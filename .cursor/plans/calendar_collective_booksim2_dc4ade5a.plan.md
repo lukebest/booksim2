@@ -4,28 +4,28 @@ overview: Extend BookSim2 with a new sim_type=calendar that models contention-fr
 todos:
   - id: config
     content: Add calendar config params in src/booksim_config.cpp and register sim_type=calendar in TrafficManager::New (src/trafficmanager.cpp)
-    status: pending
+    status: completed
   - id: graph
     content: Implement MeshGraph (src/mesh_graph.*) with 12x16 H=4/V=8 latencies, ramps, fault application, and Dijkstra routing; add utils/gen_mesh_anynet.py
-    status: pending
+    status: completed
   - id: collective
     content: Implement collective dataflow generation (src/collective.*) for the 7 collectives with combine/fork and message size M
-    status: pending
+    status: completed
   - id: scheduler
     content: "Implement CalendarScheduler (src/calendar_scheduler.*): time-slot link reservation, combine/fork, makespan + period + feasibility"
-    status: pending
+    status: completed
   - id: tm
     content: "Implement CalendarTrafficManager (src/calendartrafficmanager.*): _SingleSim execution, validation, CSV result output; add runfiles/calendarconfig"
-    status: pending
+    status: completed
   - id: experiments
     content: "Implement utils/run_calendar_experiments.py: build + healthy M-sweep + representative fault sweep, aggregate results.csv"
-    status: pending
+    status: completed
   - id: report
     content: "Implement utils/gen_report.py: self-contained HTML report with topology SVG, theory bounds, charts, Q1/Q2 conclusions"
-    status: pending
+    status: completed
   - id: verify
     content: Build, smoke-test, run full sweeps, verify periods match M/191M/768M scaling and fault degradation trends; produce report.html
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

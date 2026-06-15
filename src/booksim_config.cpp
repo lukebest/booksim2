@@ -314,6 +314,25 @@ BookSimConfig::BookSimConfig( )
 
   //==================Network file===========================
   AddStrField("network_file","");
+
+  //==================Calendar collective simulation=========
+  AddStrField( "collective_type", "allreduce" );
+  _int_map["msg_size"] = 1;
+  _int_map["mesh_x"] = 12;
+  _int_map["mesh_y"] = 16;
+  _int_map["h_latency"] = 4;
+  _int_map["v_latency"] = 8;
+  _int_map["ramp_latency"] = 1;
+  _int_map["allow_combine"] = 1;
+  _int_map["allow_fork"] = 1;
+  _int_map["collective_root"] = 0;
+  _int_map["anytoany_seed"] = 42;
+  _int_map["fault_nodes"] = 0;
+  AddStrField("fault_nodes", "");
+  _int_map["fault_links"] = 0;
+  AddStrField("fault_links", "");
+  AddStrField("fault_desc", "healthy");
+  AddStrField("result_csv", "");
 }
 
 

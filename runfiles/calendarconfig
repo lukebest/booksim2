@@ -1,0 +1,52 @@
+// Calendar collective simulation config for 12x16 heterogeneous mesh
+
+sim_type = calendar;
+
+topology = anynet;
+network_file = runfiles/mesh_12x16.anynet;
+routing_function = min;
+
+// Minimal router config (network not exercised in calendar mode)
+num_vcs = 1;
+vc_buf_size = 4;
+wait_for_tail_credit = 1;
+vc_allocator = islip;
+sw_allocator = islip;
+alloc_iters = 1;
+credit_delay = 1;
+routing_delay = 1;
+vc_alloc_delay = 1;
+sw_alloc_delay = 1;
+st_final_delay = 1;
+input_speedup = 1;
+output_speedup = 1;
+internal_speedup = 1.0;
+
+// Calendar mesh parameters
+mesh_x = 12;
+mesh_y = 16;
+h_latency = 4;
+v_latency = 8;
+ramp_latency = 1;
+allow_combine = 1;
+allow_fork = 1;
+collective_root = 0;
+anytoany_seed = 42;
+
+// Default run (override on command line)
+collective_type = broadcast;
+msg_size = 1;
+fault_desc = healthy;
+result_csv = results/results.csv;
+
+// Traffic section required by TrafficManager constructor
+traffic = uniform;
+injection_rate = 0.0;
+packet_size = 1;
+injection_process = bernoulli;
+classes = 1;
+sim_count = 1;
+sample_period = 1;
+max_samples = 1;
+warmup_periods = 0;
+measure_stats = 0;
