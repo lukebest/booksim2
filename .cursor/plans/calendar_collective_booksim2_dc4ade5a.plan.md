@@ -25,7 +25,7 @@ todos:
     status: completed
   - id: verify
     content: Build, smoke-test, run full sweeps, verify periods match M/191M/768M scaling and fault degradation trends; produce report.html
-    status: in_progress
+    status: completed
 isProject: false
 ---
 

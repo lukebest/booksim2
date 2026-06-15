@@ -118,14 +118,6 @@ CollectivePlan CollectivePlanner::PlanBroadcast(int msg_size, int root,
   plan.feasible = true;
 
   vector<int> parent = BuildLatencyTree(root, nodes);
-  vector<int> depth = TreeDepths(root, parent);
-  vector<int> cum_lat(_graph.NumNodes(), 0);
-  for(size_t i = 0; i < nodes.size(); ++i) {
-    int n = nodes[i];
-    if(n == root) continue;
-    int p = parent[n];
-    if(p >= 0) cum_lat[n] = cum_lat[p] + _graph.Latency(p, n);
-  }
 
   for(int k = 0; k < msg_size; ++k) {
     for(size_t i = 0; i < nodes.size(); ++i) {
@@ -327,11 +319,23 @@ CollectivePlan CollectivePlanner::Build(const string & type, int msg_size,
                                         int root, int anytoany_seed) const
 {
   vector<int> nodes = LiveNodes();
-  if(type == "broadcast") return PlanBroadcast(msg_size, root, nodes);
-  if(type == "reduce") return PlanReduce(msg_size, root, nodes);
-  if(type == "gather") return PlanGather(msg_size, root, nodes);
-  if(type == "allgather") return PlanAllGather(msg_size, root, nodes);
-  if(type == "allreduce") return PlanAllReduce(msg_size, root, nodes);
+  if(nodes.empty()) {
+    CollectivePlan plan;
+    plan.name = type;
+    plan.msg_size = msg_size;
+    plan.root = root;
+    plan.feasible = false;
+    return plan;
+  }
+  int effective_root = root;
+  if(find(nodes.begin(), nodes.end(), effective_root) == nodes.end())
+    effective_root = nodes[0];
+
+  if(type == "broadcast") return PlanBroadcast(msg_size, effective_root, nodes);
+  if(type == "reduce") return PlanReduce(msg_size, effective_root, nodes);
+  if(type == "gather") return PlanGather(msg_size, effective_root, nodes);
+  if(type == "allgather") return PlanAllGather(msg_size, effective_root, nodes);
+  if(type == "allreduce") return PlanAllReduce(msg_size, effective_root, nodes);
   if(type == "alltoall") return PlanAllToAll(msg_size, nodes);
   if(type == "anytoany") return PlanAnyToAny(msg_size, nodes, anytoany_seed);
 

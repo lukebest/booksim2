@@ -147,6 +147,11 @@ CalendarResult CalendarScheduler::ScheduleTransfers(vector<ScheduledTransfer> & 
     result.link_peak_occupancy[it->first] = (int)it->second.size();
   }
 
+  if(result.transfers.empty()) {
+    result.feasible = false;
+    result.makespan = 0;
+  }
+
   if(result.theo_bound > 0)
     result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);
   else
