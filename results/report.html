@@ -2,6 +2,7 @@
 <title>Calendar Collective Simulation Report</title>
 <style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;}h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;}th{background:#e2e8f0;} .card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}</style></head><body>
 <h1>Calendar-preconfigured Collective Communication</h1>
+<p>详细数据流动示意图见 <a href='dataflow.html'>dataflow.html</a>（各 collective 最低 makespan calendar 及故障重调度）。</p>
 <div class='card'><h2>Problem setup</h2>
 <p>12×16 mesh2d (192 nodes). Horizontal link latency 4 cycles, vertical 8 cycles. PE↔router ramps: 1 flit/cycle, 1-cycle latency. NoC: 1 flit/cycle per link. In-network combine (reduce) and fork (broadcast) enabled. Calendar = contention-free TDM preconfiguration.</p>
 <h3>Topology</h3><svg width="416" height="528" viewBox="0 0 416 528" xmlns="http://www.w3.org/2000/svg">

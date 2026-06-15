@@ -202,6 +202,10 @@ def render(csv_path, html_path):
         "code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}</style></head><body>"
     )
     sections.append("<h1>Calendar-preconfigured Collective Communication</h1>")
+    sections.append(
+        "<p>详细数据流动示意图见 "
+        "<a href='dataflow.html'>dataflow.html</a>（各 collective 最低 makespan calendar 及故障重调度）。</p>"
+    )
     sections.append("<div class='card'><h2>Problem setup</h2>")
     sections.append(
         f"<p>12×16 mesh2d ({N} nodes). Horizontal link latency {H_LAT} cycles, vertical {V_LAT} cycles. "
