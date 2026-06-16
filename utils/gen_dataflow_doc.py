@@ -575,61 +575,65 @@ Lᵢ={sL}，故 Lᵢ−i={sL}−{si}=<strong>{t0}</strong>。
 <strong>period=(N−1)×M=191</strong> 是 root 带宽下界（稳态重复间隔），不是 makespan。</p>"""
 
 
-def _line_gather_bound(P, ell, m):
-    avail = []
-    for j in range(1, P):
-        base = j * ell + 2
-        for k in range(m):
-            avail.append(base + k)
-    avail.sort()
-    t0 = max(avail[i] - i for i in range(len(avail)))
-    return t0 + len(avail) - 1
-
-
 def mesh_allgather():
-    """2D dimensional allgather: Phase X row-allgather, Phase Y column-allgather."""
+    """Ring-tree hybrid: left = one source's X-then-Y fork tree; right = corner funnel."""
     w1, _ = svg_size(48)
     w = w1 * 2 + 24
     h = PAD * 2 + MY * CS + 72
-    px = _line_gather_bound(MX, H_LAT, 1)
-    py = _line_gather_bound(MY, V_LAT, MX)
     parts = [
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">',
         svg_defs("ag0"),
         svg_defs("ag1"),
         '<text x="16" y="18" font-size="12" fill="#334155">'
-        '2D Dimensional AllGather：左 Phase X 行内收集（H-link）  右 Phase Y 列内收集（V-link）—— 不经 root</text>',
+        'Ring-Tree 混合 AllGather：左 = 单源 X-先-Y fork 树（router 复制）  右 = 叠加后最坏角节点漏斗</text>',
     ]
     sub = Mesh()
-    for idx, label in enumerate([
-        f"Phase X：每行 12 节点互收 (→← 沿 H-link)  ≈{px}cy",
-        f"Phase Y：每列 16 节点互收整行包 (↑↓ 沿 V-link)  ≈{py}cy",
-    ]):
-        ox = idx * (w1 + 8) + 8
-        parts.append(f'<g transform="translate({ox},26)">')
-        parts.append(f'<text x="{PAD}" y="0" font-size="10" font-weight="bold">{label}</text>')
-        gparts, _, _ = draw_grid(f"ag{idx}", sub, root=ROOT_NODE)
-        for line in gparts[2:]:
-            if "svg" not in line:
-                parts.append(line)
-        if idx == 0:
-            # Phase X: bidirectional arrows within every row
-            for y in range(MY):
-                for x in range(MX - 1):
-                    a, b = nid(x, y), nid(x + 1, y)
-                    parts.append(arrow_line(*pos(a), *pos(b), "#0d9488", "ag0", 0.7))
-                    parts.append(arrow_line(*pos(b), *pos(a), "#0d9488", "ag0", 0.7))
-        else:
-            # Phase Y: bidirectional arrows within every column
-            for x in range(MX):
-                for y in range(MY - 1):
-                    a, b = nid(x, y), nid(x, y + 1)
-                    parts.append(arrow_line(*pos(a), *pos(b), "#7c3aed", "ag1", 0.7))
-                    parts.append(arrow_line(*pos(b), *pos(a), "#7c3aed", "ag1", 0.7))
-        parts.append("</g>")
+
+    # ---- Panel 0: one source's X-then-Y in-network multicast tree ----
+    sdx, sdy = 6, 8
+    s_demo = nid(sdx, sdy)
+    ox = 8
+    parts.append(f'<g transform="translate({ox},26)">')
+    parts.append(f'<text x="{PAD}" y="0" font-size="10" font-weight="bold">'
+                 f"源 ({sdx},{sdy})：行脊 →← (H) + 每列分叉 ↑↓ (V)，节点 fork 同时下 ramp+转发</text>")
+    gparts, _, _ = draw_grid("ag0", sub, root=s_demo)
+    for line in gparts[2:]:
+        if "svg" not in line:
+            parts.append(line)
+    # row spine (bidirectional along row sdy)
+    for x in range(sdx, MX - 1):
+        parts.append(arrow_line(*pos(nid(x, sdy)), *pos(nid(x + 1, sdy)), "#0d9488", "ag0", 1.2))
+    for x in range(sdx, 0, -1):
+        parts.append(arrow_line(*pos(nid(x, sdy)), *pos(nid(x - 1, sdy)), "#0d9488", "ag0", 1.2))
+    # column branches from every spine node, both directions
+    for x in range(MX):
+        for y in range(sdy, MY - 1):
+            parts.append(arrow_line(*pos(nid(x, y)), *pos(nid(x, y + 1)), "#7c3aed", "ag0", 0.7))
+        for y in range(sdy, 0, -1):
+            parts.append(arrow_line(*pos(nid(x, y)), *pos(nid(x, y - 1)), "#7c3aed", "ag0", 0.7))
+    parts.append("</g>")
+
+    # ---- Panel 1: superposed funnel into the worst corner (0,0) ----
+    ox = w1 + 16
+    parts.append(f'<g transform="translate({ox},26)">')
+    parts.append(f'<text x="{PAD}" y="0" font-size="10" font-weight="bold">'
+                 "角节点 (0,0)：列0 漏斗 180 flit (V) + 行0 11 flit (H) → down-ramp 191</text>")
+    gparts, _, _ = draw_grid("ag1", sub, root=nid(0, 0))
+    for line in gparts[2:]:
+        if "svg" not in line:
+            parts.append(line)
+    # column-0 vertical funnel toward (0,0)
+    for y in range(MY - 1, 0, -1):
+        parts.append(arrow_line(*pos(nid(0, y)), *pos(nid(0, y - 1)), "#dc2626", "ag1", 1.3))
+    # row-0 horizontal toward (0,0)
+    for x in range(MX - 1, 0, -1):
+        parts.append(arrow_line(*pos(nid(x, 0)), *pos(nid(x - 1, 0)), "#0d9488", "ag1", 1.0))
+    parts.append("</g>")
+
     parts.append(
         f'<text x="16" y="{h - 8}" font-size="10" fill="#64748b">'
-        f"down-ramp 之和 = 11M + 180M = 191M = (N−1)M（带宽最优）；总 makespan ≈ {px}+{py} = {px + py} (M=1)</text></svg>"
+        "全局 link-time calendar 贪心装填（每 link/down-ramp 每周期≤1 flit）→ 无冲突命中下界："
+        "makespan = 205(M=1) / 769(M=4) / 12229(M=64)，eff=1.0</text></svg>"
     )
     return "\n".join(parts)
 
@@ -883,10 +887,15 @@ COLLECTIVES = [
         下界被高估为 205+166=371。真实瓶颈是<strong>每个节点</strong>的单条 down-ramp 必须吞入 (N−1)M flit，
         故下界 = <code>max((N−1)M, bisection, 最坏角节点 gather)</code> = <strong>205</strong>(M=1)，
         约等于<strong>一次最坏 gather</strong>，而非 gather+broadcast。</p>
-        <p>最优算法为 <strong>2D dimensional allgather</strong>：先沿行（H-link）做行内 allgather，
-        再沿列（V-link）做列内 allgather，<strong>全程只用相邻链路、不经 root</strong>。
-        两阶段 down-ramp 之和恰为 (N−1)M（<strong>带宽最优</strong>），makespan ≈ 235(M=1) → 12238(M=64)，eff→1.0，
-        远优于 gather+broadcast。详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>""",
+        <p>实现的最优算法是 <strong>ring-tree 混合</strong>：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
+        —— 行脊（H-link 双向）+ 每列分叉（V-link 双向）。转发是 <strong>router 内 fork</strong>：节点把到达的 flit
+        复制一份下 down-ramp（eject 到 PE），另一份继续转发，<strong>中间节点从不 eject 后再 reinject</strong>，
+        因此不付 10cy 的 PE/SRAM bounce。N 棵树叠加后由<strong>全局 link-time calendar</strong> 贪心装填，
+        每条有向 link、每个 down-ramp 每周期≤1 flit，<strong>构造即无冲突</strong>。
+        最坏角节点 (0,0) 的列0 漏斗承载 180M flit、down-ramp 吞 191M flit，恰是瓶颈。
+        仿真（C++ 调度器 + <code>utils/sim_ring_tree.py</code>）确认 makespan <strong>精确命中下界</strong>：
+        205(M=1) / 769(M=4) / 3061(M=16) / 12229(M=64)，<strong>eff=1.0</strong>，优于 2D dimensional(235) 与 gather+broadcast(371)。
+        详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>""",
     ),
     (
         "allreduce",

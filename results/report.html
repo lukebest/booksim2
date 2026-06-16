@@ -207,7 +207,7 @@
 <tr><td>reduce</td><td>166 + M - 1</td><td>M</td><td>Node up-ramp + mesh inline combine + root down-ramp</td></tr>
 <tr><td>allreduce</td><td>2×166 + M - 1</td><td>M</td><td>Reduce (up+mesh+down) then broadcast</td></tr>
 <tr><td>gather</td><td>max(191×M, maxᵢ(Lᵢ−i)+(N−2))</td><td>191×M</td><td>Root slot assignment + global link-time calendar; closed form ≈(N−2)+max_path−mesh_diam+H+V</td></tr>
-<tr><td>allgather</td><td>max(191×M, bisection, worst-corner gather)</td><td>191×M</td><td>NOT gather+broadcast; per-node down-ramp floor; 2D dimensional algorithm</td></tr>
+<tr><td>allgather</td><td>max(191×M, bisection, worst-corner gather)</td><td>191×M</td><td>NOT gather+broadcast; per-node down-ramp floor; ring-tree hybrid hits LB exactly</td></tr>
 <tr><td>alltoall</td><td>764×M + 166 − M</td><td>764×M</td><td>Bisection bandwidth (H/V weighted) + path drain</td></tr>
 <tr><td>anytoany</td><td>~764×M (per-hop sim)</td><td>~764×M</td><td>Per-path Dijkstra schedule with H/V hops</td></tr>
 </table></div>
@@ -250,30 +250,34 @@
 直觉上 allgather = 「N 个并发 gather」，其代价由<strong>最坏的那一个 gather</strong> 主导，
 额外的副本是<strong>并发</strong>送达的，而不是在一次完整 gather 之后再串行广播。</p>
 
-<h3>最优算法：2D dimensional allgather</h3>
-<p>沿 mesh 两个维度分解，<strong>不经过 root</strong>、只用相邻链路：</p>
-<ul>
-<li><strong>Phase X（行内 allgather）</strong>：每行 12 个节点沿 H-link 互相收集，
-每节点收 (MX−1)M flit。行端节点 = 一次 line-gather，makespan = 46(M=1)。</li>
-<li><strong>Phase Y（列内 allgather）</strong>：每列 16 个节点沿 V-link 收集
-已打包的整行数据（每份 MX×M flit），每节点收 (MY−1)×MX×M flit。makespan = 189(M=1)。</li>
-</ul>
-<p>两阶段 down-ramp 之和 = (MX−1)M + (MY−1)·MX·M = <code>(N−1)M</code>，
-<strong>恰好等于带宽下界</strong>（bandwidth-optimal）。总 makespan = 46+189 = <strong>235</strong>(M=1)，
-仅比下界 205 高 30 cycle（两阶段 fill 开销），远优于 gather+broadcast 的 371。
-M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
+<h3>实现的最优算法：ring-tree 混合（命中下界）</h3>
+<p>把行/列遍历<strong>重叠到单阶段</strong>：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
+——行脊（H-link 双向）+ 每列分叉（V-link 双向）。转发为 <strong>router 内 fork</strong>：
+节点把到达 flit 复制一份下 down-ramp（eject 到 PE），另一份继续转发，
+<strong>中间节点从不 eject 后再 reinject</strong>，因此不付 10cy 的 PE/SRAM bounce。</p>
+<p>N 棵树叠加后用<strong>全局 link-time calendar</strong> 贪心装填：每条有向 link、每个 down-ramp
+每周期 ≤1 flit，<strong>构造即无冲突</strong>。最坏角节点 (0,0) 的列0 漏斗承载 180M flit、
+down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherRingTree</code> +
+<code>utils/sim_ring_tree.py</code>）确认 makespan <strong>精确命中下界</strong>：
+<code>205 / 769 / 3061 / 12229</code>（M=1/4/16/64），<strong>eff=1.0</strong>。</p>
 
-<h3>其它算法对比（12×16 mesh）</h3>
+<h3>对比：2D dimensional allgather（次优，两阶段）</h3>
+<p>另一可行算法是先沿行（Phase X，H-link）做行内 allgather（makespan 46），
+再沿列（Phase Y，V-link）做列内 allgather（makespan 189），down-ramp 之和同为 (N−1)M。
+但两阶段被串行化，总 makespan = 46+189 = <strong>235</strong>(M=1)，比下界高 30 cycle
+（Phase X 的 fill 未被隐藏）。ring-tree 把这段 fill 重叠掉，故能从 235 收紧到 205。</p>
+
+<h3>算法对比（12×16 mesh，M=1）</h3>
 <table style="font-size:13px">
 <tr><th>算法</th><th>带宽</th><th>延迟特性（本拓扑）</th><th>M=1 makespan</th></tr>
 <tr><td>gather + broadcast（旧）</td><td>非最优（汇经 root）</td><td>两阶段串行 + root 热点</td><td>371</td></tr>
 <tr><td>Ring（Hamiltonian 环）</td><td>最优</td><td>环周长 ~800cy 传播延迟主导，长宽比大时差</td><td>~800+</td></tr>
 <tr><td>Recursive doubling</td><td>最优</td><td>log₂N≈8 步，但 mesh 上 partner 距离逐步增大→长线/拥塞；192 非 2 的幂</td><td>较差</td></tr>
-<tr><td><strong>2D dimensional</strong></td><td><strong>最优</strong></td><td><strong>仅相邻链路、无长线、低拥塞</strong></td><td><strong>235</strong></td></tr>
+<tr><td>2D dimensional</td><td>最优</td><td>仅相邻链路，但两阶段 fill 不重叠</td><td>235</td></tr>
+<tr><td><strong>ring-tree 混合</strong></td><td><strong>最优</strong></td><td><strong>单阶段重叠 + in-network fork + 全局 calendar</strong></td><td><strong>205</strong></td></tr>
 </table>
-<p>下界 = <strong>205</strong>(M=1)。dimensional 在 mesh 上是实用最优；
-若进一步单阶段并发 multicast（每源一棵生成树 + 全局 calendar 让各接收者 down-ramp 持续满载），
-可把行/列遍历重叠，逼近 205，但调度复杂、对大 M 收益甚微。</p>
+<p>下界 = <strong>205</strong>(M=1)，ring-tree <strong>无冲突地精确命中</strong>（eff=1.0），
+为本拓扑上 allgather 的实用最优实现。</p>
 </div>
 <div class='card'><h2>Q1: Minimum makespan and calendar period</h2><p><strong>Q1 conclusion:</strong> Not all collectives can reach the unconstrained latency minimum.</p>
 <ul>
@@ -281,7 +285,7 @@ M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
 <li><strong>reduce</strong>: leaf PE nodes inject via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>
 <li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>
 <li><strong>gather</strong>: period <code>191×M</code> (root down-ramp); makespan bound <code>maxᵢ(Lᵢ−i)+(N−2)</code> with global link-time calendar (M=1 healthy: 205).</li>
-<li><strong>allgather</strong>: the optimum is <strong>NOT</strong> gather+broadcast. True bound = <code>max((N−1)×M down-ramp, bisection, worst-corner gather)</code> = 205 (M=1), not 371. The bottleneck is every node's single down-ramp absorbing <code>(N−1)×M</code> flits — allgather costs essentially one <em>worst-case gather</em>, not a gather plus a broadcast. The <strong>2D dimensional algorithm</strong> (row-allgather then column-allgather) is down-ramp bandwidth optimal: makespan 235 (M=1) → 12238 (M=64), efficiency → 1.0.</li>
+<li><strong>allgather</strong>: the optimum is <strong>NOT</strong> gather+broadcast. True bound = <code>max((N−1)×M down-ramp, bisection, worst-corner gather)</code> = 205 (M=1), not 371. The bottleneck is every node's single down-ramp absorbing <code>(N−1)×M</code> flits — allgather costs essentially one <em>worst-case gather</em>, not a gather plus a broadcast. The implemented optimum is the <strong>ring-tree hybrid</strong> (X-then-Y in-network fork trees superposed under one global link-time calendar): it <strong>hits the lower bound exactly</strong> — makespan 205 (M=1) → 12229 (M=64), efficiency = 1.0, conflict-free.</li>
 <li><strong>alltoall</strong>: bisection bandwidth bound <code>764×M</code> plus diameter path drain (<code>+164+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>
 </ul>
 <p>Simulated broadcast M=1 makespan=166, period=1, efficiency=1.0000.</p></div>
@@ -336,15 +340,15 @@ M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
 <text x="50" y="20" font-size="14" font-weight="bold">allgather makespan</text>
 <line x1="50" y1="210" x2="590" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="70.2" y="207.2" width="94.5" height="2.8" fill="#3b82f6"/>
+<rect x="70.2" y="207.6" width="94.5" height="2.4" fill="#3b82f6"/>
 <text x="117.5" y="224" font-size="9" text-anchor="middle">1</text>
-<rect x="205.2" y="200.8" width="94.5" height="9.2" fill="#3b82f6"/>
+<rect x="205.2" y="200.9" width="94.5" height="9.1" fill="#3b82f6"/>
 <text x="252.5" y="224" font-size="9" text-anchor="middle">4</text>
-<rect x="340.2" y="173.5" width="94.5" height="36.5" fill="#3b82f6"/>
+<rect x="340.2" y="173.6" width="94.5" height="36.4" fill="#3b82f6"/>
 <text x="387.5" y="224" font-size="9" text-anchor="middle">16</text>
 <rect x="475.2" y="64.5" width="94.5" height="145.5" fill="#3b82f6"/>
 <text x="522.5" y="224" font-size="9" text-anchor="middle">64</text>
-<text x="10" y="60" font-size="10" fill="#64748b">max=13462</text>
+<text x="10" y="60" font-size="10" fill="#64748b">max=13452</text>
 </svg>
 <h3>allreduce</h3>
 <svg width="640" height="260" xmlns="http://www.w3.org/2000/svg">
@@ -394,7 +398,7 @@ M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
 </div>
 <div class='card'><h2>Healthy simulation summary (M=64)</h2><table>
 <tr><th>Collective</th><th>Makespan</th><th>Period</th><th>Bound</th><th>Efficiency</th></tr>
-<tr><td>allgather</td><td>12238</td><td>12224</td><td>12229</td><td>0.9993</td></tr>
+<tr><td>allgather</td><td>12229</td><td>12224</td><td>12229</td><td>1.0000</td></tr>
 <tr><td>allreduce</td><td>391</td><td>64</td><td>395</td><td>1.0102</td></tr>
 <tr><td>alltoall</td><td>48896</td><td>48896</td><td>48896</td><td>1.0000</td></tr>
 <tr><td>anytoany</td><td>48896</td><td>48896</td><td>48896</td><td>1.0000</td></tr>
@@ -408,84 +412,84 @@ M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
 <text x="50" y="20" font-size="14" font-weight="bold">Fault degradation (% makespan increase vs healthy M=16)</text>
 <line x1="50" y1="210" x2="910" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="55.4" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="55.4" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="67.9" y="224" font-size="9" text-anchor="middle">allg/linkH_cent</text>
-<rect x="91.2" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="91.2" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="103.8" y="224" font-size="9" text-anchor="middle">allg/linkH_cent</text>
-<rect x="127.0" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="127.0" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="139.6" y="224" font-size="9" text-anchor="middle">allg/linkH_cent</text>
-<rect x="162.9" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="162.9" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="175.4" y="224" font-size="9" text-anchor="middle">allg/linkH_corn</text>
-<rect x="198.7" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="198.7" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="211.2" y="224" font-size="9" text-anchor="middle">allg/linkH_corn</text>
-<rect x="234.5" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="234.5" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="247.1" y="224" font-size="9" text-anchor="middle">allg/linkH_corn</text>
-<rect x="270.4" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="270.4" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="282.9" y="224" font-size="9" text-anchor="middle">allg/linkH_edge</text>
-<rect x="306.2" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="306.2" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="318.8" y="224" font-size="9" text-anchor="middle">allg/linkH_edge</text>
-<rect x="342.0" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="342.0" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="354.6" y="224" font-size="9" text-anchor="middle">allg/linkH_edge</text>
-<rect x="377.9" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="377.9" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="390.4" y="224" font-size="9" text-anchor="middle">allg/linkV_cent</text>
-<rect x="413.7" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="413.7" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="426.3" y="224" font-size="9" text-anchor="middle">allg/linkV_cent</text>
 <rect x="449.5" y="64.5" width="25.1" height="145.5" fill="#3b82f6"/>
 <text x="462.1" y="224" font-size="9" text-anchor="middle">allg/linkV_cent</text>
-<rect x="485.4" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="485.4" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="497.9" y="224" font-size="9" text-anchor="middle">allg/linkV_corn</text>
-<rect x="521.2" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="521.2" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="533.8" y="224" font-size="9" text-anchor="middle">allg/linkV_corn</text>
-<rect x="557.0" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="557.0" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="569.6" y="224" font-size="9" text-anchor="middle">allg/linkV_corn</text>
-<rect x="592.9" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="592.9" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="605.4" y="224" font-size="9" text-anchor="middle">allg/linkV_edge</text>
-<rect x="628.7" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="628.7" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="641.2" y="224" font-size="9" text-anchor="middle">allg/linkV_edge</text>
-<rect x="664.5" y="68.0" width="25.1" height="142.0" fill="#3b82f6"/>
+<rect x="664.5" y="67.8" width="25.1" height="142.2" fill="#3b82f6"/>
 <text x="677.1" y="224" font-size="9" text-anchor="middle">allg/linkV_edge</text>
-<rect x="700.4" y="81.8" width="25.1" height="128.2" fill="#3b82f6"/>
+<rect x="700.4" y="80.9" width="25.1" height="129.1" fill="#3b82f6"/>
 <text x="712.9" y="224" font-size="9" text-anchor="middle">allg/node_cente</text>
-<rect x="736.2" y="95.5" width="25.1" height="114.5" fill="#3b82f6"/>
+<rect x="736.2" y="94.0" width="25.1" height="116.0" fill="#3b82f6"/>
 <text x="748.8" y="224" font-size="9" text-anchor="middle">allg/node_cente</text>
-<rect x="772.0" y="123.1" width="25.1" height="86.9" fill="#3b82f6"/>
+<rect x="772.0" y="120.1" width="25.1" height="89.9" fill="#3b82f6"/>
 <text x="784.6" y="224" font-size="9" text-anchor="middle">allg/node_cente</text>
-<rect x="807.9" y="85.2" width="25.1" height="124.8" fill="#3b82f6"/>
+<rect x="807.9" y="84.2" width="25.1" height="125.8" fill="#3b82f6"/>
 <text x="820.4" y="224" font-size="9" text-anchor="middle">allg/node_corne</text>
-<rect x="843.7" y="99.0" width="25.1" height="111.0" fill="#3b82f6"/>
+<rect x="843.7" y="97.2" width="25.1" height="112.8" fill="#3b82f6"/>
 <text x="856.2" y="224" font-size="9" text-anchor="middle">allg/node_corne</text>
-<rect x="879.5" y="130.0" width="25.1" height="80.0" fill="#3b82f6"/>
+<rect x="879.5" y="126.6" width="25.1" height="83.4" fill="#3b82f6"/>
 <text x="892.1" y="224" font-size="9" text-anchor="middle">allg/node_corne</text>
 <text x="10" y="60" font-size="10" fill="#64748b">max=6</text>
 </svg>
 <table><tr><th>Collective</th><th>Fault</th><th>Makespan</th><th>Period</th><th>Feasible</th><th>Degradation%</th></tr>
-<tr><td>allgather</td><td>linkH_center_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_center_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_center_4</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_corner_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_corner_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_corner_4</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_edge_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_edge_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkH_edge_4</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_center_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_center_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_center_4</td><td>3239</td><td>3056</td><td>1</td><td>5.5</td></tr>
-<tr><td>allgather</td><td>linkV_corner_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_corner_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_corner_4</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_edge_1</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_edge_2</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>linkV_edge_4</td><td>3235</td><td>3056</td><td>1</td><td>5.4</td></tr>
-<tr><td>allgather</td><td>node_center_1</td><td>3219</td><td>3040</td><td>1</td><td>4.9</td></tr>
-<tr><td>allgather</td><td>node_center_2</td><td>3203</td><td>3024</td><td>1</td><td>4.3</td></tr>
-<tr><td>allgather</td><td>node_center_4</td><td>3171</td><td>2992</td><td>1</td><td>3.3</td></tr>
-<tr><td>allgather</td><td>node_corner_1</td><td>3215</td><td>3040</td><td>1</td><td>4.7</td></tr>
-<tr><td>allgather</td><td>node_corner_2</td><td>3199</td><td>3024</td><td>1</td><td>4.2</td></tr>
-<tr><td>allgather</td><td>node_corner_4</td><td>3163</td><td>2992</td><td>1</td><td>3.0</td></tr>
-<tr><td>allgather</td><td>node_edge_1</td><td>3219</td><td>3040</td><td>1</td><td>4.9</td></tr>
-<tr><td>allgather</td><td>node_edge_2</td><td>3203</td><td>3024</td><td>1</td><td>4.3</td></tr>
-<tr><td>allgather</td><td>node_edge_4</td><td>3171</td><td>2992</td><td>1</td><td>3.3</td></tr>
+<tr><td>allgather</td><td>linkH_center_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_center_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_center_4</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_corner_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_corner_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_corner_4</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_edge_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_edge_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkH_edge_4</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_center_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_center_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_center_4</td><td>3239</td><td>3056</td><td>1</td><td>5.8</td></tr>
+<tr><td>allgather</td><td>linkV_corner_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_corner_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_corner_4</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_edge_1</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_edge_2</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>linkV_edge_4</td><td>3235</td><td>3056</td><td>1</td><td>5.7</td></tr>
+<tr><td>allgather</td><td>node_center_1</td><td>3219</td><td>3040</td><td>1</td><td>5.2</td></tr>
+<tr><td>allgather</td><td>node_center_2</td><td>3203</td><td>3024</td><td>1</td><td>4.6</td></tr>
+<tr><td>allgather</td><td>node_center_4</td><td>3171</td><td>2992</td><td>1</td><td>3.6</td></tr>
+<tr><td>allgather</td><td>node_corner_1</td><td>3215</td><td>3040</td><td>1</td><td>5.0</td></tr>
+<tr><td>allgather</td><td>node_corner_2</td><td>3199</td><td>3024</td><td>1</td><td>4.5</td></tr>
+<tr><td>allgather</td><td>node_corner_4</td><td>3163</td><td>2992</td><td>1</td><td>3.3</td></tr>
+<tr><td>allgather</td><td>node_edge_1</td><td>3219</td><td>3040</td><td>1</td><td>5.2</td></tr>
+<tr><td>allgather</td><td>node_edge_2</td><td>3203</td><td>3024</td><td>1</td><td>4.6</td></tr>
+<tr><td>allgather</td><td>node_edge_4</td><td>3171</td><td>2992</td><td>1</td><td>3.6</td></tr>
 <tr><td>allreduce</td><td>linkH_center_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
 <tr><td>allreduce</td><td>linkH_center_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
 <tr><td>allreduce</td><td>linkH_center_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>

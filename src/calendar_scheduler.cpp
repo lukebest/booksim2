@@ -4,9 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <queue>
-#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 
 using namespace std;
 
@@ -281,19 +279,28 @@ CalendarResult CalendarScheduler::ScheduleAllGatherRingTree(int msg_size) const
     }
   }
 
-  unordered_map<long long, unordered_set<int> > link_busy;
-  unordered_map<int, unordered_set<int> > down_busy;
+  // Per-calendar "next free slot" allocators (path-compressed union-find over
+  // cycles): allocate() returns the smallest free cycle >= e in ~O(1) amortized,
+  // so even fully-packed bottleneck links/down-ramps schedule in linear time.
+  unordered_map<long long, unordered_map<int, int> > link_nf;  // directed link
+  unordered_map<int, unordered_map<int, int> > down_nf;        // node down-ramp
   unordered_map<long long, int> avail;
+  vector<int> eject_count(N, 0);
+  unordered_map<long long, int> link_load;
+  int peak_link = 0;
 
-  // earliest free cycle >= e on a calendar slot-set (gaps are tiny once packed)
-  struct Reserver {
-    int operator()(unordered_set<int> & s, int e) const {
+  struct Allocator {
+    int operator()(unordered_map<int, int> & nxt, int e) const {
       int t = e;
-      while(s.count(t)) ++t;
-      s.insert(t);
+      static thread_local vector<int> chain;
+      chain.clear();
+      unordered_map<int, int>::iterator it;
+      while((it = nxt.find(t)) != nxt.end()) { chain.push_back(t); t = it->second; }
+      nxt[t] = t + 1;
+      for(size_t i = 0; i < chain.size(); ++i) nxt[chain[i]] = t + 1;
       return t;
     }
-  } reserve;
+  } allocate;
 
   priority_queue<RTEvent, vector<RTEvent>, RTEventGreater> pq;
   long long seq = 0;
@@ -316,11 +323,14 @@ CalendarResult CalendarScheduler::ScheduleAllGatherRingTree(int msg_size) const
     int t_avail = avail[pkey];
     int lat = _graph.Latency(ev.parent, ev.child);
     long long lk = (long long)ev.parent * N + ev.child;
-    int send = reserve(link_busy[lk], max(ev.ready, t_avail));
+    int send = allocate(link_nf[lk], max(ev.ready, t_avail));
+    int lc = ++link_load[lk];
+    if(lc > peak_link) peak_link = lc;
     int arrive = send + lat;
     long long ckey = ((long long)ev.s * N + ev.child) * msg_size + ev.k;
     avail[ckey] = arrive;
-    int eject = reserve(down_busy[ev.child], arrive);
+    int eject = allocate(down_nf[ev.child], arrive);
+    ++eject_count[ev.child];
     int done = eject + ramp;
     if(done > result.makespan) result.makespan = done;
     const vector<int> & gcs = child[ev.s][ev.child];
@@ -335,11 +345,10 @@ CalendarResult CalendarScheduler::ScheduleAllGatherRingTree(int msg_size) const
   int expect = (alive - 1) * msg_size;
   for(int n = 0; n < N; ++n) {
     if(!_graph.IsAlive(n)) continue;
-    if((int)down_busy[n].size() != expect) { result.feasible = false; break; }
+    if(eject_count[n] != expect) { result.feasible = false; break; }
   }
-  for(unordered_map<long long, unordered_set<int> >::const_iterator it = link_busy.begin();
-      it != link_busy.end(); ++it)
-    result.link_peak_occupancy[(int)(it->first % 1000000)] = (int)it->second.size();
+  // Bottleneck check: busiest directed link must fit within the makespan.
+  if(peak_link > result.makespan) result.feasible = false;
 
   if(result.theo_bound > 0)
     result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);

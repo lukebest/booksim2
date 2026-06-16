@@ -143,7 +143,7 @@ def theory_table():
             "allgather",
             f"max({(N-1)}×M, bisection, worst-corner gather)",
             f"{(N-1)}×M",
-            "NOT gather+broadcast; per-node down-ramp floor; 2D dimensional algorithm",
+            "NOT gather+broadcast; per-node down-ramp floor; ring-tree hybrid hits LB exactly",
         ),
         (
             "alltoall",
@@ -186,9 +186,10 @@ def q1_answer(healthy):
         f"True bound = <code>max((N−1)×M down-ramp, bisection, worst-corner gather)</code> "
         f"= 205 (M=1), not 371. The bottleneck is every node's single down-ramp absorbing "
         f"<code>(N−1)×M</code> flits — allgather costs essentially one <em>worst-case gather</em>, "
-        f"not a gather plus a broadcast. The <strong>2D dimensional algorithm</strong> "
-        f"(row-allgather then column-allgather) is down-ramp bandwidth optimal: "
-        f"makespan 235 (M=1) → 12238 (M=64), efficiency → 1.0.</li>",
+        f"not a gather plus a broadcast. The implemented optimum is the <strong>ring-tree hybrid</strong> "
+        f"(X-then-Y in-network fork trees superposed under one global link-time calendar): it "
+        f"<strong>hits the lower bound exactly</strong> — makespan 205 (M=1) → 12229 (M=64), "
+        f"efficiency = 1.0, conflict-free.</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",
     ]
@@ -336,30 +337,34 @@ def allgather_bound_section():
 直觉上 allgather = 「N 个并发 gather」，其代价由<strong>最坏的那一个 gather</strong> 主导，
 额外的副本是<strong>并发</strong>送达的，而不是在一次完整 gather 之后再串行广播。</p>
 
-<h3>最优算法：2D dimensional allgather</h3>
-<p>沿 mesh 两个维度分解，<strong>不经过 root</strong>、只用相邻链路：</p>
-<ul>
-<li><strong>Phase X（行内 allgather）</strong>：每行 {MESH_X} 个节点沿 H-link 互相收集，
-每节点收 (MX−1)M flit。行端节点 = 一次 line-gather，makespan = {px}(M=1)。</li>
-<li><strong>Phase Y（列内 allgather）</strong>：每列 {MESH_Y} 个节点沿 V-link 收集
-已打包的整行数据（每份 MX×M flit），每节点收 (MY−1)×MX×M flit。makespan = {py}(M=1)。</li>
-</ul>
-<p>两阶段 down-ramp 之和 = (MX−1)M + (MY−1)·MX·M = <code>(N−1)M</code>，
-<strong>恰好等于带宽下界</strong>（bandwidth-optimal）。总 makespan = {px}+{py} = <strong>{dim}</strong>(M=1)，
-仅比下界 {lb} 高 {dim - lb} cycle（两阶段 fill 开销），远优于 gather+broadcast 的 {old}。
-M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
+<h3>实现的最优算法：ring-tree 混合（命中下界）</h3>
+<p>把行/列遍历<strong>重叠到单阶段</strong>：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
+——行脊（H-link 双向）+ 每列分叉（V-link 双向）。转发为 <strong>router 内 fork</strong>：
+节点把到达 flit 复制一份下 down-ramp（eject 到 PE），另一份继续转发，
+<strong>中间节点从不 eject 后再 reinject</strong>，因此不付 10cy 的 PE/SRAM bounce。</p>
+<p>N 棵树叠加后用<strong>全局 link-time calendar</strong> 贪心装填：每条有向 link、每个 down-ramp
+每周期 ≤1 flit，<strong>构造即无冲突</strong>。最坏角节点 (0,0) 的列0 漏斗承载 180M flit、
+down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherRingTree</code> +
+<code>utils/sim_ring_tree.py</code>）确认 makespan <strong>精确命中下界</strong>：
+<code>205 / 769 / 3061 / 12229</code>（M=1/4/16/64），<strong>eff=1.0</strong>。</p>
 
-<h3>其它算法对比（12×16 mesh）</h3>
+<h3>对比：2D dimensional allgather（次优，两阶段）</h3>
+<p>另一可行算法是先沿行（Phase X，H-link）做行内 allgather（makespan {px}），
+再沿列（Phase Y，V-link）做列内 allgather（makespan {py}），down-ramp 之和同为 (N−1)M。
+但两阶段被串行化，总 makespan = {px}+{py} = <strong>{dim}</strong>(M=1)，比下界高 {dim - lb} cycle
+（Phase X 的 fill 未被隐藏）。ring-tree 把这段 fill 重叠掉，故能从 {dim} 收紧到 {lb}。</p>
+
+<h3>算法对比（12×16 mesh，M=1）</h3>
 <table style="font-size:13px">
 <tr><th>算法</th><th>带宽</th><th>延迟特性（本拓扑）</th><th>M=1 makespan</th></tr>
 <tr><td>gather + broadcast（旧）</td><td>非最优（汇经 root）</td><td>两阶段串行 + root 热点</td><td>{old}</td></tr>
 <tr><td>Ring（Hamiltonian 环）</td><td>最优</td><td>环周长 ~800cy 传播延迟主导，长宽比大时差</td><td>~800+</td></tr>
 <tr><td>Recursive doubling</td><td>最优</td><td>log₂N≈8 步，但 mesh 上 partner 距离逐步增大→长线/拥塞；192 非 2 的幂</td><td>较差</td></tr>
-<tr><td><strong>2D dimensional</strong></td><td><strong>最优</strong></td><td><strong>仅相邻链路、无长线、低拥塞</strong></td><td><strong>{dim}</strong></td></tr>
+<tr><td>2D dimensional</td><td>最优</td><td>仅相邻链路，但两阶段 fill 不重叠</td><td>{dim}</td></tr>
+<tr><td><strong>ring-tree 混合</strong></td><td><strong>最优</strong></td><td><strong>单阶段重叠 + in-network fork + 全局 calendar</strong></td><td><strong>{lb}</strong></td></tr>
 </table>
-<p>下界 = <strong>{lb}</strong>(M=1)。dimensional 在 mesh 上是实用最优；
-若进一步单阶段并发 multicast（每源一棵生成树 + 全局 calendar 让各接收者 down-ramp 持续满载），
-可把行/列遍历重叠，逼近 {lb}，但调度复杂、对大 M 收益甚微。</p>
+<p>下界 = <strong>{lb}</strong>(M=1)，ring-tree <strong>无冲突地精确命中</strong>（eff=1.0），
+为本拓扑上 allgather 的实用最优实现。</p>
 </div>"""
 
 
