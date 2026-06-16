@@ -410,9 +410,22 @@ def allgather_buffer_section():
 其 makespan 取所有节点的最大 = <strong>release-packing 下界 LB*</strong>。</p>
 <p>实测（<code>utils/sched_zero_eject_v2.py</code> 的 <code>packing_lb</code>）：
 <strong>LB* = 78（6×8）/ 205（12×16）</strong>，瓶颈都在最远角节点 (0,0)。
-<strong>这恰好等于带缓冲日历的 makespan（78/205）</strong>——两者相等说明 <strong>205 就是真正的最优 makespan</strong>
-（下界 = 可达值），且<strong>零 eject 缓冲并不抬高这个下界</strong>：原理上去掉 eject 缓冲<strong>不需要多花一个 cycle</strong>。
-零 eject 缓冲只要求这 (N−1) 次 eject 落在互异 cycle 且恰在到达当 cycle，靠<strong>有界网内等待</strong>把到达抹平到 ≤1/cycle 即可。</p>
+注意 LB* 是<strong>松弛下界</strong>——它只看单个 down-ramp 的 release-packing，<strong>忽略了链路争用与 fork 树的共享前缀耦合</strong>。
+真正的最优（同时满足 E=0、链路无冲突、有界等待）由下面的 CP-SAT 精确求解给出，会<strong>略高于 LB*</strong>。</p>
+
+<h3>用 CP-SAT 精确求解 buffer-free / conflict-free / non-blocking 排程</h3>
+<p>把问题写成约束规划（<code>utils/sched_ilp.py</code>，OR-Tools CP-SAT）：变量为每个 (源, 节点) 的到达 cycle
+<code>a[s,d]</code>；<code>a[s,s]=inject+ramp</code>；树边 <code>a[s,p]+lat ≤ a[s,c] ≤ a[s,p]+lat+W</code>（因果 + 有界每跳等待＝non-blocking）；
+每条有向链路 <code>AllDifferent</code>（发送 cycle 互异＝无冲突）；每个节点 down-ramp <code>AllDifferent</code>（eject 互异、E=0、无队列）；
+目标 min makespan。结果：</p>
+<table style="font-size:13px">
+<tr><th>Mesh</th><th>带缓冲乐观</th><th>松弛 LB*</th><th>CP-SAT 真实最优（E=0+无冲突+non-blocking）</th><th>所需 W</th></tr>
+<tr><td>6×8</td><td>78</td><td>78</td><td><strong>81（已证最优）</strong></td><td>W≥4 即可达</td></tr>
+<tr><td>12×16</td><td>205</td><td>205</td><td><strong>∈[257, 313]</strong>（W=8，证下界 257，已找到 313）</td><td>W=8</td></tr>
+</table>
+<p>关键结论：<strong>零 eject 缓冲 + 有界等待并非免费</strong>。6×8 真实最优 = <strong>81</strong>（比带缓冲 78 多 +3，约 4%）；
+12×16 在 W=8 下<strong>已证下界就有 257</strong>（比 205 多 ≥25%）——之前「去掉 eject 缓冲不多花一个 cycle」是基于松弛 LB* 的过乐观说法，
+CP-SAT 的紧下界推翻了它。代价虽小（6×8）到中等（12×16），但确实存在，根因是 fork 树共享前缀耦合 + 链路争用。</p>
 
 <h3>满足约束的排程（<code>utils/sched_no_eject_buffer.py</code>）</h3>
 <p>调度器强制 <strong>eject 缓冲 E=0</strong>（到达即取走），并用<strong>每跳 ≤W 的网内等待</strong>来错开最后一跳的到达 cycle，
@@ -449,8 +462,10 @@ def allgather_buffer_section():
   <!-- y scale: ms 600->180, 192->40 ; y = 180 - (ms-192)*140/408 -->
   <line x1="60" y1="176" x2="490" y2="176" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2,3"/>
   <text x="492" y="180" font-size="9" fill="#94a3b8">带宽项 192(不可达)</text>
-  <line x1="60" y1="172" x2="490" y2="172" stroke="#059669" stroke-width="1.3" stroke-dasharray="4,3"/>
-  <text x="492" y="166" font-size="9" fill="#059669">最优 LB* 205</text>
+  <line x1="60" y1="172" x2="490" y2="172" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2,3"/>
+  <text x="492" y="166" font-size="9" fill="#94a3b8">松弛 LB* 205</text>
+  <line x1="60" y1="158" x2="490" y2="158" stroke="#059669" stroke-width="1.3" stroke-dasharray="4,3"/>
+  <text x="492" y="152" font-size="9" fill="#059669">CP-SAT 证下界 257</text>
   <polyline fill="none" stroke="#2563eb" stroke-width="2.5"
     points="90,47 160,80 230,96 300,111 370,126"/>
   <circle cx="90" cy="47" r="4" fill="#2563eb"/><text x="90" y="40" text-anchor="middle" font-size="9">W=0:579</text>
@@ -466,24 +481,23 @@ def allgather_buffer_section():
 最优 LB*=205（绿线）才是 E=0 下真正的下界，曲线与它的差距是<strong>调度器次优性</strong>（见结论），不是物理代价。
 带宽项 192 因到达量化不可达，仅作参照。</p>
 
-<h3>结论（含关键修正）</h3>
+<h3>结论（CP-SAT 精确求解后的最终结论）</h3>
 <ul>
-<li><strong>205 是真正的最优 makespan</strong>：release-packing 下界 LB* = 205（12×16）/ 78（6×8），
-与带缓冲日历的实测值<strong>完全相等</strong> → 下界 = 可达值 = 最优。带宽项 192 因到达量化<strong>不可达</strong>。</li>
-<li><strong>零 eject 缓冲不抬高下界</strong>（重要修正）：LB* 的推导本身就假设到达即 eject、无队列，
-所以 E=0 的最优<strong>仍是 205</strong>——原理上<strong>去掉 eject 缓冲一个 cycle 都不用多花</strong>。
-之前「零 eject 缓冲根本上更贵」的说法是错的。</li>
-<li><strong>eject 缓冲可以严格为 0</strong>且调度仍<strong>构造即无冲突</strong>（所有 W 下均可行）。</li>
-<li>但<strong>目前的贪心调度器还达不到 205</strong>：E=0、W=∞ 时最好只到 <strong>274（1.34×）</strong>，W=8 为 330。
-差距是<strong>调度器次优性</strong>，根因是 <strong>fork 树的共享前缀耦合</strong>——共享链路上的一次网内等待会
-<strong>同时</strong>推迟其下游所有目的地的到达，无法独立地把每个节点的 down-ramp packing 到 LB*。
-试过的「瓶颈对齐」「按到角距离升序」等排序反而更差（382/343），<strong>far-from-center 优先</strong>仍是最好的贪心序。</li>
-<li><strong>205 那组（eff=1.0）的旧日历</strong>用 50–87 flit 的 eject 队列 + 端口无界滞留（踩踏）来达到 205；
-这是<strong>实现方式</strong>的问题，不是 205 本身——存在合法的 E=0 调度同样以 205 为最优，只是需要近最优 packing（开放问题，疑似需 ILP/flow）。</li>
-<li>相关脚本：<code>utils/sched_zero_eject_v2.py</code>（release-packing 下界 + 瓶颈对齐尝试）、
-<code>utils/sched_no_eject_buffer.py</code>（E=0 + 有界 W 主结果 274/330）、
-<code>utils/sched_zero_buffer.py</code>（W=0 完全刚性 139/579）、
-<code>utils/sched_buffer_sweep.py</code>（允许 eject 排队的对照）。</li>
+<li><strong>零 eject 缓冲 + 无冲突 + non-blocking 是可行的</strong>，且 CP-SAT 能<strong>构造出来并证明（近）最优</strong>：
+6×8 真实最优 = <strong>81</strong>（已证），12×16(W=8) ∈ <strong>[257, 313]</strong>。</li>
+<li><strong>它不是免费的</strong>（修正早前基于松弛 LB* 的乐观结论）：相比带缓冲乐观值，
+6×8 多 +3（78→81，约 4%），12×16 至少多 +52（205→≥257，约 ≥25%，W=8）。
+代价来自 <strong>fork 树共享前缀耦合 + 链路争用</strong>，松弛 LB*（只看单 down-ramp）看不到这部分。</li>
+<li><strong>CP-SAT 明显优于贪心</strong>：6×8 把 W=4 的 108→<strong>81</strong>、W=8 的 103→81（已证最优，约 −25%）；
+12×16(W=8) 把贪心 330 改进到 <strong>313</strong>，并把下界收紧到 257。</li>
+<li><strong>W=4 对 6×8 已足够</strong>命中最优 81（W=0 受限到 ~118、W=2 到 ~86）；非阻塞的有界等待不需要很大。</li>
+<li><strong>规模瓶颈</strong>：12×16 是 ~37k 变量 + 192 组大 AllDifferent，CP-SAT 600s 内
+<strong>从零找不到可行解</strong>；必须用贪心解<strong>热启动</strong>（<code>--warmstart</code>，AddHint + 收紧 horizon）才能在 313 上继续改进。
+要逼近真实最优需更长时间或问题分解（按瓶颈节点分块 / 列生成）。</li>
+<li>相关脚本：<code>utils/sched_ilp.py</code>（CP-SAT 精确/热启动，需 <code>ortools</code>，见 <code>.venv-ilp</code>）、
+<code>utils/sched_zero_eject_v2.py</code>（松弛下界 LB*）、
+<code>utils/sched_no_eject_buffer.py</code>（贪心 E=0 + 有界 W：274/330）、
+<code>utils/sched_zero_buffer.py</code>（W=0 完全刚性 139/579）。</li>
 </ul>
 </div>"""
 
