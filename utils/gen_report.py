@@ -135,15 +135,15 @@ def theory_table():
         ("allreduce", f"2×{bcast_diam} + M - 1", "M", "Reduce (up+mesh+down) then broadcast"),
         (
             "gather",
-            f"max({(N-1)}×M, (N-1)×M + path − mesh_diam + H + V)",
+            f"max({(N-1)}×M, maxᵢ(Lᵢ−i)+(N−2))",
             f"{(N-1)}×M",
-            "Down-ramp bound + longest source path (H/V)",
+            "Root slot assignment + global link-time calendar; closed form ≈(N−2)+max_path−mesh_diam+H+V",
         ),
         (
             "allgather",
             f"gather_bound + {bcast_diam} + M − 1",
             f"{(N-1)}×M",
-            "Gather then broadcast; path-aware gather bound",
+            "Gather (global calendar) then broadcast",
         ),
         (
             "alltoall",
@@ -179,7 +179,10 @@ def q1_answer(healthy):
         "<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>",
         "<li><strong>reduce</strong>: leaf PE nodes inject via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>",
         "<li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>",
-        f"<li><strong>gather, allgather</strong>: down-ramp bound <code>{N-1}×M</code> plus longest shortest-path latency (H=4/V=8); simulated gather M=1 makespan ≈ 205.</li>",
+        f"<li><strong>gather, allgather</strong>: period <code>{N-1}×M</code> (root down-ramp); "
+        f"makespan bound <code>maxᵢ(Lᵢ−i)+(N−2)</code> with global link-time calendar "
+        f"(M=1 healthy: 205). Closed form <code>(N−2)+max_path−mesh_diam+H+V</code> gives 204 "
+        f"(optimistic by 1 cycle).</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",
     ]
@@ -216,6 +219,69 @@ def q2_answer(fault_rows_data, baseline):
     )
 
 
+def gather_bound_section():
+    mesh_diam = H_LAT * (MESH_X - 1) + V_LAT * (MESH_Y - 1)
+    max_path = mesh_diam + 2  # up + mesh + down
+    closed = (N - 2) + max_path - mesh_diam + H_LAT + V_LAT
+    # replicate healthy gather path lat slack (see gen_dataflow_doc.gather_bounds)
+    import heapq
+
+    class _M:
+        def __init__(self):
+            self.alive = [True] * N
+            self.adj = [[] for _ in range(N)]
+            for y in range(MESH_Y):
+                for x in range(MESH_X):
+                    u = x + MESH_X * y
+                    if x + 1 < MESH_X:
+                        v = u + 1
+                        self.adj[u].append((v, H_LAT))
+                        self.adj[v].append((u, H_LAT))
+                    if y + 1 < MESH_Y:
+                        v = u + MESH_X
+                        self.adj[u].append((v, V_LAT))
+                        self.adj[v].append((u, V_LAT))
+
+        def path_lat(self, src, dst):
+            dist = [10**9] * N
+            dist[src] = 0
+            pq = [(0, src)]
+            while pq:
+                d, u = heapq.heappop(pq)
+                if d != dist[u]:
+                    continue
+                if u == dst:
+                    return d + 2
+                for v, w in self.adj[u]:
+                    if d + w < dist[v]:
+                        dist[v] = d + w
+                        heapq.heappush(pq, (dist[v], v))
+            return 10**9
+
+    m = _M()
+    lats = sorted(m.path_lat(n, 0) for n in range(1, N))
+    t0 = max(lats[i] - i for i in range(len(lats)))
+    tight = t0 + len(lats) - 1
+    return f"""
+<div class="card"><h2>Gather 无阻塞下界推导</h2>
+<p>healthy 12×16 mesh，M=1，191 个非 root 源，root down-ramp 每 cycle 1 flit。</p>
+<h3>Period（稳态 initiation interval）</h3>
+<p><code>period = (N−1)×M = 191</code> — root 侧带宽瓶颈，与路径长度无关。</p>
+<h3>Makespan 下界（两种表述）</h3>
+<ol>
+<li><strong>精确 slot 分配式</strong>（仿真采用）：将 191 个 flit 按路径延迟 Lᵢ 升序排列，
+为第 i 个分配 root 完成时刻 Fᵢ = t₀+i，约束 Fᵢ ≥ Lᵢ。
+最小化 max Fᵢ 得 t₀ = maxᵢ(Lᵢ−i) = {t0}，故 <code>makespan = t₀ + (N−2) = {tight}</code>。
+全局 link-time calendar 反向预约各 hop 的 send-time，可达该下界（eff=1.0）。</li>
+<li><strong>闭式近似</strong>（旧文档 204）：
+<code>(N−2) + max_path − mesh_diam + H + V = 190 + {max_path} − {mesh_diam} + {H_LAT + V_LAT} = {closed}</code>。
+其中 max_path={max_path}（最远源 up+mesh+down），mesh_diam={mesh_diam}。
++H+V 项假设 mesh 链路可额外流水线重叠 1 cycle；在本拓扑精确 slot 式下界为 {tight}，闭式少 1 cycle。</li>
+</ol>
+<p>详见 <a href="dataflow.html">dataflow.html</a> Gather 节的 link-time 日历示意图。</p>
+</div>"""
+
+
 def render(csv_path, html_path):
     rows = load_rows(csv_path)
     healthy = healthy_by_collective(rows)
@@ -247,6 +313,7 @@ def render(csv_path, html_path):
     sections.append("</div>")
 
     sections.append("<div class='card'><h2>Theoretical bounds</h2>" + theory_table() + "</div>")
+    sections.append(gather_bound_section())
     sections.append("<div class='card'><h2>Q1: Minimum makespan and calendar period</h2>" + q1_answer(healthy) + "</div>")
 
     sections.append("<div class='card'><h2>Healthy simulation: makespan vs M</h2>")

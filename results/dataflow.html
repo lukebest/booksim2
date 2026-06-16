@@ -2111,7 +2111,52 @@ a{color:#2563eb;}
 <p class="metric">healthy M=1: makespan=166, period=1</p>
 </div>
 <div class='card'><h2>Gather 收集</h2>
-<p>每个非 root 节点（橙箭头）沿 <strong>Dijkstra 最短路径</strong>（曼哈顿加权：H=4, V=8）向 root 发送 flit。图中浅色线为全部 191 条源路径，深色为抽样高亮。所有 flit 最终汇入 root 的 down-ramp（瓶颈：每 cycle 1 flit）。</p>
+<p>每个非 root 节点沿 <strong>Dijkstra 最短路径</strong>（H=4, V=8）向 root 发送 flit。
+<strong>全局 link-time calendar</strong>：先为每个 flit 分配 root down-ramp 完成时刻
+Fᵢ=t₀+i（相邻 slot 间隔 1 cycle），再<strong>反向</strong>逐 hop 在 (link, cycle) 网格上预约 send-time；
+冲突则 Fᵢ 递增并重算后续 slot。下图为空间路径 + 时隙日历示意。</p>
+
+<h3>Lᵢ 的含义</h3>
+<p><strong>Lᵢ</strong> 是将 191 个非 root 源按<strong>路径延迟升序</strong>编号后，第 i 个源的端到端延迟
+（up-ramp 1cy + mesh 最短路径 + root down-ramp 1cy，与 <code>PathLatency</code> 一致）。
+M=1 healthy 时 L₀=6（最近邻），L₁₉₀=166（角点 (11,15)）。</p>
+
+<h3>精确 makespan 下界：maxᵢ(Lᵢ−i)+(N−2)=205</h3>
+<p>root down-ramp 每 cycle 只能完成 1 个 flit，191 个 flit 占用连续 slot t₀, t₀+1, …, t₀+190。
+第 i 个 flit 最早在 cycle Lᵢ 完成，故约束 <code>t₀+i ≥ Lᵢ</code>，即 <code>t₀ ≥ Lᵢ−i</code>。
+取 <code>t₀=maxᵢ(Lᵢ−i)=15</code>，则 makespan = t₀+190 = t₀+(N−2) = <strong>205</strong>。</p>
+
+<h3>为何 maxᵢ(Lᵢ−i)=15？</h3>
+<p>瓶颈<strong>不是</strong>最远角点 (11,15)（L=166 排在 i=190，166−190=−24，约束很松），
+而是「路径中等偏长、但排序靠前」的源：例如节点 <strong>6</strong>（坐标 (6,0)）在排序中 i=11，
+Lᵢ=26，故 Lᵢ−i=26−11=<strong>15</strong>。
+含义：已有 11 个更短路径的源占用了 slot t₀…t₀+10，该源若要在 slot t₀+11 完成，
+必须整体把 pipeline 起点后移 t₀=15 cycle，使 t₀+11≥26。
+同 slack=15 的还有 i=15（节点 7）、i=19（节点 8）等 L=30/34 的 x 轴同行源。</p>
+
+<h3>闭式近似：(N−2)+max_path−mesh_diam+H+V=204</h3>
+<table style="border-collapse:collapse;font-size:13px;margin:8px 0">
+<tr><th style="border:1px solid #cbd5e1;padding:4px 8px">项</th>
+<th style="border:1px solid #cbd5e1;padding:4px 8px">值</th>
+<th style="border:1px solid #cbd5e1;padding:4px 8px">含义</th></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">N−2</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">190</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">191 个 root slot 的首尾索引差</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">max_path</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">166</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">最远源 up+mesh+down 全路径延迟</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">mesh_diam</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">164</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">纯 mesh 直径 11×H+15×V</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">max_path−mesh_diam</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">2</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">两端 ramp 各 1cy</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">H+V</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">12</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">mesh 流水线重叠的乐观修正（本拓扑少 1cy）</td></tr>
+</table>
+<p>代入 190+2+12=204，比精确式少 1 cycle（闭式用 max_path 代替全部 Lᵢ 分布）。
+<strong>period=(N−1)×M=191</strong> 是 root 带宽下界（稳态重复间隔），不是 makespan。</p>
 <div class="mesh-wrap">
 <svg width="384" height="544" viewBox="0 0 384 544" xmlns="http://www.w3.org/2000/svg">
 
@@ -2979,7 +3024,163 @@ a{color:#2563eb;}
 <line x1="49.0" y1="122.0" x2="49.0" y2="108.0" stroke="#ea580c" stroke-width="1.4" color="#ea580c" marker-end="url(#arr_ga)" opacity="0.85"/>
 <line x1="49.0" y1="96.0" x2="49.0" y2="82.0" stroke="#ea580c" stroke-width="1.4" color="#ea580c" marker-end="url(#arr_ga)" opacity="0.85"/>
 <line x1="49.0" y1="70.0" x2="49.0" y2="56.0" stroke="#ea580c" stroke-width="1.4" color="#ea580c" marker-end="url(#arr_ga)" opacity="0.85"/>
-<text x="36" y="532" font-size="10" fill="#64748b">节点着色=到 root 跳数；示 8 条完整路径，其余 183 源同型收敛；period≈191×M</text></svg>
+<text x="36" y="532" font-size="10" fill="#64748b">节点着色=到 root 跳数；示 8 条完整路径；全局 calendar 填满 root down-ramp → makespan=205</text></svg>
+<svg width="820" height="320" viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg">
+<text x="16" y="22" font-size="12" fill="#334155" font-weight="bold">全局 Link-Time Calendar（Gather M=1，root-slot 反向定标 + 链路时隙预约）</text>
+<text x="16" y="40" font-size="10" fill="#64748b">t₀=maxᵢ(Lᵢ−i)=15；makespan=t₀+190=205；period=191；闭式近似 204（H+V 流水线假设，少 1cy）</text>
+<text x="16" y="68" font-size="11" fill="#b45309">① Root down-ramp：每 cycle 完成 1 flit（191 连续 slot）</text>
+<line x1="16" y1="106" x2="776" y2="106" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="16.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="16.0" y="122" font-size="7" fill="#64748b">15</text>
+<rect x="20.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="24.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="27.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="31.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="35.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="35.9" y="122" font-size="7" fill="#64748b">20</text>
+<rect x="39.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="43.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="47.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="51.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="55.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="55.8" y="122" font-size="7" fill="#64748b">25</text>
+<rect x="59.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="63.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="67.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="71.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="75.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="75.7" y="122" font-size="7" fill="#64748b">30</text>
+<rect x="79.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="83.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="87.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="91.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="95.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="95.6" y="122" font-size="7" fill="#64748b">35</text>
+<rect x="99.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="103.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="107.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="111.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="115.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="115.5" y="122" font-size="7" fill="#64748b">40</text>
+<rect x="119.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="123.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="127.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="131.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="135.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="135.4" y="122" font-size="7" fill="#64748b">45</text>
+<rect x="139.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="143.3" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="147.3" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="151.3" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="155.3" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="155.3" y="122" font-size="7" fill="#64748b">50</text>
+<rect x="159.2" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="163.2" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="167.2" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="171.2" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="175.2" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="175.2" y="122" font-size="7" fill="#64748b">55</text>
+<rect x="179.1" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="183.1" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="187.1" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="191.1" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="195.1" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="195.1" y="122" font-size="7" fill="#64748b">60</text>
+<rect x="199.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="203.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="207.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="211.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="215.0" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="215.0" y="122" font-size="7" fill="#64748b">65</text>
+<rect x="218.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="222.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="226.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="230.9" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="234.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="234.8" y="122" font-size="7" fill="#64748b">70</text>
+<rect x="238.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="242.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="246.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="250.8" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="254.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="254.7" y="122" font-size="7" fill="#64748b">75</text>
+<rect x="258.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="262.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="266.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="270.7" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="274.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="274.6" y="122" font-size="7" fill="#64748b">80</text>
+<rect x="278.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="282.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="286.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="290.6" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="294.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="294.5" y="122" font-size="7" fill="#64748b">85</text>
+<rect x="298.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="302.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="306.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="310.5" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="314.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="314.4" y="122" font-size="7" fill="#64748b">90</text>
+<rect x="318.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="322.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="326.4" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<rect x="330.3" y="78" width="3.5" height="24" fill="#fed7aa" stroke="#fdba74" stroke-width="0.5"/>
+<text x="16" y="136" font-size="9" fill="#64748b">橙块=root 每 cycle 接收 1 flit（slot 15…205）；首 slot 由最远源路径决定</text>
+<text x="16" y="150" font-size="11" fill="#0369a1">② 链路 (12→0) send-time 日历：每 (link,cycle) 至多 1 flit（无冲突 TDM）</text>
+<rect x="16.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="31.8" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="47.7" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="63.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="79.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="95.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="111.0" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="126.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="142.7" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="158.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="174.3" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="190.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="206.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="221.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="237.7" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="253.5" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="269.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="285.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="301.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="316.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="332.7" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="348.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="364.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="380.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="396.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="411.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="427.7" y="162" width="14.8" height="22" fill="#f8fafc" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="443.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="459.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="475.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="491.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="506.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="522.7" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="538.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="554.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="570.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="586.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="601.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="617.7" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="633.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="649.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="665.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="681.0" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="696.8" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="712.7" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="728.5" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="744.3" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<rect x="760.2" y="162" width="14.8" height="22" fill="#2563eb" stroke="#94a3b8" stroke-width="0.4"/>
+<text x="16" y="200" font-size="9" fill="#64748b">蓝=该 cycle 在节点 12→0 竖链路发送；反向定标保证与 root slot 对齐</text>
+<text x="16" y="230" font-size="11" fill="#0f766e">③ 单 flit 反向预约（最远源示例）</text>
+<text x="16" y="246" font-size="9" fill="#64748b">F=目标 root 完成时刻 → down-ramp send=F−1 → 逐 hop 向前减 latency → up-ramp；若 (link,t) 冲突则 F++ 并更新后续 slot</text>
+<text x="16" y="262" font-size="9" fill="#64748b">公式：makespan = maxᵢ(Lᵢ−i) + (N−2) = 15+190 = 205（闭式 (N−2)+max_path−mesh_diam+H+V = 204 为乐观近似）</text>
+</svg>
 </div>
 <p class="metric">healthy M=1: makespan=205, period=191</p>
 </div>
@@ -4368,7 +4569,7 @@ a{color:#2563eb;}
 </g>
 <text x="16" y="552" font-size="10" fill="#64748b">period≈191×M</text></svg>
 </div>
-<p class="metric">healthy M=1: makespan=512, period=191</p>
+<p class="metric">healthy M=1: makespan=371, period=191</p>
 </div>
 <div class='card'><h2>AllReduce 全归约</h2>
 <p>左：Reduce 阶段，红箭头由叶向 root 汇聚并在 router combine。右：Broadcast 阶段，蓝箭头由 root 向全网 fork。calendar 在 mesh 链路上为两阶段分别预分配时隙后拼接。</p>

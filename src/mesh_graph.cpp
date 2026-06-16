@@ -173,11 +173,22 @@ int MeshGraph::GatherTheoBound(int msg_size) const
   if(alive <= 1) return msg_size;
 
   int root = EffectiveRoot(_collective_root);
-  int ramp_bound = (alive - 1) * msg_size;
-  int max_path = MaxPathToRoot(root);
-  int path_aware = (alive - 1) * msg_size - 1 + max_path - DiameterLatency();
-  if(msg_size == 1) path_aware += _h_lat + _v_lat;
-  return max(ramp_bound, path_aware);
+  int ramp_period = (alive - 1) * msg_size;
+
+  vector<int> path_lats;
+  for(int i = 0; i < _num_nodes; ++i) {
+    if(!IsAlive(i) || i == root) continue;
+    for(int k = 0; k < msg_size; ++k)
+      path_lats.push_back(PathLatency(i, root));
+  }
+  sort(path_lats.begin(), path_lats.end());
+
+  int slack = 0;
+  for(size_t i = 0; i < path_lats.size(); ++i)
+    slack = max(slack, path_lats[i] - (int)i);
+
+  int slot_makespan = slack + (int)path_lats.size() - 1;
+  return max(ramp_period, slot_makespan);
 }
 
 int MeshGraph::BisectionCapacity() const

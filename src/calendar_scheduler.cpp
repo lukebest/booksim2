@@ -24,6 +24,26 @@ vector<int> CalendarScheduler::PathLinkIds(const vector<int> & path) const
   return links;
 }
 
+bool CalendarScheduler::LinkFree(const map<int, vector<int> > & occupancy,
+                                   int link_id, int send_time) const
+{
+  if(!_graph.IsLinkAlive(link_id)) return false;
+  map<int, vector<int> >::const_iterator it = occupancy.find(link_id);
+  if(it == occupancy.end()) return true;
+  const vector<int> & occ = it->second;
+  for(size_t i = 0; i < occ.size(); ++i)
+    if(occ[i] == send_time) return false;
+  return true;
+}
+
+void CalendarScheduler::OccupyLink(map<int, vector<int> > & occupancy,
+                                     int link_id, int send_time) const
+{
+  vector<int> & occ = occupancy[link_id];
+  occ.push_back(send_time);
+  sort(occ.begin(), occ.end());
+}
+
 int CalendarScheduler::ReserveLink(map<int, vector<int> > & occupancy,
                                    int link_id, int start, int latency) const
 {
@@ -41,6 +61,168 @@ int CalendarScheduler::ReserveLink(map<int, vector<int> > & occupancy,
   occ.push_back(t);
   sort(occ.begin(), occ.end());
   return t + latency;
+}
+
+bool CalendarScheduler::TryPlaceBackward(const vector<int> & path,
+                                           bool use_up, bool use_down,
+                                           int finish_time,
+                                           const map<int, vector<int> > & occupancy,
+                                           vector<ScheduledHop> & hops) const
+{
+  hops.clear();
+  if(path.size() < 2) return false;
+
+  int t = finish_time;
+
+  if(use_down) {
+    int down_id = _graph.DownLinkId(path[path.size()-1]);
+    int lat = _graph.LinkLatency(down_id);
+    int send = t - lat;
+    if(send < 0 || !LinkFree(occupancy, down_id, send)) return false;
+    ScheduledHop dh;
+    dh.link_id = down_id;
+    dh.send_time = send;
+    dh.finish_time = t;
+    hops.insert(hops.begin(), dh);
+    t = send;
+  }
+
+  for(int h = (int)path.size() - 2; h >= 0; --h) {
+    int lid = _graph.LinkId(path[h], path[h+1]);
+    int lat = _graph.LinkLatency(lid);
+    int send = t - lat;
+    if(send < 0 || !LinkFree(occupancy, lid, send)) return false;
+    ScheduledHop mh;
+    mh.link_id = lid;
+    mh.send_time = send;
+    mh.finish_time = t;
+    hops.insert(hops.begin(), mh);
+    t = send;
+  }
+
+  if(use_up) {
+    int up_id = _graph.UpLinkId(path[0]);
+    int lat = _graph.LinkLatency(up_id);
+    int send = t - lat;
+    if(send < 0 || !LinkFree(occupancy, up_id, send)) return false;
+    ScheduledHop uh;
+    uh.link_id = up_id;
+    uh.send_time = send;
+    uh.finish_time = t;
+    hops.insert(hops.begin(), uh);
+  }
+
+  return true;
+}
+
+void CalendarScheduler::CommitHops(map<int, vector<int> > & occupancy,
+                                     const vector<ScheduledHop> & hops) const
+{
+  for(size_t i = 0; i < hops.size(); ++i)
+    OccupyLink(occupancy, hops[i].link_id, hops[i].send_time);
+}
+
+CalendarResult CalendarScheduler::ScheduleGatherGlobal(
+    vector<ScheduledTransfer> & transfers, int msg_size) const
+{
+  CalendarResult result;
+  result.feasible = true;
+  result.makespan = 0;
+  result.theo_bound = _graph.TheoBound("gather", msg_size);
+  int alive = 0;
+  for(int i = 0; i < _graph.NumNodes(); ++i)
+    if(_graph.IsAlive(i)) ++alive;
+  result.period = max(1, alive - 1) * msg_size;
+
+  if(transfers.empty()) {
+    result.feasible = false;
+    return result;
+  }
+
+  struct GatherItem {
+    size_t idx;
+    int path_lat;
+    int src;
+    int flit_idx;
+  };
+
+  vector<GatherItem> items;
+  items.reserve(transfers.size());
+  for(size_t i = 0; i < transfers.size(); ++i) {
+    const ScheduledTransfer & tr = transfers[i];
+    int plat = _graph.PathLatency(tr.src, tr.dst);
+    GatherItem gi;
+    gi.idx = i;
+    gi.path_lat = plat;
+    gi.src = tr.src;
+    gi.flit_idx = tr.flit_idx;
+    items.push_back(gi);
+  }
+
+  sort(items.begin(), items.end(),
+       [](const GatherItem & a, const GatherItem & b) {
+         if(a.path_lat != b.path_lat) return a.path_lat < b.path_lat;
+         if(a.src != b.src) return a.src < b.src;
+         return a.flit_idx < b.flit_idx;
+       });
+
+  vector<int> target_finish(items.size());
+  for(size_t i = 0; i < items.size(); ++i) {
+    if(i == 0)
+      target_finish[i] = items[i].path_lat;
+    else
+      target_finish[i] = max(items[i].path_lat, target_finish[i-1] + 1);
+  }
+
+  map<int, vector<int> > occupancy;
+  vector<ScheduledTransfer> scheduled(transfers.size());
+
+  for(size_t ord = 0; ord < items.size(); ++ord) {
+    size_t idx = items[ord].idx;
+    ScheduledTransfer & tr = transfers[idx];
+    vector<int> path = _graph.ShortestPath(tr.src, tr.dst);
+    if(path.size() < 2) {
+      result.feasible = false;
+      continue;
+    }
+
+    vector<ScheduledHop> hops;
+    while(true) {
+      if(TryPlaceBackward(path, tr.use_up_ramp, tr.use_down_ramp,
+                          target_finish[ord], occupancy, hops))
+        break;
+      ++target_finish[ord];
+      for(size_t j = ord + 1; j < items.size(); ++j)
+        target_finish[j] = max(target_finish[j], target_finish[j-1] + 1);
+    }
+
+    CommitHops(occupancy, hops);
+    tr.hops = hops;
+    tr.finish_time = target_finish[ord];
+    if(!hops.empty()) tr.start_time = hops.front().send_time;
+    scheduled[idx] = tr;
+  }
+
+  result.transfers.clear();
+  for(size_t ord = 0; ord < items.size(); ++ord)
+    result.transfers.push_back(scheduled[items[ord].idx]);
+
+  for(size_t i = 0; i < result.transfers.size(); ++i)
+    if(result.transfers[i].finish_time > result.makespan)
+      result.makespan = result.transfers[i].finish_time;
+
+  for(map<int, vector<int> >::const_iterator it = occupancy.begin();
+      it != occupancy.end(); ++it)
+    result.link_peak_occupancy[it->first] = (int)it->second.size();
+
+  if(result.transfers.empty()) result.feasible = false;
+
+  if(result.theo_bound > 0)
+    result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);
+  else
+    result.efficiency = 0.0;
+
+  return result;
 }
 
 static int TheoPeriod(const MeshGraph & graph, const string & name, int msg_size)
@@ -162,6 +344,55 @@ CalendarResult CalendarScheduler::ScheduleTransfers(vector<ScheduledTransfer> & 
 
 CalendarResult CalendarScheduler::Schedule(CollectivePlan & plan) const
 {
+  if(plan.name == "gather")
+    return ScheduleGatherGlobal(plan.transfers, plan.msg_size);
+
+  if(plan.name == "allgather") {
+    int root = plan.root;
+    vector<ScheduledTransfer> gather_tr;
+    vector<ScheduledTransfer> bcast_tr;
+    for(size_t i = 0; i < plan.transfers.size(); ++i) {
+      if(plan.transfers[i].dst == root)
+        gather_tr.push_back(plan.transfers[i]);
+      else
+        bcast_tr.push_back(plan.transfers[i]);
+    }
+
+    CalendarResult g = ScheduleGatherGlobal(gather_tr, plan.msg_size);
+    int gather_end = g.makespan;
+
+    int bcast_base = 0;
+    if(!bcast_tr.empty()) {
+      bcast_base = bcast_tr[0].start_time;
+      for(size_t i = 0; i < bcast_tr.size(); ++i)
+        bcast_tr[i].start_time -= bcast_base;
+    }
+
+    CalendarResult b = ScheduleTransfers(bcast_tr, "broadcast", plan.msg_size);
+    for(size_t i = 0; i < b.transfers.size(); ++i)
+      b.transfers[i].start_time += gather_end;
+
+    CalendarResult result;
+    result.feasible = g.feasible && b.feasible;
+    result.makespan = gather_end + b.makespan;
+    result.period = g.period;
+    result.theo_bound = _graph.TheoBound("allgather", plan.msg_size);
+    result.transfers = g.transfers;
+    result.transfers.insert(result.transfers.end(),
+                            b.transfers.begin(), b.transfers.end());
+    result.link_peak_occupancy = g.link_peak_occupancy;
+    for(map<int,int>::const_iterator it = b.link_peak_occupancy.begin();
+        it != b.link_peak_occupancy.end(); ++it)
+      result.link_peak_occupancy[it->first] =
+          max(result.link_peak_occupancy[it->first], it->second);
+    if(result.theo_bound > 0)
+      result.efficiency =
+          (double)result.theo_bound / (double)max(1, result.makespan);
+    else
+      result.efficiency = 0.0;
+    return result;
+  }
+
   CalendarResult result = ScheduleTransfers(plan.transfers, plan.name, plan.msg_size);
 
   if(plan.name == "alltoall") {

@@ -252,6 +252,226 @@ def mesh_reduce(mesh=None):
     return "\n".join(parts)
 
 
+def path_latency(mesh, src, dst):
+    path = mesh.shortest_path(src, dst)
+    if len(path) < 2:
+        return 10**9
+    lat = 1  # up-ramp
+    for j in range(len(path) - 1):
+        u, v = path[j], path[j + 1]
+        for a, b, w, _ in mesh.edges:
+            if a == u and b == v:
+                lat += w
+                break
+    lat += 1  # down-ramp
+    return lat
+
+
+def gather_bounds():
+    """Return closed-form 204, tight slot bound, period, slack for healthy gather M=1."""
+    mesh = Mesh()
+    lats = []
+    for n in range(N):
+        if not mesh.alive[n] or n == ROOT_NODE:
+            continue
+        lats.append(path_latency(mesh, n, ROOT_NODE))
+    lats.sort()
+    slack = max(lats[i] - i for i in range(len(lats)))
+    slack_i = max(range(len(lats)), key=lambda i: lats[i] - i)
+    tight = slack + len(lats) - 1
+    mesh_diam = H_LAT * (MX - 1) + V_LAT * (MY - 1)
+    max_path = max(lats)
+    closed = (len(lats) - 1) + max_path - mesh_diam + H_LAT + V_LAT
+    period = len(lats)
+    # node id for slack argmax (sorted by path latency, then node id)
+    sources = []
+    for n in range(N):
+        if not mesh.alive[n] or n == ROOT_NODE:
+            continue
+        sources.append((path_latency(mesh, n, ROOT_NODE), n))
+    sources.sort()
+    slack_node = sources[slack_i][1]
+    sx, sy = coord(slack_node)
+    return {
+        "lats": lats,
+        "slack": slack,
+        "slack_i": slack_i,
+        "slack_L": lats[slack_i],
+        "slack_node": slack_node,
+        "slack_coord": (sx, sy),
+        "tight": tight,
+        "closed": closed,
+        "period": period,
+        "max_path": max_path,
+        "min_path": lats[0] if lats else 0,
+        "mesh_diam": mesh_diam,
+    }
+
+
+def gather_link_calendar(mesh, max_cycles=48):
+    """Simulate global link-time calendar (backward placement) for hot links near root."""
+    items = []
+    for n in range(N):
+        if not mesh.alive[n] or n == ROOT_NODE:
+            continue
+        L = path_latency(mesh, n, ROOT_NODE)
+        items.append({"src": n, "path_lat": L})
+    items.sort(key=lambda x: (x["path_lat"], x["src"]))
+
+    target = []
+    for i, it in enumerate(items):
+        if i == 0:
+            target.append(it["path_lat"])
+        else:
+            target.append(max(it["path_lat"], target[i - 1] + 1))
+
+    occupancy = {}
+
+    def link_free(key, t):
+        return t not in occupancy.get(key, set())
+
+    def occupy(key, t):
+        occupancy.setdefault(key, set()).add(t)
+
+    def edge_lat(u, v):
+        for a, b, w, _ in mesh.edges:
+            if a == u and b == v:
+                return w
+        return H_LAT
+
+    for ord_i, it in enumerate(items):
+        path = mesh.shortest_path(it["src"], ROOT_NODE)
+        while True:
+            hops = []
+            t = target[ord_i]
+            ok = True
+
+            if True:  # down-ramp
+                key = ("down", ROOT_NODE)
+                lat = 1
+                send = t - lat
+                if send < 0 or not link_free(key, send):
+                    ok = False
+                else:
+                    hops.insert(0, (key, send, t))
+                    t = send
+
+            if ok:
+                for j in range(len(path) - 2, -1, -1):
+                    key = (path[j], path[j + 1])
+                    lat = edge_lat(path[j], path[j + 1])
+                    send = t - lat
+                    if send < 0 or not link_free(key, send):
+                        ok = False
+                        break
+                    hops.insert(0, (key, send, t))
+                    t = send
+
+            if ok:
+                key = ("up", it["src"])
+                lat = 1
+                send = t - lat
+                if send < 0 or not link_free(key, send):
+                    ok = False
+                else:
+                    hops.insert(0, (key, send, t))
+
+            if ok:
+                for key, s, _ in hops:
+                    occupy(key, s)
+                break
+
+            target[ord_i] += 1
+            for j in range(ord_i + 1, len(target)):
+                target[j] = max(target[j], target[j - 1] + 1)
+
+    hot = (12, 0)
+    hot_times = sorted(occupancy.get(hot, []))
+    return {
+        "target": target,
+        "hot": hot,
+        "hot_times": hot_times,
+        "makespan": max(target) if target else 0,
+    }
+
+
+def mesh_gather_calendar():
+    """SVG: root down-ramp timeline + link-time calendar on hot ingress link."""
+    info = gather_bounds()
+    mesh = Mesh()
+    cal = gather_link_calendar(mesh)
+    t0 = info["slack"]
+    t1 = cal["makespan"]
+    w, h = 820, 320
+    parts = [
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">',
+        '<text x="16" y="22" font-size="12" fill="#334155" font-weight="bold">'
+        "全局 Link-Time Calendar（Gather M=1，root-slot 反向定标 + 链路时隙预约）</text>",
+        f'<text x="16" y="40" font-size="10" fill="#64748b">'
+        f"t₀=maxᵢ(Lᵢ−i)={info['slack']}；makespan=t₀+190={info['tight']}；"
+        f"period=191；闭式近似 {info['closed']}（H+V 流水线假设，少 1cy）</text>",
+        # Root down-ramp timeline
+        '<text x="16" y="68" font-size="11" fill="#b45309">① Root down-ramp：每 cycle 完成 1 flit（191 连续 slot）</text>',
+    ]
+    ox, oy, cw = 16, 78, 760
+    parts.append(f'<line x1="{ox}" y1="{oy+28}" x2="{ox+cw}" y2="{oy+28}" stroke="#cbd5e1" stroke-width="1"/>')
+    # show window [t0 .. t1] scaled
+    span = max(t1 - t0 + 1, 40)
+    scale = cw / span
+    for k in range(0, min(span, 80)):
+        cyc = t0 + k
+        x = ox + k * scale
+        fill = "#fed7aa" if k < info["period"] else "#f1f5f9"
+        parts.append(
+            f'<rect x="{x:.1f}" y="{oy}" width="{max(scale-0.5,2):.1f}" height="24" fill="{fill}" stroke="#fdba74" stroke-width="0.5"/>'
+        )
+        if k % 5 == 0:
+            parts.append(
+                f'<text x="{x:.1f}" y="{oy+44}" font-size="7" fill="#64748b">{cyc}</text>'
+            )
+    parts.append(
+        f'<text x="{ox}" y="{oy+58}" font-size="9" fill="#64748b">'
+        f"橙块=root 每 cycle 接收 1 flit（slot {t0}…{t1}）；首 slot 由最远源路径决定</text>"
+    )
+    # Link-time calendar heatmap
+    ly = 150
+    parts.append(
+        f'<text x="16" y="{ly}" font-size="11" fill="#0369a1">'
+        f"② 链路 (12→0) send-time 日历：每 (link,cycle) 至多 1 flit（无冲突 TDM）</text>"
+    )
+    hot = cal["hot"]
+    hx, hy = 16, ly + 12
+    nshow = 48
+    for k in range(nshow):
+        cyc = t0 + k
+        x = hx + k * (cw / nshow)
+        occupied = cyc in cal["hot_times"]
+        fill = "#2563eb" if occupied else "#f8fafc"
+        parts.append(
+            f'<rect x="{x:.1f}" y="{hy}" width="{cw/nshow - 1:.1f}" height="22" '
+            f'fill="{fill}" stroke="#94a3b8" stroke-width="0.4"/>'
+        )
+    parts.append(
+        f'<text x="{hx}" y="{hy+38}" font-size="9" fill="#64748b">'
+        f"蓝=该 cycle 在节点 12→0 竖链路发送；反向定标保证与 root slot 对齐</text>"
+    )
+    # Backward placement schematic
+    by = 230
+    parts.append(f'<text x="16" y="{by}" font-size="11" fill="#0f766e">③ 单 flit 反向预约（最远源示例）</text>')
+    parts.append(
+        f'<text x="16" y="{by+16}" font-size="9" fill="#64748b">'
+        "F=目标 root 完成时刻 → down-ramp send=F−1 → 逐 hop 向前减 latency → up-ramp；"
+        "若 (link,t) 冲突则 F++ 并更新后续 slot</text>"
+    )
+    parts.append(
+        f'<text x="16" y="{by+32}" font-size="9" fill="#64748b">'
+        f"公式：makespan = maxᵢ(Lᵢ−i) + (N−2) = {info['slack']}+{info['period']-1} = {info['tight']}"
+        f"（闭式 (N−2)+max_path−mesh_diam+H+V = {info['closed']} 为乐观近似）</text>"
+    )
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
 def mesh_gather(mesh=None):
     mesh = mesh or Mesh()
     uid = "ga"
@@ -289,9 +509,70 @@ def mesh_gather(mesh=None):
             parts.append(arrow_line(*pos(a), *pos(b), "#ea580c", uid, width=1.4))
     parts.append(
         f'<text x="{PAD}" y="{h - 12}" font-size="10" fill="#64748b">'
-        f"节点着色=到 root 跳数；示 8 条完整路径，其余 183 源同型收敛；period≈191×M</text></svg>"
+        f"节点着色=到 root 跳数；示 8 条完整路径；全局 calendar 填满 root down-ramp → makespan={gather_bounds()['tight']}</text></svg>"
     )
     return "\n".join(parts)
+
+
+def mesh_gather_section():
+    """Spatial paths + link-time calendar diagram."""
+    return mesh_gather() + "\n" + mesh_gather_calendar()
+
+
+def gather_description():
+    """HTML prose for Gather card: bounds, L_i, slack=15 explanation."""
+    b = gather_bounds()
+    t0, tight, closed = b["slack"], b["tight"], b["closed"]
+    si, sL = b["slack_i"], b["slack_L"]
+    sn, (sx, sy) = b["slack_node"], b["slack_coord"]
+    mp, md = b["max_path"], b["mesh_diam"]
+    ramp2 = mp - md
+    return f"""<p>每个非 root 节点沿 <strong>Dijkstra 最短路径</strong>（H=4, V=8）向 root 发送 flit。
+<strong>全局 link-time calendar</strong>：先为每个 flit 分配 root down-ramp 完成时刻
+Fᵢ=t₀+i（相邻 slot 间隔 1 cycle），再<strong>反向</strong>逐 hop 在 (link, cycle) 网格上预约 send-time；
+冲突则 Fᵢ 递增并重算后续 slot。下图为空间路径 + 时隙日历示意。</p>
+
+<h3>Lᵢ 的含义</h3>
+<p><strong>Lᵢ</strong> 是将 191 个非 root 源按<strong>路径延迟升序</strong>编号后，第 i 个源的端到端延迟
+（up-ramp 1cy + mesh 最短路径 + root down-ramp 1cy，与 <code>PathLatency</code> 一致）。
+M=1 healthy 时 L₀={b['min_path']}（最近邻），L₁₉₀={mp}（角点 (11,15)）。</p>
+
+<h3>精确 makespan 下界：maxᵢ(Lᵢ−i)+(N−2)={tight}</h3>
+<p>root down-ramp 每 cycle 只能完成 1 个 flit，191 个 flit 占用连续 slot t₀, t₀+1, …, t₀+190。
+第 i 个 flit 最早在 cycle Lᵢ 完成，故约束 <code>t₀+i ≥ Lᵢ</code>，即 <code>t₀ ≥ Lᵢ−i</code>。
+取 <code>t₀=maxᵢ(Lᵢ−i)={t0}</code>，则 makespan = t₀+190 = t₀+(N−2) = <strong>{tight}</strong>。</p>
+
+<h3>为何 maxᵢ(Lᵢ−i)={t0}？</h3>
+<p>瓶颈<strong>不是</strong>最远角点 (11,15)（L=166 排在 i=190，166−190=−24，约束很松），
+而是「路径中等偏长、但排序靠前」的源：例如节点 <strong>{sn}</strong>（坐标 ({sx},{sy})）在排序中 i={si}，
+Lᵢ={sL}，故 Lᵢ−i={sL}−{si}=<strong>{t0}</strong>。
+含义：已有 {si} 个更短路径的源占用了 slot t₀…t₀+{si - 1}，该源若要在 slot t₀+{si} 完成，
+必须整体把 pipeline 起点后移 t₀={t0} cycle，使 t₀+{si}≥{sL}。
+同 slack={t0} 的还有 i=15（节点 7）、i=19（节点 8）等 L=30/34 的 x 轴同行源。</p>
+
+<h3>闭式近似：(N−2)+max_path−mesh_diam+H+V={closed}</h3>
+<table style="border-collapse:collapse;font-size:13px;margin:8px 0">
+<tr><th style="border:1px solid #cbd5e1;padding:4px 8px">项</th>
+<th style="border:1px solid #cbd5e1;padding:4px 8px">值</th>
+<th style="border:1px solid #cbd5e1;padding:4px 8px">含义</th></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">N−2</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">190</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">191 个 root slot 的首尾索引差</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">max_path</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">{mp}</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">最远源 up+mesh+down 全路径延迟</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">mesh_diam</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">{md}</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">纯 mesh 直径 11×H+15×V</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">max_path−mesh_diam</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">{ramp2}</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">两端 ramp 各 1cy</td></tr>
+<tr><td style="border:1px solid #cbd5e1;padding:4px 8px">H+V</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">{H_LAT + V_LAT}</td>
+<td style="border:1px solid #cbd5e1;padding:4px 8px">mesh 流水线重叠的乐观修正（本拓扑少 1cy）</td></tr>
+</table>
+<p>代入 190+{ramp2}+{H_LAT + V_LAT}={closed}，比精确式少 1 cycle（闭式用 max_path 代替全部 Lᵢ 分布）。
+<strong>period=(N−1)×M=191</strong> 是 root 带宽下界（稳态重复间隔），不是 makespan。</p>"""
 
 
 def mesh_allgather():
@@ -569,8 +850,8 @@ COLLECTIVES = [
     (
         "gather",
         "Gather 收集",
-        mesh_gather,
-        """<p>每个非 root 节点（橙箭头）沿 <strong>Dijkstra 最短路径</strong>（曼哈顿加权：H=4, V=8）向 root 发送 flit。图中浅色线为全部 191 条源路径，深色为抽样高亮。所有 flit 最终汇入 root 的 down-ramp（瓶颈：每 cycle 1 flit）。</p>""",
+        mesh_gather_section,
+        None,  # description from gather_description()
     ),
     (
         "allgather",
@@ -631,6 +912,8 @@ def render():
         note = ""
         if m1:
             note = f'<p class="metric">healthy M=1: makespan={m1["makespan"]}, period={m1["period"]}</p>'
+        if desc is None and name == "gather":
+            desc = gather_description()
         parts.extend([
             f"<div class='card'><h2>{html.escape(title)}</h2>",
             desc,

@@ -33,6 +33,23 @@ private:
   int ReserveLink(std::map<int, std::vector<int> > & occupancy,
                   int link_id, int start, int latency) const;
 
+  bool LinkFree(const std::map<int, std::vector<int> > & occupancy,
+                int link_id, int send_time) const;
+
+  void OccupyLink(std::map<int, std::vector<int> > & occupancy,
+                    int link_id, int send_time) const;
+
+  bool TryPlaceBackward(const std::vector<int> & path,
+                        bool use_up, bool use_down, int finish_time,
+                        const std::map<int, std::vector<int> > & occupancy,
+                        std::vector<ScheduledHop> & hops) const;
+
+  void CommitHops(std::map<int, std::vector<int> > & occupancy,
+                  const std::vector<ScheduledHop> & hops) const;
+
+  CalendarResult ScheduleGatherGlobal(std::vector<ScheduledTransfer> & transfers,
+                                      int msg_size) const;
+
   std::vector<int> PathLinkIds(const std::vector<int> & path) const;
 };
 
