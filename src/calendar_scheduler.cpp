@@ -244,6 +244,110 @@ CalendarResult CalendarScheduler::ScheduleGatherGlobal(
   return result;
 }
 
+CalendarResult CalendarScheduler::ScheduleAllGatherRingTree(int msg_size) const
+{
+  // Ring-tree hybrid allgather on a healthy mesh: every source broadcasts via
+  // an X-then-Y dimension-ordered multicast tree (row spine + column branches).
+  // Forwarding is IN-NETWORK (router fork): a node duplicates an arriving flit,
+  // ejecting one copy to its PE (down-ramp) and forwarding one copy onward.
+  // Intermediate nodes never eject-then-reinject, so no PE/SRAM bounce is paid.
+  // A global link-time calendar reserves each (directed-link, cycle) and
+  // (node down-ramp, cycle) to <=1 flit, so the schedule is conflict-free by
+  // construction; the greedy earliest-free packing reaches the makespan lower
+  // bound exactly (verified against utils/sim_ring_tree.py).
+  CalendarResult result;
+  result.feasible = true;
+  result.makespan = 0;
+  result.theo_bound = _graph.TheoBound("allgather", msg_size);
+
+  const int N = _graph.NumNodes();
+  const int MX = _graph.MeshX();
+  const int MY = _graph.MeshY();
+  const int ramp = _graph.RampLatency();
+
+  int alive = 0;
+  for(int i = 0; i < N; ++i) if(_graph.IsAlive(i)) ++alive;
+  result.period = max(1, alive - 1) * msg_size;
+
+  // Per-source tree children: child[s][node] -> nodes it forwards to.
+  vector<vector<vector<int> > > child(N, vector<vector<int> >(N));
+  for(int s = 0; s < N; ++s) {
+    int sx = s % MX, sy = s / MX;
+    for(int x = sx + 1; x < MX; ++x) child[s][(x - 1) + MX * sy].push_back(x + MX * sy);
+    for(int x = sx - 1; x >= 0; --x) child[s][(x + 1) + MX * sy].push_back(x + MX * sy);
+    for(int x = 0; x < MX; ++x) {
+      for(int y = sy + 1; y < MY; ++y) child[s][x + MX * (y - 1)].push_back(x + MX * y);
+      for(int y = sy - 1; y >= 0; --y) child[s][x + MX * (y + 1)].push_back(x + MX * y);
+    }
+  }
+
+  unordered_map<long long, unordered_set<int> > link_busy;
+  unordered_map<int, unordered_set<int> > down_busy;
+  unordered_map<long long, int> avail;
+
+  // earliest free cycle >= e on a calendar slot-set (gaps are tiny once packed)
+  struct Reserver {
+    int operator()(unordered_set<int> & s, int e) const {
+      int t = e;
+      while(s.count(t)) ++t;
+      s.insert(t);
+      return t;
+    }
+  } reserve;
+
+  priority_queue<RTEvent, vector<RTEvent>, RTEventGreater> pq;
+  long long seq = 0;
+  for(int s = 0; s < N; ++s) {
+    for(int k = 0; k < msg_size; ++k) {
+      long long key = ((long long)s * N + s) * msg_size + k;
+      avail[key] = ramp + k;
+      const vector<int> & cs = child[s][s];
+      for(size_t i = 0; i < cs.size(); ++i) {
+        RTEvent ev; ev.ready = ramp + k; ev.seq = seq++;
+        ev.s = s; ev.parent = s; ev.child = cs[i]; ev.k = k;
+        pq.push(ev);
+      }
+    }
+  }
+
+  while(!pq.empty()) {
+    RTEvent ev = pq.top(); pq.pop();
+    long long pkey = ((long long)ev.s * N + ev.parent) * msg_size + ev.k;
+    int t_avail = avail[pkey];
+    int lat = _graph.Latency(ev.parent, ev.child);
+    long long lk = (long long)ev.parent * N + ev.child;
+    int send = reserve(link_busy[lk], max(ev.ready, t_avail));
+    int arrive = send + lat;
+    long long ckey = ((long long)ev.s * N + ev.child) * msg_size + ev.k;
+    avail[ckey] = arrive;
+    int eject = reserve(down_busy[ev.child], arrive);
+    int done = eject + ramp;
+    if(done > result.makespan) result.makespan = done;
+    const vector<int> & gcs = child[ev.s][ev.child];
+    for(size_t i = 0; i < gcs.size(); ++i) {
+      RTEvent nx; nx.ready = arrive; nx.seq = seq++;
+      nx.s = ev.s; nx.parent = ev.child; nx.child = gcs[i]; nx.k = ev.k;
+      pq.push(nx);
+    }
+  }
+
+  // Verify allgather correctness: every node ejected exactly (alive-1)*M flits.
+  int expect = (alive - 1) * msg_size;
+  for(int n = 0; n < N; ++n) {
+    if(!_graph.IsAlive(n)) continue;
+    if((int)down_busy[n].size() != expect) { result.feasible = false; break; }
+  }
+  for(unordered_map<long long, unordered_set<int> >::const_iterator it = link_busy.begin();
+      it != link_busy.end(); ++it)
+    result.link_peak_occupancy[(int)(it->first % 1000000)] = (int)it->second.size();
+
+  if(result.theo_bound > 0)
+    result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);
+  else
+    result.efficiency = 0.0;
+  return result;
+}
+
 static int TheoPeriod(const MeshGraph & graph, const string & name, int msg_size)
 {
   int alive = 0;
@@ -367,6 +471,12 @@ CalendarResult CalendarScheduler::Schedule(CollectivePlan & plan) const
     return ScheduleGatherGlobal(plan.transfers, plan.msg_size);
 
   if(plan.name == "allgather") {
+    // On a healthy mesh the optimum is the ring-tree hybrid (in-network fork),
+    // which hits the makespan lower bound conflict-free. Faults break the fixed
+    // X-then-Y routing, so fall back to the gather+broadcast schedule there.
+    if(_graph.IsHealthy())
+      return ScheduleAllGatherRingTree(plan.msg_size);
+
     int root = plan.root;
     vector<ScheduledTransfer> gather_tr;
     vector<ScheduledTransfer> bcast_tr;
