@@ -99,7 +99,8 @@ def build_trees(mx, my):
     return trees, parents
 
 
-def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=False):
+def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=False,
+          bw=1):
     n = mx * my
     trees, parents = build_trees(mx, my)
 
@@ -135,10 +136,17 @@ def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=Fal
         if len(vars_) > 1:
             model.AddAllDifferent(vars_)
 
-    # down-ramp conflict-free + zero eject buffer: distinct arrivals per node
+    # down-ramp eject + zero eject buffer (E=0): <= bw ejects per cycle per node.
+    # bw==1 -> AllDifferent (1/cycle). bw>1 -> cumulative: unit-duration task at
+    # start=a[s,d], demand 1, capacity bw (wider down-ramp consumes bw/cycle).
     for d in range(n):
         grp = [a[(s, d)] for s in range(n) if s != d]
-        model.AddAllDifferent(grp)
+        if bw == 1:
+            model.AddAllDifferent(grp)
+        else:
+            iv = [model.NewFixedSizeIntervalVar(v, 1, f"ej_{d}_{i}")
+                  for i, v in enumerate(grp)]
+            model.AddCumulative(iv, [1] * len(iv), bw)
 
     # objective: minimize makespan
     mk = model.NewIntVar(0, horizon, "makespan")
@@ -166,21 +174,22 @@ def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=Fal
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         res["makespan"] = int(solver.Value(mk)) + ramp
         res["best_bound"] = int(solver.BestObjectiveBound()) + ramp
-        # verify zero eject buffer + conflict-free from the solution
-        res["verified"] = _verify(solver, a, link_users, n, ramp)
+        # verify links (always 1/cycle); eject strict-distinct only when bw==1
+        res["verified"] = _verify(solver, a, link_users, n, ramp, bw)
     return res
 
 
-def _verify(solver, a, link_users, n, ramp):
-    # link: distinct send-equivalent arrivals
+def _verify(solver, a, link_users, n, ramp, bw=1):
+    # link: distinct send-equivalent arrivals (always 1/cycle/directed-link)
     for pc, vars_ in link_users.items():
         vals = [solver.Value(v) for v in vars_]
         if len(vals) != len(set(vals)):
             return False
-    # eject: distinct arrivals per node (E=0 implied: eject == arrival)
+    # eject: <= bw per cycle per node (E=0: eject == arrival)
+    from collections import Counter
     for d in range(n):
-        vals = [solver.Value(a[(s, d)]) for s in range(n) if s != d]
-        if len(vals) != len(set(vals)):
+        cnt = Counter(solver.Value(a[(s, d)]) for s in range(n) if s != d)
+        if max(cnt.values()) > bw:
             return False
     return True
 
@@ -198,6 +207,7 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--warmstart", action="store_true",
                     help="seed CP-SAT with greedy schedule + tighten horizon")
+    ap.add_argument("--bw", type=int, default=1, help="down-ramp eject bw (flit/cycle)")
     args = ap.parse_args()
     mx, my, h, vv, ramp = args.mx, args.my, args.h, args.v, args.ramp
 
@@ -209,7 +219,7 @@ def main():
           f"LB*={lb} @({bx},{by})  W={wlabel}  horizon={horizon}  t<={args.time}s"
           f"  warmstart={args.warmstart}")
     res = solve(mx, my, h, vv, ramp, args.w, horizon, args.time, args.workers,
-                warmstart=args.warmstart)
+                warmstart=args.warmstart, bw=args.bw)
     print(f"  status   : {res['status']}  ({res['wall']:.1f}s)")
     if res.get("warm") is not None:
         print(f"  warmstart: greedy makespan = {res['warm']}")

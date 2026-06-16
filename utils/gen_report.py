@@ -478,8 +478,55 @@ CP-SAT 的紧下界推翻了它。代价虽小（6×8）到中等（12×16），
   <text x="18" y="105" text-anchor="middle" font-size="10" fill="#64748b" transform="rotate(-90 18 105)">makespan</text>
 </svg>
 <p style="font-size:12px;color:#64748b">注：曲线由贪心启发式产生（<code>sched_no_eject_buffer.py</code>），是<strong>可达上界</strong>而非最优；
-最优 LB*=205（绿线）才是 E=0 下真正的下界，曲线与它的差距是<strong>调度器次优性</strong>（见结论），不是物理代价。
+CP-SAT 已证下界 257（绿线）高于松弛 LB* 205；曲线与 CP-SAT 下界的差距是<strong>调度器次优性</strong>。
 带宽项 192 因到达量化不可达，仅作参照。</p>
+
+<h3>down-ramp 带宽扩充（B flit/cycle eject）</h3>
+<p>若把每个节点的 down-ramp 从 <strong>1 flit/cycle</strong> 扩到 <strong>2 或 4 flit/cycle</strong>（仍 E=0：到达当 cycle 即 eject，只是同一 cycle 可并行取走 B 个 flit），
+链路带宽仍为 1 flit/cycle/directed-link。Makespan 由两个下界取大决定：</p>
+<p><code>makespan ≥ max( ⌈(N−1)M / B⌉ + ramp , latency_floor )</code></p>
+<ul>
+<li><strong>eject 带宽项</strong> <code>⌈(N−1)/B⌉+ramp</code>：随 B 增大而下降（6×8：48→25→13；12×16：192→97→49）。</li>
+<li><strong>延迟地板 latency_floor</strong>：最远 flit 的物理传播 + ramp，<strong>与 B 无关</strong>
+（6×8 = <strong>78</strong>；12×16 = <strong>166</strong>，角 (11,15)→(0,0) 的维序路径 11×H+15×V+2×ramp）。</li>
+</ul>
+<p>实测（<code>utils/sched_eject_bw.py</code> 的 LB*(B) + 贪心；6×8 用 CP-SAT <code>sched_ilp.py --bw B</code> 证最优）：</p>
+
+<p><strong>6×8（延迟地板 78，B=1 时 eject 项 48 已低于地板 → 早就是延迟受限）</strong></p>
+<table style="font-size:13px">
+<tr><th>B (flit/cycle)</th><th>eject 带宽项</th><th>LB*(B)</th><th>CP-SAT 真实最优</th><th>贪心 (W=8)</th></tr>
+<tr><td>1</td><td>48</td><td>78</td><td><strong>81（已证）</strong></td><td>103</td></tr>
+<tr style="background:#ecfdf5"><td>2</td><td>25</td><td>78</td><td><strong>78（已证，命中地板）</strong></td><td>78</td></tr>
+<tr><td>4</td><td>13</td><td>78</td><td><strong>78（已证）</strong></td><td>78</td></tr>
+</table>
+<p>B=1→2：消掉 fork 争用带来的 +3（81→78）；<strong>B≥2 无进一步收益</strong>（已在延迟地板上）。</p>
+
+<p><strong>12×16（延迟地板 166；B=1 时 eject 项 192 &gt; 166 → eject 受限）</strong></p>
+<table style="font-size:13px">
+<tr><th>B (flit/cycle)</th><th>eject 带宽项</th><th>LB*(B)</th><th>贪心 (W=∞)</th><th>贪心 (W=8)</th></tr>
+<tr><td>1</td><td>192</td><td>205</td><td>274</td><td>330</td></tr>
+<tr style="background:#ecfdf5"><td>2</td><td>97</td><td><strong>166</strong></td><td><strong>201</strong></td><td>256</td></tr>
+<tr><td>4</td><td>49</td><td>166</td><td>201</td><td>248</td></tr>
+</table>
+<p>B=1→2：LB* 从 205 降到 166（−19%），贪心可达从 274→201（−27%），瓶颈从 down-ramp 转为<strong>延迟地板</strong>。
+<strong>B=2→4 基本饱和</strong>（LB* 与 W=∞ 贪心均不变）；继续加宽 down-ramp 无法突破 166 的传播延迟墙。</p>
+
+<p><strong>12×16 makespan vs down-ramp 带宽 B（E=0，贪心 W=∞ 可达值）</strong></p>
+<svg width="480" height="200" viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+  <text x="240" y="14" text-anchor="middle" font-size="11" fill="#334155">12×16：makespan vs down-ramp 带宽 B（E=0, W=∞ 贪心）</text>
+  <line x1="55" y1="165" x2="450" y2="165" stroke="#94a3b8"/>
+  <line x1="55" y1="25" x2="55" y2="165" stroke="#94a3b8"/>
+  <!-- y: 300->165, 166->52, 201->82 ; scale approx -->
+  <line x1="55" y1="52" x2="450" y2="52" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="452" y="56" font-size="9" fill="#059669">延迟地板 166</text>
+  <line x1="55" y1="82" x2="450" y2="82" stroke="#2563eb" stroke-dasharray="4,3"/>
+  <text x="452" y="86" font-size="9" fill="#2563eb">贪心可达 ~201</text>
+  <polyline fill="none" stroke="#dc2626" stroke-width="2.5" points="100,82 200,82 300,82"/>
+  <circle cx="100" cy="82" r="5" fill="#dc2626"/><text x="100" y="100" text-anchor="middle" font-size="9">B=1:274</text>
+  <circle cx="200" cy="82" r="5" fill="#059669"/><text x="200" y="74" text-anchor="middle" font-size="9">B=2:201</text>
+  <circle cx="300" cy="82" r="5" fill="#059669"/><text x="300" y="74" text-anchor="middle" font-size="9">B=4:201</text>
+  <text x="250" y="188" text-anchor="middle" font-size="10" fill="#64748b">down-ramp 带宽 B (flit/cycle) →</text>
+</svg>
 
 <h3>结论（CP-SAT 精确求解后的最终结论）</h3>
 <ul>
@@ -494,7 +541,11 @@ CP-SAT 的紧下界推翻了它。代价虽小（6×8）到中等（12×16），
 <li><strong>规模瓶颈</strong>：12×16 是 ~37k 变量 + 192 组大 AllDifferent，CP-SAT 600s 内
 <strong>从零找不到可行解</strong>；必须用贪心解<strong>热启动</strong>（<code>--warmstart</code>，AddHint + 收紧 horizon）才能在 313 上继续改进。
 要逼近真实最优需更长时间或问题分解（按瓶颈节点分块 / 列生成）。</li>
+<li><strong>down-ramp 加宽有效但很快饱和</strong>：B=1→2 在 12×16 上 LB* 205→166、贪心 274→201（−27%）；
+6×8 上 CP-SAT 81→78。B≥2（6×8）/ B≥2（12×16）均已撞上<strong>延迟地板</strong>（78/166），继续加宽无收益。
+脚本 <code>utils/sched_eject_bw.py</code>；CP-SAT 加宽用 <code>sched_ilp.py --bw B</code>（cumulative 约束）。</li>
 <li>相关脚本：<code>utils/sched_ilp.py</code>（CP-SAT 精确/热启动，需 <code>ortools</code>，见 <code>.venv-ilp</code>）、
+<code>utils/sched_eject_bw.py</code>（down-ramp 带宽 B 扫参）、
 <code>utils/sched_zero_eject_v2.py</code>（松弛下界 LB*）、
 <code>utils/sched_no_eject_buffer.py</code>（贪心 E=0 + 有界 W：274/330）、
 <code>utils/sched_zero_buffer.py</code>（W=0 完全刚性 139/579）。</li>

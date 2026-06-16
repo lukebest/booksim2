@@ -668,7 +668,17 @@ def allgather_description():
         <p style="font-size:12px;color:#475569">松弛 LB*（只看单 down-ramp packing）<strong>低估</strong>了真实代价：
         计入链路争用 + fork 树共享前缀耦合后，6×8 多 +3（→81），12×16(W=8) 已证下界就到 257（比 205 多 ≥25%）。
         CP-SAT 也明显优于贪心（6×8: 108→81；12×16: 330→313）。完整分析见
-        <a href="report.html">report.html</a>「用 CP-SAT 精确求解…」。</p>"""
+        <a href="report.html">report.html</a>「用 CP-SAT 精确求解…」。</p>
+        <h3 style="font-size:15px;margin:16px 0 8px">down-ramp 带宽扩充（B flit/cycle）</h3>
+        <p>若 down-ramp 从 1 扩到 2/4 flit/cycle（仍 E=0，同一 cycle 可并行 eject B 个 flit），
+        makespan ≥ <code>max(⌈(N−1)/B⌉+ramp, latency_floor)</code>。延迟地板与 B 无关：6×8=<strong>78</strong>，12×16=<strong>166</strong>。</p>
+        <table style="font-size:12px;border-collapse:collapse;width:100%;margin:8px 0">
+        <tr style="background:#f1f5f9"><th>Mesh</th><th>B=1</th><th>B=2</th><th>B=4</th><th>饱和说明</th></tr>
+        <tr><td>6×8 CP-SAT 最优</td><td>81</td><td><strong>78</strong></td><td>78</td><td>B≥2 命中延迟地板</td></tr>
+        <tr style="background:#ecfdf5"><td>12×16 贪心(W=∞)</td><td>274</td><td><strong>201</strong></td><td>201</td><td>B≥2 命中延迟地板 166；可达仍 &gt;166 因链路争用</td></tr>
+        </table>
+        <p style="font-size:12px;color:#475569">12×16：B=1→2 使 LB* 从 205 降到 166（−19%），可达从 274→201（−27%）；B=2→4 无进一步改善。
+        详见 <a href="report.html">report.html</a>「down-ramp 带宽扩充」。</p>"""
 
 
 def buffer_tradeoff_svg():
@@ -694,6 +704,23 @@ def buffer_tradeoff_svg():
   <circle cx="340" cy="124" r="3.5" fill="#2563eb"/><text x="340" y="117" text-anchor="middle" font-size="8">8:330</text>
   <circle cx="410" cy="142" r="3.5" fill="#94a3b8"/><text x="410" y="135" text-anchor="middle" font-size="8" fill="#64748b">∞:274</text>
   <text x="250" y="200" text-anchor="middle" font-size="9" fill="#64748b">每跳网内等待上限 W</text>
+</svg>"""
+
+
+def eject_bw_svg():
+    """12×16 makespan vs down-ramp bandwidth B (greedy W=inf)."""
+    return """
+<svg width="480" height="185" viewBox="0 0 480 185" xmlns="http://www.w3.org/2000/svg">
+  <text x="240" y="14" text-anchor="middle" font-size="11" fill="#334155">12×16：makespan vs down-ramp 带宽 B（E=0, W=∞ 贪心）</text>
+  <line x1="50" y1="155" x2="445" y2="155" stroke="#94a3b8"/>
+  <line x1="50" y1="28" x2="50" y2="155" stroke="#94a3b8"/>
+  <line x1="50" y1="48" x2="445" y2="48" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="447" y="52" font-size="8" fill="#059669">延迟地板166</text>
+  <polyline fill="none" stroke="#2563eb" stroke-width="2" points="90,75 190,75 290,75"/>
+  <circle cx="90" cy="75" r="4" fill="#dc2626"/><text x="90" y="92" text-anchor="middle" font-size="8">B1:274</text>
+  <circle cx="190" cy="75" r="4" fill="#059669"/><text x="190" y="67" text-anchor="middle" font-size="8">B2:201</text>
+  <circle cx="290" cy="75" r="4" fill="#059669"/><text x="290" y="67" text-anchor="middle" font-size="8">B4:201</text>
+  <text x="240" y="175" text-anchor="middle" font-size="9" fill="#64748b">down-ramp 带宽 B (flit/cycle)</text>
 </svg>"""
 
 
@@ -1011,6 +1038,9 @@ def render():
         if name == "allgather":
             parts.append('<div class="mesh-wrap">')
             parts.append(buffer_tradeoff_svg())
+            parts.append("</div>")
+            parts.append('<div class="mesh-wrap">')
+            parts.append(eject_bw_svg())
             parts.append("</div>")
         parts.extend([
             note,
