@@ -247,7 +247,7 @@ def mesh_reduce(mesh=None):
     draw_flow_edges(parts, edges, uid, "#dc2626", reverse=True)
     parts.append(
         f'<text x="{PAD}" y="{h - 12}" font-size="10" fill="#64748b">'
-        f"叶节点先发起，router 内 inline combine；仅 mesh 链路 (H/V)，无 PE ramp → makespan=164 (M=1)</text></svg>"
+        f"叶节点先经 up-ramp 注入，router inline combine；root down-ramp 输出 → makespan=166 (M=1)</text></svg>"
     )
     return "\n".join(parts)
 
@@ -564,7 +564,7 @@ COLLECTIVES = [
         "reduce",
         "Reduce 归约",
         mesh_reduce,
-        """<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。flit 在 router 内 <strong>inline combine</strong>，仅经 mesh 链路（H=4cy / V=8cy）汇聚，<strong>不经过 PE up/down ramp</strong>。calendar 按 latency 加权深度从远到近安排 wave；M=1 makespan=164（=4×11+8×15）。</p>""",
+        """<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。各节点 PE 经 <strong>up-ramp</strong> 注入，flit 在 router 内 <strong>inline combine</strong>，沿 mesh 链路（H=4cy / V=8cy）汇聚；归约完成后由 root 的 <strong>down-ramp</strong> 输出至 PE。M=1 makespan=166（1cy up + 164cy mesh + 1cy down）。</p>""",
     ),
     (
         "gather",

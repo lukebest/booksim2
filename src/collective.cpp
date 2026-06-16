@@ -152,6 +152,21 @@ CollectivePlan CollectivePlanner::PlanReduce(int msg_size, int root,
   for(size_t i = 0; i < nodes.size(); ++i)
     if(lat[nodes[i]] > max_lat) max_lat = lat[nodes[i]];
 
+  int exit_child = -1;
+  int exit_lat = -1;
+  vector<int> num_children(_graph.NumNodes(), 0);
+  for(size_t i = 0; i < nodes.size(); ++i) {
+    int node = nodes[i];
+    if(node == root) continue;
+    int p = parent[node];
+    if(p < 0) { plan.feasible = false; continue; }
+    ++num_children[p];
+    if(p == root && lat[node] > exit_lat) {
+      exit_lat = lat[node];
+      exit_child = node;
+    }
+  }
+
   for(int k = 0; k < msg_size; ++k) {
     for(size_t i = 0; i < nodes.size(); ++i) {
       int node = nodes[i];
@@ -159,7 +174,9 @@ CollectivePlan CollectivePlanner::PlanReduce(int msg_size, int root,
       int p = parent[node];
       if(p < 0) { plan.feasible = false; continue; }
       int ready = k + (max_lat - lat[node]);
-      AddEdgeTransfer(plan.transfers, node, p, k, ready, false, false);
+      bool up = (num_children[node] == 0);
+      bool down = (p == root && node == exit_child);
+      AddEdgeTransfer(plan.transfers, node, p, k, ready, up, down);
     }
   }
   return plan;

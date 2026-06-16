@@ -61,5 +61,13 @@ int main()
   for(size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i)
     RunCollective(config, names[i], 4);
 
+  cout << "\n=== healthy M=16 ===\n";
+  for(size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i)
+    RunCollective(config, names[i], 16);
+
+  cout << "\n=== healthy M=64 ===\n";
+  for(size_t i = 0; i < sizeof(names)/sizeof(names[0]); ++i)
+    RunCollective(config, names[i], 64);
+
   return 0;
 }

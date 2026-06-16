@@ -131,8 +131,8 @@ def theory_table():
     alltoall_bw = (N * (N - 1) + bisection - 1) // bisection
     rows = [
         ("broadcast", f"{bcast_diam} + M - 1", "M", "Root up-ramp + mesh (H=4/V=8) + leaf down-ramp"),
-        ("reduce", f"{mesh_diam} + M - 1", "M", "Inline router combine; mesh links only (no ramps)"),
-        ("allreduce", f"{mesh_diam} + {bcast_diam} + M - 1", "M", "Inline reduce phase + broadcast phase"),
+        ("reduce", f"{bcast_diam} + M - 1", "M", "Node up-ramp + mesh inline combine + root down-ramp"),
+        ("allreduce", f"2×{bcast_diam} + M - 1", "M", "Reduce (up+mesh+down) then broadcast"),
         (
             "gather",
             f"max({(N-1)}×M, (N-1)×M + path − mesh_diam + H + V)",
@@ -177,8 +177,8 @@ def q1_answer(healthy):
         "<p><strong>Q1 conclusion:</strong> Not all collectives can reach the unconstrained latency minimum.</p>",
         "<ul>",
         "<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>",
-        "<li><strong>reduce</strong>: inline combine in routers on mesh links only (no PE ramps); optimal period <code>M</code>.</li>",
-        "<li><strong>allreduce</strong>: inline reduce phase (mesh) followed by broadcast phase (ramps + mesh).</li>",
+        "<li><strong>reduce</strong>: each node injects via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>",
+        "<li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>",
         f"<li><strong>gather, allgather</strong>: down-ramp bound <code>{N-1}×M</code> plus longest shortest-path latency (H=4/V=8); simulated gather M=1 makespan ≈ 205.</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",

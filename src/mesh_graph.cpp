@@ -269,6 +269,7 @@ int MeshGraph::TheoBound(const string & collective_type, int msg_size) const
   if(alive <= 1) return msg_size;
 
   int mesh_diam = DiameterLatency();
+  int reduce_diam = mesh_diam + 2 * _ramp_lat;
   int bcast_diam = mesh_diam + 2 * _ramp_lat;
   int bisection = BisectionCapacity();
   if(bisection <= 0) bisection = 1;
@@ -277,9 +278,9 @@ int MeshGraph::TheoBound(const string & collective_type, int msg_size) const
   if(collective_type == "broadcast")
     return bcast_diam + msg_size - 1;
   if(collective_type == "reduce")
-    return mesh_diam + msg_size - 1;
+    return reduce_diam + msg_size - 1;
   if(collective_type == "allreduce")
-    return mesh_diam + bcast_diam + msg_size - 1;
+    return reduce_diam + bcast_diam + msg_size - 1;
   if(collective_type == "gather")
     return GatherTheoBound(msg_size);
   if(collective_type == "allgather")
