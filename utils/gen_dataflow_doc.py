@@ -564,7 +564,7 @@ COLLECTIVES = [
         "reduce",
         "Reduce 归约",
         mesh_reduce,
-        """<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。各节点 PE 经 <strong>up-ramp</strong> 注入，flit 在 router 内 <strong>inline combine</strong>，沿 mesh 链路（H=4cy / V=8cy）汇聚；归约完成后由 root 的 <strong>down-ramp</strong> 输出至 PE。M=1 makespan=166（1cy up + 164cy mesh + 1cy down）。</p>""",
+        """<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。参与归约的叶节点 PE 经 <strong>up-ramp</strong> 注入本地 flit，router 内 <strong>inline combine</strong>，沿 mesh 链路（H=4cy / V=8cy）逐级汇聚；最终结果经 root <strong>down-ramp</strong> 输出至 PE。M=1 makespan=166（1cy up + 164cy mesh + 1cy down，与 broadcast 对称）。</p>""",
     ),
     (
         "gather",

@@ -177,7 +177,7 @@ def q1_answer(healthy):
         "<p><strong>Q1 conclusion:</strong> Not all collectives can reach the unconstrained latency minimum.</p>",
         "<ul>",
         "<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>",
-        "<li><strong>reduce</strong>: each node injects via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>",
+        "<li><strong>reduce</strong>: leaf PE nodes inject via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>",
         "<li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>",
         f"<li><strong>gather, allgather</strong>: down-ramp bound <code>{N-1}×M</code> plus longest shortest-path latency (H=4/V=8); simulated gather M=1 makespan ≈ 205.</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
