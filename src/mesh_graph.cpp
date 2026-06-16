@@ -198,24 +198,6 @@ int MeshGraph::GatherTheoBound(int msg_size) const
   return GatherSlotBound(EffectiveRoot(_collective_root), msg_size);
 }
 
-int MeshGraph::LineGatherBound(int num_nodes, int link_lat, int flits_per_node) const
-{
-  // The end node of a num_nodes-long line gathers (num_nodes-1)*flits_per_node
-  // flits; the node j hops away contributes flits_per_node flits whose arrival
-  // lower bound is j*link_lat + 2*ramp (pipelined +0..flits_per_node-1).
-  if(num_nodes <= 1 || flits_per_node <= 0) return flits_per_node;
-  vector<int> avail;
-  for(int j = 1; j < num_nodes; ++j) {
-    int base = j * link_lat + 2 * _ramp_lat;
-    for(int k = 0; k < flits_per_node; ++k) avail.push_back(base + k);
-  }
-  sort(avail.begin(), avail.end());
-  int t0 = 0;
-  for(size_t i = 0; i < avail.size(); ++i)
-    t0 = max(t0, avail[i] - (int)i);
-  return t0 + (int)avail.size() - 1;
-}
-
 int MeshGraph::AllGatherTheoBound(int msg_size) const
 {
   int alive = 0;
@@ -242,15 +224,6 @@ int MeshGraph::AllGatherTheoBound(int msg_size) const
   if(bisec > lb) lb = bisec;
   if(pipe > lb) lb = pipe;
   return lb;
-}
-
-int MeshGraph::AllGatherDimMakespan(int msg_size) const
-{
-  // 2D dimensional allgather: row-allgather (X) then column-allgather (Y).
-  // Each phase is a line-allgather bounded by its end node (a line gather).
-  int phase_x = LineGatherBound(_mesh_x, _h_lat, msg_size);
-  int phase_y = LineGatherBound(_mesh_y, _v_lat, _mesh_x * msg_size);
-  return phase_x + phase_y;
 }
 
 bool MeshGraph::IsHealthy() const
