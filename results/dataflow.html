@@ -3204,17 +3204,18 @@ Lᵢ=26，故 Lᵢ−i=26−11=<strong>15</strong>。
         硬件上有两条硬约束：<strong>(1) down-ramp/eject 缓冲必须为 0</strong>——到达当 cycle 即被 PE 取走；
         <strong>(2) 每跳网内等待必须有界 W</strong>——无界滞留会与后续 flit <strong>踩踏</strong>（卡住的 flit 占住端口，后面流水 flit 撞上）。
         之前 makespan=205/eff=1.0 依赖角节点 <strong>50–87 flit 的 eject 队列</strong> + 端口无界滞留，正是被禁止的场景。</p>
-        <p>强制 E=0、用有界 W 抹平到达节奏后（<code>utils/sched_no_eject_buffer.py</code>），makespan：</p>
+        <p><strong>关键修正</strong>：零 eject 缓冲<strong>不抬高下界</strong>。down-ramp 的 release-packing 下界
+        <strong>LB*=78(6×8)/205(12×16)</strong>，与带缓冲日历实测值<strong>完全相等</strong> → 205 即最优，
+        且 E=0 的最优<strong>仍是 205</strong>（原理上去掉 eject 缓冲一个 cycle 都不用多花）。带宽项 192 因到达量化不可达。</p>
+        <p>但<strong>目前贪心调度器还达不到 205</strong>（<code>utils/sched_no_eject_buffer.py</code>，E=0、有界 W）：</p>
         <table style="font-size:12px;border-collapse:collapse;width:100%;margin:8px 0">
-        <tr style="background:#f1f5f9"><th>每跳网内等待上限 W</th><th>6×8 makespan</th><th>12×16 makespan</th></tr>
+        <tr style="background:#f1f5f9"><th>每跳网内等待上限 W</th><th>6×8 (LB*78)</th><th>12×16 (LB*205)</th></tr>
         <tr><td>0（完全刚性）</td><td>139 (1.78×)</td><td>579 (2.82×)</td></tr>
-        <tr><td>4</td><td>108 (1.38×)</td><td>376 (1.83×)</td></tr>
-        <tr style="background:#ecfdf5"><td>8（现实工作点）</td><td><strong>103 (1.32×)</strong></td><td><strong>330 (1.61×)</strong></td></tr>
-        <tr><td>∞（仅参考，违反有界等待）</td><td>82 (1.05×)</td><td>274 (1.34×)</td></tr>
+        <tr><td>8（现实工作点）</td><td>103 (1.32×)</td><td>330 (1.61×)</td></tr>
+        <tr style="background:#ecfdf5"><td>∞（仅参考，违反有界等待）</td><td><strong>82 (1.05×)</strong></td><td><strong>274 (1.34×)</strong></td></tr>
         </table>
-        <p style="font-size:12px;color:#475569">eject 缓冲可严格为 0 且仍无冲突；但代价是 makespan 上升。
-        eject 端口带宽硬下界 <code>(N−1)M+ramp</code> = 48(6×8)/192(12×16)。
-        完整曲线见 <a href="report.html">report.html</a>「AllGather：无冲突、缓冲与 makespan 权衡（真实物理约束）」。</p>
+        <p style="font-size:12px;color:#475569">差距是<strong>调度器次优性</strong>（fork 树共享前缀耦合：一次网内等待同时推迟下游所有目的地），
+        不是物理代价。完整分析见 <a href="report.html">report.html</a>「AllGather：无冲突、缓冲与 makespan 权衡」。</p>
 <div class="mesh-wrap">
 <svg width="792" height="560" viewBox="0 0 792 560" xmlns="http://www.w3.org/2000/svg">
 
@@ -4560,10 +4561,10 @@ Lᵢ=26，故 Lᵢ−i=26−11=<strong>15</strong>。
   <line x1="50" y1="170" x2="455" y2="170" stroke="#94a3b8"/>
   <line x1="50" y1="28" x2="50" y2="170" stroke="#94a3b8"/>
   <!-- y: ms 600->170, 192->34 ; y=170-(ms-192)*136/408 -->
-  <line x1="50" y1="166" x2="455" y2="166" stroke="#059669" stroke-dasharray="4,3"/>
-  <text x="457" y="170" font-size="8" fill="#059669">下界192</text>
-  <line x1="50" y1="162" x2="455" y2="162" stroke="#dc2626" stroke-dasharray="4,3"/>
-  <text x="457" y="156" font-size="8" fill="#dc2626">乐观205</text>
+  <line x1="50" y1="166" x2="455" y2="166" stroke="#94a3b8" stroke-dasharray="2,3"/>
+  <text x="457" y="170" font-size="8" fill="#94a3b8">192不可达</text>
+  <line x1="50" y1="162" x2="455" y2="162" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="457" y="156" font-size="8" fill="#059669">最优LB*205</text>
   <polyline fill="none" stroke="#2563eb" stroke-width="2"
     points="80,41 145,76 210,93 275,109 340,124"/>
   <circle cx="80" cy="41" r="3.5" fill="#2563eb"/><text x="80" y="34" text-anchor="middle" font-size="8">W0:579</text>
