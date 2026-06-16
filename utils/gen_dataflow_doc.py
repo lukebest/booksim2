@@ -652,41 +652,46 @@ def allgather_description():
         最坏角节点 (0,0) 的列0 漏斗承载 180M flit、down-ramp 吞 191M flit，恰是瓶颈。
         仿真（C++ 调度器 + <code>utils/sim_dim_multitree.py</code>）确认 makespan <strong>精确命中下界</strong>：
         205(M=1) / 769(M=4) / 3061(M=16) / 12229(M=64)，<strong>eff=1.0</strong>，优于 2D dimensional(235) 与 gather+broadcast(371)。
-        详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>
-        <h3 style="font-size:15px;margin:16px 0 8px">无冲突 vs 缓冲：两类 queue</h3>
-        <p><strong>无冲突</strong>指同一 cycle 同一资源最多 1 flit（有向 link 的 <code>inject≤1</code>，down-ramp 的 <code>eject≤1</code>），
-        不等于 flit 从不排队。左右邻居<strong>同时到达</strong> router（不同输入端口）合法；
-        争用同一<strong>输出 lane</strong> 时 calendar 错开 <code>send</code>（trace 例：(1,0) 向下 lane，cycle 5/6 各注入 1 flit）。
-        两类 buffer：<strong>网内输出端口 FIFO</strong>（可压到 0，见下表）与 <strong>down-ramp/PE 接收队列</strong>
-        （191 份 @1 flit/cycle，makespan=205 下不可为 0）。</p>
+        <strong>但这组 eff=1.0 数依赖充足缓冲</strong>（见下）。详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>
+        <h3 style="font-size:15px;margin:16px 0 8px">真实物理约束：零 eject 缓冲 + 有界网内等待</h3>
+        <p><strong>无冲突</strong>指同一 cycle 同一资源最多 1 flit（<code>inject≤1</code> / <code>eject≤1</code>），不等于不排队。
+        硬件上有两条硬约束：<strong>(1) down-ramp/eject 缓冲必须为 0</strong>——到达当 cycle 即被 PE 取走；
+        <strong>(2) 每跳网内等待必须有界 W</strong>——无界滞留会与后续 flit <strong>踩踏</strong>（卡住的 flit 占住端口，后面流水 flit 撞上）。
+        之前 makespan=205/eff=1.0 依赖角节点 <strong>50–87 flit 的 eject 队列</strong> + 端口无界滞留，正是被禁止的场景。</p>
+        <p>强制 E=0、用有界 W 抹平到达节奏后（<code>utils/sched_no_eject_buffer.py</code>），makespan：</p>
         <table style="font-size:12px;border-collapse:collapse;width:100%;margin:8px 0">
-        <tr style="background:#f1f5f9"><th>每跳网内等待上限 W</th><th>12×16 makespan</th><th>网内端口 buffer</th><th>PE eject buffer</th></tr>
-        <tr><td>0</td><td>301</td><td><strong>0</strong></td><td>50</td></tr>
-        <tr><td>2</td><td>264</td><td>2</td><td>56</td></tr>
-        <tr><td>4</td><td>259</td><td>4</td><td>60</td></tr>
-        <tr style="background:#ecfdf5"><td>∞（当前 calendar）</td><td><strong>205</strong></td><td>4</td><td>87</td></tr>
+        <tr style="background:#f1f5f9"><th>每跳网内等待上限 W</th><th>6×8 makespan</th><th>12×16 makespan</th></tr>
+        <tr><td>0（完全刚性）</td><td>139 (1.78×)</td><td>579 (2.82×)</td></tr>
+        <tr><td>4</td><td>108 (1.38×)</td><td>376 (1.83×)</td></tr>
+        <tr style="background:#ecfdf5"><td>8（现实工作点）</td><td><strong>103 (1.32×)</strong></td><td><strong>330 (1.61×)</strong></td></tr>
+        <tr><td>∞（仅参考，违反有界等待）</td><td>82 (1.05×)</td><td>274 (1.34×)</td></tr>
         </table>
-        <p style="font-size:12px;color:#475569">6×8：W=0 时网内 buffer=0 且 makespan 仍为最优 78。
-        12×16：要保持 205，约需 4 flit 网内端口缓冲；严格处处 0 buffer 则 makespan→301。
-        完整曲线与 trace CSV 见 <a href="report.html">report.html</a>「AllGather：无冲突、缓冲与 makespan 权衡」。</p>"""
+        <p style="font-size:12px;color:#475569">eject 缓冲可严格为 0 且仍无冲突；但代价是 makespan 上升。
+        eject 端口带宽硬下界 <code>(N−1)M+ramp</code> = 48(6×8)/192(12×16)。
+        完整曲线见 <a href="report.html">report.html</a>「AllGather：无冲突、缓冲与 makespan 权衡（真实物理约束）」。</p>"""
 
 
 def buffer_tradeoff_svg():
-    """Compact makespan vs in-network buffer chart for 12×16."""
+    """makespan vs bounded in-network wait W under zero eject buffer, 12×16."""
     return """
-<svg width="480" height="200" viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg">
-  <text x="240" y="14" text-anchor="middle" font-size="11" fill="#334155">12×16 makespan vs 网内输出端口 buffer（M=1）</text>
-  <line x1="44" y1="165" x2="460" y2="165" stroke="#94a3b8"/>
-  <line x1="44" y1="28" x2="44" y2="165" stroke="#94a3b8"/>
-  <line x1="44" y1="55" x2="460" y2="55" stroke="#dc2626" stroke-dasharray="4,3"/>
-  <text x="462" y="58" font-size="9" fill="#dc2626">205</text>
+<svg width="480" height="210" viewBox="0 0 480 210" xmlns="http://www.w3.org/2000/svg">
+  <text x="240" y="14" text-anchor="middle" font-size="11" fill="#334155">零 eject 缓冲：makespan vs 网内等待上限 W（12×16, M=1）</text>
+  <line x1="50" y1="170" x2="455" y2="170" stroke="#94a3b8"/>
+  <line x1="50" y1="28" x2="50" y2="170" stroke="#94a3b8"/>
+  <!-- y: ms 600->170, 192->34 ; y=170-(ms-192)*136/408 -->
+  <line x1="50" y1="166" x2="455" y2="166" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="457" y="170" font-size="8" fill="#059669">下界192</text>
+  <line x1="50" y1="162" x2="455" y2="162" stroke="#dc2626" stroke-dasharray="4,3"/>
+  <text x="457" y="156" font-size="8" fill="#dc2626">乐观205</text>
   <polyline fill="none" stroke="#2563eb" stroke-width="2"
-    points="70,165 120,132 170,127 220,122 270,118 360,55"/>
-  <circle cx="70" cy="165" r="3.5" fill="#2563eb"/><text x="70" y="178" text-anchor="middle" font-size="8">0</text>
-  <circle cx="170" cy="127" r="3.5" fill="#2563eb"/><text x="170" y="140" text-anchor="middle" font-size="8">2</text>
-  <circle cx="220" cy="122" r="3.5" fill="#2563eb"/><text x="220" y="135" text-anchor="middle" font-size="8">4</text>
-  <circle cx="360" cy="55" r="4" fill="#059669"/><text x="360" y="48" text-anchor="middle" font-size="8" fill="#059669">205</text>
-  <text x="240" y="192" text-anchor="middle" font-size="9" fill="#64748b">网内输出端口 buffer 深度</text>
+    points="80,41 145,76 210,93 275,109 340,124"/>
+  <circle cx="80" cy="41" r="3.5" fill="#2563eb"/><text x="80" y="34" text-anchor="middle" font-size="8">W0:579</text>
+  <circle cx="145" cy="76" r="3.5" fill="#2563eb"/><text x="145" y="69" text-anchor="middle" font-size="8">1:475</text>
+  <circle cx="210" cy="93" r="3.5" fill="#2563eb"/><text x="210" y="86" text-anchor="middle" font-size="8">2:424</text>
+  <circle cx="275" cy="109" r="3.5" fill="#2563eb"/><text x="275" y="102" text-anchor="middle" font-size="8">4:376</text>
+  <circle cx="340" cy="124" r="3.5" fill="#2563eb"/><text x="340" y="117" text-anchor="middle" font-size="8">8:330</text>
+  <circle cx="410" cy="142" r="3.5" fill="#94a3b8"/><text x="410" y="135" text-anchor="middle" font-size="8" fill="#64748b">∞:274</text>
+  <text x="250" y="200" text-anchor="middle" font-size="9" fill="#64748b">每跳网内等待上限 W</text>
 </svg>"""
 
 
