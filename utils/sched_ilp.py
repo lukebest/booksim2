@@ -28,17 +28,19 @@ from ortools.sat.python import cp_model
 
 from sched_no_eject_buffer import coord, nid, link_lat, tree_children
 from sched_zero_eject_v2 import packing_lb
+from sched_eject_bw import packing_lb_bw, latency_floor
 
 
-def greedy_arrivals(mx, my, h, vv, ramp, wcap):
+def greedy_arrivals(mx, my, h, vv, ramp, wcap, bw=1):
     """Greedy E=0 + bounded-W schedule; return (makespan, arrivals dict a[(s,d)]).
 
     Mirrors sched_no_eject_buffer.schedule but records every node's arrival cycle
-    so it can warm-start CP-SAT. Far-from-center source order (the good one)."""
+    so it can warm-start CP-SAT. Far-from-center source order (the good one).
+    down-ramp may eject up to bw flits per cycle (E=0 throughout)."""
     n = mx * my
     trees = {s: tree_children(s, mx, my) for s in range(n)}
     link_busy = defaultdict(set)
-    down_busy = defaultdict(set)
+    down_cnt = defaultdict(lambda: defaultdict(int))  # node -> cycle -> #ejects
     cx0, cy0 = (mx - 1) / 2, (my - 1) / 2
     srcs = sorted(range(n),
                   key=lambda s: -(abs(coord(s, mx)[0] - cx0) + abs(coord(s, mx)[1] - cy0)))
@@ -47,7 +49,8 @@ def greedy_arrivals(mx, my, h, vv, ramp, wcap):
     for s in srcs:
         off = 0
         while True:
-            tent_l, tent_d, tl, td = [], [], set(), set()
+            tent_l, tent_d, tl = [], [], set()
+            tent_dcnt = defaultdict(lambda: defaultdict(int))
             avail = {s: off + ramp}
             order = [s]; qi = 0; ok = True
             while qi < len(order) and ok:
@@ -59,19 +62,19 @@ def greedy_arrivals(mx, my, h, vv, ramp, wcap):
                     while wcap is None or t - ready <= wcap:
                         if t not in link_busy[lk] and (lk, t) not in tl:
                             arrive = t + lat
-                            if arrive not in down_busy[c] and (c, arrive) not in td:
+                            if down_cnt[c][arrive] + tent_dcnt[c][arrive] < bw:
                                 found = True; break
                         t += 1
                     if not found:
                         ok = False; break
                     tent_l.append((lk, t)); tl.add((lk, t))
-                    tent_d.append((c, arrive)); td.add((c, arrive))
+                    tent_d.append((c, arrive)); tent_dcnt[c][arrive] += 1
                     avail[c] = arrive; order.append(c)
             if ok:
                 for (lk, t) in tent_l:
                     link_busy[lk].add(t)
                 for (d, ej) in tent_d:
-                    down_busy[d].add(ej)
+                    down_cnt[d][ej] += 1
                     makespan = max(makespan, ej + ramp)
                 for d, av in avail.items():
                     arr[(s, d)] = av
@@ -106,7 +109,7 @@ def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=Fal
 
     warm_mk, warm_arr = (None, None)
     if warmstart:
-        warm_mk, warm_arr = greedy_arrivals(mx, my, h, vv, ramp, wcap)
+        warm_mk, warm_arr = greedy_arrivals(mx, my, h, vv, ramp, wcap, bw)
         # tighten horizon to the greedy makespan -> smaller domains
         horizon = min(horizon, warm_mk)
 
@@ -211,13 +214,14 @@ def main():
     args = ap.parse_args()
     mx, my, h, vv, ramp = args.mx, args.my, args.h, args.v, args.ramp
 
-    lb, B, _ = packing_lb(mx, my, h, vv, ramp)
+    lb, B = packing_lb_bw(mx, my, h, vv, ramp, args.bw)
     bx, by = coord(B, mx)
+    lfloor = latency_floor(mx, my, h, vv, ramp)
     horizon = args.horizon or (lb * 3)
     wlabel = "inf" if args.w is None else str(args.w)
-    print(f"mesh {mx}x{my}  N={mx*my}  "
-          f"LB*={lb} @({bx},{by})  W={wlabel}  horizon={horizon}  t<={args.time}s"
-          f"  warmstart={args.warmstart}")
+    print(f"mesh {mx}x{my}  N={mx*my}  bw={args.bw}  "
+          f"LB*(bw)={lb} @({bx},{by})  latency_floor={lfloor}  "
+          f"W={wlabel}  horizon={horizon}  t<={args.time}s  warmstart={args.warmstart}")
     res = solve(mx, my, h, vv, ramp, args.w, horizon, args.time, args.workers,
                 warmstart=args.warmstart, bw=args.bw)
     print(f"  status   : {res['status']}  ({res['wall']:.1f}s)")
