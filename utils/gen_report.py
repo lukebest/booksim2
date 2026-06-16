@@ -370,6 +370,104 @@ down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherDim
 </div>"""
 
 
+def allgather_buffer_section():
+    """Buffer depth vs makespan tradeoff (measured via sched_buffer_sweep.py)."""
+    return """
+<div class="card"><h2>AllGather：无冲突、缓冲与 makespan 权衡</h2>
+
+<h3>「无冲突」≠「无缓冲」</h3>
+<p>Calendar 保证的是<strong>同一 cycle、同一资源</strong>上最多 1 个 flit：
+每条<strong>有向 link</strong> 每 cycle 最多 1 次注入（<code>inject≤1</code>），
+每个 router 的 <strong>down-ramp</strong> 每 cycle 最多 1 次 eject（<code>eject≤1</code>）。
+这与「flit 从不排队」是两回事——争用通过<strong>错开 send/eject 周期</strong>化解，
+中间节点/输出端口可能需要 FIFO 缓冲。</p>
+<p>实测（当前 calendar，<code>utils/sim_dim_multitree.py</code> + trace CSV）：</p>
+<table style="font-size:13px">
+<tr><th>Mesh</th><th>max 输出端口队列深度</th><th>max 节点驻留 flit</th><th>说明</th></tr>
+<tr><td>6×8</td><td><strong>2</strong></td><td>4</td><td>列漏斗处多源 flit 排队等同一下行 lane</td></tr>
+<tr><td>12×16</td><td><strong>4</strong></td><td>10</td><td>角节点列0 漏斗 180M flit，端口每 cycle 仅放行 1 个</td></tr>
+</table>
+
+<h3>三类「同时到达」场景</h3>
+<ol>
+<li><strong>左右邻居同时到达 router</strong>（不同输入端口）——合法，<code>arrive</code> 可 &gt;1，不是冲突。</li>
+<li><strong>两者都要 fork 到同一输出端口</strong>——真争用；calendar 把第二个 flit 的 <code>send</code> 推到下一 cycle
+（trace 例：节点 (1,0) 向下 lane，cycle 5 注入 src=0，cycle 6 注入 src=2；该 lane 全程 <code>inject≤1</code>）。</li>
+<li><strong>同一 link 上多个 flit 同时在飞</strong>（<code>inFlight&gt;1</code>）——wormhole 流水线，非阻塞；
+各 flit 在不同 cycle 注入、沿 link 错开飞行。</li>
+</ol>
+
+<h3>两类 buffer（性质不同）</h3>
+<table style="font-size:13px">
+<tr><th>类型</th><th>位置</th><th>作用</th><th>能否压到 0？</th></tr>
+<tr><td><strong>网内链路输出 buffer</strong></td><td>router 出端口 FIFO</td><td>多个 ready flit 争同一输出 lane 时排队</td><td>可以（见下表），但大 mesh 可能牺牲 makespan</td></tr>
+<tr><td><strong>down-ramp / PE 接收 buffer</strong></td><td>目的地 SRAM 入口</td><td>191 份数据经 1 flit/cycle 口进入 PE</td><td><strong>在 makespan=205 下不能为 0</strong>（带宽下界）</td></tr>
+</table>
+<p>角节点 down-ramp 必须吞 (N−1)M=191 flit、每 cycle 1 个 → 接收侧必然排队数十个 flit（12×16 实测 eject 队列深度 50–87）。
+这通常算 PE/SRAM 入口队列，而非 router 转发缓冲。</p>
+
+<h3>Buffer-aware 排程变体（<code>utils/sched_buffer_sweep.py</code>）</h3>
+<p>限制每跳<strong>网内等待上限 W</strong>：flit 在 router 输出端口最多等 W cycle，超出则推迟该源的 injection offset
+（争用回到源 PE 队列）。W=0 ⇒ 网内输出端口 0 buffer；W=∞ ⇒ 当前 calendar（makespan 最优）。</p>
+
+<p><strong>6×8（带缓冲最优 makespan=78）</strong></p>
+<table style="font-size:13px">
+<tr><th>每跳等待上限 W</th><th>makespan</th><th>网内链路端口 buffer</th><th>down-ramp(PE) buffer</th></tr>
+<tr><td>0</td><td><strong>78</strong></td><td><strong>0</strong></td><td>11</td></tr>
+<tr><td>1</td><td><strong>78</strong></td><td>1</td><td>11</td></tr>
+<tr><td>2</td><td><strong>78</strong></td><td>2</td><td>11</td></tr>
+<tr><td>∞（当前 calendar）</td><td><strong>78</strong></td><td>2</td><td>11</td></tr>
+</table>
+<p>小 mesh：<strong>网内 0 buffer 与最优 makespan 可兼得</strong>——争用被推到源 injection 时刻错开。</p>
+
+<p><strong>12×16（带缓冲最优 makespan=205）</strong></p>
+<table style="font-size:13px">
+<tr><th>每跳等待上限 W</th><th>makespan</th><th>网内链路端口 buffer</th><th>down-ramp(PE) buffer</th></tr>
+<tr><td>0</td><td>301 (+47%)</td><td><strong>0</strong></td><td>50</td></tr>
+<tr><td>1</td><td>268</td><td>1</td><td>50</td></tr>
+<tr><td>2</td><td>264</td><td>2</td><td>56</td></tr>
+<tr><td>4</td><td>259</td><td>4</td><td>60</td></tr>
+<tr><td>8</td><td>248</td><td>5</td><td>59</td></tr>
+<tr><td>∞（当前 calendar）</td><td><strong>205</strong></td><td>4</td><td>87</td></tr>
+</table>
+
+<p><strong>权衡曲线（12×16 makespan vs 网内 buffer）</strong></p>
+<svg width="520" height="220" viewBox="0 0 520 220" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+  <text x="260" y="16" text-anchor="middle" font-size="12" fill="#334155">makespan vs 网内输出端口 buffer 深度（12×16, M=1）</text>
+  <line x1="50" y1="180" x2="490" y2="180" stroke="#94a3b8" stroke-width="1"/>
+  <line x1="50" y1="30" x2="50" y2="180" stroke="#94a3b8" stroke-width="1"/>
+  <line x1="50" y1="62" x2="490" y2="62" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="492" y="66" font-size="10" fill="#dc2626">opt 205</text>
+  <text x="48" y="184" text-anchor="end" font-size="10" fill="#64748b">301</text>
+  <text x="48" y="62" text-anchor="end" font-size="10" fill="#64748b">205</text>
+  <!-- points: (buf, ms): (0,301), (1,268), (2,264), (4,259), (5,248), (4,205) -->
+  <!-- y scale: 205->62, 301->180 => y = 62 + (ms-205)*118/96 -->
+  <polyline fill="none" stroke="#2563eb" stroke-width="2.5"
+    points="80,180 130,147 180,142 230,137 280,133 380,62"/>
+  <circle cx="80" cy="180" r="4" fill="#2563eb"/><text x="80" y="198" text-anchor="middle" font-size="9">buf=0</text>
+  <circle cx="130" cy="147" r="4" fill="#2563eb"/><text x="130" y="165" text-anchor="middle" font-size="9">1</text>
+  <circle cx="180" cy="142" r="4" fill="#2563eb"/><text x="180" y="160" text-anchor="middle" font-size="9">2</text>
+  <circle cx="230" cy="137" r="4" fill="#2563eb"/><text x="230" y="155" text-anchor="middle" font-size="9">4</text>
+  <circle cx="280" cy="133" r="4" fill="#2563eb"/><text x="280" y="151" text-anchor="middle" font-size="9">5</text>
+  <circle cx="380" cy="62" r="5" fill="#059669"/><text x="380" y="54" text-anchor="middle" font-size="9" fill="#059669">buf=4, ms=205</text>
+  <text x="260" y="212" text-anchor="middle" font-size="10" fill="#64748b">网内输出端口 buffer 深度 →</text>
+  <text x="14" y="105" text-anchor="middle" font-size="10" fill="#64748b" transform="rotate(-90 14 105)">makespan</text>
+</svg>
+
+<h3>结论</h3>
+<ul>
+<li><strong>网内转发 0 buffer</strong>：6×8 可在 makespan=78 下实现；12×16 要么 makespan 涨到 301（+47%），
+要么保持 205 时留约 <strong>4 flit</strong> 的输出端口缓冲。</li>
+<li><strong>处处 0 buffer 且 makespan=205 不可行</strong>：down-ramp 1 flit/cycle 吞 191 份是带宽下界，
+接收侧必然排队（非 router 转发问题）。</li>
+<li>严格刚性 0-buffer 打包（<code>utils/sched_zero_buffer.py</code>，源 injection 整体平移）：
+6×8 makespan=139，12×16=579——比带少量网内 buffer 的 calendar 更差。</li>
+<li>Trace 验证：全部 cycle <code>inject≤1</code>、<code>eject≤1</code>（6×8 与 12×16 均 0 冲突 cycle），
+见 <code>results/allgather_trace_summary_*.csv</code>。</li>
+</ul>
+</div>"""
+
+
 def render(csv_path, html_path):
     rows = load_rows(csv_path)
     healthy = healthy_by_collective(rows)
@@ -403,6 +501,7 @@ def render(csv_path, html_path):
     sections.append("<div class='card'><h2>Theoretical bounds</h2>" + theory_table() + "</div>")
     sections.append(gather_bound_section())
     sections.append(allgather_bound_section())
+    sections.append(allgather_buffer_section())
     sections.append("<div class='card'><h2>Q1: Minimum makespan and calendar period</h2>" + q1_answer(healthy) + "</div>")
 
     sections.append("<div class='card'><h2>Healthy simulation: makespan vs M</h2>")
