@@ -21,6 +21,8 @@ public:
   int MeshY() const { return _mesh_y; }
 
   bool IsAlive(int node) const;
+  bool IsHealthy() const;
+  int AllGatherDimMakespan(int msg_size) const;
   int NodeId(int x, int y) const { return x + _mesh_x * y; }
   void NodeCoord(int node, int & x, int & y) const;
 
@@ -66,7 +68,10 @@ private:
   void BuildMesh();
   void ApplyFaults(const Configuration & config);
   void RegisterLink(int src, int dst, int latency);
+  int GatherSlotBound(int root, int msg_size) const;
   int GatherTheoBound(int msg_size) const;
+  int AllGatherTheoBound(int msg_size) const;
+  int LineGatherBound(int num_nodes, int link_lat, int flits_per_node) const;
 };
 
 #endif

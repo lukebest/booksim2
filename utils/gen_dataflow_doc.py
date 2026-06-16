@@ -575,21 +575,35 @@ Lᵢ={sL}，故 Lᵢ−i={sL}−{si}=<strong>{t0}</strong>。
 <strong>period=(N−1)×M=191</strong> 是 root 带宽下界（稳态重复间隔），不是 makespan。</p>"""
 
 
+def _line_gather_bound(P, ell, m):
+    avail = []
+    for j in range(1, P):
+        base = j * ell + 2
+        for k in range(m):
+            avail.append(base + k)
+    avail.sort()
+    t0 = max(avail[i] - i for i in range(len(avail)))
+    return t0 + len(avail) - 1
+
+
 def mesh_allgather():
+    """2D dimensional allgather: Phase X row-allgather, Phase Y column-allgather."""
     w1, _ = svg_size(48)
     w = w1 * 2 + 24
     h = PAD * 2 + MY * CS + 72
+    px = _line_gather_bound(MX, H_LAT, 1)
+    py = _line_gather_bound(MY, V_LAT, MX)
     parts = [
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">',
         svg_defs("ag0"),
         svg_defs("ag1"),
-        '<text x="16" y="18" font-size="12" fill="#334155">AllGather：左 Phase1 Gather(→R)  右 Phase2 Broadcast(R→)</text>',
+        '<text x="16" y="18" font-size="12" fill="#334155">'
+        '2D Dimensional AllGather：左 Phase X 行内收集（H-link）  右 Phase Y 列内收集（V-link）—— 不经 root</text>',
     ]
     sub = Mesh()
-    reps = [nid(11, 15), nid(6, 0), nid(0, 8), nid(11, 8), nid(5, 7)]
-    for idx, (label, color, rev) in enumerate([
-        ("Phase1 → root", "#ea580c", True),
-        ("Phase2 root →", "#2563eb", False),
+    for idx, label in enumerate([
+        f"Phase X：每行 12 节点互收 (→← 沿 H-link)  ≈{px}cy",
+        f"Phase Y：每列 16 节点互收整行包 (↑↓ 沿 V-link)  ≈{py}cy",
     ]):
         ox = idx * (w1 + 8) + 8
         parts.append(f'<g transform="translate({ox},26)">')
@@ -598,17 +612,25 @@ def mesh_allgather():
         for line in gparts[2:]:
             if "svg" not in line:
                 parts.append(line)
-        if rev:
-            for src in reps:
-                path = sub.shortest_path(src, ROOT_NODE)
-                for j in range(len(path) - 1):
-                    a, b = path[j], path[j + 1]
-                    parts.append(arrow_line(*pos(a), *pos(b), color, f"ag{idx}", 1.2))
+        if idx == 0:
+            # Phase X: bidirectional arrows within every row
+            for y in range(MY):
+                for x in range(MX - 1):
+                    a, b = nid(x, y), nid(x + 1, y)
+                    parts.append(arrow_line(*pos(a), *pos(b), "#0d9488", "ag0", 0.7))
+                    parts.append(arrow_line(*pos(b), *pos(a), "#0d9488", "ag0", 0.7))
         else:
-            for a, b in sub.tree_edges(ROOT_NODE):
-                parts.append(arrow_line(*pos(a), *pos(b), color, f"ag{idx}", 1.0))
+            # Phase Y: bidirectional arrows within every column
+            for x in range(MX):
+                for y in range(MY - 1):
+                    a, b = nid(x, y), nid(x, y + 1)
+                    parts.append(arrow_line(*pos(a), *pos(b), "#7c3aed", "ag1", 0.7))
+                    parts.append(arrow_line(*pos(b), *pos(a), "#7c3aed", "ag1", 0.7))
         parts.append("</g>")
-    parts.append(f'<text x="16" y="{h - 8}" font-size="10" fill="#64748b">period≈191×M</text></svg>')
+    parts.append(
+        f'<text x="16" y="{h - 8}" font-size="10" fill="#64748b">'
+        f"down-ramp 之和 = 11M + 180M = 191M = (N−1)M（带宽最优）；总 makespan ≈ {px}+{py} = {px + py} (M=1)</text></svg>"
+    )
     return "\n".join(parts)
 
 
@@ -857,7 +879,14 @@ COLLECTIVES = [
         "allgather",
         "AllGather 全收集",
         mesh_allgather,
-        """<p>左图：Phase1 与 Gather 相同，全网 flit 沿最短路径<strong>收敛至 root</strong>。右图：Phase2 与 Broadcast 相同，root 沿 latency 树<strong>扩散至全网</strong>。两幅图均为同一 12×16 mesh 上的空间数据流。</p>""",
+        """<p><strong>最优方案不是 gather+broadcast。</strong>把数据汇经 root 再广播会串行化两阶段并制造 root 热点，
+        下界被高估为 205+166=371。真实瓶颈是<strong>每个节点</strong>的单条 down-ramp 必须吞入 (N−1)M flit，
+        故下界 = <code>max((N−1)M, bisection, 最坏角节点 gather)</code> = <strong>205</strong>(M=1)，
+        约等于<strong>一次最坏 gather</strong>，而非 gather+broadcast。</p>
+        <p>最优算法为 <strong>2D dimensional allgather</strong>：先沿行（H-link）做行内 allgather，
+        再沿列（V-link）做列内 allgather，<strong>全程只用相邻链路、不经 root</strong>。
+        两阶段 down-ramp 之和恰为 (N−1)M（<strong>带宽最优</strong>），makespan ≈ 235(M=1) → 12238(M=64)，eff→1.0，
+        远优于 gather+broadcast。详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>""",
     ),
     (
         "allreduce",

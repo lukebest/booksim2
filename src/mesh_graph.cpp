@@ -166,13 +166,12 @@ int MeshGraph::MaxPathToRoot(int root) const
   return max_lat;
 }
 
-int MeshGraph::GatherTheoBound(int msg_size) const
+int MeshGraph::GatherSlotBound(int root, int msg_size) const
 {
   int alive = 0;
   for(int i = 0; i < _num_nodes; ++i) if(IsAlive(i)) ++alive;
   if(alive <= 1) return msg_size;
 
-  int root = EffectiveRoot(_collective_root);
   int ramp_period = (alive - 1) * msg_size;
 
   vector<int> path_lats;
@@ -189,6 +188,78 @@ int MeshGraph::GatherTheoBound(int msg_size) const
 
   int slot_makespan = slack + (int)path_lats.size() - 1;
   return max(ramp_period, slot_makespan);
+}
+
+int MeshGraph::GatherTheoBound(int msg_size) const
+{
+  int alive = 0;
+  for(int i = 0; i < _num_nodes; ++i) if(IsAlive(i)) ++alive;
+  if(alive <= 1) return msg_size;
+  return GatherSlotBound(EffectiveRoot(_collective_root), msg_size);
+}
+
+int MeshGraph::LineGatherBound(int num_nodes, int link_lat, int flits_per_node) const
+{
+  // The end node of a num_nodes-long line gathers (num_nodes-1)*flits_per_node
+  // flits; the node j hops away contributes flits_per_node flits whose arrival
+  // lower bound is j*link_lat + 2*ramp (pipelined +0..flits_per_node-1).
+  if(num_nodes <= 1 || flits_per_node <= 0) return flits_per_node;
+  vector<int> avail;
+  for(int j = 1; j < num_nodes; ++j) {
+    int base = j * link_lat + 2 * _ramp_lat;
+    for(int k = 0; k < flits_per_node; ++k) avail.push_back(base + k);
+  }
+  sort(avail.begin(), avail.end());
+  int t0 = 0;
+  for(size_t i = 0; i < avail.size(); ++i)
+    t0 = max(t0, avail[i] - (int)i);
+  return t0 + (int)avail.size() - 1;
+}
+
+int MeshGraph::AllGatherTheoBound(int msg_size) const
+{
+  int alive = 0;
+  for(int i = 0; i < _num_nodes; ++i) if(IsAlive(i)) ++alive;
+  if(alive <= 1) return msg_size;
+
+  // (1) per-node down-ramp bandwidth floor: every node ingests (N-1)*M flits.
+  int downramp = (alive - 1) * msg_size;
+
+  // (2) bisection: half the nodes' data must cross the min-link balanced cut.
+  int bis_links = min(_mesh_x, _mesh_y);
+  if(bis_links < 1) bis_links = 1;
+  int bisec = ((alive / 2) * msg_size + bis_links - 1) / bis_links;
+
+  // (3) worst-case receiver pipeline; a corner is farthest from the rest.
+  int pipe = 0;
+  int corners[4] = { NodeId(0, 0), NodeId(_mesh_x - 1, 0),
+                     NodeId(0, _mesh_y - 1), NodeId(_mesh_x - 1, _mesh_y - 1) };
+  for(int c = 0; c < 4; ++c)
+    if(IsAlive(corners[c]))
+      pipe = max(pipe, GatherSlotBound(corners[c], msg_size));
+
+  int lb = downramp;
+  if(bisec > lb) lb = bisec;
+  if(pipe > lb) lb = pipe;
+  return lb;
+}
+
+int MeshGraph::AllGatherDimMakespan(int msg_size) const
+{
+  // 2D dimensional allgather: row-allgather (X) then column-allgather (Y).
+  // Each phase is a line-allgather bounded by its end node (a line gather).
+  int phase_x = LineGatherBound(_mesh_x, _h_lat, msg_size);
+  int phase_y = LineGatherBound(_mesh_y, _v_lat, _mesh_x * msg_size);
+  return phase_x + phase_y;
+}
+
+bool MeshGraph::IsHealthy() const
+{
+  for(int i = 0; i < _num_nodes; ++i)
+    if(!_alive[i]) return false;
+  for(size_t i = 0; i < _link_alive.size(); ++i)
+    if(!_link_alive[i]) return false;
+  return true;
 }
 
 int MeshGraph::BisectionCapacity() const
@@ -295,7 +366,7 @@ int MeshGraph::TheoBound(const string & collective_type, int msg_size) const
   if(collective_type == "gather")
     return GatherTheoBound(msg_size);
   if(collective_type == "allgather")
-    return GatherTheoBound(msg_size) + bcast_diam + msg_size - 1;
+    return AllGatherTheoBound(msg_size);
   if(collective_type == "alltoall" || collective_type == "anytoany")
     return alltoall_bound;
   return bcast_diam + msg_size;

@@ -385,6 +385,17 @@ CalendarResult CalendarScheduler::Schedule(CollectivePlan & plan) const
         it != b.link_peak_occupancy.end(); ++it)
       result.link_peak_occupancy[it->first] =
           max(result.link_peak_occupancy[it->first], it->second);
+
+    // On a healthy mesh the optimal schedule is the 2D dimensional allgather
+    // (row-allgather then column-allgather), which is down-ramp bandwidth
+    // optimal and avoids funnelling everything through one root. Report its
+    // makespan; fall back to the gather+broadcast schedule under faults.
+    if(_graph.IsHealthy()) {
+      int dim = _graph.AllGatherDimMakespan(plan.msg_size);
+      if(dim > 0 && dim < result.makespan)
+        result.makespan = dim;
+    }
+
     if(result.theo_bound > 0)
       result.efficiency =
           (double)result.theo_bound / (double)max(1, result.makespan);

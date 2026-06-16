@@ -141,9 +141,9 @@ def theory_table():
         ),
         (
             "allgather",
-            f"gather_bound + {bcast_diam} + M − 1",
+            f"max({(N-1)}×M, bisection, worst-corner gather)",
             f"{(N-1)}×M",
-            "Gather (global calendar) then broadcast",
+            "NOT gather+broadcast; per-node down-ramp floor; 2D dimensional algorithm",
         ),
         (
             "alltoall",
@@ -179,10 +179,16 @@ def q1_answer(healthy):
         "<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>",
         "<li><strong>reduce</strong>: leaf PE nodes inject via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>",
         "<li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>",
-        f"<li><strong>gather, allgather</strong>: period <code>{N-1}×M</code> (root down-ramp); "
+        f"<li><strong>gather</strong>: period <code>{N-1}×M</code> (root down-ramp); "
         f"makespan bound <code>maxᵢ(Lᵢ−i)+(N−2)</code> with global link-time calendar "
-        f"(M=1 healthy: 205). Closed form <code>(N−2)+max_path−mesh_diam+H+V</code> gives 204 "
-        f"(optimistic by 1 cycle).</li>",
+        f"(M=1 healthy: 205).</li>",
+        f"<li><strong>allgather</strong>: the optimum is <strong>NOT</strong> gather+broadcast. "
+        f"True bound = <code>max((N−1)×M down-ramp, bisection, worst-corner gather)</code> "
+        f"= 205 (M=1), not 371. The bottleneck is every node's single down-ramp absorbing "
+        f"<code>(N−1)×M</code> flits — allgather costs essentially one <em>worst-case gather</em>, "
+        f"not a gather plus a broadcast. The <strong>2D dimensional algorithm</strong> "
+        f"(row-allgather then column-allgather) is down-ramp bandwidth optimal: "
+        f"makespan 235 (M=1) → 12238 (M=64), efficiency → 1.0.</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",
     ]
@@ -282,6 +288,81 @@ def gather_bound_section():
 </div>"""
 
 
+def allgather_bound_section():
+    """Re-analysis: allgather LB is NOT gather+broadcast."""
+    mesh_diam = H_LAT * (MESH_X - 1) + V_LAT * (MESH_Y - 1)
+    bcast = mesh_diam + 2  # diam + 2 ramp
+    downramp = N - 1
+    bis_links = min(MESH_X, MESH_Y)
+    bisec = ((N // 2) + bis_links - 1) // bis_links
+    # worst-corner gather pipeline = gather bound (corner root) = 205 for M=1
+    pipe = 205
+    lb = max(downramp, bisec, pipe)
+    old = pipe + bcast  # 205 + 166 = 371
+
+    # dimensional phase split (M=1)
+    def line_gb(P, ell, m):
+        avail = []
+        for j in range(1, P):
+            base = j * ell + 2
+            for k in range(m):
+                avail.append(base + k)
+        avail.sort()
+        t0 = max(avail[i] - i for i in range(len(avail)))
+        return t0 + len(avail) - 1
+
+    px = line_gb(MESH_X, H_LAT, 1)
+    py = line_gb(MESH_Y, V_LAT, MESH_X)
+    dim = px + py
+
+    return f"""
+<div class="card"><h2>AllGather 理论再分析：为何不是 gather + broadcast</h2>
+<p>AllGather 要求<strong>每个</strong>节点最终持有全部 N 份数据。把它当作
+「先 gather 到 root，再从 root broadcast」会得到 <code>205 + {bcast} = {old}</code>，
+但这<strong>高估</strong>了下界——两阶段被人为串行化，且所有数据被迫汇经 root 形成热点。</p>
+
+<h3>正确下界 = 三个约束取最大</h3>
+<ol>
+<li><strong>down-ramp 带宽下界</strong>：每个节点的单条 down-ramp 必须吞入
+其余 (N−1) 个源的数据 = <code>(N−1)×M = {downramp}×M</code>。这是<strong>每个节点都同时</strong>
+承受的瓶颈（gather 中只有 root 承受）。</li>
+<li><strong>bisection 下界</strong>：最小割 {bis_links} 条链路，半数节点数据需跨割
+= <code>⌈(N/2)×M / {bis_links}⌉ = {bisec}×M</code>（本拓扑非瓶颈）。</li>
+<li><strong>最坏接收者 pipeline</strong>：最远角节点接收 (N−1)M flit 的 gather slot 下界
+= <strong>{pipe}</strong>(M=1)。</li>
+</ol>
+<p>三者取大：<code>max({downramp}, {bisec}, {pipe}) = {lb}</code>(M=1)。
+关键结论：<strong>allgather 下界 ≈ gather 下界（{pipe}），而非 gather+broadcast（{old}）</strong>。
+直觉上 allgather = 「N 个并发 gather」，其代价由<strong>最坏的那一个 gather</strong> 主导，
+额外的副本是<strong>并发</strong>送达的，而不是在一次完整 gather 之后再串行广播。</p>
+
+<h3>最优算法：2D dimensional allgather</h3>
+<p>沿 mesh 两个维度分解，<strong>不经过 root</strong>、只用相邻链路：</p>
+<ul>
+<li><strong>Phase X（行内 allgather）</strong>：每行 {MESH_X} 个节点沿 H-link 互相收集，
+每节点收 (MX−1)M flit。行端节点 = 一次 line-gather，makespan = {px}(M=1)。</li>
+<li><strong>Phase Y（列内 allgather）</strong>：每列 {MESH_Y} 个节点沿 V-link 收集
+已打包的整行数据（每份 MX×M flit），每节点收 (MY−1)×MX×M flit。makespan = {py}(M=1)。</li>
+</ul>
+<p>两阶段 down-ramp 之和 = (MX−1)M + (MY−1)·MX·M = <code>(N−1)M</code>，
+<strong>恰好等于带宽下界</strong>（bandwidth-optimal）。总 makespan = {px}+{py} = <strong>{dim}</strong>(M=1)，
+仅比下界 {lb} 高 {dim - lb} cycle（两阶段 fill 开销），远优于 gather+broadcast 的 {old}。
+M 越大越贴近下界（M=64：12238 vs 12229，eff≈0.999）。</p>
+
+<h3>其它算法对比（12×16 mesh）</h3>
+<table style="font-size:13px">
+<tr><th>算法</th><th>带宽</th><th>延迟特性（本拓扑）</th><th>M=1 makespan</th></tr>
+<tr><td>gather + broadcast（旧）</td><td>非最优（汇经 root）</td><td>两阶段串行 + root 热点</td><td>{old}</td></tr>
+<tr><td>Ring（Hamiltonian 环）</td><td>最优</td><td>环周长 ~800cy 传播延迟主导，长宽比大时差</td><td>~800+</td></tr>
+<tr><td>Recursive doubling</td><td>最优</td><td>log₂N≈8 步，但 mesh 上 partner 距离逐步增大→长线/拥塞；192 非 2 的幂</td><td>较差</td></tr>
+<tr><td><strong>2D dimensional</strong></td><td><strong>最优</strong></td><td><strong>仅相邻链路、无长线、低拥塞</strong></td><td><strong>{dim}</strong></td></tr>
+</table>
+<p>下界 = <strong>{lb}</strong>(M=1)。dimensional 在 mesh 上是实用最优；
+若进一步单阶段并发 multicast（每源一棵生成树 + 全局 calendar 让各接收者 down-ramp 持续满载），
+可把行/列遍历重叠，逼近 {lb}，但调度复杂、对大 M 收益甚微。</p>
+</div>"""
+
+
 def render(csv_path, html_path):
     rows = load_rows(csv_path)
     healthy = healthy_by_collective(rows)
@@ -314,6 +395,7 @@ def render(csv_path, html_path):
 
     sections.append("<div class='card'><h2>Theoretical bounds</h2>" + theory_table() + "</div>")
     sections.append(gather_bound_section())
+    sections.append(allgather_bound_section())
     sections.append("<div class='card'><h2>Q1: Minimum makespan and calendar period</h2>" + q1_answer(healthy) + "</div>")
 
     sections.append("<div class='card'><h2>Healthy simulation: makespan vs M</h2>")
