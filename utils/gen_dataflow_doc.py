@@ -576,7 +576,7 @@ Lᵢ={sL}，故 Lᵢ−i={sL}−{si}=<strong>{t0}</strong>。
 
 
 def mesh_allgather():
-    """Ring-tree hybrid: left = one source's X-then-Y fork tree; right = corner funnel."""
+    """Dimensional multi-tree: left = one source's X-then-Y fork tree; right = corner funnel."""
     w1, _ = svg_size(48)
     w = w1 * 2 + 24
     h = PAD * 2 + MY * CS + 72
@@ -585,7 +585,7 @@ def mesh_allgather():
         svg_defs("ag0"),
         svg_defs("ag1"),
         '<text x="16" y="18" font-size="12" fill="#334155">'
-        'Ring-Tree 混合 AllGather：左 = 单源 X-先-Y fork 树（router 复制）  右 = 叠加后最坏角节点漏斗</text>',
+        '双向维序多树 AllGather：左 = 单源 X-先-Y fork 树（router 复制）  右 = 叠加后最坏角节点漏斗</text>',
     ]
     sub = Mesh()
 
@@ -887,13 +887,14 @@ COLLECTIVES = [
         下界被高估为 205+166=371。真实瓶颈是<strong>每个节点</strong>的单条 down-ramp 必须吞入 (N−1)M flit，
         故下界 = <code>max((N−1)M, bisection, 最坏角节点 gather)</code> = <strong>205</strong>(M=1)，
         约等于<strong>一次最坏 gather</strong>，而非 gather+broadcast。</p>
-        <p>实现的最优算法是 <strong>ring-tree 混合</strong>：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
+        <p>实现的最优算法是 <strong>双向维序多树</strong>（bidirectional dimensional multi-tree，<strong>无字面意义的 Hamiltonian 环</strong>，
+        每维的「双向 line」即 mesh 上环的等价物）：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
         —— 行脊（H-link 双向）+ 每列分叉（V-link 双向）。转发是 <strong>router 内 fork</strong>：节点把到达的 flit
         复制一份下 down-ramp（eject 到 PE），另一份继续转发，<strong>中间节点从不 eject 后再 reinject</strong>，
         因此不付 10cy 的 PE/SRAM bounce。N 棵树叠加后由<strong>全局 link-time calendar</strong> 贪心装填，
         每条有向 link、每个 down-ramp 每周期≤1 flit，<strong>构造即无冲突</strong>。
         最坏角节点 (0,0) 的列0 漏斗承载 180M flit、down-ramp 吞 191M flit，恰是瓶颈。
-        仿真（C++ 调度器 + <code>utils/sim_ring_tree.py</code>）确认 makespan <strong>精确命中下界</strong>：
+        仿真（C++ 调度器 + <code>utils/sim_dim_multitree.py</code>）确认 makespan <strong>精确命中下界</strong>：
         205(M=1) / 769(M=4) / 3061(M=16) / 12229(M=64)，<strong>eff=1.0</strong>，优于 2D dimensional(235) 与 gather+broadcast(371)。
         详见 <a href="report.html">report.html</a> 的「AllGather 理论再分析」。</p>""",
     ),

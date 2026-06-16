@@ -242,17 +242,20 @@ CalendarResult CalendarScheduler::ScheduleGatherGlobal(
   return result;
 }
 
-CalendarResult CalendarScheduler::ScheduleAllGatherRingTree(int msg_size) const
+CalendarResult CalendarScheduler::ScheduleAllGatherDimMultiTree(int msg_size) const
 {
-  // Ring-tree hybrid allgather on a healthy mesh: every source broadcasts via
-  // an X-then-Y dimension-ordered multicast tree (row spine + column branches).
-  // Forwarding is IN-NETWORK (router fork): a node duplicates an arriving flit,
-  // ejecting one copy to its PE (down-ramp) and forwarding one copy onward.
-  // Intermediate nodes never eject-then-reinject, so no PE/SRAM bounce is paid.
-  // A global link-time calendar reserves each (directed-link, cycle) and
-  // (node down-ramp, cycle) to <=1 flit, so the schedule is conflict-free by
-  // construction; the greedy earliest-free packing reaches the makespan lower
-  // bound exactly (verified against utils/sim_ring_tree.py).
+  // Bidirectional dimensional multi-tree allgather on a healthy mesh: every
+  // source broadcasts via an X-then-Y dimension-ordered multicast tree (a
+  // bidirectional row spine + bidirectional column branches). There is no
+  // literal Hamiltonian ring; the "bidirectional" lines per dimension are the
+  // mesh analogue of a ring. Forwarding is IN-NETWORK (router fork): a node
+  // duplicates an arriving flit, ejecting one copy to its PE (down-ramp) and
+  // forwarding one copy onward. Intermediate nodes never eject-then-reinject,
+  // so no PE/SRAM bounce is paid. A global link-time calendar reserves each
+  // (directed-link, cycle) and (node down-ramp, cycle) to <=1 flit, so the
+  // schedule is conflict-free by construction; the greedy earliest-free packing
+  // reaches the makespan lower bound exactly (verified against
+  // utils/sim_dim_multitree.py).
   CalendarResult result;
   result.feasible = true;
   result.makespan = 0;
@@ -480,11 +483,11 @@ CalendarResult CalendarScheduler::Schedule(CollectivePlan & plan) const
     return ScheduleGatherGlobal(plan.transfers, plan.msg_size);
 
   if(plan.name == "allgather") {
-    // On a healthy mesh the optimum is the ring-tree hybrid (in-network fork),
-    // which hits the makespan lower bound conflict-free. Faults break the fixed
-    // X-then-Y routing, so fall back to the gather+broadcast schedule there.
+    // On a healthy mesh the optimum is the bidirectional dimensional multi-tree
+    // (in-network fork), which hits the makespan lower bound conflict-free.
+    // Faults break the fixed X-then-Y routing, so fall back to gather+broadcast.
     if(_graph.IsHealthy())
-      return ScheduleAllGatherRingTree(plan.msg_size);
+      return ScheduleAllGatherDimMultiTree(plan.msg_size);
 
     int root = plan.root;
     vector<ScheduledTransfer> gather_tr;

@@ -17,7 +17,7 @@ UPDATES = {
     ("gather", 4): (769, 764, 769, 1.0000),
     ("gather", 16): (3061, 3056, 3061, 1.0000),
     ("gather", 64): (12229, 12224, 12229, 1.0000),
-    # ring-tree hybrid (in-network fork) hits the makespan LB exactly, eff=1.0
+    # bidirectional dimensional multi-tree (in-network fork) hits the makespan LB exactly, eff=1.0
     ("allgather", 1): (205, 191, 205, 1.0000),
     ("allgather", 4): (769, 764, 769, 1.0000),
     ("allgather", 16): (3061, 3056, 3061, 1.0000),

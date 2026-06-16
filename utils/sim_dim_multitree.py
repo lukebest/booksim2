@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Ring-tree hybrid allgather: global link-time calendar simulator.
+"""Bidirectional dimensional multi-tree allgather: global link-time calendar simulator.
 
-Every source s broadcasts via an X-then-Y dimension-ordered multicast tree:
+There is no literal Hamiltonian ring here; each source broadcasts via an
+X-then-Y dimension-ordered multicast tree, and the "bidirectional" lines per
+dimension are the mesh analogue of a ring:
   * row spine along row sy (bidirectional from sx),
   * column branches up/down each column from row sy.
 Forwarding is IN-NETWORK (router fork): a node duplicates an incoming flit,
@@ -87,7 +89,7 @@ def simulate(msg_size=1, verbose=True):
             adj[p].append(c)
         trees[s] = adj
 
-    pq = [*
+    pq = []
     seq = 0
     # availability of a flit at a node within its source tree
     avail = {}  # (src, node, k) -> time available to forward
@@ -138,7 +140,8 @@ def simulate(msg_size=1, verbose=True):
 
 
 if __name__ == "__main__":
-    print("Ring-tree hybrid allgather (in-network fork, global link-time calendar)\n")
+    print("Bidirectional dimensional multi-tree allgather "
+          "(in-network fork, global link-time calendar)\n")
     for M in (1, 4, 16):
         simulate(M)
         print()

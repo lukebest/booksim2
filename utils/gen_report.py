@@ -143,7 +143,7 @@ def theory_table():
             "allgather",
             f"max({(N-1)}×M, bisection, worst-corner gather)",
             f"{(N-1)}×M",
-            "NOT gather+broadcast; per-node down-ramp floor; ring-tree hybrid hits LB exactly",
+            "NOT gather+broadcast; per-node down-ramp floor; dimensional multi-tree hits LB exactly",
         ),
         (
             "alltoall",
@@ -186,10 +186,11 @@ def q1_answer(healthy):
         f"True bound = <code>max((N−1)×M down-ramp, bisection, worst-corner gather)</code> "
         f"= 205 (M=1), not 371. The bottleneck is every node's single down-ramp absorbing "
         f"<code>(N−1)×M</code> flits — allgather costs essentially one <em>worst-case gather</em>, "
-        f"not a gather plus a broadcast. The implemented optimum is the <strong>ring-tree hybrid</strong> "
-        f"(X-then-Y in-network fork trees superposed under one global link-time calendar): it "
-        f"<strong>hits the lower bound exactly</strong> — makespan 205 (M=1) → 12229 (M=64), "
-        f"efficiency = 1.0, conflict-free.</li>",
+        f"not a gather plus a broadcast. The implemented optimum is the "
+        f"<strong>bidirectional dimensional multi-tree</strong> "
+        f"(X-then-Y in-network fork trees superposed under one global link-time calendar; "
+        f"no literal ring): it <strong>hits the lower bound exactly</strong> — "
+        f"makespan 205 (M=1) → 12229 (M=64), efficiency = 1.0, conflict-free.</li>",
         f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",
     ]
@@ -337,22 +338,23 @@ def allgather_bound_section():
 直觉上 allgather = 「N 个并发 gather」，其代价由<strong>最坏的那一个 gather</strong> 主导，
 额外的副本是<strong>并发</strong>送达的，而不是在一次完整 gather 之后再串行广播。</p>
 
-<h3>实现的最优算法：ring-tree 混合（命中下界）</h3>
+<h3>实现的最优算法：双向维序多树（bidirectional dimensional multi-tree，命中下界）</h3>
 <p>把行/列遍历<strong>重叠到单阶段</strong>：每个源沿 <strong>X-先-Y</strong> 维序展开一棵组播树
-——行脊（H-link 双向）+ 每列分叉（V-link 双向）。转发为 <strong>router 内 fork</strong>：
+——行脊（H-link 双向）+ 每列分叉（V-link 双向）。<strong>注意没有字面意义的 Hamiltonian 环</strong>，
+每个维度上的「双向 line」就是 mesh 上环的等价物。转发为 <strong>router 内 fork</strong>：
 节点把到达 flit 复制一份下 down-ramp（eject 到 PE），另一份继续转发，
 <strong>中间节点从不 eject 后再 reinject</strong>，因此不付 10cy 的 PE/SRAM bounce。</p>
 <p>N 棵树叠加后用<strong>全局 link-time calendar</strong> 贪心装填：每条有向 link、每个 down-ramp
 每周期 ≤1 flit，<strong>构造即无冲突</strong>。最坏角节点 (0,0) 的列0 漏斗承载 180M flit、
-down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherRingTree</code> +
-<code>utils/sim_ring_tree.py</code>）确认 makespan <strong>精确命中下界</strong>：
+down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherDimMultiTree</code> +
+<code>utils/sim_dim_multitree.py</code>）确认 makespan <strong>精确命中下界</strong>：
 <code>205 / 769 / 3061 / 12229</code>（M=1/4/16/64），<strong>eff=1.0</strong>。</p>
 
 <h3>对比：2D dimensional allgather（次优，两阶段）</h3>
 <p>另一可行算法是先沿行（Phase X，H-link）做行内 allgather（makespan {px}），
 再沿列（Phase Y，V-link）做列内 allgather（makespan {py}），down-ramp 之和同为 (N−1)M。
 但两阶段被串行化，总 makespan = {px}+{py} = <strong>{dim}</strong>(M=1)，比下界高 {dim - lb} cycle
-（Phase X 的 fill 未被隐藏）。ring-tree 把这段 fill 重叠掉，故能从 {dim} 收紧到 {lb}。</p>
+（Phase X 的 fill 未被隐藏）。多树方案把这段 fill 重叠掉，故能从 {dim} 收紧到 {lb}。</p>
 
 <h3>算法对比（12×16 mesh，M=1）</h3>
 <table style="font-size:13px">
@@ -361,9 +363,9 @@ down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherRin
 <tr><td>Ring（Hamiltonian 环）</td><td>最优</td><td>环周长 ~800cy 传播延迟主导，长宽比大时差</td><td>~800+</td></tr>
 <tr><td>Recursive doubling</td><td>最优</td><td>log₂N≈8 步，但 mesh 上 partner 距离逐步增大→长线/拥塞；192 非 2 的幂</td><td>较差</td></tr>
 <tr><td>2D dimensional</td><td>最优</td><td>仅相邻链路，但两阶段 fill 不重叠</td><td>{dim}</td></tr>
-<tr><td><strong>ring-tree 混合</strong></td><td><strong>最优</strong></td><td><strong>单阶段重叠 + in-network fork + 全局 calendar</strong></td><td><strong>{lb}</strong></td></tr>
+<tr><td><strong>双向维序多树</strong></td><td><strong>最优</strong></td><td><strong>单阶段重叠 + in-network fork + 全局 calendar</strong></td><td><strong>{lb}</strong></td></tr>
 </table>
-<p>下界 = <strong>{lb}</strong>(M=1)，ring-tree <strong>无冲突地精确命中</strong>（eff=1.0），
+<p>下界 = <strong>{lb}</strong>(M=1)，双向维序多树 <strong>无冲突地精确命中</strong>（eff=1.0），
 为本拓扑上 allgather 的实用最优实现。</p>
 </div>"""
 
