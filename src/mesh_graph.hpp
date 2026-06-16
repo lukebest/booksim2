@@ -29,6 +29,11 @@ public:
 
   int ManhattanLatency(int a, int b) const;
   int DiameterLatency() const;
+  int RampLatency() const { return _ramp_lat; }
+  int PathLatency(int src, int dst, bool include_ramps = true) const;
+  int MaxPathToRoot(int root) const;
+  int EffectiveRoot(int preferred = 0) const;
+  int BisectionCapacity() const;
 
   std::vector<int> ShortestPath(int src, int dst) const;
 
@@ -49,6 +54,7 @@ private:
   int _h_lat;
   int _v_lat;
   int _ramp_lat;
+  int _collective_root;
 
   std::vector<bool> _alive;
   std::vector<std::vector<int> > _neighbors;
@@ -60,6 +66,7 @@ private:
   void BuildMesh();
   void ApplyFaults(const Configuration & config);
   void RegisterLink(int src, int dst, int latency);
+  int GatherTheoBound(int msg_size) const;
 };
 
 #endif

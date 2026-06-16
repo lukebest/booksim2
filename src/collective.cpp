@@ -75,22 +75,23 @@ vector<int> CollectivePlanner::TreeChildren(int node, const vector<int> & tree_p
   return children;
 }
 
-vector<int> CollectivePlanner::TreeDepths(int root, const vector<int> & tree_parent) const
+vector<int> CollectivePlanner::TreeLatencies(int root, const vector<int> & tree_parent,
+                                             const vector<int> & nodes) const
 {
-  vector<int> depth(_graph.NumNodes(), -1);
-  depth[root] = 0;
-  for(int n = 0; n < _graph.NumNodes(); ++n) {
-    if(tree_parent[n] == -1 && n != root) continue;
+  vector<int> lat(_graph.NumNodes(), -1);
+  lat[root] = 0;
+  for(size_t i = 0; i < nodes.size(); ++i) {
+    int n = nodes[i];
     if(n == root) continue;
     int cur = n;
-    int d = 0;
+    int total = 0;
     while(cur != root && tree_parent[cur] != -1) {
-      ++d;
+      total += _graph.Latency(tree_parent[cur], cur);
       cur = tree_parent[cur];
     }
-    depth[n] = d;
+    if(cur == root) lat[n] = total;
   }
-  return depth;
+  return lat;
 }
 
 void CollectivePlanner::AddEdgeTransfer(vector<ScheduledTransfer> & out,
@@ -146,10 +147,10 @@ CollectivePlan CollectivePlanner::PlanReduce(int msg_size, int root,
   plan.feasible = true;
 
   vector<int> parent = BuildLatencyTree(root, nodes);
-  vector<int> depth = TreeDepths(root, parent);
-  int max_depth = 0;
+  vector<int> lat = TreeLatencies(root, parent, nodes);
+  int max_lat = 0;
   for(size_t i = 0; i < nodes.size(); ++i)
-    if(depth[nodes[i]] > max_depth) max_depth = depth[nodes[i]];
+    if(lat[nodes[i]] > max_lat) max_lat = lat[nodes[i]];
 
   for(int k = 0; k < msg_size; ++k) {
     for(size_t i = 0; i < nodes.size(); ++i) {
@@ -157,10 +158,8 @@ CollectivePlan CollectivePlanner::PlanReduce(int msg_size, int root,
       if(node == root) continue;
       int p = parent[node];
       if(p < 0) { plan.feasible = false; continue; }
-      bool up = true;
-      bool down = (p == root);
-      int ready = k + (max_depth - depth[node]);
-      AddEdgeTransfer(plan.transfers, node, p, k, ready, up, down);
+      int ready = k + (max_lat - lat[node]);
+      AddEdgeTransfer(plan.transfers, node, p, k, ready, false, false);
     }
   }
   return plan;
@@ -181,10 +180,7 @@ CollectivePlan CollectivePlanner::PlanGather(int msg_size, int root,
     if(src == root) continue;
     vector<int> path = _graph.ShortestPath(src, root);
     if(path.empty()) { plan.feasible = false; continue; }
-    int path_lat = 2 * _graph.LinkLatency(_graph.UpLinkId(src));
-    for(size_t h = 0; h + 1 < path.size(); ++h)
-      path_lat += _graph.Latency(path[h], path[h+1]);
-    sources.push_back(make_pair(path_lat, src));
+    sources.push_back(make_pair(_graph.PathLatency(src, root), src));
   }
   sort(sources.begin(), sources.end());
 
@@ -265,6 +261,9 @@ CollectivePlan CollectivePlanner::PlanAllToAll(int msg_size,
   plan.root = 0;
   plan.feasible = true;
 
+  int cap = _graph.BisectionCapacity();
+  if(cap <= 0) cap = 1;
+
   int slot = 0;
   for(size_t i = 0; i < nodes.size(); ++i) {
     int src = nodes[i];
@@ -272,7 +271,7 @@ CollectivePlan CollectivePlanner::PlanAllToAll(int msg_size,
       int dst = nodes[j];
       if(src == dst) continue;
       for(int k = 0; k < msg_size; ++k) {
-        AddEdgeTransfer(plan.transfers, src, dst, k, slot, true, true);
+        AddEdgeTransfer(plan.transfers, src, dst, k, slot / cap, true, true);
         ++slot;
       }
     }

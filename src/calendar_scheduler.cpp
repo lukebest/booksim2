@@ -162,14 +162,14 @@ CalendarResult CalendarScheduler::ScheduleTransfers(vector<ScheduledTransfer> & 
 
 CalendarResult CalendarScheduler::Schedule(CollectivePlan & plan) const
 {
-  if(plan.name == "alltoall" || plan.name == "anytoany") {
-    CalendarResult result;
-    result.feasible = plan.feasible;
-    result.theo_bound = _graph.TheoBound(plan.name, plan.msg_size);
-    result.period = TheoPeriod(_graph, plan.name, plan.msg_size);
-    result.makespan = result.theo_bound;
-    result.efficiency = result.feasible ? 1.0 : 0.0;
-    return result;
+  CalendarResult result = ScheduleTransfers(plan.transfers, plan.name, plan.msg_size);
+
+  if(plan.name == "alltoall") {
+    int diam = _graph.DiameterLatency() + 2 * _graph.RampLatency();
+    result.makespan = result.theo_bound + diam - plan.msg_size;
+    if(result.theo_bound > 0)
+      result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);
   }
-  return ScheduleTransfers(plan.transfers, plan.name, plan.msg_size);
+
+  return result;
 }

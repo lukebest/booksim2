@@ -58,7 +58,8 @@ private:
   std::vector<int> LiveNodes() const;
   std::vector<int> BuildLatencyTree(int root, const std::vector<int> & nodes) const;
   std::vector<int> TreeChildren(int node, const std::vector<int> & tree_parent) const;
-  std::vector<int> TreeDepths(int root, const std::vector<int> & tree_parent) const;
+  std::vector<int> TreeLatencies(int root, const std::vector<int> & tree_parent,
+                                 const std::vector<int> & nodes) const;
 
   void AddEdgeTransfer(std::vector<ScheduledTransfer> & out,
                        int src, int dst, int flit_idx, int ready_time,

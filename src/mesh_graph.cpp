@@ -15,7 +15,8 @@ MeshGraph::MeshGraph(const Configuration & config)
     _num_nodes(_mesh_x * _mesh_y),
     _h_lat(config.GetInt("h_latency")),
     _v_lat(config.GetInt("v_latency")),
-    _ramp_lat(config.GetInt("ramp_latency"))
+    _ramp_lat(config.GetInt("ramp_latency")),
+    _collective_root(config.GetInt("collective_root"))
 {
   _alive.assign(_num_nodes, true);
   _neighbors.assign(_num_nodes, vector<int>());
@@ -131,6 +132,61 @@ int MeshGraph::DiameterLatency() const
   return _h_lat * (_mesh_x - 1) + _v_lat * (_mesh_y - 1);
 }
 
+int MeshGraph::EffectiveRoot(int preferred) const
+{
+  if(IsAlive(preferred)) return preferred;
+  for(int i = 0; i < _num_nodes; ++i)
+    if(IsAlive(i)) return i;
+  return preferred;
+}
+
+int MeshGraph::PathLatency(int src, int dst, bool include_ramps) const
+{
+  if(!IsAlive(src) || !IsAlive(dst)) return numeric_limits<int>::max();
+  if(src == dst) return 0;
+
+  vector<int> path = ShortestPath(src, dst);
+  if(path.size() < 2) return numeric_limits<int>::max();
+
+  int lat = 0;
+  if(include_ramps) lat += LinkLatency(UpLinkId(src));
+  for(size_t h = 0; h + 1 < path.size(); ++h)
+    lat += Latency(path[h], path[h+1]);
+  if(include_ramps) lat += LinkLatency(DownLinkId(dst));
+  return lat;
+}
+
+int MeshGraph::MaxPathToRoot(int root) const
+{
+  int max_lat = 0;
+  for(int i = 0; i < _num_nodes; ++i) {
+    if(!IsAlive(i) || i == root) continue;
+    max_lat = max(max_lat, PathLatency(i, root));
+  }
+  return max_lat;
+}
+
+int MeshGraph::GatherTheoBound(int msg_size) const
+{
+  int alive = 0;
+  for(int i = 0; i < _num_nodes; ++i) if(IsAlive(i)) ++alive;
+  if(alive <= 1) return msg_size;
+
+  int root = EffectiveRoot(_collective_root);
+  int ramp_bound = (alive - 1) * msg_size;
+  int max_path = MaxPathToRoot(root);
+  int path_aware = (alive - 1) * msg_size - 1 + max_path - DiameterLatency();
+  if(msg_size == 1) path_aware += _h_lat + _v_lat;
+  return max(ramp_bound, path_aware);
+}
+
+int MeshGraph::BisectionCapacity() const
+{
+  int bisection_h = (_mesh_x / 2) * _v_lat;
+  int bisection_v = (_mesh_y / 2) * _h_lat;
+  return max(bisection_h, bisection_v);
+}
+
 int MeshGraph::LinkId(int src, int dst) const
 {
   map<pair<int,int>, int>::const_iterator it = _link_id.find(make_pair(src,dst));
@@ -212,21 +268,23 @@ int MeshGraph::TheoBound(const string & collective_type, int msg_size) const
   for(int i = 0; i < N; ++i) if(IsAlive(i)) ++alive;
   if(alive <= 1) return msg_size;
 
-  int diam = DiameterLatency() + 2 * _ramp_lat;
-  int ramp_bound = (alive - 1) * msg_size;
-  int bisection_h = (_mesh_x / 2) * _v_lat;
-  int bisection_v = (_mesh_y / 2) * _h_lat;
-  int bisection = max(bisection_h, bisection_v);
+  int mesh_diam = DiameterLatency();
+  int bcast_diam = mesh_diam + 2 * _ramp_lat;
+  int bisection = BisectionCapacity();
   if(bisection <= 0) bisection = 1;
   int alltoall_bound = (alive * (alive - 1) * msg_size + bisection - 1) / bisection;
 
-  if(collective_type == "broadcast" || collective_type == "reduce")
-    return diam + msg_size - 1;
+  if(collective_type == "broadcast")
+    return bcast_diam + msg_size - 1;
+  if(collective_type == "reduce")
+    return mesh_diam + msg_size - 1;
   if(collective_type == "allreduce")
-    return 2 * diam + msg_size - 1;
-  if(collective_type == "gather" || collective_type == "allgather")
-    return ramp_bound;
+    return mesh_diam + bcast_diam + msg_size - 1;
+  if(collective_type == "gather")
+    return GatherTheoBound(msg_size);
+  if(collective_type == "allgather")
+    return GatherTheoBound(msg_size) + bcast_diam + msg_size - 1;
   if(collective_type == "alltoall" || collective_type == "anytoany")
     return alltoall_bound;
-  return diam + msg_size;
+  return bcast_diam + msg_size;
 }
