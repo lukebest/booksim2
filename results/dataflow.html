@@ -1356,7 +1356,7 @@ a{color:#2563eb;}
 <p class="metric">healthy M=1: makespan=166, period=1</p>
 </div>
 <div class='card'><h2>Reduce 归约</h2>
-<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。叶节点 PE 经 up-ramp 注入，router 对来自不同子树的 flit 做 <strong>combine</strong>，最终 root 的 down-ramp 输出归约结果。calendar 按树深度从远到近安排发送 wave。</p>
+<p>使用与 broadcast 相同的 latency 树，但箭头<strong>指向 root</strong>。参与归约的叶节点 PE 经 <strong>up-ramp</strong> 注入本地 flit，router 内 <strong>inline combine</strong>，沿 mesh 链路（H=4cy / V=8cy）逐级汇聚；最终结果经 root <strong>down-ramp</strong> 输出至 PE。M=1 makespan=166（1cy up + 164cy mesh + 1cy down，与 broadcast 对称）。</p>
 <div class="mesh-wrap">
 <svg width="384" height="544" viewBox="0 0 384 544" xmlns="http://www.w3.org/2000/svg">
 
@@ -2106,9 +2106,9 @@ a{color:#2563eb;}
 <line x1="283.0" y1="434.0" x2="283.0" y2="420.0" stroke="#dc2626" stroke-width="1.4" color="#dc2626" marker-end="url(#arr_rd)" opacity="0.85"/>
 <line x1="309.0" y1="434.0" x2="309.0" y2="420.0" stroke="#dc2626" stroke-width="1.4" color="#dc2626" marker-end="url(#arr_rd)" opacity="0.85"/>
 <line x1="335.0" y1="434.0" x2="335.0" y2="420.0" stroke="#dc2626" stroke-width="1.4" color="#dc2626" marker-end="url(#arr_rd)" opacity="0.85"/>
-<text x="36" y="532" font-size="10" fill="#64748b">叶节点先发起，内部 combine；root down-ramp 收结果 → makespan≈191 (M=1)</text></svg>
+<text x="36" y="532" font-size="10" fill="#64748b">叶节点先经 up-ramp 注入，router inline combine；root down-ramp 输出 → makespan=166 (M=1)</text></svg>
 </div>
-<p class="metric">healthy M=1: makespan=191, period=1</p>
+<p class="metric">healthy M=1: makespan=166, period=1</p>
 </div>
 <div class='card'><h2>Gather 收集</h2>
 <p>每个非 root 节点（橙箭头）沿 <strong>Dijkstra 最短路径</strong>（曼哈顿加权：H=4, V=8）向 root 发送 flit。图中浅色线为全部 191 条源路径，深色为抽样高亮。所有 flit 最终汇入 root 的 down-ramp（瓶颈：每 cycle 1 flit）。</p>
@@ -5875,7 +5875,7 @@ a{color:#2563eb;}
 </g>
 <text x="20" y="558" font-size="10" fill="#64748b">两阶段 calendar 首尾拼接；period=M</text></svg>
 </div>
-<p class="metric">healthy M=1: makespan=348, period=1</p>
+<p class="metric">healthy M=1: makespan=323, period=1</p>
 </div>
 <div class='card'><h2>AllToAll 全交换</h2>
 <p>虚线为<strong>水平二分切面</strong>（x=5|6）。紫色双向箭头表示跨切面的 flit 交换（瓶颈链路）；淡紫水平线为行内 X 维交换。全网每对节点互发 M flit，calendar 分 X/Y 两阶段填满切面带宽，makespan 下界 768×M。</p>
@@ -6500,7 +6500,7 @@ a{color:#2563eb;}
 <line x1="309.0" y1="361.0" x2="335.0" y2="361.0" stroke="#7c3aed" stroke-width="0.7" opacity="0.35" marker-end="url(#arr_a2a)" color="#7c3aed"/>
 <text x="36" y="532" font-size="10" fill="#64748b">96×96 对 flit / 12 切链路 = 768×M；M=16 makespan=12224</text></svg>
 </div>
-<p class="metric">healthy M=1: makespan=764, period=764</p>
+<p class="metric">healthy M=1: makespan=929, period=764</p>
 </div>
 <div class='card'><h2>AnyToAny 任意置换</h2>
 <p>每条彩色折线为一条置换路径 i→P(i)（Dijkstra 最短路径，沿 mesh 水平/竖直链路转弯）。模式事先已知，calendar 为每条路径的每一跳预分配 send-time，全网并行、链路无冲突。</p>
@@ -7091,7 +7091,7 @@ a{color:#2563eb;}
 <path d="M 127.0,101.0 L 153.0,101.0 L 179.0,101.0 L 205.0,101.0 L 231.0,101.0 L 257.0,101.0 L 257.0,127.0 L 257.0,153.0 L 257.0,179.0 L 257.0,205.0 L 257.0,231.0 L 257.0,257.0 L 257.0,283.0 L 257.0,309.0 L 257.0,335.0 L 257.0,361.0" fill="none" stroke="hsl(279,65%,45%)" stroke-width="0.9" opacity="0.65" marker-end="url(#arr_a2p)" color="hsl(279,65%,45%)"/>
 <text x="36" y="532" font-size="10" fill="#64748b">展示 28 条置换路径；全网 192 条同时 calendar 调度，bound≈768×M</text></svg>
 </div>
-<p class="metric">healthy M=1: makespan=764, period=764</p>
+<p class="metric">healthy M=1: makespan=360, period=764</p>
 </div>
 <div class='card'><h2>故障下离线重调度 — Mesh 上的数据流变化</h2>
 <p>故障后在<strong>同一 mesh 坐标系</strong>上更新拓扑（删节点/删边），Dijkstra 重算路径，calendar 全链路时隙表 offline 重生成。</p>

@@ -203,16 +203,21 @@
 </svg>
 </div>
 <div class='card'><h2>Theoretical bounds</h2><table><tr><th>Collective</th><th>Min makespan</th><th>Min period</th><th>Notes</th></tr>
-<tr><td>broadcast / reduce</td><td>166 + M - 1</td><td>M</td><td>Latency + ramp bound; calendar optimal</td></tr>
-<tr><td>allreduce</td><td>2*166 + M - 1</td><td>M</td><td>Reduce + broadcast phases</td></tr>
-<tr><td>gather / allgather</td><td>191*M</td><td>191*M</td><td>Down-ramp bandwidth bound</td></tr>
-<tr><td>alltoall / anytoany</td><td>~768*M</td><td>~768*M</td><td>Bisection bandwidth bound</td></tr>
+<tr><td>broadcast</td><td>166 + M - 1</td><td>M</td><td>Root up-ramp + mesh (H=4/V=8) + leaf down-ramp</td></tr>
+<tr><td>reduce</td><td>166 + M - 1</td><td>M</td><td>Node up-ramp + mesh inline combine + root down-ramp</td></tr>
+<tr><td>allreduce</td><td>2×166 + M - 1</td><td>M</td><td>Reduce (up+mesh+down) then broadcast</td></tr>
+<tr><td>gather</td><td>max(191×M, (N-1)×M + path − mesh_diam + H + V)</td><td>191×M</td><td>Down-ramp bound + longest source path (H/V)</td></tr>
+<tr><td>allgather</td><td>gather_bound + 166 + M − 1</td><td>191×M</td><td>Gather then broadcast; path-aware gather bound</td></tr>
+<tr><td>alltoall</td><td>764×M + 166 − M</td><td>764×M</td><td>Bisection bandwidth (H/V weighted) + path drain</td></tr>
+<tr><td>anytoany</td><td>~764×M (per-hop sim)</td><td>~764×M</td><td>Per-path Dijkstra schedule with H/V hops</td></tr>
 </table></div>
 <div class='card'><h2>Q1: Minimum makespan and calendar period</h2><p><strong>Q1 conclusion:</strong> Not all collectives can reach the unconstrained latency minimum.</p>
 <ul>
-<li><strong>broadcast, reduce, allreduce</strong>: calendar scheduling with in-network fork/combine achieves the latency lower bound; optimal period is <code>M</code> flit initiation interval.</li>
-<li><strong>gather, allgather</strong>: bottleneck is root down-ramp (191 sources × M flits at 1 flit/cycle); minimum makespan/period ≈ <code>191×M = 191×M</code>.</li>
-<li><strong>alltoall, anytoany</strong>: bisection-limited; minimum makespan/period ≈ <code>768×M</code> on this 12×16 mesh.</li>
+<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>
+<li><strong>reduce</strong>: leaf PE nodes inject via up-ramp; inline combine on mesh; root down-ramp for final result; period <code>M</code>.</li>
+<li><strong>allreduce</strong>: reduce phase (up+mesh+down) then broadcast phase (up+mesh+down).</li>
+<li><strong>gather, allgather</strong>: down-ramp bound <code>191×M</code> plus longest shortest-path latency (H=4/V=8); simulated gather M=1 makespan ≈ 205.</li>
+<li><strong>alltoall</strong>: bisection bandwidth bound <code>764×M</code> plus diameter path drain (<code>+164+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>
 </ul>
 <p>Simulated broadcast M=1 makespan=166, period=1, efficiency=1.0000.</p></div>
 <div class='card'><h2>Healthy simulation: makespan vs M</h2>
@@ -236,15 +241,15 @@
 <text x="50" y="20" font-size="14" font-weight="bold">reduce makespan</text>
 <line x1="50" y1="210" x2="590" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="70.2" y="108.6" width="94.5" height="101.4" fill="#3b82f6"/>
+<rect x="70.2" y="104.6" width="94.5" height="105.4" fill="#3b82f6"/>
 <text x="117.5" y="224" font-size="9" text-anchor="middle">1</text>
-<rect x="205.2" y="107.0" width="94.5" height="103.0" fill="#3b82f6"/>
+<rect x="205.2" y="102.7" width="94.5" height="107.3" fill="#3b82f6"/>
 <text x="252.5" y="224" font-size="9" text-anchor="middle">4</text>
-<rect x="340.2" y="100.6" width="94.5" height="109.4" fill="#3b82f6"/>
+<rect x="340.2" y="95.0" width="94.5" height="115.0" fill="#3b82f6"/>
 <text x="387.5" y="224" font-size="9" text-anchor="middle">16</text>
 <rect x="475.2" y="64.5" width="94.5" height="145.5" fill="#3b82f6"/>
 <text x="522.5" y="224" font-size="9" text-anchor="middle">64</text>
-<text x="10" y="60" font-size="10" fill="#64748b">max=301</text>
+<text x="10" y="60" font-size="10" fill="#64748b">max=252</text>
 </svg>
 <h3>gather</h3>
 <svg width="640" height="260" xmlns="http://www.w3.org/2000/svg">
@@ -281,24 +286,24 @@
 <text x="50" y="20" font-size="14" font-weight="bold">allreduce makespan</text>
 <line x1="50" y1="210" x2="590" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="70.2" y="105.0" width="94.5" height="105.0" fill="#3b82f6"/>
+<rect x="70.2" y="89.8" width="94.5" height="120.2" fill="#3b82f6"/>
 <text x="117.5" y="224" font-size="9" text-anchor="middle">1</text>
-<rect x="205.2" y="110.4" width="94.5" height="99.6" fill="#3b82f6"/>
+<rect x="205.2" y="86.5" width="94.5" height="123.5" fill="#3b82f6"/>
 <text x="252.5" y="224" font-size="9" text-anchor="middle">4</text>
-<rect x="340.2" y="125.2" width="94.5" height="84.8" fill="#3b82f6"/>
+<rect x="340.2" y="82.0" width="94.5" height="128.0" fill="#3b82f6"/>
 <text x="387.5" y="224" font-size="9" text-anchor="middle">16</text>
 <rect x="475.2" y="64.5" width="94.5" height="145.5" fill="#3b82f6"/>
 <text x="522.5" y="224" font-size="9" text-anchor="middle">64</text>
-<text x="10" y="60" font-size="10" fill="#64748b">max=530</text>
+<text x="10" y="60" font-size="10" fill="#64748b">max=430</text>
 </svg>
 <h3>alltoall</h3>
 <svg width="640" height="260" xmlns="http://www.w3.org/2000/svg">
 <text x="50" y="20" font-size="14" font-weight="bold">alltoall makespan</text>
 <line x1="50" y1="210" x2="590" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="70.2" y="207.7" width="94.5" height="2.3" fill="#3b82f6"/>
+<rect x="70.2" y="207.2" width="94.5" height="2.8" fill="#3b82f6"/>
 <text x="117.5" y="224" font-size="9" text-anchor="middle">1</text>
-<rect x="205.2" y="200.9" width="94.5" height="9.1" fill="#3b82f6"/>
+<rect x="205.2" y="200.4" width="94.5" height="9.6" fill="#3b82f6"/>
 <text x="252.5" y="224" font-size="9" text-anchor="middle">4</text>
 <rect x="340.2" y="173.6" width="94.5" height="36.4" fill="#3b82f6"/>
 <text x="387.5" y="224" font-size="9" text-anchor="middle">16</text>
@@ -311,9 +316,9 @@
 <text x="50" y="20" font-size="14" font-weight="bold">anytoany makespan</text>
 <line x1="50" y1="210" x2="590" y2="210" stroke="#64748b"/>
 <line x1="50" y1="50" x2="50" y2="210" stroke="#64748b"/>
-<rect x="70.2" y="207.7" width="94.5" height="2.3" fill="#3b82f6"/>
+<rect x="70.2" y="208.9" width="94.5" height="1.1" fill="#3b82f6"/>
 <text x="117.5" y="224" font-size="9" text-anchor="middle">1</text>
-<rect x="205.2" y="200.9" width="94.5" height="9.1" fill="#3b82f6"/>
+<rect x="205.2" y="207.3" width="94.5" height="2.7" fill="#3b82f6"/>
 <text x="252.5" y="224" font-size="9" text-anchor="middle">4</text>
 <rect x="340.2" y="173.6" width="94.5" height="36.4" fill="#3b82f6"/>
 <text x="387.5" y="224" font-size="9" text-anchor="middle">16</text>
@@ -325,15 +330,15 @@
 <div class='card'><h2>Healthy simulation summary (M=64)</h2><table>
 <tr><th>Collective</th><th>Makespan</th><th>Period</th><th>Bound</th><th>Efficiency</th></tr>
 <tr><td>allgather</td><td>12451</td><td>12224</td><td>12224</td><td>0.9818</td></tr>
-<tr><td>allreduce</td><td>482</td><td>64</td><td>395</td><td>0.8195</td></tr>
+<tr><td>allreduce</td><td>391</td><td>64</td><td>395</td><td>1.0102</td></tr>
 <tr><td>alltoall</td><td>48896</td><td>48896</td><td>48896</td><td>1.0000</td></tr>
 <tr><td>anytoany</td><td>48896</td><td>48896</td><td>48896</td><td>1.0000</td></tr>
 <tr><td>broadcast</td><td>292</td><td>64</td><td>229</td><td>0.7842</td></tr>
 <tr><td>gather</td><td>12229</td><td>12224</td><td>12224</td><td>0.9996</td></tr>
-<tr><td>reduce</td><td>274</td><td>64</td><td>229</td><td>0.8358</td></tr>
+<tr><td>reduce</td><td>229</td><td>64</td><td>229</td><td>1.0000</td></tr>
 </table></div>
 <div class='card'><h2>Q2: Fault tolerance with offline rescheduling</h2>
-<p><strong>Q2 conclusion:</strong> With offline calendar rescheduling on the surviving topology, 189/189 fault scenarios remained feasible in simulation.</p><p>Average makespan degradation vs healthy (M=16): -0.4%; maximum observed: 8.2%. Corner faults and multi-link cuts show higher degradation due to longer detour paths and reduced bisection bandwidth.</p>
+<p><strong>Q2 conclusion:</strong> With offline calendar rescheduling on the surviving topology, 189/189 fault scenarios remained feasible in simulation.</p><p>Average makespan degradation vs healthy (M=16): -1.0%; maximum observed: 22.1%. Corner faults and multi-link cuts show higher degradation due to longer detour paths and reduced bisection bandwidth.</p>
 <svg width="960" height="260" xmlns="http://www.w3.org/2000/svg">
 <text x="50" y="20" font-size="14" font-weight="bold">Fault degradation (% makespan increase vs healthy M=16)</text>
 <line x1="50" y1="210" x2="910" y2="210" stroke="#64748b"/>
@@ -416,33 +421,33 @@
 <tr><td>allgather</td><td>node_edge_1</td><td>3219</td><td>3040</td><td>1</td><td>-0.5</td></tr>
 <tr><td>allgather</td><td>node_edge_2</td><td>3203</td><td>3024</td><td>1</td><td>-1.0</td></tr>
 <tr><td>allgather</td><td>node_edge_4</td><td>3171</td><td>2992</td><td>1</td><td>-2.0</td></tr>
-<tr><td>allreduce</td><td>linkH_center_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_center_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_center_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_corner_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_corner_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_corner_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_edge_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_edge_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkH_edge_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_center_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_center_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_center_4</td><td>304</td><td>16</td><td>1</td><td>8.2</td></tr>
-<tr><td>allreduce</td><td>linkV_corner_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_corner_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_corner_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_edge_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_edge_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>linkV_edge_4</td><td>285</td><td>16</td><td>1</td><td>1.4</td></tr>
-<tr><td>allreduce</td><td>node_center_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_center_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_center_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_corner_1</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_corner_2</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_corner_4</td><td>281</td><td>16</td><td>1</td><td>0.0</td></tr>
-<tr><td>allreduce</td><td>node_edge_1</td><td>273</td><td>16</td><td>1</td><td>-2.8</td></tr>
-<tr><td>allreduce</td><td>node_edge_2</td><td>273</td><td>16</td><td>1</td><td>-2.8</td></tr>
-<tr><td>allreduce</td><td>node_edge_4</td><td>273</td><td>16</td><td>1</td><td>-2.8</td></tr>
+<tr><td>allreduce</td><td>linkH_center_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_center_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_center_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_corner_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_corner_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_corner_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_edge_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_edge_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkH_edge_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_center_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_center_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_center_4</td><td>304</td><td>16</td><td>1</td><td>-11.6</td></tr>
+<tr><td>allreduce</td><td>linkV_corner_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_corner_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_corner_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_edge_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_edge_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>linkV_edge_4</td><td>285</td><td>16</td><td>1</td><td>-17.2</td></tr>
+<tr><td>allreduce</td><td>node_center_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_center_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_center_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_corner_1</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_corner_2</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_corner_4</td><td>281</td><td>16</td><td>1</td><td>-18.3</td></tr>
+<tr><td>allreduce</td><td>node_edge_1</td><td>273</td><td>16</td><td>1</td><td>-20.6</td></tr>
+<tr><td>allreduce</td><td>node_edge_2</td><td>273</td><td>16</td><td>1</td><td>-20.6</td></tr>
+<tr><td>allreduce</td><td>node_edge_4</td><td>273</td><td>16</td><td>1</td><td>-20.6</td></tr>
 <tr><td>alltoall</td><td>linkH_center_1</td><td>12224</td><td>12224</td><td>1</td><td>0.0</td></tr>
 <tr><td>alltoall</td><td>linkH_center_2</td><td>12224</td><td>12224</td><td>1</td><td>0.0</td></tr>
 <tr><td>alltoall</td><td>linkH_center_4</td><td>12224</td><td>12224</td><td>1</td><td>0.0</td></tr>
