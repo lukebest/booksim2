@@ -125,12 +125,38 @@ def degradation_chart(rows, baseline):
 
 
 def theory_table():
-    diam = H_LAT * (MESH_X - 1) + V_LAT * (MESH_Y - 1) + 2
+    mesh_diam = H_LAT * (MESH_X - 1) + V_LAT * (MESH_Y - 1)
+    bcast_diam = mesh_diam + 2
+    bisection = max((MESH_X // 2) * V_LAT, (MESH_Y // 2) * H_LAT)
+    alltoall_bw = (N * (N - 1) + bisection - 1) // bisection
     rows = [
-        ("broadcast / reduce", f"{diam} + M - 1", "M", "Latency + ramp bound; calendar optimal"),
-        ("allreduce", f"2*{diam} + M - 1", "M", "Reduce + broadcast phases"),
-        ("gather / allgather", f"{(N-1)}*M", f"{(N-1)}*M", "Down-ramp bandwidth bound"),
-        ("alltoall / anytoany", f"~{768}*M", f"~{768}*M", "Bisection bandwidth bound"),
+        ("broadcast", f"{bcast_diam} + M - 1", "M", "Root up-ramp + mesh (H=4/V=8) + leaf down-ramp"),
+        ("reduce", f"{mesh_diam} + M - 1", "M", "Inline router combine; mesh links only (no ramps)"),
+        ("allreduce", f"{mesh_diam} + {bcast_diam} + M - 1", "M", "Inline reduce phase + broadcast phase"),
+        (
+            "gather",
+            f"max({(N-1)}×M, (N-1)×M + path − mesh_diam + H + V)",
+            f"{(N-1)}×M",
+            "Down-ramp bound + longest source path (H/V)",
+        ),
+        (
+            "allgather",
+            f"gather_bound + {bcast_diam} + M − 1",
+            f"{(N-1)}×M",
+            "Gather then broadcast; path-aware gather bound",
+        ),
+        (
+            "alltoall",
+            f"{alltoall_bw}×M + {bcast_diam} − M",
+            f"{alltoall_bw}×M",
+            "Bisection bandwidth (H/V weighted) + path drain",
+        ),
+        (
+            "anytoany",
+            f"~{alltoall_bw}×M (per-hop sim)",
+            f"~{alltoall_bw}×M",
+            "Per-path Dijkstra schedule with H/V hops",
+        ),
     ]
     out = ["<table><tr><th>Collective</th><th>Min makespan</th><th>Min period</th><th>Notes</th></tr>"]
     for r in rows:
@@ -144,12 +170,17 @@ def theory_table():
 
 
 def q1_answer(healthy):
+    mesh_diam = H_LAT * (MESH_X - 1) + V_LAT * (MESH_Y - 1)
+    bisection = max((MESH_X // 2) * V_LAT, (MESH_Y // 2) * H_LAT)
+    alltoall_bw = (N * (N - 1) + bisection - 1) // bisection
     lines = [
         "<p><strong>Q1 conclusion:</strong> Not all collectives can reach the unconstrained latency minimum.</p>",
         "<ul>",
-        "<li><strong>broadcast, reduce, allreduce</strong>: calendar scheduling with in-network fork/combine achieves the latency lower bound; optimal period is <code>M</code> flit initiation interval.</li>",
-        f"<li><strong>gather, allgather</strong>: bottleneck is root down-ramp ({N-1} sources × M flits at 1 flit/cycle); minimum makespan/period ≈ <code>{N-1}×M = {191}×M</code>.</li>",
-        f"<li><strong>alltoall, anytoany</strong>: bisection-limited; minimum makespan/period ≈ <code>768×M</code> on this 12×16 mesh.</li>",
+        "<li><strong>broadcast</strong>: root up-ramp inject + mesh tree fork + leaf down-ramp; optimal period <code>M</code>.</li>",
+        "<li><strong>reduce</strong>: inline combine in routers on mesh links only (no PE ramps); optimal period <code>M</code>.</li>",
+        "<li><strong>allreduce</strong>: inline reduce phase (mesh) followed by broadcast phase (ramps + mesh).</li>",
+        f"<li><strong>gather, allgather</strong>: down-ramp bound <code>{N-1}×M</code> plus longest shortest-path latency (H=4/V=8); simulated gather M=1 makespan ≈ 205.</li>",
+        f"<li><strong>alltoall</strong>: bisection bandwidth bound <code>{alltoall_bw}×M</code> plus diameter path drain (<code>+{mesh_diam}+2</code> ramp cycles); anytoany uses full per-hop calendar simulation.</li>",
         "</ul>",
     ]
     if healthy:
