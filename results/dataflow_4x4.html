@@ -1,0 +1,154 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
+<title>4x4 多树 AllGather 每-cycle 数据流</title>
+<style>
+ body{font-family:'Segoe UI',Arial,sans-serif;margin:18px;color:#0f172a;background:#f8fafc;}
+ h1{color:#1e3a8a;font-size:20px;} .sub{color:#475569;font-size:13px;line-height:1.6;}
+ #wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;}
+ #panel{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;}
+ .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;}
+ button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:14px;}
+ button:hover{background:#1d4ed8;} button.sec{background:#64748b;}
+ input[type=range]{width:360px;} select,label{font-size:13px;}
+ #cyc{font-weight:700;color:#1e3a8a;font-variant-numeric:tabular-nums;}
+ #legend{display:flex;flex-wrap:wrap;gap:6px;max-width:380px;}
+ .lg{font-size:11px;padding:2px 6px;border-radius:4px;color:#fff;cursor:pointer;opacity:.4;}
+ .lg.on{opacity:1;}
+ table{border-collapse:collapse;font-size:12px;} td,th{border:1px solid #cbd5e1;padding:3px 7px;}
+</style></head><body>
+<h1>4×4 双向维序多树 AllGather —— 每 cycle 数据流动</h1>
+<p class="sub" id="meta"></p>
+<div id="wrap">
+ <div id="panel"><svg id="svg"></svg></div>
+ <div id="panel" style="min-width:300px">
+  <div class="ctl">
+    <button id="play">▶ 播放</button>
+    <button id="step" class="sec">单步 ▶|</button>
+    <button id="reset" class="sec">⟲ 复位</button>
+  </div>
+  <div class="ctl">cycle <span id="cyc">0</span> / <span id="mk"></span></div>
+  <div class="ctl"><input type="range" id="slider" min="0" value="0" step="1"></div>
+  <div class="ctl">速度 <input type="range" id="speed" min="60" max="900" value="350" step="20"></div>
+  <div class="ctl">源筛选
+    <select id="src"><option value="-1">全部源</option></select>
+  </div>
+  <div class="ctl" style="font-size:12px;color:#475569">点击图例可切换显示对应源；圆点=飞行中的 flit，到达即 eject。</div>
+  <div id="legend"></div>
+  <h3 style="font-size:14px;margin:14px 0 4px;color:#1e3a8a">本 cycle 统计</h3>
+  <table><tr><th>飞行中 flit</th><th>本 cycle eject 数</th></tr>
+   <tr><td id="inflight">0</td><td id="ejcnt">0</td></tr></table>
+ </div>
+</div>
+<script>
+const D = {"mx": 4, "my": 4, "h": 4, "v": 6, "ramp": 1, "bw": 2, "w": "3", "makespan": 32, "n": 16, "pos": {"0": [70, 70], "1": [190, 70], "2": [310, 70], "3": [430, 70], "4": [70, 190], "5": [190, 190], "6": [310, 190], "7": [430, 190], "8": [70, 310], "9": [190, 310], "10": [310, 310], "11": [430, 310], "12": [70, 430], "13": [190, 430], "14": [310, 430], "15": [430, 430]}, "flits": [{"s": 0, "p": 0, "c": 1, "t": 1, "lat": 4}, {"s": 0, "p": 0, "c": 4, "t": 2, "lat": 6}, {"s": 0, "p": 1, "c": 2, "t": 5, "lat": 4}, {"s": 0, "p": 1, "c": 5, "t": 8, "lat": 6}, {"s": 0, "p": 2, "c": 3, "t": 9, "lat": 4}, {"s": 0, "p": 2, "c": 6, "t": 11, "lat": 6}, {"s": 0, "p": 4, "c": 8, "t": 10, "lat": 6}, {"s": 0, "p": 8, "c": 12, "t": 16, "lat": 6}, {"s": 0, "p": 5, "c": 9, "t": 17, "lat": 6}, {"s": 0, "p": 9, "c": 13, "t": 23, "lat": 6}, {"s": 0, "p": 6, "c": 10, "t": 18, "lat": 6}, {"s": 0, "p": 10, "c": 14, "t": 24, "lat": 6}, {"s": 0, "p": 3, "c": 7, "t": 13, "lat": 6}, {"s": 0, "p": 7, "c": 11, "t": 19, "lat": 6}, {"s": 0, "p": 11, "c": 15, "t": 25, "lat": 6}, {"s": 1, "p": 1, "c": 2, "t": 3, "lat": 4}, {"s": 1, "p": 1, "c": 0, "t": 1, "lat": 4}, {"s": 1, "p": 1, "c": 5, "t": 4, "lat": 6}, {"s": 1, "p": 2, "c": 3, "t": 7, "lat": 4}, {"s": 1, "p": 2, "c": 6, "t": 10, "lat": 6}, {"s": 1, "p": 0, "c": 4, "t": 5, "lat": 6}, {"s": 1, "p": 4, "c": 8, "t": 14, "lat": 6}, {"s": 1, "p": 8, "c": 12, "t": 22, "lat": 6}, {"s": 1, "p": 5, "c": 9, "t": 13, "lat": 6}, {"s": 1, "p": 9, "c": 13, "t": 21, "lat": 6}, {"s": 1, "p": 6, "c": 10, "t": 19, "lat": 6}, {"s": 1, "p": 10, "c": 14, "t": 25, "lat": 6}, {"s": 1, "p": 3, "c": 7, "t": 11, "lat": 6}, {"s": 1, "p": 7, "c": 11, "t": 17, "lat": 6}, {"s": 1, "p": 11, "c": 15, "t": 23, "lat": 6}, {"s": 2, "p": 2, "c": 3, "t": 1, "lat": 4}, {"s": 2, "p": 2, "c": 1, "t": 3, "lat": 4}, {"s": 2, "p": 2, "c": 6, "t": 4, "lat": 6}, {"s": 2, "p": 1, "c": 0, "t": 7, "lat": 4}, {"s": 2, "p": 1, "c": 5, "t": 10, "lat": 6}, {"s": 2, "p": 0, "c": 4, "t": 11, "lat": 6}, {"s": 2, "p": 4, "c": 8, "t": 17, "lat": 6}, {"s": 2, "p": 8, "c": 12, "t": 23, "lat": 6}, {"s": 2, "p": 5, "c": 9, "t": 19, "lat": 6}, {"s": 2, "p": 9, "c": 13, "t": 25, "lat": 6}, {"s": 2, "p": 6, "c": 10, "t": 13, "lat": 6}, {"s": 2, "p": 10, "c": 14, "t": 21, "lat": 6}, {"s": 2, "p": 3, "c": 7, "t": 5, "lat": 6}, {"s": 2, "p": 7, "c": 11, "t": 13, "lat": 6}, {"s": 2, "p": 11, "c": 15, "t": 22, "lat": 6}, {"s": 3, "p": 3, "c": 2, "t": 1, "lat": 4}, {"s": 3, "p": 3, "c": 7, "t": 2, "lat": 6}, {"s": 3, "p": 2, "c": 1, "t": 5, "lat": 4}, {"s": 3, "p": 2, "c": 6, "t": 6, "lat": 6}, {"s": 3, "p": 1, "c": 0, "t": 9, "lat": 4}, {"s": 3, "p": 1, "c": 5, "t": 11, "lat": 6}, {"s": 3, "p": 0, "c": 4, "t": 13, "lat": 6}, {"s": 3, "p": 4, "c": 8, "t": 19, "lat": 6}, {"s": 3, "p": 8, "c": 12, "t": 25, "lat": 6}, {"s": 3, "p": 5, "c": 9, "t": 18, "lat": 6}, {"s": 3, "p": 9, "c": 13, "t": 24, "lat": 6}, {"s": 3, "p": 6, "c": 10, "t": 15, "lat": 6}, {"s": 3, "p": 10, "c": 14, "t": 22, "lat": 6}, {"s": 3, "p": 7, "c": 11, "t": 10, "lat": 6}, {"s": 3, "p": 11, "c": 15, "t": 16, "lat": 6}, {"s": 4, "p": 4, "c": 5, "t": 4, "lat": 4}, {"s": 4, "p": 4, "c": 8, "t": 2, "lat": 6}, {"s": 4, "p": 4, "c": 0, "t": 1, "lat": 6}, {"s": 4, "p": 5, "c": 6, "t": 10, "lat": 4}, {"s": 4, "p": 5, "c": 9, "t": 11, "lat": 6}, {"s": 4, "p": 5, "c": 1, "t": 8, "lat": 6}, {"s": 4, "p": 6, "c": 7, "t": 14, "lat": 4}, {"s": 4, "p": 6, "c": 10, "t": 17, "lat": 6}, {"s": 4, "p": 6, "c": 2, "t": 16, "lat": 6}, {"s": 4, "p": 8, "c": 12, "t": 9, "lat": 6}, {"s": 4, "p": 9, "c": 13, "t": 20, "lat": 6}, {"s": 4, "p": 10, "c": 14, "t": 23, "lat": 6}, {"s": 4, "p": 7, "c": 11, "t": 18, "lat": 6}, {"s": 4, "p": 7, "c": 3, "t": 21, "lat": 6}, {"s": 4, "p": 11, "c": 15, "t": 24, "lat": 6}, {"s": 5, "p": 5, "c": 6, "t": 1, "lat": 4}, {"s": 5, "p": 5, "c": 4, "t": 3, "lat": 4}, {"s": 5, "p": 5, "c": 9, "t": 4, "lat": 6}, {"s": 5, "p": 5, "c": 1, "t": 2, "lat": 6}, {"s": 5, "p": 6, "c": 7, "t": 5, "lat": 4}, {"s": 5, "p": 6, "c": 10, "t": 7, "lat": 6}, {"s": 5, "p": 6, "c": 2, "t": 6, "lat": 6}, {"s": 5, "p": 4, "c": 8, "t": 8, "lat": 6}, {"s": 5, "p": 4, "c": 0, "t": 9, "lat": 6}, {"s": 5, "p": 8, "c": 12, "t": 14, "lat": 6}, {"s": 5, "p": 9, "c": 13, "t": 10, "lat": 6}, {"s": 5, "p": 10, "c": 14, "t": 16, "lat": 6}, {"s": 5, "p": 7, "c": 11, "t": 11, "lat": 6}, {"s": 5, "p": 7, "c": 3, "t": 12, "lat": 6}, {"s": 5, "p": 11, "c": 15, "t": 20, "lat": 6}, {"s": 6, "p": 6, "c": 7, "t": 3, "lat": 4}, {"s": 6, "p": 6, "c": 5, "t": 1, "lat": 4}, {"s": 6, "p": 6, "c": 10, "t": 4, "lat": 6}, {"s": 6, "p": 6, "c": 2, "t": 2, "lat": 6}, {"s": 6, "p": 5, "c": 4, "t": 5, "lat": 4}, {"s": 6, "p": 5, "c": 9, "t": 7, "lat": 6}, {"s": 6, "p": 5, "c": 1, "t": 6, "lat": 6}, {"s": 6, "p": 4, "c": 8, "t": 12, "lat": 6}, {"s": 6, "p": 4, "c": 0, "t": 11, "lat": 6}, {"s": 6, "p": 8, "c": 12, "t": 21, "lat": 6}, {"s": 6, "p": 9, "c": 13, "t": 16, "lat": 6}, {"s": 6, "p": 10, "c": 14, "t": 10, "lat": 6}, {"s": 6, "p": 7, "c": 11, "t": 7, "lat": 6}, {"s": 6, "p": 7, "c": 3, "t": 8, "lat": 6}, {"s": 6, "p": 11, "c": 15, "t": 13, "lat": 6}, {"s": 7, "p": 7, "c": 6, "t": 4, "lat": 4}, {"s": 7, "p": 7, "c": 11, "t": 1, "lat": 6}, {"s": 7, "p": 7, "c": 3, "t": 2, "lat": 6}, {"s": 7, "p": 6, "c": 5, "t": 8, "lat": 4}, {"s": 7, "p": 6, "c": 10, "t": 11, "lat": 6}, {"s": 7, "p": 6, "c": 2, "t": 9, "lat": 6}, {"s": 7, "p": 5, "c": 4, "t": 12, "lat": 4}, {"s": 7, "p": 5, "c": 9, "t": 14, "lat": 6}, {"s": 7, "p": 5, "c": 1, "t": 15, "lat": 6}, {"s": 7, "p": 4, "c": 8, "t": 18, "lat": 6}, {"s": 7, "p": 4, "c": 0, "t": 16, "lat": 6}, {"s": 7, "p": 8, "c": 12, "t": 24, "lat": 6}, {"s": 7, "p": 9, "c": 13, "t": 22, "lat": 6}, {"s": 7, "p": 10, "c": 14, "t": 20, "lat": 6}, {"s": 7, "p": 11, "c": 15, "t": 7, "lat": 6}, {"s": 8, "p": 8, "c": 9, "t": 4, "lat": 4}, {"s": 8, "p": 8, "c": 12, "t": 2, "lat": 6}, {"s": 8, "p": 8, "c": 4, "t": 1, "lat": 6}, {"s": 8, "p": 9, "c": 10, "t": 8, "lat": 4}, {"s": 8, "p": 9, "c": 13, "t": 9, "lat": 6}, {"s": 8, "p": 9, "c": 5, "t": 11, "lat": 6}, {"s": 8, "p": 10, "c": 11, "t": 14, "lat": 4}, {"s": 8, "p": 10, "c": 14, "t": 13, "lat": 6}, {"s": 8, "p": 10, "c": 6, "t": 15, "lat": 6}, {"s": 8, "p": 4, "c": 0, "t": 7, "lat": 6}, {"s": 8, "p": 5, "c": 1, "t": 20, "lat": 6}, {"s": 8, "p": 6, "c": 2, "t": 22, "lat": 6}, {"s": 8, "p": 11, "c": 15, "t": 21, "lat": 6}, {"s": 8, "p": 11, "c": 7, "t": 18, "lat": 6}, {"s": 8, "p": 7, "c": 3, "t": 24, "lat": 6}, {"s": 9, "p": 9, "c": 10, "t": 4, "lat": 4}, {"s": 9, "p": 9, "c": 8, "t": 1, "lat": 4}, {"s": 9, "p": 9, "c": 13, "t": 2, "lat": 6}, {"s": 9, "p": 9, "c": 5, "t": 3, "lat": 6}, {"s": 9, "p": 10, "c": 11, "t": 8, "lat": 4}, {"s": 9, "p": 10, "c": 14, "t": 9, "lat": 6}, {"s": 9, "p": 10, "c": 6, "t": 11, "lat": 6}, {"s": 9, "p": 8, "c": 12, "t": 6, "lat": 6}, {"s": 9, "p": 8, "c": 4, "t": 5, "lat": 6}, {"s": 9, "p": 4, "c": 0, "t": 13, "lat": 6}, {"s": 9, "p": 5, "c": 1, "t": 9, "lat": 6}, {"s": 9, "p": 6, "c": 2, "t": 20, "lat": 6}, {"s": 9, "p": 11, "c": 15, "t": 12, "lat": 6}, {"s": 9, "p": 11, "c": 7, "t": 14, "lat": 6}, {"s": 9, "p": 7, "c": 3, "t": 22, "lat": 6}, {"s": 10, "p": 10, "c": 11, "t": 3, "lat": 4}, {"s": 10, "p": 10, "c": 9, "t": 1, "lat": 4}, {"s": 10, "p": 10, "c": 14, "t": 4, "lat": 6}, {"s": 10, "p": 10, "c": 6, "t": 2, "lat": 6}, {"s": 10, "p": 9, "c": 8, "t": 5, "lat": 4}, {"s": 10, "p": 9, "c": 13, "t": 6, "lat": 6}, {"s": 10, "p": 9, "c": 5, "t": 7, "lat": 6}, {"s": 10, "p": 8, "c": 12, "t": 10, "lat": 6}, {"s": 10, "p": 8, "c": 4, "t": 11, "lat": 6}, {"s": 10, "p": 4, "c": 0, "t": 20, "lat": 6}, {"s": 10, "p": 5, "c": 1, "t": 16, "lat": 6}, {"s": 10, "p": 6, "c": 2, "t": 10, "lat": 6}, {"s": 10, "p": 11, "c": 15, "t": 8, "lat": 6}, {"s": 10, "p": 11, "c": 7, "t": 9, "lat": 6}, {"s": 10, "p": 7, "c": 3, "t": 15, "lat": 6}, {"s": 11, "p": 11, "c": 10, "t": 1, "lat": 4}, {"s": 11, "p": 11, "c": 15, "t": 3, "lat": 6}, {"s": 11, "p": 11, "c": 7, "t": 2, "lat": 6}, {"s": 11, "p": 10, "c": 9, "t": 7, "lat": 4}, {"s": 11, "p": 10, "c": 14, "t": 6, "lat": 6}, {"s": 11, "p": 10, "c": 6, "t": 5, "lat": 6}, {"s": 11, "p": 9, "c": 8, "t": 13, "lat": 4}, {"s": 11, "p": 9, "c": 13, "t": 14, "lat": 6}, {"s": 11, "p": 9, "c": 5, "t": 12, "lat": 6}, {"s": 11, "p": 8, "c": 12, "t": 20, "lat": 6}, {"s": 11, "p": 8, "c": 4, "t": 17, "lat": 6}, {"s": 11, "p": 4, "c": 0, "t": 23, "lat": 6}, {"s": 11, "p": 5, "c": 1, "t": 21, "lat": 6}, {"s": 11, "p": 6, "c": 2, "t": 12, "lat": 6}, {"s": 11, "p": 7, "c": 3, "t": 9, "lat": 6}, {"s": 12, "p": 12, "c": 13, "t": 1, "lat": 4}, {"s": 12, "p": 12, "c": 8, "t": 2, "lat": 6}, {"s": 12, "p": 13, "c": 14, "t": 5, "lat": 4}, {"s": 12, "p": 13, "c": 9, "t": 8, "lat": 6}, {"s": 12, "p": 14, "c": 15, "t": 9, "lat": 4}, {"s": 12, "p": 14, "c": 10, "t": 11, "lat": 6}, {"s": 12, "p": 8, "c": 4, "t": 8, "lat": 6}, {"s": 12, "p": 4, "c": 0, "t": 15, "lat": 6}, {"s": 12, "p": 9, "c": 5, "t": 17, "lat": 6}, {"s": 12, "p": 5, "c": 1, "t": 23, "lat": 6}, {"s": 12, "p": 10, "c": 6, "t": 18, "lat": 6}, {"s": 12, "p": 6, "c": 2, "t": 24, "lat": 6}, {"s": 12, "p": 15, "c": 11, "t": 13, "lat": 6}, {"s": 12, "p": 11, "c": 7, "t": 19, "lat": 6}, {"s": 12, "p": 7, "c": 3, "t": 25, "lat": 6}, {"s": 13, "p": 13, "c": 14, "t": 3, "lat": 4}, {"s": 13, "p": 13, "c": 12, "t": 4, "lat": 4}, {"s": 13, "p": 13, "c": 9, "t": 6, "lat": 6}, {"s": 13, "p": 14, "c": 15, "t": 7, "lat": 4}, {"s": 13, "p": 14, "c": 10, "t": 10, "lat": 6}, {"s": 13, "p": 12, "c": 8, "t": 8, "lat": 6}, {"s": 13, "p": 8, "c": 4, "t": 15, "lat": 6}, {"s": 13, "p": 4, "c": 0, "t": 21, "lat": 6}, {"s": 13, "p": 9, "c": 5, "t": 15, "lat": 6}, {"s": 13, "p": 5, "c": 1, "t": 22, "lat": 6}, {"s": 13, "p": 10, "c": 6, "t": 19, "lat": 6}, {"s": 13, "p": 6, "c": 2, "t": 25, "lat": 6}, {"s": 13, "p": 15, "c": 11, "t": 11, "lat": 6}, {"s": 13, "p": 11, "c": 7, "t": 17, "lat": 6}, {"s": 13, "p": 7, "c": 3, "t": 23, "lat": 6}, {"s": 14, "p": 14, "c": 15, "t": 1, "lat": 4}, {"s": 14, "p": 14, "c": 13, "t": 3, "lat": 4}, {"s": 14, "p": 14, "c": 10, "t": 4, "lat": 6}, {"s": 14, "p": 13, "c": 12, "t": 7, "lat": 4}, {"s": 14, "p": 13, "c": 9, "t": 10, "lat": 6}, {"s": 14, "p": 12, "c": 8, "t": 11, "lat": 6}, {"s": 14, "p": 8, "c": 4, "t": 18, "lat": 6}, {"s": 14, "p": 4, "c": 0, "t": 24, "lat": 6}, {"s": 14, "p": 9, "c": 5, "t": 19, "lat": 6}, {"s": 14, "p": 5, "c": 1, "t": 25, "lat": 6}, {"s": 14, "p": 10, "c": 6, "t": 12, "lat": 6}, {"s": 14, "p": 6, "c": 2, "t": 21, "lat": 6}, {"s": 14, "p": 15, "c": 11, "t": 5, "lat": 6}, {"s": 14, "p": 11, "c": 7, "t": 11, "lat": 6}, {"s": 14, "p": 7, "c": 3, "t": 20, "lat": 6}, {"s": 15, "p": 15, "c": 14, "t": 1, "lat": 4}, {"s": 15, "p": 15, "c": 11, "t": 2, "lat": 6}, {"s": 15, "p": 14, "c": 13, "t": 5, "lat": 4}, {"s": 15, "p": 14, "c": 10, "t": 8, "lat": 6}, {"s": 15, "p": 13, "c": 12, "t": 9, "lat": 4}, {"s": 15, "p": 13, "c": 9, "t": 11, "lat": 6}, {"s": 15, "p": 12, "c": 8, "t": 13, "lat": 6}, {"s": 15, "p": 8, "c": 4, "t": 19, "lat": 6}, {"s": 15, "p": 4, "c": 0, "t": 25, "lat": 6}, {"s": 15, "p": 9, "c": 5, "t": 18, "lat": 6}, {"s": 15, "p": 5, "c": 1, "t": 24, "lat": 6}, {"s": 15, "p": 10, "c": 6, "t": 17, "lat": 6}, {"s": 15, "p": 6, "c": 2, "t": 23, "lat": 6}, {"s": 15, "p": 11, "c": 7, "t": 10, "lat": 6}, {"s": 15, "p": 7, "c": 3, "t": 16, "lat": 6}], "injects": {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0, "8": 0, "9": 0, "10": 0, "11": 0, "12": 0, "13": 2, "14": 0, "15": 0}, "cell": 120, "pad": 70, "W": 500, "H": 500, "serfork": 1};
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+svg.setAttribute("width",D.W); svg.setAttribute("height",D.H);
+svg.setAttribute("viewBox",`0 0 ${D.W} ${D.H}`);
+function hue(s){return `hsl(${Math.round(s*360/D.n)},70%,45%)`;}
+function P(i){return D.pos[i];}
+
+// static layer: faint physical links + nodes
+for(let y=0;y<D.my;y++)for(let x=0;x<D.mx;x++){
+  const i=x+D.mx*y;
+  [[1,0],[0,1]].forEach(([dx,dy])=>{
+    const nx=x+dx,ny=y+dy;
+    if(nx<D.mx&&ny<D.my){const j=nx+D.mx*ny;
+      const a=P(i),b=P(j);
+      const l=document.createElementNS(NS,"line");
+      l.setAttribute("x1",a[0]);l.setAttribute("y1",a[1]);
+      l.setAttribute("x2",b[0]);l.setAttribute("y2",b[1]);
+      l.setAttribute("stroke","#e2e8f0");l.setAttribute("stroke-width",6);
+      svg.appendChild(l);
+    }});
+}
+const nodeEls={};
+for(let i=0;i<D.n;i++){const p=P(i);
+  const ring=document.createElementNS(NS,"circle");
+  ring.setAttribute("cx",p[0]);ring.setAttribute("cy",p[1]);ring.setAttribute("r",22);
+  ring.setAttribute("fill","#fff");ring.setAttribute("stroke","#94a3b8");ring.setAttribute("stroke-width",3);
+  svg.appendChild(ring);
+  const t=document.createElementNS(NS,"text");
+  t.setAttribute("x",p[0]);t.setAttribute("y",p[1]+4);t.setAttribute("text-anchor","middle");
+  t.setAttribute("font-size",12);t.setAttribute("fill","#334155");
+  const [cx,cy]=[i%D.mx,Math.floor(i/D.mx)];
+  t.textContent=`${cx},${cy}`;
+  svg.appendChild(t);
+  nodeEls[i]=ring;
+}
+// dynamic layer
+const dyn=document.createElementNS(NS,"g");svg.appendChild(dyn);
+
+// controls
+const slider=document.getElementById("slider");
+slider.max=D.makespan;
+document.getElementById("mk").textContent=D.makespan;
+document.getElementById("meta").textContent=
+  `配置: ${D.mx}×${D.my} mesh, H-link delay=${D.h}, V-link delay=${D.v}, down-ramp B=${D.bw} flit/cy, E=0, 每跳网内等待 W=${D.w}`
+  + (D.serfork? ", serialize-fork: 每路由器每 cycle 至多转发 1 个 flit(fan-out≤1 端口)":"")
+  + `; makespan=${D.makespan}`;
+const srcSel=document.getElementById("src");
+const legend=document.getElementById("legend");
+const srcOn=new Array(D.n).fill(true);
+for(let s=0;s<D.n;s++){
+  const o=document.createElement("option");o.value=s;
+  const [cx,cy]=[s%D.mx,Math.floor(s/D.mx)];o.textContent=`源 (${cx},${cy}) = ${s}`;srcSel.appendChild(o);
+  const b=document.createElement("span");b.className="lg on";b.style.background=hue(s);
+  b.textContent=`${cx},${cy}`;b.onclick=()=>{srcOn[s]=!srcOn[s];b.classList.toggle("on");draw(cur);};
+  legend.appendChild(b);
+}
+let filter=-1;
+srcSel.onchange=()=>{filter=parseInt(srcSel.value);draw(cur);};
+
+function visible(s){ if(filter>=0) return s===filter; return srcOn[s]; }
+
+function draw(k){
+  cur=k;
+  document.getElementById("cyc").textContent=k;
+  slider.value=k;
+  while(dyn.firstChild) dyn.removeChild(dyn.firstChild);
+  let inflight=0, ej=0;
+  const ejNodes={};
+  for(const f of D.flits){
+    if(!visible(f.s)) continue;
+    if(k<f.t || k>f.t+f.lat) continue;
+    const a=P(f.p), b=P(f.c);
+    const frac=(k-f.t)/f.lat;
+    if(k===f.t+f.lat){ // ejecting at c
+      ej++; ejNodes[f.c]=hue(f.s);
+    } else {
+      inflight++;
+    }
+    const x=a[0]+(b[0]-a[0])*frac, y=a[1]+(b[1]-a[1])*frac;
+    const d=document.createElementNS(NS,"circle");
+    d.setAttribute("cx",x);d.setAttribute("cy",y);d.setAttribute("r",8);
+    d.setAttribute("fill",hue(f.s));
+    d.setAttribute("stroke","#fff");d.setAttribute("stroke-width",1.5);
+    if(k===f.t+f.lat){d.setAttribute("r",6);d.setAttribute("opacity",.9);}
+    dyn.appendChild(d);
+  }
+  // highlight ejecting nodes
+  for(let i=0;i<D.n;i++){
+    nodeEls[i].setAttribute("stroke", ejNodes[i]||"#94a3b8");
+    nodeEls[i].setAttribute("stroke-width", ejNodes[i]?6:3);
+  }
+  document.getElementById("inflight").textContent=inflight;
+  document.getElementById("ejcnt").textContent=ej;
+}
+
+let cur=0, timer=null;
+slider.oninput=()=>draw(parseInt(slider.value));
+document.getElementById("step").onclick=()=>draw(Math.min(cur+1,D.makespan));
+document.getElementById("reset").onclick=()=>{stop();draw(0);};
+function stop(){if(timer){clearInterval(timer);timer=null;document.getElementById("play").textContent="▶ 播放";}}
+document.getElementById("play").onclick=()=>{
+  if(timer){stop();return;}
+  document.getElementById("play").textContent="⏸ 暂停";
+  timer=setInterval(()=>{
+    let nk=cur+1; if(nk>D.makespan){nk=0;}
+    draw(nk);
+  }, 1000 - (document.getElementById("speed").value));
+};
+document.getElementById("speed").oninput=()=>{ if(timer){stop();document.getElementById("play").click();} };
+draw(0);
+</script>
+</body></html>

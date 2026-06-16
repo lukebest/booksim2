@@ -103,7 +103,7 @@ def build_trees(mx, my):
 
 
 def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=False,
-          bw=1):
+          bw=1, serfork=False):
     n = mx * my
     trees, parents = build_trees(mx, my)
 
@@ -138,6 +138,23 @@ def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=Fal
     for pc, vars_ in link_users.items():
         if len(vars_) > 1:
             model.AddAllDifferent(vars_)
+
+    # serialize fork: each router forwards <=1 flit per cycle (fan-out <=1 port
+    # per cycle). Group EVERY outgoing forwarding send of node p (all directions,
+    # all sources) and force distinct send cycles. send_cycle(s,p->c)=a[s,c]-lat.
+    # (down-ramp eject is a separate path, governed by bw, not counted here.)
+    if serfork:
+        node_sends = defaultdict(list)
+        for s in range(n):
+            for p, kids in trees[s].items():
+                for c in kids:
+                    lat = link_lat(p, c, mx, h, vv)
+                    sv = model.NewIntVar(0, horizon, f"snd_{s}_{p}_{c}")
+                    model.Add(sv == a[(s, c)] - lat)
+                    node_sends[p].append(sv)
+        for p, lst in node_sends.items():
+            if len(lst) > 1:
+                model.AddAllDifferent(lst)
 
     # down-ramp eject + zero eject buffer (E=0): <= bw ejects per cycle per node.
     # bw==1 -> AllDifferent (1/cycle). bw>1 -> cumulative: unit-duration task at
@@ -178,11 +195,16 @@ def solve(mx, my, h, vv, ramp, wcap, horizon, time_limit, workers, warmstart=Fal
         res["makespan"] = int(solver.Value(mk)) + ramp
         res["best_bound"] = int(solver.BestObjectiveBound()) + ramp
         # verify links (always 1/cycle); eject strict-distinct only when bw==1
-        res["verified"] = _verify(solver, a, link_users, n, ramp, bw)
+        res["verified"] = _verify(solver, a, link_users, n, ramp, bw,
+                                  trees, mx, h, vv, serfork)
+        res["arrivals"] = {(s, d): int(solver.Value(a[(s, d)]))
+                           for s in range(n) for d in range(n)}
+        res["trees"] = trees
     return res
 
 
-def _verify(solver, a, link_users, n, ramp, bw=1):
+def _verify(solver, a, link_users, n, ramp, bw=1,
+            trees=None, mx=None, h=None, vv=None, serfork=False):
     # link: distinct send-equivalent arrivals (always 1/cycle/directed-link)
     for pc, vars_ in link_users.items():
         vals = [solver.Value(v) for v in vars_]
@@ -194,6 +216,17 @@ def _verify(solver, a, link_users, n, ramp, bw=1):
         cnt = Counter(solver.Value(a[(s, d)]) for s in range(n) if s != d)
         if max(cnt.values()) > bw:
             return False
+    # serialize-fork: each node forwards <=1 flit per cycle (fan-out <=1 port)
+    if serfork and trees is not None:
+        node_sends = defaultdict(list)
+        for s in range(n):
+            for p, kids in trees[s].items():
+                for c in kids:
+                    lat = link_lat(p, c, mx, h, vv)
+                    node_sends[p].append(int(solver.Value(a[(s, c)])) - lat)
+        for p, lst in node_sends.items():
+            if len(lst) != len(set(lst)):
+                return False
     return True
 
 
@@ -211,6 +244,8 @@ def main():
     ap.add_argument("--warmstart", action="store_true",
                     help="seed CP-SAT with greedy schedule + tighten horizon")
     ap.add_argument("--bw", type=int, default=1, help="down-ramp eject bw (flit/cycle)")
+    ap.add_argument("--serfork", action="store_true",
+                    help="serialize router fan-out: <=1 forwarded flit per node per cycle")
     args = ap.parse_args()
     mx, my, h, vv, ramp = args.mx, args.my, args.h, args.v, args.ramp
 
@@ -223,7 +258,7 @@ def main():
           f"LB*(bw)={lb} @({bx},{by})  latency_floor={lfloor}  "
           f"W={wlabel}  horizon={horizon}  t<={args.time}s  warmstart={args.warmstart}")
     res = solve(mx, my, h, vv, ramp, args.w, horizon, args.time, args.workers,
-                warmstart=args.warmstart, bw=args.bw)
+                warmstart=args.warmstart, bw=args.bw, serfork=args.serfork)
     print(f"  status   : {res['status']}  ({res['wall']:.1f}s)")
     if res.get("warm") is not None:
         print(f"  warmstart: greedy makespan = {res['warm']}")
