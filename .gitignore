@@ -4,3 +4,4 @@
 .Apple*
 .DS_Store
 utils/test_calendar_smoke
+*.pyc*

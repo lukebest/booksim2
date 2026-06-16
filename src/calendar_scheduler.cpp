@@ -3,8 +3,27 @@
 #include "calendar_scheduler.hpp"
 #include <algorithm>
 #include <iostream>
+#include <queue>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace std;
+
+namespace {
+// One in-network forwarding event: flit k of source s traverses parent->child.
+struct RTEvent {
+  int ready;
+  long long seq;
+  int s, parent, child, k;
+};
+struct RTEventGreater {
+  bool operator()(const RTEvent & a, const RTEvent & b) const {
+    if(a.ready != b.ready) return a.ready > b.ready;
+    return a.seq > b.seq;
+  }
+};
+}  // namespace
 
 CalendarScheduler::CalendarScheduler(const MeshGraph & graph)
   : _graph(graph)

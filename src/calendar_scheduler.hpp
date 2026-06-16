@@ -50,6 +50,8 @@ private:
   CalendarResult ScheduleGatherGlobal(std::vector<ScheduledTransfer> & transfers,
                                       int msg_size) const;
 
+  CalendarResult ScheduleAllGatherRingTree(int msg_size) const;
+
   std::vector<int> PathLinkIds(const std::vector<int> & path) const;
 };
 
