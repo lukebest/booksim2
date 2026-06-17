@@ -53,6 +53,15 @@ def ham_cycle_rect(x0, y0, w, h):
     return order
 
 
+def ham_cycle_rect_vflip(x0, y0, w, h):
+    """ham_cycle_rect reflected vertically: spine on the TOP row (y0+h-1)."""
+    out = []
+    for nd in ham_cycle_rect(x0, y0, w, h):
+        x, y = coord(nd)
+        out.append(nid(x, (2 * y0 + h - 1) - y))
+    return out
+
+
 def ham_cycle_vband(C, x0):
     """Closed Hamilton cycle over columns [x0,x0+C) x all rows: VERTICAL comb."""
     order = [nid(x0, y) for y in range(_MY)]

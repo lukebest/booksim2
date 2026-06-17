@@ -158,15 +158,17 @@ def scheme_diagrams():
         el.append(f'<circle cx="{px(cx):.1f}" cy="{py(cy):.1f}" r="3.6" fill="#dc2626"/>')
     dia_q = _svg("② quad 4×(8×8) 环 + 中心交换", W, Ht, el)
 
-    # (3) border: 4 rings + multi-point border injection
+    # (3) border: 4 rings (long edge hugging the center border) + multi-point injection.
+    # Bottom quadrants are vertically flipped so all four spines sit along rows 7/8.
     W, Ht, px, py, el = _grid(16, 16, cell, shade)
     for i, (qx, qy) in enumerate(qspec):
-        el.append(_poly(fr.ham_cycle_rect(qx, qy, 8, 8), px, py, coord, DIA_PAL[i]))
-    for y in range(0, 16, 2):
-        el.append(_arrow(px(7), py(y), px(8), py(y), "ah-g", "#15803d", both=True))
-    for x in range(0, 16, 2):
+        ring = fr.ham_cycle_rect_vflip(qx, qy, 8, 8) if qy == 0 else fr.ham_cycle_rect(qx, qy, 8, 8)
+        el.append(_poly(ring, px, py, coord, DIA_PAL[i]))
+    for x in range(16):                              # spine-to-spine across H-border (rows 7|8)
         el.append(_arrow(px(x), py(7), px(x), py(8), "ah-g", "#15803d", both=True))
-    dia_b = _svg("③ border 4×(8×8) 环 + 边界多点注入", W, Ht, el)
+    for y in range(0, 16, 2):                        # across V-border (cols 7|8)
+        el.append(_arrow(px(7), py(y), px(8), py(y), "ah-g", "#15803d", both=True))
+    dia_b = _svg("③ border 4×(8×8) 环（长边贴边界）+ 多点注入", W, Ht, el)
 
     out = ["<div class='card'><h2>方案结构示意图（16×16 mesh）</h2>",
            "<p>灰点＝节点；彩色实线环＝各子区的 Hamilton 环投递；橙虚线/箭头＝跨带/跨象限的多播注入。</p>",
@@ -182,9 +184,88 @@ def scheme_diagrams():
                "<figcaption style='font-size:12px;color:#475569'>4 象限各跑 8×8 环；4 个最内角构成<b>中心 4-环</b>（红箭头），"
                "象限块经中心互传，进入对端后<b>再绕近一圈</b>分发。</figcaption></figure>")
     out.append("<figure style='margin:0;max-width:380px'>" + dia_b +
-               "<figcaption style='font-size:12px;color:#475569'>同样 4 象限环，但外部数据沿两条<b>共享边界的多个点</b>"
-               "跨界（绿色箭头），对端沿行/列<b>短弧</b>分发，对角象限经水平邻居二跳到达。</figcaption></figure>")
+               "<figcaption style='font-size:12px;color:#475569'>4 象限环，<b>下方两个环上下翻转</b>，使每个环的<b>长边(梳脊)"
+               "都贴着中心边界</b>（4 条脊集中在 row 7/8）。横向边界(row7|8)由此变为<b>脊对脊</b>，可在全部 8 列同时跨界注入"
+               "（绿色箭头铺满），交换点更多、时序更整齐。</figcaption></figure>")
     out.append("</div></div>")
+    return "\n".join(out)
+
+
+def swimlane_diagram():
+    """Pedagogical swimlane: with down-ramp=1 and ~5-cycle mean ring hop, a router
+    sees its OWN ring's data only 1 of every 5 cycles, leaving 4 idle down-ramp
+    slots. The other 3 rings precompute lead time and inject across the border into
+    those slots, so every ring ends up holding all 4 colors."""
+    rings = 4
+    ncyc = 20
+    cell_w, cell_h = 27, 30
+    lx, ty = 96, 56
+    W = lx + ncyc * cell_w + 16
+    Ht = ty + rings * (cell_h + 6) + 96
+    pal = DIA_PAL
+    cx = lambda c: lx + c * cell_w
+    cy = lambda r: ty + r * (cell_h + 6)
+    el = [f'<text x="10" y="20" font-size="13" font-weight="bold" fill="#1e3a8a">'
+          f'多 Hamilton 环时分注入泳道图（下 ramp=1，每列 = 1 cycle）</text>']
+    # window phase banners
+    phases = [(0, "初始：仅本环 (1/5 拍)"), (1, "邻环注入"), (2, "+次邻环"), (3, "四色齐全")]
+    for win, txt in phases:
+        x0 = cx(win * 5)
+        el.append(f'<rect x="{x0:.0f}" y="{ty-20:.0f}" width="{5*cell_w:.0f}" height="16" '
+                  f'fill="{"#dcfce7" if win==3 else "#eef2ff"}" stroke="#e2e8f0"/>')
+        el.append(f'<text x="{x0+5*cell_w/2:.0f}" y="{ty-8:.0f}" font-size="10" '
+                  f'text-anchor="middle" fill="#475569">{txt}</text>')
+    # cycle ticks
+    for c in range(0, ncyc, 1):
+        if c % 5 == 0:
+            el.append(f'<line x1="{cx(c):.0f}" y1="{ty-2:.0f}" x2="{cx(c):.0f}" '
+                      f'y2="{cy(rings)-6:.0f}" stroke="#cbd5e1" stroke-dasharray="2 3"/>')
+        el.append(f'<text x="{cx(c)+cell_w/2:.0f}" y="{cy(rings)+12:.0f}" font-size="8" '
+                  f'text-anchor="middle" fill="#94a3b8">{c}</text>')
+    for r in range(rings):
+        el.append(f'<text x="10" y="{cy(r)+cell_h/2+4:.0f}" font-size="11" fill="#334155">环{r} router</text>')
+        for c in range(ncyc):
+            win, slot = c // 5, c % 5
+            color, label = None, ""
+            if slot == 0:                      # own ring's data: every window
+                color, label = pal[r], str(r)
+            elif slot in (1, 2, 3):            # neighbours arrive with growing lead time
+                if win >= slot:
+                    nb = (r + slot) % rings
+                    color, label = pal[nb], str(nb)
+            x, y = cx(c), cy(r)
+            if color:
+                el.append(f'<rect x="{x:.0f}" y="{y:.0f}" width="{cell_w-3:.0f}" height="{cell_h:.0f}" '
+                          f'rx="3" fill="{color}" opacity="0.88"/>')
+                el.append(f'<text x="{x+(cell_w-3)/2:.0f}" y="{y+cell_h/2+4:.0f}" font-size="11" '
+                          f'font-weight="bold" text-anchor="middle" fill="#fff">{label}</text>')
+            else:
+                fill = "#f1f5f9" if slot == 4 else "#fbfdff"
+                el.append(f'<rect x="{x:.0f}" y="{y:.0f}" width="{cell_w-3:.0f}" height="{cell_h:.0f}" '
+                          f'rx="3" fill="{fill}" stroke="#e2e8f0" stroke-dasharray="2 2"/>')
+                if slot == 4:
+                    el.append(f'<text x="{x+(cell_w-3)/2:.0f}" y="{y+cell_h/2+4:.0f}" font-size="9" '
+                              f'text-anchor="middle" fill="#94a3b8">空</text>')
+    # legend
+    ly = cy(rings) + 28
+    for r in range(rings):
+        lx0 = lx + r * 110
+        el.append(f'<rect x="{lx0:.0f}" y="{ly:.0f}" width="14" height="14" rx="3" fill="{pal[r]}"/>')
+        el.append(f'<text x="{lx0+20:.0f}" y="{ly+12:.0f}" font-size="10" fill="#475569">环{r} 的数据</text>')
+    el.append(f'<rect x="{lx:.0f}" y="{ly+22:.0f}" width="14" height="14" rx="3" fill="#f1f5f9" '
+              f'stroke="#e2e8f0" stroke-dasharray="2 2"/>')
+    el.append(f'<text x="{lx+20:.0f}" y="{ly+34:.0f}" font-size="10" fill="#475569">空闲下 ramp 余量（提前量注入用）</text>')
+    svg = f'<svg width="{W}" height="{Ht}" xmlns="http://www.w3.org/2000/svg">' + "".join(el) + "</svg>"
+
+    out = ["<div class='card'><h2>border 时分注入泳道图（多 Hamilton 环，下 ramp=1）</h2>",
+           "<p>单向绕环时，相邻 flit 沿环按一跳到达（均跳延迟 ≈ (H+V)/2 = 5 cycle），故某 router 的"
+           "<b>下 ramp 每 5 拍只有 1 拍下泄本环数据</b>，余下 4 拍空闲。其它 3 个环把数据<b>算好提前量</b>、"
+           "在边界（脊对脊）跨界注入到这些空槽里——离得近的邻环先到、对角环最后到。"
+           "稳态下每个 5 拍窗口内集齐 <b>4 种颜色</b>，即每个环都拿到全部 4 个环的数据。</p>",
+           "<div style='overflow-x:auto'>" + svg + "</div>",
+           "<p style='color:#64748b;font-size:12px'>每格＝该 router 在该 cycle 下泄的 flit 所属环（数字/颜色＝源环号）；"
+           "灰“空”格＝该拍下 ramp 空闲、可被其它环的提前量注入占用。本图为<b>时序示意</b>，"
+           "用于解释“长边贴边界”后跨界注入如何填满空槽；严格 0-buffer makespan 见汇总表。</p></div>"]
     return "\n".join(out)
 
 
@@ -254,24 +335,29 @@ def conclusions_section(payload):
     hV = rows["hybrid 纵带环 + 横向树（新增）"]
     hH = rows["hybrid 横带环 + 纵向树"]
     mt = rows["dimensional multi-tree"]
+    bu = rows["border 边界多点（单向）"]
+    qd = rows["quad 中心交换（单向）"]
     out = ["<div class='card'><h2>结论（仅 0-buffer）</h2><ul>"]
     out.append(
         f"<li><b>0-buffer 最优方案：hybrid 纵带环 + 横向树</b>。BW=1 / BW=2 均为 <b>{hV[1]} / {hV[2]}</b>，"
         f"优于横带环+纵向树（{hH[1]}/{hH[2]}）、multi-tree（{mt[1]}/{mt[2]}）、"
-        f"quad（{get(d1,'quad_uni')}/{get(d2,'quad_bi')}）、border（{get(d1,'border_uni')}/{get(d2,'border_bi')}）、"
+        f"quad（{qd[1]}/{qd[2]}）、border（{bu[1]}/{bu[2]}）、"
         f"纯环（{get(d1,'ring_uni')}/{get(d1,'ring_bi')}）。</li>")
+    out.append(
+        f"<li><b>border “长边贴边界” 大幅提速</b>：把下方两环上下翻转、令 4 条梳脊都贴中心边界后，"
+        f"横向边界变为脊对脊、跨界注入点增多、时序更整齐——border 单向 BW=1 从 782 降到 <b>{bu[1]}</b>"
+        "（约 1.8× 提速），已接近行带 hybrid。</li>")
     out.append(
         "<li><b>关键洞察：在 H&lt;V 的网格上，应让“树/多播”走便宜的方向</b>。本例 H=4&lt;V=6，"
         "故纵向 Hamilton 环 + 横向多播树优于横向环 + 纵向树。若 H&gt;V 则结论相反。</li>")
     out.append(
         f"<li><b>multi-tree</b> 虽在可缓存模型最强，但严格 0-buffer 下退化到 {mt[1]}/{mt[2]}（足迹太宽，难刚性错开）。</li>")
     out.append(
-        f"<li><b>quad / border</b> 结构规整、4 象限对称，0-buffer 可行但偏慢"
-        f"（quad 单向恒 {get(d1,'quad_uni')}；border 单向 {get(d1,'border_uni')}/{get(d2,'border_uni')}）——"
-        "跨象限通道单一/绕行较长。</li>")
+        f"<li><b>quad / border</b> 结构规整、4 象限对称：quad 中心交换偏慢（单向恒 {qd[1]}，中心通道单一）；"
+        f"border 长边贴边界后已显著改善（单向 {bu[1]}/{bu[2]}），是规整象限版图里的最优折中。</li>")
     out.append(
         "<li><b>选型（硬性 0-buffer）</b>：首选 <b>hybrid 纵带环 + 横向树</b>；"
-        "要规整 4 象限版图可用 quad/border 作折中。</li>")
+        "要规整 4 象限版图 → <b>border 长边贴边界</b>。</li>")
     out.append("</ul></div>")
     return "\n".join(out)
 
@@ -334,10 +420,12 @@ def render():
              "<li><b>hybrid 纵带环 + 横向树（新增）</b>：转置版——切 B 个<b>垂直</b>带（每带 C=MX/B 列），带内跑<b>纵向</b> "
              "Hamilton 环 allgather，再每<b>行</b>向左右相邻带做<b>横向</b>树广播。</li>"
              "<li><b>quad 4×(8×8) 环 + 中心交换</b>：4 象限各跑环，最内 4 角构成中心 4-环互传，对端再绕环二次分发。</li>"
-             "<li><b>border 4×(8×8) 环 + 边界多点注入</b>：4 象限各跑环，沿共享边界多点跨界 + 短弧分发（亦为多播）。</li>"
+             "<li><b>border 4×(8×8) 环 + 边界多点注入</b>：4 象限各跑环，<b>下方两环上下翻转使每个环的长边(梳脊)都贴中心边界</b>，"
+             "横向边界变为脊对脊、跨界注入点更多；外部数据沿共享边界多点跨界 + 短弧分发（亦为多播）。</li>"
              "</ul></div>")
 
     s.append(scheme_diagrams())
+    s.append(swimlane_diagram())
     s.append("\n".join(_summary_card(payload)))
     s.append(insights_section(payload))
     s.append(conclusions_section(payload))

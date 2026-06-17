@@ -92,6 +92,26 @@ def ham_cycle_rect(x0, y0, w, h):
     return order
 
 
+def ham_cycle_rect_vflip(x0, y0, w, h):
+    """ham_cycle_rect reflected vertically inside the sub-grid: spine on the TOP
+    row (y0+h-1), teeth pointing down. Reflection preserves grid adjacency, so it
+    stays a valid Hamilton cycle."""
+    out = []
+    for nd in ham_cycle_rect(x0, y0, w, h):
+        x, y = coord(nd)
+        out.append(nid(x, (2 * y0 + h - 1) - y))
+    return out
+
+
+def quad_ring_border(x0, y0, w, h):
+    """Quadrant ring oriented so its long edge (spine) hugs the central border:
+    bottom quadrants flip up so the spine sits on their TOP row (toward center),
+    top quadrants keep the spine on their BOTTOM row (= the center border)."""
+    if y0 == 0:
+        return ham_cycle_rect_vflip(x0, y0, w, h)
+    return ham_cycle_rect(x0, y0, w, h)
+
+
 def ham_cycle_vband(C, x0):
     """Closed Hamilton cycle over columns [x0, x0+C) x all MY rows (needs MY even,
     C>=2): a VERTICAL comb (left spine along column x0, horizontal teeth)."""
@@ -262,7 +282,7 @@ def fp_border(s, bidir, ramp_bw):
     hw, hh = MX // 2, MY // 2
     sx, sy = coord(s)
     qx0, qy0 = (0 if sx < hw else hw), (0 if sy < hh else hh)
-    order = ham_cycle_rect(qx0, qy0, hw, hh)
+    order = quad_ring_border(qx0, qy0, hw, hh)   # long edge hugs the central border
     pos = {nd: k for k, nd in enumerate(order)}
     slots, arr = _ring_arrivals(order, pos, s, bidir, ramp_bw)
 

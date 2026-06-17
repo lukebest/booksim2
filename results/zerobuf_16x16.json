@@ -106,11 +106,11 @@
         "ok": true
       },
       "border_uni": {
-        "makespan": 782,
+        "makespan": 437,
         "ok": true
       },
       "border_bi": {
-        "makespan": 628,
+        "makespan": 540,
         "ok": true
       }
     },
@@ -215,11 +215,11 @@
         "ok": true
       },
       "border_uni": {
-        "makespan": 702,
+        "makespan": 722,
         "ok": true
       },
       "border_bi": {
-        "makespan": 603,
+        "makespan": 596,
         "ok": true
       }
     }
