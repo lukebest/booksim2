@@ -92,6 +92,17 @@ def ham_cycle_rect(x0, y0, w, h):
     return order
 
 
+def ham_cycle_vband(C, x0):
+    """Closed Hamilton cycle over columns [x0, x0+C) x all MY rows (needs MY even,
+    C>=2): a VERTICAL comb (left spine along column x0, horizontal teeth)."""
+    order = [nid(x0, y) for y in range(MY)]            # left spine (column x0)
+    for i, y in enumerate(range(MY - 1, -1, -1)):
+        cols = range(1, C) if i % 2 == 0 else range(C - 1, 0, -1)
+        for xloc in cols:
+            order.append(nid(x0 + xloc, y))
+    return order
+
+
 # Four 8x8 quadrants + the central 4-cycle of their innermost corners.
 QUAD = None        # list of {'rep','order','pos'} for Q0,Q1,Q2,Q3
 RING4 = None       # quadrant indices in central-cycle order [Q0,Q1,Q3,Q2]
@@ -412,6 +423,36 @@ def fp_hybrid(s, B, bidir, ramp_bw):
     return slots
 
 
+def fp_hybrid_v(s, B, bidir, ramp_bw):
+    """Transpose of fp_hybrid: B VERTICAL bands (each C=MX/B columns).
+    Phase A: local VERTICAL Hamilton ring allgather inside the band.
+    Phase B: per-row HORIZONTAL multicast tree forks left/right to other bands."""
+    C = MX // B
+    sx, _ = coord(s)
+    x0 = (sx // C) * C
+    order = ham_cycle_vband(C, x0)
+    pos = {nd: k for k, nd in enumerate(order)}
+    slots, arr = _ring_arrivals(order, pos, s, bidir, ramp_bw)
+    for y in range(MY):                                  # horizontal tree per row
+        t = arr[nid(x0, y)]
+        prev = nid(x0, y)
+        for xx in range(x0 - 1, -1, -1):                # fork left
+            cur = nid(xx, y)
+            slots.append(('L', lk(prev, cur), t))
+            t += H
+            slots.append(('D', cur, t))
+            prev = cur
+        t = arr[nid(x0 + C - 1, y)]
+        prev = nid(x0 + C - 1, y)
+        for xx in range(x0 + C, MX):                     # fork right
+            cur = nid(xx, y)
+            slots.append(('L', lk(prev, cur), t))
+            t += H
+            slots.append(('D', cur, t))
+            prev = cur
+    return slots
+
+
 # --------------------------------------------------------------------------
 # Rigid offset packer (conflict-free links + capacity-RAMP_BW ramps).
 # --------------------------------------------------------------------------
@@ -509,8 +550,17 @@ def study(ramp_bw):
         if R >= 2:
             out["hybrid_uni"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, False, ramp_bw), ramp_bw)
         out["hybrid_bi"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, True, ramp_bw), ramp_bw)
+    out["hybrid_v_uni"] = {}
+    out["hybrid_v_bi"] = {}
+    for B in divisors_bands():
+        C = MX // B
+        if C >= 2:
+            out["hybrid_v_uni"][B] = run_scheme(lambda s, B=B: fp_hybrid_v(s, B, False, ramp_bw), ramp_bw)
+            out["hybrid_v_bi"][B] = run_scheme(lambda s, B=B: fp_hybrid_v(s, B, True, ramp_bw), ramp_bw)
     out["quad_uni"] = run_scheme(lambda s: fp_quadrant(s, False, ramp_bw), ramp_bw)
     out["quad_bi"] = run_scheme(lambda s: fp_quadrant(s, True, ramp_bw), ramp_bw)
+    out["border_uni"] = run_scheme(lambda s: fp_border(s, False, ramp_bw), ramp_bw)
+    out["border_bi"] = run_scheme(lambda s: fp_border(s, True, ramp_bw), ramp_bw)
     return out
 
 
@@ -535,8 +585,12 @@ def study_json(ramp_bw):
         "ring_bi": {"makespan": res["ring_bi"][0], "ok": res["ring_bi"][3]},
         "hybrid_uni": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_uni"].items()},
         "hybrid_bi": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_bi"].items()},
+        "hybrid_v_uni": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_v_uni"].items()},
+        "hybrid_v_bi": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_v_bi"].items()},
         "quad_uni": {"makespan": res["quad_uni"][0], "ok": res["quad_uni"][3]},
         "quad_bi": {"makespan": res["quad_bi"][0], "ok": res["quad_bi"][3]},
+        "border_uni": {"makespan": res["border_uni"][0], "ok": res["border_uni"][3]},
+        "border_bi": {"makespan": res["border_bi"][0], "ok": res["border_bi"][3]},
     }
     return d
 
@@ -563,11 +617,17 @@ def main():
         print(f"  ring  unidirectional makespan={d['ring_uni']['makespan']:5d}  ok={d['ring_uni']['ok']}")
         print(f"  ring  bidirectional  makespan={d['ring_bi']['makespan']:5d}  ok={d['ring_bi']['ok']}")
         for mode in ("hybrid_uni", "hybrid_bi"):
-            print(f"  {mode}:")
+            print(f"  {mode} (横带环+纵树):")
             for B, r in sorted(d[mode].items()):
                 print(f"      B={B:2d} (R={MY//B:2d})  makespan={r['makespan']:5d}  ok={r['ok']}")
+        for mode in ("hybrid_v_uni", "hybrid_v_bi"):
+            print(f"  {mode} (纵带环+横树):")
+            for B, r in sorted(d[mode].items()):
+                print(f"      B={B:2d} (C={MX//B:2d})  makespan={r['makespan']:5d}  ok={r['ok']}")
         print(f"  quad 4x(8x8)+center uni makespan={d['quad_uni']['makespan']:5d}  ok={d['quad_uni']['ok']}")
         print(f"  quad 4x(8x8)+center bi  makespan={d['quad_bi']['makespan']:5d}  ok={d['quad_bi']['ok']}")
+        print(f"  border multi-point  uni makespan={d['border_uni']['makespan']:5d}  ok={d['border_uni']['ok']}")
+        print(f"  border multi-point  bi  makespan={d['border_bi']['makespan']:5d}  ok={d['border_bi']['ok']}")
         print()
 
     if args.json:

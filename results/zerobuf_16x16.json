@@ -61,12 +61,56 @@
           "ok": true
         }
       },
+      "hybrid_v_uni": {
+        "1": {
+          "makespan": 1082,
+          "ok": true
+        },
+        "2": {
+          "makespan": 602,
+          "ok": true
+        },
+        "4": {
+          "makespan": 363,
+          "ok": true
+        },
+        "8": {
+          "makespan": 840,
+          "ok": true
+        }
+      },
+      "hybrid_v_bi": {
+        "1": {
+          "makespan": 558,
+          "ok": true
+        },
+        "2": {
+          "makespan": 334,
+          "ok": true
+        },
+        "4": {
+          "makespan": 938,
+          "ok": true
+        },
+        "8": {
+          "makespan": 830,
+          "ok": true
+        }
+      },
       "quad_uni": {
         "makespan": 717,
         "ok": true
       },
       "quad_bi": {
         "makespan": 1097,
+        "ok": true
+      },
+      "border_uni": {
+        "makespan": 782,
+        "ok": true
+      },
+      "border_bi": {
+        "makespan": 628,
         "ok": true
       }
     },
@@ -126,12 +170,56 @@
           "ok": true
         }
       },
+      "hybrid_v_uni": {
+        "1": {
+          "makespan": 1082,
+          "ok": true
+        },
+        "2": {
+          "makespan": 603,
+          "ok": true
+        },
+        "4": {
+          "makespan": 596,
+          "ok": true
+        },
+        "8": {
+          "makespan": 437,
+          "ok": true
+        }
+      },
+      "hybrid_v_bi": {
+        "1": {
+          "makespan": 558,
+          "ok": true
+        },
+        "2": {
+          "makespan": 656,
+          "ok": true
+        },
+        "4": {
+          "makespan": 756,
+          "ok": true
+        },
+        "8": {
+          "makespan": 490,
+          "ok": true
+        }
+      },
       "quad_uni": {
         "makespan": 717,
         "ok": true
       },
       "quad_bi": {
         "makespan": 523,
+        "ok": true
+      },
+      "border_uni": {
+        "makespan": 702,
+        "ok": true
+      },
+      "border_bi": {
+        "makespan": 603,
         "ok": true
       }
     }

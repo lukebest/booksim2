@@ -53,6 +53,16 @@ def ham_cycle_rect(x0, y0, w, h):
     return order
 
 
+def ham_cycle_vband(C, x0):
+    """Closed Hamilton cycle over columns [x0,x0+C) x all rows: VERTICAL comb."""
+    order = [nid(x0, y) for y in range(_MY)]
+    for i, y in enumerate(range(_MY - 1, -1, -1)):
+        cols = range(1, C) if i % 2 == 0 else range(C - 1, 0, -1)
+        for xloc in cols:
+            order.append(nid(x0 + xloc, y))
+    return order
+
+
 class Cal:
     def __init__(self, cap=1):
         self.cap = cap
