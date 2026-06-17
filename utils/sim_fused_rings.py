@@ -221,6 +221,78 @@ def border_fused_4ring(ramp_bw, bidir):
     return {"makespan": mk, "ok": ok, "busiest_link": bl, "busiest_down": bd}
 
 
+def tree_edges(s):
+    sx, sy = coord(s)
+    e = []
+    for x in range(sx + 1, _MX):
+        e.append((nid(x - 1, sy), nid(x, sy)))
+    for x in range(sx - 1, -1, -1):
+        e.append((nid(x + 1, sy), nid(x, sy)))
+    for x in range(_MX):
+        for y in range(sy + 1, _MY):
+            e.append((nid(x, y - 1), nid(x, y)))
+        for y in range(sy - 1, -1, -1):
+            e.append((nid(x, y + 1), nid(x, y)))
+    return e
+
+
+def build_multitree_delivery(s):
+    ch = defaultdict(list)
+    for p, c in tree_edges(s):
+        ch[p].append(c)
+    return ch
+
+
+def build_ring_delivery(order, s, bidir):
+    ch = defaultdict(list)
+    add_ring_chain(ch, order, s, bidir)
+    return ch
+
+
+def build_hybrid_delivery(s, B, bidir):
+    R = _MY // B
+    _, sy = coord(s)
+    y0 = (sy // R) * R
+    ch = defaultdict(list)
+    add_ring_chain(ch, ham_cycle_rect(0, y0, _MX, R), s, bidir)   # local band ring
+    for x in range(_MX):                                          # vertical column tree
+        prev = nid(x, y0)
+        for yy in range(y0 - 1, -1, -1):
+            cur = nid(x, yy)
+            ch[prev].append(cur)
+            prev = cur
+        prev = nid(x, y0 + R - 1)
+        for yy in range(y0 + R, _MY):
+            cur = nid(x, yy)
+            ch[prev].append(cur)
+            prev = cur
+    return ch
+
+
+def _eval(builder, rb):
+    n = _MX * _MY
+    deliveries = {s: builder(s) for s in range(n)}
+    mk, ej, bl, bd = simulate(deliveries, rb)
+    ok = all(ej[x] == n - 1 for x in range(n))
+    return mk, ok
+
+
+def all_schemes_timediv(rb):
+    """Time-division (conflict-free, pipelined/buffered) makespan of every scheme."""
+    full = ham_cycle_rect(0, 0, _MX, _MY)
+    res = {}
+    res["ring_uni"] = _eval(lambda s: build_ring_delivery(full, s, False), rb)[0]
+    res["ring_bi"] = _eval(lambda s: build_ring_delivery(full, s, True), rb)[0]
+    res["multitree"] = _eval(build_multitree_delivery, rb)[0]
+    res["hybrid_uni"] = min(_eval(lambda s, B=B: build_hybrid_delivery(s, B, False), rb)[0] for B in (2, 4, 8))
+    res["hybrid_bi"] = min(_eval(lambda s, B=B: build_hybrid_delivery(s, B, True), rb)[0] for B in (2, 4, 8))
+    res["quad_uni"] = fused_4ring(rb, False)["makespan"]
+    res["quad_bi"] = fused_4ring(rb, True)["makespan"]
+    res["border_uni"] = border_fused_4ring(rb, False)["makespan"]
+    res["border_bi"] = border_fused_4ring(rb, True)["makespan"]
+    return res
+
+
 def main():
     print("=== 8x8 Hamilton-ring allgather (standalone, 64 nodes) ===")
     cfg(8, 8, 4, 6)

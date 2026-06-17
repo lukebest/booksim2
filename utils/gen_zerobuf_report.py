@@ -121,11 +121,117 @@ def fused_section():
         f"实测单向 <b>{bu['makespan']}</b>（≈8×8 一圈 {r8u['makespan']} + {bu['makespan']-r8u['makespan']} 尾），"
         f"较中心方案 {fu['makespan']} <b>提速 {fu['makespan']/bu['makespan']:.2f}×</b>；"
         f"busiest link 从 {fu['busiest_link']} 降到 {bu['busiest_link']}（负载也更均衡）。</li>"
-        f"<li><b>边界 + 双向最佳</b>：BW=1 {bb1['makespan']}、BW=2 <b>{bb2['makespan']}</b>，"
-        f"已逼近 eject 下界区间（{(256-1)//1}/{(256-1+1)//2}），并优于时分中心方案与严格 0-buffer 各方案。</li>"
+        f"<li><b>边界 + 双向是象限局部方案里的最优</b>：BW=1 {bb1['makespan']}、BW=2 <b>{bb2['makespan']}</b>，"
+        "远优于<b>同模型</b>下的中心单点（413/715）与纯环（754/1474）；不过在时分模型里它仍略逊于 "
+        "multi-tree 与行带 hybrid（≈255–265，见上方汇总表）——后两者已贴 eject 下界。"
+        "<b>（注意：不要把时分 border 与严格 0-buffer 方案直接比，两者模型不同。）</b></li>"
         "<li><b>代价</b>：边界多点注入用满了象限共享边界的 8 条跨界链路并在对端做行/列分发——"
         "本质上是把“环 + 局部树”结合，结构比“中心 4 环”略复杂，但仍是规整的象限化布局。</li>"
         "</ul></div>")
+    return "\n".join(out)
+
+
+def _td_makespans():
+    """Time-division (buffered/pipelined, conflict-free) makespan of every scheme,
+    computed in ONE common engine so the schemes are directly comparable."""
+    import sim_fused_rings as fr
+    fr.cfg(16, 16, 4, 6)
+    return {rb: fr.all_schemes_timediv(rb) for rb in (1, 2)}
+
+
+def _cell(v, is_min):
+    if v is None:
+        return "<td style='color:#94a3b8'>—</td>"
+    return f"<td class='win'>{v}</td>" if is_min else f"<td>{v}</td>"
+
+
+def summary_table(payload, td):
+    """The centerpiece: every scheme's makespan for each ramp bandwidth, with the
+    strict-0-buffer column and the time-division column side by side."""
+    d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
+
+    def zb_best_hybrid(d):
+        items = ([(int(B), v["makespan"], "双") for B, v in d["hybrid_bi"].items()] +
+                 [(int(B), v["makespan"], "单") for B, v in d["hybrid_uni"].items()])
+        B, mk, dirn = min(items, key=lambda t: t[1])
+        return mk, f"{dirn}向 B={B}"
+
+    zb1h, zb1h_tag = zb_best_hybrid(d1)
+    zb2h, zb2h_tag = zb_best_hybrid(d2)
+    td1h = min(td[1]["hybrid_uni"], td[1]["hybrid_bi"])
+    td2h = min(td[2]["hybrid_uni"], td[2]["hybrid_bi"])
+
+    # rows: (label, zb_bw1, td_bw1, zb_bw2, td_bw2)
+    rows = [
+        ("dimensional multi-tree", d1["multitree"]["makespan"], td[1]["multitree"],
+         d2["multitree"]["makespan"], td[2]["multitree"]),
+        ("纯 Hamilton 环（单向）", d1["ring_uni"]["makespan"], td[1]["ring_uni"],
+         d2["ring_uni"]["makespan"], td[2]["ring_uni"]),
+        ("纯 Hamilton 环（双向）", d1["ring_bi"]["makespan"], td[1]["ring_bi"],
+         d2["ring_bi"]["makespan"], td[2]["ring_bi"]),
+        (f"hybrid 行带（最优）", zb1h, td1h, zb2h, td2h),
+        ("quad 中心交换（单向）", d1["quad_uni"]["makespan"], td[1]["quad_uni"],
+         d2["quad_uni"]["makespan"], td[2]["quad_uni"]),
+        ("quad 中心交换（双向）", d1["quad_bi"]["makespan"], td[1]["quad_bi"],
+         d2["quad_bi"]["makespan"], td[2]["quad_bi"]),
+        ("border 边界多点（单向）", None, td[1]["border_uni"], None, td[2]["border_uni"]),
+        ("border 边界多点（双向）", None, td[1]["border_bi"], None, td[2]["border_bi"]),
+    ]
+    cols = [[r[i] for r in rows if r[i] is not None] for i in range(1, 5)]
+    mins = [min(c) for c in cols]
+
+    out = ["<div class='card'><h2>汇总：各方案 makespan（按下 Ramp 带宽 × 调度模型）</h2>",
+           "<p>两套模型分开看：<b>0-buf 刚性</b>＝严格 0-buffer、刚性时隙（路由器零缓存，仅源端可缓存）；"
+           "<b>时分</b>＝允许网内时分复用 + 源端缓存的流水/理想时延（同一引擎计算，可直接比较）。"
+           "同一方案两列之差 = <b>0-buffer 的代价</b>。绿底＝该列最小（越低越好）。</p>",
+           "<table><tr><th rowspan='2'>方案</th>"
+           "<th colspan='2'>下 Ramp 带宽 = 1（eject 下界 255）</th>"
+           "<th colspan='2'>下 Ramp 带宽 = 2（eject 下界 128）</th></tr>"
+           "<tr><th>0-buf 刚性</th><th>时分/流水</th><th>0-buf 刚性</th><th>时分/流水</th></tr>"]
+    for label, *vals in rows:
+        cells = "".join(_cell(v, v is not None and v == mins[i]) for i, v in enumerate(vals))
+        note = ""
+        if label.startswith("hybrid"):
+            note = f" <span style='color:#64748b;font-size:11px'>(0-buf {zb1h_tag} / {zb2h_tag})</span>"
+        out.append(f"<tr><td>{html.escape(label)}{note}</td>{cells}</tr>")
+    out.append("</table>")
+    out.append("<p style='color:#64748b;font-size:12px'>注：border（边界多点注入）只在时分模型评估，"
+               "故其 0-buf 刚性列留空（—）。8×8 独立环参考：单向一圈 354、双向半圈 186 cycle。</p>")
+    out.append("</div>")
+    return "\n".join(out), (zb1h, zb2h, td1h, td2h)
+
+
+def insights_section(payload, td):
+    d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
+    mt = (d1["multitree"]["makespan"], d2["multitree"]["makespan"])
+    out = ["<div class='card'><h2>数据洞察</h2><ol>"]
+    out.append(
+        "<li><b>0-buffer 的代价 = 足迹局部性</b>。同一方案“0-buf÷时分”的倍率：multi-tree "
+        f"{mt[0]}/{td[1]['multitree']}≈<b>{mt[0]/td[1]['multitree']:.1f}×</b>（足迹横跨整网，刚性最难错开）；"
+        f"hybrid 行带 ≈<b>1.6×</b>（足迹最紧凑，最抗 0-buffer）；"
+        f"quad 单向 {d1['quad_uni']['makespan']}/{td[1]['quad_uni']}≈<b>1.0×</b>"
+        "（本就延迟受限，刚性化几乎不再变差）。局部性越强 → 越抗 0-buffer。</li>")
+    out.append(
+        "<li><b>时分模型里最优是 multi-tree 与 hybrid，不是 border</b>。时分 BW=1：multi-tree "
+        f"{td[1]['multitree']}、hybrid {min(td[1]['hybrid_uni'], td[1]['hybrid_bi'])} 已贴 eject 下界 255；"
+        f"border 双向 {td[1]['border_bi']} 紧随其后，是“环局部性”系列里的最优，但仍略逊于树/行带。"
+        "（此前把时分 border 与 0-buf 方案混比的说法已纠正。）</li>")
+    out.append(
+        "<li><b>下 Ramp 带宽 1→2 是否有用，取决于瓶颈</b>。受“下泄”约束者才受益："
+        f"0-buf multi-tree {mt[0]}→{mt[1]}、0-buf quad 双向 {d1['quad_bi']['makespan']}→{d2['quad_bi']['makespan']}、"
+        f"时分 border 双向 {td[1]['border_bi']}→{td[2]['border_bi']}；"
+        "受“延迟/链路”约束者几乎不变：纯环恒 1474/754、quad 中心恒 715/717、"
+        f"时分 multi-tree {td[1]['multitree']}→{td[2]['multitree']}（已链路受限）。"
+        "<b>一旦调度逼近延迟最优，2 flit/cy 下泄几乎白费。</b></li>")
+    out.append(
+        "<li><b>方向（单/双）是双刃剑</b>。时分里双向普遍把最坏路径减半（纯环 1474→754、border 437→283、"
+        f"quad 中心 715→413）；但 0-buf 刚性里双向中心交换<b>有害</b>——quad 单向 {d1['quad_uni']['makespan']} "
+        f"vs 双向 {d1['quad_bi']['makespan']}（BW=1），双向制造更多链路冲突反而更慢。</li>")
+    out.append(
+        "<li><b>“一圈 + 尾”得到验证</b>。8×8 独立环单向 354、双向 186；border 16×16 单向 "
+        f"{td[1]['border_uni']}≈354+尾、双向 {td[1]['border_bi']}≈186+尾；中心单点 {td[1]['quad_uni']}≈2×354 是两圈。"
+        "每条环 link 仅需承载 255 flit < 一圈容量 356，<b>带宽够、是延迟（圈数）决定胜负</b>。</li>")
+    out.append("</ol></div>")
     return "\n".join(out)
 
 
@@ -133,45 +239,72 @@ def render():
     payload = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     mx, my, h, v, n = payload["mx"], payload["my"], payload["h"], payload["v"], payload["n"]
     bw_keys = sorted(payload["bw"].keys(), key=int)
+    td = _td_makespans()
 
     s = ["<!DOCTYPE html><html><head><meta charset='utf-8'>",
-         "<title>16x16 Zero-buffer Allgather Comparison</title>",
+         "<title>16x16 Allgather Comparison</title>",
          "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1100px;}"
          "h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}"
          "td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;}th{background:#e2e8f0;}"
          ".card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}"
-         ".win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}</style></head><body>"]
-    s.append(f"<h1>{mx}×{my} Mesh Allgather：局部 Hamilton 环 + 全局树广播 对比</h1>")
+         ".win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}"
+         "ol li,ul li{margin:6px 0;}</style></head><body>"]
+    s.append(f"<h1>{mx}×{my} Mesh Allgather 方案对比（H={h}, V={v}）</h1>")
 
     s.append("<div class='card'><h2>问题设定</h2>"
              f"<p>{mx}×{my} mesh（{n} 节点）。横向 link delay <b>H={h}</b> cycle，纵向 <b>V={v}</b> cycle，"
-             "PE↔router ramp 延迟 1 cycle。下 Ramp（eject）带宽分别取 <b>1</b> 与 <b>2</b> flit/cycle 两种场景。"
-             "msg_size=1。</p>"
-             "<p><b>硬约束（三方案均满足）</b>：所有时隙离线编排，"
-             "<b>无冲突</b>（每条有向 link 每 cycle ≤1 flit、每节点下/上 ramp 每 cycle ≤ ramp 带宽）、"
-             "<b>无阻塞</b>（全离线、无运行期阻塞/死锁）、"
-             "<b>0 buffer</b>（网络内部路由器零缓存：每条 flit 一旦注入即按固定时刻逐跳前进，中间节点绝不等待）。</p>"
-             "<p><b>0-buffer 刚性模型</b>：在单个源的投递结构（环/树）内，link(p→c) 恒在 "
-             "<code>inject<sub>s</sub>+ramp+dist(s,p)</code> 占用、节点 d 恒在 <code>inject<sub>s</sub>+ramp+dist(s,d)</code> 下泄，"
-             "其中 dist 为该结构上的真实 H/V 跳延迟之和；唯一自由度是每个源的<b>注入偏移 inject<sub>s</sub></b>"
-             "（数据暂存在源 PE/SRAM，<i>非</i>路由器 buffer）。贪心地为每个源选择最小的、与已排源不冲突的偏移，"
-             "即<b>构造性地</b>保证无冲突 + 无阻塞 + 0 buffer（取多种排序中的最优结果）。</p>"
-             f"<p><b>通用下界</b>：每个节点都必须经其单条下 ramp 下泄 N−1={n-1} 条 flit，"
-             "故任何方案 makespan ≥ (N−1)/ramp_bw + 最小投递延迟。</p></div>")
+             "PE↔router ramp 延迟 1 cycle。下 Ramp（eject）带宽分别取 <b>1</b> 与 <b>2</b> flit/cycle 两种场景，msg_size=1。</p>"
+             "<p><b>两套调度模型</b>（报告中始终分开比较）：</p><ul>"
+             "<li><b>严格 0-buffer 刚性</b>：所有时隙离线编排，无冲突（每条有向 link 每 cycle ≤1 flit、每节点下/上 ramp "
+             "≤ramp 带宽）、无阻塞（全离线）、<b>路由器零缓存</b>——flit 一旦注入即按固定时刻逐跳前进，中间绝不等待；"
+             "唯一自由度是每源<b>注入偏移</b>（数据暂存在源 PE/SRAM，非路由器 buffer），贪心打包出可行上界。"
+             "脚本 <code>utils/sched_zerobuf_compare.py</code>。</li>"
+             "<li><b>时分 / 流水</b>：事件驱动全局 link-time calendar，允许同一条 link 被不同源 flit <b>时分复用</b>、"
+             "并允许网内缓存——这是<b>流水的理想时延</b>（下界侧）。脚本 <code>utils/sim_fused_rings.py</code>。</li>"
+             "</ul>"
+             f"<p><b>通用下界</b>：每节点都要经其单条下 ramp 下泄 N−1={n-1} 条 flit，"
+             "故任何方案 makespan ≥ (N−1)/ramp_bw + 最小投递延迟（BW=1→255，BW=2→128）。</p></div>")
 
-    s.append("<div class='card'><h2>四类方案</h2><ul>"
-             "<li><b>dimensional multi-tree</b>：每个源用 X-then-Y 维序多播树（行脊 + 各列分支，网内 fork），"
-             "带 buffer 时可命中下界，是已有最优方案。</li>"
-             "<li><b>纯 Hamilton 环</b>：全局一个 Hamilton 环（蛇形 comb 闭环），单向 / 双向。</li>"
-             "<li><b>hybrid 局部环 + 全局树</b>：按行切 B 个水平带（每带 R=MY/B 行），"
-             "①带内跑局部 Hamilton 环 allgather（各带并行）；②每列向上下相邻带做树状广播，把各带块互换。</li>"
-             "<li><b>quad 4×(8×8) 环 + 中心交换</b>：把 16×16 切成 4 个 8×8 象限，各自构造 Hamilton 环做象限内 allgather；"
-             "4 个象限的<b>最内角节点</b> (7,7)/(8,7)/(8,8)/(7,8) 在中心恰好构成一个 4-环，"
-             "各象限块经此中心 4-环<b>时分</b>互传（每条中心链路逐 cycle 轮流承载不同源的 flit），"
-             "对端象限再沿本象限环二次环绕分发，使每个节点都拿到全部 4 象限数据。</li>"
+    s.append("<div class='card'><h2>五类方案</h2><ul>"
+             "<li><b>dimensional multi-tree</b>：每源用 X-then-Y 维序多播树（行脊 + 各列分支，网内 fork），带 buffer 时可命中下界。</li>"
+             "<li><b>纯 Hamilton 环</b>：全局一个蛇形 comb 闭环，单向 / 双向。</li>"
+             "<li><b>hybrid 局部环 + 全局树</b>：按行切 B 个水平带（每带 R=MY/B 行）；①带内跑局部 Hamilton 环 allgather（并行）；"
+             "②每列向上下相邻带做树状广播互换各带块。</li>"
+             "<li><b>quad 4×(8×8) 环 + 中心交换</b>：切成 4 个 8×8 象限各跑环；4 象限最内角在中心构成 4-环，"
+             "象限块经中心<b>时分</b>互传，对端再绕环二次分发。</li>"
+             "<li><b>border 4×(8×8) 环 + 边界多点注入</b>：同样切 4 象限跑环，但外部数据沿象限<b>共享边界的多点</b>跨界，"
+             "对端只需沿行/列<b>短弧</b>分发（≪一圈），逼近“一圈 + 尾”。</li>"
              "</ul></div>")
 
-    # per-bw tables
+    summary_html, _ = summary_table(payload, td)
+    s.append(summary_html)
+    s.append(insights_section(payload, td))
+
+    # corrected conclusions
+    d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
+    mt1, mt2 = d1["multitree"]["makespan"], d2["multitree"]["makespan"]
+    b1B, b1 = min([(int(B), x["makespan"]) for B, x in d1["hybrid_bi"].items()] +
+                  [(int(B), x["makespan"]) for B, x in d1["hybrid_uni"].items()], key=lambda t: t[1])
+    bu2_B, bu2 = best_hybrid(d2, "hybrid_uni")
+    s.append("<div class='card'><h2>结论（已复核）</h2><ul>"
+             "<li><b>允许 buffer / 时分时：multi-tree 与 hybrid 行带并列最优</b>，"
+             f"均贴近 eject 下界（BW=1 约 {td[1]['multitree']}/{min(td[1]['hybrid_uni'], td[1]['hybrid_bi'])}，"
+             f"BW=2 约 {td[2]['multitree']}/{min(td[2]['hybrid_uni'], td[2]['hybrid_bi'])}）；"
+             f"<b>border 边界多点</b>（{td[1]['border_bi']}/{td[2]['border_bi']}，双向）是象限局部方案中的最优、紧随其后；"
+             "中心单点（413/715）与纯环（754/1474）最差。</li>"
+             f"<li><b>严格 0-buffer 刚性时：hybrid 行带整体最优</b>。BW=1 ≈ <b>{b1}</b>(B={b1B})，"
+             f"比 multi-tree 的 {mt1} 快 <b>{mt1/b1:.2f}×</b>；BW=2 ≈ <b>{bu2}</b>(单向 B={bu2_B})，优于 multi-tree {mt2}。"
+             "原因：行带足迹时间跨度小、占用稀疏，最易刚性错开。</li>"
+             f"<li><b>multi-tree 在 0-buffer 下退化</b>（{mt1}/{mt2}）：每源足迹横跨整网"
+             f"（直径 {(mx-1)*h+(my-1)*v} cycle），又宽又满，256 个宽足迹难以单偏移错开 → 约 3× 下界。</li>"
+             f"<li><b>quad 中心交换居中</b>：单向恒 {d1['quad_uni']['makespan']}（延迟受象限环周长主导，加带宽无效），"
+             f"双向 0-buf 反而更差（BW=1 {d1['quad_bi']['makespan']}）。可行、规整、对称，但中心 4-环是唯一跨象限通道，受两段绕行延迟约束。</li>"
+             "<li><b>选型</b>：可缓存 → multi-tree / hybrid；硬性 0-buffer 刚性 → <b>hybrid 行带</b>；"
+             "要规整 4 象限版图又接近最优延迟 → <b>border 边界多点</b>（时分）。</li>"
+             "</ul></div>")
+
+    # ---- appendix: detailed 0-buffer tables / B-sweep / charts ----
+    s.append("<div class='card'><h2>附：严格 0-buffer 明细</h2>")
     for bk in bw_keys:
         d = payload["bw"][bk]
         rb = int(bk)
@@ -183,7 +316,7 @@ def render():
         qb = d["quad_bi"]["makespan"]
         best_overall = min(mt, d["ring_uni"]["makespan"], d["ring_bi"]["makespan"], bu, bb, qu, qb)
 
-        s.append(f"<div class='card'><h2>结果：下 Ramp 带宽 = {rb} flit/cycle（eject 下界 = {lb}）</h2>")
+        s.append(f"<h3>下 Ramp 带宽 = {rb}（eject 下界 = {lb}）</h3>")
         s.append("<table><tr><th>方案</th><th>0-buffer makespan</th><th>vs 下界</th><th>vs multi-tree</th></tr>")
         for name, mk in [("multitree", mt), ("ring_uni", d["ring_uni"]["makespan"]),
                          ("ring_bi", d["ring_bi"]["makespan"]),
@@ -198,8 +331,7 @@ def render():
             s.append(row)
         s.append("</table>")
 
-        # B sweep
-        s.append("<h3>hybrid 带数 B 扫描</h3><table><tr><th>B 带数</th><th>R 行/带</th>"
+        s.append("<table><tr><th>hybrid B 带数</th><th>R 行/带</th>"
                  "<th>单向局部环</th><th>双向局部环</th></tr>")
         allB = sorted({int(b) for b in list(d["hybrid_uni"]) + list(d["hybrid_bi"])})
         for B in allB:
@@ -210,46 +342,13 @@ def render():
                      f"<td>{rbi if rbi is not None else '—'}</td></tr>")
         s.append("</table>")
 
-        labels = ["multi-tree", "ring\n双向", f"hybrid\nB={bu_B}(单)", f"hybrid\nB={bb_B}(双)",
+        labels = ["multi-tree", "ring 双向", f"hybrid B{bu_B}单", f"hybrid B{bb_B}双",
                   "quad 单向", "quad 双向"]
         values = [mt, d["ring_bi"]["makespan"], bu, bb, qu, qb]
         s.append(bar_chart(f"0-buffer makespan @ ramp_bw={rb}（越低越好）", labels, values, lb=lb))
-        s.append("</div>")
+    s.append("</div>")
 
     s.append(fused_section())
-
-    # conclusions
-    d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
-    mt1, mt2 = d1["multitree"]["makespan"], d2["multitree"]["makespan"]
-    b1B, b1 = min([(int(B), v["makespan"]) for B, v in d1["hybrid_bi"].items()] +
-                  [(int(B), v["makespan"]) for B, v in d1["hybrid_uni"].items()], key=lambda t: t[1])
-    bu2_B, bu2 = best_hybrid(d2, "hybrid_uni")
-    q1 = min(d1["quad_uni"]["makespan"], d1["quad_bi"]["makespan"])
-    q2 = min(d2["quad_uni"]["makespan"], d2["quad_bi"]["makespan"])
-    s.append("<div class='card'><h2>结论</h2><ul>"
-             f"<li><b>0-buffer 约束下，hybrid（行带）整体最优</b>：BW=1 时 hybrid 最优 ≈ <b>{b1}</b> "
-             f"(B={b1B})，比 multi-tree 的 {mt1} 快 <b>{mt1/b1:.2f}×</b>，比纯环（{d1['ring_uni']['makespan']}/{d1['ring_bi']['makespan']}）更快；"
-             f"BW=2 时 hybrid 最优 ≈ <b>{bu2}</b> (单向 B={bu2_B})，优于 multi-tree {mt2}。</li>"
-             f"<li><b>quad 4×(8×8)环 + 中心交换：可行且居中</b>。单向 {d1['quad_uni']['makespan']}（BW 无关），"
-             f"双向 BW=1 {d1['quad_bi']['makespan']} / BW=2 {d2['quad_bi']['makespan']}。"
-             f"它优于纯环、与 multi-tree 同档（BW=1 时 quad 单向 {d1['quad_uni']['makespan']} 还略快于 multi-tree {mt1}），"
-             f"但不及最佳行带 hybrid。原因：<b>中心 4-环是唯一的跨象限通道</b>——每条中心链路要时分承载 ~2 个象限块（≈128 flit），"
-             "且每条 flit 要走“本象限环 + 中心跳 + 对端象限环”两段绕行，<b>延迟受象限环周长主导</b>；"
-             "单向 quad 因此被绕行延迟卡在 717（加带宽也不降，瓶颈是延迟非下泄）。</li>"
-             "<li><b>为什么带 buffer 最强的 multi-tree 在 0-buffer 下变弱？</b> multi-tree 每个源的足迹横跨整张网"
-             f"（直径 = {(mx-1)*h+(my-1)*v} cycle），刚性时隙铺得又宽又满，单偏移很难把 256 个宽足迹彼此错开，"
-             "贪心打包后被迫拉大注入偏移 → makespan 远离下界（约 3× 下界）。</li>"
-             "<li><b>共同规律——局部性决定 0-buffer 表现</b>：足迹越紧凑（时间跨度小、占用稀疏）越易刚性错开。"
-             "行带 hybrid 足迹最紧凑（最优档 ≈1.6× 下界）；quad 次之（两段象限环绕行偏长）；"
-             "multi-tree 足迹最宽（≈3× 下界）。</li>"
-             "<li><b>纯环</b>：单向环足迹长（绕行整周），始终最差（1474）；双向环减半（754）。</li>"
-             "<li><b>带宽加倍（1→2）</b>仅对“受下泄约束”的方案有效（下界 255→128）：multi-tree、hybrid、quad-双向 均下降；"
-             "而 quad-单向受<b>延迟</b>约束，加带宽无效（恒 717）。</li>"
-             "<li><b>选型</b>：允许路由器 buffer → multi-tree（命中下界）最优；硬性 0-buffer/刚性时隙 → "
-             "<b>行带 hybrid</b> 最优，<b>quad 4×(8×8)+中心交换</b> 是结构规整、布局对称的次优折中（适合物理上天然 4 象限的版图）。</li>"
-             "</ul>"
-             "<p style='color:#64748b;font-size:12px'>注：0-buffer makespan 为“多种源排序贪心刚性打包”的可行上界（已验证无冲突 + 0 buffer + 每节点下泄 N−1）；"
-             "脚本 <code>utils/sched_zerobuf_compare.py</code>，数据缓存 <code>results/zerobuf_16x16.json</code>。</p></div>")
 
     s.append("</body></html>")
     HTML_PATH.write_text("\n".join(s), encoding="utf-8")

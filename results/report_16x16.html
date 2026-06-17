@@ -1,10 +1,33 @@
 <!DOCTYPE html><html><head><meta charset='utf-8'>
-<title>16x16 Zero-buffer Allgather Comparison</title>
-<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1100px;}h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;}th{background:#e2e8f0;}.card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}.win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}</style></head><body>
-<h1>16×16 Mesh Allgather：局部 Hamilton 环 + 全局树广播 对比</h1>
-<div class='card'><h2>问题设定</h2><p>16×16 mesh（256 节点）。横向 link delay <b>H=4</b> cycle，纵向 <b>V=6</b> cycle，PE↔router ramp 延迟 1 cycle。下 Ramp（eject）带宽分别取 <b>1</b> 与 <b>2</b> flit/cycle 两种场景。msg_size=1。</p><p><b>硬约束（三方案均满足）</b>：所有时隙离线编排，<b>无冲突</b>（每条有向 link 每 cycle ≤1 flit、每节点下/上 ramp 每 cycle ≤ ramp 带宽）、<b>无阻塞</b>（全离线、无运行期阻塞/死锁）、<b>0 buffer</b>（网络内部路由器零缓存：每条 flit 一旦注入即按固定时刻逐跳前进，中间节点绝不等待）。</p><p><b>0-buffer 刚性模型</b>：在单个源的投递结构（环/树）内，link(p→c) 恒在 <code>inject<sub>s</sub>+ramp+dist(s,p)</code> 占用、节点 d 恒在 <code>inject<sub>s</sub>+ramp+dist(s,d)</code> 下泄，其中 dist 为该结构上的真实 H/V 跳延迟之和；唯一自由度是每个源的<b>注入偏移 inject<sub>s</sub></b>（数据暂存在源 PE/SRAM，<i>非</i>路由器 buffer）。贪心地为每个源选择最小的、与已排源不冲突的偏移，即<b>构造性地</b>保证无冲突 + 无阻塞 + 0 buffer（取多种排序中的最优结果）。</p><p><b>通用下界</b>：每个节点都必须经其单条下 ramp 下泄 N−1=255 条 flit，故任何方案 makespan ≥ (N−1)/ramp_bw + 最小投递延迟。</p></div>
-<div class='card'><h2>四类方案</h2><ul><li><b>dimensional multi-tree</b>：每个源用 X-then-Y 维序多播树（行脊 + 各列分支，网内 fork），带 buffer 时可命中下界，是已有最优方案。</li><li><b>纯 Hamilton 环</b>：全局一个 Hamilton 环（蛇形 comb 闭环），单向 / 双向。</li><li><b>hybrid 局部环 + 全局树</b>：按行切 B 个水平带（每带 R=MY/B 行），①带内跑局部 Hamilton 环 allgather（各带并行）；②每列向上下相邻带做树状广播，把各带块互换。</li><li><b>quad 4×(8×8) 环 + 中心交换</b>：把 16×16 切成 4 个 8×8 象限，各自构造 Hamilton 环做象限内 allgather；4 个象限的<b>最内角节点</b> (7,7)/(8,7)/(8,8)/(7,8) 在中心恰好构成一个 4-环，各象限块经此中心 4-环<b>时分</b>互传（每条中心链路逐 cycle 轮流承载不同源的 flit），对端象限再沿本象限环二次环绕分发，使每个节点都拿到全部 4 象限数据。</li></ul></div>
-<div class='card'><h2>结果：下 Ramp 带宽 = 1 flit/cycle（eject 下界 = 255）</h2>
+<title>16x16 Allgather Comparison</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1100px;}h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;}th{background:#e2e8f0;}.card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}.win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}ol li,ul li{margin:6px 0;}</style></head><body>
+<h1>16×16 Mesh Allgather 方案对比（H=4, V=6）</h1>
+<div class='card'><h2>问题设定</h2><p>16×16 mesh（256 节点）。横向 link delay <b>H=4</b> cycle，纵向 <b>V=6</b> cycle，PE↔router ramp 延迟 1 cycle。下 Ramp（eject）带宽分别取 <b>1</b> 与 <b>2</b> flit/cycle 两种场景，msg_size=1。</p><p><b>两套调度模型</b>（报告中始终分开比较）：</p><ul><li><b>严格 0-buffer 刚性</b>：所有时隙离线编排，无冲突（每条有向 link 每 cycle ≤1 flit、每节点下/上 ramp ≤ramp 带宽）、无阻塞（全离线）、<b>路由器零缓存</b>——flit 一旦注入即按固定时刻逐跳前进，中间绝不等待；唯一自由度是每源<b>注入偏移</b>（数据暂存在源 PE/SRAM，非路由器 buffer），贪心打包出可行上界。脚本 <code>utils/sched_zerobuf_compare.py</code>。</li><li><b>时分 / 流水</b>：事件驱动全局 link-time calendar，允许同一条 link 被不同源 flit <b>时分复用</b>、并允许网内缓存——这是<b>流水的理想时延</b>（下界侧）。脚本 <code>utils/sim_fused_rings.py</code>。</li></ul><p><b>通用下界</b>：每节点都要经其单条下 ramp 下泄 N−1=255 条 flit，故任何方案 makespan ≥ (N−1)/ramp_bw + 最小投递延迟（BW=1→255，BW=2→128）。</p></div>
+<div class='card'><h2>五类方案</h2><ul><li><b>dimensional multi-tree</b>：每源用 X-then-Y 维序多播树（行脊 + 各列分支，网内 fork），带 buffer 时可命中下界。</li><li><b>纯 Hamilton 环</b>：全局一个蛇形 comb 闭环，单向 / 双向。</li><li><b>hybrid 局部环 + 全局树</b>：按行切 B 个水平带（每带 R=MY/B 行）；①带内跑局部 Hamilton 环 allgather（并行）；②每列向上下相邻带做树状广播互换各带块。</li><li><b>quad 4×(8×8) 环 + 中心交换</b>：切成 4 个 8×8 象限各跑环；4 象限最内角在中心构成 4-环，象限块经中心<b>时分</b>互传，对端再绕环二次分发。</li><li><b>border 4×(8×8) 环 + 边界多点注入</b>：同样切 4 象限跑环，但外部数据沿象限<b>共享边界的多点</b>跨界，对端只需沿行/列<b>短弧</b>分发（≪一圈），逼近“一圈 + 尾”。</li></ul></div>
+<div class='card'><h2>汇总：各方案 makespan（按下 Ramp 带宽 × 调度模型）</h2>
+<p>两套模型分开看：<b>0-buf 刚性</b>＝严格 0-buffer、刚性时隙（路由器零缓存，仅源端可缓存）；<b>时分</b>＝允许网内时分复用 + 源端缓存的流水/理想时延（同一引擎计算，可直接比较）。同一方案两列之差 = <b>0-buffer 的代价</b>。绿底＝该列最小（越低越好）。</p>
+<table><tr><th rowspan='2'>方案</th><th colspan='2'>下 Ramp 带宽 = 1（eject 下界 255）</th><th colspan='2'>下 Ramp 带宽 = 2（eject 下界 128）</th></tr><tr><th>0-buf 刚性</th><th>时分/流水</th><th>0-buf 刚性</th><th>时分/流水</th></tr>
+<tr><td>dimensional multi-tree</td><td>837</td><td class='win'>265</td><td>504</td><td class='win'>255</td></tr>
+<tr><td>纯 Hamilton 环（单向）</td><td>1474</td><td>1474</td><td>1474</td><td>1474</td></tr>
+<tr><td>纯 Hamilton 环（双向）</td><td>754</td><td>754</td><td>754</td><td>754</td></tr>
+<tr><td>hybrid 行带（最优） <span style='color:#64748b;font-size:11px'>(0-buf 双向 B=2 / 单向 B=8)</span></td><td class='win'>416</td><td class='win'>265</td><td class='win'>409</td><td class='win'>255</td></tr>
+<tr><td>quad 中心交换（单向）</td><td>717</td><td>715</td><td>717</td><td>715</td></tr>
+<tr><td>quad 中心交换（双向）</td><td>1097</td><td>413</td><td>523</td><td>413</td></tr>
+<tr><td>border 边界多点（单向）</td><td style='color:#94a3b8'>—</td><td>437</td><td style='color:#94a3b8'>—</td><td>437</td></tr>
+<tr><td>border 边界多点（双向）</td><td style='color:#94a3b8'>—</td><td>283</td><td style='color:#94a3b8'>—</td><td>267</td></tr>
+</table>
+<p style='color:#64748b;font-size:12px'>注：border（边界多点注入）只在时分模型评估，故其 0-buf 刚性列留空（—）。8×8 独立环参考：单向一圈 354、双向半圈 186 cycle。</p>
+</div>
+<div class='card'><h2>数据洞察</h2><ol>
+<li><b>0-buffer 的代价 = 足迹局部性</b>。同一方案“0-buf÷时分”的倍率：multi-tree 837/265≈<b>3.2×</b>（足迹横跨整网，刚性最难错开）；hybrid 行带 ≈<b>1.6×</b>（足迹最紧凑，最抗 0-buffer）；quad 单向 717/715≈<b>1.0×</b>（本就延迟受限，刚性化几乎不再变差）。局部性越强 → 越抗 0-buffer。</li>
+<li><b>时分模型里最优是 multi-tree 与 hybrid，不是 border</b>。时分 BW=1：multi-tree 265、hybrid 265 已贴 eject 下界 255；border 双向 283 紧随其后，是“环局部性”系列里的最优，但仍略逊于树/行带。（此前把时分 border 与 0-buf 方案混比的说法已纠正。）</li>
+<li><b>下 Ramp 带宽 1→2 是否有用，取决于瓶颈</b>。受“下泄”约束者才受益：0-buf multi-tree 837→504、0-buf quad 双向 1097→523、时分 border 双向 283→267；受“延迟/链路”约束者几乎不变：纯环恒 1474/754、quad 中心恒 715/717、时分 multi-tree 265→255（已链路受限）。<b>一旦调度逼近延迟最优，2 flit/cy 下泄几乎白费。</b></li>
+<li><b>方向（单/双）是双刃剑</b>。时分里双向普遍把最坏路径减半（纯环 1474→754、border 437→283、quad 中心 715→413）；但 0-buf 刚性里双向中心交换<b>有害</b>——quad 单向 717 vs 双向 1097（BW=1），双向制造更多链路冲突反而更慢。</li>
+<li><b>“一圈 + 尾”得到验证</b>。8×8 独立环单向 354、双向 186；border 16×16 单向 437≈354+尾、双向 283≈186+尾；中心单点 715≈2×354 是两圈。每条环 link 仅需承载 255 flit < 一圈容量 356，<b>带宽够、是延迟（圈数）决定胜负</b>。</li>
+</ol></div>
+<div class='card'><h2>结论（已复核）</h2><ul><li><b>允许 buffer / 时分时：multi-tree 与 hybrid 行带并列最优</b>，均贴近 eject 下界（BW=1 约 265/265，BW=2 约 255/255）；<b>border 边界多点</b>（283/267，双向）是象限局部方案中的最优、紧随其后；中心单点（413/715）与纯环（754/1474）最差。</li><li><b>严格 0-buffer 刚性时：hybrid 行带整体最优</b>。BW=1 ≈ <b>416</b>(B=2)，比 multi-tree 的 837 快 <b>2.01×</b>；BW=2 ≈ <b>409</b>(单向 B=8)，优于 multi-tree 504。原因：行带足迹时间跨度小、占用稀疏，最易刚性错开。</li><li><b>multi-tree 在 0-buffer 下退化</b>（837/504）：每源足迹横跨整网（直径 150 cycle），又宽又满，256 个宽足迹难以单偏移错开 → 约 3× 下界。</li><li><b>quad 中心交换居中</b>：单向恒 717（延迟受象限环周长主导，加带宽无效），双向 0-buf 反而更差（BW=1 1097）。可行、规整、对称，但中心 4-环是唯一跨象限通道，受两段绕行延迟约束。</li><li><b>选型</b>：可缓存 → multi-tree / hybrid；硬性 0-buffer 刚性 → <b>hybrid 行带</b>；要规整 4 象限版图又接近最优延迟 → <b>border 边界多点</b>（时分）。</li></ul></div>
+<div class='card'><h2>附：严格 0-buffer 明细</h2>
+<h3>下 Ramp 带宽 = 1（eject 下界 = 255）</h3>
 <table><tr><th>方案</th><th>0-buffer makespan</th><th>vs 下界</th><th>vs multi-tree</th></tr>
 <tr><td>dimensional multi-tree</td><td>837</td><td>3.28×</td><td>基准</td></tr>
 <tr><td>纯 Hamilton 环 (单向)</td><td>1474</td><td>5.78×</td><td>1.76×</td></tr>
@@ -14,7 +37,7 @@
 <tr><td>quad 4×(8×8)环 + 中心交换 (单向)</td><td>717</td><td>2.81×</td><td>0.86×</td></tr>
 <tr><td>quad 4×(8×8)环 + 中心交换 (双向)</td><td>1097</td><td>4.30×</td><td>1.31×</td></tr>
 </table>
-<h3>hybrid 带数 B 扫描</h3><table><tr><th>B 带数</th><th>R 行/带</th><th>单向局部环</th><th>双向局部环</th></tr>
+<table><tr><th>hybrid B 带数</th><th>R 行/带</th><th>单向局部环</th><th>双向局部环</th></tr>
 <tr><td>1</td><td>16</td><td>1474</td><td>754</td></tr>
 <tr><td>2</td><td>8</td><td>755</td><td>416</td></tr>
 <tr><td>4</td><td>4</td><td>863</td><td>815</td></tr>
@@ -32,16 +55,13 @@
 <text x="91.7" y="261.0" font-size="10" text-anchor="middle">multi-tree</text>
 <rect x="139.9" y="128.2" width="54.2" height="117.8" fill="#fca5a5"/>
 <text x="167.0" y="123.2" font-size="11" font-weight="bold" text-anchor="middle">754</text>
-<text x="167.0" y="261.0" font-size="10" text-anchor="middle">ring</text>
-<text x="167.0" y="273.0" font-size="10" text-anchor="middle">双向</text>
+<text x="167.0" y="261.0" font-size="10" text-anchor="middle">ring 双向</text>
 <rect x="215.2" y="128.0" width="54.2" height="118.0" fill="#f87171"/>
 <text x="242.3" y="123.0" font-size="11" font-weight="bold" text-anchor="middle">755</text>
-<text x="242.3" y="261.0" font-size="10" text-anchor="middle">hybrid</text>
-<text x="242.3" y="273.0" font-size="10" text-anchor="middle">B=2(单)</text>
+<text x="242.3" y="261.0" font-size="10" text-anchor="middle">hybrid B2单</text>
 <rect x="290.5" y="181.0" width="54.2" height="65.0" fill="#34d399"/>
 <text x="317.7" y="176.0" font-size="11" font-weight="bold" text-anchor="middle">416</text>
-<text x="317.7" y="261.0" font-size="10" text-anchor="middle">hybrid</text>
-<text x="317.7" y="273.0" font-size="10" text-anchor="middle">B=2(双)</text>
+<text x="317.7" y="261.0" font-size="10" text-anchor="middle">hybrid B2双</text>
 <rect x="365.9" y="134.0" width="54.2" height="112.0" fill="#10b981"/>
 <text x="393.0" y="129.0" font-size="11" font-weight="bold" text-anchor="middle">717</text>
 <text x="393.0" y="261.0" font-size="10" text-anchor="middle">quad 单向</text>
@@ -49,8 +69,7 @@
 <text x="468.3" y="69.6" font-size="11" font-weight="bold" text-anchor="middle">1097</text>
 <text x="468.3" y="261.0" font-size="10" text-anchor="middle">quad 双向</text>
 </svg>
-</div>
-<div class='card'><h2>结果：下 Ramp 带宽 = 2 flit/cycle（eject 下界 = 128）</h2>
+<h3>下 Ramp 带宽 = 2（eject 下界 = 128）</h3>
 <table><tr><th>方案</th><th>0-buffer makespan</th><th>vs 下界</th><th>vs multi-tree</th></tr>
 <tr><td>dimensional multi-tree</td><td>504</td><td>3.94×</td><td>基准</td></tr>
 <tr><td>纯 Hamilton 环 (单向)</td><td>1474</td><td>11.52×</td><td>2.92×</td></tr>
@@ -60,7 +79,7 @@
 <tr><td>quad 4×(8×8)环 + 中心交换 (单向)</td><td>717</td><td>5.60×</td><td>1.42×</td></tr>
 <tr><td>quad 4×(8×8)环 + 中心交换 (双向)</td><td>523</td><td>4.09×</td><td>1.04×</td></tr>
 </table>
-<h3>hybrid 带数 B 扫描</h3><table><tr><th>B 带数</th><th>R 行/带</th><th>单向局部环</th><th>双向局部环</th></tr>
+<table><tr><th>hybrid B 带数</th><th>R 行/带</th><th>单向局部环</th><th>双向局部环</th></tr>
 <tr><td>1</td><td>16</td><td>1474</td><td>754</td></tr>
 <tr><td>2</td><td>8</td><td>755</td><td>801</td></tr>
 <tr><td>4</td><td>4</td><td>604</td><td>777</td></tr>
@@ -78,16 +97,13 @@
 <text x="91.7" y="261.0" font-size="10" text-anchor="middle">multi-tree</text>
 <rect x="139.9" y="74.6" width="54.2" height="171.4" fill="#fca5a5"/>
 <text x="167.0" y="69.6" font-size="11" font-weight="bold" text-anchor="middle">754</text>
-<text x="167.0" y="261.0" font-size="10" text-anchor="middle">ring</text>
-<text x="167.0" y="273.0" font-size="10" text-anchor="middle">双向</text>
+<text x="167.0" y="261.0" font-size="10" text-anchor="middle">ring 双向</text>
 <rect x="215.2" y="153.0" width="54.2" height="93.0" fill="#f87171"/>
 <text x="242.3" y="148.0" font-size="11" font-weight="bold" text-anchor="middle">409</text>
-<text x="242.3" y="261.0" font-size="10" text-anchor="middle">hybrid</text>
-<text x="242.3" y="273.0" font-size="10" text-anchor="middle">B=8(单)</text>
+<text x="242.3" y="261.0" font-size="10" text-anchor="middle">hybrid B8单</text>
 <rect x="290.5" y="131.4" width="54.2" height="114.6" fill="#34d399"/>
 <text x="317.7" y="126.4" font-size="11" font-weight="bold" text-anchor="middle">504</text>
-<text x="317.7" y="261.0" font-size="10" text-anchor="middle">hybrid</text>
-<text x="317.7" y="273.0" font-size="10" text-anchor="middle">B=16(双)</text>
+<text x="317.7" y="261.0" font-size="10" text-anchor="middle">hybrid B16双</text>
 <rect x="365.9" y="83.0" width="54.2" height="163.0" fill="#10b981"/>
 <text x="393.0" y="78.0" font-size="11" font-weight="bold" text-anchor="middle">717</text>
 <text x="393.0" y="261.0" font-size="10" text-anchor="middle">quad 单向</text>
@@ -109,6 +125,5 @@
 <tr class='win'><td><b>(b) 边界多点</b></td><td>双向</td><td><b>283</b></td><td>160</td><td>255</td><td>≈ 半圈 + 尾（BW=2 时 267）</td></tr>
 </table>
 <p style='color:#64748b;font-size:12px'>注：中心方案在 ramp_bw=1/2 下 makespan 不变（延迟受限）；边界双向在 BW=1→2 时 283→267（接近 eject 下界，下泄略有作用）。</p>
-<h3>关键结论：中心单点 = 两圈；边界多点 = 一圈 + 尾</h3><ul><li><b>带宽上一圈本就够</b>：每条环 link 仅需承载 局部 63 + 外部 192 = 255 flit < 一圈容量 356，带宽不是瓶颈。</li><li><b>中心单点注入 → 延迟必须两圈</b>：外部数据只能从中心 4 角进入，进对端环后要覆盖其 64 个节点必须再绕近一圈，最坏路径 ≈ 自身环 1 圈 + 对端环 1 圈 = 2 圈（实测单向 715≈2×354）。</li><li><b>边界多点注入 → 真正做到“一圈 + 尾”</b>：外部数据沿共享边界 8 点同时跨界，对端只需沿行/列短弧（≤7 跳）分发。最坏路径 ≈ 自身环 1 圈 + 跨界 + 短弧 ≈ 一圈 + 小尾。实测单向 <b>437</b>（≈8×8 一圈 354 + 83 尾），较中心方案 715 <b>提速 1.64×</b>；busiest link 从 255 降到 191（负载也更均衡）。</li><li><b>边界 + 双向最佳</b>：BW=1 283、BW=2 <b>267</b>，已逼近 eject 下界区间（255/128），并优于时分中心方案与严格 0-buffer 各方案。</li><li><b>代价</b>：边界多点注入用满了象限共享边界的 8 条跨界链路并在对端做行/列分发——本质上是把“环 + 局部树”结合，结构比“中心 4 环”略复杂，但仍是规整的象限化布局。</li></ul></div>
-<div class='card'><h2>结论</h2><ul><li><b>0-buffer 约束下，hybrid（行带）整体最优</b>：BW=1 时 hybrid 最优 ≈ <b>416</b> (B=2)，比 multi-tree 的 837 快 <b>2.01×</b>，比纯环（1474/754）更快；BW=2 时 hybrid 最优 ≈ <b>409</b> (单向 B=8)，优于 multi-tree 504。</li><li><b>quad 4×(8×8)环 + 中心交换：可行且居中</b>。单向 717（BW 无关），双向 BW=1 1097 / BW=2 523。它优于纯环、与 multi-tree 同档（BW=1 时 quad 单向 717 还略快于 multi-tree 837），但不及最佳行带 hybrid。原因：<b>中心 4-环是唯一的跨象限通道</b>——每条中心链路要时分承载 ~2 个象限块（≈128 flit），且每条 flit 要走“本象限环 + 中心跳 + 对端象限环”两段绕行，<b>延迟受象限环周长主导</b>；单向 quad 因此被绕行延迟卡在 717（加带宽也不降，瓶颈是延迟非下泄）。</li><li><b>为什么带 buffer 最强的 multi-tree 在 0-buffer 下变弱？</b> multi-tree 每个源的足迹横跨整张网（直径 = 150 cycle），刚性时隙铺得又宽又满，单偏移很难把 256 个宽足迹彼此错开，贪心打包后被迫拉大注入偏移 → makespan 远离下界（约 3× 下界）。</li><li><b>共同规律——局部性决定 0-buffer 表现</b>：足迹越紧凑（时间跨度小、占用稀疏）越易刚性错开。行带 hybrid 足迹最紧凑（最优档 ≈1.6× 下界）；quad 次之（两段象限环绕行偏长）；multi-tree 足迹最宽（≈3× 下界）。</li><li><b>纯环</b>：单向环足迹长（绕行整周），始终最差（1474）；双向环减半（754）。</li><li><b>带宽加倍（1→2）</b>仅对“受下泄约束”的方案有效（下界 255→128）：multi-tree、hybrid、quad-双向 均下降；而 quad-单向受<b>延迟</b>约束，加带宽无效（恒 717）。</li><li><b>选型</b>：允许路由器 buffer → multi-tree（命中下界）最优；硬性 0-buffer/刚性时隙 → <b>行带 hybrid</b> 最优，<b>quad 4×(8×8)+中心交换</b> 是结构规整、布局对称的次优折中（适合物理上天然 4 象限的版图）。</li></ul><p style='color:#64748b;font-size:12px'>注：0-buffer makespan 为“多种源排序贪心刚性打包”的可行上界（已验证无冲突 + 0 buffer + 每节点下泄 N−1）；脚本 <code>utils/sched_zerobuf_compare.py</code>，数据缓存 <code>results/zerobuf_16x16.json</code>。</p></div>
+<h3>关键结论：中心单点 = 两圈；边界多点 = 一圈 + 尾</h3><ul><li><b>带宽上一圈本就够</b>：每条环 link 仅需承载 局部 63 + 外部 192 = 255 flit < 一圈容量 356，带宽不是瓶颈。</li><li><b>中心单点注入 → 延迟必须两圈</b>：外部数据只能从中心 4 角进入，进对端环后要覆盖其 64 个节点必须再绕近一圈，最坏路径 ≈ 自身环 1 圈 + 对端环 1 圈 = 2 圈（实测单向 715≈2×354）。</li><li><b>边界多点注入 → 真正做到“一圈 + 尾”</b>：外部数据沿共享边界 8 点同时跨界，对端只需沿行/列短弧（≤7 跳）分发。最坏路径 ≈ 自身环 1 圈 + 跨界 + 短弧 ≈ 一圈 + 小尾。实测单向 <b>437</b>（≈8×8 一圈 354 + 83 尾），较中心方案 715 <b>提速 1.64×</b>；busiest link 从 255 降到 191（负载也更均衡）。</li><li><b>边界 + 双向是象限局部方案里的最优</b>：BW=1 283、BW=2 <b>267</b>，远优于<b>同模型</b>下的中心单点（413/715）与纯环（754/1474）；不过在时分模型里它仍略逊于 multi-tree 与行带 hybrid（≈255–265，见上方汇总表）——后两者已贴 eject 下界。<b>（注意：不要把时分 border 与严格 0-buffer 方案直接比，两者模型不同。）</b></li><li><b>代价</b>：边界多点注入用满了象限共享边界的 8 条跨界链路并在对端做行/列分发——本质上是把“环 + 局部树”结合，结构比“中心 4 环”略复杂，但仍是规整的象限化布局。</li></ul></div>
 </body></html>
