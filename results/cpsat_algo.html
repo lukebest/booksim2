@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CP-SAT 生成 0-buffer / 无阻塞 / 无冲突 multi-tree allgather pattern 的算法流程</title>
+<style>
+ body{font-family:'Segoe UI',Arial,sans-serif;margin:0;color:#0f172a;background:#f8fafc;line-height:1.7;}
+ .wrap{max-width:980px;margin:0 auto;padding:28px 22px 80px;}
+ h1{color:#1e3a8a;font-size:24px;margin:0 0 4px;}
+ h2{color:#1e3a8a;font-size:19px;margin:30px 0 8px;border-bottom:2px solid #e2e8f0;padding-bottom:5px;}
+ h3{color:#1e40af;font-size:15px;margin:18px 0 6px;}
+ p,li{font-size:14px;}
+ .sub{color:#475569;font-size:13px;margin:0 0 18px;}
+ .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:16px 0;}
+ table{border-collapse:collapse;width:100%;margin:10px 0;}
+ td,th{border:1px solid #cbd5e1;padding:7px 10px;font-size:13px;vertical-align:top;}
+ th{background:#e2e8f0;text-align:left;}
+ code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12.5px;color:#0f172a;}
+ pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:12.5px;line-height:1.5;}
+ pre code{background:none;color:inherit;padding:0;}
+ .pill{display:inline-block;background:#1e3a8a;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:6px;}
+ .ok{color:#059669;font-weight:700;}
+ .warn{color:#b45309;font-weight:700;}
+ .mono{font-family:'Cascadia Code',Consolas,monospace;}
+ .formula{background:#f8fafc;border-left:3px solid #2563eb;padding:8px 12px;margin:8px 0;font-family:Consolas,monospace;font-size:13px;}
+ .note{font-size:12px;color:#64748b;}
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+ @media(max-width:760px){.grid2{grid-template-columns:1fr;}}
+ .tag{font-size:11px;color:#fff;padding:1px 6px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>用 CP-SAT 生成 multi-tree AllGather 调度</h1>
+<p class="sub">0-buffer（E=0）· 无阻塞（bounded-W）· 无冲突（link / down-ramp 互斥）的双向维序多树 pattern —— 求解器流程与 ILP 对比。对应代码 <code>utils/sched_ilp.py</code>。</p>
+
+<!-- ============ 1. CP-SAT vs ILP ============ -->
+<h2>1. CP-SAT 与 ILP 的区别</h2>
+<div class="card">
+<p>两者都求解“整数变量上的优化问题”，但<strong>建模语言</strong>和<strong>求解引擎</strong>不同。</p>
+<table>
+<tr><th style="width:16%"></th><th>ILP / MILP（整数线性规划）</th><th>CP-SAT（约束规划 + SAT）</th></tr>
+<tr>
+  <td><strong>变量</strong></td>
+  <td>整数 + 连续混合（MILP）</td>
+  <td>仅有限域整数 / 布尔（无连续变量）</td>
+</tr>
+<tr>
+  <td><strong>约束形式</strong></td>
+  <td>必须是<strong>线性</strong>不等式 <code>Ax ≤ b</code>。组合约束要手工线性化</td>
+  <td>原生支持<strong>全局约束</strong>：<code>AllDifferent</code>、<code>Cumulative</code>、<code>NoOverlap</code>、reified（条件）约束，也接受线性约束</td>
+</tr>
+<tr>
+  <td><strong>求解引擎</strong></td>
+  <td>LP 松弛 + 分支定界 + 割平面（单纯形 / 内点）</td>
+  <td>约束传播（域过滤）+ <strong>惰性子句学习</strong>（CDCL/SAT）+ LP 松弛 混合；多策略 portfolio 并行</td>
+</tr>
+<tr>
+  <td><strong>表达 “一组值互不相同”</strong></td>
+  <td>需展开成 O(n²) 个 big-M 成对不等式，或 one-hot 指派矩阵 → 模型膨胀</td>
+  <td>一行 <code>AddAllDifferent(vars)</code>，并有专用传播器，剪枝强</td>
+</tr>
+<tr>
+  <td><strong>擅长问题</strong></td>
+  <td>网络流、配比、连续资源的成本最优化</td>
+  <td>调度、排程、资源互斥这类<strong>强组合 / 析取</strong>问题</td>
+</tr>
+</table>
+<p class="note">关系：CP-SAT 也能直接吃线性约束，可视为整数问题上 ILP 的<strong>超集求解器</strong>。本问题的核心约束是“同一链路 / 同一 down-ramp 的占用 cycle 互不相同”——典型的析取互斥，用 <code>AllDifferent</code> 表达最自然，所以选 CP-SAT 而非纯 ILP。</p>
+</div>
+
+<div class="card">
+<h3>本模型为什么是 CP 而不是纯线性</h3>
+<p>目标 <code>min makespan</code> 与因果约束 <code>a[s,c] ≥ a[s,p]+lat</code> 都是线性的；但“每条物理链路每 cycle 至多 1 个 flit”“每个 down-ramp E=0 时每 cycle 至多 1 次 eject”本质是<strong>互斥（all-different）</strong>。在 ILP 里要靠大量 0/1 变量 + big-M 线性化，规模爆炸；CP-SAT 用全局约束 + 传播直接处理。down-ramp 带宽 <code>B&gt;1</code> 时进一步用 <code>Cumulative</code>（容量 B 的累积资源）表达，这在纯 ILP 中也很笨重。</p>
+</div>
+
+<!-- ============ 2. 问题与三条硬约束 ============ -->
+<h2>2. 目标 pattern 与三条硬约束</h2>
+<div class="card">
+<p><strong>目标</strong>：在 mesh 上为 AllGather 生成一份<strong>全局发包日历</strong>——每个源 <code>s</code> 的 flit 沿其 <em>X-then-Y 维序 fork 树</em>（<code>tree_children</code>，覆盖全部 N 个节点）向所有节点传播，router 在分叉处复制。求 makespan 最小且物理可实现的发送时刻表。</p>
+<table>
+<tr><th style="width:22%">约束</th><th>物理含义</th><th>模型表达</th></tr>
+<tr>
+  <td><span class="pill">E = 0</span>0-buffer</td>
+  <td>flit 到达目的节点的那一 cycle 必须被 PE 取走，down-ramp 无 eject 队列</td>
+  <td>eject cycle == arrival cycle（直接用 <code>a[s,d]</code> 当 eject 时刻）</td>
+</tr>
+<tr>
+  <td><span class="pill">bounded W</span>无阻塞</td>
+  <td>flit 在输出端口最多滞留 W 拍即须发出；无限滞留会“踩踏”后续 flit（堵住 wormhole 流）</td>
+  <td><code>a[s,c] ≤ a[s,p]+lat+W</code></td>
+</tr>
+<tr>
+  <td><span class="pill">conflict-free</span>无冲突</td>
+  <td>每条有向链路、每个 down-ramp 同一 cycle 至多 1 个 flit（B&gt;1 时至多 B 个）</td>
+  <td>链路 / eject 组内 <code>AllDifferent</code>（或 <code>Cumulative</code>）</td>
+</tr>
+</table>
+<p class="note">争用不在网内堆积：若某跳在 W 内放不下，就把整个源的<strong>注入时刻</strong>整体后移（争用回退到源 PE 注入队列，那是允许排队的地方）。这正是 warmstart 贪心 <code>greedy_arrivals</code> 的做法。</p>
+</div>
+
+<!-- ============ 3. CP-SAT 形式化 ============ -->
+<h2>3. CP-SAT 形式化（逐条对应代码）</h2>
+<div class="card">
+<h3>决策变量</h3>
+<div class="formula">a[s, d] ∈ [0, horizon]　　源 s 的 flit 到达节点 d 的 cycle（共 N² 个整数变量）</div>
+<p>makespan = max<sub>s,d</sub> a[s,d] + RAMP。</p>
+
+<h3>约束</h3>
+<table>
+<tr><th style="width:30%">约束（数学）</th><th>代码</th><th>作用</th></tr>
+<tr>
+  <td class="formula" style="border:0;margin:0">a[s,s] ≥ RAMP</td>
+  <td><code>model.Add(a[(s,s)]&gt;=ramp)</code></td>
+  <td>源在 up-ramp 注入，注入偏移 ≥ 0</td>
+</tr>
+<tr>
+  <td class="formula" style="border:0;margin:0">a[s,p]+lat ≤ a[s,c]<br>a[s,c] ≤ a[s,p]+lat+W</td>
+  <td><code>model.Add(a[(s,c)]&gt;=a[(s,p)]+lat)</code><br><code>model.Add(a[(s,c)]&lt;=a[(s,p)]+lat+wcap)</code></td>
+  <td>树边因果（不能未到先发）+ 有界网内等待（无阻塞）。发送时刻 = <code>a[s,c]-lat</code></td>
+</tr>
+<tr>
+  <td class="formula" style="border:0;margin:0">∀ 物理有向链路 (p,c):<br>AllDifferent({a[s,c]})</td>
+  <td><code>model.AddAllDifferent(link_users[(p,c)])</code></td>
+  <td>链路无冲突：lat 在一条链路上是常数，到达互异 ⟺ 发送 cycle 互异 ⟺ ≤1 flit/cycle</td>
+</tr>
+<tr>
+  <td class="formula" style="border:0;margin:0">∀ 节点 d:<br>B=1: AllDifferent({a[s,d]})<br>B&gt;1: Cumulative(demand 1, cap B)</td>
+  <td><code>AddAllDifferent(grp)</code> /<br><code>AddCumulative(iv,[1..],bw)</code></td>
+  <td>down-ramp E=0：B=1 每 cycle 至多 1 次 eject；B&gt;1 每 cycle 至多 B 次</td>
+</tr>
+<tr>
+  <td class="formula" style="border:0;margin:0">（可选）serialize-fork<br>∀ 节点 p: AllDifferent(送出 cycle)</td>
+  <td><code>--serfork</code> → <code>AddAllDifferent(node_sends[p])</code></td>
+  <td>每个 router 每 cycle 至多转发 1 个 flit（fan-out ≤ 1 端口）</td>
+</tr>
+</table>
+
+<h3>目标</h3>
+<div class="formula">mk = max<sub>s,d</sub> a[s,d]；　minimize mk　（报告 makespan = mk + RAMP）</div>
+<pre><code>mk = model.NewIntVar(0, horizon, "makespan")
+model.AddMaxEquality(mk, [a[(s,d)] for s in range(n) for d in range(n)])
+model.Minimize(mk)</code></pre>
+</div>
+
+<!-- ============ 4. 算法流程 ============ -->
+<h2>4. 算法流程（pipeline）</h2>
+<div class="card">
+<svg width="100%" viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" style="max-width:900px">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <!-- boxes -->
+  <g font-family="Segoe UI,Arial" font-size="12" text-anchor="middle">
+    <rect x="10"  y="40" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="75" y="62">① 建树</text>
+    <text x="75" y="80" font-size="10.5" fill="#334155">每源 X-then-Y</text>
+    <text x="75" y="94" font-size="10.5" fill="#334155">fork 树(覆盖全网)</text>
+
+    <rect x="170" y="40" width="130" height="64" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="235" y="62">② 建变量</text>
+    <text x="235" y="80" font-size="10.5" fill="#334155">a[s,d] 到达 cycle</text>
+    <text x="235" y="94" font-size="10.5" fill="#334155">N² 个整数</text>
+
+    <rect x="330" y="40" width="140" height="64" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="400" y="58">③ 加约束</text>
+    <text x="400" y="74" font-size="10.5" fill="#334155">因果+W / 链路</text>
+    <text x="400" y="88" font-size="10.5" fill="#334155">/eject / serfork</text>
+
+    <rect x="500" y="40" width="130" height="64" rx="8" fill="#fef3c7" stroke="#d97706"/>
+    <text x="565" y="58">④ warmstart</text>
+    <text x="565" y="74" font-size="10.5" fill="#334155">贪心解作 hint</text>
+    <text x="565" y="88" font-size="10.5" fill="#334155">收紧 horizon</text>
+
+    <rect x="660" y="40" width="130" height="64" rx="8" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="725" y="58">⑤ 求解</text>
+    <text x="725" y="74" font-size="10.5" fill="#334155">传播+CDCL+LP</text>
+    <text x="725" y="88" font-size="10.5" fill="#334155">portfolio 并行</text>
+
+    <rect x="660" y="150" width="130" height="64" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+    <text x="725" y="172">⑥ 校验</text>
+    <text x="725" y="188" font-size="10.5" fill="#334155">独立复查</text>
+    <text x="725" y="202" font-size="10.5" fill="#334155">link/eject/fork</text>
+
+    <rect x="490" y="150" width="150" height="64" rx="8" fill="#f1f5f9" stroke="#64748b"/>
+    <text x="565" y="172">⑦ 抽取 pattern</text>
+    <text x="565" y="188" font-size="10.5" fill="#334155">send(s,p→c)</text>
+    <text x="565" y="202" font-size="10.5" fill="#334155">= a[s,c] − lat</text>
+  </g>
+  <!-- arrows -->
+  <g stroke="#475569" stroke-width="1.6" fill="none" marker-end="url(#ar)">
+    <path d="M140,72 L168,72"/>
+    <path d="M300,72 L328,72"/>
+    <path d="M470,72 L498,72"/>
+    <path d="M630,72 L658,72"/>
+    <path d="M725,104 L725,148"/>
+    <path d="M658,182 L642,182"/>
+  </g>
+</svg>
+
+<h3>各步说明</h3>
+<ol>
+<li><strong>建树</strong> <code>build_trees</code>：对每个源 s，用 <code>tree_children</code> 生成 X-then-Y 维序双向 fork 树（先沿行铺满，再每列向上下铺满），决定每个源的 flit 走哪些物理有向链路、父子关系。</li>
+<li><strong>建变量</strong>：为每对 (s,d) 建整数变量 <code>a[s,d] ∈ [0,horizon]</code>。<code>horizon</code> 默认 <code>3×LB*</code>，越紧域越小、求解越快。</li>
+<li><strong>加约束</strong>：注入、因果+有界 W、链路 <code>AllDifferent</code>、down-ramp <code>AllDifferent</code>/<code>Cumulative</code>，可选 serialize-fork。同时把每条树边的 <code>a[s,c]</code> 登记进 <code>link_users[(p,c)]</code> 以便成组互斥。</li>
+<li><strong>warmstart（可选）</strong> <code>greedy_arrivals</code>：用“离中心最远的源优先”贪心地放每个源（放不下就整体后移注入），得到一份可行解；作为 <code>AddHint</code> 喂给求解器，并把 horizon 收紧到贪心 makespan。大网格（如 16×16）非常依赖它。</li>
+<li><strong>求解</strong> <code>CpSolver</code>：设 <code>max_time_in_seconds</code> 与 <code>num_search_workers</code>（多策略并行）。引擎做约束传播（AllDifferent/Cumulative 域过滤）+ 惰性子句学习 + LP 下界。返回 <span class="ok">OPTIMAL</span>（证明最优）/ <span class="warn">FEASIBLE</span>（最好可行 + 证下界）/ INFEASIBLE。</li>
+<li><strong>校验</strong> <code>_verify</code>：用解出的值<strong>独立</strong>复查——每条链路到达互异、每节点 eject ≤ B、（serfork 时）每节点转发 cycle 互异。返回 <code>verified=True</code> 才采信。</li>
+<li><strong>抽取 pattern</strong>：发送日历 <code>send(s, p→c) = a[s,c] − lat(p,c)</code>，eject 时刻 = <code>a[s,c]</code>。这份 per-link 发包表就是最终的 multi-tree pattern（可视化 / 仿真直接用它）。</li>
+</ol>
+</div>
+
+<!-- ============ 5. 纯 ILP 流程 ============ -->
+<h2>5. 用纯 ILP 生成同一 pattern 的流程</h2>
+<div class="card">
+<p>同一个问题也能写成<strong>纯线性整数规划</strong>。关键技巧：把“第几 cycle”从<strong>变量的值</strong>改成<strong>一个 0/1 开关的下标</strong>（时间索引法）。这样“每 cycle 至多几个”就变成一条简单的求和不等式，全程线性、无需 big-M。</p>
+
+<h3>编码对比（一句话抓住区别）</h3>
+<table>
+<tr><th style="width:18%"></th><th>CP-SAT（值编码）</th><th>纯 ILP（时间索引 / one-hot）</th></tr>
+<tr><td><strong>核心变量</strong></td><td><code>a[s,d]</code> = 到达 cycle（整数本身就是时刻）</td><td><code>x[s,d,t]∈{0,1}</code> = 源 s 是否在第 t cycle 到达节点 d</td></tr>
+<tr><td><strong>“无冲突”</strong></td><td><code>AllDifferent</code>（全局约束）</td><td>每 cycle 求和 <code>Σ ≤ 1</code>（线性不等式）</td></tr>
+<tr><td><strong>时间轴</strong></td><td>隐式，域 [0,horizon]</td><td>显式离散 <code>t = 0..T</code></td></tr>
+</table>
+
+<h3>步骤（简明版）</h3>
+<ol>
+<li><strong>建树</strong>：和 CP-SAT 完全一样——每个源建 X-then-Y 维序 fork 树，确定每个 flit 经过哪些物理链路、父子关系。</li>
+<li><strong>定时间轴</strong>：取上限 <code>T</code>（如 3×LB*），把时间离散成 <code>t = 0,1,…,T</code>。</li>
+<li><strong>定 0/1 变量</strong>：<code>x[s,d,t] = 1</code> 表示“源 s 的 flit 在第 t cycle 到达并 eject 于节点 d”。<br>
+   <span class="note">因为 x 直接代表“到达即被取走”，<strong>0-buffer(E=0) 天然成立</strong>，不用额外约束。</span></li>
+<li><strong>每个 flit 只有一个到达时刻</strong>：<div class="formula" style="margin:6px 0">Σ<sub>t</sub> x[s,d,t] = 1，　并令到达 cycle　a[s,d] = Σ<sub>t</sub> t·x[s,d,t]</div></li>
+<li><strong>因果 + 无阻塞（有界等待 W）</strong>：父到了才能往子发，且最多等 W 拍：<div class="formula" style="margin:6px 0">a[s,p] + lat ≤ a[s,c] ≤ a[s,p] + lat + W</div></li>
+<li><strong>链路无冲突</strong>：同一条物理有向链路 (p,c)，任一 cycle 至多 1 个 flit 通过：<div class="formula" style="margin:6px 0">∀t:　Σ<sub>s 用 (p,c)</sub> x[s, c, t+lat] ≤ 1</div></li>
+<li><strong>down-ramp 无冲突 / 带宽 B</strong>：每个节点 d、每个 cycle t，至多 B 次 eject（B=1 即严格 0-buffer 单端口）：<div class="formula" style="margin:6px 0">∀d,t:　Σ<sub>s≠d</sub> x[s, d, t] ≤ B</div></li>
+<li><strong>目标</strong>：最小化 makespan（线性）：<div class="formula" style="margin:6px 0">min mk，　s.t. mk ≥ a[s,d] ∀(s,d)</div></li>
+<li><strong>求解 + 还原</strong>：交给 ILP 求解器（单纯形 LP 松弛 + 分支定界 + 割平面）。解出的 <code>x</code> 还原发送日历 <code>send(s,p→c) = a[s,c] − lat</code>，即最终 multi-tree pattern。</li>
+</ol>
+
+<p class="note">第 4、6、7 步把“无冲突 / 0-buffer / 限带宽”全写成了<strong>简单求和 ≤ 常数</strong>，这正是时间索引 ILP 直观的地方。代价：变量数 ≈ N²×T，比 CP-SAT 的值编码多一个时间维，大网格上 LP 矩阵很大、求解更慢——这也是工程上选 CP-SAT 的原因。<br>
+<strong>另一种 B=1 写法</strong>：不离散时间，改用成对顺序变量 <code>y[i,j]∈{0,1}</code> + big-M 把“两 flit 不同 cycle”写成 <code>a_i−a_j ≥ 1−M·y</code> / <code>a_j−a_i ≥ 1−M·(1−y)</code>（经典析取调度法）。更紧凑但 big-M 让 LP 松弛很松、分支更多。</p>
+</div>
+
+<!-- ============ 6. 结果 ============ -->
+<h2>6. 典型结果与下界</h2>
+<div class="card">
+<p>两个与 buffer 无关的下界：<strong>latency_floor</strong>（最远角维序传播 + 2×ramp，物理硬墙）与 <strong>LB*</strong>（瓶颈节点 down-ramp 的 release-packing，带 B）。CP-SAT 在两者之间逼近真实最优。</p>
+<table>
+<tr><th>配置</th><th>latency_floor</th><th>LB*</th><th>CP-SAT 结果</th><th>状态</th></tr>
+<tr><td>4×4, H=4 V=6, B=2, serfork</td><td>32</td><td>32</td><td><strong>32</strong>（W≥3；W≤2 不可行）</td><td class="ok">已证最优</td></tr>
+<tr><td>8×8, lat=4, B=2</td><td>58</td><td>58</td><td><strong>67</strong>（W≥2）</td><td class="ok">已证最优</td></tr>
+<tr><td>16×16, lat=4, B=1</td><td>122</td><td>263</td><td>298（W=∞, 600s）</td><td class="warn">区间 [263, 298]</td></tr>
+<tr><td>16×16, lat=4, B=2</td><td>122</td><td>143</td><td>301（W=16）</td><td class="warn">区间，仅可达</td></tr>
+</table>
+<p class="note">小网格（≤64 节点）CP-SAT 能<strong>证明最优</strong>；256 节点 ≈ 6.5 万变量，150–600s 内通常只能给 [证下界, 最好可达] 区间——这也是 ILP/CP 在强组合调度上的规模天花板。serialize-fork 不抬高最优 makespan，但会抬高所需最小 buffer 深度 W（4×4 上从 W=0 抬到 W≥3）。</p>
+</div>
+
+<!-- ============ 7. 复现 ============ -->
+<h2>7. 复现命令</h2>
+<div class="card">
+<pre><code># 4×4，serialize-fork，扫 W（小网格可证明最优）
+../.venv-ilp/bin/python sched_ilp.py --mx 4 --my 4 --h 4 --v 6 --bw 2 --serfork --w 3
+
+# 16×16，B=1，贪心 warmstart + 长时限
+../.venv-ilp/bin/python sched_ilp.py --mx 16 --my 16 --h 4 --v 4 --bw 1 --warmstart --time 600
+
+# 关键开关
+#   --bw B      down-ramp 每 cycle eject 上限（B=1 即严格 0-buffer 单端口）
+#   --w  W      每跳网内等待上限（无阻塞；缺省=无界）
+#   --serfork   每 router 每 cycle 至多转发 1 个 flit
+#   --warmstart 贪心解作 hint 并收紧 horizon（大网格必备）</code></pre>
+</div>
+
+<p class="note" style="margin-top:24px">代码：<code>utils/sched_ilp.py</code>（CP-SAT 模型 + 校验）· <code>utils/sched_no_eject_buffer.py</code>（维序 fork 树 + 贪心基线）· <code>utils/sched_eject_bw.py</code>（latency_floor / LB* / 带宽 B 分析）。</p>
+
+</div>
+</body>
+</html>
