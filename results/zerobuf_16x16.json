@@ -60,6 +60,14 @@
           "makespan": 667,
           "ok": true
         }
+      },
+      "quad_uni": {
+        "makespan": 717,
+        "ok": true
+      },
+      "quad_bi": {
+        "makespan": 1097,
+        "ok": true
       }
     },
     "2": {
@@ -117,6 +125,14 @@
           "makespan": 504,
           "ok": true
         }
+      },
+      "quad_uni": {
+        "makespan": 717,
+        "ok": true
+      },
+      "quad_bi": {
+        "makespan": 523,
+        "ok": true
       }
     }
   }

@@ -82,6 +82,120 @@ def row_path(y0):
     return [nid(x, y0) for x in range(MX)]
 
 
+def ham_cycle_rect(x0, y0, w, h):
+    """Closed Hamilton cycle over the w x h sub-grid at (x0,y0) (needs w even)."""
+    order = [nid(x0 + x, y0) for x in range(w)]        # bottom spine
+    for i, x in enumerate(range(w - 1, -1, -1)):
+        rows = range(1, h) if i % 2 == 0 else range(h - 1, 0, -1)
+        for yloc in rows:
+            order.append(nid(x0 + x, y0 + yloc))
+    return order
+
+
+# Four 8x8 quadrants + the central 4-cycle of their innermost corners.
+QUAD = None        # list of {'rep','order','pos'} for Q0,Q1,Q2,Q3
+RING4 = None       # quadrant indices in central-cycle order [Q0,Q1,Q3,Q2]
+
+
+def init_quadrants():
+    global QUAD, RING4
+    hw, hh = MX // 2, MY // 2
+    specs = [(0, 0), (hw, 0), (0, hh), (hw, hh)]                 # Q0..Q3 origins
+    reps = [(hw - 1, hh - 1), (hw, hh - 1), (hw - 1, hh), (hw, hh)]  # inner corners
+    QUAD = []
+    for (x0, y0), (rx, ry) in zip(specs, reps):
+        order = ham_cycle_rect(x0, y0, hw, hh)
+        assert len(order) == hw * hh and len(set(order)) == hw * hh
+        QUAD.append({"rep": nid(rx, ry), "order": order,
+                     "pos": {nd: k for k, nd in enumerate(order)}})
+    RING4 = [0, 1, 3, 2]   # (7,7)->(8,7)->(8,8)->(7,8)->(7,7)
+
+
+def quad_of(s):
+    sx, sy = coord(s)
+    return (0 if sx < MX // 2 else 1) + (0 if sy < MY // 2 else 2)
+
+
+def _circulate(order, pos, entry, start_rel, bidir, second_rel):
+    """Slots for a flit that enters `order` ring at `entry` (already present at
+    start_rel) and rides around it; returns (slots, arrival_rel_per_node).
+    Does NOT eject at `entry` itself (caller handles that)."""
+    n = len(order)
+    i = pos[entry]
+    slots = []
+    arr = {entry: start_rel}
+    if not bidir:
+        chain = [order[(i + k) % n] for k in range(n)]
+        a, _ = _arc(chain, start_rel)
+        slots += a
+        t = start_rel
+        for k in range(n - 1):
+            t += edge_lat(chain[k], chain[k + 1])
+            arr[chain[k + 1]] = t
+    else:
+        half = n // 2
+        b = (n - 1) - half
+        fwd = [order[(i + k) % n] for k in range(half + 1)]
+        bwd = [order[(i - k) % n] for k in range(b + 1)]
+        sf, _ = _arc(fwd, start_rel)
+        sb, _ = _arc(bwd, second_rel)
+        slots += sf + sb
+        t = start_rel
+        for k in range(len(fwd) - 1):
+            t += edge_lat(fwd[k], fwd[k + 1])
+            arr[fwd[k + 1]] = t
+        t = second_rel
+        for k in range(len(bwd) - 1):
+            t += edge_lat(bwd[k], bwd[k + 1])
+            arr[bwd[k + 1]] = t
+    return slots, arr
+
+
+def fp_quadrant(s, bidir, ramp_bw):
+    """4x (8x8 Hamilton ring) + central 4-ring exchange + re-circulation.
+
+    Phase A: s circulates its own 8x8 quadrant ring (allgather within quadrant).
+    Phase B: from its quadrant's inner-corner rep, s's flit hops along the central
+    4-cycle to the other 3 quadrant reps (cw 1 & 2 hops, ccw 1 hop) and, at each
+    foreign rep, re-circulates that quadrant's ring so every node there gets it.
+    """
+    qi = quad_of(s)
+    q = QUAD[qi]
+    d2 = 0 if ramp_bw >= 2 else 1
+    slots = [('U', s, 0)]
+    if bidir:
+        slots.append(('U', s, d2))
+    sa, arrA = _circulate(q["order"], q["pos"], s, RAMP, bidir, RAMP + d2)
+    slots += sa
+    own = q["rep"]
+    crel = arrA[own]
+
+    ci = RING4.index(qi)
+    nb_cw = RING4[(ci + 1) % 4]
+    nb_op = RING4[(ci + 2) % 4]
+    nb_cc = RING4[(ci + 3) % 4]
+    rep_cw, rep_op, rep_cc = QUAD[nb_cw]["rep"], QUAD[nb_op]["rep"], QUAD[nb_cc]["rep"]
+
+    def enter(rep, qidx, arrive_rel):
+        out = [('D', rep, arrive_rel)]
+        sc, _ = _circulate(QUAD[qidx]["order"], QUAD[qidx]["pos"], rep,
+                           arrive_rel, bidir, arrive_rel)
+        return out + sc
+
+    # cw: own -> rep_cw  (then rep_cw -> rep_op for the opposite quadrant)
+    t = crel + edge_lat(own, rep_cw)
+    slots.append(('L', lk(own, rep_cw), crel))
+    slots += enter(rep_cw, nb_cw, t)
+    t_op = t + edge_lat(rep_cw, rep_op)
+    slots.append(('L', lk(rep_cw, rep_op), t))
+    slots += enter(rep_op, nb_op, t_op)
+    # ccw: own -> rep_cc
+    t_cc = crel + edge_lat(own, rep_cc)
+    slots.append(('L', lk(own, rep_cc), crel))
+    slots += enter(rep_cc, nb_cc, t_cc)
+    return slots
+
+
 # --------------------------------------------------------------------------
 # Footprints: list of ('L', linkkey, rel) / ('D', node, rel) / ('U', node, rel)
 # --------------------------------------------------------------------------
@@ -317,6 +431,8 @@ def study(ramp_bw):
         if R >= 2:
             out["hybrid_uni"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, False, ramp_bw), ramp_bw)
         out["hybrid_bi"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, True, ramp_bw), ramp_bw)
+    out["quad_uni"] = run_scheme(lambda s: fp_quadrant(s, False, ramp_bw), ramp_bw)
+    out["quad_bi"] = run_scheme(lambda s: fp_quadrant(s, True, ramp_bw), ramp_bw)
     return out
 
 
@@ -341,6 +457,8 @@ def study_json(ramp_bw):
         "ring_bi": {"makespan": res["ring_bi"][0], "ok": res["ring_bi"][3]},
         "hybrid_uni": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_uni"].items()},
         "hybrid_bi": {B: {"makespan": r[0], "ok": r[3]} for B, r in res["hybrid_bi"].items()},
+        "quad_uni": {"makespan": res["quad_uni"][0], "ok": res["quad_uni"][3]},
+        "quad_bi": {"makespan": res["quad_bi"][0], "ok": res["quad_bi"][3]},
     }
     return d
 
@@ -355,6 +473,7 @@ def main():
     args = ap.parse_args()
     cfg(args.mx, args.my, args.h, args.v)
     init_ring()
+    init_quadrants()
 
     print(f"Mesh {MX}x{MY}, H={H}, V={V}, N={N}, 0-buffer rigid schedules\n")
     payload = {"mx": MX, "my": MY, "h": H, "v": V, "n": N, "bw": {}}
@@ -369,6 +488,8 @@ def main():
             print(f"  {mode}:")
             for B, r in sorted(d[mode].items()):
                 print(f"      B={B:2d} (R={MY//B:2d})  makespan={r['makespan']:5d}  ok={r['ok']}")
+        print(f"  quad 4x(8x8)+center uni makespan={d['quad_uni']['makespan']:5d}  ok={d['quad_uni']['ok']}")
+        print(f"  quad 4x(8x8)+center bi  makespan={d['quad_bi']['makespan']:5d}  ok={d['quad_bi']['ok']}")
         print()
 
     if args.json:

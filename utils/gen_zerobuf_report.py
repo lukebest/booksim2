@@ -15,6 +15,8 @@ SCHEME_LABEL = {
     "ring_bi": "纯 Hamilton 环 (双向)",
     "hybrid_uni": "hybrid 局部环+全局树 (单向局部环)",
     "hybrid_bi": "hybrid 局部环+全局树 (双向局部环)",
+    "quad_uni": "quad 4×(8×8)环 + 中心交换 (单向)",
+    "quad_bi": "quad 4×(8×8)环 + 中心交换 (双向)",
 }
 
 
@@ -88,12 +90,16 @@ def render():
              f"<p><b>通用下界</b>：每个节点都必须经其单条下 ramp 下泄 N−1={n-1} 条 flit，"
              "故任何方案 makespan ≥ (N−1)/ramp_bw + 最小投递延迟。</p></div>")
 
-    s.append("<div class='card'><h2>三种方案</h2><ul>"
+    s.append("<div class='card'><h2>四类方案</h2><ul>"
              "<li><b>dimensional multi-tree</b>：每个源用 X-then-Y 维序多播树（行脊 + 各列分支，网内 fork），"
              "带 buffer 时可命中下界，是已有最优方案。</li>"
              "<li><b>纯 Hamilton 环</b>：全局一个 Hamilton 环（蛇形 comb 闭环），单向 / 双向。</li>"
              "<li><b>hybrid 局部环 + 全局树</b>：按行切 B 个水平带（每带 R=MY/B 行），"
              "①带内跑局部 Hamilton 环 allgather（各带并行）；②每列向上下相邻带做树状广播，把各带块互换。</li>"
+             "<li><b>quad 4×(8×8) 环 + 中心交换</b>：把 16×16 切成 4 个 8×8 象限，各自构造 Hamilton 环做象限内 allgather；"
+             "4 个象限的<b>最内角节点</b> (7,7)/(8,7)/(8,8)/(7,8) 在中心恰好构成一个 4-环，"
+             "各象限块经此中心 4-环<b>时分</b>互传（每条中心链路逐 cycle 轮流承载不同源的 flit），"
+             "对端象限再沿本象限环二次环绕分发，使每个节点都拿到全部 4 象限数据。</li>"
              "</ul></div>")
 
     # per-bw tables
@@ -104,13 +110,16 @@ def render():
         mt = d["multitree"]["makespan"]
         bu_B, bu = best_hybrid(d, "hybrid_uni")
         bb_B, bb = best_hybrid(d, "hybrid_bi")
-        best_overall = min(mt, d["ring_uni"]["makespan"], d["ring_bi"]["makespan"], bu, bb)
+        qu = d["quad_uni"]["makespan"]
+        qb = d["quad_bi"]["makespan"]
+        best_overall = min(mt, d["ring_uni"]["makespan"], d["ring_bi"]["makespan"], bu, bb, qu, qb)
 
         s.append(f"<div class='card'><h2>结果：下 Ramp 带宽 = {rb} flit/cycle（eject 下界 = {lb}）</h2>")
         s.append("<table><tr><th>方案</th><th>0-buffer makespan</th><th>vs 下界</th><th>vs multi-tree</th></tr>")
         for name, mk in [("multitree", mt), ("ring_uni", d["ring_uni"]["makespan"]),
                          ("ring_bi", d["ring_bi"]["makespan"]),
-                         (f"hybrid_uni", bu), (f"hybrid_bi", bb)]:
+                         ("hybrid_uni", bu), ("hybrid_bi", bb),
+                         ("quad_uni", qu), ("quad_bi", qb)]:
             row = scheme_row(name, mk, lb, mt)
             if mk == best_overall:
                 row = row.replace("<tr>", "<tr class='win'>")
@@ -132,9 +141,9 @@ def render():
                      f"<td>{rbi if rbi is not None else '—'}</td></tr>")
         s.append("</table>")
 
-        labels = ["multi-tree", "ring 单向", "ring 双向",
-                  f"hybrid 单向\nB={bu_B}", f"hybrid 双向\nB={bb_B}"]
-        values = [mt, d["ring_uni"]["makespan"], d["ring_bi"]["makespan"], bu, bb]
+        labels = ["multi-tree", "ring\n双向", f"hybrid\nB={bu_B}(单)", f"hybrid\nB={bb_B}(双)",
+                  "quad 单向", "quad 双向"]
+        values = [mt, d["ring_bi"]["makespan"], bu, bb, qu, qb]
         s.append(bar_chart(f"0-buffer makespan @ ramp_bw={rb}（越低越好）", labels, values, lb=lb))
         s.append("</div>")
 
@@ -144,22 +153,29 @@ def render():
     b1B, b1 = min([(int(B), v["makespan"]) for B, v in d1["hybrid_bi"].items()] +
                   [(int(B), v["makespan"]) for B, v in d1["hybrid_uni"].items()], key=lambda t: t[1])
     bu2_B, bu2 = best_hybrid(d2, "hybrid_uni")
+    q1 = min(d1["quad_uni"]["makespan"], d1["quad_bi"]["makespan"])
+    q2 = min(d2["quad_uni"]["makespan"], d2["quad_bi"]["makespan"])
     s.append("<div class='card'><h2>结论</h2><ul>"
-             f"<li><b>0-buffer 约束下，hybrid 反而最优</b>：BW=1 时 hybrid 最优 ≈ <b>{b1}</b> "
+             f"<li><b>0-buffer 约束下，hybrid（行带）整体最优</b>：BW=1 时 hybrid 最优 ≈ <b>{b1}</b> "
              f"(B={b1B})，比 multi-tree 的 {mt1} 快 <b>{mt1/b1:.2f}×</b>，比纯环（{d1['ring_uni']['makespan']}/{d1['ring_bi']['makespan']}）更快；"
              f"BW=2 时 hybrid 最优 ≈ <b>{bu2}</b> (单向 B={bu2_B})，优于 multi-tree {mt2}。</li>"
+             f"<li><b>quad 4×(8×8)环 + 中心交换：可行且居中</b>。单向 {d1['quad_uni']['makespan']}（BW 无关），"
+             f"双向 BW=1 {d1['quad_bi']['makespan']} / BW=2 {d2['quad_bi']['makespan']}。"
+             f"它优于纯环、与 multi-tree 同档（BW=1 时 quad 单向 {d1['quad_uni']['makespan']} 还略快于 multi-tree {mt1}），"
+             f"但不及最佳行带 hybrid。原因：<b>中心 4-环是唯一的跨象限通道</b>——每条中心链路要时分承载 ~2 个象限块（≈128 flit），"
+             "且每条 flit 要走“本象限环 + 中心跳 + 对端象限环”两段绕行，<b>延迟受象限环周长主导</b>；"
+             "单向 quad 因此被绕行延迟卡在 717（加带宽也不降，瓶颈是延迟非下泄）。</li>"
              "<li><b>为什么带 buffer 最强的 multi-tree 在 0-buffer 下变弱？</b> multi-tree 每个源的足迹横跨整张网"
              f"（直径 = {(mx-1)*h+(my-1)*v} cycle），刚性时隙铺得又宽又满，单偏移很难把 256 个宽足迹彼此错开，"
              "贪心打包后被迫拉大注入偏移 → makespan 远离下界（约 3× 下界）。</li>"
-             "<li><b>hybrid 赢在“局部性”</b>：带内小环 + 短纵向树的足迹紧凑（时间跨度小、占用稀疏），"
-             "刚性打包时彼此更易错开，因此更接近 eject 下界（最优档约 1.6× 下界）。"
-             "存在最优带数：B 太小→局部环过长（足迹宽），B 太大→全局树纵向跨度与下泄量上升；二者权衡出谷底。</li>"
-             "<li><b>纯环</b>：单向环足迹长（绕行整周），始终最差（1474）；双向环减半（754），但仍不及 hybrid。</li>"
-             "<li><b>带宽加倍（1→2）</b>对所有方案都有效（下界 255→128），multi-tree 与 hybrid 均显著下降；"
-             "hybrid 的最优带数随带宽变化（BW=1 偏向较少带、双向局部环；BW=2 偏向较多带、单向局部环）。</li>"
-             "<li><b>选型</b>：若网络<b>允许路由器 buffer</b>，multi-tree（带 buffer 命中下界）最优；"
-             "若硬性要求<b>0 buffer / 完全刚性时隙</b>，<b>hybrid 局部环+全局树</b>是更好的选择——"
-             "局部性让它在无缓存约束下既可调度又更快。</li>"
+             "<li><b>共同规律——局部性决定 0-buffer 表现</b>：足迹越紧凑（时间跨度小、占用稀疏）越易刚性错开。"
+             "行带 hybrid 足迹最紧凑（最优档 ≈1.6× 下界）；quad 次之（两段象限环绕行偏长）；"
+             "multi-tree 足迹最宽（≈3× 下界）。</li>"
+             "<li><b>纯环</b>：单向环足迹长（绕行整周），始终最差（1474）；双向环减半（754）。</li>"
+             "<li><b>带宽加倍（1→2）</b>仅对“受下泄约束”的方案有效（下界 255→128）：multi-tree、hybrid、quad-双向 均下降；"
+             "而 quad-单向受<b>延迟</b>约束，加带宽无效（恒 717）。</li>"
+             "<li><b>选型</b>：允许路由器 buffer → multi-tree（命中下界）最优；硬性 0-buffer/刚性时隙 → "
+             "<b>行带 hybrid</b> 最优，<b>quad 4×(8×8)+中心交换</b> 是结构规整、布局对称的次优折中（适合物理上天然 4 象限的版图）。</li>"
              "</ul>"
              "<p style='color:#64748b;font-size:12px'>注：0-buffer makespan 为“多种源排序贪心刚性打包”的可行上界（已验证无冲突 + 0 buffer + 每节点下泄 N−1）；"
              "脚本 <code>utils/sched_zerobuf_compare.py</code>，数据缓存 <code>results/zerobuf_16x16.json</code>。</p></div>")
