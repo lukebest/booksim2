@@ -60,6 +60,75 @@ def scheme_row(name, mk, lb, mt):
     return f"<tr><td>{html.escape(SCHEME_LABEL.get(name, name))}</td><td>{mk}</td><td>{ratio_lb}</td><td>{ratio_mt}</td></tr>"
 
 
+def fused_section():
+    """时分流水模型下的 8x8 环单元 与 4 环中心交换融合 的总时延分析。"""
+    import sim_fused_rings as fr
+
+    fr.cfg(8, 8, 4, 6)
+    o8 = fr.ham_cycle_rect(0, 0, 8, 8)
+    r8u = fr.ring_allgather(o8, 1, False)
+    r8b = fr.ring_allgather(o8, 1, True)
+    fr.cfg(16, 16, 4, 6)
+    fu = fr.fused_4ring(1, False)
+    fb = fr.fused_4ring(1, True)
+    bu = fr.border_fused_4ring(1, False)
+    bb1 = fr.border_fused_4ring(1, True)
+    bb2 = fr.border_fused_4ring(2, True)
+
+    out = ["<div class='card'><h2>时分融合分析：8×8 环单元 + 4 环中心交换的“一圈 / 两圈”问题</h2>"]
+    out.append(
+        "<p><b>模型</b>：事件驱动的全局 link-time calendar（无冲突、网内 fork、每条 link 1 flit/cy、"
+        "每节点下 ramp ramp_bw flit/cy），允许同一条 link 被不同源的 flit <b>时分复用</b>"
+        "（即“时分地插入其他环的数据”）。这是<b>流水/时分</b>的理想时延；严格 0-buffer 刚性版即上文的 "
+        "quad（717/1097）。脚本 <code>utils/sim_fused_rings.py</code>。</p>")
+
+    out.append("<h3>① 8×8 Hamilton 环 allgather 单元（64 节点，独立）</h3><table>"
+               "<tr><th>方向</th><th>makespan</th><th>一圈周长</th><th>busiest link</th><th>说明</th></tr>")
+    out.append(f"<tr><td>单向</td><td>{r8u['makespan']}</td><td>{r8u['circ']}</td><td>{r8u['busiest_link']}</td>"
+               f"<td>≈ <b>一整圈</b>（{r8u['makespan']}≈周长{r8u['circ']}）；带宽 63≪周长，延迟主导</td></tr>")
+    out.append(f"<tr><td>双向</td><td>{r8b['makespan']}</td><td>{r8b['circ']}</td><td>{r8b['busiest_link']}</td>"
+               f"<td>≈ <b>半圈</b>（两侧各走一半）</td></tr>")
+    out.append("</table>")
+
+    out.append("<h3>② 16×16 分 4 个 8×8 环：中心交换 vs 边界多点注入（256 节点）</h3>"
+               "<p><b>(a) 中心单点交换</b>：外部数据只从中心 4 个角注入，进入对端环后再绕近一圈分发。<br>"
+               "<b>(b) 边界多点注入</b>：本方案——外部数据沿象限<b>共享边界的 8 个点</b>跨界，"
+               "进入对端后只需沿该行/列<b>短弧</b>分发（≪一圈），对角象限经水平邻居二跳到达。</p>"
+               "<table><tr><th>方案</th><th>方向</th><th>总 makespan</th><th>busiest ring-link</th>"
+               "<th>busiest down-ramp</th><th>≈ 圈数</th></tr>")
+    out.append(f"<tr><td>(a) 中心单点</td><td>单向</td><td>{fu['makespan']}</td><td>{fu['busiest_link']}</td>"
+               f"<td>{fu['busiest_down']}</td><td>≈ 2 圈（≈2×{r8u['makespan']}）</td></tr>")
+    out.append(f"<tr><td>(a) 中心单点</td><td>双向</td><td>{fb['makespan']}</td><td>{fb['busiest_link']}</td>"
+               f"<td>{fb['busiest_down']}</td><td>≈ 2 半圈</td></tr>")
+    out.append(f"<tr class='win'><td><b>(b) 边界多点</b></td><td>单向</td><td><b>{bu['makespan']}</b></td>"
+               f"<td>{bu['busiest_link']}</td><td>{bu['busiest_down']}</td>"
+               f"<td>≈ <b>1 圈 + 尾</b>（{bu['makespan']}≈{r8u['makespan']}+{bu['makespan']-r8u['makespan']}）</td></tr>")
+    out.append(f"<tr class='win'><td><b>(b) 边界多点</b></td><td>双向</td><td><b>{bb1['makespan']}</b></td>"
+               f"<td>{bb1['busiest_link']}</td><td>{bb1['busiest_down']}</td>"
+               f"<td>≈ 半圈 + 尾（BW=2 时 {bb2['makespan']}）</td></tr>")
+    out.append("</table>")
+    out.append("<p style='color:#64748b;font-size:12px'>注：中心方案在 ramp_bw=1/2 下 makespan 不变（延迟受限）；"
+               f"边界双向在 BW=1→2 时 {bb1['makespan']}→{bb2['makespan']}（接近 eject 下界，下泄略有作用）。</p>")
+
+    out.append(
+        "<h3>关键结论：中心单点 = 两圈；边界多点 = 一圈 + 尾</h3><ul>"
+        "<li><b>带宽上一圈本就够</b>：每条环 link 仅需承载 局部 63 + 外部 192 = 255 flit < 一圈容量 "
+        f"{r8u['circ']}，带宽不是瓶颈。</li>"
+        "<li><b>中心单点注入 → 延迟必须两圈</b>：外部数据只能从中心 4 角进入，进对端环后要覆盖其 64 个节点"
+        f"必须再绕近一圈，最坏路径 ≈ 自身环 1 圈 + 对端环 1 圈 = 2 圈（实测单向 {fu['makespan']}≈2×{r8u['makespan']}）。</li>"
+        f"<li><b>边界多点注入 → 真正做到“一圈 + 尾”</b>：外部数据沿共享边界 8 点同时跨界，"
+        f"对端只需沿行/列短弧（≤7 跳）分发。最坏路径 ≈ 自身环 1 圈 + 跨界 + 短弧 ≈ 一圈 + 小尾。"
+        f"实测单向 <b>{bu['makespan']}</b>（≈8×8 一圈 {r8u['makespan']} + {bu['makespan']-r8u['makespan']} 尾），"
+        f"较中心方案 {fu['makespan']} <b>提速 {fu['makespan']/bu['makespan']:.2f}×</b>；"
+        f"busiest link 从 {fu['busiest_link']} 降到 {bu['busiest_link']}（负载也更均衡）。</li>"
+        f"<li><b>边界 + 双向最佳</b>：BW=1 {bb1['makespan']}、BW=2 <b>{bb2['makespan']}</b>，"
+        f"已逼近 eject 下界区间（{(256-1)//1}/{(256-1+1)//2}），并优于时分中心方案与严格 0-buffer 各方案。</li>"
+        "<li><b>代价</b>：边界多点注入用满了象限共享边界的 8 条跨界链路并在对端做行/列分发——"
+        "本质上是把“环 + 局部树”结合，结构比“中心 4 环”略复杂，但仍是规整的象限化布局。</li>"
+        "</ul></div>")
+    return "\n".join(out)
+
+
 def render():
     payload = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     mx, my, h, v, n = payload["mx"], payload["my"], payload["h"], payload["v"], payload["n"]
@@ -146,6 +215,8 @@ def render():
         values = [mt, d["ring_bi"]["makespan"], bu, bb, qu, qb]
         s.append(bar_chart(f"0-buffer makespan @ ramp_bw={rb}（越低越好）", labels, values, lb=lb))
         s.append("</div>")
+
+    s.append(fused_section())
 
     # conclusions
     d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
