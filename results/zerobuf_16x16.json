@@ -1,0 +1,123 @@
+{
+  "mx": 16,
+  "my": 16,
+  "h": 4,
+  "v": 6,
+  "n": 256,
+  "bw": {
+    "1": {
+      "ramp_bw": 1,
+      "eject_lb": 255,
+      "multitree": {
+        "makespan": 837,
+        "order": "col",
+        "ok": true
+      },
+      "ring_uni": {
+        "makespan": 1474,
+        "ok": true
+      },
+      "ring_bi": {
+        "makespan": 754,
+        "ok": true
+      },
+      "hybrid_uni": {
+        "1": {
+          "makespan": 1474,
+          "ok": true
+        },
+        "2": {
+          "makespan": 755,
+          "ok": true
+        },
+        "4": {
+          "makespan": 863,
+          "ok": true
+        },
+        "8": {
+          "makespan": 848,
+          "ok": true
+        }
+      },
+      "hybrid_bi": {
+        "1": {
+          "makespan": 754,
+          "ok": true
+        },
+        "2": {
+          "makespan": 416,
+          "ok": true
+        },
+        "4": {
+          "makespan": 815,
+          "ok": true
+        },
+        "8": {
+          "makespan": 942,
+          "ok": true
+        },
+        "16": {
+          "makespan": 667,
+          "ok": true
+        }
+      }
+    },
+    "2": {
+      "ramp_bw": 2,
+      "eject_lb": 128,
+      "multitree": {
+        "makespan": 504,
+        "order": "col",
+        "ok": true
+      },
+      "ring_uni": {
+        "makespan": 1474,
+        "ok": true
+      },
+      "ring_bi": {
+        "makespan": 754,
+        "ok": true
+      },
+      "hybrid_uni": {
+        "1": {
+          "makespan": 1474,
+          "ok": true
+        },
+        "2": {
+          "makespan": 755,
+          "ok": true
+        },
+        "4": {
+          "makespan": 604,
+          "ok": true
+        },
+        "8": {
+          "makespan": 409,
+          "ok": true
+        }
+      },
+      "hybrid_bi": {
+        "1": {
+          "makespan": 754,
+          "ok": true
+        },
+        "2": {
+          "makespan": 801,
+          "ok": true
+        },
+        "4": {
+          "makespan": 777,
+          "ok": true
+        },
+        "8": {
+          "makespan": 506,
+          "ok": true
+        },
+        "16": {
+          "makespan": 504,
+          "ok": true
+        }
+      }
+    }
+  }
+}
