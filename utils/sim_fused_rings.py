@@ -117,6 +117,63 @@ def simulate(deliveries, ramp_bw):
 
 
 # ---------------------------------------------------------------------------
+def measure_buffers(deliveries, ramp_bw):
+    """Same event sim, but record how many flits must be HELD (buffered) at a
+    router because a needed output link / down-ramp is busy.
+
+    A flit ready to leave router p on link (p,c) at `ready` but granted the link
+    only at `send` occupies an output buffer at p during [ready, send).  A flit
+    that arrives at c at `arrive` but reaches its down-ramp only at `e` occupies
+    an eject buffer during [arrive, e).  The required buffer depth (in flits) for
+    a port is the max number of such intervals overlapping at once.
+    Returns (makespan, max_link_buf, max_ramp_buf)."""
+    link = Cal(1)
+    down = Cal(ramp_bw)
+    up = Cal(ramp_bw)
+    link_iv = defaultdict(list)
+    ramp_iv = defaultdict(list)
+    pq = []
+    seq = 0
+    avail = {}
+    for s, ch in deliveries.items():
+        inj = up.reserve(s, 0)
+        avail[(s, s)] = inj + RAMP
+        for c in ch.get(s, []):
+            heapq.heappush(pq, (avail[(s, s)], seq, s, s, c))
+            seq += 1
+    makespan = 0
+    while pq:
+        ready, _, s, p, c = heapq.heappop(pq)
+        send = link.reserve((p, c), ready)
+        if send > ready:
+            link_iv[(p, c)].append((ready, send))
+        arrive = send + edge_lat(p, c)
+        e = down.reserve(c, arrive)
+        if e > arrive:
+            ramp_iv[c].append((arrive, e))
+        makespan = max(makespan, e + RAMP)
+        avail[(s, c)] = arrive
+        for g in deliveries[s].get(c, []):
+            heapq.heappush(pq, (arrive, seq, s, c, g))
+            seq += 1
+
+    def max_overlap(ivs):
+        ev = []
+        for a, b in ivs:
+            ev.append((a, 1))
+            ev.append((b, -1))
+        ev.sort()
+        cur = mx = 0
+        for _, d in ev:
+            cur += d
+            mx = max(mx, cur)
+        return mx
+
+    link_buf = max((max_overlap(v) for v in link_iv.values()), default=0)
+    ramp_buf = max((max_overlap(v) for v in ramp_iv.values()), default=0)
+    return makespan, link_buf, ramp_buf
+
+
 def ring_allgather(order, ramp_bw, bidir):
     deliveries = {}
     for s in order:
@@ -146,26 +203,28 @@ def quad_of(s):
     return (0 if sx < _MX // 2 else 1) + (0 if sy < _MY // 2 else 2)
 
 
+def build_quad_delivery(s, bidir, quads, ring4):
+    qi = quad_of(s)
+    q = quads[qi]
+    ch = defaultdict(list)
+    add_ring_chain(ch, q["order"], s, bidir)             # own ring lap
+    own = q["rep"]
+    ci = ring4.index(qi)
+    cw = quads[ring4[(ci + 1) % 4]]
+    op = quads[ring4[(ci + 2) % 4]]
+    cc = quads[ring4[(ci + 3) % 4]]
+    ch[own].append(cw["rep"])                            # cross to cw neighbour
+    ch[own].append(cc["rep"])                            # cross to ccw neighbour
+    add_ring_chain(ch, cw["order"], cw["rep"], bidir)
+    ch[cw["rep"]].append(op["rep"])                      # cw -> opposite
+    add_ring_chain(ch, op["order"], op["rep"], bidir)
+    add_ring_chain(ch, cc["order"], cc["rep"], bidir)
+    return ch
+
+
 def fused_4ring(ramp_bw, bidir):
     quads, ring4 = quad_setup()
-    deliveries = {}
-    for s in range(_MX * _MY):
-        qi = quad_of(s)
-        q = quads[qi]
-        ch = defaultdict(list)
-        add_ring_chain(ch, q["order"], s, bidir)         # own ring lap
-        own = q["rep"]
-        ci = ring4.index(qi)
-        cw = quads[ring4[(ci + 1) % 4]]
-        op = quads[ring4[(ci + 2) % 4]]
-        cc = quads[ring4[(ci + 3) % 4]]
-        ch[own].append(cw["rep"])                        # cross to cw neighbour
-        ch[own].append(cc["rep"])                        # cross to ccw neighbour
-        add_ring_chain(ch, cw["order"], cw["rep"], bidir)
-        ch[cw["rep"]].append(op["rep"])                  # cw -> opposite
-        add_ring_chain(ch, op["order"], op["rep"], bidir)
-        add_ring_chain(ch, cc["order"], cc["rep"], bidir)
-        deliveries[s] = ch
+    deliveries = {s: build_quad_delivery(s, bidir, quads, ring4) for s in range(_MX * _MY)}
     n = _MX * _MY
     mk, ej, bl, bd = simulate(deliveries, ramp_bw)
     ok = all(ej[x] == n - 1 for x in range(n))

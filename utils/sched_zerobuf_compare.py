@@ -196,6 +196,84 @@ def fp_quadrant(s, bidir, ramp_bw):
     return slots
 
 
+def _ring_arrivals(order, pos, s, bidir, ramp_bw):
+    """Rigid local-ring slots + arrival-rel per node (s present at RAMP)."""
+    n = len(order)
+    i = pos[s]
+    d2 = 0 if ramp_bw >= 2 else 1
+    slots = [('U', s, 0)]
+    arr = {s: RAMP}
+    if not bidir:
+        chain = [order[(i + k) % n] for k in range(n)]
+        a, _ = _arc(chain, RAMP)
+        slots += a
+        t = RAMP
+        for k in range(n - 1):
+            t += edge_lat(chain[k], chain[k + 1])
+            arr[chain[k + 1]] = t
+    else:
+        a = n // 2
+        b = (n - 1) - a
+        fwd = [order[(i + k) % n] for k in range(a + 1)]
+        bwd = [order[(i - k) % n] for k in range(b + 1)]
+        slots.append(('U', s, d2))
+        sf, _ = _arc(fwd, RAMP)
+        sb, _ = _arc(bwd, RAMP + d2)
+        slots += sf + sb
+        t = RAMP
+        for k in range(len(fwd) - 1):
+            t += edge_lat(fwd[k], fwd[k + 1])
+            arr[fwd[k + 1]] = t
+        t = RAMP + d2
+        for k in range(len(bwd) - 1):
+            t += edge_lat(bwd[k], bwd[k + 1])
+            arr[bwd[k + 1]] = t
+    return slots, arr
+
+
+def _arc_track(slots, arr_out, start_node, start_rel, xs_or_ys, axis_x, fixed):
+    """Emit a straight arc of nodes (along x if axis_x else y) starting from
+    start_node at start_rel, recording arrival rel of each visited node."""
+    prev = start_node
+    t = start_rel
+    for v in xs_or_ys:
+        cur = nid(v, fixed) if axis_x else nid(fixed, v)
+        slots.append(('L', lk(prev, cur), t))
+        t += edge_lat(prev, cur)
+        slots.append(('D', cur, t))
+        arr_out[cur] = t
+        prev = cur
+
+
+def fp_border(s, bidir, ramp_bw):
+    """4x(8x8) quadrant ring + BORDER multi-point injection (rigid 0-buffer form
+    of sim_fused_rings.build_border_delivery)."""
+    hw, hh = MX // 2, MY // 2
+    sx, sy = coord(s)
+    qx0, qy0 = (0 if sx < hw else hw), (0 if sy < hh else hh)
+    order = ham_cycle_rect(qx0, qy0, hw, hh)
+    pos = {nd: k for k, nd in enumerate(order)}
+    slots, arr = _ring_arrivals(order, pos, s, bidir, ramp_bw)
+
+    if qx0 == 0:
+        bxQ, arc_xs = hw - 1, list(range(hw, 2 * hw))
+    else:
+        bxQ, arc_xs = hw, list(range(hw - 1, -1, -1))
+    if qy0 == 0:
+        byQ, arc_ys = hh - 1, list(range(hh, 2 * hh))
+    else:
+        byQ, arc_ys = hh, list(range(hh - 1, -1, -1))
+
+    arrH = {}
+    for y in range(qy0, qy0 + hh):                       # horizontal neighbour QH
+        _arc_track(slots, arrH, nid(bxQ, y), arr[nid(bxQ, y)], arc_xs, True, y)
+    for x in range(qx0, qx0 + hw):                       # vertical neighbour QV
+        _arc_track(slots, {}, nid(x, byQ), arr[nid(x, byQ)], arc_ys, False, x)
+    for x in arc_xs:                                     # diagonal QD via QH
+        _arc_track(slots, {}, nid(x, byQ), arrH[nid(x, byQ)], arc_ys, False, x)
+    return slots
+
+
 # --------------------------------------------------------------------------
 # Footprints: list of ('L', linkkey, rel) / ('D', node, rel) / ('U', node, rel)
 # --------------------------------------------------------------------------

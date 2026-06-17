@@ -54,6 +54,120 @@ def bar_chart(title, labels, values, lb=None):
     return "\n".join(p)
 
 
+DIA_PAL = ["#2563eb", "#16a34a", "#d97706", "#9333ea"]
+BAND_BG = ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"]
+
+
+def _dia_defs():
+    m = []
+    for name, col in (("r", "#dc2626"), ("g", "#15803d"), ("o", "#ea580c")):
+        m.append(f'<marker id="ah-{name}" markerWidth="8" markerHeight="8" refX="5.5" refY="2.5" '
+                 f'orient="auto"><path d="M0,0 L5.5,2.5 L0,5 z" fill="{col}"/></marker>')
+    return "<defs>" + "".join(m) + "</defs>"
+
+
+def _grid(MX, MY, cell, shade):
+    pad, topgap = 28, 24
+    W = MX * cell + 2 * pad
+    Ht = MY * cell + 2 * pad + topgap
+    px = lambda x: pad + x * cell + cell / 2
+    py = lambda y: topgap + pad + (MY - 1 - y) * cell + cell / 2
+    el = []
+    for (sx, sy, sw, sh, col) in shade:
+        x = pad + sx * cell
+        y = topgap + pad + (MY - sy - sh) * cell
+        el.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{sw*cell:.1f}" height="{sh*cell:.1f}" '
+                  f'fill="{col}" stroke="#e2e8f0"/>')
+    for yy in range(MY):
+        for xx in range(MX):
+            el.append(f'<circle cx="{px(xx):.1f}" cy="{py(yy):.1f}" r="1.7" fill="#cbd5e1"/>')
+    return W, Ht, px, py, el
+
+
+def _poly(order, px, py, coord, color, close=True):
+    pts = []
+    for nd in order:
+        x, y = coord(nd)
+        pts.append(f"{px(x):.1f},{py(y):.1f}")
+    if close:
+        x, y = coord(order[0])
+        pts.append(f"{px(x):.1f},{py(y):.1f}")
+    return f'<polyline points="{" ".join(pts)}" fill="none" stroke="{color}" stroke-width="1.7"/>'
+
+
+def _arrow(x1, y1, x2, y2, marker, color, both=False, dash=""):
+    ms = f' marker-start="url(#{marker})"' if both else ""
+    da = f' stroke-dasharray="{dash}"' if dash else ""
+    return (f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{color}" '
+            f'stroke-width="1.3" marker-end="url(#{marker})"{ms}{da}/>')
+
+
+def _svg(title, W, Ht, body):
+    return (f'<svg width="{W}" height="{Ht}" xmlns="http://www.w3.org/2000/svg">' + _dia_defs() +
+            f'<text x="10" y="16" font-size="12" font-weight="bold" fill="#1e3a8a">{html.escape(title)}</text>' +
+            "".join(body) + "</svg>")
+
+
+def scheme_diagrams():
+    import sim_fused_rings as fr
+    fr.cfg(16, 16, 4, 6)
+    coord = fr.coord
+    cell = 23
+
+    # ---- (1) hybrid, illustrated with B=4 bands ----
+    shade = [(0, b * 4, 16, 4, BAND_BG[b]) for b in range(4)]
+    W, Ht, px, py, el = _grid(16, 16, cell, shade)
+    for b in range(4):
+        el.append(_poly(fr.ham_cycle_rect(0, b * 4, 16, 4), px, py, coord, DIA_PAL[b]))
+    for x in (1, 5, 9, 13):                       # per-column vertical tree (phase B)
+        el.append(_arrow(px(x), py(0), px(x), py(15), "ah-o", "#ea580c", both=True, dash="4 3"))
+    for b in range(4):
+        el.append(f'<text x="6" y="{py(b*4+2):.1f}" font-size="10" fill="#475569">带{b}</text>')
+    dia1 = _svg("① hybrid 局部环 + 全局树（示例 B=4）", W, Ht, el)
+
+    # ---- (2) quad: 4 rings + central 4-ring exchange ----
+    qspec = [(0, 0), (8, 0), (0, 8), (8, 8)]
+    shade = [(qx, qy, 8, 8, BAND_BG[i]) for i, (qx, qy) in enumerate(qspec)]
+    W, Ht, px, py, el = _grid(16, 16, cell, shade)
+    for i, (qx, qy) in enumerate(qspec):
+        el.append(_poly(fr.ham_cycle_rect(qx, qy, 8, 8), px, py, coord, DIA_PAL[i]))
+    ring4 = [(7, 7), (8, 7), (8, 8), (7, 8)]      # central 4-cycle of inner corners
+    for k in range(4):
+        ax, ay = ring4[k]
+        bx, by = ring4[(k + 1) % 4]
+        el.append(_arrow(px(ax), py(ay), px(bx), py(by), "ah-r", "#dc2626"))
+    for cx, cy in ring4:
+        el.append(f'<circle cx="{px(cx):.1f}" cy="{py(cy):.1f}" r="3.6" fill="#dc2626"/>')
+    dia2 = _svg("② quad 4×(8×8) 环 + 中心交换", W, Ht, el)
+
+    # ---- (3) border: 4 rings + multi-point border injection ----
+    W, Ht, px, py, el = _grid(16, 16, cell, shade)
+    for i, (qx, qy) in enumerate(qspec):
+        el.append(_poly(fr.ham_cycle_rect(qx, qy, 8, 8), px, py, coord, DIA_PAL[i]))
+    for y in range(0, 16, 2):                     # vertical shared border (x:7<->8)
+        el.append(_arrow(px(7), py(y), px(8), py(y), "ah-g", "#15803d", both=True))
+    for x in range(0, 16, 2):                     # horizontal shared border (y:7<->8)
+        el.append(_arrow(px(x), py(7), px(x), py(8), "ah-g", "#15803d", both=True))
+    dia3 = _svg("③ border 4×(8×8) 环 + 边界多点注入", W, Ht, el)
+
+    out = ["<div class='card'><h2>三种方案结构示意图（16×16 mesh）</h2>",
+           "<p>灰点＝节点；彩色实线环＝各子区的 Hamilton 环投递；箭头＝跨带 / 跨象限的数据注入。</p>",
+           "<div style='display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start'>"]
+    out.append("<figure style='margin:0;max-width:400px'>" + dia1 +
+               "<figcaption style='font-size:12px;color:#475569'>4 个水平带各跑局部 Hamilton 环（彩色，①阶段）；"
+               "每列再向上下相邻带做<b>树广播</b>（橙色虚线双向箭头，②阶段）互换各带块。实际取最优 B（见上表）。</figcaption></figure>")
+    out.append("<figure style='margin:0;max-width:400px'>" + dia2 +
+               "<figcaption style='font-size:12px;color:#475569'>4 象限各跑 8×8 环；4 个最内角 (7,7)(8,7)(8,8)(7,8) "
+               "构成<b>中心 4-环</b>（红箭头），象限块经中心<b>时分</b>互传，进入对端后需<b>再绕近一圈</b>分发"
+               "→ 延迟≈两圈。</figcaption></figure>")
+    out.append("<figure style='margin:0;max-width:400px'>" + dia3 +
+               "<figcaption style='font-size:12px;color:#475569'>同样 4 象限环，但外部数据沿两条<b>共享边界的多个点</b>"
+               "跨界（绿色双向箭头遍布边界），对端只需沿该行/列<b>短弧</b>分发（≪一圈），对角象限经水平邻居二跳到达"
+               "→ 延迟≈一圈+尾。</figcaption></figure>")
+    out.append("</div></div>")
+    return "\n".join(out)
+
+
 def scheme_row(name, mk, lb, mt):
     ratio_lb = f"{mk/lb:.2f}×"
     ratio_mt = "基准" if name == "multitree" else f"{mk/mt:.2f}×"
@@ -145,7 +259,7 @@ def _cell(v, is_min):
     return f"<td class='win'>{v}</td>" if is_min else f"<td>{v}</td>"
 
 
-def summary_table(payload, td):
+def summary_table(payload, td, border_zb):
     """The centerpiece: every scheme's makespan for each ramp bandwidth, with the
     strict-0-buffer column and the time-division column side by side."""
     d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
@@ -174,8 +288,10 @@ def summary_table(payload, td):
          d2["quad_uni"]["makespan"], td[2]["quad_uni"]),
         ("quad 中心交换（双向）", d1["quad_bi"]["makespan"], td[1]["quad_bi"],
          d2["quad_bi"]["makespan"], td[2]["quad_bi"]),
-        ("border 边界多点（单向）", None, td[1]["border_uni"], None, td[2]["border_uni"]),
-        ("border 边界多点（双向）", None, td[1]["border_bi"], None, td[2]["border_bi"]),
+        ("border 边界多点（单向）", border_zb[(1, "uni")], td[1]["border_uni"],
+         border_zb[(2, "uni")], td[2]["border_uni"]),
+        ("border 边界多点（双向）", border_zb[(1, "bi")], td[1]["border_bi"],
+         border_zb[(2, "bi")], td[2]["border_bi"]),
     ]
     cols = [[r[i] for r in rows if r[i] is not None] for i in range(1, 5)]
     mins = [min(c) for c in cols]
@@ -195,8 +311,8 @@ def summary_table(payload, td):
             note = f" <span style='color:#64748b;font-size:11px'>(0-buf {zb1h_tag} / {zb2h_tag})</span>"
         out.append(f"<tr><td>{html.escape(label)}{note}</td>{cells}</tr>")
     out.append("</table>")
-    out.append("<p style='color:#64748b;font-size:12px'>注：border（边界多点注入）只在时分模型评估，"
-               "故其 0-buf 刚性列留空（—）。8×8 独立环参考：单向一圈 354、双向半圈 186 cycle。</p>")
+    out.append("<p style='color:#64748b;font-size:12px'>注：所有方案（含 border）都有可行的严格 0-buf 刚性调度；"
+               "8×8 独立环参考：单向一圈 354、双向半圈 186 cycle。</p>")
     out.append("</div>")
     return "\n".join(out), (zb1h, zb2h, td1h, td2h)
 
@@ -235,11 +351,91 @@ def insights_section(payload, td):
     return "\n".join(out)
 
 
+def _border_zb():
+    """Strict 0-buffer (rigid packer) makespan for the border scheme."""
+    import sched_zerobuf_compare as Z
+    Z.cfg(16, 16, 4, 6)
+    Z.init_ring()
+    Z.init_quadrants()
+    out = {}
+    for rb in (1, 2):
+        for bidir, key in ((False, "uni"), (True, "bi")):
+            out[(rb, key)] = Z.run_scheme(lambda s, bd=bidir, r=rb: Z.fp_border(s, bd, r), rb)[0]
+    return out
+
+
+def buffer_section(payload, border_zb):
+    """Can hybrid / quad / border be 0-buffer, and how many flits of buffer do the
+    faster time-division schedules consume?"""
+    import sim_fused_rings as fr
+    fr.cfg(16, 16, 4, 6)
+    full = fr.ham_cycle_rect(0, 0, 16, 16)
+    quads, ring4 = fr.quad_setup()
+
+    def meas(builder, rb):
+        return fr.measure_buffers({s: builder(s) for s in range(256)}, rb)
+
+    def hybrid_meas(rb):
+        best = None
+        for B in (2, 4, 8):
+            r = meas(lambda s, B=B: fr.build_hybrid_delivery(s, B, True), rb)
+            if best is None or r[0] < best[0]:
+                best = r
+        return best
+
+    out = ["<div class='card'><h2>这些方案能做到 0-buffer 吗？需要多少 buffer（flit）？</h2>"]
+    out.append("<p><b>结论先行</b>：hybrid、quad 中心交换、border 边界多点<b>都能</b>做到严格 0-buffer"
+               "（路由器零缓存，仅靠源端注入偏移调度）——即上方“0-buf 刚性”列；代价是 makespan 偏高。"
+               "只有为了拿到更快的<b>时分</b> makespan 才需要路由器 buffer，所需量主要由<b>下 Ramp 带宽</b>决定。</p>")
+    out.append("<p>buffer 分两处：<b>link buffer</b>＝某输出端口同时排队等链路的 flit 数（在网）；"
+               "<b>eject buffer</b>＝某节点到达后等下 ramp 下泄的 flit 数（NI 队列）。"
+               "下表为达到时分 makespan 时的<b>峰值</b>占用。</p>")
+    out.append("<table><tr><th>方案</th><th>下Ramp带宽</th><th>时分 makespan</th>"
+               "<th>link buffer<br>(flit/端口)</th><th>eject buffer<br>(flit/节点)</th>"
+               "<th>同方案严格 0-buf makespan</th></tr>")
+    for rb in (1, 2):
+        zb = payload["bw"][str(rb)]
+        hyb_zb = min([x["makespan"] for x in zb["hybrid_uni"].values()] +
+                     [x["makespan"] for x in zb["hybrid_bi"].values()])
+        rows = [
+            ("dimensional multi-tree", meas(fr.build_multitree_delivery, rb), zb["multitree"]["makespan"]),
+            ("hybrid 行带（双向,最优）", hybrid_meas(rb), hyb_zb),
+            ("quad 中心交换（单向）", meas(lambda s: fr.build_quad_delivery(s, False, quads, ring4), rb), zb["quad_uni"]["makespan"]),
+            ("quad 中心交换（双向）", meas(lambda s: fr.build_quad_delivery(s, True, quads, ring4), rb), zb["quad_bi"]["makespan"]),
+            ("border 边界多点（单向）", meas(lambda s: fr.build_border_delivery(s, False), rb), border_zb[(rb, "uni")]),
+            ("border 边界多点（双向）", meas(lambda s: fr.build_border_delivery(s, True), rb), border_zb[(rb, "bi")]),
+            ("纯 Hamilton 环（双向,参考）", meas(lambda s: fr.build_ring_delivery(full, s, True), rb), zb["ring_bi"]["makespan"]),
+        ]
+        for label, (mk, lb, eb), zbmk in rows:
+            hot = " class='win'" if (lb <= 2 and eb <= 2) else ""
+            out.append(f"<tr{hot}><td>{html.escape(label)}</td><td>{rb}</td><td>{mk}</td>"
+                       f"<td>{lb}</td><td>{eb}</td><td>{zbmk}</td></tr>")
+    out.append("</table>")
+    out.append("<p style='color:#64748b;font-size:12px'>绿底＝该 makespan 几乎无需路由器 buffer（link 与 eject 均 ≤2 flit）。</p>")
+    out.append(
+        "<ul>"
+        "<li><b>都能 0-buffer</b>：三方案的“严格 0-buf makespan”均为已验证可行的刚性调度"
+        "（无冲突、无阻塞、每节点下泄 N−1）。所以答案是——<b>做得到 0-buffer，只是更慢</b>。</li>"
+        "<li><b>真正吃 buffer 的是 eject 队列，且由带宽决定</b>：BW=1 要逼近 eject 下界 255，"
+        "flit 到达速率远超 1 flit/cy 的下泄，节点被迫排队——multi-tree / hybrid 需 <b>~120 flit</b> 的 eject buffer，"
+        "quad / border 双向需 <b>~74 flit</b>；BW=2 下泄翻倍后，eject buffer 骤降到 <b>≤20 flit</b>。"
+        "这是“逼近下界”的内在代价，与具体拓扑无关。</li>"
+        "<li><b>border 最省 buffer</b>：BW=2 双向仅 ~2 flit 即达 267；单向几乎 0-buffer（≤2 flit）就能流水到 437——"
+        "投递沿短弧均匀铺开、不突发。</li>"
+        "<li><b>quad 中心双向 link buffer 偏高（44 flit）</b>：中心 4-环是唯一跨象限通道，被多源时分挤占，"
+        "链路前排起 ~44 flit 队列——这是“单点交换”的结构代价。</li>"
+        "<li><b>纯环天然 0-buffer</b>：link/eject buffer ≈0（节奏自然均匀），但慢（754）。"
+        "<b>规律：投递越均匀/越慢越省 buffer；越快越逼近下界越费 buffer。</b></li>"
+        "</ul></div>")
+    return "\n".join(out)
+
+
 def render():
     payload = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     mx, my, h, v, n = payload["mx"], payload["my"], payload["h"], payload["v"], payload["n"]
     bw_keys = sorted(payload["bw"].keys(), key=int)
     td = _td_makespans()
+    border_zb = _border_zb()
 
     s = ["<!DOCTYPE html><html><head><meta charset='utf-8'>",
          "<title>16x16 Allgather Comparison</title>",
@@ -276,9 +472,12 @@ def render():
              "对端只需沿行/列<b>短弧</b>分发（≪一圈），逼近“一圈 + 尾”。</li>"
              "</ul></div>")
 
-    summary_html, _ = summary_table(payload, td)
+    s.append(scheme_diagrams())
+
+    summary_html, _ = summary_table(payload, td, border_zb)
     s.append(summary_html)
     s.append(insights_section(payload, td))
+    s.append(buffer_section(payload, border_zb))
 
     # corrected conclusions
     d1, d2 = payload["bw"]["1"], payload["bw"]["2"]
@@ -299,8 +498,11 @@ def render():
              f"（直径 {(mx-1)*h+(my-1)*v} cycle），又宽又满，256 个宽足迹难以单偏移错开 → 约 3× 下界。</li>"
              f"<li><b>quad 中心交换居中</b>：单向恒 {d1['quad_uni']['makespan']}（延迟受象限环周长主导，加带宽无效），"
              f"双向 0-buf 反而更差（BW=1 {d1['quad_bi']['makespan']}）。可行、规整、对称，但中心 4-环是唯一跨象限通道，受两段绕行延迟约束。</li>"
+             "<li><b>0-buffer 可行性</b>：三种方案都能做到严格 0-buffer（仅源端注入偏移），代价是更高 makespan；"
+             "要达到时分快档才需路由器 buffer，量主要由下 Ramp 带宽决定——BW=1 逼近下界需 ~120 flit eject 队列，"
+             "BW=2 降到 ≤20 flit，border 最省（≤2 flit）。详见下节。</li>"
              "<li><b>选型</b>：可缓存 → multi-tree / hybrid；硬性 0-buffer 刚性 → <b>hybrid 行带</b>；"
-             "要规整 4 象限版图又接近最优延迟 → <b>border 边界多点</b>（时分）。</li>"
+             "要规整 4 象限版图又接近最优延迟、且 buffer 预算小 → <b>border 边界多点</b>（时分）。</li>"
              "</ul></div>")
 
     # ---- appendix: detailed 0-buffer tables / B-sweep / charts ----
