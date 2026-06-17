@@ -426,7 +426,17 @@ def buffer_section(payload, border_zb):
         "链路前排起 ~44 flit 队列——这是“单点交换”的结构代价。</li>"
         "<li><b>纯环天然 0-buffer</b>：link/eject buffer ≈0（节奏自然均匀），但慢（754）。"
         "<b>规律：投递越均匀/越慢越省 buffer；越快越逼近下界越费 buffer。</b></li>"
-        "</ul></div>")
+        "</ul>")
+    out.append(
+        "<p style='color:#475569;font-size:12px;border-left:3px solid #15803d;padding-left:8px'>"
+        "<b>border 多播的 0-buffer 已逐 cycle 验证</b>：border 在每个边界节点会把 flit 同时<b>多播</b>到"
+        "“环的下一跳 + 跨界注入 + 对角下钻”等多个输出端口。已对全部 256 源 ×（单/双向）×（BW 1/2）"
+        "= 1024 例逐源核验——每次 fork 都发生在 flit <b>到达的同一 cycle</b>（零等待）、每个节点恰好被投递一次、"
+        "每节点下泄 N−1；再对打包后的全局调度逐 cycle 核验——每条有向 link ≤1 flit、每条上/下 ramp ≤ 带宽。"
+        "故严格刚性 border（782/628/702/603）确为<b>无阻塞、无冲突、路由器 0 buffer</b>。"
+        "多播扇出按“到达即组合复制 / 直通”建模（扇出计入单跳延迟），与 multi-tree、hybrid 的树完全同理。"
+        "<br><b>注意</b>：报告中更快的 border（时分 283/267）属<b>缓存模型</b>，<b>不是</b> 0-buffer——其 buffer 需求见上表。</p>")
+    out.append("</div>")
     return "\n".join(out)
 
 
