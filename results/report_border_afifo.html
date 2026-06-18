@@ -1,0 +1,92 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'>
+<title>Border + AFIFO Allgather Min Makespan</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1050px;}h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;text-align:center;}th{background:#e2e8f0;}.card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}.win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}ol li,ul li{margin:6px 0;}td.l{text-align:left;}</style></head><body>
+<h1>border 4-环 + 跨界 AFIFO 的最小 makespan（H=4, V=6）</h1>
+<div class='card'><h2>模型与规则</h2><ul><li><b>4 个象限 Hamilton 环</b>（4×4→2×2、8×8→4×4、16×16→8×8 每象限），环<b>内部 0-buffer、无冲突、无阻塞</b>（每条有向环 link 每 cycle ≤1 flit）。</li><li><b>跨边界为 AFIFO</b>，可缓存 <b>depth=5</b> flit：到边界即可写入 AFIFO 跨到相邻环，相邻环一有<b>空闲时隙</b>就读出上环；各 AFIFO <b>负载均衡</b>。</li><li><b>多点注入 + 短弧覆盖</b>：flit 沿共享边界多个节点跨界，用短弧合并覆盖相邻环；<b>对角环</b>经中间相邻环间接到达（生命周期含相邻环 + 对角环遍历）。</li><li><b>方向跟随下 ramp 带宽</b>：下 ramp=1 → 单向绕一圈；下 ramp=2 → 双向各绕半圈。下 ramp（eject）为<b>硬约束</b>（每节点 eject N−1 个 flit）。</li><li><b>“最小 makespan”</b>＝在上述约束下流水编排所得的可达下界；同时给出<b>严格刚性（无 AFIFO，处处 0-buffer）</b>作为保守上界对照。仿真见 <code>utils/sim_fused_rings.py: simulate_afifo</code>。</li></ul></div>
+<div class='card'><h2>最小 makespan 结果</h2>
+<table><tr><th>规模</th><th>N</th><th>配置</th><th>最小 makespan<br>(AFIFO depth≤5)</th><th>eject 下界</th><th>÷下界</th><th>busiest<br>ring link</th><th>环内 buf</th><th>AFIFO 深度</th><th>eject buf</th><th>严格刚性<br>(无 AFIFO,上界)</th></tr>
+<tr><td rowspan='2'>4×4</td><td rowspan='2'>16</td><td class='l'>单向环 @ 下ramp=1</td><td><b>38</b></td><td>15</td><td>2.53×</td><td>11</td><td>1</td><td class='win'>1</td><td>2</td><td>48</td></tr>
+<tr><td class='l'>双向环 @ 下ramp=2</td><td><b>32</b></td><td>8</td><td>4.00×</td><td>10</td><td>0</td><td class='win'>1</td><td>1</td><td>32</td></tr>
+<tr><td rowspan='2'>8×8</td><td rowspan='2'>64</td><td class='l'>单向环 @ 下ramp=1</td><td><b>123</b></td><td>63</td><td>1.95×</td><td>47</td><td>1</td><td class='win'>1</td><td>2</td><td>195</td></tr>
+<tr><td class='l'>双向环 @ 下ramp=2</td><td><b>86</b></td><td>32</td><td>2.69×</td><td>40</td><td>1</td><td class='win'>2</td><td>2</td><td>126</td></tr>
+<tr><td rowspan='2'>16×16</td><td rowspan='2'>256</td><td class='l'>单向环 @ 下ramp=1</td><td><b>437</b></td><td>255</td><td>1.71×</td><td>191</td><td>1</td><td class='win'>1</td><td>2</td><td>437</td></tr>
+<tr><td class='l'>双向环 @ 下ramp=2</td><td><b>267</b></td><td>128</td><td>2.09×</td><td>160</td><td>2</td><td class='win'>2</td><td>2</td><td>596</td></tr>
+</table>
+<p style='color:#64748b;font-size:12px'>绿底＝所需 AFIFO 深度 ≤5（预算内）。“环内 buf / eject buf” 为达到该 makespan 时的峰值占用：环内仅 ≤2、可由源端注入偏移 + AFIFO 吸收，故 0-buffer 环 + depth-5 AFIFO 足以实现该 makespan。单向配置下它与严格刚性相等（如 16×16 = 437），说明单向时即便完全不用 AFIFO 也已达此值；双向时 AFIFO 解耦各环带来大幅提速。</p>
+</div>
+<div class='card'><h2>makespan 随规模变化</h2>
+<svg width="480" height="300" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">单向环 @ 下ramp=1（越低越好；红虚线＝eject 下界）</text>
+<line x1="54" y1="246" x2="426" y2="246" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="246" stroke="#64748b"/>
+<rect x="75.7" y="231.5" width="37.3" height="14.5" fill="#10b981"/>
+<text x="94.3" y="227.5" font-size="10" font-weight="bold" text-anchor="middle">38</text>
+<rect x="119.0" y="227.7" width="37.3" height="18.3" fill="#94a3b8"/>
+<text x="137.6" y="223.7" font-size="10" font-weight="bold" text-anchor="middle">48</text>
+<line x1="54.0" y1="240.3" x2="184.0" y2="240.3" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="180.0" y="237.3" font-size="9" fill="#dc2626" text-anchor="end">下界15</text>
+<text x="116.0" y="262.0" font-size="11" text-anchor="middle">4×4
+(N=16)</text>
+<rect x="205.7" y="199.0" width="37.3" height="47.0" fill="#10b981"/>
+<text x="224.3" y="195.0" font-size="10" font-weight="bold" text-anchor="middle">123</text>
+<rect x="249.0" y="171.5" width="37.3" height="74.5" fill="#94a3b8"/>
+<text x="267.6" y="167.5" font-size="10" font-weight="bold" text-anchor="middle">195</text>
+<line x1="184.0" y1="221.9" x2="314.0" y2="221.9" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="310.0" y="218.9" font-size="9" fill="#dc2626" text-anchor="end">下界63</text>
+<text x="246.0" y="262.0" font-size="11" text-anchor="middle">8×8
+(N=64)</text>
+<rect x="335.7" y="79.0" width="37.3" height="167.0" fill="#10b981"/>
+<text x="354.3" y="75.0" font-size="10" font-weight="bold" text-anchor="middle">437</text>
+<rect x="379.0" y="79.0" width="37.3" height="167.0" fill="#94a3b8"/>
+<text x="397.6" y="75.0" font-size="10" font-weight="bold" text-anchor="middle">437</text>
+<line x1="314.0" y1="148.6" x2="444.0" y2="148.6" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="440.0" y="145.6" font-size="9" fill="#dc2626" text-anchor="end">下界255</text>
+<text x="376.0" y="262.0" font-size="11" text-anchor="middle">16×16
+(N=256)</text>
+<rect x="54.0" y="280.0" width="12" height="12" fill="#10b981"/>
+<text x="70.0" y="290.0" font-size="10">AFIFO depth≤5 (最小)</text>
+<rect x="220.0" y="280.0" width="12" height="12" fill="#94a3b8"/>
+<text x="236.0" y="290.0" font-size="10">严格刚性 无AFIFO (上界)</text>
+</svg>
+<svg width="480" height="300" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">双向环 @ 下ramp=2（越低越好；红虚线＝eject 下界）</text>
+<line x1="54" y1="246" x2="426" y2="246" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="246" stroke="#64748b"/>
+<rect x="75.7" y="237.0" width="37.3" height="9.0" fill="#10b981"/>
+<text x="94.3" y="233.0" font-size="10" font-weight="bold" text-anchor="middle">32</text>
+<rect x="119.0" y="237.0" width="37.3" height="9.0" fill="#94a3b8"/>
+<text x="137.6" y="233.0" font-size="10" font-weight="bold" text-anchor="middle">32</text>
+<line x1="54.0" y1="243.8" x2="184.0" y2="243.8" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="180.0" y="240.8" font-size="9" fill="#dc2626" text-anchor="end">下界8</text>
+<text x="116.0" y="262.0" font-size="11" text-anchor="middle">4×4
+(N=16)</text>
+<rect x="205.7" y="221.9" width="37.3" height="24.1" fill="#10b981"/>
+<text x="224.3" y="217.9" font-size="10" font-weight="bold" text-anchor="middle">86</text>
+<rect x="249.0" y="210.7" width="37.3" height="35.3" fill="#94a3b8"/>
+<text x="267.6" y="206.7" font-size="10" font-weight="bold" text-anchor="middle">126</text>
+<line x1="184.0" y1="237.0" x2="314.0" y2="237.0" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="310.0" y="234.0" font-size="9" fill="#dc2626" text-anchor="end">下界32</text>
+<text x="246.0" y="262.0" font-size="11" text-anchor="middle">8×8
+(N=64)</text>
+<rect x="335.7" y="171.2" width="37.3" height="74.8" fill="#10b981"/>
+<text x="354.3" y="167.2" font-size="10" font-weight="bold" text-anchor="middle">267</text>
+<rect x="379.0" y="79.0" width="37.3" height="167.0" fill="#94a3b8"/>
+<text x="397.6" y="75.0" font-size="10" font-weight="bold" text-anchor="middle">596</text>
+<line x1="314.0" y1="210.1" x2="444.0" y2="210.1" stroke="#dc2626" stroke-dasharray="4 3"/>
+<text x="440.0" y="207.1" font-size="9" fill="#dc2626" text-anchor="end">下界128</text>
+<text x="376.0" y="262.0" font-size="11" text-anchor="middle">16×16
+(N=256)</text>
+<rect x="54.0" y="280.0" width="12" height="12" fill="#10b981"/>
+<text x="70.0" y="290.0" font-size="10">AFIFO depth≤5 (最小)</text>
+<rect x="220.0" y="280.0" width="12" height="12" fill="#94a3b8"/>
+<text x="236.0" y="290.0" font-size="10">严格刚性 无AFIFO (上界)</text>
+</svg>
+</div>
+<div class='card'><h2>结论</h2><ul>
+<li><b>最小 makespan</b>：4×4 = 38(单)/32(双)，8×8 = 123/86，16×16 = <b>437</b>(单,下ramp1)/<b>267</b>(双,下ramp2)。</li>
+<li><b>depth-5 AFIFO 绰绰有余</b>：实测所需 AFIFO 峰值深度仅 1–2（≤5），环内缓存 ≤2、eject 缓存 ≤2。多点注入把跨界流量摊到多个 AFIFO 上，负载天然均衡，不会突发塞满 5 深。</li>
+<li><b>AFIFO 解耦各环：双向受益最大</b>。16×16 双向：有 AFIFO 解耦 = <b>267</b>，而严格刚性(无 AFIFO)需 596——提速约 2.2×。AFIFO 让相邻/对角环的时序彼此独立，各环可单独紧凑排布；刚性版把一个源跨多环的足迹绑死，冲突更多。</li>
+<li><b>单向无需 AFIFO 即达最小</b>：16×16 单向 437 = 严格刚性 437，单向绕环本就规整、零等待；AFIFO 主要服务于双向/小规模的解耦。</li>
+<li><b>趋势：越大越贴下界</b>。÷eject下界 从 4×4 的 2.5×/4.0× 收敛到 16×16 的 1.71×/2.09×——环周长（延迟尾）被规模摊薄，瓶颈趋于 eject 吞吐。小规模 makespan 由环延迟主导，故离下界更远。</li>
+</ul></div>
+</body></html>

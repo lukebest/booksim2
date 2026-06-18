@@ -193,6 +193,89 @@ def measure_buffers(deliveries, ramp_bw):
     return makespan, link_buf, ramp_buf
 
 
+def simulate_afifo(deliveries, ramp_bw):
+    """Same conflict-free event sim as `simulate`, but it separates the buffering
+    that builds up on (a) ring-internal links, (b) CROSS-BORDER links (= the AFIFO
+    queues) and (c) node down-ramps (eject).  This is exactly the border + AFIFO
+    model: rings want 0 buffer, the cross-border AFIFOs may hold a few flits.
+
+    Returns dict: makespan, ok, busiest_link, busiest_down,
+    ring_buf, afifo_buf (peak depth of any cross-border AFIFO), eject_buf."""
+    link = Cal(1)
+    down = Cal(ramp_bw)
+    up = Cal(ramp_bw)
+    ring_iv = defaultdict(list)
+    afifo_iv = defaultdict(list)
+    eject_iv = defaultdict(list)
+    pq = []
+    seq = 0
+    avail = {}
+    for s, ch in deliveries.items():
+        inj = up.reserve(s, 0)
+        avail[(s, s)] = inj + RAMP
+        for c in ch.get(s, []):
+            heapq.heappush(pq, (avail[(s, s)], seq, s, s, c))
+            seq += 1
+    makespan = 0
+    eject = defaultdict(int)
+    while pq:
+        ready, _, s, p, c = heapq.heappop(pq)
+        cross = quad_of(p) != quad_of(c)
+        send = link.reserve((p, c), ready)
+        if send > ready:
+            (afifo_iv if cross else ring_iv)[(p, c)].append((ready, send))
+        arrive = send + edge_lat(p, c)
+        e = down.reserve(c, arrive)
+        if e > arrive:
+            eject_iv[c].append((arrive, e))
+        makespan = max(makespan, e + RAMP)
+        eject[c] += 1
+        avail[(s, c)] = arrive
+        for g in deliveries[s].get(c, []):
+            heapq.heappush(pq, (arrive, seq, s, c, g))
+            seq += 1
+
+    def peak(ivs):
+        ev = []
+        for a, b in ivs:
+            ev += [(a, 1), (b, -1)]
+        ev.sort()
+        cur = m = 0
+        for _, d in ev:
+            cur += d
+            m = max(m, cur)
+        return m
+
+    n = len(deliveries)
+    return {
+        "makespan": makespan,
+        "ok": all(eject[x] == n - 1 for x in deliveries),
+        "busiest_link": link.busiest(),
+        "busiest_down": down.busiest(),
+        "ring_buf": max((peak(v) for v in ring_iv.values()), default=0),
+        "afifo_buf": max((peak(v) for v in afifo_iv.values()), default=0),
+        "eject_buf": max((peak(v) for v in eject_iv.values()), default=0),
+    }
+
+
+def border_afifo_study(sizes=(4, 8, 16)):
+    """Min makespan of the border (multi-point) scheme under the AFIFO model:
+    uni ring @ down-ramp=1 and bi ring @ down-ramp=2, H=4, V=6, for each size."""
+    out = {}
+    for sz in sizes:
+        cfg(sz, sz, 4, 6)
+        n = sz * sz
+        rec = {}
+        for tag, bidir, rb in (("uni", False, 1), ("bi", True, 2)):
+            deliveries = {s: build_border_delivery(s, bidir) for s in range(n)}
+            r = simulate_afifo(deliveries, rb)
+            r["eject_lb"] = (n - 1 + rb - 1) // rb
+            r["ramp_bw"] = rb
+            rec[tag] = r
+        out[sz] = {"n": n, **rec}
+    return out
+
+
 def ring_allgather(order, ramp_bw, bidir):
     deliveries = {}
     for s in order:
