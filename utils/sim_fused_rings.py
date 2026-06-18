@@ -62,6 +62,56 @@ def ham_cycle_rect_vflip(x0, y0, w, h):
     return out
 
 
+def ham_cycle_rect_hflip(x0, y0, w, h):
+    """ham_cycle_rect reflected horizontally: spine on the RIGHT column (x0+w-1)."""
+    out = []
+    for nd in ham_cycle_rect(x0, y0, w, h):
+        x, y = coord(nd)
+        out.append(nid((2 * x0 + w - 1) - x, y))
+    return out
+
+
+def _rotate_order_ccw(order, x0, y0, w, h):
+    """Rotate cycle 90° counter-clockwise within the w×h sub-grid at (x0,y0)."""
+    out = []
+    for nd in order:
+        lx, ly = coord(nd)[0] - x0, coord(nd)[1] - y0
+        out.append(nid(x0 + ly, y0 + (w - 1 - lx)))
+    return out
+
+
+def _rotate_order_cw(order, x0, y0, w, h):
+    """Rotate cycle 90° clockwise within the w×h sub-grid at (x0,y0)."""
+    out = []
+    for nd in order:
+        lx, ly = coord(nd)[0] - x0, coord(nd)[1] - y0
+        out.append(nid(x0 + (h - 1 - ly), y0 + lx))
+    return out
+
+
+def _quad_origin_index(x0, y0, w, h):
+    hw, hh = w, h
+    return (1 if x0 >= hw else 0) + (2 if y0 >= hh else 2)
+
+
+def quad_ring_horizontal(x0, y0, w, h):
+    """Horizontal comb Hamilton ring, rotated per quadrant:
+
+    Q0/Q3 (TL/BR): 90° counter-clockwise; Q1/Q2 (TR/BL): 90° clockwise."""
+    order = ham_cycle_rect(x0, y0, w, h)
+    qi = _quad_origin_index(x0, y0, w, h)
+    if qi in (0, 3):
+        order = _rotate_order_ccw(order, x0, y0, w, h)
+    else:
+        order = _rotate_order_cw(order, x0, y0, w, h)
+    return order
+
+
+def quad_ring_border(x0, y0, w, h):
+    """Alias kept for callers; same as quad_ring_horizontal."""
+    return quad_ring_horizontal(x0, y0, w, h)
+
+
 def ham_cycle_vband(C, x0):
     """Closed Hamilton cycle over columns [x0,x0+C) x all rows: VERTICAL comb."""
     order = [nid(x0, y) for y in range(_MY)]
@@ -295,7 +345,7 @@ def quad_setup():
     reps = [(hw - 1, hh - 1), (hw, hh - 1), (hw - 1, hh), (hw, hh)]
     quads = []
     for (x0, y0), (rx, ry) in zip(specs, reps):
-        order = ham_cycle_rect(x0, y0, hw, hh)
+        order = quad_ring_horizontal(x0, y0, hw, hh)
         quads.append({"rep": nid(rx, ry), "order": order})
     return quads, [0, 1, 3, 2]
 
@@ -303,6 +353,62 @@ def quad_setup():
 def quad_of(s):
     sx, sy = coord(s)
     return (0 if sx < _MX // 2 else 1) + (0 if sy < _MY // 2 else 2)
+
+
+def build_quad_border_lap_delivery(s, bidir, quads=None):
+    """4-ring allgather with the AFIFO single-crossing model.
+
+    Each source keeps ONE copy circulating per ring (bidir half-lap / uni full
+    lap) and crosses each shared border EXACTLY ONCE into the inter-ring AFIFO:
+
+      * home ring  : one lap from s, ejecting at every home node;
+      * H neighbour: a single cross on s's OWN row sy  -> one lap there;
+      * V neighbour: a single cross on s's OWN column sx -> one lap there;
+      * diagonal   : one further single cross from the H-neighbour copy, on a
+                     source-dependent column, -> one lap there.
+
+    Because each of the 64 sources in a quadrant uses its own row/column, the
+    crossings spread evenly over all 8 links of every shared border (8 per link)
+    instead of funnelling through the centre reps.  A flit that has finished its
+    lap and made its one cross-copy simply stops (the DAG ends), freeing the link
+    slot for other data; the receiving ring picks the AFIFO flit up on the first
+    free slot (the link calendar in `simulate`).  Every node ejects s once."""
+    if quads is None:
+        quads, _ = quad_setup()
+    hw, hh = _MX // 2, _MY // 2
+    qi = quad_of(s)
+    qx0, qy0 = (qi % 2) * hw, (qi // 2) * hh
+    sx, sy = coord(s)
+
+    home_order = quad_ring_horizontal(qx0, qy0, hw, hh)
+
+    ch = defaultdict(list)
+    add_ring_chain(ch, home_order, s, bidir)
+
+    # boundary columns/rows shared with the H / V neighbours (home vs far side)
+    home_bx, far_bx = (hw - 1, hw) if qx0 == 0 else (hw, hw - 1)
+    home_by, far_by = (hh - 1, hh) if qy0 == 0 else (hh, hh - 1)
+
+    # H neighbour (qi ^ 1): one cross on s's own row sy, then one lap
+    qh = quads[qi ^ 1]
+    ch[nid(home_bx, sy)].append(nid(far_bx, sy))
+    add_ring_chain(ch, qh["order"], nid(far_bx, sy), bidir)
+
+    # V neighbour (qi ^ 2): one cross on s's own column sx, then one lap
+    qv = quads[qi ^ 2]
+    ch[nid(sx, home_by)].append(nid(sx, far_by))
+    add_ring_chain(ch, qv["order"], nid(sx, far_by), bidir)
+
+    # diagonal (qi ^ 3): one further cross from the H-neighbour copy.
+    # QH shares the home quadrant's y-range, so home_by/far_by apply again;
+    # the cross column is shifted into QH and spread by the source column.
+    qd = quads[qi ^ 3]
+    qhx0 = (qx0 + hw) % _MX
+    xcross = qhx0 + (sx - qx0)
+    ch[nid(xcross, home_by)].append(nid(xcross, far_by))
+    add_ring_chain(ch, qd["order"], nid(xcross, far_by), bidir)
+
+    return ch
 
 
 def build_quad_delivery(s, bidir, quads, ring4):
@@ -344,7 +450,7 @@ def build_border_delivery(s, bidir):
     qy = 0 if sy < hh else 1
     qx0, qy0 = qx * hw, qy * hh
     ch = defaultdict(list)
-    add_ring_chain(ch, ham_cycle_rect(qx0, qy0, hw, hh), s, bidir)   # local lap
+    add_ring_chain(ch, quad_ring_horizontal(qx0, qy0, hw, hh), s, bidir)   # local lap
 
     # horizontal neighbour QH: cross x-border, arc across QH rows
     if qx == 0:
