@@ -103,40 +103,13 @@ def ham_cycle_rect_vflip(x0, y0, w, h):
     return out
 
 
-def _rotate_order_ccw(order, x0, y0, w, h):
-    out = []
-    for nd in order:
-        lx, ly = coord(nd)[0] - x0, coord(nd)[1] - y0
-        out.append(nid(x0 + ly, y0 + (w - 1 - lx)))
-    return out
-
-
-def _rotate_order_cw(order, x0, y0, w, h):
-    out = []
-    for nd in order:
-        lx, ly = coord(nd)[0] - x0, coord(nd)[1] - y0
-        out.append(nid(x0 + (h - 1 - ly), y0 + lx))
-    return out
-
-
-def _quad_origin_index(x0, y0, w, h):
-    return (1 if x0 >= w else 0) + (2 if y0 >= h else 2)
-
-
-def quad_ring_horizontal(x0, y0, w, h):
-    """Horizontal comb Hamilton ring: Q0/Q3 CCW 90°, Q1/Q2 CW 90°."""
-    order = ham_cycle_rect(x0, y0, w, h)
-    qi = _quad_origin_index(x0, y0, w, h)
-    if qi in (0, 3):
-        order = _rotate_order_ccw(order, x0, y0, w, h)
-    else:
-        order = _rotate_order_cw(order, x0, y0, w, h)
-    return order
-
-
 def quad_ring_border(x0, y0, w, h):
-    """Alias: horizontal comb with long edges on both center borders."""
-    return quad_ring_horizontal(x0, y0, w, h)
+    """Quadrant ring oriented so its long edge (spine) hugs the central border:
+    bottom quadrants flip up so the spine sits on their TOP row (toward center),
+    top quadrants keep the spine on their BOTTOM row (= the center border)."""
+    if y0 == 0:
+        return ham_cycle_rect_vflip(x0, y0, w, h)
+    return ham_cycle_rect(x0, y0, w, h)
 
 
 def ham_cycle_vband(C, x0):
@@ -162,7 +135,7 @@ def init_quadrants():
     reps = [(hw - 1, hh - 1), (hw, hh - 1), (hw - 1, hh), (hw, hh)]  # inner corners
     QUAD = []
     for (x0, y0), (rx, ry) in zip(specs, reps):
-        order = quad_ring_horizontal(x0, y0, hw, hh)
+        order = ham_cycle_rect(x0, y0, hw, hh)
         assert len(order) == hw * hh and len(set(order)) == hw * hh
         QUAD.append({"rep": nid(rx, ry), "order": order,
                      "pos": {nd: k for k, nd in enumerate(order)}})

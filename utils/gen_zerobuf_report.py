@@ -148,7 +148,7 @@ def scheme_diagrams():
     shade = [(qx, qy, 8, 8, BAND_BG[i]) for i, (qx, qy) in enumerate(qspec)]
     W, Ht, px, py, el = _grid(16, 16, cell, shade)
     for i, (qx, qy) in enumerate(qspec):
-        el.append(_poly(fr.quad_ring_horizontal(qx, qy, 8, 8), px, py, coord, DIA_PAL[i]))
+        el.append(_poly(fr.ham_cycle_rect(qx, qy, 8, 8), px, py, coord, DIA_PAL[i]))
     ring4 = [(7, 7), (8, 7), (8, 8), (7, 8)]
     for k in range(4):
         ax, ay = ring4[k]
@@ -162,7 +162,7 @@ def scheme_diagrams():
     # Bottom quadrants are vertically flipped so all four spines sit along rows 7/8.
     W, Ht, px, py, el = _grid(16, 16, cell, shade)
     for i, (qx, qy) in enumerate(qspec):
-        ring = fr.quad_ring_horizontal(qx, qy, 8, 8)
+        ring = fr.ham_cycle_rect_vflip(qx, qy, 8, 8) if qy == 0 else fr.ham_cycle_rect(qx, qy, 8, 8)
         el.append(_poly(ring, px, py, coord, DIA_PAL[i]))
     for x in range(16):                              # spine-to-spine across H-border (rows 7|8)
         el.append(_arrow(px(x), py(7), px(x), py(8), "ah-g", "#15803d", both=True))
