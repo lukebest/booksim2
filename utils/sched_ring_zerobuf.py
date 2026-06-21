@@ -104,6 +104,28 @@ class Calendar:
         return t
 
 
+def cross_lb_groups(sz):
+    """Eight parallel AFIFO links per adjacent-quad direction (LB pool)."""
+    hw = sz // 2
+    groups = {}
+    pair_to_group = {}
+    specs = [
+        ("Hdn02", [(fr.nid(x, hw), fr.nid(x, hw - 1)) for x in range(hw)]),
+        ("Hup20", [(fr.nid(x, hw - 1), fr.nid(x, hw)) for x in range(hw)]),
+        ("Hdn13", [(fr.nid(x, hw), fr.nid(x, hw - 1)) for x in range(hw, sz)]),
+        ("Hup31", [(fr.nid(x, hw - 1), fr.nid(x, hw)) for x in range(hw, sz)]),
+        ("Vrt01", [(fr.nid(hw - 1, y), fr.nid(hw, y)) for y in range(hw)]),
+        ("Vlf10", [(fr.nid(hw, y), fr.nid(hw - 1, y)) for y in range(hw)]),
+        ("Vrt23", [(fr.nid(hw - 1, y), fr.nid(hw, y)) for y in range(hw, sz)]),
+        ("Vlf32", [(fr.nid(hw, y), fr.nid(hw - 1, y)) for y in range(hw, sz)]),
+    ]
+    for name, links in specs:
+        groups[name] = links
+        for lk in links:
+            pair_to_group[lk] = name
+    return groups, pair_to_group
+
+
 def afifo_profile(afifo_intervals, mx, makespan, top_n=3):
     """Per-cycle AFIFO queue depth: global max + top-N busiest border links."""
     mk = makespan + 1
@@ -154,8 +176,52 @@ def afifo_profile(afifo_intervals, mx, makespan, top_n=3):
     }
 
 
+def afifo_profile_balanced(afifo_intervals, sz, makespan):
+    """Theoretical LB: per-cycle water-fill across 8 parallel links per direction."""
+    mk = makespan + 1
+    _, pair_to_group = cross_lb_groups(sz)
+    by_group = defaultdict(list)
+    for lk, ivs in afifo_intervals.items():
+        p, c = divmod(lk, 100000)
+        g = pair_to_group.get((p, c))
+        if g:
+            by_group[g].append((lk, ivs))
+    global_d = [0] * mk
+    worst_peak = 0
+    worst_lk = None
+    for g, items in by_group.items():
+        n = len(items)
+        if not n:
+            continue
+        curves = []
+        for lk, ivs in items:
+            diff = [0] * (mk + 1)
+            for ap, cs in ivs:
+                if cs > ap:
+                    diff[ap] += 1
+                    if cs < mk:
+                        diff[cs] -= 1
+                    else:
+                        diff[mk] -= 1
+            d = 0
+            cur = []
+            for t in range(mk):
+                d += diff[t]
+                cur.append(d)
+            curves.append(cur)
+        for t in range(mk):
+            s = sum(curves[i][t] for i in range(n))
+            bal = -(s // -n)
+            global_d[t] = max(global_d[t], bal)
+            if bal > worst_peak:
+                worst_peak = bal
+    g_peak = max(global_d) if global_d else 0
+    g_peak_cy = global_d.index(g_peak) if g_peak else 0
+    return {"global": global_d, "peak": g_peak, "peak_cy": g_peak_cy}
+
+
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
-             record_events=False, quads=None):
+             record_events=False, quads=None, lb_cross=False):
     fr.cfg(sz, sz, 4, 6)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
@@ -167,12 +233,41 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
         order = quads[fr.quad_of(s)]["order"]
         home_idx[s] = order.index(s)
 
+    lb_groups, lb_pair = (cross_lb_groups(sz) if lb_cross else (None, None))
+
     cal = Calendar(ramp_bw)
     makespan = 0
     max_off = 0
     afifo_intervals = defaultdict(list)   # lk -> [(start_wait, end_wait)]
-    arrive_abs = {}                        # (s, node) -> absolute arrive cycle
+    arrive_abs = {}                        # (s, root, node) -> absolute arrive cycle
     events = []
+
+    def afifo_q(lk, t):
+        return sum(1 for ap, cs in afifo_intervals[lk] if ap <= t < cs)
+
+    def pick_cross(s, owner_root, p, c, lat, placed_roots):
+        """Pick among 8 parallel AFIFOs (unused foreign sub-tree root, min queue)."""
+        if not lb_cross:
+            return p, c
+        gname = lb_pair.get((p, c))
+        if not gname:
+            return p, c
+        best = None
+        for pp, cc in lb_groups[gname]:
+            if cc in placed_roots or cc not in sub[s]:
+                continue
+            ap2 = arrive_abs.get((s, owner_root, pp))
+            if ap2 is None:
+                continue
+            lk = pp * 100000 + cc
+            cs = cal.cross_send_free(lk, ap2)
+            q = afifo_q(lk, cs)
+            score = (q, cs)
+            if best is None or score < best[0]:
+                best = (score, pp, cc)
+        if best:
+            return best[1], best[2]
+        return p, c
 
     def place(s, root, anchor):
         st = sub[s][root]
@@ -208,14 +303,21 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
         for (p, c, lat) in sub[s][s]["crosses"]:
             pending.append((s, p, c, lat))
         placed_roots = {s}
+        batch = list(pending)
+        pending.clear()
+        batch.sort(key=lambda x: arrive_abs.get((s, x[0], x[1]), 0), reverse=lb_cross)
+        pending.extend(batch)
         while pending:
             owner_root, p, c, lat = pending.popleft()
             ap = arrive_abs[(s, owner_root, p)]
+            p, c = pick_cross(s, owner_root, p, c, lat, placed_roots)
+            ap = arrive_abs[(s, owner_root, p)]
             st = sub[s][c]
+            llat = fr.edge_lat(p, c)
             cs = ap
             while True:
                 cs = cal.cross_send_free(p * 100000 + c, cs)   # free AFIFO send slot
-                anchor = cs + lat
+                anchor = cs + llat
                 if cal.fits(st["links"], st["ejects"], anchor):
                     break
                 cs += 1
@@ -224,7 +326,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
             cal.link[p * 100000 + c].add(cs)                   # reserve cross link
             afifo_intervals[p * 100000 + c].append((ap, cs))   # waited in AFIFO
             if record_events:
-                events.append((s, p, c, cs, lat, cs + lat, 2))
+                events.append((s, p, c, cs, llat, cs + llat, 2))
             last, _ = place(s, c, anchor)
             makespan = max(makespan, last + fr.RAMP)
             placed_roots.add(c)
@@ -253,7 +355,8 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
     ok = all(ej_total[nd] == n - 1 for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
                max_inject_off=max_off, ramp_bw=ramp_bw,
-               afifo_profile=afifo_profile(afifo_intervals, sz, makespan))
+               afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
+               afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:
         out["events"] = events
     return out
@@ -484,7 +587,8 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
     ok = all(ej_total[nd] == n - 1 for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
                max_inject_off=max_off, ramp_bw=ramp_bw,
-               afifo_profile=afifo_profile(afifo_intervals, sz, makespan))
+               afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
+               afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:
         out["events"] = events
     return out

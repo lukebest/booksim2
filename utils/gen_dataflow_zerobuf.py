@@ -46,10 +46,11 @@ def rings_from_quads(quads):
     return [q["order"] for q in quads]
 
 
-def schedule_with_quads(cfg, deliv_fn, spread=0):
+def schedule_with_quads(cfg, deliv_fn, spread=0, lb_cross=False):
     quads = make_quads(cfg)
     deliv = lambda s, b, q=quads: deliv_fn(s, b, q)
-    r = S.schedule(MX, True, 2, deliv, spread=spread, quads=quads, record_events=True)
+    r = S.schedule(MX, True, 2, deliv, spread=spread, quads=quads,
+                   record_events=True, lb_cross=lb_cross)
     return r, rings_from_quads(quads)
 
 
@@ -82,6 +83,9 @@ def pack(name, label, note, result, ring_paths):
         "afifo": result.get("afifo_profile") or {
             "global": [0] * (mk + 1), "peak": 0, "peak_cy": 0, "worst": None, "top": [],
         },
+        "afifo_balanced": result.get("afifo_balanced") or {
+            "global": [0] * (mk + 1), "peak": 0, "peak_cy": 0,
+        },
     }
 
 
@@ -94,10 +98,24 @@ def build():
         "4096 组环形状扫描最优：左右列旋转相反，makespan=240（比默认 266 快 26cy）；"
         "需 AFIFO 深度 ~45。" + cfg_str(OPTIMAL_BORDER),
         r, rings)
+    r_lb, rings_lb = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads, lb_cross=True)
+    schemes["border_opt_lb"] = pack(
+        "border 240cy+LB", "border 240cy · 8链路最短队列 LB",
+        "跨界时在 8 条并行 AFIFO 中选排队最短的链路（在线贪心）。"
+        f"在线 peak={r_lb['afifo_depth']}；"
+        f"8链路组内理想均摊下界 peak={r_lb['afifo_balanced']['peak']}。",
+        r_lb, rings_lb)
     schemes["border_fast"] = pack(
         "border 全速", "border 短弧 · 默认环（266cy）",
         "4 个 8×8 环并行，本环 conveyor 同时注入；默认 ham_cycle_rect，AFIFO 深度 11。",
         S.schedule(MX, True, 2, S.deliv_border, record_events=True), quad_rings())
+    r266_lb = S.schedule(MX, True, 2, S.deliv_border, record_events=True, lb_cross=True)
+    schemes["border_fast_lb"] = pack(
+        "border 266cy+LB", "border 266cy · 8链路最短队列 LB",
+        "默认环 + 边界最短队列选路。"
+        f"在线 peak={r266_lb['afifo_depth']}；"
+        f"理想均摊 peak={r266_lb['afifo_balanced']['peak']}（≤5 预算内）。",
+        r266_lb, quad_rings())
     schemes["border_d5"] = pack(
         "border depth≤5", "border 短弧 · AFIFO≤5（相位错开）",
         "同 4 环并行，但注入相位错开把每个 AFIFO 压到 ≤5；router 仍零 buffer。",
@@ -126,9 +144,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["border_opt", "border_fast", "border_d5",
-                  "ringfollow_opt", "ringfollow", "global1"],
-        "default": "border_opt",
+        "order": ["border_opt", "border_opt_lb", "border_fast", "border_fast_lb",
+                  "border_d5", "ringfollow_opt", "ringfollow", "global1"],
+        "default": "border_opt_lb",
         "schemes": schemes,
     }
     return cfg
@@ -214,14 +232,14 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
 <table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>AFIFO 深度</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note">权衡：AFIFO 越深 → makespan 越小。环形状优化 border <b>240cy</b>（AFIFO~45）；
-默认 border 266cy（AFIFO 11）；AFIFO≤5 约 454cy；ring-following 优化 416cy；
-AFIFO≤5 约 508cy；全局单环 754cy（AFIFO 2）。</p>
+<p class="note">权衡：AFIFO 越深 → makespan 越小。240cy 固定路由 peak 45，8链路理想均摊下界 40；
+266cy 固定 peak 11，理想均摊 5（≤5 预算）；相位错开 454cy。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
 <canvas id="afc" width="280" height="150" style="width:100%;max-width:300px;display:block;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0"></canvas>
-<p class="note" id="aflbl">全局最大排队深度 vs cycle；橙=全网峰值，红=最深链路，灰=次深链路，绿虚线=预算5。</p>
+<p class="note" id="aflbl">橙=固定路由全网峰值；紫虚线=8链路组内理想均摊下界；绿虚线=预算5。</p>
 <button id="jumppeak" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到 AFIFO 峰值 cycle</button>
+<button id="jumpbal" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到理想均摊峰值</button>
 </div>
 <div class="panel"><h2>Hamilton 环路径</h2>
 <svg id="ringsvg" style="width:100%;max-width:280px;display:block;margin:0 auto"></svg>
@@ -286,12 +304,12 @@ const AFCAP=5;
 
 function drawAfifoChart(k){
   const A=S.afifo;if(!A||!A.global)return;
+  const B=S.afifo_balanced||{global:[],peak:0,peak_cy:0};
   const W=afc.width,H=afc.height,pad={l:34,r:8,t:10,b:22};
   actx.clearRect(0,0,W,H);
-  const mk=S.makespan, ymax=Math.max(A.peak,AFCAP,1);
+  const mk=S.makespan, ymax=Math.max(A.peak,B.peak||0,AFCAP,1);
   function x(t){return pad.l+(W-pad.l-pad.r)*t/mk;}
   function y(v){return pad.t+(H-pad.t-pad.b)*(1-v/ymax);}
-  // grid + budget line
   actx.strokeStyle='#e2e8f0';actx.lineWidth=1;
   for(let g=0;g<=4;g++){const v=ymax*g/4;actx.beginPath();
     actx.moveTo(pad.l,y(v));actx.lineTo(W-pad.r,y(v));actx.stroke();}
@@ -299,29 +317,29 @@ function drawAfifoChart(k){
   actx.beginPath();actx.moveTo(pad.l,y(AFCAP));actx.lineTo(W-pad.r,y(AFCAP));actx.stroke();
   actx.setLineDash([]);
   actx.fillStyle='#64748b';actx.font='10px sans-serif';
-  actx.fillText('5',4,y(AFCAP)+3);
-  actx.fillText(String(ymax|0),4,pad.t+4);
-  actx.fillText('0',8,H-pad.b+4);
-  actx.fillText('0',pad.l,H-4);actx.fillText(String(mk),W-pad.r-12,H-4);
-  function plotCurve(curve,col,lw){
+  actx.fillText('5',4,y(AFCAP)+3);actx.fillText(String(ymax|0),4,pad.t+4);
+  actx.fillText('0',8,H-pad.b+4);actx.fillText('0',pad.l,H-4);actx.fillText(String(mk),W-pad.r-12,H-4);
+  function plotCurve(curve,col,lw,dash){
     if(!curve||!curve.length)return;
-    actx.strokeStyle=col;actx.lineWidth=lw;actx.beginPath();
+    actx.setLineDash(dash||[]);actx.strokeStyle=col;actx.lineWidth=lw;actx.beginPath();
     curve.forEach((v,t)=>{const px=x(t),py=y(v);if(t)actx.lineTo(px,py);else actx.moveTo(px,py);});
-    actx.stroke();
+    actx.stroke();actx.setLineDash([]);
   }
-  (A.top||[]).slice().reverse().forEach((lk,i)=>plotCurve(lk.curve,'#94a3b8',1));
-  if(A.worst)plotCurve(A.worst.curve,'#dc2626',1.8);
+  (A.top||[]).slice().reverse().forEach(lk=>plotCurve(lk.curve,'#94a3b8',1));
+  if(A.worst)plotCurve(A.worst.curve,'#dc2626',1.5);
+  if(B.global&&B.global.length)plotCurve(B.global,'#7c3aed',2,[5,4]);
   plotCurve(A.global,'#f97316',2.2);
-  // peak marker
-  actx.fillStyle='#dc2626';actx.beginPath();
+  actx.fillStyle='#f97316';actx.beginPath();
   actx.arc(x(A.peak_cy),y(A.peak),3.5,0,Math.PI*2);actx.fill();
-  // current cycle cursor
+  if(B.peak>0){actx.fillStyle='#7c3aed';actx.beginPath();
+    actx.arc(x(B.peak_cy),y(B.peak),3,0,Math.PI*2);actx.fill();}
   actx.strokeStyle='#0f766e';actx.lineWidth=1.5;
   actx.beginPath();actx.moveTo(x(k),pad.t);actx.lineTo(x(k),H-pad.b);actx.stroke();
   const now=A.global[k]||0;
   document.getElementById('afnow').textContent=now;
-  let lbl='峰值 <b>'+A.peak+'</b> @cycle <b>'+A.peak_cy+'</b>';
-  if(A.worst)lbl+=' · 最深链路 <b>'+A.worst.label+'</b>（peak '+A.worst.peak+'）';
+  let lbl='固定路由峰值 <b>'+A.peak+'</b>@cy<b>'+A.peak_cy+'</b>';
+  if(B.peak)lbl+=' · 8链路理想均摊 <b>'+B.peak+'</b>@cy<b>'+B.peak_cy+'</b>';
+  if(A.worst)lbl+=' · 最深链路 '+A.worst.label;
   lbl+=' · 当前 cy'+k+' 排队 <b>'+now+'</b>';
   document.getElementById('aflbl').innerHTML=lbl;
 }
@@ -409,6 +427,10 @@ function syncScheme(){
   document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
   document.getElementById('jumppeak').onclick=()=>{
     const cy=(S.afifo&&S.afifo.peak_cy)||0;stop();
+    if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
+  };
+  document.getElementById('jumpbal').onclick=()=>{
+    const cy=(S.afifo_balanced&&S.afifo_balanced.peak_cy)||0;stop();
     if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
   };
   buildCmp();drawRingSvg();rebuild(0);draw(0);
