@@ -105,12 +105,13 @@ class Calendar:
 
 
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
-             record_events=False):
+             record_events=False, quads=None):
     fr.cfg(sz, sz, 4, 6)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
-    quads, _ = fr.quad_setup()
+    if quads is None:
+        quads, _ = fr.quad_setup()
     home_idx = {}
     for s in range(n):
         order = quads[fr.quad_of(s)]["order"]
@@ -212,8 +213,45 @@ def deliv_border(s, bidir):
     return fr.build_border_delivery(s, bidir)
 
 
+def deliv_border_quads(s, bidir, quads):
+    """Border short-arc; local lap uses the given per-quadrant Hamilton orders."""
+    qi = fr.quad_of(s)
+    ch = defaultdict(list)
+    fr.add_ring_chain(ch, quads[qi]["order"], s, bidir)
+    hw, hh = fr._MX // 2, fr._MY // 2
+    sx, sy = fr.coord(s)
+    qx = qi % 2
+    qy = qi // 2
+    qx0, qy0 = qx * hw, qy * hh
+    if qx == 0:
+        bxQ, arc_xs = hw - 1, list(range(hw, 2 * hw))
+    else:
+        bxQ, arc_xs = hw, list(range(hw - 1, -1, -1))
+    for y in range(qy0, qy0 + hh):
+        ch[fr.nid(bxQ, y)].append(fr.nid(arc_xs[0], y))
+        for k in range(len(arc_xs) - 1):
+            ch[fr.nid(arc_xs[k], y)].append(fr.nid(arc_xs[k + 1], y))
+    if qy == 0:
+        byQ, arc_ys = hh - 1, list(range(hh, 2 * hh))
+    else:
+        byQ, arc_ys = hh, list(range(hh - 1, -1, -1))
+    for x in range(qx0, qx0 + hw):
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(len(arc_ys) - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    for x in arc_xs:
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(len(arc_ys) - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    return ch
+
+
 def deliv_ringfollow(s, bidir):
     quads, _ = fr.quad_setup()
+    return deliv_ringfollow_quads(s, bidir, quads)
+
+
+def deliv_ringfollow_quads(s, bidir, quads):
     sz = fr._MX
     hw, hh = sz // 2, sz // 2
     qi = fr.quad_of(s)
