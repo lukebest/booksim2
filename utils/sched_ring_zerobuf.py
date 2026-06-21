@@ -104,6 +104,56 @@ class Calendar:
         return t
 
 
+def afifo_profile(afifo_intervals, mx, makespan, top_n=3):
+    """Per-cycle AFIFO queue depth: global max + top-N busiest border links."""
+    mk = makespan + 1
+    global_d = [0] * mk
+    ranked = []
+    for lk, ivs in afifo_intervals.items():
+        diff = [0] * (mk + 1)
+        for ap, cs in ivs:
+            if cs > ap:
+                diff[ap] += 1
+                if cs < mk:
+                    diff[cs] -= 1
+                else:
+                    diff[mk] -= 1
+        d = 0
+        curve = [0] * mk
+        peak = 0
+        peak_cy = 0
+        for t in range(mk):
+            d += diff[t]
+            curve[t] = d
+            if d > peak:
+                peak = d
+                peak_cy = t
+            global_d[t] = max(global_d[t], d)
+        p, c = divmod(lk, 100000)
+        ranked.append((peak, lk, curve, peak_cy, p, c))
+    ranked.sort(reverse=True)
+    g_peak = max(global_d) if global_d else 0
+    g_peak_cy = global_d.index(g_peak) if g_peak else 0
+
+    def link_entry(peak, lk, curve, peak_cy, p, c):
+        return {
+            "label": f"({p % mx},{p // mx})→({c % mx},{c // mx})",
+            "p": p, "c": c,
+            "peak": peak, "peak_cy": peak_cy,
+            "curve": curve,
+        }
+
+    worst = link_entry(*ranked[0]) if ranked else None
+    top = [link_entry(*r) for r in ranked[1:1 + top_n]]
+    return {
+        "global": global_d,
+        "peak": g_peak,
+        "peak_cy": g_peak_cy,
+        "worst": worst,
+        "top": top,
+    }
+
+
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
              record_events=False, quads=None):
     fr.cfg(sz, sz, 4, 6)
@@ -202,7 +252,8 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
         ej_total[nd] = sum(cyc.values())
     ok = all(ej_total[nd] == n - 1 for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw)
+               max_inject_off=max_off, ramp_bw=ramp_bw,
+               afifo_profile=afifo_profile(afifo_intervals, sz, makespan))
     if record_events:
         out["events"] = events
     return out
@@ -432,7 +483,8 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
         ej_total[nd] = sum(cyc.values())
     ok = all(ej_total[nd] == n - 1 for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw)
+               max_inject_off=max_off, ramp_bw=ramp_bw,
+               afifo_profile=afifo_profile(afifo_intervals, sz, makespan))
     if record_events:
         out["events"] = events
     return out
