@@ -7,8 +7,10 @@ Schedules come from utils/sched_ring_zerobuf.py.
 
   border-fast : 4 parallel quadrant rings, short-arc spread, home rings injected
                 together -> makespan 266 but bursty (AFIFO depth 11).
+  border-opt  : ring shapes tuned by sweep -> makespan 240 (AFIFO depth ~45).
   border-d5   : same, paced so every AFIFO <= 5 -> makespan ~454.
   ringfollow  : cross then ride the WHOLE destination ring, AFIFO <= 5 -> ~508.
+  ringfollow-opt : shape-tuned ring-following -> makespan 416.
   global1     : the 4 rings spliced into ONE global ring -> 754, AFIFO depth ~2.
 
 Output: results/dataflow_zerobuf.html (self-contained canvas viewer).
@@ -19,10 +21,15 @@ from pathlib import Path
 
 import sim_fused_rings as fr
 import sched_ring_zerobuf as S
+from sweep_quad_ring_shapes import cfg_str, make_quads
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "dataflow_zerobuf.html"
 MX, MY = 16, 16
+
+# 4096-config sweep minima (0 router-buffer, spread=0)
+OPTIMAL_BORDER = (("vflip", 1), ("rect", 1), ("rect", 3), ("vflip", 3))
+OPTIMAL_RINGFOLLOW = (("vflip", 3), ("rect", 3), ("rect", 1), ("rect", 3))
 
 
 def quad_rings():
@@ -33,6 +40,17 @@ def quad_rings():
 
 def global_ring():
     return [fr.ham_cycle_rect(0, 0, MX, MY)]
+
+
+def rings_from_quads(quads):
+    return [q["order"] for q in quads]
+
+
+def schedule_with_quads(cfg, deliv_fn, spread=0):
+    quads = make_quads(cfg)
+    deliv = lambda s, b, q=quads: deliv_fn(s, b, q)
+    r = S.schedule(MX, True, 2, deliv, spread=spread, quads=quads, record_events=True)
+    return r, rings_from_quads(quads)
 
 
 def pack(name, label, note, result, ring_paths):
@@ -67,17 +85,29 @@ def pack(name, label, note, result, ring_paths):
 def build():
     fr.cfg(MX, MY, 4, 6)
     schemes = {}
+    r, rings = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads)
+    schemes["border_opt"] = pack(
+        "border 240cy", "border 短弧 · 环形状优化（240cy）",
+        "4096 组环形状扫描最优：左右列旋转相反，makespan=240（比默认 266 快 26cy）；"
+        "需 AFIFO 深度 ~45。" + cfg_str(OPTIMAL_BORDER),
+        r, rings)
     schemes["border_fast"] = pack(
-        "border 全速", "border 短弧 · 全速（AFIFO 突发）",
-        "4 个 8×8 环并行，本环 conveyor 同时注入；最快但跨界突发，需要 AFIFO 深度 11。",
+        "border 全速", "border 短弧 · 默认环（266cy）",
+        "4 个 8×8 环并行，本环 conveyor 同时注入；默认 ham_cycle_rect，AFIFO 深度 11。",
         S.schedule(MX, True, 2, S.deliv_border, record_events=True), quad_rings())
     schemes["border_d5"] = pack(
         "border depth≤5", "border 短弧 · AFIFO≤5（相位错开）",
         "同 4 环并行，但注入相位错开把每个 AFIFO 压到 ≤5；router 仍零 buffer。",
         S.schedule_atomic(MX, True, 2, S.deliv_border, afifo_cap=5,
                           order="natural", record_events=True), quad_rings())
+    r, rings = schedule_with_quads(OPTIMAL_RINGFOLLOW, S.deliv_ringfollow_quads)
+    schemes["ringfollow_opt"] = pack(
+        "ring-following 416cy", "ring-following · 环形状优化（416cy）",
+        "4096 组扫描最优：makespan=416（比默认 508 快 92cy）；AFIFO 深度 8。"
+        + cfg_str(OPTIMAL_RINGFOLLOW),
+        r, rings)
     schemes["ringfollow"] = pack(
-        "ring-following", "跨界后跟随目的环双向整圈 · AFIFO≤5",
+        "ring-following", "ring-following · AFIFO≤5（相位错开）",
         "外象限数据切入目的 8×8 环后绕整圈双向流转；AFIFO≤5，router 零 buffer。",
         S.schedule_atomic(MX, True, 2, S.deliv_ringfollow, afifo_cap=5,
                           order="quadblock", record_events=True), quad_rings())
@@ -93,8 +123,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["border_fast", "border_d5", "ringfollow", "global1"],
-        "default": "border_d5",
+        "order": ["border_opt", "border_fast", "border_d5",
+                  "ringfollow_opt", "ringfollow", "global1"],
+        "default": "border_opt",
         "schemes": schemes,
     }
     return cfg
@@ -179,8 +210,9 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
 <table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>AFIFO 深度</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note">权衡：AFIFO 越深 → makespan 越小。border 全速 266cy 需深 11；压到 ≤5 约 454cy；
-ring-following ≤5 约 508cy；全局单环天然深 2 但最慢 754cy。</p>
+<p class="note">权衡：AFIFO 越深 → makespan 越小。环形状优化 border <b>240cy</b>（AFIFO~45）；
+默认 border 266cy（AFIFO 11）；AFIFO≤5 约 454cy；ring-following 优化 416cy；
+AFIFO≤5 约 508cy；全局单环 754cy（AFIFO 2）。</p>
 </div>
 <div class="panel"><h2>Hamilton 环路径</h2>
 <svg id="ringsvg" style="width:100%;max-width:280px;display:block;margin:0 auto"></svg>
