@@ -48,7 +48,7 @@ T<sub>eject</sub> = ⌈(N−1) / ramp_bw⌉ &nbsp;&nbsp;|&nbsp;&nbsp;
 L<sub>max</sub> = max<sub>有向边 e</sub> |{源 s : s 的树路径经过 e}| &nbsp;&nbsp;|&nbsp;&nbsp;
 fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 </div>
-<p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。</p>
+<p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。 <b>fill / L<sub>max</sub> 的详细定义与算例见 §1c。</b></p>
 </div>
 <div class='card'><h2>1b. 术语说明：B、ramp_buf 与下 ramp 突发</h2>
 <h3>B（hybrid B=k 中的带数）</h3>
@@ -84,6 +84,75 @@ fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 <b>读 Pareto 表时</b>：预算 K 约束的是 <code>max(link_buf, ramp_buf) ≤ K</code>。 例如 border bi、ramp_bw=1 时 ramp_buf=74 —— 表示某节点曾同时有 74 个 flit 等下 ramp， 持续 eject 仍为 1 flit/cy，但调度允许这 74 个 flit 在 eject 口排队； 要把该方案纳入 K≤2 的 Pareto，必须换 ramp_bw=2（此时 border 的 ramp_buf 降为 2） 或改用 hybrid B=2 等更平滑的到达模式。
 </div>
 <p class='meta'>本报告 Pareto 中的 <b>pipe_mk</b> 假设 eject 口确有 depth ≥ ramp_buf 的缓冲； 若硬件只给 K 个 slot，则 ramp_buf &gt; K 的方案不可实现，即使其 pipe_mk 更小。</p>
+</div>
+<div class='card'><h2>1c. 术语说明：fill 与 L<sub>max</sub></h2>
+<p>二者是 allgather makespan 的三条下界里与<b>树形拓扑 / 分叉位置</b>直接相关的两项。 明细表「主导」列标出 <code>max(fill, L<sub>max</sub>, eject)</code> 中哪一项最大—— 它往往就是该方案 pipe_mk 的第一近似。</p>
+<h3>fill（树深 / 填充时延）</h3>
+<p><b>定义</b>：对每个源节点 <code>s</code>，在其投递 DAG 中，从 <code>s</code> 注入到任意目的节点 <code>v</code> 沿树路径的<b>链路时延之和</b>的最大值，再对所有源取 max，并加上上下 ramp：</p>
+<div class='formula'>
+depth(s) = max<sub>v</sub> Σ<sub>(p→c) ∈ path(s→v)</sub> latency(p,c) &nbsp;&nbsp;（H=4 水平，V=6 垂直）<br/>
+fill = max<sub>s</sub> depth(s) + ramp<sub>up</sub> + ramp<sub>down</sub> = max<sub>s</sub> depth(s) + 2
+</div>
+<p><b>物理含义</b>：若每条链路<b>独占、无排队</b>，从 collective 开始到<b>最后一个 flit 到达其最远目的节点</b>（尚未计 eject 口排队）所需的最少 cycle 数。fill 刻画的是<b>纯传播时延</b>，与 ramp 带宽无关。</p>
+<p><b>如何计算</b>（与 <code>analyze_branch_position.py</code> / <code>tree_depth</code> 一致）：</p>
+<ol>
+<li>固定源 <code>s</code>，以其 children-map 构成有向树（router 内 fork 产生多条出边，共享入边只走一次）；</li>
+<li>BFS/松弛求每个可达节点相对 <code>s</code> 的累计时延；</li>
+<li>取该源 DAG 中最长路径；对所有 <code>s ∈ [0,N)</code> 再取 max，加 2 cycle ramp。</li>
+</ol>
+<p><b>与分叉位置的关系</b>：</p>
+<table><thead><tr><th>分叉形态</th><th>树形特征</th><th>fill 趋势</th><th>16×16 双向示例</th></tr></thead><tbody>
+<tr><td>仅根处分叉（单环）</td><td>深而窄：拷贝沿一条 Hamilton 路径<b>串行</b>推进，无中途 fork</td><td>≈ 半周长</td><td><b>754</b></td></tr>
+<tr><td>象限 border（3 级）</td><td>中等：本象限半环 + 边界短弧</td><td>≈ 子环半周 + 跨界</td><td><b>266</b></td></tr>
+<tr><td>multitree / grid 8×2</td><td>浅而宽：根附近行/列 fork，最远点跳数少</td><td>≈ 直径量级</td><td><b>152</b></td></tr>
+</tbody></table>
+<div class='insight'>
+<b>直觉</b>：fill 回答「最慢的那份拷贝还要跑多远？」。分叉越<b>靠近源</b>、树越<b>宽</b>， 最远目的越早被覆盖 → fill↓。单环把全部 N−1 份拷贝排成一条链，最后一份必须绕近半圈 → fill 最大。
+</div>
+<p class='meta'>注意：fill 用的是<b>时延加权路径长</b>（H/V），不是 hop 数。 16×16 蛇形环周长约 356 cycle（链路延迟和），半圈 ≈178；加 ramp 后与实测 fill=754（双向取半圈路径）一致。</p>
+<h3>L<sub>max</sub>（峰值有向链路载荷）</h3>
+<p><b>定义</b>：对 mesh 上每条<b>有向</b>链路 <code>e = (p→c)</code>，统计有多少个<b>不同的源</b> <code>s</code> 的投递树会让「<code>s</code> 的 flit」经过 <code>e</code>；取所有链路上的最大值：</p>
+<div class='formula'>
+load(e) = |{ s : s 的 flit 在 DAG 中经过有向边 e }|<br/>
+L<sub>max</sub> = max<sub>所有有向边 e</sub> load(e)
+</div>
+<p><b>物理含义</b>：本模型每条有向链路每 cycle 最多发射 <b>1 个 flit</b>（发射槽 cap=1）。 若某条链路上一共要过 load(e) 个「源 flit」，则仅清空该链路就需要 ≥ load(e) cycle ——  故 <b>makespan ≥ L<sub>max</sub></b>。这是<b>链路带宽</b>下界，与链路 latency 无关。</p>
+<p><b>计数规则</b>（与 in-network fork 一致）：</p>
+<ul>
+<li>每个源 <code>s</code> 只产生 1 个 flit；该 flit 经 router fork 复制到多条出边时，<b>共享的输入边只计 1 次</b>，每条被使用的出边各计 1 次；</li>
+<li>下 ramp <b>不做</b> fork：到达目的节点后只 eject，不计入 L<sub>max</sub>（eject 由 T<sub>eject</sub> 单独约束）；</li>
+<li>所有 N 个源的树<b>叠加</b>在同一 mesh 上：L<sub>max</sub> 是全局最忙那条有向边的总流量。</li>
+</ul>
+<p><b>与分叉位置的关系</b>：</p>
+<table><thead><tr><th>分叉形态</th><th>载荷分布</th><th>L<sub>max</sub> 趋势</th><th>16×16 双向示例</th></tr></thead><tbody>
+<tr><td>单环（根分叉后串行）</td><td>每条环边恰好承担 ⌊N/2⌋ 或 N−1 个源 flit，<b>完全均衡</b></td><td>= N/2（bi）或 N−1（uni）</td><td><b>128</b>（= eject LB）</td></tr>
+<tr><td>border Q=4</td><td>子环边 + 边界短弧；跨界边聚合略增</td><td>略高于 N/2</td><td><b>160</b></td></tr>
+<tr><td>multitree</td><td>根附近多路复制，某些「脊柱」行/列边被大量源共享</td><td>显著升高</td><td><b>240</b></td></tr>
+<tr><td>grid 8×2</td><td>更细区域 → 更多边界边分流，但局部脊柱仍存在</td><td>可低于 multitree</td><td><b>136</b>（uni）</td></tr>
+</tbody></table>
+<div class='insight'>
+<b>直觉</b>：L<sub>max</sub> 回答「最忙的那条有向边一共要过多少份不同源的 flit？」。 分叉越<b>靠近根</b>，越早复制到多条分支，越可能在少数「主干道」上叠很多源 → L<sub>max</sub>↑。 单环几乎不在中途 fork，却把流量<b>均匀摊</b>到每条环边 —— L<sub>max</sub> 达到理论最小（= N/2）。
+</div>
+<p class='meta'>流水线仿真中的 <code>busiest_link</code> 与 L<sub>max</sub> 在 allgather 场景下一致（见 <code>simulate</code> 返回的第三项）。</p>
+<h3>fill 与 L<sub>max</sub> 的此消彼长</h3>
+<p>同一 collective 往往不能同时把 fill 和 L<sub>max</sub> 都压到最低：</p>
+<table><thead><tr><th>方案 (16×16 bi, rb=2)</th><th>fill</th><th>L<sub>max</sub></th><th>eject</th><th>主导</th><th>pipe_mk</th></tr></thead><tbody>
+<tr><td>ring</td><td>754</td><td>128</td><td>128</td><td><b>fill</b></td><td>754</td></tr>
+<tr><td>border</td><td>266</td><td>160</td><td>128</td><td><b>fill</b></td><td>267</td></tr>
+<tr><td>grid 8×2</td><td>152</td><td>136</td><td>128</td><td><b>fill</b></td><td>189*</td></tr>
+<tr><td>multitree</td><td>152</td><td>240</td><td>128</td><td><b>L<sub>max</sub></b>→eject</td><td>255*</td></tr>
+</tbody></table>
+<p class='meta'>* pipe_mk &gt; max(fill,L<sub>max</sub>,eject) 时，差额来自 eject 到达<b>成簇</b>（需 ramp_buf） 或链路日历上的非理想对齐；下界仍解释数量级与分叉权衡。</p>
+<div class='formula'>
+<b>综合下界</b>：makespan ≳ max( fill, L<sub>max</sub>, T<sub>eject</sub> )<br/>
+T<sub>eject</sub> = ⌈(N−1)/ramp_bw⌉ — 与树形无关的硬件地板
+</div>
+<ul>
+<li><b>fill 主导</b>（ring、border、浅树）：再减 makespan 要靠<b>加深/前移分叉</b>缩短最远路径； 单环 fill=754 是典型。</li>
+<li><b>L<sub>max</sub> 主导</b>（multitree 等）：再减要靠<b>分流</b>、区域化，避免过多源共享同一条边； 但 fill 已很低，往往转而受 eject 或 ramp_buf 限制。</li>
+<li><b>三者贴齐</b>（单环双向）：L<sub>max</sub>=T<sub>eject</sub>=128，但 fill 仍 754 ——  说明「链路带宽已最优」≠「时延已最优」。</li>
+<li><b>工程折中</b>：border Q=4 把 fill 从 754 降到 266，L<sub>max</sub> 仅从 128 升到 160， 在 K≤2 无缓冲约束下仍是 Pareto 最优（ramp_bw=2）。</li>
+</ul>
 </div>
 <div class='card'><h2>2. 分叉位置参数化</h2>
 <table><thead><tr><th>族</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>
