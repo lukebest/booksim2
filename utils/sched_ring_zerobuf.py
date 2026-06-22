@@ -432,7 +432,8 @@ def hop_kind(s, p, c):
 
 
 def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
-                    order="interleave", off_limit=20000, record_events=False):
+                    order="interleave", off_limit=20000, record_events=False,
+                    quads=None):
     """Per-source atomic placement with a global AFIFO-occupancy calendar.
 
     Each source is placed (home rigid sub-tree + all foreign sub-trees) at the
@@ -445,7 +446,8 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
-    quads, _ = fr.quad_setup()
+    if quads is None:
+        quads, _ = fr.quad_setup()
     home_idx = {s: quads[fr.quad_of(s)]["order"].index(s) for s in range(n)}
 
     if order == "interleave":
