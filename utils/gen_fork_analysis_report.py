@@ -136,7 +136,9 @@ def scheme_table(schemes, top_n=20):
             f"<td>{s['eject']}</td><td>{s['link_buf']}</td><td>{s['ramp_buf']}</td>"
             f"<td>{s['buf_peak']}</td><td>{s['dom']}</td></tr>"
         )
-    hdr = ("<table><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th>"
+    cap = ("<caption style='caption-side:bottom;text-align:left;font-size:.82rem;color:#64748b;margin-top:8px'>"
+           "peak = max(link_buf, ramp_buf)；ramp_buf = 下 ramp 口最深排队 flit 数（§1b）。</caption>")
+    hdr = ("<table>" + cap + "<thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th>"
            "<th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody>")
     return hdr + "\n".join(rows) + "</tbody></table>"
 
@@ -206,11 +208,65 @@ def build_report(data):
         "<p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。</p>",
         "</div>",
 
+        "<div class='card'><h2>1b. 术语说明：B、ramp_buf 与下 ramp 突发</h2>",
+
+        "<h3>B（hybrid B=k 中的带数）</h3>",
+        "<p><b>B</b> 是把 mesh 在<b>纵向（行方向）</b>均分成 <b>B 个水平带</b>的个数。"
+        " 对 16×16 mesh，行数 MY=16，每带高度 R = MY/B 行：</p>",
+        "<table><thead><tr><th>B</th><th>带数</th><th>每带规模</th><th>本带 Hamilton 环</th><th>跨带传播</th></tr></thead><tbody>",
+        "<tr><td>2</td><td>2 条水平带</td><td>16×8</td><td>源在本带内跑 16×8 蛇形环（①）</td><td>每列再向上下相邻带做<b>纵向树</b>（②）</td></tr>",
+        "<tr><td>4</td><td>4 条</td><td>16×4</td><td>同上，环更小</td><td>列树跨度更短</td></tr>",
+        "<tr><td>8</td><td>8 条</td><td>16×2</td><td>环更小、fill 更低</td><td>树更浅，但 eject 突发更大</td></tr>",
+        "<tr><td>16</td><td>16 条</td><td>16×1</td><td>退化为单行环</td><td>几乎只剩列树 → 接近 multitree</td></tr>",
+        "</tbody></table>",
+        "<p class='meta'>代码：<code>build_hybrid_delivery(s, B, bidir)</code> — "
+        "<code>R = MY // B</code>，<code>ham_cycle_rect(0, y0, MX, R)</code> 为本带环，"
+        "随后对每列 <code>x</code> 向带外行做链式 fork（纵向树）。"
+        " B 越大 → 局部环越短（fill↓），但根附近分叉越早、越多源 flit 同时涌向同一节点的下 ramp（ramp_buf↑）。</p>",
+
+        "<h3>ramp_buf（下 ramp 侧 router 缓冲深度）</h3>",
+        "<p><b>ramp_buf</b> 是在冲突无关流水线日历下，<b>某一个节点</b>在其<b>下 ramp 口</b>上，"
+        "所需 eject 缓冲的<b>峰值深度</b>（单位：flit）。统计方式（<code>measure_buffers</code>）：</p>",
+        "<ol>",
+        "<li>flit 经 mesh 到达目的节点 <code>c</code> 的时刻为 <code>arrive</code>；</li>",
+        "<li>下 ramp 日历把该 flit 排到可 eject 的时刻为 <code>e</code>（每 cycle 最多接纳 ramp_bw 个到达）；</li>",
+        "<li>若 <code>e &gt; arrive</code>，则 flit 在 <code>[arrive, e)</code> 内占用该节点的 <b>eject 缓冲</b>；</li>",
+        "<li><b>ramp_buf</b> = 所有节点、所有 flit 的这类等待区间中，<b>同一时刻重叠 flit 数的最大值</b>。</li>",
+        "</ol>",
+        "<p>对比 <b>link_buf</b>：输出链路上因发射槽被占而等待（可部分转移到边界 AFIFO）；"
+        "<b>ramp_buf</b> 发生在<b>目的节点自身</b>的下 ramp 前，<b>无法</b>用象限边界 AFIFO 代替。</p>",
+
+        "<h3>有 ramp_buf 时，下 ramp 的「突发能力」是多少？</h3>",
+        "<p><b>重要区分</b>：本模型里下 ramp 的<b>物理持续带宽</b>恒为 "
+        "<code>ramp_bw</code> flit/cycle —— 有缓冲也<b>不会</b>让单 cycle 吐出超过 ramp_bw 个 flit。"
+        " ramp_buf 描述的是<b>可吸收的到达突发</b>，不是 eject 加速。</p>",
+        "<div class='formula'>",
+        "令牌桶模型：在任意长度为 T 的窗口内，该节点下 ramp 最多可接收的到达 flit 数 ≤ "
+        "<b>ramp_bw · T + ramp_buf</b><br/>"
+        "等价地：相对持续速率 ramp_bw，最多可<b>多攒 ramp_buf 个 flit</b> 而不丢包（在日历意义下不破坏可行性）。",
+        "</div>",
+        "<table><thead><tr><th>量</th><th>含义</th><th>16×16 示例</th></tr></thead><tbody>",
+        "<tr><td>ramp_bw</td><td>下 ramp <b>持续</b> eject 上限</td><td>1 / 2 / 4 flit/cycle</td></tr>",
+        "<tr><td>ramp_buf = K</td><td>单节点 eject 口<b>最深排队</b> K 个 flit</td><td>multitree K≈121；border bi rb=1 时 K=74</td></tr>",
+        "<tr><td>瞬时 eject 速率</td><td>每 cycle 仍 ≤ ramp_bw</td><td>有 K 个排队时，需 ≥ ⌈K/ramp_bw⌉ cycle 排空</td></tr>",
+        "<tr><td>到达突发（可吸收）</td><td>短窗口内可超过 ramp_bw 的<b>超额到达</b></td><td>最坏 ≈ ramp_buf flit（在同一 arrive 附近同时到达）</td></tr>",
+        "</tbody></table>",
+        "<div class='insight'>",
+        "<b>读 Pareto 表时</b>：预算 K 约束的是 <code>max(link_buf, ramp_buf) ≤ K</code>。"
+        " 例如 border bi、ramp_bw=1 时 ramp_buf=74 —— 表示某节点曾同时有 74 个 flit 等下 ramp，"
+        " 持续 eject 仍为 1 flit/cy，但调度允许这 74 个 flit 在 eject 口排队；"
+        " 要把该方案纳入 K≤2 的 Pareto，必须换 ramp_bw=2（此时 border 的 ramp_buf 降为 2）"
+        " 或改用 hybrid B=2 等更平滑的到达模式。",
+        "</div>",
+        "<p class='meta'>本报告 Pareto 中的 <b>pipe_mk</b> 假设 eject 口确有 depth ≥ ramp_buf 的缓冲；"
+        " 若硬件只给 K 个 slot，则 ramp_buf &gt; K 的方案不可实现，即使其 pipe_mk 更小。</p>",
+        "</div>",
+
         "<div class='card'><h2>2. 分叉位置参数化</h2>",
         "<table><thead><tr><th>族</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>",
         "<tr><td>ring (Q=1)</td><td>根处双向/单向分叉，之后无分叉</td><td>是（≈半周长）</td><td>link=0, ramp≈0</td></tr>",
         "<tr><td>border / grid 2×2 (Q=4)</td><td>子环 + 2/3 级边界多播 + 短弧</td><td>中等</td><td>link≤2；ramp 随 rb 变化</td></tr>",
-        "<tr><td>hybrid B=k</td><td>水平带环 + 列向树</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>",
+        "<tr><td>hybrid B=k</td><td>mesh 纵向切成 <b>B 条水平带</b>：带内 Hamilton 环 + 跨带列向树（见 §1b）</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>",
         "<tr><td>grid Qx×Qy</td><td>通用区域网格边界展开</td><td>Q 大时 fill↓</td><td>Q&gt;2 需 K≫2</td></tr>",
         "<tr><td>multitree (Q=N)</td><td>根处行+列全分叉</td><td>否（eject 主导）</td><td>ramp_buf≈120</td></tr>",
         "</tbody></table>",

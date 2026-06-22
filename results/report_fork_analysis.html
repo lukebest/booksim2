@@ -27,7 +27,7 @@ ul, ol { margin:8px 0 8px 22px; }
 .tag-warn { background:#fef3c7; color:#92400e; }
 </style></head><body>
 <h1>树形 Allgather：多播分叉位置 × 缓冲预算 × Ramp 带宽</h1>
-<p class='meta'>Mesh 16x16，N=256，H=4 V=6 cycle/link，ramp=1 cycle，M=1 flit/源。 生成时间 2026-06-22T13:45:57.995502+00:00。 数据来自 <code>sweep_buffer_pareto.py</code>（流水线冲突无关 TDM 日历 + 实测 peak buffer）。</p>
+<p class='meta'>Mesh 16x16，N=256，H=4 V=6 cycle/link，ramp=1 cycle，M=1 flit/源。 生成时间 2026-06-22T13:53:28.600498+00:00。 数据来自 <code>sweep_buffer_pareto.py</code>（流水线冲突无关 TDM 日历 + 实测 peak buffer）。</p>
 <div class='card'><h2>执行摘要</h2>
 <ol>
 <li><b>三条下界</b>：makespan ≳ max(<i>fill</i> 树深, <i>L<sub>max</sub></i> 峰值链路载荷, <i>T<sub>eject</sub></i> 下 ramp 带宽地板)。 分叉越靠根 → fill↓ 但 L<sub>max</sub>↑ 且 eject 口突发 → router 缓冲↑。</li>
@@ -50,11 +50,46 @@ fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 </div>
 <p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。</p>
 </div>
+<div class='card'><h2>1b. 术语说明：B、ramp_buf 与下 ramp 突发</h2>
+<h3>B（hybrid B=k 中的带数）</h3>
+<p><b>B</b> 是把 mesh 在<b>纵向（行方向）</b>均分成 <b>B 个水平带</b>的个数。 对 16×16 mesh，行数 MY=16，每带高度 R = MY/B 行：</p>
+<table><thead><tr><th>B</th><th>带数</th><th>每带规模</th><th>本带 Hamilton 环</th><th>跨带传播</th></tr></thead><tbody>
+<tr><td>2</td><td>2 条水平带</td><td>16×8</td><td>源在本带内跑 16×8 蛇形环（①）</td><td>每列再向上下相邻带做<b>纵向树</b>（②）</td></tr>
+<tr><td>4</td><td>4 条</td><td>16×4</td><td>同上，环更小</td><td>列树跨度更短</td></tr>
+<tr><td>8</td><td>8 条</td><td>16×2</td><td>环更小、fill 更低</td><td>树更浅，但 eject 突发更大</td></tr>
+<tr><td>16</td><td>16 条</td><td>16×1</td><td>退化为单行环</td><td>几乎只剩列树 → 接近 multitree</td></tr>
+</tbody></table>
+<p class='meta'>代码：<code>build_hybrid_delivery(s, B, bidir)</code> — <code>R = MY // B</code>，<code>ham_cycle_rect(0, y0, MX, R)</code> 为本带环，随后对每列 <code>x</code> 向带外行做链式 fork（纵向树）。 B 越大 → 局部环越短（fill↓），但根附近分叉越早、越多源 flit 同时涌向同一节点的下 ramp（ramp_buf↑）。</p>
+<h3>ramp_buf（下 ramp 侧 router 缓冲深度）</h3>
+<p><b>ramp_buf</b> 是在冲突无关流水线日历下，<b>某一个节点</b>在其<b>下 ramp 口</b>上，所需 eject 缓冲的<b>峰值深度</b>（单位：flit）。统计方式（<code>measure_buffers</code>）：</p>
+<ol>
+<li>flit 经 mesh 到达目的节点 <code>c</code> 的时刻为 <code>arrive</code>；</li>
+<li>下 ramp 日历把该 flit 排到可 eject 的时刻为 <code>e</code>（每 cycle 最多接纳 ramp_bw 个到达）；</li>
+<li>若 <code>e &gt; arrive</code>，则 flit 在 <code>[arrive, e)</code> 内占用该节点的 <b>eject 缓冲</b>；</li>
+<li><b>ramp_buf</b> = 所有节点、所有 flit 的这类等待区间中，<b>同一时刻重叠 flit 数的最大值</b>。</li>
+</ol>
+<p>对比 <b>link_buf</b>：输出链路上因发射槽被占而等待（可部分转移到边界 AFIFO）；<b>ramp_buf</b> 发生在<b>目的节点自身</b>的下 ramp 前，<b>无法</b>用象限边界 AFIFO 代替。</p>
+<h3>有 ramp_buf 时，下 ramp 的「突发能力」是多少？</h3>
+<p><b>重要区分</b>：本模型里下 ramp 的<b>物理持续带宽</b>恒为 <code>ramp_bw</code> flit/cycle —— 有缓冲也<b>不会</b>让单 cycle 吐出超过 ramp_bw 个 flit。 ramp_buf 描述的是<b>可吸收的到达突发</b>，不是 eject 加速。</p>
+<div class='formula'>
+令牌桶模型：在任意长度为 T 的窗口内，该节点下 ramp 最多可接收的到达 flit 数 ≤ <b>ramp_bw · T + ramp_buf</b><br/>等价地：相对持续速率 ramp_bw，最多可<b>多攒 ramp_buf 个 flit</b> 而不丢包（在日历意义下不破坏可行性）。
+</div>
+<table><thead><tr><th>量</th><th>含义</th><th>16×16 示例</th></tr></thead><tbody>
+<tr><td>ramp_bw</td><td>下 ramp <b>持续</b> eject 上限</td><td>1 / 2 / 4 flit/cycle</td></tr>
+<tr><td>ramp_buf = K</td><td>单节点 eject 口<b>最深排队</b> K 个 flit</td><td>multitree K≈121；border bi rb=1 时 K=74</td></tr>
+<tr><td>瞬时 eject 速率</td><td>每 cycle 仍 ≤ ramp_bw</td><td>有 K 个排队时，需 ≥ ⌈K/ramp_bw⌉ cycle 排空</td></tr>
+<tr><td>到达突发（可吸收）</td><td>短窗口内可超过 ramp_bw 的<b>超额到达</b></td><td>最坏 ≈ ramp_buf flit（在同一 arrive 附近同时到达）</td></tr>
+</tbody></table>
+<div class='insight'>
+<b>读 Pareto 表时</b>：预算 K 约束的是 <code>max(link_buf, ramp_buf) ≤ K</code>。 例如 border bi、ramp_bw=1 时 ramp_buf=74 —— 表示某节点曾同时有 74 个 flit 等下 ramp， 持续 eject 仍为 1 flit/cy，但调度允许这 74 个 flit 在 eject 口排队； 要把该方案纳入 K≤2 的 Pareto，必须换 ramp_bw=2（此时 border 的 ramp_buf 降为 2） 或改用 hybrid B=2 等更平滑的到达模式。
+</div>
+<p class='meta'>本报告 Pareto 中的 <b>pipe_mk</b> 假设 eject 口确有 depth ≥ ramp_buf 的缓冲； 若硬件只给 K 个 slot，则 ramp_buf &gt; K 的方案不可实现，即使其 pipe_mk 更小。</p>
+</div>
 <div class='card'><h2>2. 分叉位置参数化</h2>
 <table><thead><tr><th>族</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>
 <tr><td>ring (Q=1)</td><td>根处双向/单向分叉，之后无分叉</td><td>是（≈半周长）</td><td>link=0, ramp≈0</td></tr>
 <tr><td>border / grid 2×2 (Q=4)</td><td>子环 + 2/3 级边界多播 + 短弧</td><td>中等</td><td>link≤2；ramp 随 rb 变化</td></tr>
-<tr><td>hybrid B=k</td><td>水平带环 + 列向树</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>
+<tr><td>hybrid B=k</td><td>mesh 纵向切成 <b>B 条水平带</b>：带内 Hamilton 环 + 跨带列向树（见 §1b）</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>
 <tr><td>grid Qx×Qy</td><td>通用区域网格边界展开</td><td>Q 大时 fill↓</td><td>Q&gt;2 需 K≫2</td></tr>
 <tr><td>multitree (Q=N)</td><td>根处行+列全分叉</td><td>否（eject 主导）</td><td>ramp_buf≈120</td></tr>
 </tbody></table>
@@ -69,74 +104,28 @@ fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 <line x1="58" y1="36.0" x2="58" y2="268.0" stroke="#64748b"/>
 <line x1="58" y1="261.5" x2="536.0" y2="261.5" stroke="#dc2626" stroke-dasharray="6 4"/>
 <text x="532" y="256.5" font-size="10" fill="#dc2626" text-anchor="end">eject LB=255</text>
-<path d="M 58.0,55.9 L 177.5,55.9 L 177.5,177.4 L 297.0,177.4 L 297.0,234.0 L 536.0,234.0 L 536.0,236.4 L 536.0,236.4" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<path d="M 58.0,55.9 L 58.0,55.9" fill="none" stroke="#2563eb" stroke-width="2.5"/>
 <circle cx="58.0" cy="55.9" r="4" fill="#2563eb"/>
 <text x="58.0" y="47.9" font-size="9" text-anchor="middle" fill="#334155">K≤0</text>
-<circle cx="177.5" cy="177.4" r="4" fill="#2563eb"/>
-<text x="177.5" y="169.4" font-size="9" text-anchor="middle" fill="#334155">K≤1</text>
-<circle cx="297.0" cy="234.0" r="4" fill="#2563eb"/>
-<text x="297.0" y="226.0" font-size="9" text-anchor="middle" fill="#334155">K≤2</text>
-<circle cx="536.0" cy="236.4" r="4" fill="#2563eb"/>
-<text x="536.0" y="228.4" font-size="9" text-anchor="middle" fill="#334155">K≤4</text>
 <text x="58.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">0</text>
-<text x="177.5" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">1</text>
-<text x="297.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">2</text>
-<text x="416.5" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">3</text>
-<text x="536.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">4</text>
+<text x="536.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">1</text>
 <text x="297.0" y="312.0" font-size="11" text-anchor="middle" fill="#475569">Router buffer budget K (max(link_buf, ramp_buf) ≤ K)</text>
 <text x="14" y="152.0" font-size="11" fill="#475569" transform="rotate(-90 14 152.0)">makespan (cycles)</text>
-</svg><table><thead><tr><th>K</th><th>makespan</th><th>最优方案</th><th>方向</th><th>link_buf</th><th>ramp_buf</th><th>fill</th><th>主导项</th><th>相对 eject LB</th></tr></thead><tbody><tr><td>K ≤ 0</td><td><b>1474</b></td><td>ring (Q=1)</td><td>uni</td><td>0</td><td>0</td><td>1474</td><td>fill</td><td>17.3%</td></tr>
-<tr><td>K ≤ 1</td><td><b>754</b></td><td>ring (Q=1)</td><td>bi</td><td>0</td><td>1</td><td>754</td><td>fill</td><td>33.8%</td></tr>
-<tr><td>K ≤ 2</td><td><b>418</b></td><td>hybrid B=2</td><td>bi</td><td>2</td><td>2</td><td>416</td><td>fill</td><td>61.0%</td></tr>
-<tr><td>K ≤ 4</td><td><b>404</b></td><td>hybrid B=4</td><td>uni</td><td>2</td><td>4</td><td>394</td><td>fill</td><td>63.1%</td></tr>
-<tr><td>K ≤ 67</td><td><b>289</b></td><td>grid 4x2</td><td>uni</td><td>2</td><td>67</td><td>274</td><td>fill</td><td>88.2%</td></tr>
-<tr><td>K ≤ 73</td><td><b>288</b></td><td>hybrid B=4</td><td>bi</td><td>24</td><td>73</td><td>246</td><td>eject</td><td>88.5%</td></tr>
-<tr><td>K ≤ 74</td><td><b>283</b></td><td>border (Q=4)</td><td>bi</td><td>2</td><td>74</td><td>266</td><td>fill</td><td>90.1%</td></tr>
-<tr><td>K ≤ 103</td><td><b>277</b></td><td>hybrid B=8</td><td>uni</td><td>20</td><td>103</td><td>214</td><td>Lmax</td><td>92.1%</td></tr>
-<tr><td>K ≤ 119</td><td><b>265</b></td><td>hybrid B=8</td><td>bi</td><td>20</td><td>119</td><td>152</td><td>eject</td><td>96.2%</td></tr>
-<tr><td>K ≤ 121</td><td><b>261</b></td><td>hybrid B=16</td><td>bi</td><td>10</td><td>121</td><td>124</td><td>eject</td><td>97.7%</td></tr></tbody></table></div>
+</svg><table><thead><tr><th>K</th><th>makespan</th><th>最优方案</th><th>方向</th><th>link_buf</th><th>ramp_buf</th><th>fill</th><th>主导项</th><th>相对 eject LB</th></tr></thead><tbody><tr><td>K ≤ 0</td><td><b>1474</b></td><td>ring (Q=1)</td><td>uni</td><td>0</td><td>0</td><td>1474</td><td>fill</td><td>17.3%</td></tr></tbody></table></div>
 <div><h3>ramp_bw = 2（eject LB = 128）</h3><svg width="560" height="320" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="13" font-weight="bold">ramp_bw=2</text>
 <line x1="58" y1="268.0" x2="536.0" y2="268.0" stroke="#64748b"/>
 <line x1="58" y1="36.0" x2="58" y2="268.0" stroke="#64748b"/>
 <line x1="58" y1="261.7" x2="536.0" y2="261.7" stroke="#dc2626" stroke-dasharray="6 4"/>
 <text x="532" y="256.7" font-size="10" fill="#dc2626" text-anchor="end">eject LB=128</text>
-<path d="M 58.0,55.8 L 66.5,55.8 L 66.5,160.1 L 75.1,160.1 L 75.1,216.0 L 143.4,216.0 L 143.4,221.2 L 228.7,221.2 L 228.7,223.2 L 297.0,223.2 L 297.0,237.4 L 314.1,237.4 L 314.1,237.7 L 536.0,237.7 L 536.0,241.6 L 536.0,241.6" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<path d="M 58.0,55.8 L 58.0,55.8" fill="none" stroke="#2563eb" stroke-width="2.5"/>
 <circle cx="58.0" cy="55.8" r="4" fill="#2563eb"/>
 <text x="58.0" y="47.8" font-size="9" text-anchor="middle" fill="#334155">K≤0</text>
-<circle cx="66.5" cy="160.1" r="4" fill="#2563eb"/>
-<text x="66.5" y="152.1" font-size="9" text-anchor="middle" fill="#334155">K≤1</text>
-<circle cx="75.1" cy="216.0" r="4" fill="#2563eb"/>
-<text x="75.1" y="208.0" font-size="9" text-anchor="middle" fill="#334155">K≤2</text>
-<circle cx="143.4" cy="221.2" r="4" fill="#2563eb"/>
-<text x="143.4" y="213.2" font-size="9" text-anchor="middle" fill="#334155">K≤10</text>
-<circle cx="228.7" cy="223.2" r="4" fill="#2563eb"/>
-<text x="228.7" y="215.2" font-size="9" text-anchor="middle" fill="#334155">K≤20</text>
-<circle cx="297.0" cy="237.4" r="4" fill="#2563eb"/>
-<text x="297.0" y="229.4" font-size="9" text-anchor="middle" fill="#334155">K≤28</text>
-<circle cx="314.1" cy="237.7" r="4" fill="#2563eb"/>
-<text x="314.1" y="229.7" font-size="9" text-anchor="middle" fill="#334155">K≤30</text>
-<circle cx="536.0" cy="241.6" r="4" fill="#2563eb"/>
-<text x="536.0" y="233.6" font-size="9" text-anchor="middle" fill="#334155">K≤56</text>
 <text x="58.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">0</text>
-<text x="117.8" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">7</text>
-<text x="177.5" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">14</text>
-<text x="237.2" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">21</text>
-<text x="297.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">28</text>
-<text x="356.8" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">35</text>
-<text x="416.5" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">42</text>
-<text x="476.2" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">49</text>
-<text x="536.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">56</text>
+<text x="536.0" y="284.0" font-size="9" text-anchor="middle" fill="#64748b">1</text>
 <text x="297.0" y="312.0" font-size="11" text-anchor="middle" fill="#475569">Router buffer budget K (max(link_buf, ramp_buf) ≤ K)</text>
 <text x="14" y="152.0" font-size="11" fill="#475569" transform="rotate(-90 14 152.0)">makespan (cycles)</text>
-</svg><table><thead><tr><th>K</th><th>makespan</th><th>最优方案</th><th>方向</th><th>link_buf</th><th>ramp_buf</th><th>fill</th><th>主导项</th><th>相对 eject LB</th></tr></thead><tbody><tr><td>K ≤ 0</td><td><b>754</b></td><td>ring (Q=1)</td><td>bi</td><td>0</td><td>0</td><td>754</td><td>fill</td><td>17.0%</td></tr>
-<tr><td>K ≤ 1</td><td><b>437</b></td><td>border (Q=4)</td><td>uni</td><td>1</td><td>1</td><td>434</td><td>fill</td><td>29.3%</td></tr>
-<tr><td>K ≤ 2</td><td><b>267</b></td><td>border (Q=4)</td><td>bi</td><td>2</td><td>2</td><td>266</td><td>fill</td><td>47.9%</td></tr>
-<tr><td>K ≤ 10</td><td><b>251</b></td><td>hybrid B=16</td><td>bi</td><td>10</td><td>9</td><td>124</td><td>Lmax</td><td>51.0%</td></tr>
-<tr><td>K ≤ 20</td><td><b>245</b></td><td>grid 4x8</td><td>bi</td><td>20</td><td>20</td><td>152</td><td>Lmax</td><td>52.2%</td></tr>
-<tr><td>K ≤ 28</td><td><b>202</b></td><td>grid 8x2</td><td>uni</td><td>28</td><td>27</td><td>194</td><td>fill</td><td>63.4%</td></tr>
-<tr><td>K ≤ 30</td><td><b>201</b></td><td>grid 4x2</td><td>bi</td><td>30</td><td>29</td><td>190</td><td>fill</td><td>63.7%</td></tr>
-<tr><td>K ≤ 56</td><td><b>189</b></td><td>grid 8x2</td><td>bi</td><td>56</td><td>55</td><td>152</td><td>fill</td><td>67.7%</td></tr></tbody></table></div>
+</svg><table><thead><tr><th>K</th><th>makespan</th><th>最优方案</th><th>方向</th><th>link_buf</th><th>ramp_buf</th><th>fill</th><th>主导项</th><th>相对 eject LB</th></tr></thead><tbody><tr><td>K ≤ 0</td><td><b>754</b></td><td>ring (Q=1)</td><td>bi</td><td>0</td><td>0</td><td>754</td><td>fill</td><td>17.0%</td></tr></tbody></table></div>
 <div><h3>ramp_bw = 4（eject LB = 64）</h3><svg width="560" height="320" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="13" font-weight="bold">ramp_bw=4</text>
 <line x1="58" y1="268.0" x2="536.0" y2="268.0" stroke="#64748b"/>
@@ -188,47 +177,11 @@ fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 <li><b>K≥56</b>：grid 8×2 bi 最优 mk=189（rb=2/4）；仍高于 eject LB 128/64。</li>
 <li><b>eject 地板</b>：ramp_bw=1→255，2→128，4→64；仅当 fill/Lmax 已贴地板时 ramp_bw 才成为主导瓶颈。</li>
 </ul></div>
-<div class='card'><h2>5. 全方案扫描（ramp_bw=1，按 pipe_mk 排序 Top 20）</h2><table><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>hybrid B=16</td><td>bi</td><td>261</td><td>124</td><td>240</td><td>255</td><td>10</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>hybrid B=8</td><td>bi</td><td>265</td><td>152</td><td>240</td><td>255</td><td>20</td><td>119</td><td>119</td><td>eject</td></tr>
-<tr><td>hybrid B=16</td><td>uni</td><td>265</td><td>152</td><td>240</td><td>255</td><td>10</td><td>119</td><td>119</td><td>eject</td></tr>
-<tr><td>multitree (Q=N)</td><td>uni</td><td>265</td><td>152</td><td>240</td><td>255</td><td>10</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 2x8</td><td>bi</td><td>265</td><td>152</td><td>232</td><td>255</td><td>20</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 8x4</td><td>bi</td><td>265</td><td>152</td><td>196</td><td>255</td><td>40</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 4x8</td><td>bi</td><td>265</td><td>152</td><td>228</td><td>255</td><td>20</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 8x2</td><td>bi</td><td>266</td><td>152</td><td>136</td><td>255</td><td>56</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 4x4</td><td>bi</td><td>270</td><td>166</td><td>200</td><td>255</td><td>40</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 4x8</td><td>uni</td><td>271</td><td>166</td><td>231</td><td>255</td><td>20</td><td>120</td><td>120</td><td>eject</td></tr>
-<tr><td>grid 8x4</td><td>uni</td><td>272</td><td>170</td><td>199</td><td>255</td><td>40</td><td>119</td><td>119</td><td>eject</td></tr>
-<tr><td>grid 4x2</td><td>bi</td><td>274</td><td>190</td><td>144</td><td>255</td><td>30</td><td>121</td><td>121</td><td>eject</td></tr>
-<tr><td>grid 8x2</td><td>uni</td><td>275</td><td>194</td><td>143</td><td>255</td><td>28</td><td>119</td><td>119</td><td>eject</td></tr>
-<tr><td>grid 2x8</td><td>uni</td><td>275</td><td>182</td><td>239</td><td>255</td><td>20</td><td>119</td><td>119</td><td>eject</td></tr>
-<tr><td>grid 2x4</td><td>bi</td><td>275</td><td>192</td><td>208</td><td>255</td><td>34</td><td>120</td><td>120</td><td>eject</td></tr>
-<tr><td>hybrid B=8</td><td>uni</td><td>277</td><td>214</td><td>255</td><td>255</td><td>20</td><td>103</td><td>103</td><td>Lmax</td></tr>
-<tr><td>grid 4x4</td><td>uni</td><td>281</td><td>202</td><td>207</td><td>255</td><td>40</td><td>116</td><td>116</td><td>eject</td></tr>
-<tr><td>border (Q=4)</td><td>bi</td><td>283</td><td>266</td><td>160</td><td>255</td><td>2</td><td>74</td><td>74</td><td>fill</td></tr>
-<tr><td>grid 2x2</td><td>bi</td><td>283</td><td>266</td><td>160</td><td>255</td><td>2</td><td>74</td><td>74</td><td>fill</td></tr>
-<tr><td>hybrid B=4</td><td>bi</td><td>288</td><td>246</td><td>224</td><td>255</td><td>24</td><td>73</td><td>73</td><td>eject</td></tr></tbody></table></div>
-<div class='card'><h2>5. 全方案扫描（ramp_bw=2，按 pipe_mk 排序 Top 20）</h2><table><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>grid 8x2</td><td>bi</td><td>189</td><td>152</td><td>136</td><td>128</td><td>56</td><td>55</td><td>56</td><td>fill</td></tr>
-<tr><td>grid 4x2</td><td>bi</td><td>201</td><td>190</td><td>144</td><td>128</td><td>30</td><td>29</td><td>30</td><td>fill</td></tr>
-<tr><td>grid 8x2</td><td>uni</td><td>202</td><td>194</td><td>143</td><td>128</td><td>28</td><td>27</td><td>28</td><td>fill</td></tr>
-<tr><td>grid 8x4</td><td>bi</td><td>225</td><td>152</td><td>196</td><td>128</td><td>40</td><td>44</td><td>44</td><td>Lmax</td></tr>
-<tr><td>grid 4x4</td><td>bi</td><td>231</td><td>166</td><td>200</td><td>128</td><td>40</td><td>41</td><td>41</td><td>Lmax</td></tr>
-<tr><td>grid 8x4</td><td>uni</td><td>232</td><td>170</td><td>199</td><td>128</td><td>40</td><td>41</td><td>41</td><td>Lmax</td></tr>
-<tr><td>grid 2x4</td><td>bi</td><td>242</td><td>192</td><td>208</td><td>128</td><td>34</td><td>30</td><td>34</td><td>Lmax</td></tr>
-<tr><td>grid 4x8</td><td>bi</td><td>245</td><td>152</td><td>228</td><td>128</td><td>20</td><td>20</td><td>20</td><td>Lmax</td></tr>
-<tr><td>grid 4x4</td><td>uni</td><td>246</td><td>202</td><td>207</td><td>128</td><td>40</td><td>27</td><td>40</td><td>Lmax</td></tr>
-<tr><td>grid 2x8</td><td>bi</td><td>247</td><td>152</td><td>232</td><td>128</td><td>20</td><td>20</td><td>20</td><td>Lmax</td></tr>
-<tr><td>hybrid B=16</td><td>bi</td><td>251</td><td>124</td><td>240</td><td>128</td><td>10</td><td>9</td><td>10</td><td>Lmax</td></tr>
-<tr><td>grid 4x8</td><td>uni</td><td>251</td><td>166</td><td>231</td><td>128</td><td>20</td><td>20</td><td>20</td><td>Lmax</td></tr>
-<tr><td>multitree (Q=N)</td><td>uni</td><td>255</td><td>152</td><td>240</td><td>128</td><td>10</td><td>10</td><td>10</td><td>Lmax</td></tr>
-<tr><td>hybrid B=16</td><td>uni</td><td>255</td><td>152</td><td>240</td><td>128</td><td>10</td><td>10</td><td>10</td><td>Lmax</td></tr>
-<tr><td>hybrid B=8</td><td>bi</td><td>255</td><td>152</td><td>240</td><td>128</td><td>20</td><td>20</td><td>20</td><td>Lmax</td></tr>
-<tr><td>grid 2x8</td><td>uni</td><td>261</td><td>182</td><td>239</td><td>128</td><td>20</td><td>20</td><td>20</td><td>Lmax</td></tr>
-<tr class='near'><td>border (Q=4)</td><td>bi</td><td>267</td><td>266</td><td>160</td><td>128</td><td>2</td><td>2</td><td>2</td><td>fill</td></tr>
-<tr class='near'><td>grid 2x2</td><td>bi</td><td>267</td><td>266</td><td>160</td><td>128</td><td>2</td><td>2</td><td>2</td><td>fill</td></tr>
-<tr class='near'><td>grid 4x2</td><td>uni</td><td>276</td><td>274</td><td>159</td><td>128</td><td>2</td><td>2</td><td>2</td><td>fill</td></tr>
-<tr><td>hybrid B=8</td><td>uni</td><td>277</td><td>214</td><td>255</td><td>128</td><td>20</td><td>1</td><td>20</td><td>Lmax</td></tr></tbody></table></div>
-<div class='card'><h2>5. 全方案扫描（ramp_bw=4，按 pipe_mk 排序 Top 20）</h2><table><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>grid 8x2</td><td>bi</td><td>189</td><td>152</td><td>136</td><td>64</td><td>56</td><td>0</td><td>56</td><td>fill</td></tr>
+<div class='card'><h2>5. 全方案扫描（ramp_bw=1，按 pipe_mk 排序 Top 20）</h2><table><caption style='caption-side:bottom;text-align:left;font-size:.82rem;color:#64748b;margin-top:8px'>peak = max(link_buf, ramp_buf)；ramp_buf = 下 ramp 口最深排队 flit 数（§1b）。</caption><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>ring (Q=1)</td><td>uni</td><td>1474</td><td>1474</td><td>255</td><td>255</td><td>0</td><td>0</td><td>0</td><td>fill</td></tr></tbody></table></div>
+<div class='card'><h2>5. 全方案扫描（ramp_bw=2，按 pipe_mk 排序 Top 20）</h2><table><caption style='caption-side:bottom;text-align:left;font-size:.82rem;color:#64748b;margin-top:8px'>peak = max(link_buf, ramp_buf)；ramp_buf = 下 ramp 口最深排队 flit 数（§1b）。</caption><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>ring (Q=1)</td><td>bi</td><td>754</td><td>754</td><td>128</td><td>128</td><td>0</td><td>0</td><td>0</td><td>fill</td></tr>
+<tr class='near'><td>hybrid B=2</td><td>uni</td><td>756</td><td>754</td><td>255</td><td>128</td><td>1</td><td>0</td><td>1</td><td>fill</td></tr>
+<tr class='near'><td>ring (Q=1)</td><td>uni</td><td>1474</td><td>1474</td><td>255</td><td>128</td><td>0</td><td>0</td><td>0</td><td>fill</td></tr></tbody></table></div>
+<div class='card'><h2>5. 全方案扫描（ramp_bw=4，按 pipe_mk 排序 Top 20）</h2><table><caption style='caption-side:bottom;text-align:left;font-size:.82rem;color:#64748b;margin-top:8px'>peak = max(link_buf, ramp_buf)；ramp_buf = 下 ramp 口最深排队 flit 数（§1b）。</caption><thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th><th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody><tr class='best'><td>grid 8x2</td><td>bi</td><td>189</td><td>152</td><td>136</td><td>64</td><td>56</td><td>0</td><td>56</td><td>fill</td></tr>
 <tr><td>grid 4x2</td><td>bi</td><td>201</td><td>190</td><td>144</td><td>64</td><td>30</td><td>0</td><td>30</td><td>fill</td></tr>
 <tr><td>grid 8x2</td><td>uni</td><td>202</td><td>194</td><td>143</td><td>64</td><td>28</td><td>0</td><td>28</td><td>fill</td></tr>
 <tr><td>grid 8x4</td><td>bi</td><td>225</td><td>152</td><td>196</td><td>64</td><td>40</td><td>0</td><td>40</td><td>Lmax</td></tr>
