@@ -91,16 +91,18 @@ def validate_order(order, w, h):
     return True
 
 
-def make_quads(cfg):
-    """cfg: 4-tuple of (base, rot) for Q0..Q3."""
-    fr.cfg(16, 16, 4, 6)
-    hw, hh = 8, 8
+def make_quads(cfg, sz=None):
+    """cfg: 4-tuple of (base, rot) for Q0..Q3.  sz: mesh side (4, 8, or 16)."""
+    if sz is None:
+        sz = fr._MX
+    fr.cfg(sz, sz, 4, 6)
+    hw, hh = sz // 2, sz // 2
     specs = [(0, 0), (hw, 0), (0, hh), (hw, hh)]
     reps = [(hw - 1, hh - 1), (hw, hh - 1), (hw - 1, hh), (hw, hh)]
     quads = []
     for (x0, y0), (rx, ry), (base, rot) in zip(specs, reps, cfg):
         order = quad_ham(base, rot, x0, y0, hw, hh)
-        assert validate_order(order, hw, hh), f"invalid cycle {base} rot{rot} @({x0},{y0})"
+        assert validate_order(order, hw, hh), f"invalid cycle {base} rot{rot} @({x0},{y0}) sz={sz}"
         quads.append({"rep": fr.nid(rx, ry), "order": order})
     return quads
 
@@ -117,31 +119,36 @@ def cfg_short(cfg):
 
 
 def run_one(cfg, scheme):
-    quads = make_quads(cfg)
+    return run_one_cfg(cfg, scheme)
+
+
+def run_one_cfg(cfg, scheme, sz=16, bidir=True, ramp_bw=2, spread=0, lb_cross=False):
+    quads = make_quads(cfg, sz)
     if scheme == "border":
         deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
     else:
         deliv = lambda s, b, q=quads: S.deliv_ringfollow_quads(s, b, q)
-    r = S.schedule(16, True, 2, deliv, spread=0, quads=quads)
-    return r
+    return S.schedule(sz, bidir, ramp_bw, deliv, spread=spread, quads=quads,
+                      lb_cross=lb_cross)
 
 
-def canonical_shapes(bases):
+def canonical_shapes(bases, sz=16):
     """Deduplicate (base,rot) that yield the same node order on Q0."""
-    fr.cfg(16, 16, 4, 6)
+    fr.cfg(sz, sz, 4, 6)
+    hw = sz // 2
     seen = {}
     out = []
     for b in bases:
         for r in range(4):
-            key = tuple(quad_ham(b, r, 0, 0, 8, 8))
+            key = tuple(quad_ham(b, r, 0, 0, hw, hw))
             if key not in seen:
                 seen[key] = (b, r)
                 out.append((b, r))
     return out
 
 
-def all_configs(bases):
-    per_quad = canonical_shapes(bases)
+def all_configs(bases, sz=16):
+    per_quad = canonical_shapes(bases, sz)
     return list(itertools.product(per_quad, repeat=4))
 
 

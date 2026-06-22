@@ -5,13 +5,13 @@ Every scheme below is strictly ring_buf=0 and eject_buf=0 (no router buffer; all
 waiting happens in the border AFIFOs), eject bandwidth 2 flit/cy, H=4, V=6.
 Schedules come from utils/sched_ring_zerobuf.py.
 
-  border-fast : 4 parallel quadrant rings, short-arc spread, home rings injected
-                together -> makespan 266 but bursty (AFIFO depth 11).
-  border-opt  : ring shapes tuned by sweep -> makespan 240 (AFIFO depth ~45).
-  border-d5   : same, paced so every AFIFO <= 5 -> makespan ~454.
-  ringfollow  : cross then ride the WHOLE destination ring, AFIFO <= 5 -> ~508.
-  ringfollow-opt : shape-tuned ring-following -> makespan 416.
-  global1     : the 4 rings spliced into ONE global ring -> 754, AFIFO depth ~2.
+  border_optimal : default ham_cycle_rect, spread=0, 8-link LB routing
+                   -> makespan 266, per-link AFIFO peak 11, balanced peak 5 (≤5 budget).
+  border_fast    : same schedule without LB pick -> also 266cy.
+  border_d5      : atomic pacing, every single AFIFO <= 5 -> makespan ~454.
+  border_opt     : ring shapes tuned by sweep -> makespan 240 but AFIFO depth ~45.
+  ringfollow     : cross then ride destination ring, AFIFO<=5 paced -> ~508.
+  global1        : 4 rings spliced into ONE global ring -> 754.
 
 Output: results/dataflow_zerobuf.html (self-contained canvas viewer).
 """
@@ -74,6 +74,7 @@ def pack(name, label, note, result, ring_paths):
         "note": note,
         "makespan": mk,
         "afifo_depth": result["afifo_depth"],
+        "afifo_bal_peak": (result.get("afifo_balanced") or {}).get("peak", 0),
         "max_inject_off": result["max_inject_off"],
         "events": {"s": s_, "p": p_, "c": c_, "t": t_, "lat": lat_,
                    "arr": arr_, "kind": k_, "n_ev": len(s_)},
@@ -92,35 +93,48 @@ def pack(name, label, note, result, ring_paths):
 def build():
     fr.cfg(MX, MY, 4, 6)
     schemes = {}
+    rings_def = quad_rings()
+
+    # ---- 16×16 双向最优：border 短弧 266cy，AFIFO 均衡深度 ≤5 ----
+    r_opt = S.schedule(MX, True, 2, S.deliv_border, spread=0, lb_cross=True,
+                       record_events=True)
+    schemes["border_optimal"] = pack(
+        "border 266cy 最优", "border 短弧 · 266cy 最优（AFIFO 均衡≤5）",
+        "16×16 双向已证最小 makespan=266（spread=0，默认 ham_cycle_rect）。"
+        "8 条并行边界 AFIFO/方向 + 最短队列选路；单链路峰值深度 11，"
+        f"负载均衡后峰值 <b>{r_opt['afifo_balanced']['peak']}</b>（≤5 预算内）。"
+        "router 零 buffer，等待仅在 AFIFO。",
+        r_opt, rings_def)
+
+    r_fast = S.schedule(MX, True, 2, S.deliv_border, spread=0)
+    schemes["border_fast"] = pack(
+        "border 266cy", "border 短弧 · 266cy（无 LB 选路）",
+        "与最优方案相同调度（spread=0）；固定边界链路，无在线最短队列。"
+        f"单链路 AFIFO 峰值 {r_fast['afifo_depth']}，"
+        f"均衡峰值 {r_fast['afifo_balanced']['peak']}。",
+        S.schedule(MX, True, 2, S.deliv_border, spread=0, record_events=True), rings_def)
+
+    schemes["border_d5"] = pack(
+        "border depth≤5", "border 短弧 · 单链路 AFIFO≤5（相位错开）",
+        "atomic 调度强制每条边界 AFIFO 深度 ≤5（单链路硬约束）；"
+        "makespan 升至 ~454，换取无需依赖 8 链路均摊。router 仍零 buffer。",
+        S.schedule_atomic(MX, True, 2, S.deliv_border, afifo_cap=5,
+                          order="natural", record_events=True), rings_def)
+
     r, rings = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads)
     schemes["border_opt"] = pack(
         "border 240cy", "border 短弧 · 环形状优化（240cy）",
-        "4096 组环形状扫描最优：左右列旋转相反，makespan=240（比默认 266 快 26cy）；"
-        "需 AFIFO 深度 ~45。" + cfg_str(OPTIMAL_BORDER),
+        "4096 组环形状扫描：左右列旋转相反，makespan=240（比 266 快 26cy）；"
+        f"需 AFIFO 单链路深度 ~{r['afifo_depth']}（远超 5）。"
+        + cfg_str(OPTIMAL_BORDER),
         r, rings)
     r_lb, rings_lb = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads, lb_cross=True)
     schemes["border_opt_lb"] = pack(
-        "border 240cy+LB", "border 240cy · 8链路最短队列 LB",
-        "跨界时在 8 条并行 AFIFO 中选排队最短的链路（在线贪心）。"
-        f"在线 peak={r_lb['afifo_depth']}；"
-        f"8链路组内理想均摊下界 peak={r_lb['afifo_balanced']['peak']}。",
+        "border 240cy+LB", "border 240cy · 8链路 LB",
+        "环形状优化 + 最短队列选路。"
+        f"单链路 peak={r_lb['afifo_depth']}；均衡 peak={r_lb['afifo_balanced']['peak']}。",
         r_lb, rings_lb)
-    schemes["border_fast"] = pack(
-        "border 全速", "border 短弧 · 默认环（266cy）",
-        "4 个 8×8 环并行，本环 conveyor 同时注入；默认 ham_cycle_rect，AFIFO 深度 11。",
-        S.schedule(MX, True, 2, S.deliv_border, record_events=True), quad_rings())
-    r266_lb = S.schedule(MX, True, 2, S.deliv_border, record_events=True, lb_cross=True)
-    schemes["border_fast_lb"] = pack(
-        "border 266cy+LB", "border 266cy · 8链路最短队列 LB",
-        "默认环 + 边界最短队列选路。"
-        f"在线 peak={r266_lb['afifo_depth']}；"
-        f"理想均摊 peak={r266_lb['afifo_balanced']['peak']}（≤5 预算内）。",
-        r266_lb, quad_rings())
-    schemes["border_d5"] = pack(
-        "border depth≤5", "border 短弧 · AFIFO≤5（相位错开）",
-        "同 4 环并行，但注入相位错开把每个 AFIFO 压到 ≤5；router 仍零 buffer。",
-        S.schedule_atomic(MX, True, 2, S.deliv_border, afifo_cap=5,
-                          order="natural", record_events=True), quad_rings())
+
     r, rings = schedule_with_quads(OPTIMAL_RINGFOLLOW, S.deliv_ringfollow_quads)
     schemes["ringfollow_opt"] = pack(
         "ring-following 416cy", "ring-following · 环形状优化（416cy）",
@@ -131,7 +145,7 @@ def build():
         "ring-following", "ring-following · AFIFO≤5（相位错开）",
         "外象限数据切入目的 8×8 环后绕整圈双向流转；AFIFO≤5，router 零 buffer。",
         S.schedule_atomic(MX, True, 2, S.deliv_ringfollow, afifo_cap=5,
-                          order="quadblock", record_events=True), quad_rings())
+                          order="quad", record_events=True), rings_def)
     schemes["global1"] = pack(
         "global 单环", "4 环穿成 1 个全局环（无并行）",
         "四象限 Hamilton 环经边界 AFIFO 拼成一条全局环；天然零 buffer、AFIFO 深度仅 2，但放弃并行故最慢。",
@@ -144,9 +158,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["border_opt", "border_opt_lb", "border_fast", "border_fast_lb",
-                  "border_d5", "ringfollow_opt", "ringfollow", "global1"],
-        "default": "border_opt_lb",
+        "order": ["border_optimal", "border_fast", "border_d5",
+                  "border_opt", "border_opt_lb", "ringfollow_opt", "ringfollow", "global1"],
+        "default": "border_optimal",
         "schemes": schemes,
     }
     return cfg
@@ -190,7 +204,8 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <h1>16×16 零 router-buffer AllGather · cycle-by-cycle</h1>
 <p>4×(8×8 Hamilton 环)+ 跨界 AFIFO · H=4, V=6 · 双向, 下 ramp=2 ·
 所有方案 <b>router 内零 buffer</b>（ring_buf=0, eject_buf=0），等待只发生在 AFIFO。
-当前 makespan=<b id="hmk"></b> cy · 所需 AFIFO 深度=<b id="haf"></b></p>
+<b>16×16 双向最优 makespan=266</b> · AFIFO 均衡深度 ≤<b>5</b>（8 链路/方向负载均衡）。
+当前方案 makespan=<b id="hmk"></b> cy · 单链路 AFIFO 峰值=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
 </header>
 <div class="layout">
 <div>
@@ -222,7 +237,8 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div>飞行中 flit<b id="fly">0</b></div>
 <div>本 cycle eject<b id="ej">0</b></div>
 <div>makespan<b id="mk2">0</b></div>
-<div>AFIFO 深度<b id="af">0</b></div>
+<div>单链路 AFIFO<b id="af">0</b></div>
+<div>均衡 AFIFO<b id="afb">0</b></div>
 <div>本 cycle 排队<b id="afnow">0</b></div>
 </div>
 <p class="note" id="note"></p>
@@ -230,14 +246,16 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 </div>
 <div>
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
-<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>AFIFO 深度</th></tr></thead>
+<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note">权衡：AFIFO 越深 → makespan 越小。240cy 固定路由 peak 45，8链路理想均摊下界 40；
-266cy 固定 peak 11，理想均摊 5（≤5 预算）；相位错开 454cy。</p>
+<p class="note"><b>266cy 为 16×16 双向已证最优</b>（border 短弧 + spread=0）。
+单链路峰值 11 看似超预算，但 8 条并行 AFIFO/方向经负载均衡后峰值仅 <b>5</b>（≤5 预算）。
+若强制每条 AFIFO ≤5（相位错开 atomic），makespan 升至 ~454。
+环形状优化可压至 240cy，但需 AFIFO 深度 ~45。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
 <canvas id="afc" width="280" height="150" style="width:100%;max-width:300px;display:block;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0"></canvas>
-<p class="note" id="aflbl">橙=固定路由全网峰值；紫虚线=8链路组内理想均摊下界；绿虚线=预算5。</p>
+<p class="note" id="aflbl">橙=单链路全网峰值；紫虚线=8链路理想均摊（均衡深度）；绿虚线=预算 5。</p>
 <button id="jumppeak" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到 AFIFO 峰值 cycle</button>
 <button id="jumpbal" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到理想均摊峰值</button>
 </div>
@@ -262,13 +280,16 @@ function isCross(p,c){return D.qmap[p]!==D.qmap[c];}
 // scheme dropdown + comparison table
 const schemeSel=document.getElementById('scheme');
 D.order.forEach(k=>{const o=document.createElement('option');o.value=k;
-  o.textContent=D.schemes[k].label+'（'+D.schemes[k].makespan+'cy, AFIFO '+D.schemes[k].afifo_depth+'）';
+  const sc=D.schemes[k];
+  o.textContent=sc.label+'（'+sc.makespan+'cy, 均衡AFIFO '+sc.afifo_bal_peak+'）';
   schemeSel.appendChild(o);});
 schemeSel.value=key;
 function buildCmp(){const tb=document.getElementById('cmpbody');tb.innerHTML='';
   D.order.forEach(k=>{const sc=D.schemes[k];const tr=document.createElement('tr');
     if(k===key)tr.className='on';
-    tr.innerHTML='<td>'+sc.label+'</td><td>'+sc.makespan+'</td><td>'+sc.afifo_depth+'</td>';
+    const balCls=sc.afifo_bal_peak<=5?' style="background:#dcfce7;font-weight:bold"':'';
+    tr.innerHTML='<td>'+sc.label+'</td><td>'+sc.makespan+'</td><td>'+sc.afifo_depth+'</td>'
+      +'<td'+balCls+'>'+sc.afifo_bal_peak+'</td>';
     tb.appendChild(tr);});}
 
 const srcSel=document.getElementById('src');
@@ -421,8 +442,10 @@ function syncScheme(){
   document.getElementById('mk').textContent=S.makespan;
   document.getElementById('mk2').textContent=S.makespan;
   document.getElementById('af').textContent=S.afifo_depth;
+  document.getElementById('afb').textContent=S.afifo_bal_peak;
   document.getElementById('hmk').textContent=S.makespan;
   document.getElementById('haf').textContent=S.afifo_depth;
+  document.getElementById('hafb').textContent=S.afifo_bal_peak;
   document.getElementById('slider').max=S.makespan;
   document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
   document.getElementById('jumppeak').onclick=()=>{
@@ -464,11 +487,12 @@ def render():
     data = json.dumps(cfg, separators=(",", ":"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(HTML.replace("__DATA__", data), encoding="utf-8")
-    sizes = {k: (v["makespan"], v["afifo_depth"]) for k, v in cfg["schemes"].items()}
+    sizes = {k: (v["makespan"], v["afifo_depth"], v["afifo_bal_peak"])
+             for k, v in cfg["schemes"].items()}
     print(f"Wrote {OUT}")
     for k in cfg["order"]:
-        mk, af = sizes[k]
-        print(f"  {k:12s} makespan={mk:4d}  AFIFO_depth={af}")
+        mk, af, bal = sizes[k]
+        print(f"  {k:16s} makespan={mk:4d}  AFIFO_link={af:2d}  AFIFO_bal={bal}")
 
 
 if __name__ == "__main__":
