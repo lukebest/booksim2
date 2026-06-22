@@ -1,0 +1,250 @@
+{
+  "updated": "2026-06-22T05:05:27.752416+00:00",
+  "afifo_cap": 5,
+  "configs": {
+    "4x4": {
+      "uni": {
+        "size": 4,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 16,
+        "eject_lb": 15,
+        "strict_any": {
+          "makespan": 39,
+          "afifo_depth": 2,
+          "afifo_balanced": 2,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 39,
+          "afifo_depth": 2,
+          "afifo_balanced": 2,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 39,
+          "afifo_depth": 2,
+          "afifo_balanced": 2,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 38,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null
+      },
+      "bi": {
+        "size": 4,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 16,
+        "eject_lb": 8,
+        "strict_any": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 32,
+          "ring_buf": 0,
+          "afifo_depth": 1,
+          "eject_buf": 1,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": {
+          "makespan": 32,
+          "ring_buf": 0,
+          "afifo_depth": 1,
+          "eject_buf": 1,
+          "scheduler": "pipelined"
+        }
+      }
+    },
+    "8x8": {
+      "uni": {
+        "size": 8,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 64,
+        "eject_lb": 63,
+        "strict_any": {
+          "makespan": 131,
+          "afifo_depth": 13,
+          "afifo_balanced": 11,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 180,
+          "afifo_depth": 3,
+          "afifo_balanced": 2,
+          "order": "interleave",
+          "scheduler": "atomic"
+        },
+        "strict_per_link": {
+          "makespan": 180,
+          "afifo_depth": 3,
+          "afifo_balanced": 2,
+          "order": "interleave",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 123,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null
+      },
+      "bi": {
+        "size": 8,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 64,
+        "eject_lb": 32,
+        "strict_any": {
+          "makespan": 86,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 86,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 86,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 86,
+          "ring_buf": 1,
+          "afifo_depth": 2,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null
+      }
+    },
+    "16x16": {
+      "uni": {
+        "size": 16,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 256,
+        "eject_lb": 255,
+        "strict_any": {
+          "makespan": 508,
+          "afifo_depth": 62,
+          "afifo_balanced": 60,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 764,
+          "afifo_depth": 5,
+          "afifo_balanced": 2,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "strict_per_link": {
+          "makespan": 764,
+          "afifo_depth": 5,
+          "afifo_balanced": 2,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 437,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null
+      },
+      "bi": {
+        "size": 16,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 256,
+        "eject_lb": 128,
+        "strict_any": {
+          "makespan": 266,
+          "afifo_depth": 11,
+          "afifo_balanced": 5,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 266,
+          "afifo_depth": 11,
+          "afifo_balanced": 5,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 454,
+          "afifo_depth": 3,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 267,
+          "ring_buf": 2,
+          "afifo_depth": 2,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null
+      }
+    }
+  },
+  "elapsed_s": 37.93088960647583,
+  "history": [],
+  "improvements": []
+}

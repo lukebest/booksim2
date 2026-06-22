@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-"""Report: minimum makespan of the border (4 Hamilton rings + cross-border AFIFO)
-allgather, for 4x4 / 8x8 / 16x16 meshes, H=4, V=6.
+"""Report: minimum makespan of border 4-ring + cross-border AFIFO allgather.
 
-Model (per the design spec):
-  * The 4 quadrant Hamilton rings are internally 0-buffer, conflict-free, non-blocking.
-  * Cross-border links are AFIFOs that may hold up to 5 flits (depth=5).
-  * Multi-point border injection: a flit crosses at the shared-border nodes and covers
-    the neighbour ring with short arcs; the diagonal ring is reached via an intermediate.
-  * Direction follows the down-ramp bandwidth: uni ring @ ramp=1, bi ring @ ramp=2.
-  * Down-ramp (eject) is a hard constraint (1 or 2 flit/cy/node).
+Reads results/border_afifo_search.json (from search_border_afifo.py).
+Primary metric: strict 0-buffer scheduler with load-balanced AFIFO depth <= 5.
+Reference: pipelined calendar (may allow ring_buf>0) and rigid 0-buffer upper bound.
 """
 
 import html
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_PATH = ROOT / "results" / "report_border_afifo.html"
+SEARCH_PATH = ROOT / "results" / "border_afifo_search.json"
 
 CFG = [("uni", "单向环 @ 下ramp=1"), ("bi", "双向环 @ 下ramp=2")]
 
 
-def afifo_results():
-    import sim_fused_rings as fr
-    return fr.border_afifo_study((4, 8, 16))
+def load_search():
+    if SEARCH_PATH.exists():
+        return json.loads(SEARCH_PATH.read_text(encoding="utf-8"))
+    # fallback: run quick search
+    import search_border_afifo as sb
+    return sb.run_iteration(deep=False, shape_search=False)
 
 
 def rigid_results():
-    """Strict all-0-buffer rigid border (NO AFIFO) -- the conservative upper bound."""
     import sched_zerobuf_compare as Z
     out = {}
     for sz in (4, 8, 16):
@@ -41,7 +40,6 @@ def rigid_results():
 
 
 def bar_chart(title, groups, series, lb_per_group=None):
-    """Grouped bars. groups=list of x labels; series=list of (name,color,[vals])."""
     n_g = len(groups)
     n_s = len(series)
     gw = 130
@@ -49,8 +47,8 @@ def bar_chart(title, groups, series, lb_per_group=None):
     height = 300
     margin = 54
     plot_h = height - 2 * margin
-    allv = [v for _, _, vs in series for v in vs]
-    ymax = max(allv) * 1.15
+    allv = [v for _, _, vs in series for v in vs if v is not None]
+    ymax = max(allv) * 1.15 if allv else 100
     p = [f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
          f'<text x="{margin}" y="22" font-size="14" font-weight="bold">{html.escape(title)}</text>',
          f'<line x1="{margin}" y1="{height-margin}" x2="{width-margin}" y2="{height-margin}" stroke="#64748b"/>',
@@ -60,6 +58,8 @@ def bar_chart(title, groups, series, lb_per_group=None):
         gx = margin + gi * gw + bw * 0.5
         for si, (name, color, vs) in enumerate(series):
             val = vs[gi]
+            if val is None:
+                continue
             bh = (val / ymax) * plot_h
             x = gx + si * bw
             y = height - margin - bh
@@ -83,97 +83,113 @@ def bar_chart(title, groups, series, lb_per_group=None):
     return "\n".join(p)
 
 
+def pick_primary(c):
+    """Best proven schedule under balanced AFIFO<=5; fall back to strict_any."""
+    sb = c.get("strict_balanced")
+    if sb:
+        return sb
+    return c.get("strict_any")
+
+
 def render():
-    A = afifo_results()
+    data = load_search()
     R = rigid_results()
     sizes = [4, 8, 16]
+    updated = data.get("updated", "")
 
     s = ["<!DOCTYPE html><html><head><meta charset='utf-8'>",
          "<title>Border + AFIFO Allgather Min Makespan</title>",
-         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1050px;}"
+         "<style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1100px;}"
          "h1,h2{color:#1e3a8a;}table{border-collapse:collapse;margin:12px 0;width:100%;}"
          "td,th{border:1px solid #cbd5e1;padding:6px 8px;font-size:13px;text-align:center;}th{background:#e2e8f0;}"
          ".card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}"
          ".win{background:#dcfce7;font-weight:bold;}code{background:#f1f5f9;padding:2px 4px;border-radius:4px;}"
-         "ol li,ul li{margin:6px 0;}td.l{text-align:left;}</style></head><body>"]
+         "ol li,ul li{margin:6px 0;}td.l{text-align:left;}.note{color:#64748b;font-size:12px;}</style></head><body>"]
     s.append("<h1>border 4-环 + 跨界 AFIFO 的最小 makespan（H=4, V=6）</h1>")
+    if updated:
+        s.append(f"<p class='note'>搜索更新：{html.escape(updated[:19])} UTC · "
+                 f"<code>utils/search_border_afifo.py</code></p>")
 
     s.append("<div class='card'><h2>模型与规则</h2><ul>"
-             "<li><b>4 个象限 Hamilton 环</b>（4×4→2×2、8×8→4×4、16×16→8×8 每象限），环<b>内部 0-buffer、无冲突、无阻塞</b>"
-             "（每条有向环 link 每 cycle ≤1 flit）。</li>"
-             "<li><b>跨边界为 AFIFO</b>，可缓存 <b>depth=5</b> flit：到边界即可写入 AFIFO 跨到相邻环，"
-             "相邻环一有<b>空闲时隙</b>就读出上环；各 AFIFO <b>负载均衡</b>。</li>"
-             "<li><b>多点注入 + 短弧覆盖</b>：flit 沿共享边界多个节点跨界，用短弧合并覆盖相邻环；"
-             "<b>对角环</b>经中间相邻环间接到达（生命周期含相邻环 + 对角环遍历）。</li>"
-             "<li><b>方向跟随下 ramp 带宽</b>：下 ramp=1 → 单向绕一圈；下 ramp=2 → 双向各绕半圈。"
-             "下 ramp（eject）为<b>硬约束</b>（每节点 eject N−1 个 flit）。</li>"
-             "<li><b>“最小 makespan”</b>＝在上述约束下流水编排所得的可达下界；同时给出"
-             "<b>严格刚性（无 AFIFO，处处 0-buffer）</b>作为保守上界对照。仿真见 "
-             "<code>utils/sim_fused_rings.py: simulate_afifo</code>。</li>"
-             "</ul></div>")
+             "<li><b>4 个象限 Hamilton 环</b>（4×4→2×2、8×8→4×4、16×16→8×8 每象限），环<b>内部 0-buffer</b>。"
+             "调度器 <code>sched_ring_zerobuf.schedule</code> 利用环内链路时分空隙插入跨界 flit（规则 4）。</li>"
+             "<li><b>跨边界为 AFIFO depth=5</b>；8 条并行边界链路/方向，<b>负载均衡</b>后峰值 ≤5。"
+             "主指标取 <code>afifo_balanced</code>（水线填充均衡深度）。</li>"
+             "<li><b>多点注入 + 短弧</b>覆盖相邻象限；对角经中间象限间接转发。</li>"
+             "<li><b>下 ramp</b>：单向 1 flit/cy → 单向环；双向 2 flit/cy → 双向半圈。</li>"
+             "<li>对照：<b>流水日历</b>（<code>simulate_afifo</code>，允许环内 buf≤2 的乐观下界）与"
+             "<b>严格刚性</b>（无 AFIFO、处处 0-buffer 上界）。</li></ul></div>")
 
-    # ---- main results table ----
-    s.append("<div class='card'><h2>最小 makespan 结果</h2>")
+    s.append("<div class='card'><h2>最小 makespan 结果（AFIFO 均衡深度 ≤5）</h2>")
     s.append("<table><tr><th>规模</th><th>N</th><th>配置</th>"
-             "<th>最小 makespan<br>(AFIFO depth≤5)</th><th>eject 下界</th><th>÷下界</th>"
-             "<th>busiest<br>ring link</th><th>环内 buf</th><th>AFIFO 深度</th><th>eject buf</th>"
-             "<th>严格刚性<br>(无 AFIFO,上界)</th></tr>")
+             "<th>最小 makespan<br>(0-buffer环+AFIFO≤5)</th><th>AFIFO<br>均衡深度</th>"
+             "<th>eject 下界</th><th>÷下界</th>"
+             "<th>流水乐观<br>(pipelined)</th><th>严格刚性<br>(无AFIFO)</th></tr>")
     for sz in sizes:
-        rec = A[sz]
-        n = rec["n"]
+        block = data["configs"][f"{sz}x{sz}"]
+        n = block["uni"]["n"]
         for ci, (tag, label) in enumerate(CFG):
-            d = rec[tag]
+            c = block[tag]
+            prim = pick_primary(c)
+            pipe = c.get("pipelined")
             rigid = R[sz][tag]
+            mk = prim["makespan"] if prim else "—"
+            bal = prim.get("afifo_balanced", "—") if prim else "—"
+            lb = c["eject_lb"]
+            ratio = f"{mk/lb:.2f}×" if prim else "—"
+            afifo_cls = " class='win'" if prim and prim.get("afifo_balanced", 99) <= 5 else ""
             rowspan = f"<td rowspan='2'>{sz}×{sz}</td><td rowspan='2'>{n}</td>" if ci == 0 else ""
-            afifo_cls = " class='win'" if d["afifo_buf"] <= 5 else ""
             s.append(f"<tr>{rowspan}<td class='l'>{html.escape(label)}</td>"
-                     f"<td><b>{d['makespan']}</b></td><td>{d['eject_lb']}</td><td>{d['makespan']/d['eject_lb']:.2f}×</td>"
-                     f"<td>{d['busiest_link']}</td><td>{d['ring_buf']}</td>"
-                     f"<td{afifo_cls}>{d['afifo_buf']}</td><td>{d['eject_buf']}</td><td>{rigid}</td></tr>")
+                     f"<td><b>{mk}</b></td><td{afifo_cls}>{bal}</td>"
+                     f"<td>{lb}</td><td>{ratio}</td>"
+                     f"<td>{pipe['makespan'] if pipe else '—'}</td><td>{rigid}</td></tr>")
     s.append("</table>")
-    s.append("<p style='color:#64748b;font-size:12px'>绿底＝所需 AFIFO 深度 ≤5（预算内）。"
-             "“环内 buf / eject buf” 为达到该 makespan 时的峰值占用：环内仅 ≤2、可由源端注入偏移 + AFIFO 吸收，"
-             "故 0-buffer 环 + depth-5 AFIFO 足以实现该 makespan。单向配置下它与严格刚性相等（如 16×16 = 437），"
-             "说明单向时即便完全不用 AFIFO 也已达此值；双向时 AFIFO 解耦各环带来大幅提速。</p>")
-    s.append("</div>")
+    s.append("<p class='note'>主列来自 <code>sched_ring_zerobuf</code>（环内 router_buf=0）。"
+             "流水乐观列允许环内短暂排队（ring_buf≤2），单向大拓扑上可低于严格值；"
+             "双向 16×16 严格调度 266 优于流水 267。</p></div>")
 
-    # ---- charts ----
     s.append("<div class='card'><h2>makespan 随规模变化</h2>")
     groups = [f"{sz}×{sz}\n(N={sz*sz})" for sz in sizes]
     for tag, label in CFG:
-        mk = [A[sz][tag]["makespan"] for sz in sizes]
-        rg = [R[sz][tag] for sz in sizes]
-        lb = [A[sz][tag]["eject_lb"] for sz in sizes]
+        strict = []
+        pipe = []
+        lb = []
+        for sz in sizes:
+            c = data["configs"][f"{sz}x{sz}"][tag]
+            p = pick_primary(c)
+            strict.append(p["makespan"] if p else None)
+            pipe.append(c.get("pipelined", {}).get("makespan"))
+            lb.append(c["eject_lb"])
         s.append(bar_chart(f"{label}（越低越好；红虚线＝eject 下界）", groups,
-                           [("AFIFO depth≤5 (最小)", "#10b981", mk),
-                            ("严格刚性 无AFIFO (上界)", "#94a3b8", rg)],
+                           [("0-buffer+AFIFO≤5", "#10b981", strict),
+                            ("流水乐观", "#fbbf24", pipe),
+                            ("严格刚性 无AFIFO", "#94a3b8", [R[sz][tag] for sz in sizes])],
                            lb_per_group=lb))
     s.append("</div>")
 
-    # ---- conclusions ----
-    a16u, a16b = A[16]["uni"], A[16]["bi"]
-    s.append("<div class='card'><h2>结论</h2><ul>")
-    s.append(
-        f"<li><b>最小 makespan</b>：4×4 = {A[4]['uni']['makespan']}(单)/{A[4]['bi']['makespan']}(双)，"
-        f"8×8 = {A[8]['uni']['makespan']}/{A[8]['bi']['makespan']}，"
-        f"16×16 = <b>{a16u['makespan']}</b>(单,下ramp1)/<b>{a16b['makespan']}</b>(双,下ramp2)。</li>")
-    s.append(
-        "<li><b>depth-5 AFIFO 绰绰有余</b>：实测所需 AFIFO 峰值深度仅 1–2（≤5），环内缓存 ≤2、eject 缓存 ≤2。"
-        "多点注入把跨界流量摊到多个 AFIFO 上，负载天然均衡，不会突发塞满 5 深。</li>")
-    s.append(
-        f"<li><b>AFIFO 解耦各环：双向受益最大</b>。16×16 双向：有 AFIFO 解耦 = <b>{a16b['makespan']}</b>，"
-        f"而严格刚性(无 AFIFO)需 {R[16]['bi']}——提速约 {R[16]['bi']/a16b['makespan']:.1f}×。"
-        "AFIFO 让相邻/对角环的时序彼此独立，各环可单独紧凑排布；刚性版把一个源跨多环的足迹绑死，冲突更多。</li>")
-    s.append(
-        f"<li><b>单向无需 AFIFO 即达最小</b>：16×16 单向 {a16u['makespan']} = 严格刚性 {R[16]['uni']}，"
-        "单向绕环本就规整、零等待；AFIFO 主要服务于双向/小规模的解耦。</li>")
-    s.append(
-        f"<li><b>趋势：越大越贴下界</b>。÷eject下界 从 4×4 的 {A[4]['uni']['makespan']/A[4]['uni']['eject_lb']:.1f}×/"
-        f"{A[4]['bi']['makespan']/A[4]['bi']['eject_lb']:.1f}× 收敛到 16×16 的 "
-        f"{a16u['makespan']/a16u['eject_lb']:.2f}×/{a16b['makespan']/a16b['eject_lb']:.2f}×——"
-        "环周长（延迟尾）被规模摊薄，瓶颈趋于 eject 吞吐。小规模 makespan 由环延迟主导，故离下界更远。</li>")
-    s.append("</ul></div>")
+    # conclusions from data
+    def g(sz, tag):
+        return pick_primary(data["configs"][f"{sz}x{sz}"][tag])
 
+    u4, b4 = g(4, "uni"), g(4, "bi")
+    u8, b8 = g(8, "uni"), g(8, "bi")
+    u16, b16 = g(16, "uni"), g(16, "bi")
+    p16u = data["configs"]["16x16"]["uni"].get("pipelined", {})
+    p16b = data["configs"]["16x16"]["bi"].get("pipelined", {})
+
+    s.append("<div class='card'><h2>结论</h2><ul>")
+    s.append(f"<li><b>已证最小 makespan（0-buffer 环 + AFIFO 均衡≤5）</b>："
+             f"4×4 = {u4['makespan']}(单)/{b4['makespan']}(双)，"
+             f"8×8 = {u8['makespan']}/{b8['makespan']}，"
+             f"16×16 = {u16['makespan']}(单)/<b>{b16['makespan']}</b>(双)。</li>")
+    s.append(f"<li><b>双向 16×16 最优 = 266</b>（spread=0，AFIFO 均衡深度 5）。"
+             f"比严格刚性 {R[16]['bi']} 快 {R[16]['bi']/b16['makespan']:.1f}×，"
+             f"比流水日历 {p16b.get('makespan', '?')} 略优。</li>")
+    s.append(f"<li><b>单向大拓扑差距</b>：16×16 单向严格 {u16['makespan']} vs 流水乐观 {p16u.get('makespan')}——"
+             "单向一圈耗时长、跨界与环内时序强耦合，需更大注入 spread 才能压 AFIFO，"
+             "以牺牲 makespan 换深度合规。</li>")
+    s.append(f"<li><b>8×8 双向 = 86</b> 已命中流水乐观值；4×4/8×8 双向与单向小规模结果接近 eject 下界的 {b4['makespan']/b4.get('eject_lb',8):.1f}–{u8['makespan']/u8.get('eject_lb',63):.1f}× 倍率。</li>")
+    s.append("</ul></div>")
     s.append("</body></html>")
     HTML_PATH.write_text("\n".join(s), encoding="utf-8")
     print(f"Wrote {HTML_PATH}")
