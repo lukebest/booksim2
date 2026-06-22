@@ -1,30 +1,19 @@
 #!/usr/bin/env python3
 """Search minimum allgather makespan for border 4-ring + AFIFO model.
 
-Constraints (per design spec):
-  * Quadrant Hamilton rings: 0 router buffer, conflict-free, non-blocking.
-  * Cross-border links: AFIFO depth <= AFIFO_CAP (default 5).
-  * Multi-point border injection + short arcs; diagonal via intermediate quadrant.
-  * Down-ramp BW: uni ring @ ramp=1, bi ring @ ramp=2.
-  * Load-balanced AFIFO usage across parallel border links.
-
-Two schedulers:
-  * strict  — sched_ring_zerobuf.schedule (ring_buf=0 by construction)
-  * pipelined — sim_fused_rings.simulate_afifo (link pipelining; ring_buf may >0)
-
-Results persist to results/border_afifo_search.json for /loop iterations.
+Uses ring-shape-optimized Hamilton configs per size from optimal_quad_shapes.json.
 """
 
 import argparse
 import json
 import time
 from datetime import datetime, timezone
-from itertools import product
 from pathlib import Path
 
 import sim_fused_rings as fr
 import sched_ring_zerobuf as S
-from sweep_quad_ring_shapes import canonical_shapes, make_quads
+from optimize_quad_shapes import chosen_cfg, load_optimal, quads_for
+from sweep_quad_ring_shapes import cfg_str, make_quads
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "border_afifo_search.json"
@@ -81,7 +70,6 @@ def try_pipelined(sz, bidir, ramp_bw, deliv_builder):
 
 
 def feasible(rec, cap=AFIFO_CAP, mode="balanced"):
-    """balanced: load-balanced AFIFO peak <= cap; per_link: any single link <= cap."""
     if rec is None:
         return False
     if rec["scheduler"] == "pipelined":
@@ -92,10 +80,14 @@ def feasible(rec, cap=AFIFO_CAP, mode="balanced"):
 
 
 def better(a, b):
-    """True if a is strictly better than b (lower makespan)."""
     if b is None:
         return True
     return a["makespan"] < b["makespan"]
+
+
+def shape_meta(sz, tag):
+    cfg = chosen_cfg(sz, "border", tag)
+    return {"cfg": list(cfg), "cfg_str": cfg_str(cfg)}
 
 
 def search_config(sz, bidir, ramp_bw, deliv_fn, deliv_builder, quads=None, deep=False):
@@ -130,70 +122,51 @@ def search_config(sz, bidir, ramp_bw, deliv_fn, deliv_builder, quads=None, deep=
 
     pip = try_pipelined(sz, bidir, ramp_bw, deliv_builder)
     best["pipelined"] = pip
-    if feasible(pip):
-        best["pipelined_feasible"] = pip
 
     return {"size": sz, "bidir": bidir, "ramp_bw": ramp_bw, "n": n, "eject_lb": lb,
             **best}
 
 
-def search_border(sz, deep=False):
-    deliv = S.deliv_border
-    builder = fr.build_border_delivery
-    return search_config(sz, False, 1, deliv, builder, deep=deep), \
-           search_config(sz, True, 2, deliv, builder, deep=deep)
-
-
-def search_shapes(sz, bidir, ramp_bw, bases=("rect", "vflip", "vband"), limit=64):
-    """Sample uniform 4-quad shape combos (16x16 only; make_quads is fixed to 16)."""
-    if sz != 16:
-        return []
-    fr.cfg(sz, sz, 4, 6)
-    shapes = canonical_shapes(list(bases))
-    results = []
-    for shape in shapes:
-        cfg = (shape, shape, shape, shape)
-        quads = make_quads(cfg)
+def search_border_shape_opt(sz, deep=False):
+    """Border short-arc with per-size ring-shape-optimized Hamilton quads."""
+    uni_rec, bi_rec = {}, {}
+    for bidir, tag, rb in ((False, "uni", 1), (True, "bi", 2)):
+        quads = quads_for(sz, "border", tag)
         deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
         builder = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
-        r = search_config(sz, bidir, ramp_bw, deliv, builder, quads=quads)
-        fe = r.get("strict_balanced")
-        if fe:
-            results.append({"cfg": cfg, "makespan": fe["makespan"],
-                            "afifo_depth": fe["afifo_depth"],
-                            "afifo_balanced": fe["afifo_balanced"],
-                            "detail": fe})
-    results.sort(key=lambda x: x["makespan"])
-    return results[:limit]
+        rec = search_config(sz, bidir, rb, deliv, builder, quads=quads, deep=deep)
+        rec["ring_shape"] = shape_meta(sz, tag)
+        if tag == "uni":
+            uni_rec = rec
+        else:
+            bi_rec = rec
+    return uni_rec, bi_rec
 
 
-def run_iteration(deep=False, shape_search=False):
+def run_iteration(deep=False):
+    load_optimal()
     t0 = time.time()
     out = {"updated": datetime.now(timezone.utc).isoformat(),
-           "afifo_cap": AFIFO_CAP, "configs": {}}
+           "afifo_cap": AFIFO_CAP,
+           "ring_shape_optimized": True,
+           "configs": {}}
 
     for sz in SIZES:
-        uni, bi = search_border(sz, deep=deep)
+        uni, bi = search_border_shape_opt(sz, deep=deep)
         out["configs"][f"{sz}x{sz}"] = {"uni": uni, "bi": bi}
-        if shape_search and sz == 16:
-            out["configs"][f"{sz}x{sz}"]["bi_shapes"] = search_shapes(sz, True, 2)
-            out["configs"][f"{sz}x{sz}"]["uni_shapes"] = search_shapes(sz, False, 1)
 
     out["elapsed_s"] = time.time() - t0
     OUT.parent.mkdir(parents=True, exist_ok=True)
     prev = {}
     if OUT.exists():
         prev = json.loads(OUT.read_text(encoding="utf-8"))
-    out["history"] = prev.get("history", [])
-    # record improvements
     improvements = []
     for key in out["configs"]:
         for mode in ("uni", "bi"):
             cur = out["configs"][key][mode]
             old = prev.get("configs", {}).get(key, {}).get(mode, {})
-            for field in ("strict_balanced", "strict_any", "strict_per_link", "pipelined_feasible"):
-                c = cur.get(field)
-                o = old.get(field)
+            for field in ("strict_balanced", "strict_any", "strict_per_link"):
+                c, o = cur.get(field), old.get(field)
                 if c and (not o or c["makespan"] < o.get("makespan", 1 << 30)):
                     improvements.append(f"{key} {mode} {field}: {o and o.get('makespan')} -> {c['makespan']}")
     out["improvements"] = improvements
@@ -202,30 +175,26 @@ def run_iteration(deep=False, shape_search=False):
 
 
 def print_summary(data):
-    print(f"AFIFO cap={data['afifo_cap']}  elapsed={data['elapsed_s']:.1f}s")
+    print(f"AFIFO cap={data['afifo_cap']}  shape-optimized  elapsed={data['elapsed_s']:.1f}s")
     if data.get("improvements"):
         print("Improvements:", ", ".join(data["improvements"]))
-    hdr = (f"{'size':>8s} {'cfg':>4s} {'eject_lb':>8s} "
-           f"{'strict_bal':>10s} {'strict_any':>10s} {'pipe':>6s}")
+    hdr = f"{'size':>8s} {'cfg':>4s} {'eject_lb':>8s} {'strict_bal':>10s} {'strict_any':>10s} {'pipe':>6s}  shape"
     print(hdr)
     for key in sorted(data["configs"].keys(), key=lambda k: int(k.split("x")[0])):
         for mode, tag in (("uni", "uni"), ("bi", "bi")):
             c = data["configs"][key][mode]
-            sb = c.get("strict_balanced")
-            sa = c.get("strict_any")
-            pp = c.get("pipelined")
+            sb, sa, pp = c.get("strict_balanced"), c.get("strict_any"), c.get("pipelined")
             def fmt(x):
                 return f"{x['makespan']:>10d}" if x else f"{'—':>10s}"
-            print(f"{key:>8s} {tag:>4s} {c['eject_lb']:8d} "
-                  f"{fmt(sb)} {fmt(sa)} {fmt(pp)}")
+            sh = (c.get("ring_shape") or {}).get("cfg_str", "")[:40]
+            print(f"{key:>8s} {tag:>4s} {c['eject_lb']:8d} {fmt(sb)} {fmt(sa)} {fmt(pp)}  {sh}")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--deep", action="store_true", help="wider spread sweep")
-    ap.add_argument("--shapes", action="store_true", help="scan ring shape variants")
+    ap.add_argument("--deep", action="store_true")
     args = ap.parse_args()
-    data = run_iteration(deep=args.deep, shape_search=args.shapes)
+    data = run_iteration(deep=args.deep)
     print_summary(data)
     print(f"Wrote {OUT}")
 

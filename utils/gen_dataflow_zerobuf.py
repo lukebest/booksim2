@@ -5,13 +5,10 @@ Every scheme below is strictly ring_buf=0 and eject_buf=0 (no router buffer; all
 waiting happens in the border AFIFOs), eject bandwidth 2 flit/cy, H=4, V=6.
 Schedules come from utils/sched_ring_zerobuf.py.
 
-  border_optimal : default ham_cycle_rect, spread=0, 8-link LB routing
-                   -> makespan 266, per-link AFIFO peak 11, balanced peak 5 (≤5 budget).
-  border_fast    : same schedule without LB pick -> also 266cy.
-  border_d5      : atomic pacing, every single AFIFO <= 5 -> makespan ~454.
-  border_opt     : ring shapes tuned by sweep -> makespan 240 but AFIFO depth ~45.
-  ringfollow     : cross then ride destination ring, AFIFO<=5 paced -> ~508.
-  global1        : 4 rings spliced into ONE global ring -> 754.
+  border_optimal : ring-shape-optimized quads, spread=0 -> makespan 240cy.
+  border_d5      : atomic pacing, single AFIFO <= 5 -> makespan ~387cy.
+  ringfollow     : shape-opt ringfollow -> 416cy.
+  global1        : 4 rings spliced into ONE global ring -> 754cy.
 
 Output: results/dataflow_zerobuf.html (self-contained canvas viewer).
 """
@@ -26,11 +23,6 @@ from sweep_quad_ring_shapes import cfg_str, make_quads
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "dataflow_zerobuf.html"
 MX, MY = 16, 16
-
-# 4096-config sweep minima (0 router-buffer, spread=0)
-OPTIMAL_BORDER = (("vflip", 1), ("rect", 1), ("rect", 3), ("vflip", 3))
-OPTIMAL_RINGFOLLOW = (("vflip", 3), ("rect", 3), ("rect", 1), ("rect", 3))
-
 
 def quad_rings():
     hw, hh = MX // 2, MY // 2
@@ -92,63 +84,61 @@ def pack(name, label, note, result, ring_paths):
 
 def build():
     fr.cfg(MX, MY, 4, 6)
+    from optimize_quad_shapes import chosen_cfg, quads_for, load_optimal
+    load_optimal()
     schemes = {}
-    rings_def = quad_rings()
 
-    # ---- 16×16 双向最优：border 短弧 266cy，AFIFO 均衡深度 ≤5 ----
-    r_opt = S.schedule(MX, True, 2, S.deliv_border, spread=0, lb_cross=True,
-                       record_events=True)
+    def rings_from_sz(tag):
+        return [q["order"] for q in quads_for(MX, "border", tag)]
+
+    # ---- 16×16 双向最优：环形状优化 border 240cy ----
+    quads_bi = quads_for(MX, "border", "bi")
+    deliv_bi = lambda s, b, q=quads_bi: S.deliv_border_quads(s, b, q)
+    r_opt = S.schedule(MX, True, 2, deliv_bi, spread=0, lb_cross=True,
+                       quads=quads_bi, record_events=True)
     schemes["border_optimal"] = pack(
-        "border 266cy 最优", "border 短弧 · 266cy 最优（AFIFO 均衡≤5）",
-        "16×16 双向已证最小 makespan=266（spread=0，默认 ham_cycle_rect）。"
-        "8 条并行边界 AFIFO/方向 + 最短队列选路；单链路峰值深度 11，"
-        f"负载均衡后峰值 <b>{r_opt['afifo_balanced']['peak']}</b>（≤5 预算内）。"
-        "router 零 buffer，等待仅在 AFIFO。",
-        r_opt, rings_def)
+        "border 240cy 最优", "border 短弧 · 环形状优化 240cy（AFIFO 均衡 40）",
+        "16×16 双向环形状优化最小 makespan=240（4096 组扫描最优）。"
+        f"单链路 AFIFO 峰值 {r_opt['afifo_depth']}，均衡峰值 "
+        f"<b>{r_opt['afifo_balanced']['peak']}</b>。"
+        + cfg_str(chosen_cfg(MX, "border", "bi")),
+        r_opt, rings_from_sz("bi"))
 
-    r_fast = S.schedule(MX, True, 2, S.deliv_border, spread=0)
+    r_fast = S.schedule(MX, True, 2, deliv_bi, spread=0, quads=quads_bi)
     schemes["border_fast"] = pack(
-        "border 266cy", "border 短弧 · 266cy（无 LB 选路）",
-        "与最优方案相同调度（spread=0）；固定边界链路，无在线最短队列。"
-        f"单链路 AFIFO 峰值 {r_fast['afifo_depth']}，"
-        f"均衡峰值 {r_fast['afifo_balanced']['peak']}。",
-        S.schedule(MX, True, 2, S.deliv_border, spread=0, record_events=True), rings_def)
+        "border 240cy", "border 短弧 · 环形状优化（无 LB）",
+        f"同环形状 spread=0；均衡 AFIFO {r_fast['afifo_balanced']['peak']}。",
+        S.schedule(MX, True, 2, deliv_bi, spread=0, quads=quads_bi,
+                   record_events=True), rings_from_sz("bi"))
 
     schemes["border_d5"] = pack(
         "border depth≤5", "border 短弧 · 单链路 AFIFO≤5（相位错开）",
-        "atomic 调度强制每条边界 AFIFO 深度 ≤5（单链路硬约束）；"
-        "makespan 升至 ~454，换取无需依赖 8 链路均摊。router 仍零 buffer。",
-        S.schedule_atomic(MX, True, 2, S.deliv_border, afifo_cap=5,
-                          order="natural", record_events=True), rings_def)
+        "atomic 调度强制每条边界 AFIFO 深度 ≤5；环形状仍用优化配置。",
+        S.schedule_atomic(MX, True, 2, deliv_bi, afifo_cap=5,
+                          order="natural", record_events=True), rings_from_sz("bi"))
 
-    r, rings = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads)
-    schemes["border_opt"] = pack(
-        "border 240cy", "border 短弧 · 环形状优化（240cy）",
-        "4096 组环形状扫描：左右列旋转相反，makespan=240（比 266 快 26cy）；"
-        f"需 AFIFO 单链路深度 ~{r['afifo_depth']}（远超 5）。"
-        + cfg_str(OPTIMAL_BORDER),
-        r, rings)
-    r_lb, rings_lb = schedule_with_quads(OPTIMAL_BORDER, S.deliv_border_quads, lb_cross=True)
-    schemes["border_opt_lb"] = pack(
-        "border 240cy+LB", "border 240cy · 8链路 LB",
-        "环形状优化 + 最短队列选路。"
-        f"单链路 peak={r_lb['afifo_depth']}；均衡 peak={r_lb['afifo_balanced']['peak']}。",
-        r_lb, rings_lb)
-
-    r, rings = schedule_with_quads(OPTIMAL_RINGFOLLOW, S.deliv_ringfollow_quads)
+    # ringfollow with optimized shape
+    try:
+        quads_rf = quads_for(MX, "ringfollow", "bi")
+    except Exception:
+        quads_rf = quads_bi
+    deliv_rf = lambda s, b, q=quads_rf: S.deliv_ringfollow_quads(s, b, q)
+    r_rf = S.schedule(MX, True, 2, deliv_rf, spread=0, quads=quads_rf, record_events=True)
     schemes["ringfollow_opt"] = pack(
-        "ring-following 416cy", "ring-following · 环形状优化（416cy）",
-        "4096 组扫描最优：makespan=416（比默认 508 快 92cy）；AFIFO 深度 8。"
-        + cfg_str(OPTIMAL_RINGFOLLOW),
-        r, rings)
+        "ring-following", "ring-following · 环形状优化",
+        f"环形状优化 ringfollow；mk={r_rf['makespan']}，均衡 AFIFO {r_rf['afifo_balanced']['peak']}。",
+        r_rf, [q["order"] for q in quads_rf])
+
     schemes["ringfollow"] = pack(
-        "ring-following", "ring-following · AFIFO≤5（相位错开）",
-        "外象限数据切入目的 8×8 环后绕整圈双向流转；AFIFO≤5，router 零 buffer。",
-        S.schedule_atomic(MX, True, 2, S.deliv_ringfollow, afifo_cap=5,
-                          order="quad", record_events=True), rings_def)
+        "ring-following d5", "ring-following · AFIFO≤5（相位错开）",
+        "外象限切入目的环后绕整圈；AFIFO≤5。",
+        S.schedule_atomic(MX, True, 2, deliv_rf, afifo_cap=5,
+                          order="quad", record_events=True),
+        [q["order"] for q in quads_rf])
+
     schemes["global1"] = pack(
         "global 单环", "4 环穿成 1 个全局环（无并行）",
-        "四象限 Hamilton 环经边界 AFIFO 拼成一条全局环；天然零 buffer、AFIFO 深度仅 2，但放弃并行故最慢。",
+        "四象限 Hamilton 环经边界 AFIFO 拼成一条全局环。",
         S.schedule(MX, True, 2, S.deliv_global, record_events=True), global_ring())
 
     cell, pad = 34, 44
@@ -159,7 +149,7 @@ def build():
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
         "order": ["border_optimal", "border_fast", "border_d5",
-                  "border_opt", "border_opt_lb", "ringfollow_opt", "ringfollow", "global1"],
+                  "ringfollow_opt", "ringfollow", "global1"],
         "default": "border_optimal",
         "schemes": schemes,
     }
@@ -204,8 +194,9 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <h1>16×16 零 router-buffer AllGather · cycle-by-cycle</h1>
 <p>4×(8×8 Hamilton 环)+ 跨界 AFIFO · H=4, V=6 · 双向, 下 ramp=2 ·
 所有方案 <b>router 内零 buffer</b>（ring_buf=0, eject_buf=0），等待只发生在 AFIFO。
-<b>16×16 双向最优 makespan=266</b> · AFIFO 均衡深度 ≤<b>5</b>（8 链路/方向负载均衡）。
-当前方案 makespan=<b id="hmk"></b> cy · 单链路 AFIFO 峰值=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
+<p><b>16×16 双向环形状优化 makespan=240</b>（4096 组 Hamilton 环扫描最优）。
+单链路 AFIFO 峰值较高，均衡深度见各方案。当前 makespan=<b id="hmk"></b> cy ·
+单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
 </header>
 <div class="layout">
 <div>
@@ -248,10 +239,8 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
 <table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note"><b>266cy 为 16×16 双向已证最优</b>（border 短弧 + spread=0）。
-单链路峰值 11 看似超预算，但 8 条并行 AFIFO/方向经负载均衡后峰值仅 <b>5</b>（≤5 预算）。
-若强制每条 AFIFO ≤5（相位错开 atomic），makespan 升至 ~454。
-环形状优化可压至 240cy，但需 AFIFO 深度 ~45。</p>
+<p class="note"><b>240cy</b> 为环形状优化后 16×16 双向最小 makespan（比默认环 266cy 快 26cy）。
+单链路 AFIFO 峰值 ~45，均衡深度 ~40（需 depth&gt;5 或相位错开 atomic 454cy）。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
 <canvas id="afc" width="280" height="150" style="width:100%;max-width:300px;display:block;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0"></canvas>

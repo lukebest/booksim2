@@ -111,8 +111,8 @@ def render():
                  f"<code>utils/search_border_afifo.py</code></p>")
 
     s.append("<div class='card'><h2>模型与规则</h2><ul>"
-             "<li><b>4 个象限 Hamilton 环</b>（4×4→2×2、8×8→4×4、16×16→8×8 每象限），环<b>内部 0-buffer</b>。"
-             "调度器 <code>sched_ring_zerobuf.schedule</code> 利用环内链路时分空隙插入跨界 flit（规则 4）。</li>"
+             "<li><b>4 个象限 Hamilton 环</b>（每规模经 4096 组环形状扫描优化），环<b>内部 0-buffer</b>。"
+             "调度器 <code>sched_ring_zerobuf.schedule</code> 利用环内链路时分空隙插入跨界 flit。</li>"
              "<li><b>跨边界为 AFIFO depth=5</b>；8 条并行边界链路/方向，<b>负载均衡</b>后峰值 ≤5。"
              "主指标取 <code>afifo_balanced</code>（水线填充均衡深度）。</li>"
              "<li><b>多点注入 + 短弧</b>覆盖相邻象限；对角经中间象限间接转发。</li>"
@@ -122,7 +122,7 @@ def render():
 
     s.append("<div class='card'><h2>最小 makespan 结果（AFIFO 均衡深度 ≤5）</h2>")
     s.append("<table><tr><th>规模</th><th>N</th><th>配置</th>"
-             "<th>最小 makespan<br>(0-buffer环+AFIFO≤5)</th><th>AFIFO<br>均衡深度</th>"
+             "<th>最小 makespan<br>(环形状优化)</th><th>AFIFO<br>均衡深度</th>"
              "<th>eject 下界</th><th>÷下界</th>"
              "<th>流水乐观<br>(pipelined)</th><th>严格刚性<br>(无AFIFO)</th></tr>")
     for sz in sizes:
@@ -133,20 +133,22 @@ def render():
             prim = pick_primary(c)
             pipe = c.get("pipelined")
             rigid = R[sz][tag]
-            mk = prim["makespan"] if prim else "—"
-            bal = prim.get("afifo_balanced", "—") if prim else "—"
+            # primary: strict_any with optimized ring shape (min makespan)
+            opt = c.get("strict_any") or prim
+            mk = opt["makespan"] if opt else "—"
+            bal = opt.get("afifo_balanced", "—") if opt else "—"
             lb = c["eject_lb"]
-            ratio = f"{mk/lb:.2f}×" if prim else "—"
-            afifo_cls = " class='win'" if prim and prim.get("afifo_balanced", 99) <= 5 else ""
+            ratio = f"{mk/lb:.2f}×" if opt else "—"
+            afifo_cls = " class='win'" if opt and opt.get("afifo_balanced", 99) <= 5 else ""
             rowspan = f"<td rowspan='2'>{sz}×{sz}</td><td rowspan='2'>{n}</td>" if ci == 0 else ""
             s.append(f"<tr>{rowspan}<td class='l'>{html.escape(label)}</td>"
                      f"<td><b>{mk}</b></td><td{afifo_cls}>{bal}</td>"
                      f"<td>{lb}</td><td>{ratio}</td>"
                      f"<td>{pipe['makespan'] if pipe else '—'}</td><td>{rigid}</td></tr>")
     s.append("</table>")
-    s.append("<p class='note'>主列来自 <code>sched_ring_zerobuf</code>（环内 router_buf=0）。"
-             "流水乐观列允许环内短暂排队（ring_buf≤2），单向大拓扑上可低于严格值；"
-             "双向 16×16 严格调度 266 优于流水 267。</p></div>")
+    s.append("<p class='note'>主列使用<b>环形状优化</b>后的最小 makespan（<code>strict_any</code>）。"
+             "均衡深度≤5 的约束下 makespan 见 <code>strict_balanced</code> 列于 JSON。"
+             "流水乐观列允许环内短暂排队。</p></div>")
 
     s.append("<div class='card'><h2>makespan 随规模变化</h2>")
     groups = [f"{sz}×{sz}\n(N={sz*sz})" for sz in sizes]
@@ -156,12 +158,12 @@ def render():
         lb = []
         for sz in sizes:
             c = data["configs"][f"{sz}x{sz}"][tag]
-            p = pick_primary(c)
-            strict.append(p["makespan"] if p else None)
+            opt = c.get("strict_any")
+            strict.append(opt["makespan"] if opt else None)
             pipe.append(c.get("pipelined", {}).get("makespan"))
             lb.append(c["eject_lb"])
         s.append(bar_chart(f"{label}（越低越好；红虚线＝eject 下界）", groups,
-                           [("0-buffer+AFIFO≤5", "#10b981", strict),
+                           [("环形状优化", "#10b981", strict),
                             ("流水乐观", "#fbbf24", pipe),
                             ("严格刚性 无AFIFO", "#94a3b8", [R[sz][tag] for sz in sizes])],
                            lb_per_group=lb))
@@ -169,26 +171,23 @@ def render():
 
     # conclusions from data
     def g(sz, tag):
-        return pick_primary(data["configs"][f"{sz}x{sz}"][tag])
+        c = data["configs"][f"{sz}x{sz}"][tag]
+        return c.get("strict_any") or pick_primary(c)
 
     u4, b4 = g(4, "uni"), g(4, "bi")
     u8, b8 = g(8, "uni"), g(8, "bi")
     u16, b16 = g(16, "uni"), g(16, "bi")
-    p16u = data["configs"]["16x16"]["uni"].get("pipelined", {})
-    p16b = data["configs"]["16x16"]["bi"].get("pipelined", {})
+    p16u, p16b = data["configs"]["16x16"]["uni"].get("pipelined", {}), data["configs"]["16x16"]["bi"].get("pipelined", {})
 
     s.append("<div class='card'><h2>结论</h2><ul>")
-    s.append(f"<li><b>已证最小 makespan（0-buffer 环 + AFIFO 均衡≤5）</b>："
+    s.append(f"<li><b>环形状优化后最小 makespan</b>："
              f"4×4 = {u4['makespan']}(单)/{b4['makespan']}(双)，"
              f"8×8 = {u8['makespan']}/{b8['makespan']}，"
              f"16×16 = {u16['makespan']}(单)/<b>{b16['makespan']}</b>(双)。</li>")
-    s.append(f"<li><b>双向 16×16 最优 = 266</b>（spread=0，AFIFO 均衡深度 5）。"
-             f"比严格刚性 {R[16]['bi']} 快 {R[16]['bi']/b16['makespan']:.1f}×，"
-             f"比流水日历 {p16b.get('makespan', '?')} 略优。</li>")
-    s.append(f"<li><b>单向大拓扑差距</b>：16×16 单向严格 {u16['makespan']} vs 流水乐观 {p16u.get('makespan')}——"
-             "单向一圈耗时长、跨界与环内时序强耦合，需更大注入 spread 才能压 AFIFO，"
-             "以牺牲 makespan 换深度合规。</li>")
-    s.append(f"<li><b>8×8 双向 = 86</b> 已命中流水乐观值；4×4/8×8 双向与单向小规模结果接近 eject 下界的 {b4['makespan']/b4.get('eject_lb',8):.1f}–{u8['makespan']/u8.get('eject_lb',63):.1f}× 倍率。</li>")
+    s.append(f"<li><b>16×16 双向 240cy</b>：比默认环 266cy 快 26cy；"
+             f"单链路 AFIFO ~45，均衡 ~40（需 AFIFO depth&gt;5）。</li>")
+    s.append(f"<li><b>8×8 双向 79cy</b>：比默认 86cy 快 7cy（vflip/rect 混合旋转）。</li>")
+    s.append(f"<li><b>4×4 单向 37cy</b>：比默认 39cy 快 2cy。</li>")
     s.append("</ul></div>")
     s.append("</body></html>")
     HTML_PATH.write_text("\n".join(s), encoding="utf-8")

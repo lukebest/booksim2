@@ -259,15 +259,17 @@ def simulate_afifo(deliveries, ramp_bw):
 
 
 def border_afifo_study(sizes=(4, 8, 16)):
-    """Min makespan of the border (multi-point) scheme under the AFIFO model:
-    uni ring @ down-ramp=1 and bi ring @ down-ramp=2, H=4, V=6, for each size."""
+    """Min makespan under AFIFO model with ring-shape-optimized quads per size."""
+    import sched_ring_zerobuf as S
+    from optimize_quad_shapes import quads_for
     out = {}
     for sz in sizes:
-        cfg(sz, sz, 4, 6)
+        fr.cfg(sz, sz, 4, 6)
         n = sz * sz
         rec = {}
         for tag, bidir, rb in (("uni", False, 1), ("bi", True, 2)):
-            deliveries = {s: build_border_delivery(s, bidir) for s in range(n)}
+            quads = quads_for(sz, "border", tag)
+            deliveries = {s: S.deliv_border_quads(s, bidir, quads) for s in range(n)}
             r = simulate_afifo(deliveries, rb)
             r["eject_lb"] = (n - 1 + rb - 1) // rb
             r["ramp_bw"] = rb

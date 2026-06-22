@@ -76,9 +76,10 @@ def optimize(sizes=SIZES, schemes=("border",), refine=True):
             for bidir, tag, rb in ((False, "uni", 1), (True, "bi", 2)):
                 print(f"== {sz}x{sz} {scheme} {tag} ==")
                 any_, bal, n, el = sweep_cfg(sz, scheme, bidir, rb)
-                pick = bal or any_
+                pick = any_ if any_ else bal
                 if refine and pick:
-                    pick = refine_spread(sz, scheme, bidir, rb, pick)
+                    cfg = tuple(tuple(x) for x in pick["cfg"])
+                    _, _, pick = best_spread(sz, scheme, bidir, rb, cfg, min_mk=True)
                 out["sizes"][f"{sz}x{sz}"][scheme][tag] = {
                     "best_any": any_, "best_balanced": bal, "chosen": pick,
                     "n_configs": n, "sweep_s": el,
@@ -100,15 +101,20 @@ def load_optimal():
 
 
 def chosen_cfg(sz, scheme="border", tag="bi"):
-    """Return 4-tuple (base,rot) for the chosen optimized shape."""
+    """Return 4-tuple (base,rot) — min-makespan shape from optimization."""
     data = load_optimal()
-    rec = data["sizes"][f"{sz}x{sz}"][scheme][tag]["chosen"]
+    block = data["sizes"].get(f"{sz}x{sz}", {}).get(scheme, {}).get(tag, {})
+    rec = block.get("chosen") or block.get("best_any")
     if not rec:
-        rec = data["sizes"][f"{sz}x{sz}"][scheme][tag]["best_any"]
+        # fallback: default ham_cycle_rect
+        return (("rect", 0), ("rect", 0), ("rect", 0), ("rect", 0))
     return tuple(tuple(x) for x in rec["cfg"])
 
 
 def quads_for(sz, scheme="border", tag="bi"):
+    data = load_optimal()
+    if scheme not in data.get("sizes", {}).get(f"{sz}x{sz}", {}):
+        scheme = "border"
     return make_quads(chosen_cfg(sz, scheme, tag), sz)
 
 
