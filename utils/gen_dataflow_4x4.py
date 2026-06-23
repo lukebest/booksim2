@@ -119,10 +119,9 @@ def render(mx, my, h, vv, ramp, wcap, bw, out_path, serfork=False):
         x, y = coord(i, mx)
         pos[i] = [pad + x * cell, pad + y * cell]
 
-    wlabel = "inf" if wcap is None else str(wcap)
     cfg = {
         "mx": mx, "my": my, "h": h, "v": vv, "ramp": ramp,
-        "bw": bw, "w": wlabel, "makespan": makespan, "n": n,
+        "bw": bw, "w": wcap, "makespan": makespan, "n": n,
         "pos": pos, "flits": flits, "injects": injects,
         "cell": cell, "pad": pad, "W": W, "H": H,
         "serfork": 1 if serfork else 0,
@@ -214,7 +213,7 @@ const slider=document.getElementById("slider");
 slider.max=D.makespan;
 document.getElementById("mk").textContent=D.makespan;
 document.getElementById("meta").textContent=
-  `配置: ${D.mx}×${D.my} mesh, H-link delay=${D.h}, V-link delay=${D.v}, down-ramp B=${D.bw} flit/cy, E=0, 每跳网内等待 W=${D.w}`
+  `配置: ${D.mx}×${D.my} mesh, H-link delay=${D.h}, V-link delay=${D.v}, down-ramp B=${D.bw} flit/cy, E=0, 每跳网内等待 W=${D.w == null ? "inf" : D.w}`
   + (D.serfork? ", serialize-fork: 每路由器每 cycle 至多转发 1 个 flit(fan-out≤1 端口)":"")
   + `; makespan=${D.makespan}`;
 const srcSel=document.getElementById("src");
