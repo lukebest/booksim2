@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-22T07:07:46.011472+00:00",
+  "updated": "2026-06-23T11:45:16.746951+00:00",
   "afifo_cap": 5,
   "sizes": {
     "4x4": {
@@ -168,6 +168,172 @@
           "n_configs": 4096,
           "sweep_s": 10.769389629364014
         }
+      },
+      "ringfollow": {
+        "uni": {
+          "best_any": {
+            "cfg": [
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:vflip+0\u00b0; Q2\u5de6\u4e0a:vflip+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0",
+            "makespan": 43,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:vflip+0\u00b0; Q2\u5de6\u4e0a:vflip+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0",
+            "makespan": 43,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:vflip+0\u00b0; Q2\u5de6\u4e0a:vflip+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0",
+            "makespan": 43,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 9.587338924407959
+        },
+        "bi": {
+          "best_any": {
+            "cfg": [
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0",
+            "makespan": 32,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0",
+            "makespan": 32,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "vflip",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "rect",
+                0
+              ],
+              [
+                "vflip",
+                0
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0",
+            "makespan": 32,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 8.819194555282593
+        }
       }
     },
     "8x8": {
@@ -311,6 +477,172 @@
           "n_configs": 4096,
           "sweep_s": 128.12584376335144
         }
+      },
+      "ringfollow": {
+        "uni": {
+          "best_any": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 164,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 164,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 164,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 107.61651825904846
+        },
+        "bi": {
+          "best_any": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                3
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006)",
+            "makespan": 105,
+            "afifo_depth": 3,
+            "afifo_balanced": 2,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                3
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006)",
+            "makespan": 105,
+            "afifo_depth": 3,
+            "afifo_balanced": 2,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                3
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006)",
+            "makespan": 105,
+            "afifo_depth": 3,
+            "afifo_balanced": 2,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 101.3244137763977
+        }
       }
     },
     "16x16": {
@@ -453,6 +785,172 @@
           },
           "n_configs": 4096,
           "sweep_s": 1801.0247113704681
+        }
+      },
+      "ringfollow": {
+        "uni": {
+          "best_any": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 596,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 596,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "rect",
+                3
+              ],
+              [
+                "vflip",
+                3
+              ],
+              [
+                "vflip",
+                1
+              ],
+              [
+                "rect",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a",
+            "makespan": 596,
+            "afifo_depth": 1,
+            "afifo_balanced": 1,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 1520.616404056549
+        },
+        "bi": {
+          "best_any": {
+            "cfg": [
+              [
+                "vflip",
+                3
+              ],
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                3
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006)",
+            "makespan": 416,
+            "afifo_depth": 8,
+            "afifo_balanced": 6,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "best_balanced": {
+            "cfg": [
+              [
+                "vflip",
+                3
+              ],
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "vflip",
+                1
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:vflip+90\u00b0\u987a",
+            "makespan": 416,
+            "afifo_depth": 8,
+            "afifo_balanced": 5,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "chosen": {
+            "cfg": [
+              [
+                "vflip",
+                3
+              ],
+              [
+                "rect",
+                3
+              ],
+              [
+                "rect",
+                1
+              ],
+              [
+                "rect",
+                3
+              ]
+            ],
+            "cfg_str": "Q0\u5de6\u4e0b:vflip+270\u00b0\u987a(90\u00b0\u9006); Q1\u53f3\u4e0b:rect+270\u00b0\u987a(90\u00b0\u9006); Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006)",
+            "makespan": 416,
+            "afifo_depth": 8,
+            "afifo_balanced": 6,
+            "spread": 0,
+            "lb_cross": false
+          },
+          "n_configs": 4096,
+          "sweep_s": 1481.1822609901428
         }
       }
     }

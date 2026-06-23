@@ -62,7 +62,7 @@ def analysis_rows(data):
             f"<td>{cap_min}</td><td>{depth}</td><td>{method}</td><td>{ratio}</td></tr>"
         )
     hdr = ("<tr><th>配置</th><th>下 ramp</th><th>eject 下界</th>"
-           "<th>mk@cap0</th><th>最小 mk</th><th>首达深度</th>"
+           "<th>mk@cap0</th><th>最小 mk</th><th>首达 cap 上限</th>"
            "<th>实测 AFIFO 峰值</th><th>最优方法</th><th>/下界</th></tr>")
     return f"<table>{hdr}{''.join(rows)}</table>"
 
