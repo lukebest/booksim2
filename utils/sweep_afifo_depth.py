@@ -59,35 +59,34 @@ def cache_schedules(sz, bidir, ramp_bw, quads, spread_max=80):
     return cached
 
 
-def best_at_cap(sz, bidir, ramp_bw, quads, cap, cached, spread_max=80):
-    """Min makespan with afifo_depth <= cap."""
+def min_at_cap(candidates, cap):
+    """Best makespan among schedules with per-link AFIFO peak <= cap."""
+    feas = [c for c in candidates if c["afifo_depth"] <= cap]
+    if not feas:
+        return None
+    return min(feas, key=lambda x: x["makespan"])
+
+
+def collect_atomic(sz, bidir, ramp_bw, quads, caps):
+    """Run atomic once per (cap, order); pool must be merged across caps so
+    a schedule found at cap=1 (depth=1) remains feasible at cap=2."""
     deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
-    best = None
-
-    def consider(rec):
-        nonlocal best
-        if rec is None or rec["afifo_depth"] > cap:
-            return
-        if best is None or rec["makespan"] < best["makespan"]:
-            best = rec
-
-    for rec in cached:
-        consider(rec)
-
-    cap_arg = 0 if cap == 0 else cap
-    for order in ("interleave", "natural", "quad"):
-        r = S.schedule_atomic(sz, bidir, ramp_bw, deliv, afifo_cap=cap_arg,
-                              order=order, quads=quads)
-        if r.get("ok"):
-            consider({
-                "makespan": r["makespan"],
-                "afifo_depth": r["afifo_depth"],
-                "afifo_balanced": r["afifo_balanced"]["peak"],
-                "method": "atomic",
-                "order": order,
-            })
-
-    return best
+    pool = []
+    for cap in caps:
+        cap_arg = 0 if cap == 0 else cap
+        for order in ("interleave", "natural", "quad"):
+            r = S.schedule_atomic(sz, bidir, ramp_bw, deliv, afifo_cap=cap_arg,
+                                  order=order, quads=quads)
+            if r.get("ok"):
+                pool.append({
+                    "makespan": r["makespan"],
+                    "afifo_depth": r["afifo_depth"],
+                    "afifo_balanced": r["afifo_balanced"]["peak"],
+                    "method": "atomic",
+                    "order": order,
+                    "atomic_cap": cap_arg,
+                })
+    return pool
 
 
 def sweep_config(sz, bidir, ramp_bw, caps=CAPS):
@@ -101,10 +100,19 @@ def sweep_config(sz, bidir, ramp_bw, caps=CAPS):
     t_cache = time.time()
     cached = cache_schedules(sz, bidir, ramp_bw, quads, spread_max)
     print(f"  {len(cached)} schedules in {time.time()-t_cache:.1f}s", flush=True)
+    atomic_pool = collect_atomic(sz, bidir, ramp_bw, quads, caps)
+    candidates = cached + atomic_pool
     points = []
+    prev_mk = None
     for cap in caps:
         t0 = time.time()
-        rec = best_at_cap(sz, bidir, ramp_bw, quads, cap, cached, spread_max)
+        rec = min_at_cap(candidates, cap)
+        mk = rec["makespan"] if rec else None
+        if prev_mk is not None and mk is not None and mk > prev_mk:
+            print(f"  WARNING cap={cap}: mk={mk} > prev={prev_mk} (pool merge should prevent this)",
+                  flush=True)
+        if mk is not None:
+            prev_mk = mk
         points.append({
             "cap": cap,
             "makespan": rec["makespan"] if rec else None,

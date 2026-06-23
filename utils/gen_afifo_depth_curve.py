@@ -135,7 +135,8 @@ th{{background:#e2e8f0;}} td.l{{text-align:left;}} .note{{color:#64748b;font-siz
 <div class='card'><h2>数值表</h2>
 {table_rows(data)}
 <p class='note'>每格为在该 AFIFO 深度上限下搜索到的最小 makespan（per-link peak ≤ cap）。
-搜索含 spread 调度 + atomic 相位错开；cap=0 表示跨界不允许在 AFIFO 中等待。</p>
+搜索合并全部 spread 候选与各 cap 下 atomic 结果后按深度过滤，保证 cap 增大时 makespan 不升。
+cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 </body></html>"""
 
