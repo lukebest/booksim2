@@ -1,0 +1,3396 @@
+{
+  "updated": "2026-06-22T10:32:07.005492+00:00",
+  "model": "tree fork position vs makespan; router 0-buffer rigid pack + border AFIFO\u22645",
+  "afifo_cap": 5,
+  "deep": true,
+  "sizes": {
+    "4x4": {
+      "strategies": {
+        "ring_uni_uni": {
+          "makespan": 82,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_uni": {
+          "makespan": 46,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_uni": {
+          "makespan": 45,
+          "max_offset": 7,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_uni": {
+          "makespan": 48,
+          "max_offset": 22,
+          "src_order": "ring",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_uni": {
+          "makespan": 51,
+          "max_offset": 21,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "hybrid_h_B1_uni": {
+          "makespan": 82,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_uni": {
+          "makespan": 74,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_uni": {
+          "makespan": 46,
+          "max_offset": 1,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_uni": {
+          "makespan": 50,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 15,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "border_short_arc_uni": {
+          "makespan": 37,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "scheduler": "ring_zerobuf",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0"
+        },
+        "ring_uni_bi": {
+          "makespan": 82,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_bi": {
+          "makespan": 46,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_bi": {
+          "makespan": 38,
+          "max_offset": 6,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_bi": {
+          "makespan": 32,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_bi": {
+          "makespan": 47,
+          "max_offset": 24,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_bi": {
+          "makespan": 46,
+          "max_offset": 13,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "hybrid_h_B1_bi": {
+          "makespan": 46,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_bi": {
+          "makespan": 42,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_bi": {
+          "makespan": 33,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 8,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "border_short_arc_bi": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "scheduler": "ring_zerobuf",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0"
+        }
+      },
+      "border_compare_bi": {
+        "border_3level": 33,
+        "border_short_arc": 32,
+        "border_rigid": 32,
+        "note": "3level=\u663e\u5f0f\u591a\u64ad\u68110-buffer; short_arc=Hamilton\u73af+AFIFO\u22645; rigid=fp_border\u521a\u6027"
+      },
+      "best_zerobuf_bi": [
+        32,
+        "border_rigid_bi"
+      ]
+    },
+    "8x8": {
+      "strategies": {
+        "ring_uni_uni": {
+          "makespan": 354,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_uni": {
+          "makespan": 186,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_uni": {
+          "makespan": 177,
+          "max_offset": 31,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_uni": {
+          "makespan": 195,
+          "max_offset": 93,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "quad_late_y_B1_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "quad_late_y_B2_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "quad_late_y_B3_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "quad_late_y_B4_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_y_B5_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_x_B5_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 5
+          }
+        },
+        "quad_late_y_B5_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_y_B6_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_x_B6_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 6
+          }
+        },
+        "quad_late_y_B6_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_y_B7_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_x_B7_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 7
+          }
+        },
+        "quad_late_y_B7_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_y_B8_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_x_B8_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 8
+          }
+        },
+        "quad_late_y_B8_uni": {
+          "makespan": 173,
+          "max_offset": 102,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "hybrid_h_B1_uni": {
+          "makespan": 354,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_uni": {
+          "makespan": 282,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_uni": {
+          "makespan": 187,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_uni": {
+          "makespan": 170,
+          "max_offset": 1,
+          "src_order": "ring",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_h_B4_uni": {
+          "makespan": 189,
+          "max_offset": 97,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_v_B4_uni": {
+          "makespan": 115,
+          "max_offset": 3,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 63,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "border_short_arc_uni": {
+          "makespan": 180,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+        },
+        "ring_uni_bi": {
+          "makespan": 354,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_bi": {
+          "makespan": 186,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_bi": {
+          "makespan": 126,
+          "max_offset": 65,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_bi": {
+          "makespan": 112,
+          "max_offset": 69,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_bi": {
+          "makespan": 112,
+          "max_offset": 69,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_bi": {
+          "makespan": 110,
+          "max_offset": 67,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_bi": {
+          "makespan": 110,
+          "max_offset": 59,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_bi": {
+          "makespan": 131,
+          "max_offset": 71,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_bi": {
+          "makespan": 126,
+          "max_offset": 82,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_bi": {
+          "makespan": 122,
+          "max_offset": 79,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_bi": {
+          "makespan": 170,
+          "max_offset": 100,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_bi": {
+          "makespan": 170,
+          "max_offset": 100,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_bi": {
+          "makespan": 94,
+          "max_offset": 49,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_bi": {
+          "makespan": 94,
+          "max_offset": 51,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "quad_late_y_B1_bi": {
+          "makespan": 94,
+          "max_offset": 51,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_bi": {
+          "makespan": 94,
+          "max_offset": 47,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_bi": {
+          "makespan": 92,
+          "max_offset": 49,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "quad_late_y_B2_bi": {
+          "makespan": 108,
+          "max_offset": 60,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_bi": {
+          "makespan": 94,
+          "max_offset": 51,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_bi": {
+          "makespan": 92,
+          "max_offset": 49,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "quad_late_y_B3_bi": {
+          "makespan": 115,
+          "max_offset": 72,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_bi": {
+          "makespan": 94,
+          "max_offset": 51,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_bi": {
+          "makespan": 92,
+          "max_offset": 49,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "quad_late_y_B4_bi": {
+          "makespan": 115,
+          "max_offset": 72,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_y_B5_bi": {
+          "makespan": 96,
+          "max_offset": 53,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_x_B5_bi": {
+          "makespan": 92,
+          "max_offset": 49,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 5
+          }
+        },
+        "quad_late_y_B5_bi": {
+          "makespan": 115,
+          "max_offset": 72,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_y_B6_bi": {
+          "makespan": 104,
+          "max_offset": 57,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_x_B6_bi": {
+          "makespan": 105,
+          "max_offset": 56,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 6
+          }
+        },
+        "quad_late_y_B6_bi": {
+          "makespan": 110,
+          "max_offset": 59,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_y_B7_bi": {
+          "makespan": 113,
+          "max_offset": 70,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_x_B7_bi": {
+          "makespan": 109,
+          "max_offset": 61,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 7
+          }
+        },
+        "quad_late_y_B7_bi": {
+          "makespan": 110,
+          "max_offset": 59,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_y_B8_bi": {
+          "makespan": 125,
+          "max_offset": 82,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_x_B8_bi": {
+          "makespan": 117,
+          "max_offset": 73,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 8
+          }
+        },
+        "quad_late_y_B8_bi": {
+          "makespan": 110,
+          "max_offset": 59,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "hybrid_h_B1_bi": {
+          "makespan": 186,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_bi": {
+          "makespan": 150,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_bi": {
+          "makespan": 172,
+          "max_offset": 72,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_bi": {
+          "makespan": 152,
+          "max_offset": 70,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_h_B4_bi": {
+          "makespan": 129,
+          "max_offset": 81,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_v_B4_bi": {
+          "makespan": 133,
+          "max_offset": 69,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 32,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "border_short_arc_bi": {
+          "makespan": 79,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "scheduler": "ring_zerobuf",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006); Q3\u53f3\u4e0a:vflip+270\u00b0\u987a(90\u00b0\u9006)"
+        }
+      },
+      "border_compare_bi": {
+        "border_3level": 110,
+        "border_short_arc": 79,
+        "border_rigid": 126,
+        "note": "3level=\u663e\u5f0f\u591a\u64ad\u68110-buffer; short_arc=Hamilton\u73af+AFIFO\u22645; rigid=fp_border\u521a\u6027"
+      },
+      "best_zerobuf_bi": [
+        92,
+        "dim_xy_late_x_B2_bi"
+      ]
+    },
+    "16x16": {
+      "strategies": {
+        "ring_uni_uni": {
+          "makespan": 1474,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_uni": {
+          "makespan": 754,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_uni": {
+          "makespan": 717,
+          "max_offset": 75,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_uni": {
+          "makespan": 437,
+          "max_offset": 3,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "quad_late_y_B1_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "quad_late_y_B2_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "quad_late_y_B3_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "quad_late_y_B4_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_y_B5_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_x_B5_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 5
+          }
+        },
+        "quad_late_y_B5_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_y_B6_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_x_B6_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 6
+          }
+        },
+        "quad_late_y_B6_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_y_B7_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_x_B7_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 7
+          }
+        },
+        "quad_late_y_B7_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_y_B8_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_x_B8_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 8
+          }
+        },
+        "quad_late_y_B8_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_y_B16_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 16
+          }
+        },
+        "dim_xy_late_x_B16_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 16
+          }
+        },
+        "quad_late_y_B16_uni": {
+          "makespan": 837,
+          "max_offset": 685,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 16
+          }
+        },
+        "hybrid_h_B1_uni": {
+          "makespan": 1474,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_uni": {
+          "makespan": 1082,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_uni": {
+          "makespan": 755,
+          "max_offset": 1,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_uni": {
+          "makespan": 602,
+          "max_offset": 1,
+          "src_order": "ring",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_h_B4_uni": {
+          "makespan": 863,
+          "max_offset": 531,
+          "src_order": "ring",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_v_B4_uni": {
+          "makespan": 363,
+          "max_offset": 3,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_h_B8_uni": {
+          "makespan": 848,
+          "max_offset": 694,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 8
+          }
+        },
+        "hybrid_v_B8_uni": {
+          "makespan": 840,
+          "max_offset": 614,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 255,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 8
+          }
+        },
+        "border_short_arc_uni": {
+          "makespan": 719,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+        },
+        "ring_uni_bi": {
+          "makespan": 1474,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 0,
+            "desc": "\u5355\u5411\u73af\u94fe\uff0c\u65e0\u7f51\u5185\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "ring_bi_2fork_bi": {
+          "makespan": 754,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 1,
+            "desc": "\u6e90\u70b9\u53cc\u54112\u5206\u53c9\uff0c\u73af\u4e0a\u65e0\u518d\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "dim_xy_bi": {
+          "makespan": 505,
+          "max_offset": 358,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u591a\u64ad + \u5404\u5217Y\u5206\u53c9\uff08\u7ef4\u5e8f\u591a\u6811\uff09"
+          },
+          "params": {}
+        },
+        "dim_yx_bi": {
+          "makespan": 472,
+          "max_offset": 389,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u591a\u64ad + \u5404\u884cX\u5206\u53c9"
+          },
+          "params": {}
+        },
+        "row_spine_bi": {
+          "makespan": 397,
+          "max_offset": 312,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u884c\u5de6\u53f3\u5206\u53c9\uff0c\u884c\u7aef\u5217\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "col_spine_bi": {
+          "makespan": 376,
+          "max_offset": 290,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u6e90\u5217\u4e0a\u4e0b\u5206\u53c9\uff0c\u5217\u7aef\u884c\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "border_3level_bi": {
+          "makespan": 467,
+          "max_offset": 384,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "L1\u8c61\u9650\u5185\u6811 L2\u90bb\u8c61\u9650\u8fb9\u754c L3\u5bf9\u89d2"
+          },
+          "params": {}
+        },
+        "quad_4ring_bi": {
+          "makespan": 523,
+          "max_offset": 275,
+          "src_order": "ring",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u8c61\u9650\u73af circulate + \u4e2d\u5fc34\u73af\u4ea4\u6362"
+          },
+          "params": {}
+        },
+        "border_rigid_bi": {
+          "makespan": 596,
+          "max_offset": 418,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "params": {}
+        },
+        "serpentine_bi": {
+          "makespan": 489,
+          "max_offset": 348,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u884c\u810a + \u5404\u5217\u86c7\u5f62\u5782\u76f4\u586b\u5145"
+          },
+          "params": {}
+        },
+        "center_first_xy_bi": {
+          "makespan": 820,
+          "max_offset": 669,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dX-then-Y\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "center_first_yx_bi": {
+          "makespan": 799,
+          "max_offset": 646,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "\u5148\u5230\u7f51\u683c\u4e2d\u5fc3\uff0c\u518dY-then-X\u591a\u64ad"
+          },
+          "params": {}
+        },
+        "dim_xy_late_y_B1_bi": {
+          "makespan": 330,
+          "max_offset": 241,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_x_B1_bi": {
+          "makespan": 320,
+          "max_offset": 232,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 1
+          }
+        },
+        "quad_late_y_B1_bi": {
+          "makespan": 357,
+          "max_offset": 273,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 1
+          }
+        },
+        "dim_xy_late_y_B2_bi": {
+          "makespan": 320,
+          "max_offset": 237,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_x_B2_bi": {
+          "makespan": 313,
+          "max_offset": 229,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 2
+          }
+        },
+        "quad_late_y_B2_bi": {
+          "makespan": 414,
+          "max_offset": 328,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 2
+          }
+        },
+        "dim_xy_late_y_B3_bi": {
+          "makespan": 319,
+          "max_offset": 230,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_x_B3_bi": {
+          "makespan": 313,
+          "max_offset": 229,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 3
+          }
+        },
+        "quad_late_y_B3_bi": {
+          "makespan": 447,
+          "max_offset": 361,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 3
+          }
+        },
+        "dim_xy_late_y_B4_bi": {
+          "makespan": 325,
+          "max_offset": 238,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_x_B4_bi": {
+          "makespan": 315,
+          "max_offset": 232,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 4
+          }
+        },
+        "quad_late_y_B4_bi": {
+          "makespan": 454,
+          "max_offset": 365,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 4
+          }
+        },
+        "dim_xy_late_y_B5_bi": {
+          "makespan": 344,
+          "max_offset": 261,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_x_B5_bi": {
+          "makespan": 309,
+          "max_offset": 224,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 5
+          }
+        },
+        "quad_late_y_B5_bi": {
+          "makespan": 453,
+          "max_offset": 356,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 5
+          }
+        },
+        "dim_xy_late_y_B6_bi": {
+          "makespan": 358,
+          "max_offset": 275,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_x_B6_bi": {
+          "makespan": 338,
+          "max_offset": 255,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 6
+          }
+        },
+        "quad_late_y_B6_bi": {
+          "makespan": 474,
+          "max_offset": 391,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 6
+          }
+        },
+        "dim_xy_late_y_B7_bi": {
+          "makespan": 348,
+          "max_offset": 265,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_x_B7_bi": {
+          "makespan": 328,
+          "max_offset": 245,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 7
+          }
+        },
+        "quad_late_y_B7_bi": {
+          "makespan": 456,
+          "max_offset": 368,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 7
+          }
+        },
+        "dim_xy_late_y_B8_bi": {
+          "makespan": 361,
+          "max_offset": 212,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_x_B8_bi": {
+          "makespan": 348,
+          "max_offset": 264,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 8
+          }
+        },
+        "quad_late_y_B8_bi": {
+          "makespan": 471,
+          "max_offset": 386,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 8
+          }
+        },
+        "dim_xy_late_y_B16_bi": {
+          "makespan": 458,
+          "max_offset": 311,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "X\u810a\u5168\u5c40\uff0cY\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u884c\u5e26"
+          },
+          "params": {
+            "fork_row_band": 16
+          }
+        },
+        "dim_xy_late_x_B16_bi": {
+          "makespan": 452,
+          "max_offset": 303,
+          "src_order": "rev",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 2,
+            "desc": "Y\u810a\u5168\u5c40\uff0cX\u5206\u53c9\u5ef6\u8fdf\u5230\u6307\u5b9a\u5217\u5e26"
+          },
+          "params": {
+            "fork_col_band": 16
+          }
+        },
+        "quad_late_y_B16_bi": {
+          "makespan": 467,
+          "max_offset": 384,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": 3,
+            "desc": "\u8c61\u9650\u5185\u5ef6\u8fdfY\u5206\u53c9 + \u8fb9\u754cL2/L3"
+          },
+          "params": {
+            "fork_row_band": 16
+          }
+        },
+        "hybrid_h_B1_bi": {
+          "makespan": 754,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_v_B1_bi": {
+          "makespan": 558,
+          "max_offset": 0,
+          "src_order": "corner",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 1
+          }
+        },
+        "hybrid_h_B2_bi": {
+          "makespan": 801,
+          "max_offset": 433,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_v_B2_bi": {
+          "makespan": 656,
+          "max_offset": 360,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 2
+          }
+        },
+        "hybrid_h_B4_bi": {
+          "makespan": 777,
+          "max_offset": 584,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_v_B4_bi": {
+          "makespan": 756,
+          "max_offset": 542,
+          "src_order": "center",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 4
+          }
+        },
+        "hybrid_h_B8_bi": {
+          "makespan": 506,
+          "max_offset": 366,
+          "src_order": "col",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_h"
+          },
+          "params": {
+            "B": 8
+          }
+        },
+        "hybrid_v_B8_bi": {
+          "makespan": 490,
+          "max_offset": 346,
+          "src_order": "natural",
+          "ok": true,
+          "eject_lb": 128,
+          "scheduler": "zerobuf_rigid",
+          "fork": {
+            "levels": "?",
+            "desc": "hybrid_v"
+          },
+          "params": {
+            "B": 8
+          }
+        },
+        "border_short_arc_bi": {
+          "makespan": 470,
+          "afifo_depth": 3,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic",
+          "fork": {
+            "levels": 3,
+            "desc": "Hamilton\u73af+\u77ed\u5f27\uff08\u73af\u4e0a\u65e0\u5206\u53c9\uff0c\u8fb9\u754cAFIFO\uff09"
+          },
+          "ring_shape": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:vflip+180\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+180\u00b0"
+        }
+      },
+      "border_compare_bi": {
+        "border_3level": 467,
+        "border_short_arc": 470,
+        "border_rigid": 596,
+        "note": "3level=\u663e\u5f0f\u591a\u64ad\u68110-buffer; short_arc=Hamilton\u73af+AFIFO\u22645; rigid=fp_border\u521a\u6027"
+      },
+      "best_zerobuf_bi": [
+        309,
+        "dim_xy_late_x_B5_bi"
+      ]
+    }
+  },
+  "elapsed_s": 377.5024013519287,
+  "band_optima": {
+    "4x4_bi": {
+      "best": "dim_xy_late_x_B1",
+      "makespan": 33,
+      "note": "\u5c0f\u62d3\u6251 band 1-4 \u5747 33"
+    },
+    "8x8_bi": {
+      "best": "dim_xy_late_x_B2",
+      "makespan": 92,
+      "alt": "B3-B5 \u540c\u4e3a 92"
+    },
+    "16x16_bi": {
+      "best": "dim_xy_late_x_B5",
+      "makespan": 309,
+      "y_alt": "dim_xy_late_y_B3=319"
+    }
+  },
+  "hybrid_trials_16x16_bi": {
+    "quad_center_first": 663,
+    "quad_serpentine_border": 473,
+    "quad_late_x_B5": 388,
+    "note": "\u5747\u672a\u4f18\u4e8e\u5168\u5c40 dim_xy_late_x_B5=309"
+  },
+  "loop_status": {
+    "stopped": "2026-06-22T11:17:36.032887+00:00",
+    "reason": "3\u8f6e\u65e0\u6539\u8fdb\uff1b\u8c61\u9650\u5185 center/serpentine+border \u52a3\u4e8e\u5168\u5c40\u5ef6\u8fdf\u5206\u53c9"
+  }
+}

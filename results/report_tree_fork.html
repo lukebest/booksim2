@@ -1,0 +1,806 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'>
+<title>树形 Allgather 多播分叉 vs Makespan</title>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;max-width:1100px;line-height:1.5;}
+h1,h2,h3{color:#1e3a8a;} .card{background:#fff;border:1px solid #e2e8f0;padding:16px;margin:16px 0;border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:12px;} td,th{border:1px solid #cbd5e1;padding:5px 8px;}
+th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12px;}
+</style></head><body>
+<h1>树形 Allgather：多播分叉位置与 Makespan</h1>
+<p class='note'>更新 2026-06-22T10:32:07.005492+00:00 · router 无缓冲无阻塞无冲突（刚性 pack）；
+border 短弧另允许边界 AFIFO≤5 + 环内链路时分。忽略下 ramp 多播带宽差异以外的 eject 容量。</p>
+<div class='card'><h2>统一视角</h2>
+<ul>
+<li><b>双向 Hamilton 环</b> = 源点 2 路分叉、环上无再分叉的浅树；靠全局链路时分叠加。</li>
+<li><b>维序多树 dim_xy</b> = 第一级 X 脊多播 + 第二级各列 Y 分叉；Y-first 为 dim_yx。</li>
+<li><b>border 短弧</b> = L1 本象限 Hamilton 环（无分叉）+ L2 邻象限边界短弧 + L3 对角短弧；AFIFO≤5。</li>
+<li><b>border_3level 显式树</b> = 同三级逻辑但用多播树边表达（刚性 0-buffer，无 AFIFO）。</li>
+<li><b>dim_xy_late_y</b> = 延迟 Y 分叉到源附近行带，探索分叉深度对 makespan 的影响。</li>
+</ul></div>
+<div class='card'><h3>4x4 border 对比（双向）</h3><ul><li>border_3level 显式树（0-buffer）：<b>33</b> cy</li><li>border 短弧 AFIFO≤5：<b>32</b> cy</li><li>border 刚性 fp_border：<b>32</b> cy</li></ul><p class='note'>3level=显式多播树0-buffer; short_arc=Hamilton环+AFIFO≤5; rigid=fp_border刚性</p></div><div class='card'><h3>8x8 border 对比（双向）</h3><ul><li>border_3level 显式树（0-buffer）：<b>110</b> cy</li><li>border 短弧 AFIFO≤5：<b>79</b> cy</li><li>border 刚性 fp_border：<b>126</b> cy</li></ul><p class='note'>3level=显式多播树0-buffer; short_arc=Hamilton环+AFIFO≤5; rigid=fp_border刚性</p></div><div class='card'><h3>16x16 border 对比（双向）</h3><ul><li>border_3level 显式树（0-buffer）：<b>467</b> cy</li><li>border 短弧 AFIFO≤5：<b>470</b> cy</li><li>border 刚性 fp_border：<b>596</b> cy</li></ul><p class='note'>3level=显式多播树0-buffer; short_arc=Hamilton环+AFIFO≤5; rigid=fp_border刚性</p></div><div class='card'><h2>4x4 双向 @ ramp=2</h2><svg width="1300" height="320" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">4x4 树形分叉 makespan（刚性 0-buffer + border AFIFO≤5）</text>
+<line x1="54" y1="266" x2="1246" y2="266" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="266" stroke="#64748b"/>
+<line x1="54" y1="247.5" x2="1246" y2="247.5" stroke="#dc2626" stroke-dasharray="5 4"/>
+<text x="1242" y="243.53310104529618" font-size="10" fill="#dc2626" text-anchor="end">eject LB=8</text>
+<rect x="58.8" y="76.7" width="38.1" height="189.3" fill="#60a5fa"/>
+<text x="77.8" y="72.71428571428572" font-size="9" font-weight="bold" text-anchor="middle">82</text>
+<text x="77.8" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="77.8" y="291" font-size="8" text-anchor="middle">uni</text>
+<text x="77.8" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="106.4" y="159.8" width="38.1" height="106.2" fill="#60a5fa"/>
+<text x="125.5" y="155.81533101045298" font-size="9" font-weight="bold" text-anchor="middle">46</text>
+<text x="125.5" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="125.5" y="291" font-size="8" text-anchor="middle">bi</text>
+<text x="125.5" y="302" font-size="8" text-anchor="middle">2fork</text>
+<text x="125.5" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="154.1" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="173.2" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="173.2" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="173.2" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="173.2" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="201.8" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="220.9" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="220.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="220.9" y="291" font-size="8" text-anchor="middle">yx</text>
+<text x="220.9" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="249.5" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="268.6" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="268.6" y="280" font-size="8" text-anchor="middle">row</text>
+<text x="268.6" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="268.6" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="297.2" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="316.2" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="316.2" y="280" font-size="8" text-anchor="middle">col</text>
+<text x="316.2" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="316.2" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="344.8" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="363.9" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="363.9" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="363.9" y="291" font-size="8" text-anchor="middle">3level</text>
+<text x="363.9" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="392.5" y="178.3" width="38.1" height="87.7" fill="#60a5fa"/>
+<text x="411.6" y="174.2822299651568" font-size="9" font-weight="bold" text-anchor="middle">38</text>
+<text x="411.6" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="411.6" y="291" font-size="8" text-anchor="middle">4ring</text>
+<text x="411.6" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="440.2" y="192.1" width="38.1" height="73.9" fill="#10b981"/>
+<text x="459.3" y="188.13240418118468" font-size="9" font-weight="bold" text-anchor="middle">32</text>
+<text x="459.3" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="459.3" y="291" font-size="8" text-anchor="middle">rigid</text>
+<text x="459.3" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="487.9" y="192.1" width="38.1" height="73.9" fill="#10b981"/>
+<text x="507.0" y="188.13240418118468" font-size="9" font-weight="bold" text-anchor="middle">32</text>
+<text x="507.0" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="507.0" y="291" font-size="8" text-anchor="middle">short</text>
+<text x="507.0" y="302" font-size="8" text-anchor="middle">arc</text>
+<text x="507.0" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="535.6" y="157.5" width="38.1" height="108.5" fill="#60a5fa"/>
+<text x="554.6" y="153.506968641115" font-size="9" font-weight="bold" text-anchor="middle">47</text>
+<text x="554.6" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="554.6" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="554.6" y="302" font-size="8" text-anchor="middle">xy</text>
+<text x="554.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="583.2" y="159.8" width="38.1" height="106.2" fill="#60a5fa"/>
+<text x="602.3" y="155.81533101045298" font-size="9" font-weight="bold" text-anchor="middle">46</text>
+<text x="602.3" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="602.3" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="602.3" y="302" font-size="8" text-anchor="middle">yx</text>
+<text x="602.3" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="630.9" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="650.0" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="650.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="650.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="650.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="650.0" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="650.0" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="650.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="678.6" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="697.7" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="697.7" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="697.7" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="697.7" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="697.7" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="697.7" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="697.7" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="726.3" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="745.4" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="745.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="745.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="745.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="745.4" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="745.4" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="745.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="774.0" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="793.0" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="793.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="793.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="793.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="793.0" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="793.0" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="793.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="821.6" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="840.7" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="840.7" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="840.7" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="840.7" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="840.7" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="840.7" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="840.7" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="869.3" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="888.4" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="888.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="888.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="888.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="888.4" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="888.4" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="888.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="917.0" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="936.1" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="936.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="936.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="936.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="936.1" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="936.1" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="936.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="964.7" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="983.8" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="983.8" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="983.8" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="983.8" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="983.8" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="983.8" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="983.8" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1012.4" y="159.8" width="38.1" height="106.2" fill="#60a5fa"/>
+<text x="1031.4" y="155.81533101045298" font-size="9" font-weight="bold" text-anchor="middle">46</text>
+<text x="1031.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1031.4" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1031.4" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1031.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1060.0" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="1079.1" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="1079.1" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1079.1" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1079.1" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1079.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1107.7" y="169.0" width="38.1" height="97.0" fill="#60a5fa"/>
+<text x="1126.8" y="165.0487804878049" font-size="9" font-weight="bold" text-anchor="middle">42</text>
+<text x="1126.8" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1126.8" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1126.8" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1126.8" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1155.4" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="1174.5" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="1174.5" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1174.5" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1174.5" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1174.5" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1203.1" y="189.8" width="38.1" height="76.2" fill="#60a5fa"/>
+<text x="1222.2" y="185.8240418118467" font-size="9" font-weight="bold" text-anchor="middle">33</text>
+<text x="1222.2" y="280" font-size="8" text-anchor="middle">serpentine</text>
+<text x="1222.2" y="291" font-size="8" text-anchor="middle">bi</text>
+</svg><h3>单向 @ ramp=1</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>border_short_arc_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>37</b></td><td>~ AFIFO=1/1</td></tr><tr><td class='l'>quad_4ring_uni</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>45</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>46</b></td><td>✓</td></tr><tr><td class='l'>ring_bi_2fork_uni</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>46</b></td><td>✓</td></tr><tr><td class='l'>border_rigid_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>48</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>50</b></td><td>✓</td></tr><tr><td class='l'>border_3level_uni</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_uni</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_uni</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>col_spine_uni</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B2_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_uni</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_uni</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>row_spine_uni</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>serpentine_uni</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>51</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>74</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>82</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_uni</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>82</b></td><td>✓</td></tr></table><h3>双向 @ ramp=2</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>border_rigid_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>32</b></td><td>✓</td></tr><tr><td class='l'>border_short_arc_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>32</b></td><td>~ AFIFO=2/1</td></tr><tr><td class='l'>border_3level_bi</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>col_spine_bi</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_bi</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B2_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_bi</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>row_spine_bi</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>serpentine_bi</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>33</b></td><td>✓</td></tr><tr><td class='l'>quad_4ring_bi</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>38</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>42</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_bi</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>46</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>46</b></td><td>✓</td></tr><tr><td class='l'>ring_bi_2fork_bi</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>46</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_bi</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>47</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_bi</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>82</b></td><td>✓</td></tr></table></div><div class='card'><h2>8x8 双向 @ ramp=2</h2><svg width="2236" height="320" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">8x8 树形分叉 makespan（刚性 0-buffer + border AFIFO≤5）</text>
+<line x1="54" y1="266" x2="2182" y2="266" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="266" stroke="#64748b"/>
+<line x1="54" y1="248.9" x2="2182" y2="248.9" stroke="#dc2626" stroke-dasharray="5 4"/>
+<text x="2178" y="244.88942695722358" font-size="10" fill="#dc2626" text-anchor="end">eject LB=32</text>
+<rect x="58.9" y="76.7" width="39.6" height="189.3" fill="#60a5fa"/>
+<text x="78.7" y="72.71428571428572" font-size="9" font-weight="bold" text-anchor="middle">354</text>
+<text x="78.7" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="78.7" y="291" font-size="8" text-anchor="middle">uni</text>
+<text x="78.7" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="108.4" y="166.5" width="39.6" height="99.5" fill="#60a5fa"/>
+<text x="128.2" y="162.544794188862" font-size="9" font-weight="bold" text-anchor="middle">186</text>
+<text x="128.2" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="128.2" y="291" font-size="8" text-anchor="middle">bi</text>
+<text x="128.2" y="302" font-size="8" text-anchor="middle">2fork</text>
+<text x="128.2" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="157.9" y="198.6" width="39.6" height="67.4" fill="#60a5fa"/>
+<text x="177.7" y="194.62711864406782" font-size="9" font-weight="bold" text-anchor="middle">126</text>
+<text x="177.7" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="177.7" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="177.7" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="207.4" y="206.1" width="39.6" height="59.9" fill="#60a5fa"/>
+<text x="227.2" y="202.1129943502825" font-size="9" font-weight="bold" text-anchor="middle">112</text>
+<text x="227.2" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="227.2" y="291" font-size="8" text-anchor="middle">yx</text>
+<text x="227.2" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="256.9" y="206.1" width="39.6" height="59.9" fill="#60a5fa"/>
+<text x="276.7" y="202.1129943502825" font-size="9" font-weight="bold" text-anchor="middle">112</text>
+<text x="276.7" y="280" font-size="8" text-anchor="middle">row</text>
+<text x="276.7" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="276.7" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="306.4" y="207.2" width="39.6" height="58.8" fill="#60a5fa"/>
+<text x="326.2" y="203.182405165456" font-size="9" font-weight="bold" text-anchor="middle">110</text>
+<text x="326.2" y="280" font-size="8" text-anchor="middle">col</text>
+<text x="326.2" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="326.2" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="355.9" y="207.2" width="39.6" height="58.8" fill="#60a5fa"/>
+<text x="375.7" y="203.182405165456" font-size="9" font-weight="bold" text-anchor="middle">110</text>
+<text x="375.7" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="375.7" y="291" font-size="8" text-anchor="middle">3level</text>
+<text x="375.7" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="405.4" y="196.0" width="39.6" height="70.0" fill="#60a5fa"/>
+<text x="425.2" y="191.95359160613398" font-size="9" font-weight="bold" text-anchor="middle">131</text>
+<text x="425.2" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="425.2" y="291" font-size="8" text-anchor="middle">4ring</text>
+<text x="425.2" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="454.9" y="198.6" width="39.6" height="67.4" fill="#60a5fa"/>
+<text x="474.7" y="194.62711864406782" font-size="9" font-weight="bold" text-anchor="middle">126</text>
+<text x="474.7" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="474.7" y="291" font-size="8" text-anchor="middle">rigid</text>
+<text x="474.7" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="504.3" y="223.8" width="39.6" height="42.2" fill="#10b981"/>
+<text x="524.1" y="219.75827280064567" font-size="9" font-weight="bold" text-anchor="middle">79</text>
+<text x="524.1" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="524.1" y="291" font-size="8" text-anchor="middle">short</text>
+<text x="524.1" y="302" font-size="8" text-anchor="middle">arc</text>
+<text x="524.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="553.8" y="175.1" width="39.6" height="90.9" fill="#60a5fa"/>
+<text x="573.6" y="171.1000807102502" font-size="9" font-weight="bold" text-anchor="middle">170</text>
+<text x="573.6" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="573.6" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="573.6" y="302" font-size="8" text-anchor="middle">xy</text>
+<text x="573.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="603.3" y="175.1" width="39.6" height="90.9" fill="#60a5fa"/>
+<text x="623.1" y="171.1000807102502" font-size="9" font-weight="bold" text-anchor="middle">170</text>
+<text x="623.1" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="623.1" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="623.1" y="302" font-size="8" text-anchor="middle">yx</text>
+<text x="623.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="652.8" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="672.6" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="672.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="672.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="672.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="672.6" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="672.6" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="672.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="702.3" y="216.8" width="39.6" height="49.2" fill="#60a5fa"/>
+<text x="722.1" y="212.80710250201776" font-size="9" font-weight="bold" text-anchor="middle">92</text>
+<text x="722.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="722.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="722.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="722.1" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="722.1" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="722.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="751.8" y="216.8" width="39.6" height="49.2" fill="#60a5fa"/>
+<text x="771.6" y="212.80710250201776" font-size="9" font-weight="bold" text-anchor="middle">92</text>
+<text x="771.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="771.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="771.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="771.6" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="771.6" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="771.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="801.3" y="216.8" width="39.6" height="49.2" fill="#60a5fa"/>
+<text x="821.1" y="212.80710250201776" font-size="9" font-weight="bold" text-anchor="middle">92</text>
+<text x="821.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="821.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="821.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="821.1" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="821.1" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="821.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="850.8" y="216.8" width="39.6" height="49.2" fill="#60a5fa"/>
+<text x="870.6" y="212.80710250201776" font-size="9" font-weight="bold" text-anchor="middle">92</text>
+<text x="870.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="870.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="870.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="870.6" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="870.6" y="324" font-size="8" text-anchor="middle">B5</text>
+<text x="870.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="900.3" y="209.9" width="39.6" height="56.1" fill="#60a5fa"/>
+<text x="920.0" y="205.85593220338984" font-size="9" font-weight="bold" text-anchor="middle">105</text>
+<text x="920.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="920.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="920.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="920.0" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="920.0" y="324" font-size="8" text-anchor="middle">B6</text>
+<text x="920.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="949.7" y="207.7" width="39.6" height="58.3" fill="#60a5fa"/>
+<text x="969.5" y="203.71711057304276" font-size="9" font-weight="bold" text-anchor="middle">109</text>
+<text x="969.5" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="969.5" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="969.5" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="969.5" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="969.5" y="324" font-size="8" text-anchor="middle">B7</text>
+<text x="969.5" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="999.2" y="203.4" width="39.6" height="62.6" fill="#60a5fa"/>
+<text x="1019.0" y="199.43946731234865" font-size="9" font-weight="bold" text-anchor="middle">117</text>
+<text x="1019.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1019.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1019.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1019.0" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="1019.0" y="324" font-size="8" text-anchor="middle">B8</text>
+<text x="1019.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1048.7" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="1068.5" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="1068.5" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1068.5" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1068.5" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1068.5" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1068.5" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="1068.5" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1098.2" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="1118.0" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="1118.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1118.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1118.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1118.0" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1118.0" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="1118.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1147.7" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="1167.5" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="1167.5" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1167.5" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1167.5" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1167.5" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1167.5" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="1167.5" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1197.2" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="1217.0" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="1217.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1217.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1217.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1217.0" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1217.0" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="1217.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1246.7" y="214.7" width="39.6" height="51.3" fill="#60a5fa"/>
+<text x="1266.5" y="210.6682808716707" font-size="9" font-weight="bold" text-anchor="middle">96</text>
+<text x="1266.5" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1266.5" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1266.5" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1266.5" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1266.5" y="324" font-size="8" text-anchor="middle">B5</text>
+<text x="1266.5" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1296.2" y="210.4" width="39.6" height="55.6" fill="#60a5fa"/>
+<text x="1316.0" y="206.3906376109766" font-size="9" font-weight="bold" text-anchor="middle">104</text>
+<text x="1316.0" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1316.0" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1316.0" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1316.0" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1316.0" y="324" font-size="8" text-anchor="middle">B6</text>
+<text x="1316.0" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1345.6" y="205.6" width="39.6" height="60.4" fill="#60a5fa"/>
+<text x="1365.4" y="201.57828894269574" font-size="9" font-weight="bold" text-anchor="middle">113</text>
+<text x="1365.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1365.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1365.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1365.4" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1365.4" y="324" font-size="8" text-anchor="middle">B7</text>
+<text x="1365.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1395.1" y="199.2" width="39.6" height="66.8" fill="#60a5fa"/>
+<text x="1414.9" y="195.16182405165455" font-size="9" font-weight="bold" text-anchor="middle">125</text>
+<text x="1414.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1414.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1414.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1414.9" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1414.9" y="324" font-size="8" text-anchor="middle">B8</text>
+<text x="1414.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1444.6" y="166.5" width="39.6" height="99.5" fill="#60a5fa"/>
+<text x="1464.4" y="162.544794188862" font-size="9" font-weight="bold" text-anchor="middle">186</text>
+<text x="1464.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1464.4" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1464.4" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1464.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1494.1" y="174.0" width="39.6" height="92.0" fill="#60a5fa"/>
+<text x="1513.9" y="170.0306698950767" font-size="9" font-weight="bold" text-anchor="middle">172</text>
+<text x="1513.9" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1513.9" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1513.9" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1513.9" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1543.6" y="197.0" width="39.6" height="69.0" fill="#60a5fa"/>
+<text x="1563.4" y="193.02300242130752" font-size="9" font-weight="bold" text-anchor="middle">129</text>
+<text x="1563.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1563.4" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1563.4" y="302" font-size="8" text-anchor="middle">B4</text>
+<text x="1563.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1593.1" y="185.8" width="39.6" height="80.2" fill="#60a5fa"/>
+<text x="1612.9" y="181.79418886198548" font-size="9" font-weight="bold" text-anchor="middle">150</text>
+<text x="1612.9" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1612.9" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1612.9" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1612.9" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1642.6" y="184.7" width="39.6" height="81.3" fill="#60a5fa"/>
+<text x="1662.4" y="180.72477804681193" font-size="9" font-weight="bold" text-anchor="middle">152</text>
+<text x="1662.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1662.4" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1662.4" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1662.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1692.1" y="194.9" width="39.6" height="71.1" fill="#60a5fa"/>
+<text x="1711.9" y="190.88418079096044" font-size="9" font-weight="bold" text-anchor="middle">133</text>
+<text x="1711.9" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1711.9" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1711.9" y="302" font-size="8" text-anchor="middle">B4</text>
+<text x="1711.9" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1741.6" y="215.7" width="39.6" height="50.3" fill="#60a5fa"/>
+<text x="1761.3" y="211.73769168684424" font-size="9" font-weight="bold" text-anchor="middle">94</text>
+<text x="1761.3" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1761.3" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1761.3" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1761.3" y="313" font-size="8" text-anchor="middle">B1</text>
+<text x="1761.3" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1791.0" y="208.3" width="39.6" height="57.7" fill="#60a5fa"/>
+<text x="1810.8" y="204.25181598062954" font-size="9" font-weight="bold" text-anchor="middle">108</text>
+<text x="1810.8" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1810.8" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1810.8" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1810.8" y="313" font-size="8" text-anchor="middle">B2</text>
+<text x="1810.8" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1840.5" y="204.5" width="39.6" height="61.5" fill="#60a5fa"/>
+<text x="1860.3" y="200.5088781275222" font-size="9" font-weight="bold" text-anchor="middle">115</text>
+<text x="1860.3" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1860.3" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1860.3" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1860.3" y="313" font-size="8" text-anchor="middle">B3</text>
+<text x="1860.3" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1890.0" y="204.5" width="39.6" height="61.5" fill="#60a5fa"/>
+<text x="1909.8" y="200.5088781275222" font-size="9" font-weight="bold" text-anchor="middle">115</text>
+<text x="1909.8" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1909.8" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1909.8" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1909.8" y="313" font-size="8" text-anchor="middle">B4</text>
+<text x="1909.8" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1939.5" y="204.5" width="39.6" height="61.5" fill="#60a5fa"/>
+<text x="1959.3" y="200.5088781275222" font-size="9" font-weight="bold" text-anchor="middle">115</text>
+<text x="1959.3" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1959.3" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1959.3" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1959.3" y="313" font-size="8" text-anchor="middle">B5</text>
+<text x="1959.3" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1989.0" y="207.2" width="39.6" height="58.8" fill="#60a5fa"/>
+<text x="2008.8" y="203.182405165456" font-size="9" font-weight="bold" text-anchor="middle">110</text>
+<text x="2008.8" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2008.8" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2008.8" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2008.8" y="313" font-size="8" text-anchor="middle">B6</text>
+<text x="2008.8" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2038.5" y="207.2" width="39.6" height="58.8" fill="#60a5fa"/>
+<text x="2058.3" y="203.182405165456" font-size="9" font-weight="bold" text-anchor="middle">110</text>
+<text x="2058.3" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2058.3" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2058.3" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2058.3" y="313" font-size="8" text-anchor="middle">B7</text>
+<text x="2058.3" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2088.0" y="207.2" width="39.6" height="58.8" fill="#60a5fa"/>
+<text x="2107.8" y="203.182405165456" font-size="9" font-weight="bold" text-anchor="middle">110</text>
+<text x="2107.8" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2107.8" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2107.8" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2107.8" y="313" font-size="8" text-anchor="middle">B8</text>
+<text x="2107.8" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2137.5" y="200.8" width="39.6" height="65.2" fill="#60a5fa"/>
+<text x="2157.3" y="196.76594027441485" font-size="9" font-weight="bold" text-anchor="middle">122</text>
+<text x="2157.3" y="280" font-size="8" text-anchor="middle">serpentine</text>
+<text x="2157.3" y="291" font-size="8" text-anchor="middle">bi</text>
+</svg><h3>单向 @ ramp=1</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>hybrid_v_B4_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>115</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>170</b></td><td>✓</td></tr><tr><td class='l'>border_3level_uni</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_uni</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_uni</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>col_spine_uni</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B2_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B5_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B6_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B7_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B8_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B5_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B6_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B7_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B8_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_uni</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_uni</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B1_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B2_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B3_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B4_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B5_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B6_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B7_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B8_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>row_spine_uni</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>serpentine_uni</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>173</b></td><td>✓</td></tr><tr><td class='l'>quad_4ring_uni</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>177</b></td><td>✓</td></tr><tr><td class='l'>border_short_arc_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>180</b></td><td>~ AFIFO=2/1</td></tr><tr><td class='l'>ring_bi_2fork_uni</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>186</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>187</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B4_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>189</b></td><td>✓</td></tr><tr><td class='l'>border_rigid_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>195</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>282</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>354</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_uni</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>354</b></td><td>✓</td></tr></table><h3>双向 @ ramp=2</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>border_short_arc_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>79</b></td><td>~ AFIFO=5/3</td></tr><tr><td class='l'>dim_xy_late_x_B2_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>92</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>92</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>92</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B5_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>92</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B1_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>94</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B5_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>96</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B6_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>104</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B6_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>105</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B2_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>108</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B7_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>109</b></td><td>✓</td></tr><tr><td class='l'>border_3level_bi</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>110</b></td><td>✓</td></tr><tr><td class='l'>col_spine_bi</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>110</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B6_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>110</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B7_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>110</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B8_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>110</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_bi</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>112</b></td><td>✓</td></tr><tr><td class='l'>row_spine_bi</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>112</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B7_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>113</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B3_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>115</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B4_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>115</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B5_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>115</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B8_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>117</b></td><td>✓</td></tr><tr><td class='l'>serpentine_bi</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>122</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B8_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>125</b></td><td>✓</td></tr><tr><td class='l'>border_rigid_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>126</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_bi</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>126</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B4_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>129</b></td><td>✓</td></tr><tr><td class='l'>quad_4ring_bi</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>131</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B4_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>133</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>150</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>152</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_bi</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>170</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_bi</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>170</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>172</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>186</b></td><td>✓</td></tr><tr><td class='l'>ring_bi_2fork_bi</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>186</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_bi</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>354</b></td><td>✓</td></tr></table></div><div class='card'><h2>16x16 双向 @ ramp=2</h2><svg width="2496" height="320" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">16x16 树形分叉 makespan（刚性 0-buffer + border AFIFO≤5）</text>
+<line x1="54" y1="266" x2="2442" y2="266" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="266" stroke="#64748b"/>
+<line x1="54" y1="249.6" x2="2442" y2="249.6" stroke="#dc2626" stroke-dasharray="5 4"/>
+<text x="2438" y="245.56270595076566" font-size="10" fill="#dc2626" text-anchor="end">eject LB=128</text>
+<rect x="59.0" y="76.7" width="39.8" height="189.3" fill="#60a5fa"/>
+<text x="78.9" y="72.71428571428572" font-size="9" font-weight="bold" text-anchor="middle">1474</text>
+<text x="78.9" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="78.9" y="291" font-size="8" text-anchor="middle">uni</text>
+<text x="78.9" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="108.7" y="169.2" width="39.8" height="96.8" fill="#60a5fa"/>
+<text x="128.6" y="165.1740647412289" font-size="9" font-weight="bold" text-anchor="middle">754</text>
+<text x="128.6" y="280" font-size="8" text-anchor="middle">ring</text>
+<text x="128.6" y="291" font-size="8" text-anchor="middle">bi</text>
+<text x="128.6" y="302" font-size="8" text-anchor="middle">2fork</text>
+<text x="128.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="158.5" y="201.1" width="39.8" height="64.9" fill="#60a5fa"/>
+<text x="178.4" y="197.1497383213801" font-size="9" font-weight="bold" text-anchor="middle">505</text>
+<text x="178.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="178.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="178.4" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="208.2" y="205.4" width="39.8" height="60.6" fill="#60a5fa"/>
+<text x="228.1" y="201.38747819344835" font-size="9" font-weight="bold" text-anchor="middle">472</text>
+<text x="228.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="228.1" y="291" font-size="8" text-anchor="middle">yx</text>
+<text x="228.1" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="258.0" y="215.0" width="39.8" height="51.0" fill="#60a5fa"/>
+<text x="277.9" y="211.0187051754216" font-size="9" font-weight="bold" text-anchor="middle">397</text>
+<text x="277.9" y="280" font-size="8" text-anchor="middle">row</text>
+<text x="277.9" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="277.9" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="307.7" y="217.7" width="39.8" height="48.3" fill="#60a5fa"/>
+<text x="327.6" y="213.7154487303741" font-size="9" font-weight="bold" text-anchor="middle">376</text>
+<text x="327.6" y="280" font-size="8" text-anchor="middle">col</text>
+<text x="327.6" y="291" font-size="8" text-anchor="middle">spine</text>
+<text x="327.6" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="357.5" y="206.0" width="39.8" height="60.0" fill="#60a5fa"/>
+<text x="377.4" y="202.02955999224656" font-size="9" font-weight="bold" text-anchor="middle">467</text>
+<text x="377.4" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="377.4" y="291" font-size="8" text-anchor="middle">3level</text>
+<text x="377.4" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="407.2" y="198.8" width="39.8" height="67.2" fill="#60a5fa"/>
+<text x="427.1" y="194.83824384570653" font-size="9" font-weight="bold" text-anchor="middle">523</text>
+<text x="427.1" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="427.1" y="291" font-size="8" text-anchor="middle">4ring</text>
+<text x="427.1" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="457.0" y="189.5" width="39.8" height="76.5" fill="#60a5fa"/>
+<text x="476.9" y="185.46384958325257" font-size="9" font-weight="bold" text-anchor="middle">596</text>
+<text x="476.9" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="476.9" y="291" font-size="8" text-anchor="middle">rigid</text>
+<text x="476.9" y="302" font-size="8" text-anchor="middle">bi</text>
+<rect x="506.7" y="205.6" width="39.8" height="60.4" fill="#f59e0b"/>
+<text x="526.6" y="201.64431091296763" font-size="9" font-weight="bold" text-anchor="middle">470</text>
+<text x="526.6" y="280" font-size="8" text-anchor="middle">border</text>
+<text x="526.6" y="291" font-size="8" text-anchor="middle">short</text>
+<text x="526.6" y="302" font-size="8" text-anchor="middle">arc</text>
+<text x="526.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="556.5" y="160.7" width="39.8" height="105.3" fill="#60a5fa"/>
+<text x="576.4" y="156.69858499709247" font-size="9" font-weight="bold" text-anchor="middle">820</text>
+<text x="576.4" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="576.4" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="576.4" y="302" font-size="8" text-anchor="middle">xy</text>
+<text x="576.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="606.2" y="163.4" width="39.8" height="102.6" fill="#60a5fa"/>
+<text x="626.1" y="159.395328552045" font-size="9" font-weight="bold" text-anchor="middle">799</text>
+<text x="626.1" y="280" font-size="8" text-anchor="middle">center</text>
+<text x="626.1" y="291" font-size="8" text-anchor="middle">first</text>
+<text x="626.1" y="302" font-size="8" text-anchor="middle">yx</text>
+<text x="626.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="656.0" y="208.0" width="39.8" height="58.0" fill="#60a5fa"/>
+<text x="675.9" y="203.9558053886412" font-size="9" font-weight="bold" text-anchor="middle">452</text>
+<text x="675.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="675.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="675.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="675.9" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="675.9" y="324" font-size="8" text-anchor="middle">B16</text>
+<text x="675.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="705.7" y="224.9" width="39.8" height="41.1" fill="#60a5fa"/>
+<text x="725.6" y="220.90676487691414" font-size="9" font-weight="bold" text-anchor="middle">320</text>
+<text x="725.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="725.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="725.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="725.6" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="725.6" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="725.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="755.5" y="225.8" width="39.8" height="40.2" fill="#60a5fa"/>
+<text x="775.4" y="221.80567939523164" font-size="9" font-weight="bold" text-anchor="middle">313</text>
+<text x="775.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="775.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="775.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="775.4" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="775.4" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="775.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="805.2" y="225.8" width="39.8" height="40.2" fill="#60a5fa"/>
+<text x="825.1" y="221.80567939523164" font-size="9" font-weight="bold" text-anchor="middle">313</text>
+<text x="825.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="825.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="825.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="825.1" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="825.1" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="825.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="855.0" y="225.5" width="39.8" height="40.5" fill="#60a5fa"/>
+<text x="874.9" y="221.54884667571235" font-size="9" font-weight="bold" text-anchor="middle">315</text>
+<text x="874.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="874.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="874.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="874.9" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="874.9" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="874.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="904.7" y="226.3" width="39.8" height="39.7" fill="#10b981"/>
+<text x="924.6" y="222.31934483427023" font-size="9" font-weight="bold" text-anchor="middle">309</text>
+<text x="924.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="924.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="924.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="924.6" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="924.6" y="324" font-size="8" text-anchor="middle">B5</text>
+<text x="924.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="954.5" y="222.6" width="39.8" height="43.4" fill="#60a5fa"/>
+<text x="974.4" y="218.59527040124055" font-size="9" font-weight="bold" text-anchor="middle">338</text>
+<text x="974.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="974.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="974.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="974.4" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="974.4" y="324" font-size="8" text-anchor="middle">B6</text>
+<text x="974.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1004.2" y="223.9" width="39.8" height="42.1" fill="#60a5fa"/>
+<text x="1024.1" y="219.879433998837" font-size="9" font-weight="bold" text-anchor="middle">328</text>
+<text x="1024.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1024.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1024.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1024.1" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="1024.1" y="324" font-size="8" text-anchor="middle">B7</text>
+<text x="1024.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1054.0" y="221.3" width="39.8" height="44.7" fill="#60a5fa"/>
+<text x="1073.9" y="217.31110680364412" font-size="9" font-weight="bold" text-anchor="middle">348</text>
+<text x="1073.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1073.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1073.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1073.9" y="313" font-size="8" text-anchor="middle">x</text>
+<text x="1073.9" y="324" font-size="8" text-anchor="middle">B8</text>
+<text x="1073.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1103.7" y="207.2" width="39.8" height="58.8" fill="#60a5fa"/>
+<text x="1123.6" y="203.18530723008337" font-size="9" font-weight="bold" text-anchor="middle">458</text>
+<text x="1123.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1123.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1123.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1123.6" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1123.6" y="324" font-size="8" text-anchor="middle">B16</text>
+<text x="1123.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1153.5" y="223.6" width="39.8" height="42.4" fill="#60a5fa"/>
+<text x="1173.4" y="219.6226012793177" font-size="9" font-weight="bold" text-anchor="middle">330</text>
+<text x="1173.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1173.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1173.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1173.4" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1173.4" y="324" font-size="8" text-anchor="middle">B1</text>
+<text x="1173.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1203.2" y="224.9" width="39.8" height="41.1" fill="#60a5fa"/>
+<text x="1223.1" y="220.90676487691414" font-size="9" font-weight="bold" text-anchor="middle">320</text>
+<text x="1223.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1223.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1223.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1223.1" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1223.1" y="324" font-size="8" text-anchor="middle">B2</text>
+<text x="1223.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1253.0" y="225.0" width="39.8" height="41.0" fill="#60a5fa"/>
+<text x="1272.9" y="221.03518123667376" font-size="9" font-weight="bold" text-anchor="middle">319</text>
+<text x="1272.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1272.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1272.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1272.9" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1272.9" y="324" font-size="8" text-anchor="middle">B3</text>
+<text x="1272.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1302.7" y="224.3" width="39.8" height="41.7" fill="#60a5fa"/>
+<text x="1322.6" y="220.26468307811592" font-size="9" font-weight="bold" text-anchor="middle">325</text>
+<text x="1322.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1322.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1322.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1322.6" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1322.6" y="324" font-size="8" text-anchor="middle">B4</text>
+<text x="1322.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1352.5" y="221.8" width="39.8" height="44.2" fill="#60a5fa"/>
+<text x="1372.4" y="217.82477224268268" font-size="9" font-weight="bold" text-anchor="middle">344</text>
+<text x="1372.4" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1372.4" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1372.4" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1372.4" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1372.4" y="324" font-size="8" text-anchor="middle">B5</text>
+<text x="1372.4" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1402.2" y="220.0" width="39.8" height="46.0" fill="#60a5fa"/>
+<text x="1422.1" y="216.0269432060477" font-size="9" font-weight="bold" text-anchor="middle">358</text>
+<text x="1422.1" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1422.1" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1422.1" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1422.1" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1422.1" y="324" font-size="8" text-anchor="middle">B6</text>
+<text x="1422.1" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1452.0" y="221.3" width="39.8" height="44.7" fill="#60a5fa"/>
+<text x="1471.9" y="217.31110680364412" font-size="9" font-weight="bold" text-anchor="middle">348</text>
+<text x="1471.9" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1471.9" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1471.9" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1471.9" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1471.9" y="324" font-size="8" text-anchor="middle">B7</text>
+<text x="1471.9" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1501.7" y="219.6" width="39.8" height="46.4" fill="#60a5fa"/>
+<text x="1521.6" y="215.64169412676875" font-size="9" font-weight="bold" text-anchor="middle">361</text>
+<text x="1521.6" y="280" font-size="8" text-anchor="middle">dim</text>
+<text x="1521.6" y="291" font-size="8" text-anchor="middle">xy</text>
+<text x="1521.6" y="302" font-size="8" text-anchor="middle">late</text>
+<text x="1521.6" y="313" font-size="8" text-anchor="middle">y</text>
+<text x="1521.6" y="324" font-size="8" text-anchor="middle">B8</text>
+<text x="1521.6" y="335" font-size="8" text-anchor="middle">bi</text>
+<rect x="1551.5" y="169.2" width="39.8" height="96.8" fill="#60a5fa"/>
+<text x="1571.4" y="165.1740647412289" font-size="9" font-weight="bold" text-anchor="middle">754</text>
+<text x="1571.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1571.4" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1571.4" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1571.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1601.2" y="163.1" width="39.8" height="102.9" fill="#60a5fa"/>
+<text x="1621.1" y="159.13849583252568" font-size="9" font-weight="bold" text-anchor="middle">801</text>
+<text x="1621.1" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1621.1" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1621.1" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1621.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1651.0" y="166.2" width="39.8" height="99.8" fill="#60a5fa"/>
+<text x="1670.9" y="162.22048846675713" font-size="9" font-weight="bold" text-anchor="middle">777</text>
+<text x="1670.9" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1670.9" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1670.9" y="302" font-size="8" text-anchor="middle">B4</text>
+<text x="1670.9" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1700.7" y="201.0" width="39.8" height="65.0" fill="#60a5fa"/>
+<text x="1720.6" y="197.02132196162046" font-size="9" font-weight="bold" text-anchor="middle">506</text>
+<text x="1720.6" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1720.6" y="291" font-size="8" text-anchor="middle">h</text>
+<text x="1720.6" y="302" font-size="8" text-anchor="middle">B8</text>
+<text x="1720.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1750.5" y="194.3" width="39.8" height="71.7" fill="#60a5fa"/>
+<text x="1770.4" y="190.34367125411902" font-size="9" font-weight="bold" text-anchor="middle">558</text>
+<text x="1770.4" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1770.4" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1770.4" y="302" font-size="8" text-anchor="middle">B1</text>
+<text x="1770.4" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1800.2" y="181.8" width="39.8" height="84.2" fill="#60a5fa"/>
+<text x="1820.1" y="177.75886799767397" font-size="9" font-weight="bold" text-anchor="middle">656</text>
+<text x="1820.1" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1820.1" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1820.1" y="302" font-size="8" text-anchor="middle">B2</text>
+<text x="1820.1" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1850.0" y="168.9" width="39.8" height="97.1" fill="#60a5fa"/>
+<text x="1869.9" y="164.91723202170965" font-size="9" font-weight="bold" text-anchor="middle">756</text>
+<text x="1869.9" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1869.9" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1869.9" y="302" font-size="8" text-anchor="middle">B4</text>
+<text x="1869.9" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1899.7" y="203.1" width="39.8" height="62.9" fill="#60a5fa"/>
+<text x="1919.6" y="199.07598371777476" font-size="9" font-weight="bold" text-anchor="middle">490</text>
+<text x="1919.6" y="280" font-size="8" text-anchor="middle">hybrid</text>
+<text x="1919.6" y="291" font-size="8" text-anchor="middle">v</text>
+<text x="1919.6" y="302" font-size="8" text-anchor="middle">B8</text>
+<text x="1919.6" y="313" font-size="8" text-anchor="middle">bi</text>
+<rect x="1949.5" y="206.0" width="39.8" height="60.0" fill="#60a5fa"/>
+<text x="1969.4" y="202.02955999224656" font-size="9" font-weight="bold" text-anchor="middle">467</text>
+<text x="1969.4" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="1969.4" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="1969.4" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="1969.4" y="313" font-size="8" text-anchor="middle">B16</text>
+<text x="1969.4" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="1999.2" y="220.2" width="39.8" height="45.8" fill="#60a5fa"/>
+<text x="2019.1" y="216.15535956580732" font-size="9" font-weight="bold" text-anchor="middle">357</text>
+<text x="2019.1" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2019.1" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2019.1" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2019.1" y="313" font-size="8" text-anchor="middle">B1</text>
+<text x="2019.1" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2049.0" y="212.8" width="39.8" height="53.2" fill="#60a5fa"/>
+<text x="2068.9" y="208.83562705950766" font-size="9" font-weight="bold" text-anchor="middle">414</text>
+<text x="2068.9" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2068.9" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2068.9" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2068.9" y="313" font-size="8" text-anchor="middle">B2</text>
+<text x="2068.9" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2098.7" y="208.6" width="39.8" height="57.4" fill="#60a5fa"/>
+<text x="2118.6" y="204.59788718743943" font-size="9" font-weight="bold" text-anchor="middle">447</text>
+<text x="2118.6" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2118.6" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2118.6" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2118.6" y="313" font-size="8" text-anchor="middle">B3</text>
+<text x="2118.6" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2148.5" y="207.7" width="39.8" height="58.3" fill="#60a5fa"/>
+<text x="2168.4" y="203.69897266912193" font-size="9" font-weight="bold" text-anchor="middle">454</text>
+<text x="2168.4" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2168.4" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2168.4" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2168.4" y="313" font-size="8" text-anchor="middle">B4</text>
+<text x="2168.4" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2198.2" y="207.8" width="39.8" height="58.2" fill="#60a5fa"/>
+<text x="2218.1" y="203.82738902888156" font-size="9" font-weight="bold" text-anchor="middle">453</text>
+<text x="2218.1" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2218.1" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2218.1" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2218.1" y="313" font-size="8" text-anchor="middle">B5</text>
+<text x="2218.1" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2248.0" y="205.1" width="39.8" height="60.9" fill="#60a5fa"/>
+<text x="2267.9" y="201.13064547392906" font-size="9" font-weight="bold" text-anchor="middle">474</text>
+<text x="2267.9" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2267.9" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2267.9" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2267.9" y="313" font-size="8" text-anchor="middle">B6</text>
+<text x="2267.9" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2297.7" y="207.4" width="39.8" height="58.6" fill="#60a5fa"/>
+<text x="2317.6" y="203.44213994960265" font-size="9" font-weight="bold" text-anchor="middle">456</text>
+<text x="2317.6" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2317.6" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2317.6" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2317.6" y="313" font-size="8" text-anchor="middle">B7</text>
+<text x="2317.6" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2347.5" y="205.5" width="39.8" height="60.5" fill="#60a5fa"/>
+<text x="2367.4" y="201.515894553208" font-size="9" font-weight="bold" text-anchor="middle">471</text>
+<text x="2367.4" y="280" font-size="8" text-anchor="middle">quad</text>
+<text x="2367.4" y="291" font-size="8" text-anchor="middle">late</text>
+<text x="2367.4" y="302" font-size="8" text-anchor="middle">y</text>
+<text x="2367.4" y="313" font-size="8" text-anchor="middle">B8</text>
+<text x="2367.4" y="324" font-size="8" text-anchor="middle">bi</text>
+<rect x="2397.2" y="203.2" width="39.8" height="62.8" fill="#60a5fa"/>
+<text x="2417.1" y="199.20440007753442" font-size="9" font-weight="bold" text-anchor="middle">489</text>
+<text x="2417.1" y="280" font-size="8" text-anchor="middle">serpentine</text>
+<text x="2417.1" y="291" font-size="8" text-anchor="middle">bi</text>
+</svg><h3>单向 @ ramp=1</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>hybrid_v_B4_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>363</b></td><td>✓</td></tr><tr><td class='l'>border_rigid_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>437</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>602</b></td><td>✓</td></tr><tr><td class='l'>quad_4ring_uni</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>717</b></td><td>✓</td></tr><tr><td class='l'>border_short_arc_uni</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>719</b></td><td>~ AFIFO=2/1</td></tr><tr><td class='l'>ring_bi_2fork_uni</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>754</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>755</b></td><td>✓</td></tr><tr><td class='l'>border_3level_uni</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_uni</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_uni</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>col_spine_uni</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B16_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B2_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B5_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B6_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B7_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B8_uni</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B16_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B5_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B6_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B7_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B8_uni</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_uni</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_uni</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B16_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B1_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B2_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B3_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B4_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B5_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B6_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B7_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B8_uni</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>row_spine_uni</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>serpentine_uni</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>837</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B8_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>840</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B8_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>848</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B4_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>863</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_uni</td><td>?</td><td class='l'>hybrid_v</td><td><b>1082</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_uni</td><td>?</td><td class='l'>hybrid_h</td><td><b>1474</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_uni</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>1474</b></td><td>✓</td></tr></table><h3>双向 @ ramp=2</h3><table><tr><th>策略</th><th>分叉级</th><th>拓扑说明</th><th>makespan</th><th>ok</th></tr><tr><td class='l'>dim_xy_late_x_B5_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>309</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B2_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>313</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B3_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>313</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B4_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>315</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B3_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>319</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B1_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>320</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B2_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>320</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B4_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>325</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B7_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>328</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B1_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>330</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B6_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>338</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B5_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>344</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B8_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>348</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B7_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>348</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B1_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>357</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B6_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>358</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B8_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>361</b></td><td>✓</td></tr><tr><td class='l'>col_spine_bi</td><td>2</td><td class='l'>源列上下分叉，列端行多播</td><td><b>376</b></td><td>✓</td></tr><tr><td class='l'>row_spine_bi</td><td>2</td><td class='l'>源行左右分叉，行端列多播</td><td><b>397</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B2_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>414</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B3_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>447</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_x_B16_bi</td><td>2</td><td class='l'>Y脊全局，X分叉延迟到指定列带</td><td><b>452</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B5_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>453</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B4_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>454</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B7_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>456</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_late_y_B16_bi</td><td>2</td><td class='l'>X脊全局，Y分叉延迟到指定行带</td><td><b>458</b></td><td>✓</td></tr><tr><td class='l'>border_3level_bi</td><td>3</td><td class='l'>L1象限内树 L2邻象限边界 L3对角</td><td><b>467</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B16_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>467</b></td><td>✓</td></tr><tr><td class='l'>border_short_arc_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>470</b></td><td>~ AFIFO=3/1</td></tr><tr><td class='l'>quad_late_y_B8_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>471</b></td><td>✓</td></tr><tr><td class='l'>dim_yx_bi</td><td>2</td><td class='l'>Y脊多播 + 各行X分叉</td><td><b>472</b></td><td>✓</td></tr><tr><td class='l'>quad_late_y_B6_bi</td><td>3</td><td class='l'>象限内延迟Y分叉 + 边界L2/L3</td><td><b>474</b></td><td>✓</td></tr><tr><td class='l'>serpentine_bi</td><td>2</td><td class='l'>行脊 + 各列蛇形垂直填充</td><td><b>489</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B8_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>490</b></td><td>✓</td></tr><tr><td class='l'>dim_xy_bi</td><td>2</td><td class='l'>X脊多播 + 各列Y分叉（维序多树）</td><td><b>505</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B8_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>506</b></td><td>✓</td></tr><tr><td class='l'>quad_4ring_bi</td><td>2</td><td class='l'>象限环 circulate + 中心4环交换</td><td><b>523</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B1_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>558</b></td><td>✓</td></tr><tr><td class='l'>border_rigid_bi</td><td>3</td><td class='l'>Hamilton环+短弧（环上无分叉，边界AFIFO）</td><td><b>596</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B2_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>656</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B1_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>754</b></td><td>✓</td></tr><tr><td class='l'>ring_bi_2fork_bi</td><td>1</td><td class='l'>源点双向2分叉，环上无再分叉</td><td><b>754</b></td><td>✓</td></tr><tr><td class='l'>hybrid_v_B4_bi</td><td>?</td><td class='l'>hybrid_v</td><td><b>756</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B4_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>777</b></td><td>✓</td></tr><tr><td class='l'>center_first_yx_bi</td><td>2</td><td class='l'>先到网格中心，再Y-then-X多播</td><td><b>799</b></td><td>✓</td></tr><tr><td class='l'>hybrid_h_B2_bi</td><td>?</td><td class='l'>hybrid_h</td><td><b>801</b></td><td>✓</td></tr><tr><td class='l'>center_first_xy_bi</td><td>2</td><td class='l'>先到网格中心，再X-then-Y多播</td><td><b>820</b></td><td>✓</td></tr><tr><td class='l'>ring_uni_bi</td><td>0</td><td class='l'>单向环链，无网内分叉</td><td><b>1474</b></td><td>✓</td></tr></table></div>
+</body></html>
