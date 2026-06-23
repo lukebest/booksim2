@@ -370,6 +370,102 @@ down-ramp 吞 191M flit，正是瓶颈。仿真（C++ <code>ScheduleAllGatherDim
 </div>"""
 
 
+def allgather_bufferdepth_section():
+    """CP-SAT optimal makespan vs buffer depth, B=2, 16x16 lat=4 (+8x8 anchor)."""
+    return """
+<div class="card"><h2>案例：B=2、16×16、链路 delay=4 —— CP-SAT 下 buffer 深度 vs 最优 makespan</h2>
+<p>固定配置：<strong>16×16 mesh、所有链路 delay=4、down-ramp 带宽 B=2 flit/cycle、E=0</strong>（到达即取走，
+同一 cycle 可并行 eject 2 个）。把 <strong>buffer 深度建模为每跳网内等待上限 W</strong>
+——flit 在输出端口最多滞留 W 拍，等价于该端口 FIFO 的占用深度代理（W=0 即网内无 buffer，W 越大 buffer 越深、调度越自由）。
+用 CP-SAT（<code>utils/sched_ilp.py --bw 2</code>）对每个 W 求最优 makespan。</p>
+
+<h3>两个与 B 无关 / 有关的参照</h3>
+<ul>
+<li><strong>延迟地板 latency_floor = 122</strong>：最远角 (15,15)→(0,0) 的维序传播 30×4 + 2×ramp，<strong>与 buffer、B 都无关</strong>。</li>
+<li><strong>松弛下界 LB*(B=2) = 143</strong>：单 down-ramp release-packing（B=2），忽略链路争用与 fork 耦合。</li>
+<li>B=2 时 eject 带宽项 <code>⌈255/2⌉+1 = 129</code> ≈ 延迟地板 122，两者接近 → 既非纯带宽受限也非纯延迟受限。</li>
+</ul>
+
+<h3>8×8、lat=4、B=2（规模小，CP-SAT <strong>可证明最优</strong>，作为干净锚点）</h3>
+<p>延迟地板 58、LB*(B=2)=58。CP-SAT 精确求解：</p>
+<table style="font-size:13px">
+<tr><th>buffer 深度 W</th><th>CP-SAT 最优 makespan</th><th>证明状态</th><th>vs 地板 58</th></tr>
+<tr><td>0（网内无 buffer）</td><td>∈[78, 90]</td><td>未闭合（120s）</td><td>+34%~+55%</td></tr>
+<tr><td>1</td><td>∈[70, 73]</td><td>近最优</td><td>+21%~+26%</td></tr>
+<tr style="background:#ecfdf5"><td>2</td><td><strong>67</strong></td><td><strong>已证最优</strong></td><td>+16%</td></tr>
+<tr><td>4 / 8 / ∞</td><td><strong>67</strong></td><td><strong>已证最优</strong></td><td>+16%</td></tr>
+</table>
+<p><strong>关键结论：buffer 深度 2 即命中全局最优 67，再加深 buffer 毫无收益。</strong>
+W=0（网内零 buffer）要多付 ~34%；W=1 多付几拍；W≥2 饱和。最优 67 比延迟地板 58 高 +9，
+这 +9 是<strong>链路争用 + fork 树共享前缀耦合</strong>的不可消除残差（B=2 已使 eject 不再是瓶颈）。</p>
+
+<h3>16×16、lat=4、B=2（256 节点，CP-SAT 仅给<strong>区间</strong>，无法证明最优）</h3>
+<p>256 节点 ≈ 65k 变量，CP-SAT 150s 内只能从贪心 warmstart 上微调，给出 [证下界, 最好可达] 区间：</p>
+<table style="font-size:13px">
+<tr><th>buffer 深度 W</th><th>贪心可达</th><th>CP-SAT 最好可达</th><th>CP-SAT 证下界</th><th>最优所在区间</th></tr>
+<tr><td>0（网内无 buffer）</td><td>479</td><td>424</td><td>231</td><td>[231, 424]</td></tr>
+<tr><td>2</td><td>346</td><td>343</td><td>165</td><td>[165, 343]</td></tr>
+<tr><td>4</td><td>355</td><td>353*</td><td>165</td><td>[165, 343]†</td></tr>
+<tr><td>8</td><td>317</td><td>315</td><td>165</td><td>[165, 315]</td></tr>
+<tr style="background:#ecfdf5"><td>16</td><td>302</td><td><strong>301</strong></td><td>165</td><td>[165, 301]</td></tr>
+<tr><td>∞（仅参考，违反非阻塞）</td><td>254</td><td>求解器超时无可行*</td><td>—</td><td>—</td></tr>
+</table>
+<p style="font-size:12px;color:#64748b">*W=4 的 353 &gt; W=2 的 343 是贪心 seed + 求解器预算的<strong>启发式非单调假象</strong>；
+最优 makespan 必随 W 单调不增，故 W=4 真实最优 ≤343（†取单调包络）。
+*W=∞：无界等待使域爆炸、传播极弱，CP-SAT 150s 内<strong>连 254 的 hint 都无法确认为可行</strong>
+——印证<strong>有界 W 既是物理非阻塞要求，也对求解器更友好</strong>。</p>
+
+<p><strong>buffer 深度 vs makespan 曲线</strong></p>
+<svg width="540" height="240" viewBox="0 0 540 240" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+  <text x="270" y="15" text-anchor="middle" font-size="12" fill="#334155">buffer 深度 W vs makespan（lat=4, B=2, E=0）</text>
+  <!-- 8x8 panel (left) -->
+  <text x="135" y="34" text-anchor="middle" font-size="11" fill="#1e3a8a">8×8（CP-SAT 证明最优）</text>
+  <line x1="50" y1="200" x2="250" y2="200" stroke="#94a3b8"/>
+  <line x1="50" y1="45" x2="50" y2="200" stroke="#94a3b8"/>
+  <!-- y: 95->200, 58->50 ; y=200-(ms-58)*150/37 -->
+  <line x1="50" y1="115" x2="250" y2="115" stroke="#059669" stroke-dasharray="4,3"/>
+  <text x="252" y="119" font-size="8" fill="#059669">最优67</text>
+  <line x1="50" y1="150" x2="250" y2="150" stroke="#94a3b8" stroke-dasharray="2,3"/>
+  <text x="252" y="154" font-size="8" fill="#94a3b8">地板58</text>
+  <polyline fill="none" stroke="#2563eb" stroke-width="2" points="70,70 115,139 160,115 205,115 240,115"/>
+  <circle cx="70" cy="70" r="4" fill="#dc2626"/><text x="70" y="63" text-anchor="middle" font-size="8">W0:90</text>
+  <circle cx="115" cy="139" r="4" fill="#2563eb"/><text x="115" y="132" text-anchor="middle" font-size="8">1:73</text>
+  <circle cx="160" cy="115" r="4" fill="#059669"/><text x="160" y="108" text-anchor="middle" font-size="8">2:67</text>
+  <circle cx="205" cy="115" r="4" fill="#059669"/><text x="205" y="108" text-anchor="middle" font-size="8">4:67</text>
+  <circle cx="240" cy="115" r="4" fill="#059669"/><text x="240" y="108" text-anchor="middle" font-size="8">∞:67</text>
+  <text x="150" y="218" text-anchor="middle" font-size="9" fill="#64748b">buffer 深度 W</text>
+  <!-- 16x16 panel (right) -->
+  <text x="405" y="34" text-anchor="middle" font-size="11" fill="#1e3a8a">16×16（CP-SAT 最好可达）</text>
+  <line x1="310" y1="200" x2="510" y2="200" stroke="#94a3b8"/>
+  <line x1="310" y1="45" x2="310" y2="200" stroke="#94a3b8"/>
+  <!-- y: 480->200, 122->50 ; y=200-(ms-122)*150/358 -->
+  <line x1="310" y1="150" x2="510" y2="150" stroke="#94a3b8" stroke-dasharray="2,3"/>
+  <text x="512" y="154" font-size="8" fill="#94a3b8">地板122</text>
+  <polyline fill="none" stroke="#2563eb" stroke-width="2" points="330,73 370,109 410,113 450,119 500,125"/>
+  <circle cx="330" cy="73" r="4" fill="#dc2626"/><text x="330" y="66" text-anchor="middle" font-size="8">W0:424</text>
+  <circle cx="370" cy="109" r="4" fill="#2563eb"/><text x="370" y="102" text-anchor="middle" font-size="8">2:343</text>
+  <circle cx="410" cy="113" r="4" fill="#2563eb"/><text x="410" y="106" text-anchor="middle" font-size="8">4:343</text>
+  <circle cx="450" cy="119" r="4" fill="#2563eb"/><text x="450" y="112" text-anchor="middle" font-size="8">8:315</text>
+  <circle cx="500" cy="125" r="4" fill="#2563eb"/><text x="500" y="118" text-anchor="middle" font-size="8">16:301</text>
+  <text x="410" y="218" text-anchor="middle" font-size="9" fill="#64748b">buffer 深度 W</text>
+</svg>
+
+<h3>结论</h3>
+<ul>
+<li><strong>buffer 深度收益急剧衰减</strong>：8×8 上深度 2 即命中证明最优 67；16×16 上 W=0→16 把可达从 ~424 压到 ~301，
+但边际递减明显（主要增益在 W: 0→2）。深 buffer 不能突破<strong>延迟地板</strong>（122）。</li>
+<li><strong>网内零 buffer（W=0）代价最大</strong>：8×8 ~+34%（90 vs 67），16×16 贪心 479（vs 可达 ~254–301）。
+少量 buffer（深度 2）即可回收绝大部分。</li>
+<li><strong>B=2 已让 eject 不再是瓶颈</strong>：8×8 最优 67 与 16×16 残差均源于<strong>链路争用 + fork 共享前缀耦合</strong>，
+而非 down-ramp 带宽——这部分靠加深 buffer 也只能部分缓解。</li>
+<li><strong>规模限制</strong>：16×16（256 节点）超出 CP-SAT 证明最优能力，只能给区间 [下界, 可达]；
+8×8（64 节点）可证明最优，用作干净锚点。W=∞ 对求解器最不友好（域爆炸）。</li>
+<li>复现：<code>utils/sched_ilp.py --mx 16 --my 16 --h 4 --v 4 --bw 2 --w W --warmstart</code>；
+小网格 <code>--mx 8 --my 8 --h 4 --v 4 --bw 2 --w W</code>（去掉 warmstart 即可证明最优）。</li>
+</ul>
+</div>"""
+
+
 def allgather_buffer_section():
     """Buffer vs makespan under realistic constraints (sched_no_eject_buffer.py)."""
     return """
@@ -683,6 +779,7 @@ def render(csv_path, html_path):
     sections.append(allgather_bound_section())
     sections.append(allgather_buffer_section())
     sections.append(hybrid_compare_section())
+    sections.append(allgather_bufferdepth_section())
     sections.append("<div class='card'><h2>Q1: Minimum makespan and calendar period</h2>" + q1_answer(healthy) + "</div>")
 
     sections.append("<div class='card'><h2>Healthy simulation: makespan vs M</h2>")

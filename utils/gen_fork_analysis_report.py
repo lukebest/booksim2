@@ -1,0 +1,446 @@
+#!/usr/bin/env python3
+"""Self-contained HTML report: tree fork-position analysis + buffer-budget Pareto.
+
+Reads results/buffer_pareto_16x16.json (from sweep_buffer_pareto.py) and optional
+results/border_afifo_search.json.  Writes results/report_fork_analysis.html.
+"""
+
+import html
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+PARETO_JSON = ROOT / "results" / "buffer_pareto_16x16.json"
+AFIFO_JSON = ROOT / "results" / "border_afifo_search.json"
+HTML_PATH = ROOT / "results" / "report_fork_analysis.html"
+
+CSS = """
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --accent:#2563eb; --ok:#059669; --warn:#d97706; }
+* { box-sizing:border-box; }
+body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin:0; padding:24px 32px 48px;
+       background:var(--bg); color:var(--text); line-height:1.55; max-width:1180px; }
+h1 { font-size:1.65rem; margin:0 0 8px; }
+h2 { font-size:1.2rem; margin:0 0 12px; color:#1e3a8a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; }
+h3 { font-size:1rem; margin:16px 0 8px; color:#334155; }
+.card { background:var(--card); border:1px solid #e2e8f0; border-radius:10px; padding:18px 22px; margin:18px 0;
+        box-shadow:0 1px 3px rgba(15,23,42,.06); }
+.meta { color:var(--muted); font-size:.9rem; margin-bottom:20px; }
+table { border-collapse:collapse; width:100%; font-size:.88rem; margin:10px 0; }
+th, td { border:1px solid #e2e8f0; padding:6px 10px; text-align:right; }
+th { background:#f1f5f9; text-align:center; font-weight:600; }
+td:first-child, th:first-child { text-align:left; }
+tr.best td { background:#ecfdf5; font-weight:600; }
+tr.near td { background:#fffbeb; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85em; }
+.formula { background:#f1f5f9; padding:10px 14px; border-radius:6px; margin:10px 0; overflow-x:auto; }
+ul, ol { margin:8px 0 8px 22px; }
+.chart-row { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; }
+.insight { border-left:4px solid var(--accent); padding-left:12px; margin:12px 0; }
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.75rem; font-weight:600; }
+.tag-ok { background:#d1fae5; color:#065f46; }
+.tag-warn { background:#fef3c7; color:#92400e; }
+"""
+
+
+def esc(s):
+    return html.escape(str(s))
+
+
+def pareto_svg(title, frontier, eject_lb, k_display_max=65):
+    """Step chart: buffer budget K vs optimal makespan."""
+    if not frontier:
+        return ""
+    pts = [p for p in frontier if p["K"] <= k_display_max]
+    if not pts:
+        pts = frontier[:8]
+    width, height = 560, 320
+    ml, mr, mt, mb = 58, 24, 36, 52
+    pw, ph = width - ml - mr, height - mt - mb
+    ymax = max(p["makespan"] for p in frontier) * 1.08
+    ymin = min(eject_lb * 0.85, min(p["makespan"] for p in frontier) * 0.9)
+    ymax = max(ymax, eject_lb * 1.15)
+    kmax = max(p["K"] for p in pts) or 1
+
+    def xk(k):
+        return ml + (k / kmax) * pw
+
+    def ym(v):
+        return mt + ph - ((v - ymin) / (ymax - ymin)) * ph
+
+    lines = [
+        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
+        f'<text x="{ml}" y="22" font-size="13" font-weight="bold">{esc(title)}</text>',
+        f'<line x1="{ml}" y1="{mt+ph:.1f}" x2="{ml+pw:.1f}" y2="{mt+ph:.1f}" stroke="#64748b"/>',
+        f'<line x1="{ml}" y1="{mt:.1f}" x2="{ml}" y2="{mt+ph:.1f}" stroke="#64748b"/>',
+    ]
+    # eject LB
+    ly = ym(eject_lb)
+    lines.append(f'<line x1="{ml}" y1="{ly:.1f}" x2="{ml+pw:.1f}" y2="{ly:.1f}" '
+                 f'stroke="#dc2626" stroke-dasharray="6 4"/>')
+    lines.append(f'<text x="{ml+pw-4}" y="{ly-5:.1f}" font-size="10" fill="#dc2626" text-anchor="end">'
+                 f'eject LB={eject_lb}</text>')
+
+    # step path
+    prev_k, prev_mk = pts[0]["K"], pts[0]["makespan"]
+    path = [f"M {xk(prev_k):.1f},{ym(prev_mk):.1f}"]
+    for p in pts[1:]:
+        path.append(f"L {xk(p['K']):.1f},{ym(prev_mk):.1f}")
+        path.append(f"L {xk(p['K']):.1f},{ym(p['makespan']):.1f}")
+        prev_mk = p["makespan"]
+    path.append(f"L {xk(pts[-1]['K']):.1f},{ym(prev_mk):.1f}")
+    lines.append(f'<path d="{" ".join(path)}" fill="none" stroke="#2563eb" stroke-width="2.5"/>')
+
+    for p in pts:
+        cx, cy = xk(p["K"]), ym(p["makespan"])
+        lines.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#2563eb"/>')
+        if p["K"] <= 30 or p == pts[-1]:
+            lab = f"K≤{p['K']}"
+            lines.append(f'<text x="{cx:.1f}" y="{cy-8:.1f}" font-size="9" text-anchor="middle" fill="#334155">{lab}</text>')
+
+    for tick in range(0, kmax + 1, max(1, kmax // 8)):
+        lines.append(f'<text x="{xk(tick):.1f}" y="{mt+ph+16:.1f}" font-size="9" text-anchor="middle" fill="#64748b">{tick}</text>')
+    lines.append(f'<text x="{ml+pw/2:.1f}" y="{height-8:.1f}" font-size="11" text-anchor="middle" fill="#475569">'
+                 f'Router buffer budget K (max(link_buf, ramp_buf) ≤ K)</text>')
+    lines.append(f'<text x="14" y="{mt+ph/2:.1f}" font-size="11" fill="#475569" transform="rotate(-90 14 {mt+ph/2:.1f})">'
+                 f'makespan (cycles)</text>')
+    lines.append("</svg>")
+    return "\n".join(lines)
+
+
+def pareto_table(frontier, eject_lb):
+    rows = []
+    for p in frontier:
+        eff = eject_lb / p["makespan"] * 100
+        rows.append(
+            f"<tr><td>K ≤ {p['K']}</td><td><b>{p['makespan']}</b></td>"
+            f"<td>{esc(p['scheme'])}</td><td>{esc(p['dir'])}</td>"
+            f"<td>{p['link_buf']}</td><td>{p['ramp_buf']}</td>"
+            f"<td>{p['fill']}</td><td>{p['dom']}</td><td>{eff:.1f}%</td></tr>"
+        )
+    hdr = ("<table><thead><tr><th>K</th><th>makespan</th><th>最优方案</th><th>方向</th>"
+           "<th>link_buf</th><th>ramp_buf</th><th>fill</th><th>主导项</th><th>相对 eject LB</th></tr></thead><tbody>")
+    return hdr + "\n".join(rows) + "</tbody></table>"
+
+
+def scheme_table(schemes, top_n=20):
+    rows = []
+    for i, s in enumerate(schemes[:top_n]):
+        cls = ""
+        if i == 0:
+            cls = " class='best'"
+        elif s["buf_peak"] <= 2:
+            cls = " class='near'"
+        rows.append(
+            f"<tr{cls}><td>{esc(s['name'])}</td><td>{esc(s['dir'])}</td>"
+            f"<td>{s['pipe']}</td><td>{s['fill']}</td><td>{s['Lmax']}</td>"
+            f"<td>{s['eject']}</td><td>{s['link_buf']}</td><td>{s['ramp_buf']}</td>"
+            f"<td>{s['buf_peak']}</td><td>{s['dom']}</td></tr>"
+        )
+    cap = ("<caption style='caption-side:bottom;text-align:left;font-size:.82rem;color:#64748b;margin-top:8px'>"
+           "peak = max(link_buf, ramp_buf)；ramp_buf = 下 ramp 口最深排队 flit 数（§1b）。</caption>")
+    hdr = ("<table>" + cap + "<thead><tr><th>方案</th><th>方向</th><th>pipe_mk</th><th>fill</th>"
+           "<th>Lmax</th><th>eject</th><th>link_buf</th><th>ramp_buf</th><th>peak</th><th>主导</th></tr></thead><tbody>")
+    return hdr + "\n".join(rows) + "</tbody></table>"
+
+
+def afifo_section():
+    if not AFIFO_JSON.exists():
+        return "<p><i>未找到 border_afifo_search.json（严格 0-buffer + AFIFO≤5 调度结果）。</i></p>"
+    data = json.loads(AFIFO_JSON.read_text(encoding="utf-8"))
+    rows = []
+    for key in ("16x16", "8x8", "4x4"):
+        if key not in data.get("configs", {}):
+            continue
+        for mode, tag in (("uni", "单向"), ("bi", "双向")):
+            c = data["configs"][key][mode]
+            sb = c.get("strict_balanced") or {}
+            sa = c.get("strict_any") or {}
+            rows.append(
+                f"<tr><td>{key}</td><td>{tag}</td><td>{c.get('eject_lb','')}</td>"
+                f"<td>{sb.get('makespan','—')}</td><td>{sb.get('afifo_balanced','—')}</td>"
+                f"<td>{sa.get('makespan','—')}</td><td>{sa.get('afifo_balanced','—')}</td></tr>"
+            )
+    tbl = ("<table><thead><tr><th>规模</th><th>方向</th><th>eject LB</th>"
+           "<th>strict_bal mk</th><th>AFIFO bal</th>"
+           "<th>strict_any mk</th><th>AFIFO bal</th></tr></thead><tbody>"
+           + "\n".join(rows) + "</tbody></table>")
+    return (
+        f"<p>在 <b>router 严格 0 缓冲</b>（ring_buf=eject_buf=0）且边界 AFIFO ≤ {data.get('afifo_cap',5)} 的约束下，"
+        f"border 方案经形状优化 + 原子/严格调度器得到的 makespan（高于流水线允许缓冲时的 267/437）：</p>" + tbl
+    )
+
+
+def build_report(data):
+    parts = [
+        "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'/>",
+        f"<title>树形 Allgather 分叉位置与缓冲预算分析 — {esc(data['mesh'])}</title>",
+        f"<style>{CSS}</style></head><body>",
+        "<h1>树形 Allgather：多播分叉位置 × 缓冲预算 × Ramp 带宽</h1>",
+        f"<p class='meta'>Mesh {esc(data['mesh'])}，N={data['n']}，H={data['H']} V={data['V']} cycle/link，"
+        f"ramp={data['ramp']} cycle，M=1 flit/源。"
+        f" 生成时间 {esc(data.get('updated',''))}。"
+        f" 数据来自 <code>sweep_buffer_pareto.py</code>（流水线冲突无关 TDM 日历 + 实测 peak buffer）。</p>",
+
+        "<div class='card'><h2>执行摘要</h2>",
+        "<ol>",
+        "<li><b>三条下界</b>：makespan ≳ max(<i>fill</i> 树深, <i>L<sub>max</sub></i> 峰值链路载荷, <i>T<sub>eject</sub></i> 下 ramp 带宽地板)。"
+        " 分叉越靠根 → fill↓ 但 L<sub>max</sub>↑ 且 eject 口突发 → router 缓冲↑。</li>",
+        "<li><b>严格 0 router 缓冲</b>（K=0）：单环最优（ramp_bw=2/4 → 754 bi；ramp_bw=1 → 1474 uni）。"
+        " <span class='tag tag-ok'>K≤2</span> 时 ramp_bw=2 → border 267；ramp_bw=1 → hybrid B=2 418（border 需 K≤74 才到 283）。</li>",
+        "<li><b>允许大缓冲</b>：grid 8×2 在 ramp_bw=2、K≥56 时 mk=189，逼近 fill；eject 地板 128 仍不可破。</li>",
+        "<li><b>最优切分层数</b> Q* ≈ H = 4：再细切（8×2）需 K≈30~56 才值得。</li>",
+        "</ol></div>",
+
+        "<div class='card'><h2>1. 形式化模型</h2>",
+        "<ul>",
+        "<li>每条有向 mesh 链路：≤1 flit/cycle 发射槽，latency H 或 V（流水线，可同时 in-flight L 个 flit）。</li>",
+        "<li>每节点下 ramp：≤ ramp_bw flit/cycle 到达/eject；上 ramp 注入源 flit。</li>",
+        "<li>Router 内 in-network fork：共享输入链路只计 1 次载荷；下 ramp <b>不做</b>多播复制。</li>",
+        "<li><b>Router 缓冲预算 K</b>：max(link_buf, ramp_buf) ≤ K；边界 AFIFO 单独计数（本报告 Pareto 只约束 router 缓冲）。</li>",
+        "<li><b>pipe_mk</b>：允许足够缓冲时的冲突无关流水线 makespan（<code>sim_fused_rings.simulate</code>）；"
+        " peak buffer 由 <code>measure_buffers</code> 统计。</li>",
+        "</ul>",
+        "<div class='formula'>",
+        "T<sub>eject</sub> = ⌈(N−1) / ramp_bw⌉ &nbsp;&nbsp;|&nbsp;&nbsp;",
+        "L<sub>max</sub> = max<sub>有向边 e</sub> |{源 s : s 的树路径经过 e}| &nbsp;&nbsp;|&nbsp;&nbsp;",
+        "fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp",
+        "</div>",
+        "<p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。"
+        " <b>fill / L<sub>max</sub> 的详细定义与算例见 §1c。</b></p>",
+        "</div>",
+
+        "<div class='card'><h2>1b. 术语说明：B、ramp_buf 与下 ramp 突发</h2>",
+
+        "<h3>B（hybrid B=k 中的带数）</h3>",
+        "<p><b>B</b> 是把 mesh 在<b>纵向（行方向）</b>均分成 <b>B 个水平带</b>的个数。"
+        " 对 16×16 mesh，行数 MY=16，每带高度 R = MY/B 行：</p>",
+        "<table><thead><tr><th>B</th><th>带数</th><th>每带规模</th><th>本带 Hamilton 环</th><th>跨带传播</th></tr></thead><tbody>",
+        "<tr><td>2</td><td>2 条水平带</td><td>16×8</td><td>源在本带内跑 16×8 蛇形环（①）</td><td>每列再向上下相邻带做<b>纵向树</b>（②）</td></tr>",
+        "<tr><td>4</td><td>4 条</td><td>16×4</td><td>同上，环更小</td><td>列树跨度更短</td></tr>",
+        "<tr><td>8</td><td>8 条</td><td>16×2</td><td>环更小、fill 更低</td><td>树更浅，但 eject 突发更大</td></tr>",
+        "<tr><td>16</td><td>16 条</td><td>16×1</td><td>退化为单行环</td><td>几乎只剩列树 → 接近 multitree</td></tr>",
+        "</tbody></table>",
+        "<p class='meta'>代码：<code>build_hybrid_delivery(s, B, bidir)</code> — "
+        "<code>R = MY // B</code>，<code>ham_cycle_rect(0, y0, MX, R)</code> 为本带环，"
+        "随后对每列 <code>x</code> 向带外行做链式 fork（纵向树）。"
+        " B 越大 → 局部环越短（fill↓），但根附近分叉越早、越多源 flit 同时涌向同一节点的下 ramp（ramp_buf↑）。</p>",
+
+        "<h3>ramp_buf（下 ramp 侧 router 缓冲深度）</h3>",
+        "<p><b>ramp_buf</b> 是在冲突无关流水线日历下，<b>某一个节点</b>在其<b>下 ramp 口</b>上，"
+        "所需 eject 缓冲的<b>峰值深度</b>（单位：flit）。统计方式（<code>measure_buffers</code>）：</p>",
+        "<ol>",
+        "<li>flit 经 mesh 到达目的节点 <code>c</code> 的时刻为 <code>arrive</code>；</li>",
+        "<li>下 ramp 日历把该 flit 排到可 eject 的时刻为 <code>e</code>（每 cycle 最多接纳 ramp_bw 个到达）；</li>",
+        "<li>若 <code>e &gt; arrive</code>，则 flit 在 <code>[arrive, e)</code> 内占用该节点的 <b>eject 缓冲</b>；</li>",
+        "<li><b>ramp_buf</b> = 所有节点、所有 flit 的这类等待区间中，<b>同一时刻重叠 flit 数的最大值</b>。</li>",
+        "</ol>",
+        "<p>对比 <b>link_buf</b>：输出链路上因发射槽被占而等待（可部分转移到边界 AFIFO）；"
+        "<b>ramp_buf</b> 发生在<b>目的节点自身</b>的下 ramp 前，<b>无法</b>用象限边界 AFIFO 代替。</p>",
+
+        "<h3>有 ramp_buf 时，下 ramp 的「突发能力」是多少？</h3>",
+        "<p><b>重要区分</b>：本模型里下 ramp 的<b>物理持续带宽</b>恒为 "
+        "<code>ramp_bw</code> flit/cycle —— 有缓冲也<b>不会</b>让单 cycle 吐出超过 ramp_bw 个 flit。"
+        " ramp_buf 描述的是<b>可吸收的到达突发</b>，不是 eject 加速。</p>",
+        "<div class='formula'>",
+        "令牌桶模型：在任意长度为 T 的窗口内，该节点下 ramp 最多可接收的到达 flit 数 ≤ "
+        "<b>ramp_bw · T + ramp_buf</b><br/>"
+        "等价地：相对持续速率 ramp_bw，最多可<b>多攒 ramp_buf 个 flit</b> 而不丢包（在日历意义下不破坏可行性）。",
+        "</div>",
+        "<table><thead><tr><th>量</th><th>含义</th><th>16×16 示例</th></tr></thead><tbody>",
+        "<tr><td>ramp_bw</td><td>下 ramp <b>持续</b> eject 上限</td><td>1 / 2 / 4 flit/cycle</td></tr>",
+        "<tr><td>ramp_buf = K</td><td>单节点 eject 口<b>最深排队</b> K 个 flit</td><td>multitree K≈121；border bi rb=1 时 K=74</td></tr>",
+        "<tr><td>瞬时 eject 速率</td><td>每 cycle 仍 ≤ ramp_bw</td><td>有 K 个排队时，需 ≥ ⌈K/ramp_bw⌉ cycle 排空</td></tr>",
+        "<tr><td>到达突发（可吸收）</td><td>短窗口内可超过 ramp_bw 的<b>超额到达</b></td><td>最坏 ≈ ramp_buf flit（在同一 arrive 附近同时到达）</td></tr>",
+        "</tbody></table>",
+        "<div class='insight'>",
+        "<b>读 Pareto 表时</b>：预算 K 约束的是 <code>max(link_buf, ramp_buf) ≤ K</code>。"
+        " 例如 border bi、ramp_bw=1 时 ramp_buf=74 —— 表示某节点曾同时有 74 个 flit 等下 ramp，"
+        " 持续 eject 仍为 1 flit/cy，但调度允许这 74 个 flit 在 eject 口排队；"
+        " 要把该方案纳入 K≤2 的 Pareto，必须换 ramp_bw=2（此时 border 的 ramp_buf 降为 2）"
+        " 或改用 hybrid B=2 等更平滑的到达模式。",
+        "</div>",
+        "<p class='meta'>本报告 Pareto 中的 <b>pipe_mk</b> 假设 eject 口确有 depth ≥ ramp_buf 的缓冲；"
+        " 若硬件只给 K 个 slot，则 ramp_buf &gt; K 的方案不可实现，即使其 pipe_mk 更小。</p>",
+        "</div>",
+
+        "<div class='card'><h2>1c. 术语说明：fill 与 L<sub>max</sub></h2>",
+        "<p>二者是 allgather makespan 的三条下界里与<b>树形拓扑 / 分叉位置</b>直接相关的两项。"
+        " 明细表「主导」列标出 <code>max(fill, L<sub>max</sub>, eject)</code> 中哪一项最大——"
+        " 它往往就是该方案 pipe_mk 的第一近似。</p>",
+
+        "<h3>fill（树深 / 填充时延）</h3>",
+        "<p><b>定义</b>：对每个源节点 <code>s</code>，在其投递 DAG 中，从 <code>s</code> 注入到任意目的节点 <code>v</code> "
+        "沿树路径的<b>链路时延之和</b>的最大值，再对所有源取 max，并加上上下 ramp：</p>",
+        "<div class='formula'>",
+        "depth(s) = max<sub>v</sub> Σ<sub>(p→c) ∈ path(s→v)</sub> latency(p,c) &nbsp;&nbsp;（H=4 水平，V=6 垂直）<br/>",
+        "fill = max<sub>s</sub> depth(s) + ramp<sub>up</sub> + ramp<sub>down</sub> = max<sub>s</sub> depth(s) + 2",
+        "</div>",
+        "<p><b>物理含义</b>：若每条链路<b>独占、无排队</b>，从 collective 开始到<b>最后一个 flit 到达其最远目的节点</b>"
+        "（尚未计 eject 口排队）所需的最少 cycle 数。fill 刻画的是<b>纯传播时延</b>，与 ramp 带宽无关。</p>",
+
+        "<p><b>如何计算</b>（与 <code>analyze_branch_position.py</code> / <code>tree_depth</code> 一致）：</p>",
+        "<ol>",
+        "<li>固定源 <code>s</code>，以其 children-map 构成有向树（router 内 fork 产生多条出边，共享入边只走一次）；</li>",
+        "<li>BFS/松弛求每个可达节点相对 <code>s</code> 的累计时延；</li>",
+        "<li>取该源 DAG 中最长路径；对所有 <code>s ∈ [0,N)</code> 再取 max，加 2 cycle ramp。</li>",
+        "</ol>",
+
+        "<p><b>与分叉位置的关系</b>：</p>",
+        "<table><thead><tr><th>分叉形态</th><th>树形特征</th><th>fill 趋势</th><th>16×16 双向示例</th></tr></thead><tbody>",
+        "<tr><td>仅根处分叉（单环）</td><td>深而窄：拷贝沿一条 Hamilton 路径<b>串行</b>推进，无中途 fork</td><td>≈ 半周长</td><td><b>754</b></td></tr>",
+        "<tr><td>象限 border（3 级）</td><td>中等：本象限半环 + 边界短弧</td><td>≈ 子环半周 + 跨界</td><td><b>266</b></td></tr>",
+        "<tr><td>multitree / grid 8×2</td><td>浅而宽：根附近行/列 fork，最远点跳数少</td><td>≈ 直径量级</td><td><b>152</b></td></tr>",
+        "</tbody></table>",
+        "<div class='insight'>",
+        "<b>直觉</b>：fill 回答「最慢的那份拷贝还要跑多远？」。分叉越<b>靠近源</b>、树越<b>宽</b>，"
+        " 最远目的越早被覆盖 → fill↓。单环把全部 N−1 份拷贝排成一条链，最后一份必须绕近半圈 → fill 最大。",
+        "</div>",
+        "<p class='meta'>注意：fill 用的是<b>时延加权路径长</b>（H/V），不是 hop 数。"
+        " 16×16 蛇形环周长约 356 cycle（链路延迟和），半圈 ≈178；加 ramp 后与实测 fill=754（双向取半圈路径）一致。</p>",
+
+        "<h3>L<sub>max</sub>（峰值有向链路载荷）</h3>",
+        "<p><b>定义</b>：对 mesh 上每条<b>有向</b>链路 <code>e = (p→c)</code>，统计有多少个<b>不同的源</b> "
+        "<code>s</code> 的投递树会让「<code>s</code> 的 flit」经过 <code>e</code>；取所有链路上的最大值：</p>",
+        "<div class='formula'>",
+        "load(e) = |{ s : s 的 flit 在 DAG 中经过有向边 e }|<br/>",
+        "L<sub>max</sub> = max<sub>所有有向边 e</sub> load(e)",
+        "</div>",
+        "<p><b>物理含义</b>：本模型每条有向链路每 cycle 最多发射 <b>1 个 flit</b>（发射槽 cap=1）。"
+        " 若某条链路上一共要过 load(e) 个「源 flit」，则仅清空该链路就需要 ≥ load(e) cycle —— "
+        " 故 <b>makespan ≥ L<sub>max</sub></b>。这是<b>链路带宽</b>下界，与链路 latency 无关。</p>",
+
+        "<p><b>计数规则</b>（与 in-network fork 一致）：</p>",
+        "<ul>",
+        "<li>每个源 <code>s</code> 只产生 1 个 flit；该 flit 经 router fork 复制到多条出边时，"
+        "<b>共享的输入边只计 1 次</b>，每条被使用的出边各计 1 次；</li>",
+        "<li>下 ramp <b>不做</b> fork：到达目的节点后只 eject，不计入 L<sub>max</sub>（eject 由 T<sub>eject</sub> 单独约束）；</li>",
+        "<li>所有 N 个源的树<b>叠加</b>在同一 mesh 上：L<sub>max</sub> 是全局最忙那条有向边的总流量。</li>",
+        "</ul>",
+
+        "<p><b>与分叉位置的关系</b>：</p>",
+        "<table><thead><tr><th>分叉形态</th><th>载荷分布</th><th>L<sub>max</sub> 趋势</th><th>16×16 双向示例</th></tr></thead><tbody>",
+        "<tr><td>单环（根分叉后串行）</td><td>每条环边恰好承担 ⌊N/2⌋ 或 N−1 个源 flit，<b>完全均衡</b></td><td>= N/2（bi）或 N−1（uni）</td><td><b>128</b>（= eject LB）</td></tr>",
+        "<tr><td>border Q=4</td><td>子环边 + 边界短弧；跨界边聚合略增</td><td>略高于 N/2</td><td><b>160</b></td></tr>",
+        "<tr><td>multitree</td><td>根附近多路复制，某些「脊柱」行/列边被大量源共享</td><td>显著升高</td><td><b>240</b></td></tr>",
+        "<tr><td>grid 8×2</td><td>更细区域 → 更多边界边分流，但局部脊柱仍存在</td><td>可低于 multitree</td><td><b>136</b>（uni）</td></tr>",
+        "</tbody></table>",
+        "<div class='insight'>",
+        "<b>直觉</b>：L<sub>max</sub> 回答「最忙的那条有向边一共要过多少份不同源的 flit？」。"
+        " 分叉越<b>靠近根</b>，越早复制到多条分支，越可能在少数「主干道」上叠很多源 → L<sub>max</sub>↑。"
+        " 单环几乎不在中途 fork，却把流量<b>均匀摊</b>到每条环边 —— L<sub>max</sub> 达到理论最小（= N/2）。",
+        "</div>",
+        "<p class='meta'>流水线仿真中的 <code>busiest_link</code> 与 L<sub>max</sub> 在 allgather 场景下一致"
+        "（见 <code>simulate</code> 返回的第三项）。</p>",
+
+        "<h3>fill 与 L<sub>max</sub> 的此消彼长</h3>",
+        "<p>同一 collective 往往不能同时把 fill 和 L<sub>max</sub> 都压到最低：</p>",
+        "<table><thead><tr><th>方案 (16×16 bi, rb=2)</th><th>fill</th><th>L<sub>max</sub></th><th>eject</th><th>主导</th><th>pipe_mk</th></tr></thead><tbody>",
+        "<tr><td>ring</td><td>754</td><td>128</td><td>128</td><td><b>fill</b></td><td>754</td></tr>",
+        "<tr><td>border</td><td>266</td><td>160</td><td>128</td><td><b>fill</b></td><td>267</td></tr>",
+        "<tr><td>grid 8×2</td><td>152</td><td>136</td><td>128</td><td><b>fill</b></td><td>189*</td></tr>",
+        "<tr><td>multitree</td><td>152</td><td>240</td><td>128</td><td><b>L<sub>max</sub></b>→eject</td><td>255*</td></tr>",
+        "</tbody></table>",
+        "<p class='meta'>* pipe_mk &gt; max(fill,L<sub>max</sub>,eject) 时，差额来自 eject 到达<b>成簇</b>（需 ramp_buf）"
+        " 或链路日历上的非理想对齐；下界仍解释数量级与分叉权衡。</p>",
+
+        "<div class='formula'>",
+        "<b>综合下界</b>：makespan ≳ max( fill, L<sub>max</sub>, T<sub>eject</sub> )<br/>",
+        "T<sub>eject</sub> = ⌈(N−1)/ramp_bw⌉ — 与树形无关的硬件地板",
+        "</div>",
+        "<ul>",
+        "<li><b>fill 主导</b>（ring、border、浅树）：再减 makespan 要靠<b>加深/前移分叉</b>缩短最远路径；"
+        " 单环 fill=754 是典型。</li>",
+        "<li><b>L<sub>max</sub> 主导</b>（multitree 等）：再减要靠<b>分流</b>、区域化，避免过多源共享同一条边；"
+        " 但 fill 已很低，往往转而受 eject 或 ramp_buf 限制。</li>",
+        "<li><b>三者贴齐</b>（单环双向）：L<sub>max</sub>=T<sub>eject</sub>=128，但 fill 仍 754 —— "
+        " 说明「链路带宽已最优」≠「时延已最优」。</li>",
+        "<li><b>工程折中</b>：border Q=4 把 fill 从 754 降到 266，L<sub>max</sub> 仅从 128 升到 160，"
+        " 在 K≤2 无缓冲约束下仍是 Pareto 最优（ramp_bw=2）。</li>",
+        "</ul>",
+        "</div>",
+
+        "<div class='card'><h2>2. 分叉位置参数化</h2>",
+        "<table><thead><tr><th>族</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>",
+        "<tr><td>ring (Q=1)</td><td>根处双向/单向分叉，之后无分叉</td><td>是（≈半周长）</td><td>link=0, ramp≈0</td></tr>",
+        "<tr><td>border / grid 2×2 (Q=4)</td><td>子环 + 2/3 级边界多播 + 短弧</td><td>中等</td><td>link≤2；ramp 随 rb 变化</td></tr>",
+        "<tr><td>hybrid B=k</td><td>mesh 纵向切成 <b>B 条水平带</b>：带内 Hamilton 环 + 跨带列向树（见 §1b）</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>",
+        "<tr><td>grid Qx×Qy</td><td>通用区域网格边界展开</td><td>Q 大时 fill↓</td><td>Q&gt;2 需 K≫2</td></tr>",
+        "<tr><td>multitree (Q=N)</td><td>根处行+列全分叉</td><td>否（eject 主导）</td><td>ramp_buf≈120</td></tr>",
+        "</tbody></table>",
+        "<div class='insight'><b>Q* ≈ H 定理（工程判据）</b>：子环 fill ≈ H·(N/Q)/2。令 ≈ T<sub>eject</sub> 得 Q* ≈ H。"
+        " 对 H=4，四象限 border 是无缓冲前沿；更细 grid 8×2 需 K≥56 才换到 mk=189。</div>",
+        "</div>",
+
+        "<div class='card'><h2>3. 按缓冲预算 K 的最优 makespan（Pareto 前沿）</h2>",
+        "<p>对每个 ramp_bw ∈ {1,2,4} flit/cycle/node，在 max(link_buf,ramp_buf)≤K 的可行方案中取最小 pipe_mk。"
+        " 方向 uni/bi 取最优者。</p>",
+        "<div class='chart-row'>",
+    ]
+
+    for rb in data["ramp_bws"]:
+        key = str(rb)
+        pf = data["pareto"][key]
+        parts.append(
+            f"<div><h3>ramp_bw = {rb}（eject LB = {pf['eject_lb']}）</h3>"
+            + pareto_svg(f"ramp_bw={rb}", pf["frontier"], pf["eject_lb"])
+            + pareto_table(pf["frontier"], pf["eject_lb"]) + "</div>"
+        )
+    parts.append("</div></div>")
+
+    parts.append("<div class='card'><h2>4. 关键拐点解读</h2><ul>")
+    insights = [
+        ("K=0", "仅 peak_buf=0：ramp_bw=1 → 单环 uni 1474；ramp_bw=2/4 → 单环 bi 754。"),
+        ("K≤2", "ramp_bw=2 → border Q=4 bi 267；ramp_bw=1 → hybrid B=2 bi 418（border bi 需 ramp_buf=74）。"),
+        ("K≤2, rb=4", "与 rb=2 相同拐点：border bi 267（更高 ramp_bw 吸收了 eject 突发，peak_buf 仍≤2）。"),
+        ("K≈10~30", "hybrid B=16 / grid 4×2 开始领先 border：mk 251~201。"),
+        ("K≥56", "grid 8×2 bi 最优 mk=189（rb=2/4）；仍高于 eject LB 128/64。"),
+        ("eject 地板", "ramp_bw=1→255，2→128，4→64；仅当 fill/Lmax 已贴地板时 ramp_bw 才成为主导瓶颈。"),
+    ]
+    for title, text in insights:
+        parts.append(f"<li><b>{title}</b>：{text}</li>")
+    parts.append("</ul></div>")
+
+    for rb in data["ramp_bws"]:
+        schemes = data["schemes"][str(rb)]
+        parts.append(
+            f"<div class='card'><h2>5. 全方案扫描（ramp_bw={rb}，按 pipe_mk 排序 Top 20）</h2>"
+            + scheme_table(schemes, 20) + "</div>"
+        )
+
+    parts.append(
+        "<div class='card'><h2>6. 严格 0 router 缓冲 + 边界 AFIFO ≤ 5</h2>"
+        + afifo_section()
+        + "<p class='meta'>说明：此节与 §3 Pareto（允许 router 缓冲）正交。"
+        " border 在 AFIFO≤5 下 16×16 双向 strict_balanced mk≈387，高于流水线 K≤2 的 267。</p></div>"
+    )
+
+    parts.append(
+        "<div class='card'><h2>7. 结论</h2>"
+        "<ol>"
+        "<li>在<b>仅允许 router 缓冲 ≤K</b> 时，不存在比 Pareto 前沿更小的 makespan；"
+        " 更靠根的分叉（grid 8×2、multitree）确实更快，但<b>必须付出 K 级缓冲</b>。</li>"
+        "<li><b>K≤2 的工程最优</b>：ramp_bw=2/4 → border Q=4（267）；"
+        " ramp_bw=1 → hybrid B=2（418）或 border uni（437）。</li>"
+        "<li><b>K 充足时</b>：grid 8×2 双向在 ramp_bw=2/4 下 mk=189；再往下受 T<sub>eject</sub> 限制"
+        "（128/64），需提高 ramp_bw 而非继续加深分叉。</li>"
+        "<li>eject 突发缓冲在<b>目的节点下 ramp</b>，无法转移到边界 AFIFO——这是 Q*≈H 的根本原因。</li>"
+        "</ol>"
+        "<p>复现：<code>python3 utils/sweep_buffer_pareto.py</code> → "
+        "<code>python3 utils/gen_fork_analysis_report.py</code></p></div>"
+    )
+
+    parts.append("</body></html>")
+    return "\n".join(parts)
+
+
+def main():
+    if not PARETO_JSON.exists():
+        raise SystemExit(f"Missing {PARETO_JSON}; run utils/sweep_buffer_pareto.py first")
+    data = json.loads(PARETO_JSON.read_text(encoding="utf-8"))
+    HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
+    HTML_PATH.write_text(build_report(data), encoding="utf-8")
+    print(f"Wrote {HTML_PATH}")
+
+
+if __name__ == "__main__":
+    main()

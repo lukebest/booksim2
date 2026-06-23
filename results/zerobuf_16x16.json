@@ -1,0 +1,227 @@
+{
+  "mx": 16,
+  "my": 16,
+  "h": 4,
+  "v": 6,
+  "n": 256,
+  "bw": {
+    "1": {
+      "ramp_bw": 1,
+      "eject_lb": 255,
+      "multitree": {
+        "makespan": 837,
+        "order": "col",
+        "ok": true
+      },
+      "ring_uni": {
+        "makespan": 1474,
+        "ok": true
+      },
+      "ring_bi": {
+        "makespan": 754,
+        "ok": true
+      },
+      "hybrid_uni": {
+        "1": {
+          "makespan": 1474,
+          "ok": true
+        },
+        "2": {
+          "makespan": 755,
+          "ok": true
+        },
+        "4": {
+          "makespan": 863,
+          "ok": true
+        },
+        "8": {
+          "makespan": 848,
+          "ok": true
+        }
+      },
+      "hybrid_bi": {
+        "1": {
+          "makespan": 754,
+          "ok": true
+        },
+        "2": {
+          "makespan": 416,
+          "ok": true
+        },
+        "4": {
+          "makespan": 815,
+          "ok": true
+        },
+        "8": {
+          "makespan": 942,
+          "ok": true
+        },
+        "16": {
+          "makespan": 667,
+          "ok": true
+        }
+      },
+      "hybrid_v_uni": {
+        "1": {
+          "makespan": 1082,
+          "ok": true
+        },
+        "2": {
+          "makespan": 602,
+          "ok": true
+        },
+        "4": {
+          "makespan": 363,
+          "ok": true
+        },
+        "8": {
+          "makespan": 840,
+          "ok": true
+        }
+      },
+      "hybrid_v_bi": {
+        "1": {
+          "makespan": 558,
+          "ok": true
+        },
+        "2": {
+          "makespan": 334,
+          "ok": true
+        },
+        "4": {
+          "makespan": 938,
+          "ok": true
+        },
+        "8": {
+          "makespan": 830,
+          "ok": true
+        }
+      },
+      "quad_uni": {
+        "makespan": 717,
+        "ok": true
+      },
+      "quad_bi": {
+        "makespan": 1097,
+        "ok": true
+      },
+      "border_uni": {
+        "makespan": 437,
+        "ok": true
+      },
+      "border_bi": {
+        "makespan": 540,
+        "ok": true
+      }
+    },
+    "2": {
+      "ramp_bw": 2,
+      "eject_lb": 128,
+      "multitree": {
+        "makespan": 504,
+        "order": "col",
+        "ok": true
+      },
+      "ring_uni": {
+        "makespan": 1474,
+        "ok": true
+      },
+      "ring_bi": {
+        "makespan": 754,
+        "ok": true
+      },
+      "hybrid_uni": {
+        "1": {
+          "makespan": 1474,
+          "ok": true
+        },
+        "2": {
+          "makespan": 755,
+          "ok": true
+        },
+        "4": {
+          "makespan": 604,
+          "ok": true
+        },
+        "8": {
+          "makespan": 409,
+          "ok": true
+        }
+      },
+      "hybrid_bi": {
+        "1": {
+          "makespan": 754,
+          "ok": true
+        },
+        "2": {
+          "makespan": 801,
+          "ok": true
+        },
+        "4": {
+          "makespan": 777,
+          "ok": true
+        },
+        "8": {
+          "makespan": 506,
+          "ok": true
+        },
+        "16": {
+          "makespan": 504,
+          "ok": true
+        }
+      },
+      "hybrid_v_uni": {
+        "1": {
+          "makespan": 1082,
+          "ok": true
+        },
+        "2": {
+          "makespan": 603,
+          "ok": true
+        },
+        "4": {
+          "makespan": 596,
+          "ok": true
+        },
+        "8": {
+          "makespan": 437,
+          "ok": true
+        }
+      },
+      "hybrid_v_bi": {
+        "1": {
+          "makespan": 558,
+          "ok": true
+        },
+        "2": {
+          "makespan": 656,
+          "ok": true
+        },
+        "4": {
+          "makespan": 756,
+          "ok": true
+        },
+        "8": {
+          "makespan": 490,
+          "ok": true
+        }
+      },
+      "quad_uni": {
+        "makespan": 717,
+        "ok": true
+      },
+      "quad_bi": {
+        "makespan": 523,
+        "ok": true
+      },
+      "border_uni": {
+        "makespan": 722,
+        "ok": true
+      },
+      "border_bi": {
+        "makespan": 596,
+        "ok": true
+      }
+    }
+  }
+}

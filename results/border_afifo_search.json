@@ -1,0 +1,382 @@
+{
+  "updated": "2026-06-22T07:49:11.095865+00:00",
+  "afifo_cap": 5,
+  "ring_shape_optimized": true,
+  "configs": {
+    "4x4": {
+      "uni": {
+        "size": 4,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 16,
+        "eject_lb": 15,
+        "strict_any": {
+          "makespan": 37,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 37,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 37,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 36,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "vflip",
+              0
+            ],
+            [
+              "rect",
+              0
+            ],
+            [
+              "rect",
+              0
+            ],
+            [
+              "vflip",
+              0
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0"
+        }
+      },
+      "bi": {
+        "size": 4,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 16,
+        "eject_lb": 8,
+        "strict_any": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 32,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 32,
+          "ring_buf": 0,
+          "afifo_depth": 1,
+          "eject_buf": 1,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "rect",
+              0
+            ],
+            [
+              "rect",
+              0
+            ],
+            [
+              "rect",
+              0
+            ],
+            [
+              "rect",
+              0
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0"
+        }
+      }
+    },
+    "8x8": {
+      "uni": {
+        "size": 8,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 64,
+        "eject_lb": 63,
+        "strict_any": {
+          "makespan": 117,
+          "afifo_depth": 14,
+          "afifo_balanced": 9,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 180,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "strict_per_link": {
+          "makespan": 180,
+          "afifo_depth": 2,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 114,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "vflip",
+              1
+            ],
+            [
+              "rect",
+              1
+            ],
+            [
+              "vflip",
+              1
+            ],
+            [
+              "rect",
+              1
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+        }
+      },
+      "bi": {
+        "size": 8,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 64,
+        "eject_lb": 32,
+        "strict_any": {
+          "makespan": 79,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 79,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_per_link": {
+          "makespan": 79,
+          "afifo_depth": 5,
+          "afifo_balanced": 3,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "pipelined": {
+          "makespan": 79,
+          "ring_buf": 1,
+          "afifo_depth": 2,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "vflip",
+              1
+            ],
+            [
+              "rect",
+              1
+            ],
+            [
+              "rect",
+              3
+            ],
+            [
+              "vflip",
+              3
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006); Q3\u53f3\u4e0a:vflip+270\u00b0\u987a(90\u00b0\u9006)"
+        }
+      }
+    },
+    "16x16": {
+      "uni": {
+        "size": 16,
+        "bidir": false,
+        "ramp_bw": 1,
+        "n": 256,
+        "eject_lb": 255,
+        "strict_any": {
+          "makespan": 454,
+          "afifo_depth": 109,
+          "afifo_balanced": 105,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 646,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "strict_per_link": {
+          "makespan": 646,
+          "afifo_depth": 1,
+          "afifo_balanced": 1,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 365,
+          "ring_buf": 1,
+          "afifo_depth": 1,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "rect",
+              1
+            ],
+            [
+              "rect",
+              1
+            ],
+            [
+              "rect",
+              1
+            ],
+            [
+              "rect",
+              1
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:rect+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+        }
+      },
+      "bi": {
+        "size": 16,
+        "bidir": true,
+        "ramp_bw": 2,
+        "n": 256,
+        "eject_lb": 128,
+        "strict_any": {
+          "makespan": 240,
+          "afifo_depth": 45,
+          "afifo_balanced": 40,
+          "spread": 0,
+          "lb_cross": false,
+          "scheduler": "strict"
+        },
+        "strict_balanced": {
+          "makespan": 387,
+          "afifo_depth": 4,
+          "afifo_balanced": 2,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "strict_per_link": {
+          "makespan": 387,
+          "afifo_depth": 4,
+          "afifo_balanced": 2,
+          "order": "natural",
+          "scheduler": "atomic"
+        },
+        "pipelined": {
+          "makespan": 227,
+          "ring_buf": 15,
+          "afifo_depth": 2,
+          "eject_buf": 2,
+          "scheduler": "pipelined"
+        },
+        "pipelined_feasible": null,
+        "ring_shape": {
+          "cfg": [
+            [
+              "vflip",
+              1
+            ],
+            [
+              "rect",
+              1
+            ],
+            [
+              "rect",
+              3
+            ],
+            [
+              "vflip",
+              3
+            ]
+          ],
+          "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006); Q3\u53f3\u4e0a:vflip+270\u00b0\u987a(90\u00b0\u9006)"
+        }
+      }
+    }
+  },
+  "elapsed_s": 42.37167549133301,
+  "improvements": [
+    "4x4 uni strict_balanced: 39 -> 37",
+    "4x4 uni strict_any: 39 -> 37",
+    "4x4 uni strict_per_link: 39 -> 37",
+    "8x8 uni strict_any: 131 -> 117",
+    "8x8 bi strict_balanced: 86 -> 79",
+    "8x8 bi strict_any: 86 -> 79",
+    "8x8 bi strict_per_link: 86 -> 79",
+    "16x16 uni strict_balanced: 764 -> 646",
+    "16x16 uni strict_any: 508 -> 454",
+    "16x16 uni strict_per_link: 764 -> 646",
+    "16x16 bi strict_any: 266 -> 240",
+    "16x16 bi strict_per_link: 454 -> 387"
+  ]
+}
