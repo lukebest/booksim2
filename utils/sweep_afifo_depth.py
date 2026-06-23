@@ -144,10 +144,12 @@ def sweep_config(sz, bidir, ramp_bw, caps=CAPS, scheme="border"):
     }
 
 
-def run(sizes=SIZES, caps=CAPS):
+def run(sizes=SIZES, caps=CAPS, scheme="border"):
+    model = ("border short-arc" if scheme == "border" else "ring-follow")
     out = {
         "updated": datetime.now(timezone.utc).isoformat(),
-        "model": "border short-arc, router_buf=0, per-link AFIFO cap",
+        "scheme": scheme,
+        "model": f"{model}, router_buf=0, per-link AFIFO cap",
         "caps": list(caps),
         "configs": {},
     }
@@ -155,12 +157,13 @@ def run(sizes=SIZES, caps=CAPS):
     for sz in sizes:
         for bidir, tag, rb in ((False, "uni", 1), (True, "bi", 2)):
             key = f"{sz}x{sz}_{tag}"
-            print(f"== {key} ==", flush=True)
-            out["configs"][key] = sweep_config(sz, bidir, rb, caps)
+            print(f"== {key} ({scheme}) ==", flush=True)
+            out["configs"][key] = sweep_config(sz, bidir, rb, caps, scheme)
     out["elapsed_s"] = time.time() - t0
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
-    print(f"Wrote {OUT} ({out['elapsed_s']:.0f}s)")
+    dst = out_path(scheme)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    print(f"Wrote {dst} ({out['elapsed_s']:.0f}s)")
     return out
 
 
@@ -168,8 +171,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sizes", type=int, nargs="+", default=list(SIZES))
     ap.add_argument("--caps", type=int, nargs="+", default=list(CAPS))
+    ap.add_argument("--scheme", default="border", choices=("border", "ringfollow"))
     args = ap.parse_args()
-    run(tuple(args.sizes), tuple(args.caps))
+    run(tuple(args.sizes), tuple(args.caps), args.scheme)
 
 
 if __name__ == "__main__":
