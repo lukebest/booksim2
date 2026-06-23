@@ -7,7 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "border_afifo_depth_sweep.json"
+ROUTER_JSON_PATH = ROOT / "results" / "router_afifo_depth_sweep.json"
 HTML_PATH = ROOT / "results" / "report_afifo_depth_curve.html"
+
+ROUTER_CAPS = (0, 1, 2, 3, 4)
+ROUTER_COLORS = ["#94a3b8", "#3b82f6", "#059669", "#f59e0b", "#dc2626"]
 
 SERIES = [
     ("4x4_uni", "4×4 单向", "#3b82f6"),
@@ -144,8 +148,126 @@ cap≥46 最优：schedule spread=0，mk={mk46}，AFIFO峰值={depth46}，均衡
 </div>"""
 
 
+def load_router():
+    if not ROUTER_JSON_PATH.exists():
+        return None
+    return json.loads(ROUTER_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def router_curves_for_key(rdata, key, title):
+    """Multi-line chart: each router_cap K is a series over afifo_caps."""
+    cfg = rdata["configs"].get(key, {})
+    afifo_caps = rdata["afifo_caps"]
+    grid = cfg.get("grid", {})
+    series = []
+    for k in rdata["router_caps"]:
+        row = grid.get(str(k), grid.get(k, []))
+        by_a = {p["afifo_cap"]: p for p in row}
+        pts = [{"cap": a, "makespan": by_a.get(a, {}).get("makespan")} for a in afifo_caps]
+        color = ROUTER_COLORS[k] if k < len(ROUTER_COLORS) else "#64748b"
+        series.append((f"router K={k}", color, pts))
+    return line_chart(afifo_caps, series, title)
+
+
+def router_heatmap_table(rdata, key):
+    afifo_caps = rdata["afifo_caps"]
+    grid = rdata["configs"][key]["grid"]
+    hdr = "".join(f"<th>A={a}</th>" for a in afifo_caps)
+    rows = []
+    for k in rdata["router_caps"]:
+        row = grid.get(str(k), grid.get(k, []))
+        by_a = {p["afifo_cap"]: p for p in row}
+        cells = "".join(
+            f"<td>{by_a[a]['makespan'] if by_a.get(a, {}).get('makespan') else '—'}</td>"
+            for a in afifo_caps
+        )
+        rows.append(f"<tr><td class='l'>K={k}</td>{cells}</tr>")
+    return f"<table><tr><th>router↓ AFIFO→</th>{hdr}</tr>{''.join(rows)}</table>"
+
+
+def router_buffer_section(rdata):
+    if not rdata:
+        return ""
+    u16 = rdata["configs"].get("16x16_uni", {})
+    b16 = rdata["configs"].get("16x16_bi", {})
+    grid_u = u16.get("grid", {})
+    grid_b = b16.get("grid", {})
+    # pipelined peaks from K=1 row at max A (same mk as best pipelined if feasible)
+    def pip_info(grid):
+        for k in (1, 2, 3, 4):
+            for p in grid.get(str(k), grid.get(k, [])):
+                d = p.get("detail") or {}
+                if d.get("method") == "pipelined":
+                    return d
+        return {}
+
+    pu, pb = pip_info(grid_u), pip_info(grid_b)
+    af_caps = rdata["afifo_caps"]
+    a_hi = af_caps[-1]
+    def mk_at(grid, k, a):
+        row = grid.get(str(k), grid.get(k, []))
+        for p in row:
+            if p["afifo_cap"] == a:
+                return p.get("makespan")
+        return "—"
+
+    mk_u0 = mk_at(grid_u, 0, a_hi)
+    mk_u3 = mk_at(grid_u, 3, a_hi)
+    mk_b0 = mk_at(grid_b, 0, a_hi)
+    mk_b4 = mk_at(grid_b, 4, a_hi)
+
+    small_rows = []
+    for key, label, _ in SERIES:
+        g = rdata["configs"][key]["grid"]
+        cells = "".join(
+            f"<td>{mk_at(g, k, a_hi)}</td>" for k in rdata["router_caps"]
+        )
+        small_rows.append(f"<tr><td class='l'>{html.escape(label)}</td>{cells}</tr>")
+    k_hdr = "".join(f"<th>K={k}</th>" for k in rdata["router_caps"])
+    small_tbl = (
+        f"<table><tr><th>配置 (A={a_hi})</th>{k_hdr}</tr>{''.join(small_rows)}</table>"
+    )
+
+    return f"""
+<div class='card'><h2>Router 每 port 缓冲 K × 边界 AFIFO 深度 A</h2>
+<p class='note'>更新：{html.escape(rdata.get('updated', ''))} ·
+<code>results/router_afifo_depth_sweep.json</code> · 生成 <code>sweep_router_afifo_depth.py</code></p>
+<p>在现有「router 零 buffer（K=0）」曲线基础上，允许<strong>每个 router 输出 port / 下 ramp port</strong>
+峰值排队深度 ≤ <b>K</b>（flit），同时边界 AFIFO 单链路峰值 ≤ <b>A</b>。
+候选调度：strict（spread/atomic，K=0 时与上图相同）+ <strong>pipelined TDM</strong>（环内链路可短暂排队）。</p>
+
+<h3>机制要点</h3>
+<ul>
+<li><b>K=0</b>：与上文「router 零 buffer」完全相同；等待只能发生在边界 AFIFO（或源 PE 注入偏移）。</li>
+<li><b>K≥1</b>：环内 Hamilton 链路可「就绪但链路忙」时在 router 输出 port 排队；下 ramp 同理（<code>eject_buf</code>）。
+pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> → 往往需 <b>K≥2</b>（16×16 单向 pipelined 需 <b>K≥3</b>）。</li>
+<li><b>AFIFO 与 router buffer 解耦</b>：跨界等待仍在 AFIFO；加深 K 主要缓解<strong>象限内环</strong>与<strong>eject 对齐</strong>，不能替代深 AFIFO 对 spread=0 大跨界调度的需求。</li>
+</ul>
+
+<h3>各尺寸 @ AFIFO={a_hi}：makespan vs router cap K</h3>
+{small_tbl}
+<p class='note'>4×4 单向 K≥2：37→36；8×8 单向 K≥2：117→114；16×16 单向 K≥3：651→366；
+16×16 双向 K≤4 与 K=0 相同（pipelined 需 ring_buf≈{pb.get('ring_buf','?')}）。</p>
+
+<h3>16×16 单向：K≥3 带来最大收益</h3>
+<p>K=0 时 A={a_hi} 最优 <b>{mk_u0} cy</b>（atomic）；K≥3 时 pipelined <b>{mk_u3} cy</b>
+（ring_buf={pu.get('ring_buf','?')}, eject_buf={pu.get('eject_buf','?')}, AFIFO={pu.get('afifo_depth','?')}）——
+<strong>约 −44%</strong>。K=1~2 仍不足以容纳 pipelined 的 eject 排队。</p>
+{router_curves_for_key(rdata, "16x16_uni", "16×16 单向：makespan vs AFIFO（每条线 = router cap K）")}
+
+<h3>16×16 双向：K≤4 几乎不改变平台</h3>
+<p>pipelined 需 <code>ring_buf≈{pb.get('ring_buf','?')}</code>（远超 K=4），故 K=1~4 与 K=0 重合：
+A={a_hi} 时 <b>{mk_b4} cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 的断崖。</p>
+{router_curves_for_key(rdata, "16x16_bi", "16×16 双向：makespan vs AFIFO（每条线 = router cap K）")}
+
+<h3>16×16 双向 · K×A 数值表（makespan）</h3>
+{router_heatmap_table(rdata, "16x16_bi")}
+</div>"""
+
+
 def main():
     data = load()
+    rdata = load_router()
     caps = data["caps"]
     series_data = []
     bi_only = []
@@ -185,6 +307,7 @@ th{{background:#e2e8f0;}} td.l{{text-align:left;}} .note{{color:#64748b;font-siz
 cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 {cliff_note_16x16_bi(data)}
+{router_buffer_section(rdata)}
 </body></html>"""
 
     HTML_PATH.write_text(body, encoding="utf-8")
