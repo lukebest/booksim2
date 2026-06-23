@@ -24,6 +24,17 @@ CAPS = (0, 1, 2, 3, 4, 5, 8, 12, 16, 20, 24, 32, 40, 45, 46, 47, 48)
 SIZES = (4, 8, 16)
 
 
+def out_path(scheme):
+    return ROOT / "results" / f"{scheme}_afifo_depth_sweep.json"
+
+
+def deliv_quads(scheme, quads):
+    """Bound delivery builder for the requested scheme."""
+    if scheme == "ringfollow":
+        return lambda s, b, q=quads: S.deliv_ringfollow_quads(s, b, q)
+    return lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
+
+
 def shape_cfg(sz, scheme, tag):
     """Min-makespan ring shape (best_any), not AFIFO≤5 chosen."""
     data = load_optimal()
@@ -38,9 +49,9 @@ def eject_lb(n, ramp_bw):
     return (n - 1 + ramp_bw - 1) // ramp_bw
 
 
-def cache_schedules(sz, bidir, ramp_bw, quads, spread_max=80):
+def cache_schedules(sz, bidir, ramp_bw, quads, scheme="border", spread_max=80):
     """Run spread×lb_cross schedule once; reuse for all caps."""
-    deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
+    deliv = deliv_quads(scheme, quads)
     cached = []
     for sp in range(spread_max):
         for lb in (False, True):
@@ -67,10 +78,10 @@ def min_at_cap(candidates, cap):
     return min(feas, key=lambda x: x["makespan"])
 
 
-def collect_atomic(sz, bidir, ramp_bw, quads, caps):
+def collect_atomic(sz, bidir, ramp_bw, quads, caps, scheme="border"):
     """Run atomic once per (cap, order); pool must be merged across caps so
     a schedule found at cap=1 (depth=1) remains feasible at cap=2."""
-    deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
+    deliv = deliv_quads(scheme, quads)
     pool = []
     for cap in caps:
         cap_arg = 0 if cap == 0 else cap
@@ -89,18 +100,18 @@ def collect_atomic(sz, bidir, ramp_bw, quads, caps):
     return pool
 
 
-def sweep_config(sz, bidir, ramp_bw, caps=CAPS):
+def sweep_config(sz, bidir, ramp_bw, caps=CAPS, scheme="border"):
     tag = "bi" if bidir else "uni"
-    cfg = shape_cfg(sz, "border", tag)
+    cfg = shape_cfg(sz, scheme, tag)
     quads = make_quads(cfg, sz)
     shape = {"cfg": list(cfg), "cfg_str": cfg_str(cfg)}
     n = sz * sz
     spread_max = 30 if sz <= 4 else (50 if sz <= 8 else 80)
     print(f"  caching spread 0..{spread_max-1}...", flush=True)
     t_cache = time.time()
-    cached = cache_schedules(sz, bidir, ramp_bw, quads, spread_max)
+    cached = cache_schedules(sz, bidir, ramp_bw, quads, scheme, spread_max)
     print(f"  {len(cached)} schedules in {time.time()-t_cache:.1f}s", flush=True)
-    atomic_pool = collect_atomic(sz, bidir, ramp_bw, quads, caps)
+    atomic_pool = collect_atomic(sz, bidir, ramp_bw, quads, caps, scheme)
     candidates = cached + atomic_pool
     points = []
     prev_mk = None
