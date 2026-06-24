@@ -10,8 +10,8 @@
 2. Message (data) size m = 1..5 flit: each src->dst delivery becomes an m-flit
    wormhole message (0 router buffer -> m consecutive cycles on every link and
    m eject cycles, capped at ramp_bw/cy/node).  We report the best (minimum)
-   makespan at an effectively-unbounded AFIFO (cap=48) for ramp in {1,2,4}.
-   Output: results/msg_size_sweep.json
+   makespan with the border AFIFO depth constrained to <= 5 FLITS, for ramp in
+   {1,2,4}.  Output: results/msg_size_sweep.json
 """
 
 import json
@@ -30,12 +30,12 @@ SIZE_OUT = ROOT / "results" / "msg_size_sweep.json"
 RAMP4 = 4
 MSG_SIZES = (1, 2, 3, 4, 5)
 SIZE_RAMPS = (1, 2, 4)
-SIZE_CAP = 48          # effectively unbounded border AFIFO for the size study
-# Reduced atomic-cap pool for the size study: the low caps capture the
-# pacing-optimal atomic schedules (which beat spread=0 for eject-bound uni
-# rings) and cap=48 the unbounded one.  Verified to reproduce
-# border_afifo_depth_sweep cap=48 for m=1 on every size/direction.
-SIZE_ATOMIC_CAPS = (0, 1, 2, 3, 5, SIZE_CAP)
+SIZE_CAP = 5           # border AFIFO depth constrained to <= 5 FLITS
+# Atomic-cap pool for the size study: atomic runs paced at afifo_cap 0..5 yield
+# the depth<=5 candidates; merged with the (rarely feasible) spread=0 schedule
+# and filtered at depth<=SIZE_CAP.  Verified to reproduce
+# border_afifo_depth_sweep cap=5 for m=1 on every size/direction.
+SIZE_ATOMIC_CAPS = (0, 1, 2, 3, 4, 5)
 
 
 def run_ramp4(sizes=SIZES, caps=CAPS):
@@ -60,13 +60,12 @@ def run_ramp4(sizes=SIZES, caps=CAPS):
 
 
 def best_makespan(sz, bidir, ramp_bw, quads, flits, cap=SIZE_CAP):
-    """Minimum makespan at AFIFO depth <= cap, using the same candidate pool as
-    sweep_afifo_depth: the TDM spread=0 schedule plus atomic placements run at
-    every afifo_cap (the atomic pacing threshold changes the makespan, so the
-    optimum at an unbounded cap may come from an atomic run done at a *low* cap).
-    Verified to reproduce border_afifo_depth_sweep cap=48 for m=1 on all sizes.
-    A wide injection spread only trades makespan for shallower AFIFO, so it is
-    omitted at this (effectively unbounded) cap."""
+    """Minimum makespan at AFIFO depth <= cap (flit-accurate), using the same
+    candidate pool as sweep_afifo_depth: the TDM spread=0 schedule plus atomic
+    placements paced at afifo_cap 0..5.  The atomic pacing threshold changes the
+    makespan, so the optimum at depth<=5 may come from a run done at a lower cap;
+    all candidates are filtered at afifo_depth<=cap.  Verified to reproduce
+    border_afifo_depth_sweep cap=5 for m=1 on all sizes/directions."""
     deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
     cands = []
     for lb in (False, True):

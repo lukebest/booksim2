@@ -526,13 +526,15 @@ def size_section(sdata):
             )
 
     return f"""
-<div class='card'><h2>数据大小（每报文 flit 数）vs makespan</h2>
+<div class='card'><h2>数据大小（每报文 flit 数）vs makespan（边界 AFIFO ≤ {cap} flit）</h2>
 <p class='note'>更新：{html.escape(sdata.get('updated', ''))} ·
 <code>results/msg_size_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only size</code></p>
 <p>把每个 src→dst 投递从 1 flit 改为 <b>m flit</b> 的 wormhole 报文（router 零 buffer：
 报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
-此处取边界 AFIFO 上限 = <b>{cap}</b>（实质无限）以聚焦 makespan 随报文长度的增长。
-m=1 与上文单 flit 结果完全一致（已校验）。</p>
+此处<strong>约束边界 AFIFO 深度 ≤ {cap} flit</strong>（按 flit 精确计：一个 m-flit 报文在边界 AFIFO 中
+最多占 <b>min(m, 等待周期)</b> 个槽，故一个 5-flit 报文就能占满深度 5 的 FIFO）。
+搜索取所有 <code>afifo_depth ≤ {cap}</code> 的候选（atomic pacing + 可行的 spread=0）中最小 makespan。
+m=1 与上文单 flit 曲线的 cap={cap} 列完全一致（已校验）。</p>
 
 <h3>所有配置 @ 下 ramp=4</h3>
 {chart4}
@@ -541,10 +543,53 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <p class='note'>eject 下界 = ⌈(N−1)·m / ramp⌉：每节点要收 (N−1) 个报文共 (N−1)·m 个 flit，下 ramp 每周期吞 4 个。</p>
 
 {''.join(overlay_blocks)}
-<p class='note'>关键规律：<strong>eject 受限</strong> 的大尺寸配置 makespan 近似随 <b>m/ramp</b> 线性增长——
-把下 ramp 从 2 提到 4，等于把同样长度报文的 eject 时间减半，因此「报文翻倍 + 下 ramp 翻倍」可让 makespan 基本不变。
-小尺寸（4×4/8×8）受路径时延与跨界 10cy 主导，报文增大时增速低于 eject 下界、下 ramp 加宽收益也较小。</p>
+{size_note(sdata, ms, cap)}
 </div>"""
+
+
+def size_note(sdata, ms, cap):
+    """Data-driven analysis of the AFIFO<=cap makespan-vs-size curves."""
+    def val(key, ramp, m):
+        cfg = sdata["configs"].get(key, {})
+        row = cfg.get("by_ramp", {}).get(str(ramp))
+        if not row or m not in ms:
+            return None
+        return row[ms.index(m)]
+
+    def lb(key, ramp, m):
+        cfg = sdata["configs"].get(key, {})
+        row = cfg.get("eject_lb", {}).get(str(ramp))
+        if not row or m not in ms:
+            return None
+        return row[ms.index(m)]
+
+    mmax = ms[-1]
+    # eject-limited gain (uni big ring, low ramp -> high ramp), m=1
+    u_lo, u_hi = val("16x16_uni", 1, 1), val("16x16_uni", 4, 1)
+    u_pct = f"−{round((1 - u_hi / u_lo) * 100)}%" if (u_lo and u_hi) else ""
+    # AFIFO-pacing blow-up at large m (compare to eject lower bound)
+    bk = "16x16_bi"
+    b_mk = val(bk, 4, mmax)
+    b_lb = lb(bk, 4, mmax)
+    b_ratio = f"{b_mk / b_lb:.1f}×" if (b_mk and b_lb) else ""
+    # ramp 2 vs 4 at largest m (link/AFIFO bound -> little gain)
+    r2, r4 = val(bk, 2, mmax), val(bk, 4, mmax)
+    # growth of makespan with m at fixed ramp=4 (super-linear under AFIFO<=cap)
+    g1, g5 = val(bk, 4, 1), val(bk, 4, mmax)
+    g_factor = f"{g5 / g1:.1f}×" if (g1 and g5) else ""
+
+    return f"""<p class='note'>关键规律（边界 AFIFO ≤ {cap} flit 约束下）：</p>
+<ul class='note'>
+<li><b>报文越大 makespan 增长越快（且超线性）</b>：除了「每链路串行 m flit + 每节点 eject (N−1)·m flit」两项随 m 线性增长外，
+<strong>AFIFO 只有 {cap} 槽</strong>——一个 m-flit 报文在边界最多占 min(m, 等待) 个槽，m 越大能并发等待的报文越少，
+被迫拉大注入间隔（atomic pacing）。16×16 双向 @ramp4：m=1→m={mmax} 的 makespan 增长约 <b>{g_factor}</b>（{g1} → {g5}），明显快于 {mmax}×。</li>
+<li><b>下 ramp 的收益仍主要在 eject 受限区</b>：低 ramp、单向大环时 makespan≈eject 时间，加宽下 ramp 近似按倍数缩短——
+16×16 单向 m=1 从 ramp1 的 <b>{u_lo}</b> 降到 ramp4 的 <b>{u_hi}</b>（{u_pct}）。</li>
+<li><b>大报文下瓶颈是链路 TDM + AFIFO pacing，不再是 eject</b>：16×16 双向 m={mmax} @ramp4 makespan <b>{b_mk}</b>，
+是 eject 下界 <b>{b_lb}</b> 的约 <b>{b_ratio}</b>；此时再把下 ramp 从 2 加到 4 几乎无收益（ramp2 <b>{r2}</b> vs ramp4 <b>{r4}</b>）。</li>
+<li>与「实质无限 AFIFO」相比，<strong>AFIFO≤{cap} 的代价集中在大报文</strong>：m=1 完全不受影响（与单 flit 曲线 cap={cap} 列一致），
+m 增大后 pacing 开销迅速放大，凸显小深度 AFIFO 在 GALS 多 flit 报文下的瓶颈作用。</li>
+</ul>"""
 
 
 def main():

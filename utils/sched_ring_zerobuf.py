@@ -241,6 +241,42 @@ def afifo_profile_balanced(afifo_intervals, sz, makespan):
     return {"global": global_d, "peak": g_peak, "peak_cy": g_peak_cy}
 
 
+def msg_flit_cells(ap, cs, flits):
+    """Per-cycle AFIFO occupancy (in flits) of one m-flit wormhole message whose
+    head arrives at `ap` and is sent across at `cs`.  Flit i enters the AFIFO at
+    ap+i and leaves at cs+i, so it is buffered during [ap+i, cs+i).  Returns
+    {cycle: flits_in_afifo}.  For flits=1 this is {t:1 for t in [ap, cs)}."""
+    cells = {}
+    end = cs + flits - 1
+    for t in range(ap, end):
+        arrived = min(t - ap + 1, flits)
+        departed = min(t - cs + 1, flits) if t >= cs else 0
+        v = arrived - departed
+        if v > 0:
+            cells[t] = v
+    return cells
+
+
+def afifo_peak_flits(afifo_intervals, flits):
+    """Peak per-link AFIFO depth in FLITS across all border links."""
+    gmax = 0
+    for ivs in afifo_intervals.values():
+        diff = defaultdict(int)
+        for ap, cs in ivs:
+            if cs <= ap and flits == 1:
+                continue
+            for i in range(flits):
+                diff[ap + i] += 1
+                diff[cs + i] -= 1
+        cur = peak = 0
+        for t in sorted(diff):
+            cur += diff[t]
+            if cur > peak:
+                peak = cur
+        gmax = max(gmax, peak)
+    return gmax
+
+
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
              record_events=False, quads=None, lb_cross=False, flits=1):
     fr.cfg(sz, sz, 4, 6)
@@ -355,19 +391,8 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
                 if cc not in placed_roots:
                     pending.append((c, pp, cc, llat))
 
-    # AFIFO queue depth = peak overlap of wait intervals on any one border link
-    def peak(ivs):
-        ev = []
-        for a, b in ivs:
-            if b > a:
-                ev += [(a, 1), (b, -1)]
-        ev.sort()
-        cur = m = 0
-        for _, d in ev:
-            cur += d
-            m = max(m, cur)
-        return m
-    afifo_depth = max((peak(v) for v in afifo_intervals.values()), default=0)
+    # AFIFO queue depth = peak per-link buffered flits (flit-accurate for m>1)
+    afifo_depth = afifo_peak_flits(afifo_intervals, flits)
 
     # verify every node ejects exactly n-1
     ej_total = defaultdict(int)
@@ -595,10 +620,11 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                     cs += 1
                 anchor_c = cs + hop
                 if fits(st, anchor_c, tlink, teject):
-                    # AFIFO occupancy on [ap, cs)
+                    # AFIFO occupancy (flits) during [ap, cs+m-1)
                     if afifo_cap is not None:
-                        bad = any(afifo_occ[lk][t] + tafifo[(lk, t)] + 1 > afifo_cap
-                                  for t in range(ap, cs))
+                        cells = msg_flit_cells(ap, cs, flits)
+                        bad = any(afifo_occ[lk][t] + tafifo[(lk, t)] + v > afifo_cap
+                                  for t, v in cells.items())
                         if bad:
                             return None  # waiting too deep -> bump injection
                     break
@@ -608,8 +634,8 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             # accept child sub-tree
             for i in range(flits):
                 tlink[lk].add(cs + i)
-            for t in range(ap, cs):
-                tafifo[(lk, t)] += 1
+            for t, v in msg_flit_cells(ap, cs, flits).items():
+                tafifo[(lk, t)] += v
             af_ivs.append((lk, ap, cs))
             for lk2, rel in st["links"]:
                 for i in range(flits):
@@ -656,18 +682,7 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
         if record_events:
             events.extend(res["evs"])
 
-    def peak(ivs):
-        ev = []
-        for a, b in ivs:
-            if b > a:
-                ev += [(a, 1), (b, -1)]
-        ev.sort()
-        cur = m = 0
-        for _, d in ev:
-            cur += d
-            m = max(m, cur)
-        return m
-    afifo_depth = max((peak(v) for v in afifo_intervals.values()), default=0)
+    afifo_depth = afifo_peak_flits(afifo_intervals, flits)
     ej_total = defaultdict(int)
     for nd, cyc in eject_busy.items():
         ej_total[nd] = sum(cyc.values())

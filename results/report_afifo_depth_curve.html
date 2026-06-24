@@ -527,13 +527,15 @@ eject 下界 = ⌈(N−1)/4⌉，比 ramp=1/2 更低，注入相位更易错开�
 小尺寸或已被「跨界+环内链路时分」限制的配置，下 ramp 从 2→4 收益有限。</p>
 </div>
 
-<div class='card'><h2>数据大小（每报文 flit 数）vs makespan</h2>
-<p class='note'>更新：2026-06-24T08:38:03.787784+00:00 ·
+<div class='card'><h2>数据大小（每报文 flit 数）vs makespan（边界 AFIFO ≤ 5 flit）</h2>
+<p class='note'>更新：2026-06-24T10:01:41.888668+00:00 ·
 <code>results/msg_size_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only size</code></p>
 <p>把每个 src→dst 投递从 1 flit 改为 <b>m flit</b> 的 wormhole 报文（router 零 buffer：
 报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
-此处取边界 AFIFO 上限 = <b>48</b>（实质无限）以聚焦 makespan 随报文长度的增长。
-m=1 与上文单 flit 结果完全一致（已校验）。</p>
+此处<strong>约束边界 AFIFO 深度 ≤ 5 flit</strong>（按 flit 精确计：一个 m-flit 报文在边界 AFIFO 中
+最多占 <b>min(m, 等待周期)</b> 个槽，故一个 5-flit 报文就能占满深度 5 的 FIFO）。
+搜索取所有 <code>afifo_depth ≤ 5</code> 的候选（atomic pacing + 可行的 spread=0）中最小 makespan。
+m=1 与上文单 flit 曲线的 cap=5 列完全一致（已校验）。</p>
 
 <h3>所有配置 @ 下 ramp=4</h3>
 <svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
@@ -543,15 +545,15 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">362</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">430</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">724</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">861</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">1086</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">1292</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">1448</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">1722</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">1811</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">2153</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
 <line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
@@ -564,57 +566,57 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,322.2 L 217.5,320.4 L 377.0,319.8 L 536.5,318.8 L 696.0,316.6" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
-<circle cx="58.0" cy="322.2" r="4" fill="#3b82f6"/>
-<circle cx="217.5" cy="320.4" r="4" fill="#3b82f6"/>
-<circle cx="377.0" cy="319.8" r="4" fill="#3b82f6"/>
-<circle cx="536.5" cy="318.8" r="4" fill="#3b82f6"/>
-<circle cx="696.0" cy="316.6" r="4" fill="#3b82f6"/>
+<path d="M 58.0,323.1 L 217.5,321.6 L 377.0,319.1 L 536.5,318.1 L 696.0,314.4" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="323.1" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="321.6" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="319.1" r="4" fill="#3b82f6"/>
+<circle cx="536.5" cy="318.1" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="314.4" r="4" fill="#3b82f6"/>
 <rect x="66" y="40" width="14" height="3" fill="#3b82f6"/>
 <text x="84" y="46" font-size="10">4×4 单向</text>
-<path d="M 58.0,322.8 L 217.5,322.7 L 377.0,320.4 L 536.5,319.5 L 696.0,317.4" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
-<circle cx="58.0" cy="322.8" r="4" fill="#60a5fa"/>
-<circle cx="217.5" cy="322.7" r="4" fill="#60a5fa"/>
-<circle cx="377.0" cy="320.4" r="4" fill="#60a5fa"/>
-<circle cx="536.5" cy="319.5" r="4" fill="#60a5fa"/>
-<circle cx="696.0" cy="317.4" r="4" fill="#60a5fa"/>
+<path d="M 58.0,323.7 L 217.5,323.5 L 377.0,321.5 L 536.5,320.3 L 696.0,318.0" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
+<circle cx="58.0" cy="323.7" r="4" fill="#60a5fa"/>
+<circle cx="217.5" cy="323.5" r="4" fill="#60a5fa"/>
+<circle cx="377.0" cy="321.5" r="4" fill="#60a5fa"/>
+<circle cx="536.5" cy="320.3" r="4" fill="#60a5fa"/>
+<circle cx="696.0" cy="318.0" r="4" fill="#60a5fa"/>
 <rect x="166" y="40" width="14" height="3" fill="#60a5fa"/>
 <text x="184" y="46" font-size="10">4×4 双向</text>
-<path d="M 58.0,309.6 L 217.5,306.6 L 377.0,298.3 L 536.5,292.7 L 696.0,281.1" fill="none" stroke="#059669" stroke-width="2.5"/>
-<circle cx="58.0" cy="309.6" r="4" fill="#059669"/>
-<circle cx="217.5" cy="306.6" r="4" fill="#059669"/>
-<circle cx="377.0" cy="298.3" r="4" fill="#059669"/>
-<circle cx="536.5" cy="292.7" r="4" fill="#059669"/>
-<circle cx="696.0" cy="281.1" r="4" fill="#059669"/>
+<path d="M 58.0,312.5 L 217.5,301.6 L 377.0,293.0 L 536.5,283.9 L 696.0,268.3" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="312.5" r="4" fill="#059669"/>
+<circle cx="217.5" cy="301.6" r="4" fill="#059669"/>
+<circle cx="377.0" cy="293.0" r="4" fill="#059669"/>
+<circle cx="536.5" cy="283.9" r="4" fill="#059669"/>
+<circle cx="696.0" cy="268.3" r="4" fill="#059669"/>
 <rect x="266" y="40" width="14" height="3" fill="#059669"/>
 <text x="284" y="46" font-size="10">8×8 单向</text>
-<path d="M 58.0,313.7 L 217.5,311.1 L 377.0,304.3 L 536.5,298.2 L 696.0,288.8" fill="none" stroke="#34d399" stroke-width="2.5"/>
-<circle cx="58.0" cy="313.7" r="4" fill="#34d399"/>
-<circle cx="217.5" cy="311.1" r="4" fill="#34d399"/>
-<circle cx="377.0" cy="304.3" r="4" fill="#34d399"/>
-<circle cx="536.5" cy="298.2" r="4" fill="#34d399"/>
-<circle cx="696.0" cy="288.8" r="4" fill="#34d399"/>
+<path d="M 58.0,315.9 L 217.5,309.4 L 377.0,293.8 L 536.5,287.6 L 696.0,272.1" fill="none" stroke="#34d399" stroke-width="2.5"/>
+<circle cx="58.0" cy="315.9" r="4" fill="#34d399"/>
+<circle cx="217.5" cy="309.4" r="4" fill="#34d399"/>
+<circle cx="377.0" cy="293.8" r="4" fill="#34d399"/>
+<circle cx="536.5" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="696.0" cy="272.1" r="4" fill="#34d399"/>
 <rect x="366" y="40" width="14" height="3" fill="#34d399"/>
 <text x="384" y="46" font-size="10">8×8 双向</text>
-<path d="M 58.0,268.0 L 217.5,189.8 L 377.0,134.7 L 536.5,109.9 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
-<circle cx="58.0" cy="268.0" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="189.8" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="134.7" r="4" fill="#dc2626"/>
-<circle cx="536.5" cy="109.9" r="4" fill="#dc2626"/>
+<path d="M 58.0,277.6 L 217.5,209.1 L 377.0,155.7 L 536.5,137.2 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="277.6" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="209.1" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="155.7" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="137.2" r="4" fill="#dc2626"/>
 <circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
 <rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="484" y="46" font-size="10">16×16 单向</text>
-<path d="M 58.0,289.0 L 217.5,235.3 L 377.0,175.6 L 536.5,149.2 L 696.0,79.4" fill="none" stroke="#f87171" stroke-width="2.5"/>
-<circle cx="58.0" cy="289.0" r="4" fill="#f87171"/>
-<circle cx="217.5" cy="235.3" r="4" fill="#f87171"/>
-<circle cx="377.0" cy="175.6" r="4" fill="#f87171"/>
-<circle cx="536.5" cy="149.2" r="4" fill="#f87171"/>
-<circle cx="696.0" cy="79.4" r="4" fill="#f87171"/>
+<path d="M 58.0,278.6 L 217.5,244.3 L 377.0,180.5 L 536.5,155.1 L 696.0,76.7" fill="none" stroke="#f87171" stroke-width="2.5"/>
+<circle cx="58.0" cy="278.6" r="4" fill="#f87171"/>
+<circle cx="217.5" cy="244.3" r="4" fill="#f87171"/>
+<circle cx="377.0" cy="180.5" r="4" fill="#f87171"/>
+<circle cx="536.5" cy="155.1" r="4" fill="#f87171"/>
+<circle cx="696.0" cy="76.7" r="4" fill="#f87171"/>
 <rect x="566" y="40" width="14" height="3" fill="#f87171"/>
 <text x="584" y="46" font-size="10">16×16 双向</text>
 </svg>
 <h3>数值表</h3>
-<table><tr><th>配置 (ramp=4)</th><th>m=1</th><th>m=2</th><th>m=3</th><th>m=4</th><th>m=5</th><th>eject 下界 m=1..5</th></tr><tr><td class='l'>4×4 单向</td><td>36</td><td>47</td><td>51</td><td>57</td><td>71</td><td>4/8/12/15/19</td></tr><tr><td class='l'>4×4 双向</td><td>32</td><td>33</td><td>47</td><td>53</td><td>66</td><td>4/8/12/15/19</td></tr><tr><td class='l'>8×8 单向</td><td>114</td><td>133</td><td>184</td><td>219</td><td>291</td><td>16/32/48/63/79</td></tr><tr><td class='l'>8×8 双向</td><td>89</td><td>105</td><td>147</td><td>185</td><td>243</td><td>16/32/48/63/79</td></tr><tr><td class='l'>16×16 单向</td><td>372</td><td>857</td><td>1199</td><td>1353</td><td>1677</td><td>64/128/192/255/319</td></tr><tr><td class='l'>16×16 双向</td><td>242</td><td>575</td><td>945</td><td>1109</td><td>1542</td><td>64/128/192/255/319</td></tr></table>
+<table><tr><th>配置 (ramp=4)</th><th>m=1</th><th>m=2</th><th>m=3</th><th>m=4</th><th>m=5</th><th>eject 下界 m=1..5</th></tr><tr><td class='l'>4×4 单向</td><td>36</td><td>47</td><td>66</td><td>73</td><td>100</td><td>4/8/12/15/19</td></tr><tr><td class='l'>4×4 双向</td><td>32</td><td>33</td><td>48</td><td>57</td><td>74</td><td>4/8/12/15/19</td></tr><tr><td class='l'>8×8 单向</td><td>114</td><td>195</td><td>258</td><td>325</td><td>440</td><td>16/32/48/63/79</td></tr><tr><td class='l'>8×8 双向</td><td>89</td><td>137</td><td>252</td><td>298</td><td>412</td><td>16/32/48/63/79</td></tr><tr><td class='l'>16×16 单向</td><td>372</td><td>877</td><td>1271</td><td>1407</td><td>1994</td><td>64/128/192/255/319</td></tr><tr><td class='l'>16×16 双向</td><td>364</td><td>617</td><td>1088</td><td>1275</td><td>1853</td><td>64/128/192/255/319</td></tr></table>
 <p class='note'>eject 下界 = ⌈(N−1)·m / ramp⌉：每节点要收 (N−1) 个报文共 (N−1)·m 个 flit，下 ramp 每周期吞 4 个。</p>
 
 <h3>16×16 双向：makespan vs 数据大小（下 ramp=1/2/4）</h3><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
@@ -624,15 +626,15 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">598</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">637</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">1197</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">1274</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">1795</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">1911</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">2394</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">2548</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">2992</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">3186</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
 <line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
@@ -645,28 +647,28 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,241.1 L 217.5,145.4 L 377.0,109.0 L 536.5,87.1 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
-<circle cx="58.0" cy="241.1" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="145.4" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="109.0" r="4" fill="#dc2626"/>
-<circle cx="536.5" cy="87.1" r="4" fill="#dc2626"/>
+<path d="M 58.0,248.3 L 217.5,149.9 L 377.0,108.1 L 536.5,85.1 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="248.3" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="149.9" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="108.1" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="85.1" r="4" fill="#dc2626"/>
 <circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
 <rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="84" y="46" font-size="10">下 ramp=1</text>
-<path d="M 58.0,304.2 L 217.5,263.5 L 377.0,232.3 L 536.5,215.7 L 696.0,172.1" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
-<circle cx="58.0" cy="304.2" r="4" fill="#f59e0b"/>
-<circle cx="217.5" cy="263.5" r="4" fill="#f59e0b"/>
-<circle cx="377.0" cy="232.3" r="4" fill="#f59e0b"/>
-<circle cx="536.5" cy="215.7" r="4" fill="#f59e0b"/>
-<circle cx="696.0" cy="172.1" r="4" fill="#f59e0b"/>
+<path d="M 58.0,293.3 L 217.5,259.4 L 377.0,209.2 L 536.5,198.1 L 696.0,139.9" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="293.3" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="259.4" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="209.2" r="4" fill="#f59e0b"/>
+<circle cx="536.5" cy="198.1" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="139.9" r="4" fill="#f59e0b"/>
 <rect x="166" y="40" width="14" height="3" fill="#f59e0b"/>
 <text x="184" y="46" font-size="10">下 ramp=2</text>
-<path d="M 58.0,304.4 L 217.5,271.9 L 377.0,235.8 L 536.5,219.8 L 696.0,177.5" fill="none" stroke="#059669" stroke-width="2.5"/>
-<circle cx="58.0" cy="304.4" r="4" fill="#059669"/>
-<circle cx="217.5" cy="271.9" r="4" fill="#059669"/>
-<circle cx="377.0" cy="235.8" r="4" fill="#059669"/>
-<circle cx="536.5" cy="219.8" r="4" fill="#059669"/>
-<circle cx="696.0" cy="177.5" r="4" fill="#059669"/>
+<path d="M 58.0,294.6 L 217.5,271.5 L 377.0,228.3 L 536.5,211.1 L 696.0,158.2" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="294.6" r="4" fill="#059669"/>
+<circle cx="217.5" cy="271.5" r="4" fill="#059669"/>
+<circle cx="377.0" cy="228.3" r="4" fill="#059669"/>
+<circle cx="536.5" cy="211.1" r="4" fill="#059669"/>
+<circle cx="696.0" cy="158.2" r="4" fill="#059669"/>
 <rect x="266" y="40" width="14" height="3" fill="#059669"/>
 <text x="284" y="46" font-size="10">下 ramp=4</text>
 </svg><h3>8×8 双向：makespan vs 数据大小（下 ramp=1/2/4）</h3><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
@@ -676,15 +678,15 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">109</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">146</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">219</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">292</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">329</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">439</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">438</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">585</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">548</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">732</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
 <line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
@@ -697,34 +699,43 @@ m=1 与上文单 flit 结果完全一致（已校验）。</p>
 <text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,258.3 L 217.5,215.7 L 377.0,155.6 L 536.5,127.4 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
-<circle cx="58.0" cy="258.3" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="215.7" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="155.6" r="4" fill="#dc2626"/>
-<circle cx="536.5" cy="127.4" r="4" fill="#dc2626"/>
+<path d="M 58.0,255.8 L 217.5,216.7 L 377.0,119.8 L 536.5,95.5 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="255.8" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="216.7" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="119.8" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="95.5" r="4" fill="#dc2626"/>
 <circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
 <rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="84" y="46" font-size="10">下 ramp=1</text>
-<path d="M 58.0,280.6 L 217.5,266.8 L 377.0,245.0 L 536.5,227.4 L 696.0,184.8" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
-<circle cx="58.0" cy="280.6" r="4" fill="#f59e0b"/>
-<circle cx="217.5" cy="266.8" r="4" fill="#f59e0b"/>
-<circle cx="377.0" cy="245.0" r="4" fill="#f59e0b"/>
-<circle cx="536.5" cy="227.4" r="4" fill="#f59e0b"/>
-<circle cx="696.0" cy="184.8" r="4" fill="#f59e0b"/>
+<path d="M 58.0,292.5 L 217.5,262.2 L 377.0,222.7 L 536.5,198.4 L 696.0,149.7" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="292.5" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="262.2" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="222.7" r="4" fill="#f59e0b"/>
+<circle cx="536.5" cy="198.4" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="149.7" r="4" fill="#f59e0b"/>
 <rect x="166" y="40" width="14" height="3" fill="#f59e0b"/>
 <text x="184" y="46" font-size="10">下 ramp=2</text>
-<path d="M 58.0,280.6 L 217.5,272.1 L 377.0,249.8 L 536.5,229.5 L 696.0,198.7" fill="none" stroke="#059669" stroke-width="2.5"/>
-<circle cx="58.0" cy="280.6" r="4" fill="#059669"/>
-<circle cx="217.5" cy="272.1" r="4" fill="#059669"/>
-<circle cx="377.0" cy="249.8" r="4" fill="#059669"/>
-<circle cx="536.5" cy="229.5" r="4" fill="#059669"/>
-<circle cx="696.0" cy="198.7" r="4" fill="#059669"/>
+<path d="M 58.0,292.5 L 217.5,273.4 L 377.0,227.5 L 536.5,209.2 L 696.0,163.7" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="292.5" r="4" fill="#059669"/>
+<circle cx="217.5" cy="273.4" r="4" fill="#059669"/>
+<circle cx="377.0" cy="227.5" r="4" fill="#059669"/>
+<circle cx="536.5" cy="209.2" r="4" fill="#059669"/>
+<circle cx="696.0" cy="163.7" r="4" fill="#059669"/>
 <rect x="266" y="40" width="14" height="3" fill="#059669"/>
 <text x="284" y="46" font-size="10">下 ramp=4</text>
 </svg>
-<p class='note'>关键规律：<strong>eject 受限</strong> 的大尺寸配置 makespan 近似随 <b>m/ramp</b> 线性增长——
-把下 ramp 从 2 提到 4，等于把同样长度报文的 eject 时间减半，因此「报文翻倍 + 下 ramp 翻倍」可让 makespan 基本不变。
-小尺寸（4×4/8×8）受路径时延与跨界 10cy 主导，报文增大时增速低于 eject 下界、下 ramp 加宽收益也较小。</p>
+<p class='note'>关键规律（边界 AFIFO ≤ 5 flit 约束下）：</p>
+<ul class='note'>
+<li><b>报文越大 makespan 增长越快（且超线性）</b>：除了「每链路串行 m flit + 每节点 eject (N−1)·m flit」两项随 m 线性增长外，
+<strong>AFIFO 只有 5 槽</strong>——一个 m-flit 报文在边界最多占 min(m, 等待) 个槽，m 越大能并发等待的报文越少，
+被迫拉大注入间隔（atomic pacing）。16×16 双向 @ramp4：m=1→m=5 的 makespan 增长约 <b>5.1×</b>（364 → 1853），明显快于 5×。</li>
+<li><b>下 ramp 的收益仍主要在 eject 受限区</b>：低 ramp、单向大环时 makespan≈eject 时间，加宽下 ramp 近似按倍数缩短——
+16×16 单向 m=1 从 ramp1 的 <b>651</b> 降到 ramp4 的 <b>372</b>（−43%）。</li>
+<li><b>大报文下瓶颈是链路 TDM + AFIFO pacing，不再是 eject</b>：16×16 双向 m=5 @ramp4 makespan <b>1853</b>，
+是 eject 下界 <b>319</b> 的约 <b>5.8×</b>；此时再把下 ramp 从 2 加到 4 几乎无收益（ramp2 <b>2052</b> vs ramp4 <b>1853</b>）。</li>
+<li>与「实质无限 AFIFO」相比，<strong>AFIFO≤5 的代价集中在大报文</strong>：m=1 完全不受影响（与单 flit 曲线 cap=5 列一致），
+m 增大后 pacing 开销迅速放大，凸显小深度 AFIFO 在 GALS 多 flit 报文下的瓶颈作用。</li>
+</ul>
 </div>
 
 <div class='card'><h2>对角象限均衡：半经水平邻居、半经垂直邻居</h2>
