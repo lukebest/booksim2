@@ -281,6 +281,134 @@ cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 cap≥46 最优：schedule spread=0，mk=244，AFIFO峰值=41，均衡深度≈36。</p>
 </div>
 
+<div class='card'><h2>对角象限均衡：半经水平邻居、半经垂直邻居</h2>
+<p class='note'>更新：2026-06-24T07:37:34.002520+00:00 ·
+<code>results/border_bal_afifo_depth_sweep.json</code> · <code>sched_ring_zerobuf.deliv_border_bal_quads</code></p>
+
+<h3>路由改动</h3>
+<p>原始 border 短弧把<strong>整个对角象限</strong>（QD，如左上源的 64 个目的点）全部经
+<strong>水平相邻象限 QH</strong> 投递（QD 每一列都从中线 y-border 进入）。
+均衡方案把 QD 的 64 个目的点<strong>对半拆分</strong>：</p>
+<ul>
+<li><b>上半 32 个</b>（QD 上半行）经 <strong>QH</strong>：从中线 y-border 进入，沿列向下短弧。</li>
+<li><b>下半 32 个</b>（QD 下半行）经 <strong>垂直相邻象限 QV</strong>：沿 QV 列向下后跨中线 x-border 进入 QD，沿行横向短弧。</li>
+</ul>
+<p>这样原本只承载 QH 流量的中线 x-border 也分担一半对角流量，两条中线边界负载更对称。</p>
+
+<h3>AFIFO 深度 vs makespan 的变化</h3>
+<table><tr><th>配置</th><th>原始 mk/afifo @cap5</th><th>均衡 mk/afifo @cap5</th><th>原始 最优 mk@cap/afifo</th><th>均衡 最优 mk@cap/afifo</th></tr><tr><td class='l'>4×4 单向</td><td>48 / 2</td><td>47 / 2</td><td>48 @0/0</td><td>47 @2/2</td></tr><tr><td class='l'>4×4 双向</td><td>42 / 1</td><td>42 / 1</td><td>42 @1/1</td><td>42 @1/1</td></tr><tr><td class='l'>8×8 单向</td><td>187 / 3</td><td>190 / 2</td><td>124 @16/13</td><td>126 @20/18</td></tr><tr><td class='l'>8×8 双向</td><td>89 / 4</td><td>93 / 4</td><td>89 @4/4</td><td>93 @4/4</td></tr><tr><td class='l'>16×16 单向</td><td>640 / 1</td><td>640 / 1</td><td>640 @1/1</td><td>640 @1/1</td></tr><tr><td class='l'>16×16 双向</td><td>404 / 5</td><td>423 / 2</td><td>244 @45/41</td><td>267 @40/40</td></tr></table>
+<p class='note'>表中「mk/afifo」= 该 AFIFO 上限下最优 makespan 与对应单链路 AFIFO 峰值；
+「最优」列为全 cap 扫描中的最小 makespan 及其首次达到的 cap/afifo 峰值。</p>
+
+<h3>结论</h3>
+<ul>
+<li><b>AFIFO 峰值下降</b>：在浅缓冲（atomic）区间，均衡把单链路 AFIFO 峰值显著降低。
+16×16 双向 cap=5 时：原始需 afifo=<b>5</b>（mk=404），均衡只需 afifo=<b>2</b>（mk=423）——峰值 −60%。
+8×8 单向 cap≥2：3→2；16×16 双向 cap=3~4：3→2。</li>
+<li><b>makespan 略升</b>：对角下半经 QV 要多走垂直象限的整列短弧，关键路径变长，双向配置约 +5%
+（16×16 双向最优 244→267，8×8 双向 89→93）。跨界时延=10cy 放大了这一代价。</li>
+<li><b>本质是权衡</b>：把对角流量摊到两条中线边界，<strong>用更浅的 AFIFO（更小的边界 FIFO 面积）换取约 5% 的 makespan</strong>。
+若 AFIFO 深度是受限/昂贵资源（如 GALS 边界异步 FIFO），均衡方案更优；若追求最短 makespan 且 FIFO 充足，原始单路径更快。</li>
+</ul>
+
+<h3>16×16 双向曲线对比</h3>
+<div><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">16×16 双向：原始 vs 对角均衡（makespan vs AFIFO 上限）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">128</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">257</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">385</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">514</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">642</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#dc2626"/>
+<rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="84" y="46" font-size="10">原始 单路径(全经 QH)</text>
+<path d="M 58.0,59.9 L 71.3,124.4 L 84.6,135.8 L 97.9,135.8 L 111.2,135.8 L 124.5,135.8 L 164.3,135.8 L 217.5,135.8 L 270.7,135.8 L 323.8,135.8 L 377.0,135.8 L 483.3,135.8 L 589.7,206.7 L 656.1,206.7 L 669.4,206.7 L 682.7,206.7 L 696.0,206.7" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="58.0" cy="59.9" r="4" fill="#2563eb"/>
+<circle cx="71.3" cy="124.4" r="4" fill="#2563eb"/>
+<circle cx="84.6" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="97.9" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="111.2" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="124.5" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="164.3" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="217.5" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="270.7" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="323.8" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="377.0" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="483.3" cy="135.8" r="4" fill="#2563eb"/>
+<circle cx="589.7" cy="206.7" r="4" fill="#2563eb"/>
+<circle cx="656.1" cy="206.7" r="4" fill="#2563eb"/>
+<circle cx="669.4" cy="206.7" r="4" fill="#2563eb"/>
+<circle cx="682.7" cy="206.7" r="4" fill="#2563eb"/>
+<circle cx="696.0" cy="206.7" r="4" fill="#2563eb"/>
+<rect x="166" y="40" width="14" height="3" fill="#2563eb"/>
+<text x="184" y="46" font-size="10">均衡 (半 QH / 半 QV)</text>
+</svg></div>
+<p class='note'>低 cap 段两者接近（均衡略慢但 AFIFO 更浅）；高 cap 段原始 spread=0 在 cap≈45 探到 244，
+均衡在 cap≈40 探到 267（更早达平台但平台更高）。</p>
+</div>
+
 <div class='card'><h2>Router 每 port 缓冲 K × 边界 AFIFO 深度 A</h2>
 <p class='note'>更新：2026-06-24T03:26:22.984062+00:00 ·
 <code>results/router_afifo_depth_sweep.json</code> · 生成 <code>sweep_router_afifo_depth.py</code></p>

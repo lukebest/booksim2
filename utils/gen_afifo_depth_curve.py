@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "border_afifo_depth_sweep.json"
 ROUTER_JSON_PATH = ROOT / "results" / "router_afifo_depth_sweep.json"
+BAL_JSON_PATH = ROOT / "results" / "border_bal_afifo_depth_sweep.json"
 HTML_PATH = ROOT / "results" / "report_afifo_depth_curve.html"
 
 ROUTER_CAPS = (0, 1, 2, 3, 4)
@@ -266,9 +267,107 @@ A={a_hi} 时 <b>{mk_b4} cy</b>（spread=0）；浅 router FIFO 无法替代 AFIF
 </div>"""
 
 
+def load_bal():
+    if not BAL_JSON_PATH.exists():
+        return None
+    return json.loads(BAL_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def balanced_diag_section(data, bdata):
+    """Compare single-path (all diagonal via QH) vs balanced diagonal (half via
+    QH, half via QV)."""
+    if not bdata:
+        return ""
+
+    def best(pts):
+        feas = [p for p in pts if p.get("makespan")]
+        bm = min(p["makespan"] for p in feas)
+        for p in feas:
+            if p["makespan"] == bm:
+                return bm, p["cap"], (p["detail"] or {}).get("afifo_depth")
+        return bm, None, None
+
+    def at(pts, cap):
+        for p in pts:
+            if p["cap"] == cap:
+                return p["makespan"], (p["detail"] or {}).get("afifo_depth")
+        return None, None
+
+    rows = []
+    for key, label, _ in SERIES:
+        ob = data["configs"].get(key, {}).get("points")
+        bb = bdata["configs"].get(key, {}).get("points")
+        if not ob or not bb:
+            continue
+        o5_mk, o5_d = at(ob, 5)
+        b5_mk, b5_d = at(bb, 5)
+        obest = best(ob)
+        bbest = best(bb)
+        rows.append(
+            f"<tr><td class='l'>{html.escape(label)}</td>"
+            f"<td>{o5_mk} / {o5_d}</td><td>{b5_mk} / {b5_d}</td>"
+            f"<td>{obest[0]} @{obest[1]}/{obest[2]}</td>"
+            f"<td>{bbest[0]} @{bbest[1]}/{bbest[2]}</td></tr>"
+        )
+    tbl = (
+        "<table><tr><th>配置</th>"
+        "<th>原始 mk/afifo @cap5</th><th>均衡 mk/afifo @cap5</th>"
+        "<th>原始 最优 mk@cap/afifo</th><th>均衡 最优 mk@cap/afifo</th></tr>"
+        f"{''.join(rows)}</table>"
+    )
+
+    # overlay curve for 16x16 bi (most affected)
+    caps = data["caps"]
+    ob = data["configs"]["16x16_bi"]["points"]
+    bb = bdata["configs"]["16x16_bi"]["points"]
+    overlay = [
+        ("原始 单路径(全经 QH)", "#dc2626", ob),
+        ("均衡 (半 QH / 半 QV)", "#2563eb", bb),
+    ]
+    chart = line_chart(caps, overlay, "16×16 双向：原始 vs 对角均衡（makespan vs AFIFO 上限）")
+
+    return f"""
+<div class='card'><h2>对角象限均衡：半经水平邻居、半经垂直邻居</h2>
+<p class='note'>更新：{html.escape(bdata.get('updated', ''))} ·
+<code>results/border_bal_afifo_depth_sweep.json</code> · <code>sched_ring_zerobuf.deliv_border_bal_quads</code></p>
+
+<h3>路由改动</h3>
+<p>原始 border 短弧把<strong>整个对角象限</strong>（QD，如左上源的 64 个目的点）全部经
+<strong>水平相邻象限 QH</strong> 投递（QD 每一列都从中线 y-border 进入）。
+均衡方案把 QD 的 64 个目的点<strong>对半拆分</strong>：</p>
+<ul>
+<li><b>上半 32 个</b>（QD 上半行）经 <strong>QH</strong>：从中线 y-border 进入，沿列向下短弧。</li>
+<li><b>下半 32 个</b>（QD 下半行）经 <strong>垂直相邻象限 QV</strong>：沿 QV 列向下后跨中线 x-border 进入 QD，沿行横向短弧。</li>
+</ul>
+<p>这样原本只承载 QH 流量的中线 x-border 也分担一半对角流量，两条中线边界负载更对称。</p>
+
+<h3>AFIFO 深度 vs makespan 的变化</h3>
+{tbl}
+<p class='note'>表中「mk/afifo」= 该 AFIFO 上限下最优 makespan 与对应单链路 AFIFO 峰值；
+「最优」列为全 cap 扫描中的最小 makespan 及其首次达到的 cap/afifo 峰值。</p>
+
+<h3>结论</h3>
+<ul>
+<li><b>AFIFO 峰值下降</b>：在浅缓冲（atomic）区间，均衡把单链路 AFIFO 峰值显著降低。
+16×16 双向 cap=5 时：原始需 afifo=<b>5</b>（mk=404），均衡只需 afifo=<b>2</b>（mk=423）——峰值 −60%。
+8×8 单向 cap≥2：3→2；16×16 双向 cap=3~4：3→2。</li>
+<li><b>makespan 略升</b>：对角下半经 QV 要多走垂直象限的整列短弧，关键路径变长，双向配置约 +5%
+（16×16 双向最优 244→267，8×8 双向 89→93）。跨界时延=10cy 放大了这一代价。</li>
+<li><b>本质是权衡</b>：把对角流量摊到两条中线边界，<strong>用更浅的 AFIFO（更小的边界 FIFO 面积）换取约 5% 的 makespan</strong>。
+若 AFIFO 深度是受限/昂贵资源（如 GALS 边界异步 FIFO），均衡方案更优；若追求最短 makespan 且 FIFO 充足，原始单路径更快。</li>
+</ul>
+
+<h3>16×16 双向曲线对比</h3>
+<div>{chart}</div>
+<p class='note'>低 cap 段两者接近（均衡略慢但 AFIFO 更浅）；高 cap 段原始 spread=0 在 cap≈45 探到 244，
+均衡在 cap≈40 探到 267（更早达平台但平台更高）。</p>
+</div>"""
+
+
 def main():
     data = load()
     rdata = load_router()
+    bdata = load_bal()
     caps = data["caps"]
     series_data = []
     bi_only = []
@@ -308,6 +407,7 @@ th{{background:#e2e8f0;}} td.l{{text-align:left;}} .note{{color:#64748b;font-siz
 cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 {cliff_note_16x16_bi(data)}
+{balanced_diag_section(data, bdata)}
 {router_buffer_section(rdata)}
 </body></html>"""
 

@@ -400,6 +400,57 @@ def deliv_border_quads(s, bidir, quads):
     return ch
 
 
+def deliv_border_bal_quads(s, bidir, quads):
+    """Border short-arc with a BALANCED diagonal quadrant.
+
+    The original deliv_border_quads routes the WHOLE diagonal quadrant (QD)
+    through the horizontal neighbour QH (every QD column is entered from the
+    north y-border).  Here the QD destinations are split in half:
+      * top  half of QD rows  -> reached via QH  (north y-border crossing)
+      * bottom half of QD rows -> reached via QV (west  x-border crossing)
+    so the diagonal load (e.g. 64 nodes for a 16x16 quadrant) is 32 via QH and
+    32 via QV.  This balances the two intermediate borders that previously were
+    asymmetric (the middle y-border carried QV+QD, the x-border only QH)."""
+    qi = fr.quad_of(s)
+    ch = defaultdict(list)
+    fr.add_ring_chain(ch, quads[qi]["order"], s, bidir)
+    hw, hh = fr._MX // 2, fr._MY // 2
+    qx = qi % 2
+    qy = qi // 2
+    qx0, qy0 = qx * hw, qy * hh
+    if qx == 0:
+        bxQ, arc_xs = hw - 1, list(range(hw, 2 * hw))
+    else:
+        bxQ, arc_xs = hw, list(range(hw - 1, -1, -1))
+    if qy == 0:
+        byQ, arc_ys = hh - 1, list(range(hh, 2 * hh))
+    else:
+        byQ, arc_ys = hh, list(range(hh - 1, -1, -1))
+    # QH (horizontal neighbour): cross x-border, arc across each home-region row
+    for y in range(qy0, qy0 + hh):
+        ch[fr.nid(bxQ, y)].append(fr.nid(arc_xs[0], y))
+        for k in range(len(arc_xs) - 1):
+            ch[fr.nid(arc_xs[k], y)].append(fr.nid(arc_xs[k + 1], y))
+    # QV (vertical neighbour): cross y-border, arc down each home-region column
+    for x in range(qx0, qx0 + hw):
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(len(arc_ys) - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    # diagonal QD, balanced split by rows:
+    half = len(arc_ys) // 2
+    #  top half rows of QD via QH: continue down QH columns for the first `half` rows
+    for x in arc_xs:
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(half - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    #  bottom half rows of QD via QV: cross x-border from QV border column, arc across
+    for y in arc_ys[half:]:
+        ch[fr.nid(bxQ, y)].append(fr.nid(arc_xs[0], y))
+        for k in range(len(arc_xs) - 1):
+            ch[fr.nid(arc_xs[k], y)].append(fr.nid(arc_xs[k + 1], y))
+    return ch
+
+
 def deliv_ringfollow(s, bidir):
     quads, _ = fr.quad_setup()
     return deliv_ringfollow_quads(s, bidir, quads)
@@ -498,20 +549,21 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             for lk, rel in home["links"]:
                 p, c = divmod(lk, 100000)
                 snd = anchor0 + rel
-                lt = fr.link_lat(p, c)
+                lt = fr.edge_lat(p, c)
                 evs.append((s, p, c, snd, lt, snd + lt, hop_kind(s, p, c)))
-        pending = deque((s, p, c, lat) for (p, c, lat) in home["crosses"])
+        pending = deque((s, p, c) for (p, c, _lat) in home["crosses"])
         placed = {s}
         while pending:
-            owner, p, c, lat = pending.popleft()
+            owner, p, c = pending.popleft()
             ap = arrive[(owner, p)]
             lk = p * 100000 + c
             st = sub[s][c]
+            hop = fr.edge_lat(p, c)
             cs = ap
             while True:
                 while cs in link_busy[lk] or cs in tlink.get(lk, ()):
                     cs += 1
-                anchor_c = cs + lat
+                anchor_c = cs + hop
                 if fits(st, anchor_c, tlink, teject):
                     # AFIFO occupancy on [ap, cs)
                     if afifo_cap is not None:
@@ -535,16 +587,16 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             for nd, rel in st["arrive_rel"].items():
                 arrive[(c, nd)] = anchor_c + rel
             if record_events:
-                evs.append((s, p, c, cs, lat, cs + lat, 2))
+                evs.append((s, p, c, cs, hop, cs + hop, 2))
                 for lk2, rel in st["links"]:
                     p2, c2 = divmod(lk2, 100000)
                     snd = anchor_c + rel
                     lt = fr.edge_lat(p2, c2)
                     evs.append((s, p2, c2, snd, lt, snd + lt, hop_kind(s, p2, c2)))
             placed.add(c)
-            for (pp, cc, llat) in st["crosses"]:
+            for (pp, cc, _llat) in st["crosses"]:
                 if cc not in placed:
-                    pending.append((c, pp, cc, llat))
+                    pending.append((c, pp, cc))
         return dict(tlink=tlink, teject=teject, tafifo=tafifo, af_ivs=af_ivs,
                     arrive=arrive, evs=evs)
 

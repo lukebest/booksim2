@@ -33,13 +33,17 @@ def deliv_quads(scheme, quads):
     """Bound delivery builder for the requested scheme."""
     if scheme == "ringfollow":
         return lambda s, b, q=quads: S.deliv_ringfollow_quads(s, b, q)
+    if scheme == "border_bal":
+        return lambda s, b, q=quads: S.deliv_border_bal_quads(s, b, q)
     return lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
 
 
 def shape_cfg(sz, scheme, tag):
     """Min-makespan ring shape (best_any), not AFIFO≤5 chosen."""
     data = load_optimal()
-    block = data["sizes"].get(f"{sz}x{sz}", {}).get(scheme, {}).get(tag, {})
+    # border_bal reuses the optimized border home-ring shapes for a fair compare
+    shape_scheme = "border" if scheme == "border_bal" else scheme
+    block = data["sizes"].get(f"{sz}x{sz}", {}).get(shape_scheme, {}).get(tag, {})
     rec = block.get("best_any") or block.get("chosen")
     if not rec:
         return (("rect", 0), ("rect", 0), ("rect", 0), ("rect", 0))
@@ -146,7 +150,9 @@ def sweep_config(sz, bidir, ramp_bw, caps=CAPS, scheme="border"):
 
 
 def run(sizes=SIZES, caps=CAPS, scheme="border"):
-    model = ("border short-arc" if scheme == "border" else "ring-follow")
+    model = {"border": "border short-arc",
+             "border_bal": "border short-arc, balanced diagonal",
+             "ringfollow": "ring-follow"}.get(scheme, scheme)
     out = {
         "updated": datetime.now(timezone.utc).isoformat(),
         "scheme": scheme,
@@ -172,7 +178,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sizes", type=int, nargs="+", default=list(SIZES))
     ap.add_argument("--caps", type=int, nargs="+", default=list(CAPS))
-    ap.add_argument("--scheme", default="border", choices=("border", "ringfollow"))
+    ap.add_argument("--scheme", default="border",
+                    choices=("border", "border_bal", "ringfollow"))
     args = ap.parse_args()
     run(tuple(args.sizes), tuple(args.caps), args.scheme)
 
