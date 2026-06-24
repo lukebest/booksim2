@@ -6,6 +6,7 @@ waiting happens in the border AFIFOs), eject bandwidth 2 flit/cy, H=4, V=6.
 Schedules come from utils/sched_ring_zerobuf.py.
 
   border_d5      : atomic pacing, single AFIFO <= 5 -> makespan 387cy (4096-sweep bi cfg).
+  grid_8x2_r2/r4 : 16x16 mesh, 8x2 grid border, atomic AFIFO<=5, ramp 2 or 4 flit/cy.
   ringfollow     : shape-opt ringfollow -> 416cy.
   global1        : 4 rings spliced into ONE global ring -> 754cy.
 
@@ -17,13 +18,17 @@ from pathlib import Path
 
 import sim_fused_rings as fr
 import sched_ring_zerobuf as S
+from sweep_buffer_pareto import build_grid_border
 from sweep_quad_ring_shapes import cfg_str, make_quads
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "dataflow_zerobuf.html"
 MX, MY = 16, 16
+H, V = 4, 6
+AFIFO_CAP = 5
 # 4096-sweep minimum-makespan bi border shape (mk=240 @ spread=0); atomic d5 uses same rings.
 BORDER_BI_CFG = (("vflip", 1), ("rect", 1), ("rect", 3), ("vflip", 3))
+GRID_8X2 = (8, 2)
 
 def quad_rings():
     hw, hh = MX // 2, MY // 2
@@ -47,7 +52,7 @@ def schedule_with_quads(cfg, deliv_fn, spread=0, lb_cross=False):
     return r, rings_from_quads(quads)
 
 
-def pack(name, label, note, result, ring_paths):
+def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp_bw=None):
     ev = result["events"]
     mk = result["makespan"]
     s_, p_, c_, t_, lat_, arr_, k_ = [], [], [], [], [], [], []
@@ -61,7 +66,7 @@ def pack(name, label, note, result, ring_paths):
             start_at[t].append(i)
         if a <= mk:
             end_at[a].append(i)
-    return {
+    out = {
         "name": name,
         "label": label,
         "note": note,
@@ -81,11 +86,61 @@ def pack(name, label, note, result, ring_paths):
             "global": [0] * (mk + 1), "peak": 0, "peak_cy": 0,
         },
     }
+    if grid is not None:
+        out["grid"] = {"Qx": grid[0], "Qy": grid[1]}
+    if cellmap is not None:
+        out["cellmap"] = cellmap
+    if ramp_bw is not None:
+        out["ramp_bw"] = ramp_bw
+    return out
+
+
+def grid_ring_paths(qx, qy):
+    wx, wy = MX // qx, MY // qy
+    return [fr.ham_cycle_rect(rx * wx, ry * wy, wx, wy)
+            for ry in range(qy) for rx in range(qx)]
+
+
+def grid_cell_map(qx, qy):
+    wx, wy = MX // qx, MY // qy
+    out = []
+    for s in range(MX * MY):
+        x, y = s % MX, s // MX
+        out.append((x // wx) + (y // wy) * qx)
+    return out
+
+
+def best_grid_atomic(qx, qy, ramp_bw):
+    deliv = lambda s, b: build_grid_border(s, qx, qy, b)
+    best_r, best_order = None, None
+    for order in ("interleave", "natural", "quad"):
+        r = S.schedule_atomic(MX, True, ramp_bw, deliv, afifo_cap=AFIFO_CAP,
+                              order=order, record_events=True)
+        if not r.get("ok") or r["afifo_depth"] > AFIFO_CAP:
+            continue
+        if best_r is None or r["makespan"] < best_r["makespan"]:
+            best_r, best_order = r, order
+    if best_r is None:
+        raise RuntimeError(f"grid {qx}x{qy} atomic AFIFO<={AFIFO_CAP} infeasible @ ramp={ramp_bw}")
+    return best_r, best_order
 
 
 def build():
-    fr.cfg(MX, MY, 4, 6)
+    fr.cfg(MX, MY, H, V)
     schemes = {}
+    qx, qy = GRID_8X2
+    gpaths = grid_ring_paths(qx, qy)
+    gcells = grid_cell_map(qx, qy)
+
+    for ramp_bw, key, tag in ((2, "grid_8x2_r2", "2 flit/cy"), (4, "grid_8x2_r4", "4 flit/cy")):
+        r_g, order = best_grid_atomic(qx, qy, ramp_bw)
+        schemes[key] = pack(
+            f"grid {qx}x{qy} ramp={ramp_bw}", f"grid {qx}×{qy} · AFIFO≤5 · 下 ramp={tag}",
+            f"16×16 划分为 {qx}×{qy} 个 {MX // qx}×{MY // qy} 小环 + 格间短弧；"
+            f"<code>schedule_atomic</code> 源序 <b>{order}</b>；"
+            f"makespan=<b>{r_g['makespan']}</b>，单链路 AFIFO {r_g['afifo_depth']}，"
+            f"均衡 {r_g['afifo_balanced']['peak']}。router 零 buffer。",
+            r_g, gpaths, grid=GRID_8X2, cellmap=gcells, ramp_bw=ramp_bw)
 
     quads_d5 = make_quads(BORDER_BI_CFG)
     deliv_d5 = lambda s, b, q=quads_d5: S.deliv_border_quads(s, b, q)
@@ -132,8 +187,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["border_d5", "ringfollow_opt", "ringfollow", "global1"],
-        "default": "border_d5",
+        "order": ["grid_8x2_r2", "grid_8x2_r4", "border_d5",
+                  "ringfollow_opt", "ringfollow", "global1"],
+        "default": "grid_8x2_r2",
         "schemes": schemes,
     }
     return cfg
@@ -175,10 +231,9 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 </style></head><body>
 <header>
 <h1>16×16 零 router-buffer AllGather · cycle-by-cycle</h1>
-<p>4×(8×8 Hamilton 环)+ 跨界 AFIFO · H=4, V=6 · 双向, 下 ramp=2 ·
+<p>grid 8×2 / border 四象限环 + 跨界 AFIFO · H=4, V=6 · 双向 ·
 所有方案 <b>router 内零 buffer</b>（ring_buf=0, eject_buf=0），等待只发生在 AFIFO。
-<p><b>border AFIFO≤5 atomic</b> 演示 makespan=387（4096 组环形状 + natural 源序相位错开）。
-当前 makespan=<b id="hmk"></b> cy ·
+<p>当前方案下 ramp=<b id="hramp"></b> flit/cy · makespan=<b id="hmk"></b> cy ·
 单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
 </header>
 <div class="layout">
@@ -222,8 +277,8 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
 <table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note"><b>387cy</b> = 4096 组扫描 border 环形状 + atomic 调度（单链路 AFIFO≤5，natural 源序）。
-240cy 需 spread=0 无 AFIFO 约束；ringfollow 见其它方案。</p>
+<p class="note"><b>grid 8×2</b>：16×16 划为 8×2 个 2×8 Hamilton 小环 + 格间 AFIFO，atomic 单链路 AFIFO≤5。
+<b>border 387cy</b>：4096 组扫描四象限环 + natural 源序。240cy 需 spread=0 且无 AFIFO 上限。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
 <canvas id="afc" width="280" height="150" style="width:100%;max-width:300px;display:block;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0"></canvas>
@@ -233,7 +288,7 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 </div>
 <div class="panel"><h2>Hamilton 环路径</h2>
 <svg id="ringsvg" style="width:100%;max-width:280px;display:block;margin:0 auto"></svg>
-<p class="note">彩色=各环走向；红虚线=象限边界（AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
+<p class="note">彩色=各小环走向；红虚线=格间/象限边界（AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
 </div>
 </div>
 </div>
@@ -247,7 +302,19 @@ cv.width=D.W; cv.height=D.H;
 function pos(i){return D.pos[i];}
 function coord(i){return [i%D.mx,(i/D.mx)|0];}
 function hue(s){return 'hsl('+Math.round(s*360/D.n)+',72%,48%)';}
-function isCross(p,c){return D.qmap[p]!==D.qmap[c];}
+function isCross(p,c){
+  if(S.cellmap)return S.cellmap[p]!==S.cellmap[c];
+  return D.qmap[p]!==D.qmap[c];}
+function drawGridLines(ctx, sc, pad, stroke, lw, dash){
+  if(!S.grid)return false;
+  const wx=D.mx/S.grid.Qx, wy=D.my/S.grid.Qy;
+  ctx.save();ctx.strokeStyle=stroke;ctx.lineWidth=lw;
+  if(dash)ctx.setLineDash(dash);else ctx.setLineDash([]);
+  for(let i=1;i<S.grid.Qx;i++){const x=pad+i*wx*sc;
+    ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,pad+(D.my-1)*sc);ctx.stroke();}
+  for(let j=1;j<S.grid.Qy;j++){const y=pad+j*wy*sc;
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(pad+(D.mx-1)*sc,y);ctx.stroke();}
+  ctx.restore();return true;}
 
 // scheme dropdown + comparison table
 const schemeSel=document.getElementById('scheme');
@@ -283,12 +350,24 @@ function drawRingSvg(){
     d+='Z';const el=document.createElementNS(NS,'path');el.setAttribute('d',d);
     el.setAttribute('fill','none');el.setAttribute('stroke',QCOL[qi%4]);
     el.setAttribute('stroke-width','1.6');el.setAttribute('opacity','0.85');svg.appendChild(el);});
-  const hw=D.mx/2,hh=D.my/2;
-  [['M',pad,pad+hh*sc,'L',pad+(D.mx-1)*sc,pad+hh*sc],
-   ['M',pad+hw*sc,pad,'L',pad+hw*sc,pad+(D.my-1)*sc]].forEach(a=>{
-    const l=document.createElementNS(NS,'line');l.setAttribute('x1',a[1]);l.setAttribute('y1',a[2]);
-    l.setAttribute('x2',a[3]);l.setAttribute('y2',a[4]);l.setAttribute('stroke','#dc2626');
-    l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);});
+  if(S.grid){
+    const wx=D.mx/S.grid.Qx, wy=D.my/S.grid.Qy;
+    for(let i=1;i<S.grid.Qx;i++){const x=pad+i*wx*sc;
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',x);l.setAttribute('y1',pad);
+      l.setAttribute('x2',x);l.setAttribute('y2',pad+(D.my-1)*sc);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
+    for(let j=1;j<S.grid.Qy;j++){const y=pad+j*wy*sc;
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',pad);l.setAttribute('y1',y);
+      l.setAttribute('x2',pad+(D.mx-1)*sc);l.setAttribute('y2',y);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
+  }else{
+    const hw=D.mx/2,hh=D.my/2;
+    [['M',pad,pad+hh*sc,'L',pad+(D.mx-1)*sc,pad+hh*sc],
+     ['M',pad+hw*sc,pad,'L',pad+hw*sc,pad+(D.my-1)*sc]].forEach(a=>{
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',a[1]);l.setAttribute('y1',a[2]);
+      l.setAttribute('x2',a[3]);l.setAttribute('y2',a[4]);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);});
+  }
 }
 
 let staticCv=null;
@@ -361,9 +440,11 @@ function ensureStatic(){
     if(x+1<D.mx){const[qx,qy]=pos(i+1);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}
     if(y+1<D.my){const[qx,qy]=pos(i+D.mx);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}}
   c.setLineDash([6,4]);c.strokeStyle='#dc2626';c.lineWidth=2;
-  const mx=D.pad+(hw-0.5)*D.cell,my=D.pad+(hh-0.5)*D.cell;
-  c.beginPath();c.moveTo(D.pad-10,my);c.lineTo(D.W-D.pad+10,my);c.stroke();
-  c.beginPath();c.moveTo(mx,D.pad-10);c.lineTo(mx,D.H-D.pad+10);c.stroke();
+  if(!drawGridLines(c,D.cell,D.pad,'#dc2626',2,[6,4])){
+    const mx=D.pad+(hw-0.5)*D.cell,my=D.pad+(hh-0.5)*D.cell;
+    c.beginPath();c.moveTo(D.pad-10,my);c.lineTo(D.W-D.pad+10,my);c.stroke();
+    c.beginPath();c.moveTo(mx,D.pad-10);c.lineTo(mx,D.H-D.pad+10);c.stroke();
+  }
   c.setLineDash([]);c.lineWidth=1.2;
   S.ring_paths.forEach((path,qi)=>{c.strokeStyle=QCOL[qi%4];c.globalAlpha=0.22;c.beginPath();
     path.forEach((nd,k)=>{const p=pos(nd);if(k)c.lineTo(p[0],p[1]);else c.moveTo(p[0],p[1]);});
@@ -418,6 +499,7 @@ function syncScheme(){
   document.getElementById('hmk').textContent=S.makespan;
   document.getElementById('haf').textContent=S.afifo_depth;
   document.getElementById('hafb').textContent=S.afifo_bal_peak;
+  document.getElementById('hramp').textContent=S.ramp_bw||2;
   document.getElementById('slider').max=S.makespan;
   document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
   document.getElementById('jumppeak').onclick=()=>{
