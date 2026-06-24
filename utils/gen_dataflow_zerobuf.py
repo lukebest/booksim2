@@ -52,6 +52,81 @@ def schedule_with_quads(cfg, deliv_fn, spread=0, lb_cross=False):
     return r, rings_from_quads(quads)
 
 
+def compute_conflicts(events_dict, ramp_bw, makespan):
+    """Detect router output-port conflicts in a fixed schedule.
+
+    At router R, cycle T, if >= 2 flits emit on the *same* output port -> conflict.
+    Mesh link (R->C): cap 1 flit/cy.  Down ramp at R: cap ramp_bw flit/cy.
+    """
+    ev = events_dict
+    n_ev = ev["n_ev"]
+    p_arr, c_arr, t_arr, arr_arr = ev["p"], ev["c"], ev["t"], ev["arr"]
+
+    link_buckets = {}
+    for i in range(n_ev):
+        key = (p_arr[i], c_arr[i], t_arr[i])
+        link_buckets.setdefault(key, []).append(i)
+    link_list = []
+    for (p, c, t), idxs in link_buckets.items():
+        if len(idxs) >= 2:
+            link_list.append({
+                "cy": t, "p": p, "c": c, "n": len(idxs), "ev": idxs[:24], "kind": "link",
+            })
+
+    order = sorted(range(n_ev), key=lambda i: (arr_arr[i], t_arr[i], i))
+    eject_buckets = {}
+    eject_at = [0] * n_ev
+    busy = {}
+
+    def reserve_down(node, earliest):
+        d = busy.setdefault(node, {})
+        t = earliest
+        while d.get(t, 0) >= ramp_bw:
+            t += 1
+        d[t] = d.get(t, 0) + 1
+        return t
+
+    for i in order:
+        nd = c_arr[i]
+        e = reserve_down(nd, arr_arr[i])
+        eject_at[i] = e
+        key = (nd, e)
+        eject_buckets.setdefault(key, []).append(i)
+
+    eject_list = []
+    for (nd, t), idxs in eject_buckets.items():
+        if len(idxs) > ramp_bw:
+            eject_list.append({
+                "cy": t, "p": nd, "c": -1, "n": len(idxs), "ev": idxs[:24], "kind": "eject",
+            })
+
+    mk = makespan + 1
+    at = [{"link": [], "eject": []} for _ in range(mk + 1)]
+    for item in link_list:
+        cy = item["cy"]
+        if cy <= mk:
+            at[cy]["link"].append(item)
+    for item in eject_list:
+        cy = item["cy"]
+        if cy <= mk:
+            at[cy]["eject"].append(item)
+
+    cycles_with = sorted({x["cy"] for x in link_list + eject_list})
+    return {
+        "link": link_list,
+        "eject": eject_list,
+        "at": at,
+        "eject_at": eject_at,
+        "n_link_conflicts": len(link_list),
+        "n_eject_conflicts": len(eject_list),
+        "n_flits_in_link_conflict": sum(x["n"] for x in link_list),
+        "n_flits_in_eject_conflict": sum(x["n"] for x in eject_list),
+        "n_cycles_with_conflict": len(cycles_with),
+        "clean": len(link_list) == 0 and len(eject_list) == 0,
+        "ramp_bw": ramp_bw,
+    }
+
+
 def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp_bw=None):
     ev = result["events"]
     mk = result["makespan"]
@@ -92,6 +167,10 @@ def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp
         out["cellmap"] = cellmap
     if ramp_bw is not None:
         out["ramp_bw"] = ramp_bw
+    else:
+        ramp_bw = 2
+    evd = out["events"]
+    out["conflicts"] = compute_conflicts(evd, ramp_bw, mk)
     return out
 
 
@@ -217,7 +296,7 @@ button.sec{background:#64748b;}
 input[type=range]{flex:1;min-width:120px;}
 select{font-size:13px;padding:4px 6px;border-radius:4px;border:1px solid #cbd5e1;}
 #cyc{font-weight:700;color:#0f766e;font-variant-numeric:tabular-nums;min-width:3em;display:inline-block;}
-.statgrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px;}
+.statgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;font-size:12px;}
 .statgrid div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;}
 .statgrid b{display:block;font-size:18px;color:#0f766e;}
 .phase{height:8px;border-radius:4px;background:#e2e8f0;margin:8px 0;overflow:hidden;}
@@ -228,13 +307,18 @@ table.cmp{border-collapse:collapse;width:100%;font-size:12px;margin-top:6px;}
 table.cmp td,table.cmp th{border:1px solid #e2e8f0;padding:4px 6px;text-align:center;}
 table.cmp th{background:#ccfbf1;}
 table.cmp tr.on td{background:#fef9c3;font-weight:700;}
+.conf-ok{color:#059669;font-weight:700;}
+.conf-bad{color:#dc2626;font-weight:700;}
+#conflictPanel{font-size:12px;max-height:180px;overflow-y:auto;}
+#conflictPanel li{margin:4px 0;}
 </style></head><body>
 <header>
 <h1>16×16 零 router-buffer AllGather · cycle-by-cycle</h1>
 <p>grid 8×2 / border 四象限环 + 跨界 AFIFO · H=4, V=6 · 双向 ·
 所有方案 <b>router 内零 buffer</b>（ring_buf=0, eject_buf=0），等待只发生在 AFIFO。
 <p>当前方案下 ramp=<b id="hramp"></b> flit/cy · makespan=<b id="hmk"></b> cy ·
-单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
+单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b> ·
+冲突检测=<b id="hconf"></b></p>
 </header>
 <div class="layout">
 <div>
@@ -269,13 +353,23 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div>单链路 AFIFO<b id="af">0</b></div>
 <div>均衡 AFIFO<b id="afb">0</b></div>
 <div>本 cycle 排队<b id="afnow">0</b></div>
+<div>链路冲突<b id="clink">0</b></div>
+<div>下ramp冲突<b id="ceject">0</b></div>
 </div>
 <p class="note" id="note"></p>
+<p class="note" id="confdef"><b>冲突定义</b>：同一 router 在同一 cycle 向<b>同一出端口</b>发出 ≥2 个 flit。
+Mesh 链路口容量 1 flit/cy；下 ramp 容量 = ramp_bw flit/cy。
+链路冲突在<b>发送 cycle</b>（t）标红；下 ramp 冲突在<b>eject cycle</b>标红。</p>
 </div>
 </div>
 <div>
+<div class="panel"><h2>冲突检测</h2>
+<p id="confSummary"></p>
+<ul id="conflictPanel"></ul>
+<button id="jumpconf" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到首个冲突 cycle</button>
+</div>
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
-<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th></tr></thead>
+<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th><th>冲突</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
 <p class="note"><b>grid 8×2</b>：16×16 划为 8×2 个 2×8 Hamilton 小环 + 格间 AFIFO，atomic 单链路 AFIFO≤5。
 <b>border 387cy</b>：4096 组扫描四象限环 + natural 源序。240cy 需 spread=0 且无 AFIFO 上限。</p>
@@ -327,9 +421,77 @@ function buildCmp(){const tb=document.getElementById('cmpbody');tb.innerHTML='';
   D.order.forEach(k=>{const sc=D.schemes[k];const tr=document.createElement('tr');
     if(k===key)tr.className='on';
     const balCls=sc.afifo_bal_peak<=5?' style="background:#dcfce7;font-weight:bold"':'';
+    const cf=sc.conflicts||{};
+    const cTxt=cf.clean?'<span class="conf-ok">无</span>':
+      '<span class="conf-bad">链路'+cf.n_link_conflicts+' 下ramp'+cf.n_eject_conflicts+'</span>';
     tr.innerHTML='<td>'+sc.label+'</td><td>'+sc.makespan+'</td><td>'+sc.afifo_depth+'</td>'
-      +'<td'+balCls+'>'+sc.afifo_bal_peak+'</td>';
+      +'<td'+balCls+'>'+sc.afifo_bal_peak+'</td><td>'+cTxt+'</td>';
     tb.appendChild(tr);});}
+
+function fmtCoord(n){const x=n%D.mx,y=(n/D.mx)|0;return '('+x+','+y+')';}
+function updateConflictPanel(k){
+  const C=S.conflicts||{at:[],clean:true,link:[],eject:[]};
+  const at=(C.at&&C.at[k])||{link:[],eject:[]};
+  let nLink=0,nEj=0;
+  at.link.forEach(x=>{nLink+=x.n;});
+  at.eject.forEach(x=>{nEj+=x.n;});
+  document.getElementById('clink').textContent=nLink;
+  document.getElementById('ceject').textContent=nEj;
+  const ul=document.getElementById('conflictPanel');
+  ul.innerHTML='';
+  if(C.clean){
+    document.getElementById('confSummary').innerHTML=
+      '<span class="conf-ok">✓ 全 schedule 无端口冲突</span>（共 '+S.events.n_ev+' 次链路发送均已错开）。';
+    return;
+  }
+  document.getElementById('confSummary').innerHTML=
+    '<span class="conf-bad">发现冲突</span>：链路端口 '+C.n_link_conflicts+
+    ' 处 / 下 ramp '+C.n_eject_conflicts+' 处；涉及 '+C.n_cycles_with_conflict+' 个 cycle。';
+  const show=at.link.concat(at.eject);
+  if(!show.length){
+    const li=document.createElement('li');li.textContent='当前 cycle '+k+' 无冲突';
+    ul.appendChild(li);return;
+  }
+  show.forEach(x=>{
+    const li=document.createElement('li');
+    if(x.kind==='link'||x.c>=0){
+      li.innerHTML='<b>链路</b> cy<b>'+x.cy+'</b> router '+fmtCoord(x.p)+
+        ' → '+fmtCoord(x.c)+'：<b>'+x.n+'</b> flit 同端口同发';
+    }else{
+      li.innerHTML='<b>下ramp</b> cy<b>'+x.cy+'</b> 节点 '+fmtCoord(x.p)+
+        '：<b>'+x.n+'</b> flit（cap '+((C.ramp_bw)||2)+'）';
+    }
+    ul.appendChild(li);
+  });
+}
+function drawConflicts(k){
+  const C=S.conflicts;if(!C||!C.at)return;
+  const at=C.at[k]||{link:[],eject:[]};
+  at.link.forEach(x=>{
+    const a=pos(x.p),b=pos(x.c);
+    ctx.strokeStyle='#dc2626';ctx.lineWidth=5;ctx.globalAlpha=0.9;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#dc2626';ctx.font='bold 11px sans-serif';
+    ctx.fillText('×'+x.n,a[0]+(b[0]-a[0])*0.4,a[1]+(b[1]-a[1])*0.4-8);
+    [x.p,x.c].forEach(nd=>{const p=pos(nd);
+      ctx.beginPath();ctx.arc(p[0],p[1],11,0,Math.PI*2);
+      ctx.strokeStyle='#dc2626';ctx.lineWidth=3;ctx.stroke();});
+  });
+  at.eject.forEach(x=>{
+    const p=pos(x.p);
+    ctx.beginPath();ctx.arc(p[0],p[1],13,0,Math.PI*2);
+    ctx.strokeStyle='#b91c1c';ctx.lineWidth=4;ctx.stroke();
+    ctx.fillStyle='#b91c1c';ctx.font='bold 11px sans-serif';
+    ctx.fillText('eject×'+x.n,p[0]+8,p[1]-10);
+  });
+}
+function firstConflictCy(){
+  const C=S.conflicts;if(!C)return 0;
+  for(const x of (C.link||[]))return x.cy;
+  for(const x of (C.eject||[]))return x.cy;
+  return 0;
+}
 
 const srcSel=document.getElementById('src');
 for(let s=0;s<D.n;s++){const [x,y]=coord(s);const o=document.createElement('option');
@@ -488,6 +650,8 @@ function draw(k){
   document.getElementById('ej').textContent=ej;
   drawAfifoChart(k);
   highlightAfifoLink(k);
+  drawConflicts(k);
+  updateConflictPanel(k);
 }
 
 function syncScheme(){
@@ -500,6 +664,10 @@ function syncScheme(){
   document.getElementById('haf').textContent=S.afifo_depth;
   document.getElementById('hafb').textContent=S.afifo_bal_peak;
   document.getElementById('hramp').textContent=S.ramp_bw||2;
+  const C=S.conflicts||{clean:true};
+  document.getElementById('hconf').innerHTML=C.clean?
+    '<span class="conf-ok">无冲突</span>':
+    '<span class="conf-bad">链路'+C.n_link_conflicts+'/下ramp'+C.n_eject_conflicts+'</span>';
   document.getElementById('slider').max=S.makespan;
   document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
   document.getElementById('jumppeak').onclick=()=>{
@@ -508,6 +676,10 @@ function syncScheme(){
   };
   document.getElementById('jumpbal').onclick=()=>{
     const cy=(S.afifo_balanced&&S.afifo_balanced.peak_cy)||0;stop();
+    if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
+  };
+  document.getElementById('jumpconf').onclick=()=>{
+    const cy=firstConflictCy();if(!cy)return;stop();
     if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
   };
   buildCmp();drawRingSvg();rebuild(0);draw(0);
@@ -541,12 +713,14 @@ def render():
     data = json.dumps(cfg, separators=(",", ":"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(HTML.replace("__DATA__", data), encoding="utf-8")
-    sizes = {k: (v["makespan"], v["afifo_depth"], v["afifo_bal_peak"])
+    sizes = {k: (v["makespan"], v["afifo_depth"], v["afifo_bal_peak"],
+                 v["conflicts"]["clean"], v["conflicts"]["n_link_conflicts"])
              for k, v in cfg["schemes"].items()}
     print(f"Wrote {OUT}")
     for k in cfg["order"]:
-        mk, af, bal = sizes[k]
-        print(f"  {k:16s} makespan={mk:4d}  AFIFO_link={af:2d}  AFIFO_bal={bal}")
+        mk, af, bal, clean, ncf = sizes[k]
+        flag = "CLEAN" if clean else f"CONFLICT link={ncf}"
+        print(f"  {k:16s} makespan={mk:4d}  AFIFO_link={af:2d}  AFIFO_bal={bal}  {flag}")
 
 
 if __name__ == "__main__":
