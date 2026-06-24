@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import sched_ring_zerobuf as S
+import sim_fused_rings as fr
 from sweep_afifo_depth import CAPS, SIZES, collect_atomic, shape_cfg, sweep_config
 from sweep_quad_ring_shapes import cfg_str, make_quads
 
@@ -29,8 +30,9 @@ SIZE_OUT = ROOT / "results" / "msg_size_sweep.json"
 
 RAMP4 = 4
 MSG_SIZES = (1, 2, 3, 4, 5)
-SIZE_RAMPS = (1, 2, 4)
-SIZE_CAP = 5           # border AFIFO depth constrained to <= 5 FLITS
+SIZE_RAMPS = (1, 2)
+SIZE_CROSS_LAT = 6       # border AFIFO link latency (cy); H=4, V=6
+SIZE_CAP = 5             # border AFIFO depth constrained to <= 5 FLITS
 # Atomic-cap pool for the size study: atomic runs paced at afifo_cap 0..5 yield
 # the depth<=5 candidates; merged with the (rarely feasible) spread=0 schedule
 # and filtered at depth<=SIZE_CAP.  Verified to reproduce
@@ -60,12 +62,8 @@ def run_ramp4(sizes=SIZES, caps=CAPS):
 
 
 def best_makespan(sz, bidir, ramp_bw, quads, flits, cap=SIZE_CAP):
-    """Minimum makespan at AFIFO depth <= cap (flit-accurate), using the same
-    candidate pool as sweep_afifo_depth: the TDM spread=0 schedule plus atomic
-    placements paced at afifo_cap 0..5.  The atomic pacing threshold changes the
-    makespan, so the optimum at depth<=5 may come from a run done at a lower cap;
-    all candidates are filtered at afifo_depth<=cap.  Verified to reproduce
-    border_afifo_depth_sweep cap=5 for m=1 on all sizes/directions."""
+    """Minimum makespan at AFIFO depth <= cap (flit-accurate), cross_lat=6."""
+    fr.cfg(sz, sz, 4, 6, cross=SIZE_CROSS_LAT)
     deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
     cands = []
     for lb in (False, True):
@@ -85,7 +83,8 @@ def run_size(sizes=SIZES, msg_sizes=MSG_SIZES, ramps=SIZE_RAMPS):
         "updated": datetime.now(timezone.utc).isoformat(),
         "scheme": "border",
         "model": ("border short-arc, router_buf=0, wormhole m-flit messages, "
-                  f"AFIFO cap={SIZE_CAP}"),
+                  f"AFIFO cap={SIZE_CAP}, cross_lat={SIZE_CROSS_LAT}"),
+        "cross_lat": SIZE_CROSS_LAT,
         "msg_sizes": list(msg_sizes),
         "ramps": list(ramps),
         "cap": SIZE_CAP,

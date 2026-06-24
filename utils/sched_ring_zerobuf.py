@@ -279,7 +279,7 @@ def afifo_peak_flits(afifo_intervals, flits):
 
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
              record_events=False, quads=None, lb_cross=False, flits=1):
-    fr.cfg(sz, sz, 4, 6)
+    fr.cfg(sz, sz, 4, 6, cross=fr.CROSS_LAT)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
@@ -539,7 +539,7 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
     <= afifo_cap.  If a crossing would need to wait deeper than afifo_cap, the
     source's injection is bumped (pacing the home conveyor so flits reach the
     border no faster than the destination ring can drain them)."""
-    fr.cfg(sz, sz, 4, 6)
+    fr.cfg(sz, sz, 4, 6, cross=fr.CROSS_LAT)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
