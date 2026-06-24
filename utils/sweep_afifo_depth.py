@@ -83,7 +83,7 @@ def min_at_cap(candidates, cap):
     return min(feas, key=lambda x: x["makespan"])
 
 
-def collect_atomic(sz, bidir, ramp_bw, quads, caps, scheme="border"):
+def collect_atomic(sz, bidir, ramp_bw, quads, caps, scheme="border", flits=1):
     """Run atomic once per (cap, order); pool must be merged across caps so
     a schedule found at cap=1 (depth=1) remains feasible at cap=2."""
     deliv = deliv_quads(scheme, quads)
@@ -92,7 +92,7 @@ def collect_atomic(sz, bidir, ramp_bw, quads, caps, scheme="border"):
         cap_arg = 0 if cap == 0 else cap
         for order in ("interleave", "natural", "quad"):
             r = S.schedule_atomic(sz, bidir, ramp_bw, deliv, afifo_cap=cap_arg,
-                                  order=order, quads=quads)
+                                  order=order, quads=quads, flits=flits)
             if r.get("ok"):
                 pool.append({
                     "makespan": r["makespan"],

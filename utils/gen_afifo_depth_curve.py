@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "border_afifo_depth_sweep.json"
 ROUTER_JSON_PATH = ROOT / "results" / "router_afifo_depth_sweep.json"
 BAL_JSON_PATH = ROOT / "results" / "border_bal_afifo_depth_sweep.json"
+RAMP4_JSON_PATH = ROOT / "results" / "ramp4_afifo_depth_sweep.json"
+SIZE_JSON_PATH = ROOT / "results" / "msg_size_sweep.json"
 HTML_PATH = ROOT / "results" / "report_afifo_depth_curve.html"
 
 ROUTER_CAPS = (0, 1, 2, 3, 4)
@@ -31,7 +33,8 @@ def load():
     return json.loads(JSON_PATH.read_text(encoding="utf-8"))
 
 
-def line_chart(caps, series_data, title, width=720, height=380):
+def line_chart(caps, series_data, title, width=720, height=380,
+               xlabel="边界 AFIFO 深度上限（per-link peak）"):
     margin_l, margin_r, margin_t, margin_b = 58, 24, 36, 52
     plot_w = width - margin_l - margin_r
     plot_h = height - margin_t - margin_b
@@ -62,7 +65,7 @@ def line_chart(caps, series_data, title, width=720, height=380):
         x = margin_l + (cap - xmin) / xspan * plot_w
         parts.append(f'<line x1="{x:.1f}" y1="{margin_t+plot_h}" x2="{x:.1f}" y2="{margin_t+plot_h+4}" stroke="#64748b"/>')
         parts.append(f'<text x="{x:.1f}" y="{margin_t+plot_h+18}" font-size="10" text-anchor="middle">{cap}</text>')
-    parts.append(f'<text x="{margin_l+plot_w/2:.1f}" y="{height-8}" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>')
+    parts.append(f'<text x="{margin_l+plot_w/2:.1f}" y="{height-8}" font-size="11" text-anchor="middle">{html.escape(xlabel)}</text>')
     parts.append(f'<text x="14" y="{margin_t+plot_h/2:.1f}" font-size="11" text-anchor="middle" transform="rotate(-90 14 {margin_t+plot_h/2:.1f})">makespan (cy)</text>')
 
     lx = margin_l + 8
@@ -104,48 +107,65 @@ def table_rows(data):
 
 
 def cliff_note_16x16_bi(data):
-    """Explain 16×16 bi drop from ~379 to 240 near high AFIFO caps."""
+    """Explain the 16×16 bi makespan cliff (atomic plateau -> spread=0) using the
+    actual sweep numbers, so the prose stays correct when data is regenerated."""
     cfg = data.get("configs", {}).get("16x16_bi", {})
-    pts = {p["cap"]: p for p in cfg.get("points", [])}
-    d40 = pts.get(40, {}).get("detail") or {}
-    d46 = pts.get(46, {}).get("detail") or pts.get(48, {}).get("detail") or {}
-    mk40 = pts.get(40, {}).get("makespan", "—")
-    mk46 = pts.get(46, {}).get("makespan") or pts.get(48, {}).get("makespan", "—")
-    depth46 = d46.get("afifo_depth", 46)
+    pts = [p for p in cfg.get("points", []) if p.get("makespan") is not None]
+    by_cap = {p["cap"]: p for p in pts}
+    if not pts:
+        return ""
+    mkmin = min(p["makespan"] for p in pts)
+    # first cap that reaches the minimum (the observed cliff), and the cap just
+    # before it (the top of the plateau)
+    thr_cap = next(p["cap"] for p in pts if p["makespan"] == mkmin)
+    plateau_pts = [p for p in pts if p["cap"] < thr_cap]
+    plateau = plateau_pts[-1] if plateau_pts else pts[0]
+    mk_plat = plateau["makespan"]
+    d_plat = (plateau.get("detail") or {}).get("afifo_depth", "?")
+    prev_cap = plateau["cap"]
+    dmin = by_cap[thr_cap].get("detail") or {}
+    depth = dmin.get("afifo_depth", "?")
+    bal = dmin.get("afifo_balanced", "?")
+    n = cfg.get("n", 256)
+    ramp = cfg.get("ramp_bw", 2)
+    elb = cfg.get("eject_lb", (n - 1 + ramp - 1) // ramp)
+    drop = f"{(mk_plat - mkmin) / mk_plat * 100:.0f}%" if isinstance(mk_plat, int) else "?"
+    ratio = f"{mkmin / elb:.2f}×" if isinstance(mkmin, int) and isinstance(elb, int) and elb else "—"
     return f"""
-<div class='card'><h2>案例：16×16 双向为何在 AFIFO≈46 后 makespan 骤降至 240？</h2>
-<p>表中可见：cap≤40 时 makespan 稳定在 <b>{mk40} cy</b>；cap≥46 时降至 <b>{mk46} cy</b>。
-若曲线只在 40 与 48 两点采样，会<strong>看起来像「到 48 才掉」</strong>——实际是<strong>门槛在 46</strong>（本 sweep 已补 45/46/47 采样点）。</p>
+<div class='card'><h2>案例：16×16 双向为何在深 AFIFO 后 makespan 骤降至 {mkmin}？</h2>
+<p>表中可见：cap≤{prev_cap} 时 makespan 稳定在 <b>{mk_plat} cy</b>（AFIFO 仅需 {d_plat}）；
+cap≥{thr_cap} 时降至 <b>{mkmin} cy</b>（约 −{drop}）。本 sweep 在 {prev_cap} 与 {thr_cap} 之间未采样，
+故断崖<strong>首次出现在 cap={thr_cap}</strong>——真实门槛是下面这套 <code>spread=0</code> 调度的 AFIFO 峰值深度 <b>{depth}</b>。</p>
 
 <h3>1. 为什么会下降？——两种调度范式切换</h3>
-<p>cap≤40 时的最优方案来自 <code>schedule_atomic</code>（相位错开 / pacing）：</p>
+<p>cap≤{prev_cap} 时的最优方案来自 <code>schedule_atomic</code>（相位错开 / pacing）：</p>
 <ul>
 <li>每个源作为整体原子放置；若某次跨界会使任意边界 AFIFO 在任意 cycle 超过 cap，就<strong>整体推迟该源的注入</strong>。</li>
-<li>在 AFIFO 预算很小（深度≤3）时，只能大量「等」在边界，注入偏移累积 → makespan ≈379 cy，但 AFIFO 峰值仅 3。</li>
+<li>在 AFIFO 预算很小（深度≤{d_plat}）时，只能大量「等」在边界，注入偏移累积 → makespan ≈{mk_plat} cy，但 AFIFO 峰值仅 {d_plat}。</li>
 <li>这是<strong>保守、低缓冲</strong>策略：用更长时间换更浅的 AFIFO。</li>
 </ul>
-<p>cap≥46 时，另一类方案变得可行：<code>schedule</code> 的 <strong>spread=0</strong>（环上链路时分插入）：</p>
+<p>cap≥{depth} 时，另一类方案变得可行：<code>schedule</code> 的 <strong>spread=0</strong>（环上链路时分插入）：</p>
 <ul>
 <li>四象限 Hamilton 环先按固有节拍跑（Pass1 本象限 home 子树）；跨界 flit 插入环内链路空闲 send 槽（Pass2），允许在 AFIFO 中<strong>短暂排队</strong>。</li>
-<li>不强制 per-source 原子 pacing，跨界 burst 与环内 conveyer 更自然对齐 → makespan <b>240 cy</b>（约 −37%）。</li>
-<li>代价：单链路 AFIFO 峰值约 <b>{depth46}</b>（均衡深度约 40），必须用更深的边界 FIFO 承受等待。</li>
+<li>不强制 per-source 原子 pacing，跨界 burst 与环内 conveyer 更自然对齐 → makespan <b>{mkmin} cy</b>（约 −{drop}）。</li>
+<li>代价：单链路 AFIFO 峰值约 <b>{depth}</b>（8 路并行均衡后约 {bal}），必须用更深的边界 FIFO 承受等待。</li>
 </ul>
 <p><b>结论：</b>下降不是「缓冲越深传输越快」的连续渐变，而是<strong>低深度下只能用 atomic 保守调度；深度够深后 spread=0 的环时分调度才合法并显著更优</strong>。</p>
 
-<h3>2. 为什么门槛在 46（而不是 40 或 5）？</h3>
+<h3>2. 为什么门槛在 {depth}（而不是 {prev_cap} 或 {d_plat}）？</h3>
 <p>对每个候选调度，我们要求 <code>afifo_depth ≤ cap</code>（单链路峰值）。</p>
 <ul>
-<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>{depth46}</b>（环形状优化：vflip+90° / rect+90° / rect+270° / rect+90°）。</li>
-<li>cap=45 时该方案<strong>不被允许</strong>（46&gt;45），搜索只能在 atomic 等低深度方案里选 → 仍约 379 cy。</li>
-<li>cap=46 时 <code>spread=0</code> 首次入选候选集，240 &lt; 379，曲线<strong>断崖式</strong>下探。</li>
+<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>{depth}</b>。</li>
+<li>cap&lt;{depth} 时该方案<strong>不被允许</strong>，搜索只能在 atomic 等低深度方案里选 → 仍约 {mk_plat} cy。</li>
+<li>cap≥{depth} 时 <code>spread=0</code> 首次入选候选集，{mkmin} &lt; {mk_plat}，曲线<strong>断崖式</strong>下探（本 sweep 首个满足的采样点为 cap={thr_cap}）。</li>
 </ul>
-<p>cap=5 时虽也允许「深度≤5」，但 spread=0（峰值 {depth46}）仍不可行；atomic 在 cap=3 已到其自身最优 379，故 cap=5~40 平台不变。</p>
+<p>cap={d_plat} 时虽也允许「深度≤{d_plat}」，但 spread=0（峰值 {depth}）仍不可行；atomic 在 cap={d_plat} 已到其自身最优 {mk_plat}，故 cap={d_plat}~{prev_cap} 平台不变。</p>
 
 <h3>3. 与 eject 下界的关系</h3>
-<p>16×16 双向 eject 下界 = (N−1)/2 = <b>128 cy</b>。240 cy 约为下界的 1.88×，仍远高于下界——瓶颈在<strong>跨界+环内链路时分</strong>与 AFIFO 等待，而非下 ramp 带宽。</p>
+<p>16×16 双向 eject 下界 = ⌈(N−1)/{ramp}⌉ = <b>{elb} cy</b>。{mkmin} cy 约为下界的 {ratio}，仍远高于下界——瓶颈在<strong>跨界+环内链路时分</strong>与 AFIFO 等待，而非下 ramp 带宽。</p>
 
-<p class='note'>cap≤40 最优：atomic/natural，mk={mk40}，AFIFO峰值={d40.get('afifo_depth','?')}。
-cap≥46 最优：schedule spread=0，mk={mk46}，AFIFO峰值={depth46}，均衡深度≈{d46.get('afifo_balanced','?')}。</p>
+<p class='note'>cap≤{prev_cap} 最优：atomic/natural，mk={mk_plat}，AFIFO峰值={d_plat}。
+cap≥{thr_cap} 最优：schedule spread=0，mk={mkmin}，AFIFO峰值={depth}，均衡深度≈{bal}。</p>
 </div>"""
 
 
@@ -364,10 +384,175 @@ def balanced_diag_section(data, bdata):
 </div>"""
 
 
+def load_ramp4():
+    if not RAMP4_JSON_PATH.exists():
+        return None
+    return json.loads(RAMP4_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def load_size():
+    if not SIZE_JSON_PATH.exists():
+        return None
+    return json.loads(SIZE_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _best_point(points):
+    feas = [p for p in points if p.get("makespan") is not None]
+    if not feas:
+        return None, None, None
+    pmin = min(feas, key=lambda p: p["makespan"])
+    return pmin["makespan"], pmin["cap"], (pmin.get("detail") or {}).get("afifo_depth")
+
+
+def ramp4_section(data, r4data):
+    """New 下 ramp=4 curve: makespan vs AFIFO depth at eject bandwidth 4,
+    plus a comparison against each configuration's native down-ramp (uni=1,
+    bi=2)."""
+    if not r4data:
+        return ""
+    caps = r4data["caps"]
+    bi_only, uni_only = [], []
+    for key, label, color in SERIES:
+        cfg = r4data["configs"].get(key)
+        if not cfg:
+            continue
+        pts = cfg["points"]
+        (bi_only if key.endswith("_bi") else uni_only).append((label, color, pts))
+
+    # comparison table: native-ramp best vs ramp=4 best
+    rows = []
+    for key, label, _ in SERIES:
+        nc = data["configs"].get(key)
+        rc = r4data["configs"].get(key)
+        if not nc or not rc:
+            continue
+        native_ramp = nc.get("ramp_bw", 2 if key.endswith("_bi") else 1)
+        n = nc.get("n", "?")
+        nmk, ncap, _ = _best_point(nc["points"])
+        rmk, rcap, _ = _best_point(rc["points"])
+        lb4 = rc.get("eject_lb", "?")
+        ratio = f"{rmk/lb4:.2f}×" if isinstance(rmk, int) and isinstance(lb4, int) and lb4 else "—"
+        drop = f"−{(nmk-rmk)/nmk*100:.0f}%" if isinstance(nmk, int) and isinstance(rmk, int) and nmk else "—"
+        rows.append(
+            f"<tr><td class='l'>{html.escape(label)}</td><td>{n}</td>"
+            f"<td>{native_ramp}</td><td>{nmk} @cap{ncap}</td>"
+            f"<td>{rmk} @cap{rcap}</td><td>{lb4}</td><td>{ratio}</td><td>{drop}</td></tr>"
+        )
+    tbl = (
+        "<table><tr><th>配置</th><th>N</th><th>原下 ramp</th>"
+        "<th>原最优 mk</th><th>ramp=4 最优 mk</th><th>ramp=4 eject 下界</th>"
+        "<th>mk/下界</th><th>对比原 ramp</th></tr>"
+        f"{''.join(rows)}</table>"
+    )
+
+    return f"""
+<div class='card'><h2>下 ramp = 4 flit/cycle/node</h2>
+<p class='note'>更新：{html.escape(r4data.get('updated', ''))} ·
+<code>results/ramp4_afifo_depth_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only ramp4</code></p>
+<p>把每节点 eject（下 ramp）带宽提到 <b>4 flit/cy</b>（其余模型不变：router 零 buffer、跨界 AFIFO=10cy、环形状同上）。
+下 ramp 是<strong>每节点每周期能落地的 flit 数</strong>，与环方向无关，故单/双向环都给出 ramp=4 曲线。
+eject 下界 = ⌈(N−1)/4⌉，比 ramp=1/2 更低，注入相位更易错开。</p>
+
+<h3>双向环 @ 下 ramp=4</h3>
+{line_chart(caps, bi_only, "makespan vs 边界 AFIFO 深度上限（双向, ramp=4）")}
+<h3>单向环 @ 下 ramp=4</h3>
+{line_chart(caps, uni_only, "makespan vs 边界 AFIFO 深度上限（单向, ramp=4）")}
+
+<h3>数值表（每格 = 该 AFIFO 上限下最小 makespan, ramp=4）</h3>
+{table_rows(r4data)}
+
+<h3>与原下 ramp 对比（最优 makespan）</h3>
+{tbl}
+<p class='note'>下 ramp 加宽主要帮助 <strong>eject 受限</strong> 的配置：单向环（原 ramp=1，eject 下界最大）受益最明显；
+小尺寸或已被「跨界+环内链路时分」限制的配置，下 ramp 从 2→4 收益有限。</p>
+</div>"""
+
+
+def size_section(sdata):
+    """Makespan vs message (data) size m=1..5 flit. Wormhole, 0 router buffer:
+    a message occupies m consecutive cycles on every link and m eject cycles."""
+    if not sdata:
+        return ""
+    ms = sdata["msg_sizes"]
+    cap = sdata.get("cap", 48)
+
+    def pts_for(key, ramp):
+        cfg = sdata["configs"].get(key, {})
+        row = cfg.get("by_ramp", {}).get(str(ramp))
+        if not row:
+            return None
+        return [{"cap": m, "makespan": mk} for m, mk in zip(ms, row)]
+
+    # chart 1: all 6 configs at ramp=4
+    series4 = []
+    for key, label, color in SERIES:
+        p = pts_for(key, 4)
+        if p:
+            series4.append((label, color, p))
+    chart4 = line_chart(ms, series4, "makespan vs 数据大小（所有配置, 下 ramp=4）",
+                        xlabel="数据大小 m (flit/message)")
+
+    # table: configs × m at ramp=4 + eject LB
+    rows = []
+    for key, label, _ in SERIES:
+        cfg = sdata["configs"].get(key)
+        if not cfg:
+            continue
+        row = cfg.get("by_ramp", {}).get("4", [])
+        lb = cfg.get("eject_lb", {}).get("4", [])
+        cells = "".join(f"<td>{mk}</td>" for mk in row)
+        lbcell = "/".join(str(x) for x in lb)
+        rows.append(
+            f"<tr><td class='l'>{html.escape(label)}</td>{cells}<td>{lbcell}</td></tr>"
+        )
+    hdr = "".join(f"<th>m={m}</th>" for m in ms)
+    tbl = (f"<table><tr><th>配置 (ramp=4)</th>{hdr}<th>eject 下界 m=1..5</th></tr>"
+           f"{''.join(rows)}</table>")
+
+    # chart 2: representative configs, ramp 1/2/4 overlay
+    overlay_blocks = []
+    for rep_key, rep_label in (("16x16_bi", "16×16 双向"), ("8x8_bi", "8×8 双向")):
+        ramp_colors = {1: "#dc2626", 2: "#f59e0b", 4: "#059669"}
+        ser = []
+        for rb in sdata.get("ramps", (1, 2, 4)):
+            p = pts_for(rep_key, rb)
+            if p:
+                ser.append((f"下 ramp={rb}", ramp_colors.get(rb, "#64748b"), p))
+        if ser:
+            overlay_blocks.append(
+                f"<h3>{rep_label}：makespan vs 数据大小（下 ramp=1/2/4）</h3>"
+                + line_chart(ms, ser, f"{rep_label}：下 ramp 吸收报文长度",
+                             xlabel="数据大小 m (flit/message)")
+            )
+
+    return f"""
+<div class='card'><h2>数据大小（每报文 flit 数）vs makespan</h2>
+<p class='note'>更新：{html.escape(sdata.get('updated', ''))} ·
+<code>results/msg_size_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only size</code></p>
+<p>把每个 src→dst 投递从 1 flit 改为 <b>m flit</b> 的 wormhole 报文（router 零 buffer：
+报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
+此处取边界 AFIFO 上限 = <b>{cap}</b>（实质无限）以聚焦 makespan 随报文长度的增长。
+m=1 与上文单 flit 结果完全一致（已校验）。</p>
+
+<h3>所有配置 @ 下 ramp=4</h3>
+{chart4}
+<h3>数值表</h3>
+{tbl}
+<p class='note'>eject 下界 = ⌈(N−1)·m / ramp⌉：每节点要收 (N−1) 个报文共 (N−1)·m 个 flit，下 ramp 每周期吞 4 个。</p>
+
+{''.join(overlay_blocks)}
+<p class='note'>关键规律：<strong>eject 受限</strong> 的大尺寸配置 makespan 近似随 <b>m/ramp</b> 线性增长——
+把下 ramp 从 2 提到 4，等于把同样长度报文的 eject 时间减半，因此「报文翻倍 + 下 ramp 翻倍」可让 makespan 基本不变。
+小尺寸（4×4/8×8）受路径时延与跨界 10cy 主导，报文增大时增速低于 eject 下界、下 ramp 加宽收益也较小。</p>
+</div>"""
+
+
 def main():
     data = load()
     rdata = load_router()
     bdata = load_bal()
+    r4data = load_ramp4()
+    sdata = load_size()
     caps = data["caps"]
     series_data = []
     bi_only = []
@@ -407,6 +592,8 @@ th{{background:#e2e8f0;}} td.l{{text-align:left;}} .note{{color:#64748b;font-siz
 cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 {cliff_note_16x16_bi(data)}
+{ramp4_section(data, r4data)}
+{size_section(sdata)}
 {balanced_diag_section(data, bdata)}
 {router_buffer_section(rdata)}
 </body></html>"""

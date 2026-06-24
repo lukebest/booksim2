@@ -1,0 +1,55 @@
+== 4x4_uni ==
+  caching spread 0..29...
+  60 spread schedules in 0.1s
+  pipelined: mk=46 ring_buf=1 eject_buf=2 afifo=1
+  K=0: mk@A=0=39 mk@A=48=37
+  K=1: mk@A=0=39 mk@A=48=37
+  K=2: mk@A=0=39 mk@A=48=37
+  K=3: mk@A=0=39 mk@A=48=37
+  K=4: mk@A=0=39 mk@A=48=37
+== 4x4_bi ==
+  caching spread 0..29...
+  60 spread schedules in 0.1s
+  pipelined: mk=42 ring_buf=0 eject_buf=1 afifo=1
+  K=0: mk@A=0=33 mk@A=48=33
+  K=1: mk@A=0=33 mk@A=48=33
+  K=2: mk@A=0=33 mk@A=48=33
+  K=3: mk@A=0=33 mk@A=48=33
+  K=4: mk@A=0=33 mk@A=48=33
+== 8x8_uni ==
+  caching spread 0..49...
+  100 spread schedules in 2.8s
+  pipelined: mk=125 ring_buf=1 eject_buf=2 afifo=1
+  K=0: mk@A=0=182 mk@A=48=124
+  K=1: mk@A=0=182 mk@A=48=124
+  K=2: mk@A=0=182 mk@A=48=124
+  K=3: mk@A=0=182 mk@A=48=124
+  K=4: mk@A=0=182 mk@A=48=124
+== 8x8_bi ==
+  caching spread 0..49...
+  100 spread schedules in 2.6s
+  pipelined: mk=89 ring_buf=1 eject_buf=2 afifo=2
+  K=0: mk@A=0=124 mk@A=48=89
+  K=1: mk@A=0=124 mk@A=48=89
+  K=2: mk@A=0=124 mk@A=48=89
+  K=3: mk@A=0=124 mk@A=48=89
+  K=4: mk@A=0=124 mk@A=48=89
+== 16x16_uni ==
+  caching spread 0..79...
+  160 spread schedules in 88.1s
+  pipelined: mk=375 ring_buf=1 eject_buf=2 afifo=1
+  K=0: mk@A=0=751 mk@A=48=651
+  K=1: mk@A=0=751 mk@A=48=651
+  K=2: mk@A=0=751 mk@A=48=375
+  K=3: mk@A=0=751 mk@A=48=375
+  K=4: mk@A=0=751 mk@A=48=375
+== 16x16_bi ==
+  caching spread 0..79...
+  160 spread schedules in 63.8s
+  pipelined: mk=241 ring_buf=14 eject_buf=2 afifo=2
+  K=0: mk@A=0=600 mk@A=48=244
+  K=1: mk@A=0=600 mk@A=48=244
+  K=2: mk@A=0=600 mk@A=48=244
+  K=3: mk@A=0=600 mk@A=48=244
+  K=4: mk@A=0=600 mk@A=48=244
+Wrote /home/luke/workspace/booksim2/results/router_afifo_depth_sweep.json (243s)

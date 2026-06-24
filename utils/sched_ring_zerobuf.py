@@ -75,31 +75,52 @@ def classify_subtrees(ch, s):
 
 
 class Calendar:
-    def __init__(self, ramp_bw):
+    def __init__(self, ramp_bw, flits=1):
         self.link = defaultdict(set)        # lk -> set(send cycles)
         self.eject = defaultdict(lambda: defaultdict(int))  # node -> cycle -> count
         self.ramp_bw = ramp_bw
+        self.flits = flits                  # message length (flits sent back-to-back)
 
     def fits(self, links, ejects, T):
+        m = self.flits
         for lk, rel in links:
-            if (T + rel) in self.link[lk]:
-                return False
+            base = T + rel
+            cyset = self.link[lk]
+            for i in range(m):
+                if (base + i) in cyset:
+                    return False
         for nd, rel in ejects:
-            if self.eject[nd][T + rel] >= self.ramp_bw:
-                return False
+            base = T + rel
+            ecnt = self.eject[nd]
+            for i in range(m):
+                if ecnt[base + i] >= self.ramp_bw:
+                    return False
         return True
 
     def commit(self, links, ejects, T):
+        m = self.flits
         for lk, rel in links:
-            self.link[lk].add(T + rel)
+            base = T + rel
+            for i in range(m):
+                self.link[lk].add(base + i)
         last = 0
         for nd, rel in ejects:
-            self.eject[nd][T + rel] += 1
-            last = max(last, T + rel)
+            base = T + rel
+            for i in range(m):
+                self.eject[nd][base + i] += 1
+            last = max(last, base + m - 1)
         return last
 
+    def reserve_link(self, lk, t):
+        """Reserve m consecutive send cycles starting at t on a single link."""
+        for i in range(self.flits):
+            self.link[lk].add(t + i)
+
     def cross_send_free(self, lk, t):
-        while t in self.link[lk]:
+        """First cycle with m consecutive free send slots on link lk."""
+        cyset = self.link[lk]
+        m = self.flits
+        while any((t + i) in cyset for i in range(m)):
             t += 1
         return t
 
@@ -221,7 +242,7 @@ def afifo_profile_balanced(afifo_intervals, sz, makespan):
 
 
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
-             record_events=False, quads=None, lb_cross=False):
+             record_events=False, quads=None, lb_cross=False, flits=1):
     fr.cfg(sz, sz, 4, 6)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
@@ -235,7 +256,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
 
     lb_groups, lb_pair = (cross_lb_groups(sz) if lb_cross else (None, None))
 
-    cal = Calendar(ramp_bw)
+    cal = Calendar(ramp_bw, flits)
     makespan = 0
     max_off = 0
     afifo_intervals = defaultdict(list)   # lk -> [(start_wait, end_wait)]
@@ -323,7 +344,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
                 cs += 1
                 if cs - ap > off_limit:
                     return dict(ok=False)
-            cal.link[p * 100000 + c].add(cs)                   # reserve cross link
+            cal.reserve_link(p * 100000 + c, cs)               # reserve cross link (m flits)
             afifo_intervals[p * 100000 + c].append((ap, cs))   # waited in AFIFO
             if record_events:
                 events.append((s, p, c, cs, llat, cs + llat, 2))
@@ -352,9 +373,9 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
     ej_total = defaultdict(int)
     for nd, cyc in cal.eject.items():
         ej_total[nd] = sum(cyc.values())
-    ok = all(ej_total[nd] == n - 1 for nd in range(n))
+    ok = all(ej_total[nd] == (n - 1) * flits for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw,
+               max_inject_off=max_off, ramp_bw=ramp_bw, flits=flits,
                afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
                afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:
@@ -484,7 +505,7 @@ def hop_kind(s, p, c):
 
 def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                     order="interleave", off_limit=20000, record_events=False,
-                    quads=None):
+                    quads=None, flits=1):
     """Per-source atomic placement with a global AFIFO-occupancy calendar.
 
     Each source is placed (home rigid sub-tree + all foreign sub-trees) at the
@@ -518,13 +539,19 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
 
     def fits(st, anchor, tlink, teject):
         for lk, rel in st["links"]:
-            t = anchor + rel
-            if t in link_busy[lk] or t in tlink.get(lk, ()):
-                return False
+            base = anchor + rel
+            busy = link_busy[lk]
+            tl = tlink.get(lk, ())
+            for i in range(flits):
+                t = base + i
+                if t in busy or t in tl:
+                    return False
         for nd, rel in st["ejects"]:
-            t = anchor + rel
-            if eject_busy[nd][t] + teject.get((nd, t), 0) >= ramp_bw:
-                return False
+            base = anchor + rel
+            for i in range(flits):
+                t = base + i
+                if eject_busy[nd][t] + teject.get((nd, t), 0) >= ramp_bw:
+                    return False
         return True
 
     def try_source(s, off):
@@ -540,9 +567,11 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             return None
         # tentatively record home
         for lk, rel in home["links"]:
-            tlink[lk].add(anchor0 + rel)
+            for i in range(flits):
+                tlink[lk].add(anchor0 + rel + i)
         for nd, rel in home["ejects"]:
-            teject[(nd, anchor0 + rel)] += 1
+            for i in range(flits):
+                teject[(nd, anchor0 + rel + i)] += 1
         for nd, rel in home["arrive_rel"].items():
             arrive[(s, nd)] = anchor0 + rel
         if record_events:
@@ -561,7 +590,8 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             hop = fr.edge_lat(p, c)
             cs = ap
             while True:
-                while cs in link_busy[lk] or cs in tlink.get(lk, ()):
+                while any((cs + i) in link_busy[lk] or (cs + i) in tlink.get(lk, ())
+                          for i in range(flits)):
                     cs += 1
                 anchor_c = cs + hop
                 if fits(st, anchor_c, tlink, teject):
@@ -576,14 +606,17 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                 if cs - ap > off_limit:
                     return None
             # accept child sub-tree
-            tlink[lk].add(cs)
+            for i in range(flits):
+                tlink[lk].add(cs + i)
             for t in range(ap, cs):
                 tafifo[(lk, t)] += 1
             af_ivs.append((lk, ap, cs))
             for lk2, rel in st["links"]:
-                tlink[lk2].add(anchor_c + rel)
+                for i in range(flits):
+                    tlink[lk2].add(anchor_c + rel + i)
             for nd, rel in st["ejects"]:
-                teject[(nd, anchor_c + rel)] += 1
+                for i in range(flits):
+                    teject[(nd, anchor_c + rel + i)] += 1
             for nd, rel in st["arrive_rel"].items():
                 arrive[(c, nd)] = anchor_c + rel
             if record_events:
@@ -638,9 +671,9 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
     ej_total = defaultdict(int)
     for nd, cyc in eject_busy.items():
         ej_total[nd] = sum(cyc.values())
-    ok = all(ej_total[nd] == n - 1 for nd in range(n))
+    ok = all(ej_total[nd] == (n - 1) * flits for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw,
+               max_inject_off=max_off, ramp_bw=ramp_bw, flits=flits,
                afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
                afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:

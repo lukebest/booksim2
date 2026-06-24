@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-24T03:26:22.984062+00:00",
+  "updated": "2026-06-24T08:37:50.063952+00:00",
   "scheme": "border",
   "model": "border short-arc; per-port router buffer cap \u00d7 per-link AFIFO cap; cross_lat=10",
   "router_caps": [
@@ -61,10 +61,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 48,
+            "makespan": 39,
             "feasible": true,
             "detail": {
-              "makespan": 48,
+              "makespan": 39,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -77,15 +77,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 0,
-              "afifo_balanced": 0,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
               "order": "interleave",
-              "atomic_cap": 0,
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -93,15 +93,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -109,15 +109,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -125,15 +125,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 4,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -141,15 +141,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 5,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -157,15 +157,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 8,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -173,15 +173,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 12,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -189,15 +189,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 16,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -205,15 +205,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 20,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -221,15 +221,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 24,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -237,15 +237,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 32,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -253,15 +253,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 40,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -269,15 +269,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 45,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -285,15 +285,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 46,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -301,15 +301,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 47,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -317,15 +317,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 48,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -335,10 +335,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 48,
+            "makespan": 39,
             "feasible": true,
             "detail": {
-              "makespan": 48,
+              "makespan": 39,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -351,15 +351,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 0,
-              "afifo_balanced": 0,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
               "order": "interleave",
-              "atomic_cap": 0,
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -367,15 +367,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -383,15 +383,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -399,15 +399,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 4,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -415,15 +415,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 5,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -431,15 +431,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 8,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -447,15 +447,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 12,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -463,15 +463,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 16,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -479,15 +479,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 20,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -495,15 +495,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 24,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -511,15 +511,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 32,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -527,15 +527,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 40,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -543,15 +543,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 45,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -559,15 +559,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 46,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -575,15 +575,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 47,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -591,15 +591,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 48,
-            "makespan": 48,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 48,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 37,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -609,10 +609,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 48,
+            "makespan": 39,
             "feasible": true,
             "detail": {
-              "makespan": 48,
+              "makespan": 39,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -625,225 +625,257 @@
           {
             "router_cap": 2,
             "afifo_cap": 1,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 2,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 3,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 4,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 5,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 8,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 12,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 16,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 20,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 24,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 32,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 40,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 45,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 46,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 47,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 2,
             "afifo_cap": 48,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           }
         ],
@@ -851,10 +883,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 48,
+            "makespan": 39,
             "feasible": true,
             "detail": {
-              "makespan": 48,
+              "makespan": 39,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -867,225 +899,257 @@
           {
             "router_cap": 3,
             "afifo_cap": 1,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 2,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 3,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 4,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 5,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 8,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 12,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 16,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 20,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 24,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 32,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 40,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 45,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 46,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 47,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 3,
             "afifo_cap": 48,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           }
         ],
@@ -1093,10 +1157,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 48,
+            "makespan": 39,
             "feasible": true,
             "detail": {
-              "makespan": 48,
+              "makespan": 39,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -1109,225 +1173,257 @@
           {
             "router_cap": 4,
             "afifo_cap": 1,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 2,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 3,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 4,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 5,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 8,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 12,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 16,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 20,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 24,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 32,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 40,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 45,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 46,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 47,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           },
           {
             "router_cap": 4,
             "afifo_cap": 48,
-            "makespan": 46,
+            "makespan": 37,
             "feasible": true,
             "detail": {
-              "makespan": 46,
+              "makespan": 37,
               "afifo_depth": 1,
               "afifo_balanced": 1,
-              "ring_buf": 1,
-              "eject_buf": 2,
-              "method": "pipelined"
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 1,
+              "ring_buf": 0,
+              "eject_buf": 0
             }
           }
         ]
@@ -1373,10 +1469,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 43,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 43,
+              "makespan": 33,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -1389,15 +1485,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1405,15 +1501,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1421,15 +1517,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1437,15 +1533,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 4,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1453,15 +1549,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 5,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1469,15 +1565,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 8,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1485,15 +1581,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 12,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1501,15 +1597,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 16,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1517,15 +1613,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 20,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1533,15 +1629,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 24,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1549,15 +1645,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 32,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1565,15 +1661,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 40,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1581,15 +1677,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 45,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1597,15 +1693,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 46,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1613,15 +1709,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 47,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1629,15 +1725,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 48,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1647,10 +1743,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 43,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 43,
+              "makespan": 33,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -1663,15 +1759,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1679,15 +1775,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1695,15 +1791,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1711,15 +1807,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 4,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1727,15 +1823,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 5,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1743,15 +1839,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 8,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1759,15 +1855,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 12,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1775,15 +1871,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 16,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1791,15 +1887,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 20,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1807,15 +1903,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 24,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1823,15 +1919,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 32,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1839,15 +1935,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 40,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1855,15 +1951,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 45,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1871,15 +1967,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 46,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1887,15 +1983,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 47,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1903,15 +1999,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 48,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1921,10 +2017,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 43,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 43,
+              "makespan": 33,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -1937,15 +2033,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 1,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1953,15 +2049,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 2,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1969,15 +2065,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 3,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -1985,15 +2081,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 4,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2001,15 +2097,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 5,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2017,15 +2113,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 8,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2033,15 +2129,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 12,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2049,15 +2145,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 16,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2065,15 +2161,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 20,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2081,15 +2177,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 24,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2097,15 +2193,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 32,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2113,15 +2209,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 40,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2129,15 +2225,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 45,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2145,15 +2241,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 46,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2161,15 +2257,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 47,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2177,15 +2273,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 48,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2195,10 +2291,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 43,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 43,
+              "makespan": 33,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -2211,15 +2307,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 1,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2227,15 +2323,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 2,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2243,15 +2339,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 3,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2259,15 +2355,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 4,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2275,15 +2371,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 5,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2291,15 +2387,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 8,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2307,15 +2403,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 12,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2323,15 +2419,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 16,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2339,15 +2435,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 20,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2355,15 +2451,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 24,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2371,15 +2467,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 32,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2387,15 +2483,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 40,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2403,15 +2499,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 45,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2419,15 +2515,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 46,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2435,15 +2531,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 47,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2451,15 +2547,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 48,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2469,10 +2565,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 43,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 43,
+              "makespan": 33,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -2485,15 +2581,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 1,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2501,15 +2597,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 2,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2517,15 +2613,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 3,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2533,15 +2629,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 4,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2549,15 +2645,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 5,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2565,15 +2661,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 8,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2581,15 +2677,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 12,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2597,15 +2693,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 16,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2613,15 +2709,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 20,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2629,15 +2725,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 24,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2645,15 +2741,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 32,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2661,15 +2757,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 40,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2677,15 +2773,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 45,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2693,15 +2789,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 46,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2709,15 +2805,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 47,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2725,15 +2821,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 48,
-            "makespan": 42,
+            "makespan": 33,
             "feasible": true,
             "detail": {
-              "makespan": 42,
-              "afifo_depth": 1,
-              "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 0,
-              "lb_cross": false,
+              "makespan": 33,
+              "afifo_depth": 0,
+              "afifo_balanced": 0,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 0,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2781,10 +2877,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 200,
+            "makespan": 182,
             "feasible": true,
             "detail": {
-              "makespan": 200,
+              "makespan": 182,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -2797,10 +2893,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 195,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 195,
+              "makespan": 180,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -2813,15 +2909,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 193,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 193,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 2,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2829,15 +2925,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2845,15 +2941,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 4,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2861,15 +2957,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 5,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -2877,15 +2973,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 8,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3055,10 +3151,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 200,
+            "makespan": 182,
             "feasible": true,
             "detail": {
-              "makespan": 200,
+              "makespan": 182,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -3071,10 +3167,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 195,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 195,
+              "makespan": 180,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -3087,15 +3183,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 193,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 193,
-              "afifo_depth": 2,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 2,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3103,15 +3199,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3119,15 +3215,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 4,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3135,15 +3231,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 5,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3151,15 +3247,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 8,
-            "makespan": 187,
+            "makespan": 180,
             "feasible": true,
             "detail": {
-              "makespan": 187,
-              "afifo_depth": 3,
-              "afifo_balanced": 2,
+              "makespan": 180,
+              "afifo_depth": 1,
+              "afifo_balanced": 1,
               "method": "atomic",
-              "order": "interleave",
-              "atomic_cap": 3,
+              "order": "natural",
+              "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -3329,10 +3425,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 200,
+            "makespan": 182,
             "feasible": true,
             "detail": {
-              "makespan": 200,
+              "makespan": 182,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -3589,10 +3685,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 200,
+            "makespan": 182,
             "feasible": true,
             "detail": {
-              "makespan": 200,
+              "makespan": 182,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -3849,10 +3945,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 200,
+            "makespan": 182,
             "feasible": true,
             "detail": {
-              "makespan": 200,
+              "makespan": 182,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -4147,10 +4243,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 134,
+            "makespan": 124,
             "feasible": true,
             "detail": {
-              "makespan": 134,
+              "makespan": 124,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -4163,10 +4259,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 108,
+            "makespan": 103,
             "feasible": true,
             "detail": {
-              "makespan": 108,
+              "makespan": 103,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -4179,10 +4275,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 103,
+            "makespan": 93,
             "feasible": true,
             "detail": {
-              "makespan": 103,
+              "makespan": 93,
               "afifo_depth": 2,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -4195,15 +4291,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 96,
+            "makespan": 93,
             "feasible": true,
             "detail": {
-              "makespan": 96,
-              "afifo_depth": 3,
+              "makespan": 93,
+              "afifo_depth": 2,
               "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 1,
-              "lb_cross": false,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 2,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -4421,10 +4517,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 134,
+            "makespan": 124,
             "feasible": true,
             "detail": {
-              "makespan": 134,
+              "makespan": 124,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -4437,10 +4533,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 108,
+            "makespan": 103,
             "feasible": true,
             "detail": {
-              "makespan": 108,
+              "makespan": 103,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -4453,10 +4549,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 103,
+            "makespan": 93,
             "feasible": true,
             "detail": {
-              "makespan": 103,
+              "makespan": 93,
               "afifo_depth": 2,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -4469,15 +4565,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 96,
+            "makespan": 93,
             "feasible": true,
             "detail": {
-              "makespan": 96,
-              "afifo_depth": 3,
+              "makespan": 93,
+              "afifo_depth": 2,
               "afifo_balanced": 1,
-              "method": "schedule",
-              "spread": 1,
-              "lb_cross": false,
+              "method": "atomic",
+              "order": "interleave",
+              "atomic_cap": 2,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -4695,10 +4791,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 134,
+            "makespan": 124,
             "feasible": true,
             "detail": {
-              "makespan": 134,
+              "makespan": 124,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -4711,10 +4807,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 1,
-            "makespan": 108,
+            "makespan": 103,
             "feasible": true,
             "detail": {
-              "makespan": 108,
+              "makespan": 103,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -4965,10 +5061,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 134,
+            "makespan": 124,
             "feasible": true,
             "detail": {
-              "makespan": 134,
+              "makespan": 124,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -4981,10 +5077,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 1,
-            "makespan": 108,
+            "makespan": 103,
             "feasible": true,
             "detail": {
-              "makespan": 108,
+              "makespan": 103,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5235,10 +5331,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 134,
+            "makespan": 124,
             "feasible": true,
             "detail": {
-              "makespan": 134,
+              "makespan": 124,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -5251,10 +5347,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 1,
-            "makespan": 108,
+            "makespan": 103,
             "feasible": true,
             "detail": {
-              "makespan": 108,
+              "makespan": 103,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5543,10 +5639,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 652,
+            "makespan": 751,
             "feasible": true,
             "detail": {
-              "makespan": 652,
+              "makespan": 751,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -5559,10 +5655,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5575,10 +5671,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5591,10 +5687,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5607,10 +5703,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 4,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5623,10 +5719,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 5,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5639,10 +5735,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 8,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5655,10 +5751,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 12,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5671,10 +5767,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 16,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5687,10 +5783,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 20,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5703,10 +5799,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 24,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5719,10 +5815,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 32,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5735,10 +5831,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 40,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5751,10 +5847,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 45,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5767,10 +5863,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 46,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5783,10 +5879,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 47,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5799,10 +5895,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 48,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5817,10 +5913,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 652,
+            "makespan": 751,
             "feasible": true,
             "detail": {
-              "makespan": 652,
+              "makespan": 751,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -5833,10 +5929,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5849,10 +5945,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5865,10 +5961,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5881,10 +5977,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 4,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5897,10 +5993,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 5,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5913,10 +6009,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 8,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5929,10 +6025,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 12,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5945,10 +6041,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 16,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5961,10 +6057,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 20,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5977,10 +6073,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 24,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -5993,10 +6089,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 32,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6009,10 +6105,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 40,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6025,10 +6121,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 45,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6041,10 +6137,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 46,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6057,10 +6153,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 47,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6073,10 +6169,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 48,
-            "makespan": 640,
+            "makespan": 651,
             "feasible": true,
             "detail": {
-              "makespan": 640,
+              "makespan": 651,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
@@ -6091,10 +6187,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 652,
+            "makespan": 751,
             "feasible": true,
             "detail": {
-              "makespan": 652,
+              "makespan": 751,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -6333,10 +6429,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 652,
+            "makespan": 751,
             "feasible": true,
             "detail": {
-              "makespan": 652,
+              "makespan": 751,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -6575,10 +6671,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 652,
+            "makespan": 751,
             "feasible": true,
             "detail": {
-              "makespan": 652,
+              "makespan": 751,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -6855,10 +6951,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 0,
-            "makespan": 595,
+            "makespan": 600,
             "feasible": true,
             "detail": {
-              "makespan": 595,
+              "makespan": 600,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -6871,14 +6967,14 @@
           {
             "router_cap": 0,
             "afifo_cap": 1,
-            "makespan": 443,
+            "makespan": 440,
             "feasible": true,
             "detail": {
-              "makespan": 443,
+              "makespan": 440,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
-              "order": "quad",
+              "order": "interleave",
               "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
@@ -6887,10 +6983,10 @@
           {
             "router_cap": 0,
             "afifo_cap": 2,
-            "makespan": 427,
+            "makespan": 393,
             "feasible": true,
             "detail": {
-              "makespan": 427,
+              "makespan": 393,
               "afifo_depth": 2,
               "afifo_balanced": 2,
               "method": "atomic",
@@ -6903,12 +6999,12 @@
           {
             "router_cap": 0,
             "afifo_cap": 3,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -6919,12 +7015,12 @@
           {
             "router_cap": 0,
             "afifo_cap": 4,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -6935,15 +7031,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 5,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -6951,15 +7047,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 8,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -6967,15 +7063,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 12,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -6983,15 +7079,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 16,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -6999,15 +7095,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 20,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7015,15 +7111,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 24,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7031,15 +7127,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 32,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7047,15 +7143,15 @@
           {
             "router_cap": 0,
             "afifo_cap": 40,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7129,10 +7225,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 0,
-            "makespan": 595,
+            "makespan": 600,
             "feasible": true,
             "detail": {
-              "makespan": 595,
+              "makespan": 600,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -7145,14 +7241,14 @@
           {
             "router_cap": 1,
             "afifo_cap": 1,
-            "makespan": 443,
+            "makespan": 440,
             "feasible": true,
             "detail": {
-              "makespan": 443,
+              "makespan": 440,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
-              "order": "quad",
+              "order": "interleave",
               "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
@@ -7161,10 +7257,10 @@
           {
             "router_cap": 1,
             "afifo_cap": 2,
-            "makespan": 427,
+            "makespan": 393,
             "feasible": true,
             "detail": {
-              "makespan": 427,
+              "makespan": 393,
               "afifo_depth": 2,
               "afifo_balanced": 2,
               "method": "atomic",
@@ -7177,12 +7273,12 @@
           {
             "router_cap": 1,
             "afifo_cap": 3,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7193,12 +7289,12 @@
           {
             "router_cap": 1,
             "afifo_cap": 4,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7209,15 +7305,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 5,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7225,15 +7321,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 8,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7241,15 +7337,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 12,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7257,15 +7353,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 16,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7273,15 +7369,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 20,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7289,15 +7385,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 24,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7305,15 +7401,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 32,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7321,15 +7417,15 @@
           {
             "router_cap": 1,
             "afifo_cap": 40,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7403,10 +7499,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 0,
-            "makespan": 595,
+            "makespan": 600,
             "feasible": true,
             "detail": {
-              "makespan": 595,
+              "makespan": 600,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -7419,14 +7515,14 @@
           {
             "router_cap": 2,
             "afifo_cap": 1,
-            "makespan": 443,
+            "makespan": 440,
             "feasible": true,
             "detail": {
-              "makespan": 443,
+              "makespan": 440,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
-              "order": "quad",
+              "order": "interleave",
               "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
@@ -7435,10 +7531,10 @@
           {
             "router_cap": 2,
             "afifo_cap": 2,
-            "makespan": 427,
+            "makespan": 393,
             "feasible": true,
             "detail": {
-              "makespan": 427,
+              "makespan": 393,
               "afifo_depth": 2,
               "afifo_balanced": 2,
               "method": "atomic",
@@ -7451,12 +7547,12 @@
           {
             "router_cap": 2,
             "afifo_cap": 3,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7467,12 +7563,12 @@
           {
             "router_cap": 2,
             "afifo_cap": 4,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7483,15 +7579,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 5,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7499,15 +7595,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 8,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7515,15 +7611,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 12,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7531,15 +7627,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 16,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7547,15 +7643,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 20,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7563,15 +7659,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 24,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7579,15 +7675,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 32,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7595,15 +7691,15 @@
           {
             "router_cap": 2,
             "afifo_cap": 40,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7677,10 +7773,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 0,
-            "makespan": 595,
+            "makespan": 600,
             "feasible": true,
             "detail": {
-              "makespan": 595,
+              "makespan": 600,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -7693,14 +7789,14 @@
           {
             "router_cap": 3,
             "afifo_cap": 1,
-            "makespan": 443,
+            "makespan": 440,
             "feasible": true,
             "detail": {
-              "makespan": 443,
+              "makespan": 440,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
-              "order": "quad",
+              "order": "interleave",
               "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
@@ -7709,10 +7805,10 @@
           {
             "router_cap": 3,
             "afifo_cap": 2,
-            "makespan": 427,
+            "makespan": 393,
             "feasible": true,
             "detail": {
-              "makespan": 427,
+              "makespan": 393,
               "afifo_depth": 2,
               "afifo_balanced": 2,
               "method": "atomic",
@@ -7725,12 +7821,12 @@
           {
             "router_cap": 3,
             "afifo_cap": 3,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7741,12 +7837,12 @@
           {
             "router_cap": 3,
             "afifo_cap": 4,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -7757,15 +7853,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 5,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7773,15 +7869,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 8,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7789,15 +7885,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 12,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7805,15 +7901,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 16,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7821,15 +7917,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 20,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7837,15 +7933,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 24,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7853,15 +7949,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 32,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7869,15 +7965,15 @@
           {
             "router_cap": 3,
             "afifo_cap": 40,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -7951,10 +8047,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 0,
-            "makespan": 595,
+            "makespan": 600,
             "feasible": true,
             "detail": {
-              "makespan": 595,
+              "makespan": 600,
               "afifo_depth": 0,
               "afifo_balanced": 0,
               "method": "atomic",
@@ -7967,14 +8063,14 @@
           {
             "router_cap": 4,
             "afifo_cap": 1,
-            "makespan": 443,
+            "makespan": 440,
             "feasible": true,
             "detail": {
-              "makespan": 443,
+              "makespan": 440,
               "afifo_depth": 1,
               "afifo_balanced": 1,
               "method": "atomic",
-              "order": "quad",
+              "order": "interleave",
               "atomic_cap": 1,
               "ring_buf": 0,
               "eject_buf": 0
@@ -7983,10 +8079,10 @@
           {
             "router_cap": 4,
             "afifo_cap": 2,
-            "makespan": 427,
+            "makespan": 393,
             "feasible": true,
             "detail": {
-              "makespan": 427,
+              "makespan": 393,
               "afifo_depth": 2,
               "afifo_balanced": 2,
               "method": "atomic",
@@ -7999,12 +8095,12 @@
           {
             "router_cap": 4,
             "afifo_cap": 3,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -8015,12 +8111,12 @@
           {
             "router_cap": 4,
             "afifo_cap": 4,
-            "makespan": 426,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 426,
+              "makespan": 379,
               "afifo_depth": 3,
-              "afifo_balanced": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
               "atomic_cap": 3,
@@ -8031,15 +8127,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 5,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8047,15 +8143,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 8,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8063,15 +8159,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 12,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8079,15 +8175,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 16,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8095,15 +8191,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 20,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8111,15 +8207,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 24,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8127,15 +8223,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 32,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8143,15 +8239,15 @@
           {
             "router_cap": 4,
             "afifo_cap": 40,
-            "makespan": 404,
+            "makespan": 379,
             "feasible": true,
             "detail": {
-              "makespan": 404,
-              "afifo_depth": 5,
-              "afifo_balanced": 4,
+              "makespan": 379,
+              "afifo_depth": 3,
+              "afifo_balanced": 2,
               "method": "atomic",
               "order": "natural",
-              "atomic_cap": 5,
+              "atomic_cap": 3,
               "ring_buf": 0,
               "eject_buf": 0
             }
@@ -8232,5 +8328,5 @@
       }
     }
   },
-  "elapsed_s": 162.91153693199158
+  "elapsed_s": 242.65451526641846
 }
