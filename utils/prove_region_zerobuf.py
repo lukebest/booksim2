@@ -54,7 +54,7 @@ def sim_detail(deliveries, ramp_bw):
         send = link.reserve((p, c), ready)
         if send > ready:
             (afifo_wait_iv if cross else ring_iv)[(p, c)].append((ready, send))
-        arrive = send + fr.edge_lat(p, c)
+        arrive = send + fr.link_lat(p, c)
         if cross:
             afifo_inflight[(p, c)].append((send, arrive))
         e = down.reserve(c, arrive)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Zero router-buffer ring scheduler that EXPLOITS link time-division.
 
-Model (H=4, V=6): a directed link of latency L is pipelined -- it can launch a
+Model (H=4, V=6, cross-AFIFO=10): a directed link of latency L is pipelined -- it can launch a
 new flit every cycle (cap 1/cycle on the SEND slot) while up to L flits are in
 flight.  So a region-internal ring link has free send-slots on most cycles, and
 a flit arriving from another quadrant via the AFIFO can be slotted into one of
@@ -59,7 +59,7 @@ def classify_subtrees(ch, s):
         while dq:
             p = dq.popleft()
             for c in ch.get(p, []):
-                lat = fr.edge_lat(p, c)
+                lat = fr.link_lat(p, c)
                 if fr.quad_of(p) != fr.quad_of(c):
                     crosses.append((p, c, lat))      # boundary: separate sub-tree
                     continue
@@ -278,7 +278,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
             for lk, rel in st["links"]:
                 p, c = divmod(lk, 100000)
                 snd = anchor + rel
-                lt = fr.edge_lat(p, c)
+                lt = fr.link_lat(p, c)
                 events.append((s, p, c, snd, lt, snd + lt, hop_kind(s, p, c)))
         return last, st
 
@@ -313,7 +313,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
             p, c = pick_cross(s, owner_root, p, c, lat, placed_roots)
             ap = arrive_abs[(s, owner_root, p)]
             st = sub[s][c]
-            llat = fr.edge_lat(p, c)
+            llat = fr.link_lat(p, c)
             cs = ap
             while True:
                 cs = cal.cross_send_free(p * 100000 + c, cs)   # free AFIFO send slot
@@ -498,7 +498,7 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             for lk, rel in home["links"]:
                 p, c = divmod(lk, 100000)
                 snd = anchor0 + rel
-                lt = fr.edge_lat(p, c)
+                lt = fr.link_lat(p, c)
                 evs.append((s, p, c, snd, lt, snd + lt, hop_kind(s, p, c)))
         pending = deque((s, p, c, lat) for (p, c, lat) in home["crosses"])
         placed = {s}

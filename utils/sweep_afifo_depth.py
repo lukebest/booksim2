@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import sched_ring_zerobuf as S
+import sim_fused_rings as fr
 from optimize_quad_shapes import load_optimal
 from sweep_quad_ring_shapes import cfg_str, make_quads
 
@@ -149,7 +150,7 @@ def run(sizes=SIZES, caps=CAPS, scheme="border"):
     out = {
         "updated": datetime.now(timezone.utc).isoformat(),
         "scheme": scheme,
-        "model": f"{model}, router_buf=0, per-link AFIFO cap",
+        "model": f"{model}, router_buf=0, per-link AFIFO cap, cross_lat={fr.CROSS_LAT}",
         "caps": list(caps),
         "configs": {},
     }

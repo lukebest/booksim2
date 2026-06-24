@@ -194,14 +194,15 @@ def router_buffer_section(rdata):
     grid_b = b16.get("grid", {})
     # pipelined peaks from K=1 row at max A (same mk as best pipelined if feasible)
     def pip_info(grid):
-        for k in (1, 2, 3, 4):
+        for k in rdata["router_caps"]:
             for p in grid.get(str(k), grid.get(k, [])):
                 d = p.get("detail") or {}
                 if d.get("method") == "pipelined":
                     return d
         return {}
 
-    pu, pb = pip_info(grid_u), pip_info(grid_b)
+    pu = rdata["configs"].get("16x16_uni", {}).get("pipelined") or pip_info(grid_u)
+    pb = rdata["configs"].get("16x16_bi", {}).get("pipelined") or pip_info(grid_b)
     af_caps = rdata["afifo_caps"]
     a_hi = af_caps[-1]
     def mk_at(grid, k, a):
@@ -292,7 +293,7 @@ table{{border-collapse:collapse;width:100%;font-size:12px;}} td,th{{border:1px s
 th{{background:#e2e8f0;}} td.l{{text-align:left;}} .note{{color:#64748b;font-size:12px;}}
 </style></head><body>
 <h1>Border 短弧：AFIFO 深度 vs Makespan</h1>
-<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6 · 环形状优化<br>
+<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6, 跨界 AFIFO link=10cy · 环形状优化<br>
 更新：{html.escape(data.get('updated', ''))} · 数据 <code>results/border_afifo_depth_sweep.json</code></p>
 <div class='card'><h2>双向环 @ 下 ramp=2</h2>
 {line_chart(caps, bi_only, "makespan vs 边界 AFIFO 深度上限（双向）")}

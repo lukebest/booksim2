@@ -7,8 +7,8 @@ table{border-collapse:collapse;width:100%;font-size:12px;} td,th{border:1px soli
 th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12px;}
 </style></head><body>
 <h1>Border 短弧：AFIFO 深度 vs Makespan</h1>
-<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6 · 环形状优化<br>
-更新：2026-06-23T02:11:07.360428+00:00 · 数据 <code>results/border_afifo_depth_sweep.json</code></p>
+<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6, 跨界 AFIFO link=10cy · 环形状优化<br>
+更新：2026-06-24T03:23:44.000193+00:00 · 数据 <code>results/border_afifo_depth_sweep.json</code></p>
 <div class='card'><h2>双向环 @ 下 ramp=2</h2>
 <svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="14" font-weight="bold">makespan vs 边界 AFIFO 深度上限（双向）</text>
@@ -17,15 +17,15 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">129</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">128</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">259</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">257</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">388</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">385</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">518</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">514</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">648</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">642</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
 <line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
@@ -62,64 +62,64 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,313.1 L 71.3,313.1 L 84.6,313.6 L 97.9,313.6 L 111.2,313.6 L 124.5,313.6 L 164.3,313.6 L 217.5,313.6 L 270.7,313.6 L 323.8,313.6 L 377.0,313.6 L 483.3,313.6 L 589.7,313.6 L 656.1,313.6 L 669.4,313.6 L 682.7,313.6 L 696.0,313.6" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
-<circle cx="58.0" cy="313.1" r="4" fill="#60a5fa"/>
-<circle cx="71.3" cy="313.1" r="4" fill="#60a5fa"/>
-<circle cx="84.6" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="97.9" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="111.2" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="124.5" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="164.3" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="217.5" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="270.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="323.8" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="377.0" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="483.3" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="589.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="656.1" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="669.4" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="682.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="696.0" cy="313.6" r="4" fill="#60a5fa"/>
+<path d="M 58.0,308.5 L 71.3,308.9 L 84.6,308.9 L 97.9,308.9 L 111.2,308.9 L 124.5,308.9 L 164.3,308.9 L 217.5,308.9 L 270.7,308.9 L 323.8,308.9 L 377.0,308.9 L 483.3,308.9 L 589.7,308.9 L 656.1,308.9 L 669.4,308.9 L 682.7,308.9 L 696.0,308.9" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
+<circle cx="58.0" cy="308.5" r="4" fill="#60a5fa"/>
+<circle cx="71.3" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="84.6" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="97.9" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="111.2" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="124.5" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="164.3" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="217.5" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="270.7" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="323.8" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="377.0" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="483.3" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="589.7" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="656.1" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="669.4" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="682.7" cy="308.9" r="4" fill="#60a5fa"/>
+<circle cx="696.0" cy="308.9" r="4" fill="#60a5fa"/>
 <rect x="66" y="40" width="14" height="3" fill="#60a5fa"/>
 <text x="84" y="46" font-size="10">4×4 双向</text>
-<path d="M 58.0,272.1 L 71.3,281.6 L 84.6,286.1 L 97.9,286.1 L 111.2,286.1 L 124.5,292.4 L 164.3,292.4 L 217.5,292.4 L 270.7,292.4 L 323.8,292.4 L 377.0,292.4 L 483.3,292.4 L 589.7,292.4 L 656.1,292.4 L 669.4,292.4 L 682.7,292.4 L 696.0,292.4" fill="none" stroke="#34d399" stroke-width="2.5"/>
-<circle cx="58.0" cy="272.1" r="4" fill="#34d399"/>
-<circle cx="71.3" cy="281.6" r="4" fill="#34d399"/>
-<circle cx="84.6" cy="286.1" r="4" fill="#34d399"/>
-<circle cx="97.9" cy="286.1" r="4" fill="#34d399"/>
-<circle cx="111.2" cy="286.1" r="4" fill="#34d399"/>
-<circle cx="124.5" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="164.3" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="217.5" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="270.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="323.8" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="377.0" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="483.3" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="589.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="656.1" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="669.4" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="682.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="696.0" cy="292.4" r="4" fill="#34d399"/>
+<path d="M 58.0,267.1 L 71.3,278.9 L 84.6,281.2 L 97.9,284.4 L 111.2,287.6 L 124.5,287.6 L 164.3,287.6 L 217.5,287.6 L 270.7,287.6 L 323.8,287.6 L 377.0,287.6 L 483.3,287.6 L 589.7,287.6 L 656.1,287.6 L 669.4,287.6 L 682.7,287.6 L 696.0,287.6" fill="none" stroke="#34d399" stroke-width="2.5"/>
+<circle cx="58.0" cy="267.1" r="4" fill="#34d399"/>
+<circle cx="71.3" cy="278.9" r="4" fill="#34d399"/>
+<circle cx="84.6" cy="281.2" r="4" fill="#34d399"/>
+<circle cx="97.9" cy="284.4" r="4" fill="#34d399"/>
+<circle cx="111.2" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="124.5" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="164.3" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="217.5" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="270.7" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="323.8" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="377.0" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="483.3" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="589.7" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="656.1" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="669.4" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="682.7" cy="287.6" r="4" fill="#34d399"/>
+<circle cx="696.0" cy="287.6" r="4" fill="#34d399"/>
 <rect x="166" y="40" width="14" height="3" fill="#34d399"/>
 <text x="184" y="46" font-size="10">8×8 双向</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#f87171" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#f87171" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#f87171"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#f87171"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#f87171"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#f87171"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#f87171"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#f87171"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#f87171"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#f87171"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#f87171"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#f87171"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#f87171"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#f87171"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#f87171"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#f87171"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#f87171"/>
 <rect x="266" y="40" width="14" height="3" fill="#f87171"/>
 <text x="284" y="46" font-size="10">16×16 双向</text>
 </svg>
@@ -132,15 +132,15 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">162</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">140</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">324</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">281</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">486</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">422</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">648</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">563</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">811</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">704</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
 <line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
@@ -177,77 +177,77 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,314.0 L 71.3,314.7 L 84.6,314.7 L 97.9,314.7 L 111.2,314.7 L 124.5,314.7 L 164.3,314.7 L 217.5,314.7 L 270.7,314.7 L 323.8,314.7 L 377.0,314.7 L 483.3,314.7 L 589.7,314.7 L 656.1,314.7 L 669.4,314.7 L 682.7,314.7 L 696.0,314.7" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
-<circle cx="58.0" cy="314.0" r="4" fill="#3b82f6"/>
-<circle cx="71.3" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="84.6" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="97.9" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="111.2" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="124.5" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="164.3" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="217.5" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="270.7" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="323.8" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="377.0" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="483.3" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="589.7" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="656.1" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="669.4" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="682.7" cy="314.7" r="4" fill="#3b82f6"/>
-<circle cx="696.0" cy="314.7" r="4" fill="#3b82f6"/>
+<path d="M 58.0,308.1 L 71.3,308.1 L 84.6,308.1 L 97.9,308.1 L 111.2,308.1 L 124.5,308.1 L 164.3,308.1 L 217.5,308.1 L 270.7,308.1 L 323.8,308.1 L 377.0,308.1 L 483.3,308.1 L 589.7,308.1 L 656.1,308.1 L 669.4,308.1 L 682.7,308.1 L 696.0,308.1" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="308.1" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="308.1" r="4" fill="#3b82f6"/>
 <rect x="66" y="40" width="14" height="3" fill="#3b82f6"/>
 <text x="84" y="46" font-size="10">4×4 单向</text>
-<path d="M 58.0,262.5 L 71.3,263.2 L 84.6,263.2 L 97.9,263.2 L 111.2,263.2 L 124.5,263.2 L 164.3,263.2 L 217.5,263.2 L 270.7,285.9 L 323.8,285.9 L 377.0,285.9 L 483.3,285.9 L 589.7,285.9 L 656.1,285.9 L 669.4,285.9 L 682.7,285.9 L 696.0,285.9" fill="none" stroke="#059669" stroke-width="2.5"/>
-<circle cx="58.0" cy="262.5" r="4" fill="#059669"/>
-<circle cx="71.3" cy="263.2" r="4" fill="#059669"/>
-<circle cx="84.6" cy="263.2" r="4" fill="#059669"/>
-<circle cx="97.9" cy="263.2" r="4" fill="#059669"/>
-<circle cx="111.2" cy="263.2" r="4" fill="#059669"/>
-<circle cx="124.5" cy="263.2" r="4" fill="#059669"/>
-<circle cx="164.3" cy="263.2" r="4" fill="#059669"/>
-<circle cx="217.5" cy="263.2" r="4" fill="#059669"/>
-<circle cx="270.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="323.8" cy="285.9" r="4" fill="#059669"/>
-<circle cx="377.0" cy="285.9" r="4" fill="#059669"/>
-<circle cx="483.3" cy="285.9" r="4" fill="#059669"/>
-<circle cx="589.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="656.1" cy="285.9" r="4" fill="#059669"/>
-<circle cx="669.4" cy="285.9" r="4" fill="#059669"/>
-<circle cx="682.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="696.0" cy="285.9" r="4" fill="#059669"/>
+<path d="M 58.0,245.1 L 71.3,247.1 L 84.6,248.0 L 97.9,250.5 L 111.2,250.5 L 124.5,250.5 L 164.3,250.5 L 217.5,267.9 L 270.7,276.6 L 323.8,276.6 L 377.0,276.6 L 483.3,276.6 L 589.7,276.6 L 656.1,276.6 L 669.4,276.6 L 682.7,276.6 L 696.0,276.6" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="245.1" r="4" fill="#059669"/>
+<circle cx="71.3" cy="247.1" r="4" fill="#059669"/>
+<circle cx="84.6" cy="248.0" r="4" fill="#059669"/>
+<circle cx="97.9" cy="250.5" r="4" fill="#059669"/>
+<circle cx="111.2" cy="250.5" r="4" fill="#059669"/>
+<circle cx="124.5" cy="250.5" r="4" fill="#059669"/>
+<circle cx="164.3" cy="250.5" r="4" fill="#059669"/>
+<circle cx="217.5" cy="267.9" r="4" fill="#059669"/>
+<circle cx="270.7" cy="276.6" r="4" fill="#059669"/>
+<circle cx="323.8" cy="276.6" r="4" fill="#059669"/>
+<circle cx="377.0" cy="276.6" r="4" fill="#059669"/>
+<circle cx="483.3" cy="276.6" r="4" fill="#059669"/>
+<circle cx="589.7" cy="276.6" r="4" fill="#059669"/>
+<circle cx="656.1" cy="276.6" r="4" fill="#059669"/>
+<circle cx="669.4" cy="276.6" r="4" fill="#059669"/>
+<circle cx="682.7" cy="276.6" r="4" fill="#059669"/>
+<circle cx="696.0" cy="276.6" r="4" fill="#059669"/>
 <rect x="166" y="40" width="14" height="3" fill="#059669"/>
 <text x="184" y="46" font-size="10">8×8 单向</text>
-<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,62.6 L 84.6,62.6 L 97.9,62.6 L 111.2,62.6 L 124.5,62.6 L 164.3,62.6 L 217.5,62.6 L 270.7,62.6 L 323.8,62.6 L 377.0,62.6 L 483.3,62.6 L 589.7,62.6 L 656.1,62.6 L 669.4,62.6 L 682.7,62.6 L 696.0,62.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
-<circle cx="71.3" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="84.6" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="97.9" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="111.2" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="124.5" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="164.3" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="270.7" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="323.8" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="483.3" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="589.7" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="656.1" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="669.4" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="682.7" cy="93.6" r="4" fill="#dc2626"/>
-<circle cx="696.0" cy="93.6" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="62.6" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="62.6" r="4" fill="#dc2626"/>
 <rect x="266" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="284" y="46" font-size="10">16×16 单向</text>
 </svg>
 </div>
 <div class='card'><h2>数值表</h2>
-<table><tr><th>配置</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>8</th><th>12</th><th>16</th><th>20</th><th>24</th><th>32</th><th>40</th><th>45</th><th>46</th><th>47</th><th>48</th></tr><tr><td class='l'>4×4 单向</td><td>39</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td></tr><tr><td class='l'>4×4 双向</td><td>33</td><td>33</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td></tr><tr><td class='l'>8×8 单向</td><td>182</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td></tr><tr><td class='l'>8×8 双向</td><td>124</td><td>103</td><td>93</td><td>93</td><td>93</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td></tr><tr><td class='l'>16×16 单向</td><td>751</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td></tr><tr><td class='l'>16×16 双向</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr></table>
+<table><tr><th>配置</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>8</th><th>12</th><th>16</th><th>20</th><th>24</th><th>32</th><th>40</th><th>45</th><th>46</th><th>47</th><th>48</th></tr><tr><td class='l'>4×4 单向</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td><td>48</td></tr><tr><td class='l'>4×4 双向</td><td>43</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td></tr><tr><td class='l'>8×8 单向</td><td>200</td><td>195</td><td>193</td><td>187</td><td>187</td><td>187</td><td>187</td><td>145</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td></tr><tr><td class='l'>8×8 双向</td><td>134</td><td>108</td><td>103</td><td>96</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td></tr><tr><td class='l'>16×16 单向</td><td>652</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td><td>640</td></tr><tr><td class='l'>16×16 双向</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
 <p class='note'>每格为在该 AFIFO 深度上限下搜索到的最小 makespan（per-link peak ≤ cap）。
 搜索合并全部 spread 候选与各 cap 下 atomic 结果后按深度过滤，保证 cap 增大时 makespan 不升。
 cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 
 <div class='card'><h2>案例：16×16 双向为何在 AFIFO≈46 后 makespan 骤降至 240？</h2>
-<p>表中可见：cap≤40 时 makespan 稳定在 <b>379 cy</b>；cap≥46 时降至 <b>240 cy</b>。
+<p>表中可见：cap≤40 时 makespan 稳定在 <b>404 cy</b>；cap≥46 时降至 <b>244 cy</b>。
 若曲线只在 40 与 48 两点采样，会<strong>看起来像「到 48 才掉」</strong>——实际是<strong>门槛在 46</strong>（本 sweep 已补 45/46/47 采样点）。</p>
 
 <h3>1. 为什么会下降？——两种调度范式切换</h3>
@@ -261,28 +261,28 @@ cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 <ul>
 <li>四象限 Hamilton 环先按固有节拍跑（Pass1 本象限 home 子树）；跨界 flit 插入环内链路空闲 send 槽（Pass2），允许在 AFIFO 中<strong>短暂排队</strong>。</li>
 <li>不强制 per-source 原子 pacing，跨界 burst 与环内 conveyer 更自然对齐 → makespan <b>240 cy</b>（约 −37%）。</li>
-<li>代价：单链路 AFIFO 峰值约 <b>46</b>（均衡深度约 40），必须用更深的边界 FIFO 承受等待。</li>
+<li>代价：单链路 AFIFO 峰值约 <b>41</b>（均衡深度约 40），必须用更深的边界 FIFO 承受等待。</li>
 </ul>
 <p><b>结论：</b>下降不是「缓冲越深传输越快」的连续渐变，而是<strong>低深度下只能用 atomic 保守调度；深度够深后 spread=0 的环时分调度才合法并显著更优</strong>。</p>
 
 <h3>2. 为什么门槛在 46（而不是 40 或 5）？</h3>
 <p>对每个候选调度，我们要求 <code>afifo_depth ≤ cap</code>（单链路峰值）。</p>
 <ul>
-<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>46</b>（环形状优化：vflip+90° / rect+90° / rect+270° / rect+90°）。</li>
+<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>41</b>（环形状优化：vflip+90° / rect+90° / rect+270° / rect+90°）。</li>
 <li>cap=45 时该方案<strong>不被允许</strong>（46&gt;45），搜索只能在 atomic 等低深度方案里选 → 仍约 379 cy。</li>
 <li>cap=46 时 <code>spread=0</code> 首次入选候选集，240 &lt; 379，曲线<strong>断崖式</strong>下探。</li>
 </ul>
-<p>cap=5 时虽也允许「深度≤5」，但 spread=0（峰值 46）仍不可行；atomic 在 cap=3 已到其自身最优 379，故 cap=5~40 平台不变。</p>
+<p>cap=5 时虽也允许「深度≤5」，但 spread=0（峰值 41）仍不可行；atomic 在 cap=3 已到其自身最优 379，故 cap=5~40 平台不变。</p>
 
 <h3>3. 与 eject 下界的关系</h3>
 <p>16×16 双向 eject 下界 = (N−1)/2 = <b>128 cy</b>。240 cy 约为下界的 1.88×，仍远高于下界——瓶颈在<strong>跨界+环内链路时分</strong>与 AFIFO 等待，而非下 ramp 带宽。</p>
 
-<p class='note'>cap≤40 最优：atomic/natural，mk=379，AFIFO峰值=3。
-cap≥46 最优：schedule spread=0，mk=240，AFIFO峰值=46，均衡深度≈40。</p>
+<p class='note'>cap≤40 最优：atomic/natural，mk=404，AFIFO峰值=5。
+cap≥46 最优：schedule spread=0，mk=244，AFIFO峰值=41，均衡深度≈36。</p>
 </div>
 
 <div class='card'><h2>Router 每 port 缓冲 K × 边界 AFIFO 深度 A</h2>
-<p class='note'>更新：2026-06-23T13:01:57.510923+00:00 ·
+<p class='note'>更新：2026-06-24T03:26:22.984062+00:00 ·
 <code>results/router_afifo_depth_sweep.json</code> · 生成 <code>sweep_router_afifo_depth.py</code></p>
 <p>在现有「router 零 buffer（K=0）」曲线基础上，允许<strong>每个 router 输出 port / 下 ramp port</strong>
 峰值排队深度 ≤ <b>K</b>（flit），同时边界 AFIFO 单链路峰值 ≤ <b>A</b>。
@@ -297,13 +297,13 @@ pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> 
 </ul>
 
 <h3>各尺寸 @ AFIFO=48：makespan vs router cap K</h3>
-<table><tr><th>配置 (A=48)</th><th>K=0</th><th>K=1</th><th>K=2</th><th>K=3</th><th>K=4</th></tr><tr><td class='l'>4×4 单向</td><td>37</td><td>37</td><td>36</td><td>36</td><td>36</td></tr><tr><td class='l'>4×4 双向</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td></tr><tr><td class='l'>8×8 单向</td><td>117</td><td>117</td><td>114</td><td>114</td><td>114</td></tr><tr><td class='l'>8×8 双向</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td></tr><tr><td class='l'>16×16 单向</td><td>651</td><td>651</td><td>651</td><td>366</td><td>366</td></tr><tr><td class='l'>16×16 双向</td><td>240</td><td>240</td><td>240</td><td>240</td><td>240</td></tr></table>
+<table><tr><th>配置 (A=48)</th><th>K=0</th><th>K=1</th><th>K=2</th><th>K=3</th><th>K=4</th></tr><tr><td class='l'>4×4 单向</td><td>48</td><td>48</td><td>46</td><td>46</td><td>46</td></tr><tr><td class='l'>4×4 双向</td><td>42</td><td>42</td><td>42</td><td>42</td><td>42</td></tr><tr><td class='l'>8×8 单向</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td></tr><tr><td class='l'>8×8 双向</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td></tr><tr><td class='l'>16×16 单向</td><td>640</td><td>640</td><td>375</td><td>375</td><td>375</td></tr><tr><td class='l'>16×16 双向</td><td>244</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
 <p class='note'>4×4 单向 K≥2：37→36；8×8 单向 K≥2：117→114；16×16 单向 K≥3：651→366；
-16×16 双向 K≤4 与 K=0 相同（pipelined 需 ring_buf≈?）。</p>
+16×16 双向 K≤4 与 K=0 相同（pipelined 需 ring_buf≈14）。</p>
 
 <h3>16×16 单向：K≥3 带来最大收益</h3>
-<p>K=0 时 A=48 最优 <b>651 cy</b>（atomic）；K≥3 时 pipelined <b>366 cy</b>
-（ring_buf=1, eject_buf=3, AFIFO=1）——
+<p>K=0 时 A=48 最优 <b>640 cy</b>（atomic）；K≥3 时 pipelined <b>375 cy</b>
+（ring_buf=1, eject_buf=2, AFIFO=1）——
 <strong>约 −44%</strong>。K=1~2 仍不足以容纳 pipelined 的 eject 排队。</p>
 <svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="14" font-weight="bold">16×16 单向：makespan vs AFIFO（每条线 = router cap K）</text>
@@ -312,15 +312,15 @@ pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> 
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">162</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">140</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">324</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">281</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">486</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">422</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">648</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">563</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">811</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">704</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
 <line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
@@ -357,111 +357,111 @@ pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> 
 <text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,62.6 L 84.6,62.6 L 97.9,62.6 L 111.2,62.6 L 124.5,62.6 L 164.3,62.6 L 217.5,62.6 L 270.7,62.6 L 323.8,62.6 L 377.0,62.6 L 483.3,62.6 L 589.7,62.6 L 656.1,62.6 L 669.4,62.6 L 682.7,62.6 L 696.0,62.6" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#94a3b8"/>
-<circle cx="71.3" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="84.6" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="97.9" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="111.2" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="124.5" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="164.3" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="217.5" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="270.7" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="323.8" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="377.0" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="483.3" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="589.7" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="656.1" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="669.4" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="682.7" cy="93.6" r="4" fill="#94a3b8"/>
-<circle cx="696.0" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="71.3" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="84.6" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="97.9" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="111.2" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="124.5" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="164.3" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="217.5" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="270.7" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="323.8" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="377.0" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="483.3" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="589.7" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="656.1" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="669.4" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="682.7" cy="62.6" r="4" fill="#94a3b8"/>
+<circle cx="696.0" cy="62.6" r="4" fill="#94a3b8"/>
 <rect x="66" y="40" width="14" height="3" fill="#94a3b8"/>
 <text x="84" y="46" font-size="10">router K=0</text>
-<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,62.6 L 84.6,62.6 L 97.9,62.6 L 111.2,62.6 L 124.5,62.6 L 164.3,62.6 L 217.5,62.6 L 270.7,62.6 L 323.8,62.6 L 377.0,62.6 L 483.3,62.6 L 589.7,62.6 L 656.1,62.6 L 669.4,62.6 L 682.7,62.6 L 696.0,62.6" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#3b82f6"/>
-<circle cx="71.3" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="84.6" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="97.9" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="111.2" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="124.5" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="164.3" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="217.5" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="270.7" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="323.8" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="377.0" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="483.3" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="589.7" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="656.1" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="669.4" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="682.7" cy="93.6" r="4" fill="#3b82f6"/>
-<circle cx="696.0" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="62.6" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="62.6" r="4" fill="#3b82f6"/>
 <rect x="166" y="40" width="14" height="3" fill="#3b82f6"/>
 <text x="184" y="46" font-size="10">router K=1</text>
-<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#059669" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,172.5 L 84.6,172.5 L 97.9,172.5 L 111.2,172.5 L 124.5,172.5 L 164.3,172.5 L 217.5,172.5 L 270.7,172.5 L 323.8,172.5 L 377.0,172.5 L 483.3,172.5 L 589.7,172.5 L 656.1,172.5 L 669.4,172.5 L 682.7,172.5 L 696.0,172.5" fill="none" stroke="#059669" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#059669"/>
-<circle cx="71.3" cy="93.6" r="4" fill="#059669"/>
-<circle cx="84.6" cy="93.6" r="4" fill="#059669"/>
-<circle cx="97.9" cy="93.6" r="4" fill="#059669"/>
-<circle cx="111.2" cy="93.6" r="4" fill="#059669"/>
-<circle cx="124.5" cy="93.6" r="4" fill="#059669"/>
-<circle cx="164.3" cy="93.6" r="4" fill="#059669"/>
-<circle cx="217.5" cy="93.6" r="4" fill="#059669"/>
-<circle cx="270.7" cy="93.6" r="4" fill="#059669"/>
-<circle cx="323.8" cy="93.6" r="4" fill="#059669"/>
-<circle cx="377.0" cy="93.6" r="4" fill="#059669"/>
-<circle cx="483.3" cy="93.6" r="4" fill="#059669"/>
-<circle cx="589.7" cy="93.6" r="4" fill="#059669"/>
-<circle cx="656.1" cy="93.6" r="4" fill="#059669"/>
-<circle cx="669.4" cy="93.6" r="4" fill="#059669"/>
-<circle cx="682.7" cy="93.6" r="4" fill="#059669"/>
-<circle cx="696.0" cy="93.6" r="4" fill="#059669"/>
+<circle cx="71.3" cy="172.5" r="4" fill="#059669"/>
+<circle cx="84.6" cy="172.5" r="4" fill="#059669"/>
+<circle cx="97.9" cy="172.5" r="4" fill="#059669"/>
+<circle cx="111.2" cy="172.5" r="4" fill="#059669"/>
+<circle cx="124.5" cy="172.5" r="4" fill="#059669"/>
+<circle cx="164.3" cy="172.5" r="4" fill="#059669"/>
+<circle cx="217.5" cy="172.5" r="4" fill="#059669"/>
+<circle cx="270.7" cy="172.5" r="4" fill="#059669"/>
+<circle cx="323.8" cy="172.5" r="4" fill="#059669"/>
+<circle cx="377.0" cy="172.5" r="4" fill="#059669"/>
+<circle cx="483.3" cy="172.5" r="4" fill="#059669"/>
+<circle cx="589.7" cy="172.5" r="4" fill="#059669"/>
+<circle cx="656.1" cy="172.5" r="4" fill="#059669"/>
+<circle cx="669.4" cy="172.5" r="4" fill="#059669"/>
+<circle cx="682.7" cy="172.5" r="4" fill="#059669"/>
+<circle cx="696.0" cy="172.5" r="4" fill="#059669"/>
 <rect x="266" y="40" width="14" height="3" fill="#059669"/>
 <text x="284" y="46" font-size="10">router K=2</text>
-<path d="M 58.0,57.6 L 71.3,196.2 L 84.6,196.2 L 97.9,196.2 L 111.2,196.2 L 124.5,196.2 L 164.3,196.2 L 217.5,196.2 L 270.7,196.2 L 323.8,196.2 L 377.0,196.2 L 483.3,196.2 L 589.7,196.2 L 656.1,196.2 L 669.4,196.2 L 682.7,196.2 L 696.0,196.2" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,172.5 L 84.6,172.5 L 97.9,172.5 L 111.2,172.5 L 124.5,172.5 L 164.3,172.5 L 217.5,172.5 L 270.7,172.5 L 323.8,172.5 L 377.0,172.5 L 483.3,172.5 L 589.7,172.5 L 656.1,172.5 L 669.4,172.5 L 682.7,172.5 L 696.0,172.5" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#f59e0b"/>
-<circle cx="71.3" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="84.6" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="97.9" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="111.2" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="124.5" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="164.3" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="217.5" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="270.7" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="323.8" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="377.0" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="483.3" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="589.7" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="656.1" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="669.4" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="682.7" cy="196.2" r="4" fill="#f59e0b"/>
-<circle cx="696.0" cy="196.2" r="4" fill="#f59e0b"/>
+<circle cx="71.3" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="84.6" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="97.9" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="111.2" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="124.5" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="164.3" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="270.7" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="323.8" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="483.3" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="589.7" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="656.1" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="669.4" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="682.7" cy="172.5" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="172.5" r="4" fill="#f59e0b"/>
 <rect x="366" y="40" width="14" height="3" fill="#f59e0b"/>
 <text x="384" y="46" font-size="10">router K=3</text>
-<path d="M 58.0,57.6 L 71.3,196.2 L 84.6,196.2 L 97.9,196.2 L 111.2,196.2 L 124.5,196.2 L 164.3,196.2 L 217.5,196.2 L 270.7,196.2 L 323.8,196.2 L 377.0,196.2 L 483.3,196.2 L 589.7,196.2 L 656.1,196.2 L 669.4,196.2 L 682.7,196.2 L 696.0,196.2" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,172.5 L 84.6,172.5 L 97.9,172.5 L 111.2,172.5 L 124.5,172.5 L 164.3,172.5 L 217.5,172.5 L 270.7,172.5 L 323.8,172.5 L 377.0,172.5 L 483.3,172.5 L 589.7,172.5 L 656.1,172.5 L 669.4,172.5 L 682.7,172.5 L 696.0,172.5" fill="none" stroke="#dc2626" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
-<circle cx="71.3" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="84.6" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="97.9" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="111.2" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="124.5" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="164.3" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="270.7" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="323.8" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="483.3" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="589.7" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="656.1" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="669.4" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="682.7" cy="196.2" r="4" fill="#dc2626"/>
-<circle cx="696.0" cy="196.2" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="172.5" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="172.5" r="4" fill="#dc2626"/>
 <rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="484" y="46" font-size="10">router K=4</text>
 </svg>
 
 <h3>16×16 双向：K≤4 几乎不改变平台</h3>
-<p>pipelined 需 <code>ring_buf≈?</code>（远超 K=4），故 K=1~4 与 K=0 重合：
-A=48 时 <b>240 cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 的断崖。</p>
+<p>pipelined 需 <code>ring_buf≈14</code>（远超 K=4），故 K=1~4 与 K=0 重合：
+A=48 时 <b>244 cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 的断崖。</p>
 <svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="14" font-weight="bold">16×16 双向：makespan vs AFIFO（每条线 = router cap K）</text>
 <line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
@@ -469,15 +469,15 @@ A=48 时 <b>240 cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 �
 <line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
 <text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
 <line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
-<text x="50" y="273.6" font-size="10" text-anchor="end">129</text>
+<text x="50" y="273.6" font-size="10" text-anchor="end">128</text>
 <line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
-<text x="50" y="215.2" font-size="10" text-anchor="end">259</text>
+<text x="50" y="215.2" font-size="10" text-anchor="end">257</text>
 <line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
-<text x="50" y="156.8" font-size="10" text-anchor="end">388</text>
+<text x="50" y="156.8" font-size="10" text-anchor="end">385</text>
 <line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
-<text x="50" y="98.4" font-size="10" text-anchor="end">518</text>
+<text x="50" y="98.4" font-size="10" text-anchor="end">514</text>
 <line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
-<text x="50" y="40.0" font-size="10" text-anchor="end">648</text>
+<text x="50" y="40.0" font-size="10" text-anchor="end">642</text>
 <line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
 <text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
 <line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
@@ -514,109 +514,109 @@ A=48 时 <b>240 cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 �
 <text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#94a3b8"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#94a3b8"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#94a3b8"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#94a3b8"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#94a3b8"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#94a3b8"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#94a3b8"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#94a3b8"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#94a3b8"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#94a3b8"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#94a3b8"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#94a3b8"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#94a3b8"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#94a3b8"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#94a3b8"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#94a3b8"/>
 <rect x="66" y="40" width="14" height="3" fill="#94a3b8"/>
 <text x="84" y="46" font-size="10">router K=0</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#3b82f6"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#3b82f6"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#3b82f6"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#3b82f6"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#3b82f6"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#3b82f6"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#3b82f6"/>
 <rect x="166" y="40" width="14" height="3" fill="#3b82f6"/>
 <text x="184" y="46" font-size="10">router K=1</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#059669" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#059669" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#059669"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#059669"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#059669"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#059669"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#059669"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#059669"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#059669"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#059669"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#059669"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#059669"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#059669"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#059669"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#059669"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#059669"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#059669"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#059669"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#059669"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#059669"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#059669"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#059669"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#059669"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#059669"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#059669"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#059669"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#059669"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#059669"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#059669"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#059669"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#059669"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#059669"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#059669"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#059669"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#059669"/>
 <rect x="266" y="40" width="14" height="3" fill="#059669"/>
 <text x="284" y="46" font-size="10">router K=2</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#f59e0b"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#f59e0b"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#f59e0b"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#f59e0b"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#f59e0b"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#f59e0b"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#f59e0b"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#f59e0b"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#f59e0b"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#f59e0b"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#f59e0b"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#f59e0b"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#f59e0b"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#f59e0b"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#f59e0b"/>
 <rect x="366" y="40" width="14" height="3" fill="#f59e0b"/>
 <text x="384" y="46" font-size="10">router K=3</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,126.7 L 84.6,134.0 L 97.9,134.4 L 111.2,134.4 L 124.5,144.4 L 164.3,144.4 L 217.5,144.4 L 270.7,144.4 L 323.8,144.4 L 377.0,144.4 L 483.3,144.4 L 589.7,144.4 L 656.1,217.1 L 669.4,217.1 L 682.7,217.1 L 696.0,217.1" fill="none" stroke="#dc2626" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
-<circle cx="71.3" cy="129.7" r="4" fill="#dc2626"/>
-<circle cx="84.6" cy="150.9" r="4" fill="#dc2626"/>
-<circle cx="97.9" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="111.2" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="124.5" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="164.3" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="217.5" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="270.7" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="323.8" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="377.0" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="483.3" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="589.7" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#dc2626"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#dc2626"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#dc2626"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="126.7" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="134.0" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="134.4" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="134.4" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="144.4" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="217.1" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="217.1" r="4" fill="#dc2626"/>
 <rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
 <text x="484" y="46" font-size="10">router K=4</text>
 </svg>
 
 <h3>16×16 双向 · K×A 数值表（makespan）</h3>
-<table><tr><th>router↓ AFIFO→</th><th>A=0</th><th>A=1</th><th>A=2</th><th>A=3</th><th>A=4</th><th>A=5</th><th>A=8</th><th>A=12</th><th>A=16</th><th>A=20</th><th>A=24</th><th>A=32</th><th>A=40</th><th>A=45</th><th>A=46</th><th>A=47</th><th>A=48</th></tr><tr><td class='l'>K=0</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr><tr><td class='l'>K=1</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr><tr><td class='l'>K=2</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr><tr><td class='l'>K=3</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr><tr><td class='l'>K=4</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr></table>
+<table><tr><th>router↓ AFIFO→</th><th>A=0</th><th>A=1</th><th>A=2</th><th>A=3</th><th>A=4</th><th>A=5</th><th>A=8</th><th>A=12</th><th>A=16</th><th>A=20</th><th>A=24</th><th>A=32</th><th>A=40</th><th>A=45</th><th>A=46</th><th>A=47</th><th>A=48</th></tr><tr><td class='l'>K=0</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=1</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=2</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=3</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=4</td><td>595</td><td>443</td><td>427</td><td>426</td><td>426</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>404</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
 </div>
 </body></html>

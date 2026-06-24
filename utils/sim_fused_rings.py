@@ -23,12 +23,13 @@ Bounds reported alongside the simulation:
 import heapq
 from collections import defaultdict
 
-_MX, _MY, H, V, RAMP = 16, 16, 4, 6, 1
+_MX, _MY, H, V, RAMP, CROSS_LAT = 16, 16, 4, 6, 1, 10
 
 
-def cfg(mx, my, h=4, v=6):
-    global _MX, _MY, H, V
+def cfg(mx, my, h=4, v=6, cross=10):
+    global _MX, _MY, H, V, CROSS_LAT
     _MX, _MY, H, V = mx, my, h, v
+    CROSS_LAT = cross
 
 
 def nid(x, y):
@@ -41,6 +42,13 @@ def coord(n):
 
 def edge_lat(u, v):
     return H if (u // _MX) == (v // _MX) else V
+
+
+def link_lat(u, v):
+    """Hop latency: cross-quadrant (AFIFO border) uses CROSS_LAT; intra uses H/V."""
+    if quad_of(u) != quad_of(v):
+        return CROSS_LAT
+    return edge_lat(u, v)
 
 
 def ham_cycle_rect(x0, y0, w, h):
@@ -124,7 +132,7 @@ def simulate(deliveries, ramp_bw):
     while pq:
         ready, _, s, p, c = heapq.heappop(pq)
         send = link.reserve((p, c), ready)
-        arrive = send + edge_lat(p, c)
+        arrive = send + link_lat(p, c)
         e = down.reserve(c, arrive)
         makespan = max(makespan, e + RAMP)
         eject[c] += 1
@@ -166,7 +174,7 @@ def measure_buffers(deliveries, ramp_bw):
         send = link.reserve((p, c), ready)
         if send > ready:
             link_iv[(p, c)].append((ready, send))
-        arrive = send + edge_lat(p, c)
+        arrive = send + link_lat(p, c)
         e = down.reserve(c, arrive)
         if e > arrive:
             ramp_iv[c].append((arrive, e))
@@ -224,7 +232,7 @@ def simulate_afifo(deliveries, ramp_bw):
         send = link.reserve((p, c), ready)
         if send > ready:
             (afifo_iv if cross else ring_iv)[(p, c)].append((ready, send))
-        arrive = send + edge_lat(p, c)
+        arrive = send + link_lat(p, c)
         e = down.reserve(c, arrive)
         if e > arrive:
             eject_iv[c].append((arrive, e))

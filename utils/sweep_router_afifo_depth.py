@@ -118,6 +118,7 @@ def sweep_config(sz, bidir, ramp_bw, router_caps=ROUTER_CAPS, afifo_caps=CAPS):
         "eject_lb": eject_lb(n, ramp_bw),
         "ring_shape": shape,
         "grid": grid,
+        "pipelined": pip,
     }
 
 
@@ -125,7 +126,7 @@ def run(sizes=SIZES, router_caps=ROUTER_CAPS, afifo_caps=CAPS):
     out = {
         "updated": datetime.now(timezone.utc).isoformat(),
         "scheme": "border",
-        "model": "border short-arc; per-port router buffer cap × per-link AFIFO cap",
+        "model": "border short-arc; per-port router buffer cap × per-link AFIFO cap; cross_lat=10",
         "router_caps": list(router_caps),
         "afifo_caps": list(afifo_caps),
         "configs": {},
