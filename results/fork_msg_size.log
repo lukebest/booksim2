@@ -7,3 +7,10 @@
   done m=2 in 1939.2s
 
 === m=3 flit ===
+  ramp=1 strict: hybrid B=8 (uni) mk=1231
+  ramp=1 burst R=6: ring (Q=1) (bi) mk=1016
+  ramp=2 strict: ring (Q=1) (bi) mk=756
+  ramp=2 burst R=6: ring (Q=1) (bi) mk=1016
+  done m=3 in 3811.4s
+
+=== m=4 flit ===
