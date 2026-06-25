@@ -29,7 +29,7 @@ from sweep_quad_ring_shapes import cfg_str, make_quads
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "router_afifo_depth_sweep.json"
 ROUTER_CAPS = (0, 1, 2, 3, 4)
-SIZES = (4, 8, 16)
+SIZES = (16,)
 
 
 def pipelined_candidate(sz, bidir, ramp_bw, quads):

@@ -82,7 +82,7 @@ def table_for_size(data, sz_key, tag):
 def main():
     data = load()
     sections = []
-    for sz in ("4x4", "8x8", "16x16"):
+    for sz in ("16x16",):
         if sz not in data.get("sizes", {}):
             continue
         block = data["sizes"][sz]
@@ -94,11 +94,11 @@ def main():
                 f"<li>border 短弧 AFIFO≤5：<b>{cmp_['border_short_arc']}</b> cy</li>"
                 f"<li>border 刚性 fp_border：<b>{cmp_['border_rigid']}</b> cy</li>"
                 f"</ul><p class='note'>{html.escape(cmp_.get('note',''))}</p></div>")
-    for sz in ("4x4", "8x8", "16x16"):
+    for sz in ("16x16",):
         if sz not in data.get("sizes", {}):
             continue
         block = data["sizes"][sz]
-        lb = 128 if sz == "16x16" else (32 if sz == "8x8" else 8)
+        lb = 128
         labels, vals = [], []
         for prefix in FORK_ORDER:
             k = f"{prefix}_bi"

@@ -28,7 +28,7 @@ def load_search():
 def rigid_results():
     import sched_zerobuf_compare as Z
     out = {}
-    for sz in (4, 8, 16):
+    for sz in (16,):
         Z.cfg(sz, sz, 4, 6)
         Z.init_ring()
         Z.init_quadrants()
@@ -94,7 +94,7 @@ def pick_primary(c):
 def render():
     data = load_search()
     R = rigid_results()
-    sizes = [4, 8, 16]
+    sizes = [16]
     updated = data.get("updated", "")
 
     s = ["<!DOCTYPE html><html><head><meta charset='utf-8'>",
@@ -174,20 +174,14 @@ def render():
         c = data["configs"][f"{sz}x{sz}"][tag]
         return c.get("strict_any") or pick_primary(c)
 
-    u4, b4 = g(4, "uni"), g(4, "bi")
-    u8, b8 = g(8, "uni"), g(8, "bi")
     u16, b16 = g(16, "uni"), g(16, "bi")
     p16u, p16b = data["configs"]["16x16"]["uni"].get("pipelined", {}), data["configs"]["16x16"]["bi"].get("pipelined", {})
 
     s.append("<div class='card'><h2>结论</h2><ul>")
-    s.append(f"<li><b>环形状优化后最小 makespan</b>："
-             f"4×4 = {u4['makespan']}(单)/{b4['makespan']}(双)，"
-             f"8×8 = {u8['makespan']}/{b8['makespan']}，"
-             f"16×16 = {u16['makespan']}(单)/<b>{b16['makespan']}</b>(双)。</li>")
-    s.append(f"<li><b>16×16 双向 240cy</b>：比默认环 266cy 快 26cy；"
+    s.append(f"<li><b>16×16 环形状优化后最小 makespan</b>："
+             f"单向 {u16['makespan']} cy / 双向 <b>{b16['makespan']}</b> cy。</li>")
+    s.append(f"<li><b>16×16 双向 {b16['makespan']} cy</b>：比默认环 266 cy 快 26 cy；"
              f"单链路 AFIFO ~45，均衡 ~40（需 AFIFO depth&gt;5）。</li>")
-    s.append(f"<li><b>8×8 双向 79cy</b>：比默认 86cy 快 7cy（vflip/rect 混合旋转）。</li>")
-    s.append(f"<li><b>4×4 单向 37cy</b>：比默认 39cy 快 2cy。</li>")
     s.append("</ul></div>")
     s.append("</body></html>")
     HTML_PATH.write_text("\n".join(s), encoding="utf-8")

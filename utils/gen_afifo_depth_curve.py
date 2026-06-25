@@ -17,10 +17,6 @@ ROUTER_CAPS = (0, 1, 2, 3, 4)
 ROUTER_COLORS = ["#94a3b8", "#3b82f6", "#059669", "#f59e0b", "#dc2626"]
 
 SERIES = [
-    ("4x4_uni", "4×4 单向", "#3b82f6"),
-    ("4x4_bi", "4×4 双向", "#60a5fa"),
-    ("8x8_uni", "8×8 单向", "#059669"),
-    ("8x8_bi", "8×8 双向", "#34d399"),
     ("16x16_uni", "16×16 单向", "#dc2626"),
     ("16x16_bi", "16×16 双向", "#f87171"),
 ]
@@ -266,9 +262,9 @@ pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> 
 <li><b>AFIFO 与 router buffer 解耦</b>：跨界等待仍在 AFIFO；加深 K 主要缓解<strong>象限内环</strong>与<strong>eject 对齐</strong>，不能替代深 AFIFO 对 spread=0 大跨界调度的需求。</li>
 </ul>
 
-<h3>各尺寸 @ AFIFO={a_hi}：makespan vs router cap K</h3>
+<h3>16×16 @ AFIFO={a_hi}：makespan vs router cap K</h3>
 {small_tbl}
-<p class='note'>4×4 单向 K≥2：37→36；8×8 单向 K≥2：117→114；16×16 单向 K≥3：651→366；
+<p class='note'>16×16 单向 K≥3：{mk_u0}→{mk_u3} cy（pipelined）；
 16×16 双向 K≤4 与 K=0 相同（pipelined 需 ring_buf≈{pb.get('ring_buf','?')}）。</p>
 
 <h3>16×16 单向：K≥3 带来最大收益</h3>
@@ -370,9 +366,9 @@ def balanced_diag_section(data, bdata):
 <ul>
 <li><b>AFIFO 峰值下降</b>：在浅缓冲（atomic）区间，均衡把单链路 AFIFO 峰值显著降低。
 16×16 双向 cap=5 时：原始需 afifo=<b>5</b>（mk=404），均衡只需 afifo=<b>2</b>（mk=423）——峰值 −60%。
-8×8 单向 cap≥2：3→2；16×16 双向 cap=3~4：3→2。</li>
-<li><b>makespan 略升</b>：对角下半经 QV 要多走垂直象限的整列短弧，关键路径变长，双向配置约 +5%
-（16×16 双向最优 244→267，8×8 双向 89→93）。跨界时延=10cy 放大了这一代价。</li>
+16×16 双向 cap=3~4：3→2。</li>
+<li><b>makespan 略升</b>：对角下半经 QV 要多走垂直象限的整列短弧，关键路径变长，16×16 双向约 +5%
+（最优 244→267）。跨界时延=10cy 放大了这一代价。</li>
 <li><b>本质是权衡</b>：把对角流量摊到两条中线边界，<strong>用更浅的 AFIFO（更小的边界 FIFO 面积）换取约 5% 的 makespan</strong>。
 若 AFIFO 深度是受限/昂贵资源（如 GALS 边界异步 FIFO），均衡方案更优；若追求最短 makespan 且 FIFO 充足，原始单路径更快。</li>
 </ul>
@@ -520,7 +516,7 @@ def size_section(sdata):
 
     # chart 2: representative configs, ramp 1/2 overlay
     overlay_blocks = []
-    for rep_key, rep_label in (("16x16_bi", "16×16 双向"), ("8x8_bi", "8×8 双向")):
+    for rep_key, rep_label in (("16x16_bi", "16×16 双向"),):
         ramp_colors = {1: "#dc2626", 2: "#f59e0b"}
         ser = []
         for rb in ramps:

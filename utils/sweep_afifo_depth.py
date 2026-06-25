@@ -22,7 +22,7 @@ from sweep_quad_ring_shapes import cfg_str, make_quads
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "border_afifo_depth_sweep.json"
 CAPS = (0, 1, 2, 3, 4, 5, 8, 12, 16, 20, 24, 32, 40, 45, 46, 47, 48)
-SIZES = (4, 8, 16)
+SIZES = (16,)
 
 
 def out_path(scheme):

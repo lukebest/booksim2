@@ -33,7 +33,7 @@ from sweep_quad_ring_shapes import cfg_str, make_quads
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "tree_fork_research.json"
-SIZES = (4, 8, 16)
+SIZES = (16,)
 AFIFO_CAP = 5
 
 

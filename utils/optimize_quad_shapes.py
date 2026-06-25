@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "optimal_quad_shapes.json"
 BASES = ("rect", "vflip", "vband")
 AFIFO_CAP = 5
-SIZES = (4, 8, 16)
+SIZES = (16,)
 
 
 def sweep_cfg(sz, scheme, bidir, ramp_bw, progress=512):

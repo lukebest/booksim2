@@ -152,29 +152,4 @@
 </table>
 <p style='color:#64748b;font-size:12px'>“—”表示该带数下子区退化为单行/单列无闭环，未计入。</p>
 </div>
-<div class='card'><h2>附：AFIFO border 4-ring allgather（形式化推导 + 仿真）</h2>
-<p>边界 link 为 AFIFO：包<b>经过</b>边界节点即可多播写入，<b>不必</b>等本环整圈结束。四象限环<b>并行</b>运转，均衡发送即可。脚本 <code>utils/sim_afifo_border.py</code>。</p>
-<h3>为什么当前「全圈 foreign lap」仿真 &asymp; 3&times;T_lap？</h3><p>当前 <code>build_afifo_delivery</code> 在边界<b>分叉</b>（仿真已正确：到达边界同一 cycle 继续本环 + 写入 AFIFO），但进入邻环后仍要求<b>整圈遍历</b> H / V / 对角环。对最坏源 s，对角链为：</p><p style='margin-left:1.5em;font-family:monospace'>t &asymp; d_H + H + d_Vh + V + T_lap(diag) + RAMP</p><p>其中 d_H、d_Vh 可达 O(T_lap)，再加对角整圈 T_lap &rarr; <b>L_sync &asymp; 3.0&times;T_lap</b>（16&times;16 单向 1048/352）。且 256 源同时在 t=0 注入，link 日历争用 &rarr; AFIFO sim = <b>1055</b> cycle。</p><p><b>这不是「必须等本环跑完才能跨界」</b>——分叉已在边界即时发生；3&times; 来自<b>邻环整圈</b>叠加最坏路径，而非本环串行等待。</p>
-<h3>均衡 AFIFO 下的 makespan 下界：T_lap + &tau;（一圈 + 尾）</h3><p>正确思路：四环<b>同时</b>跑各自的一圈；本环包未到边界前的空闲时隙由 AFIFO 读入邻环数据；跨界后在邻环只需<b>短弧覆盖</b>（沿行/列从边界扩散），不必再绕完整 foreign 整圈。均衡发送 = 各源注入/跨界时刻分散在 [0, T_lap] 窗口，避免挤在同一边界 AFIFO。</p><p style='margin-left:1.5em;font-family:monospace'>T_min = max( T_lap + &tau;, B_eject )</p><ul><li><b>T_lap</b>：单包单环整圈链路时间（四环并行，取 max 亦为 T_lap）</li><li><b>&tau;</b>：最后一批边界 AFIFO 注入后，沿邻环短弧抵达最远节点所需尾延迟。16&times;16 单向实测 &tau; = border_ref &minus; ring_ref = 83 cycle</li><li><b>B_eject</b> = &lceil;(N&minus;1)/r&rceil;</li></ul><p>16&times;16 单向：<b>T_min = 352 + 83 = 435</b> （border 短弧参考 437 cycle），远低于全圈 foreign lap 仿真的 1055 cycle。</p>
-<h3>术语</h3><table><tr><th>符号</th><th>含义</th></tr><tr><td><b>r</b></td><td>下 ramp 带宽 flit/cycle</td></tr><tr><td><b>T_lap</b></td><td>单包在单个 Hamilton 环上完成一整圈的链路时间</td></tr><tr><td><b>AFIFO sim</b></td><td>全圈 foreign lap 模型 + 全体 t=0 同步注入的仿真（上界）</td></tr><tr><td><b>T_min</b></td><td>均衡 AFIFO、一圈+短弧尾的理论下界 T_lap+&tau;</td></tr><tr><td><b>L_dir</b></td><td>并行 max(T_home,T_H,T_V,T_diag) 最坏源路径（全圈 foreign 模型）</td></tr></table>
-<h3>单包单环遍历 T_lap</h3><table><tr><th>Mesh</th><th>m&times;m</th><th>C_m</th><th>T_lap 单向</th><th>T_lap 双向</th></tr>
-<tr><td>4&times;4</td><td>2&times;2</td><td>20</td><td>16</td><td>10</td></tr>
-<tr><td>8&times;8</td><td>4&times;4</td><td>84</td><td>80</td><td>44</td></tr>
-<tr><td>16&times;16</td><td>8&times;8</td><td>356</td><td>352</td><td>184</td></tr>
-</table>
-<h3>仿真对比</h3><table><tr><th>Mesh</th><th>dir</th><th>r</th><th>AFIFO sim<br>(全圈 foreign)</th><th>T_min<br>(T_lap+&tau;)</th><th>&tau;</th><th>border 短弧参考</th><th>L_dir</th><th>ok</th></tr>
-<tr><td>4&times;4</td><td>uni</td><td>1</td><td>51</td><td><b>36</b></td><td>20</td><td>38</td><td>50</td><td>Y</td></tr>
-<tr><td>4&times;4</td><td>uni</td><td>2</td><td>51</td><td><b>36</b></td><td>20</td><td>38</td><td>50</td><td>Y</td></tr>
-<tr><td>4&times;4</td><td>bi</td><td>1</td><td>33</td><td><b>30</b></td><td>20</td><td>32</td><td>34</td><td>Y</td></tr>
-<tr><td>4&times;4</td><td>bi</td><td>2</td><td>33</td><td><b>30</b></td><td>20</td><td>32</td><td>34</td><td>Y</td></tr>
-<tr><td>8&times;8</td><td>uni</td><td>1</td><td>248</td><td><b>121</b></td><td>41</td><td>123</td><td>248</td><td>Y</td></tr>
-<tr><td>8&times;8</td><td>uni</td><td>2</td><td>248</td><td><b>121</b></td><td>41</td><td>123</td><td>248</td><td>Y</td></tr>
-<tr><td>8&times;8</td><td>bi</td><td>1</td><td>127</td><td><b>84</b></td><td>40</td><td>86</td><td>126</td><td>Y</td></tr>
-<tr><td>8&times;8</td><td>bi</td><td>2</td><td>127</td><td><b>84</b></td><td>40</td><td>86</td><td>126</td><td>Y</td></tr>
-<tr><td>16&times;16</td><td>uni</td><td>1</td><td>1055</td><td><b>435</b></td><td>83</td><td>437</td><td>1048</td><td>Y</td></tr>
-<tr><td>16&times;16</td><td>uni</td><td>2</td><td>1055</td><td><b>435</b></td><td>83</td><td>437</td><td>1048</td><td>Y</td></tr>
-<tr><td>16&times;16</td><td>bi</td><td>1</td><td>509</td><td><b>281</b></td><td>97</td><td>283</td><td>518</td><td>Y</td></tr>
-<tr><td>16&times;16</td><td>bi</td><td>2</td><td>509</td><td><b>265</b></td><td>81</td><td>267</td><td>518</td><td>Y</td></tr>
-</table><p style='color:#64748b;font-size:12px'>AFIFO sim 列：邻环<b>整圈</b> + 同步注入（悲观上界）。T_min 列：均衡跨界 + 短弧扩散（一圈+尾），与 border 短弧参考一致。</p>
-<h3>16&times;16 结论</h3><ul><li><b>3&times;T_lap 的原因</b>：foreign 整圈模型在最坏源上对角链 &asymp; 3 个环长；不是「等本环完成才跨界」。</li><li><b>最小 makespan（均衡 AFIFO）</b>：T_lap + &tau; &asymp; 352 + 83 = <b>435</b> cycle（单向），四环并行一圈，边界 AFIFO 填空闲时隙，邻环短弧收尾。</li><li><b>全圈 foreign 仿真 1055</b> 是未做均衡短弧优化的上界，不应与 T_min 混淆。</li><li>实现 T_min 需：边界即时分叉（已有）+ 邻环<b>短弧</b>而非整圈 + 注入时刻均衡分散（见 <code>balanced_inj_offsets</code>）。</li></ul></div>
 </body></html>

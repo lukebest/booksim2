@@ -266,7 +266,7 @@ def simulate_afifo(deliveries, ramp_bw):
     }
 
 
-def border_afifo_study(sizes=(4, 8, 16)):
+def border_afifo_study(sizes=(16,)):
     """Min makespan under AFIFO model with ring-shape-optimized quads per size."""
     import sched_ring_zerobuf as S
     from optimize_quad_shapes import quads_for

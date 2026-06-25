@@ -17,7 +17,7 @@ from pathlib import Path
 
 from optimize_quad_shapes import OUT, AFIFO_CAP, sweep_cfg
 
-SIZES = (4, 8, 16)
+SIZES = (16,)
 
 
 def run(sizes=SIZES):
