@@ -477,6 +477,65 @@ def fp_hybrid_v(s, B, bidir, ramp_bw):
 # Rigid offset packer (conflict-free links + capacity-RAMP_BW ramps).
 # --------------------------------------------------------------------------
 def pack(footprints, ramp_bw, src_order, flits=1):
+    mk, max_off, busy = _pack_core(footprints, ramp_bw, src_order, flits=flits)
+    return mk, max_off, busy
+
+
+def export_events(footprints, ramp_bw, src_order, flits=1):
+    """Run pack and emit per-link send events for cycle-by-cycle visualization.
+
+    Returns (makespan, max_offset, busy, inject_offsets, events) where each event is
+    (source, p, c, send_t, lat, arr_t, kind) and kind is 'link'.
+    """
+    inject_offsets = {}
+    events = []
+    link_busy = defaultdict(dict)
+    up_busy = defaultdict(dict)
+    down_busy = defaultdict(dict)
+
+    def table(kind):
+        return link_busy if kind == 'L' else up_busy if kind == 'U' else down_busy
+
+    def cap(kind):
+        return 1 if kind == 'L' else ramp_bw
+
+    makespan = 0
+    max_off = 0
+    for s in src_order:
+        slots = footprints[s]
+        forbidden = set()
+        for kind, key, rel in slots:
+            d = table(kind).get(key)
+            if not d:
+                continue
+            c = cap(kind)
+            for cyc, ct in d.items():
+                if ct >= c:
+                    for i in range(flits):
+                        off = cyc - rel - i
+                        if off >= 0:
+                            forbidden.add(off)
+        off = 0
+        while off in forbidden:
+            off += 1
+        inject_offsets[s] = off
+        for kind, key, rel in slots:
+            cyc = off + rel
+            t = table(kind)
+            for i in range(flits):
+                t[key][cyc + i] = t[key].get(cyc + i, 0) + 1
+            if kind == 'L':
+                p, c = key // 100000, key % 100000
+                lat = edge_lat(p, c)
+                events.append((s, p, c, cyc, lat, cyc + lat, "link"))
+            elif kind == 'D':
+                makespan = max(makespan, cyc + flits - 1 + RAMP)
+        max_off = max(max_off, off)
+    busy = (link_busy, up_busy, down_busy)
+    return makespan, max_off, busy, inject_offsets, events
+
+
+def _pack_core(footprints, ramp_bw, src_order, flits=1):
     link_busy = defaultdict(dict)
     up_busy = defaultdict(dict)
     down_busy = defaultdict(dict)

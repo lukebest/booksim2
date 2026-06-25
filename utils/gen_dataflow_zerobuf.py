@@ -18,6 +18,7 @@ from pathlib import Path
 
 import sim_fused_rings as fr
 import sched_ring_zerobuf as S
+import sched_zerobuf_compare as Z
 from sweep_buffer_pareto import build_grid_border
 from sweep_quad_ring_shapes import cfg_str, make_quads
 
@@ -29,6 +30,80 @@ AFIFO_CAP = 5
 # 4096-sweep minimum-makespan bi border shape (mk=240 @ spread=0); atomic d5 uses same rings.
 BORDER_BI_CFG = (("vflip", 1), ("rect", 1), ("rect", 3), ("vflip", 3))
 GRID_8X2 = (8, 2)
+HYBRID_B = 2
+
+
+def hybrid_band_paths(B):
+    """Hamilton cycles for each horizontal band (B bands, height MY//B)."""
+    R = MY // B
+    return [fr.ham_cycle_rect(0, b * R, MX, R) for b in range(B)]
+
+
+def hybrid_band_map(B):
+    R = MY // B
+    return [(s // MX) // R for s in range(MX * MY)]
+
+
+def pack_rigid_hybrid(B, bidir, ramp_bw):
+    """Best rigid 0-buffer pack for hybrid B=2; returns scheme dict for HTML."""
+    Z.cfg(MX, MY, H, V)
+    Z.init_ring()
+    build_fp = lambda s: Z.fp_hybrid(s, B, bidir, ramp_bw)
+    foot = {s: build_fp(s) for s in range(MX * MY)}
+    best = None
+    for order_name, gen in Z.SRC_ORDERS.items():
+        mk, mo, busy, injects, evs = Z.export_events(foot, ramp_bw, gen())
+        ok = Z.verify(busy, ramp_bw)
+        if best is None or mk < best[0]:
+            best = (mk, mo, order_name, ok, injects, evs, busy)
+    mk, max_off, order_name, ok, injects, evs, busy = best
+    s_, p_, c_, t_, lat_, arr_, k_ = [], [], [], [], [], [], []
+    for (s, p, c, t, lat, arr, kind) in evs:
+        s_.append(s); p_.append(p); c_.append(c)
+        t_.append(t); lat_.append(lat); arr_.append(arr); k_.append(kind)
+    start_at = [[] for _ in range(mk + 2)]
+    end_at = [[] for _ in range(mk + 2)]
+    for i, (t, a) in enumerate(zip(t_, arr_)):
+        if t <= mk:
+            start_at[t].append(i)
+        if a <= mk:
+            end_at[a].append(i)
+    tag = "bi" if bidir else "uni"
+    R = MY // B
+    dir_note = "双向" if bidir else "单向"
+    note = (
+        f"<b>Hybrid B={B}</b>：{MY // B} 行 × {MX} 列水平 Hamilton 带内环 allgather（Phase A），"
+        f"再沿每列垂直维序树向上下带广播（Phase B）。"
+        f"刚性 0-buffer pack，源序 <b>{order_name}</b>，max inject offset={max_off}。"
+        f"makespan=<b>{mk}</b> cy；router 内<b>零 buffer</b>、<b>无 AFIFO 等待</b>、"
+        f"无链路/下 ramp 冲突（{dir_note}，下 ramp={ramp_bw} flit/cy）。"
+    )
+    name = f"hybrid B={B} {tag} r{ramp_bw}"
+    label = f"hybrid B={B} · {dir_note} · 下 ramp={ramp_bw} flit/cy"
+    out = {
+        "name": name,
+        "label": label,
+        "note": note,
+        "makespan": mk,
+        "afifo_depth": 0,
+        "afifo_bal_peak": 0,
+        "max_inject_off": max_off,
+        "events": {"s": s_, "p": p_, "c": c_, "t": t_, "lat": lat_,
+                   "arr": arr_, "kind": k_, "n_ev": len(s_)},
+        "start_at": start_at,
+        "end_at": end_at,
+        "ring_paths": hybrid_band_paths(B),
+        "band": {"B": B, "R": R},
+        "bandmap": hybrid_band_map(B),
+        "ramp_bw": ramp_bw,
+        "rigid": True,
+        "pack_order": order_name,
+        "afifo": {"global": [0] * (mk + 1), "peak": 0, "peak_cy": 0,
+                  "worst": None, "top": []},
+        "afifo_balanced": {"global": [0] * (mk + 1), "peak": 0, "peak_cy": 0},
+    }
+    out["conflicts"] = compute_conflicts(out["events"], ramp_bw, mk)
+    return out
 
 def quad_rings():
     hw, hh = MX // 2, MY // 2
@@ -127,7 +202,8 @@ def compute_conflicts(events_dict, ramp_bw, makespan):
     }
 
 
-def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp_bw=None):
+def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None,
+         band=None, bandmap=None, ramp_bw=None, rigid=False):
     ev = result["events"]
     mk = result["makespan"]
     s_, p_, c_, t_, lat_, arr_, k_ = [], [], [], [], [], [], []
@@ -165,6 +241,12 @@ def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp
         out["grid"] = {"Qx": grid[0], "Qy": grid[1]}
     if cellmap is not None:
         out["cellmap"] = cellmap
+    if band is not None:
+        out["band"] = band
+    if bandmap is not None:
+        out["bandmap"] = bandmap
+    if rigid:
+        out["rigid"] = True
     if ramp_bw is not None:
         out["ramp_bw"] = ramp_bw
     else:
@@ -259,6 +341,10 @@ def build():
         "四象限 Hamilton 环经边界 AFIFO 拼成一条全局环。",
         S.schedule(MX, True, 2, S.deliv_global, record_events=True), global_ring())
 
+    # hybrid B=2: strict 0-buffer rigid pack (best @ bi ramp=1 -> 416cy)
+    schemes["hybrid_b2_bi_r1"] = pack_rigid_hybrid(HYBRID_B, True, 1)
+    schemes["hybrid_b2_bi_r2"] = pack_rigid_hybrid(HYBRID_B, True, 2)
+
     cell, pad = 34, 44
     cfg = {
         "mx": MX, "my": MY, "cell": cell, "pad": pad,
@@ -266,9 +352,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["grid_8x2_r2", "grid_8x2_r4", "border_d5",
-                  "ringfollow_opt", "ringfollow", "global1"],
-        "default": "grid_8x2_r2",
+        "order": ["hybrid_b2_bi_r1", "hybrid_b2_bi_r2", "grid_8x2_r2", "grid_8x2_r4",
+                  "border_d5", "ringfollow_opt", "ringfollow", "global1"],
+        "default": "hybrid_b2_bi_r1",
         "schemes": schemes,
     }
     return cfg
@@ -371,7 +457,8 @@ Mesh 链路口容量 1 flit/cy；下 ramp 容量 = ramp_bw flit/cy。
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
 <table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th><th>冲突</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note"><b>grid 8×2</b>：16×16 划为 8×2 个 2×8 Hamilton 小环 + 格间 AFIFO，atomic 单链路 AFIFO≤5。
+<p class="note"><b>hybrid B=2</b>（416cy）：2 条 8 行 × 16 列水平 Hamilton 带内环 + 列向垂直树广播；刚性 0-buffer pack，无 AFIFO。
+<b>grid 8×2</b>：16×16 划为 8×2 个 2×8 Hamilton 小环 + 格间 AFIFO，atomic 单链路 AFIFO≤5。
 <b>border 387cy</b>：4096 组扫描四象限环 + natural 源序。240cy 需 spread=0 且无 AFIFO 上限。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
@@ -382,7 +469,7 @@ Mesh 链路口容量 1 flit/cy；下 ramp 容量 = ramp_bw flit/cy。
 </div>
 <div class="panel"><h2>Hamilton 环路径</h2>
 <svg id="ringsvg" style="width:100%;max-width:280px;display:block;margin:0 auto"></svg>
-<p class="note">彩色=各小环走向；红虚线=格间/象限边界（AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
+<p class="note">彩色=各小环走向；红虚线=格间/象限/带边界。hybrid 红虚线=水平带分界（跨带走垂直 mesh 链，无 AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
 </div>
 </div>
 </div>
@@ -397,8 +484,17 @@ function pos(i){return D.pos[i];}
 function coord(i){return [i%D.mx,(i/D.mx)|0];}
 function hue(s){return 'hsl('+Math.round(s*360/D.n)+',72%,48%)';}
 function isCross(p,c){
+  if(S.bandmap)return S.bandmap[p]!==S.bandmap[c];
   if(S.cellmap)return S.cellmap[p]!==S.cellmap[c];
   return D.qmap[p]!==D.qmap[c];}
+function drawBandLines(ctx, sc, pad, stroke, lw, dash){
+  if(!S.band||!S.bandmap)return false;
+  const R=S.band.R, bands=D.my/R;
+  ctx.save();ctx.strokeStyle=stroke;ctx.lineWidth=lw;
+  if(dash)ctx.setLineDash(dash);else ctx.setLineDash([]);
+  for(let b=1;b<bands;b++){const y=pad+b*R*sc;
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(pad+(D.mx-1)*sc,y);ctx.stroke();}
+  ctx.restore();return true;}
 function drawGridLines(ctx, sc, pad, stroke, lw, dash){
   if(!S.grid)return false;
   const wx=D.mx/S.grid.Qx, wy=D.my/S.grid.Qy;
@@ -522,6 +618,12 @@ function drawRingSvg(){
       const l=document.createElementNS(NS,'line');l.setAttribute('x1',pad);l.setAttribute('y1',y);
       l.setAttribute('x2',pad+(D.mx-1)*sc);l.setAttribute('y2',y);l.setAttribute('stroke','#dc2626');
       l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
+  }else if(S.band){
+    const R=S.band.R, bands=D.my/R;
+    for(let b=1;b<bands;b++){const y=pad+b*R*sc;
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',pad);l.setAttribute('y1',y);
+      l.setAttribute('x2',pad+(D.mx-1)*sc);l.setAttribute('y2',y);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
   }else{
     const hw=D.mx/2,hh=D.my/2;
     [['M',pad,pad+hh*sc,'L',pad+(D.mx-1)*sc,pad+hh*sc],
@@ -597,16 +699,22 @@ function ensureStatic(){
   const hw=D.mx/2,hh=D.my/2;
   [[0,0,0],[hw,0,1],[0,hh,2],[hw,hh,3]].forEach(([x0,y0,qi])=>{c.fillStyle=QBG[qi];
     c.fillRect(D.pad+x0*D.cell-14,D.pad+y0*D.cell-14,(hw-1)*D.cell+28,(hh-1)*D.cell+28);});
+  if(S.bandmap){
+    const R=S.band.R, cols=[QBG[0],QBG[2]];
+    for(let s=0;s<D.n;s++){const x=s%D.mx,y=(s/D.mx)|0,b=S.bandmap[s];
+      c.fillStyle=cols[b%2];c.fillRect(D.pad+x*D.cell-12,D.pad+y*D.cell-12,D.cell+4,D.cell+4);}
+  }
   c.strokeStyle='#e2e8f0';c.lineWidth=2;
   for(let y=0;y<D.my;y++)for(let x=0;x<D.mx;x++){const i=x+D.mx*y,[px,py]=pos(i);
     if(x+1<D.mx){const[qx,qy]=pos(i+1);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}
     if(y+1<D.my){const[qx,qy]=pos(i+D.mx);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}}
   c.setLineDash([6,4]);c.strokeStyle='#dc2626';c.lineWidth=2;
   if(!drawGridLines(c,D.cell,D.pad,'#dc2626',2,[6,4])){
+    if(!drawBandLines(c,D.cell,D.pad,'#dc2626',2,[6,4])){
     const mx=D.pad+(hw-0.5)*D.cell,my=D.pad+(hh-0.5)*D.cell;
     c.beginPath();c.moveTo(D.pad-10,my);c.lineTo(D.W-D.pad+10,my);c.stroke();
     c.beginPath();c.moveTo(mx,D.pad-10);c.lineTo(mx,D.H-D.pad+10);c.stroke();
-  }
+  }}
   c.setLineDash([]);c.lineWidth=1.2;
   S.ring_paths.forEach((path,qi)=>{c.strokeStyle=QCOL[qi%4];c.globalAlpha=0.22;c.beginPath();
     path.forEach((nd,k)=>{const p=pos(nd);if(k)c.lineTo(p[0],p[1]);else c.moveTo(p[0],p[1]);});
@@ -669,7 +777,8 @@ function syncScheme(){
     '<span class="conf-ok">无冲突</span>':
     '<span class="conf-bad">链路'+C.n_link_conflicts+'/下ramp'+C.n_eject_conflicts+'</span>';
   document.getElementById('slider').max=S.makespan;
-  document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
+  document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note+
+    (S.rigid?' <span class="tag" style="background:#7c3aed">刚性0-buffer</span>':'');
   document.getElementById('jumppeak').onclick=()=>{
     const cy=(S.afifo&&S.afifo.peak_cy)||0;stop();
     if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
