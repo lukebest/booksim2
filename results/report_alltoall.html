@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>All-to-All / Any-to-Any：零 buffer 模式与 buffer–makespan 关系</title>
+<style>
+body{font-family:'Segoe UI',Arial,sans-serif;margin:24px;color:#0f172a;line-height:1.65;max-width:980px;}
+h1,h2,h3{color:#1e3a8a;} h3{font-size:15px;margin:18px 0 8px;}
+.card{background:#fff;border:1px solid #e2e8f0;padding:18px;margin:18px 0;border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0;}
+td,th{border:1px solid #cbd5e1;padding:6px 8px;} th{background:#e2e8f0;}
+code{background:#f1f5f9;padding:2px 5px;border-radius:4px;font-size:12px;}
+.note{font-size:12px;color:#64748b;}
+a{color:#2563eb;}
+ul{margin:8px 0;padding-left:22px;}
+li{margin:4px 0;}
+.tag{display:inline-block;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:6px;}
+</style></head><body>
+
+<h1>All-to-All / Any-to-Any：零 router buffer 最优模式 &amp; buffer–makespan 关系</h1>
+<p class="note">基于 booksim2 calendar 模型（12×16 mesh, H=4, V=8, ramp=1, 每有向 link 1 flit/cycle）。
+相关仿真见 <a href="report.html">report.html</a>、数据流见 <a href="dataflow.html">dataflow.html</a>。
+生成脚本 <code>utils/gen_alltoall_report.py</code>。</p>
+
+<div class="card"><h2>1. 约束定义</h2>
+<p><span class="tag">无冲突</span>每条有向 link 每个 send-cycle 最多 1 flit（<code>inject≤1</code>）。</p>
+<p><span class="tag">无阻塞</span>每跳在 router 输出端口最多等待 W cycle；W=0 为完全刚性。</p>
+<p><span class="tag">无 router buffer</span><code>ring_buf=0</code> 且 <code>eject_buf=0</code>：flit 不在 router 排队；
+争用只能退到<strong>源 PE 注入队列</strong>（或边界 AFIFO，mesh all-to-all 通常无 AFIFO）。</p>
+<p><span class="tag">E=0</span>到达目的节点当 cycle 必须 eject，down-ramp 无队列。</p>
+</div>
+
+<div class="card"><h2>2. All-to-All 最优算法与 Pattern</h2>
+<h3>理论下界</h3>
+<p>瓶颈在<strong>二分带宽</strong>，不是直径：</p>
+<p><code>makespan ≥ ⌈N(N−1)M / B⌉ + diameter + 2×ramp − M</code></p>
+<p>12×16（N=192, B≈48）：带宽项 <code>764×M</code>；pipeline drain ≈ 166−M →
+M=1 完整下界 <strong>929</strong> cy，M=16 带宽项即 <strong>12224</strong> cy。</p>
+
+<h3>最优路由 Pattern</h3>
+<p><strong>维序最短路径（XY 或 YX）</strong>：先走完 Δx（H-link），再在转角 router 切到 Δy（V-link）。
+固定、无死锁、<strong>无 fork</strong>——与 AllGather 的多播树是不同问题。</p>
+
+<h3>最优调度</h3>
+<ol>
+<li><strong>二分槽流水线</strong>（<code>collective.cpp::PlanAllToAll</code>）：对 N(N−1)M 个流编号，
+按 <code>start = slot / B</code> 错开注入，使最小割平均 B flit/cycle。</li>
+<li><strong>两阶段维序</strong>（文档规划）：Phase-X 完成全部水平位移 → Phase-Y 完成垂直位移；
+大 M 时与槽流水线等价，均逼近 <code>764×M</code>。</li>
+</ol>
+
+<h3>零 buffer 要点</h3>
+<p>每条 (src,dst) 路径在给定 <code>inject_s</code> 后是<strong>刚性链</strong>：
+<code>send(p→c) = arrive(p)</code>（W=0）。全局只需为所有流选注入相位，使 link send-cycle 不碰撞——
+本质是<strong>边着色 / link slot packing</strong>，比 AllGather 的多播树耦合简单得多。</p>
+</div>
+
+<div class="card"><h2>3. Any-to-Any 最优算法与 Pattern</h2>
+<table>
+<tr><th></th><th>All-to-All</th><th>Any-to-Any</th></tr>
+<tr><td>流数</td><td>N(N−1)M</td><td><strong>N×M</strong>（每源 1 个目的）</td></tr>
+<tr><td>路由</td><td>XY 维序</td><td><strong>每对 Dijkstra 最短路径</strong></td></tr>
+<tr><td>小 M 瓶颈</td><td>二分带宽 + pipeline drain</td><td>最长路径 + 调度效率</td></tr>
+<tr><td>大 M 瓶颈</td><td>二分带宽</td><td>同样 saturate cut → ≈ all-to-all</td></tr>
+</table>
+<p>本仓库默认实例：固定 derangement 置换（seed=42），M=1 makespan=360（总流量远小于 all-to-all 的 929）；
+M≥16 时与 all-to-all 同为 12224（eff=1.0）。</p>
+</div>
+
+<div class="card"><h2>4. 与 AllGather 对比</h2>
+<table>
+<tr><th>特性</th><th>AllGather</th><th>All-to-All</th></tr>
+<tr><td>流量形态</td><td>多播树 + router fork</td><td><strong>单播链</strong>（无 fork）</td></tr>
+<tr><td>瓶颈资源</td><td>down-ramp + 树共享前缀</td><td><strong>二分带宽 B</strong></td></tr>
+<tr><td>最优路由</td><td>双向维序多树 X-then-Y</td><td><strong>XY / YX 维序最短路径</strong></td></tr>
+<tr><td>最优调度</td><td>全局 link calendar + 源注入偏移</td><td><strong>二分槽流水线</strong> 或 X→Y 两阶段</td></tr>
+<tr><td>W=0 惩罚 (12×16)</td><td>~2.8× (579 vs 205 LB*)</td><td><strong>预期 ~10–30%</strong>（无实测 W 扫描）</td></tr>
+<tr><td>深 buffer 能否突破下界</td><td>不能（eject/fork 耦合）</td><td>不能（<code>764×M</code> 带宽墙）</td></tr>
+</table>
+<p class="note">AllGather 的 buffer 深度扫描见 <a href="report.html">report.html</a>「AllGather：无冲突、缓冲与 makespan 权衡」
+及 <a href="report_16x16.html">report_16x16.html</a>（0-buffer 方案对比）。</p>
+</div>
+
+<div class="card"><h2>5. Router buffer 深度 vs All-to-All makespan</h2>
+
+<h3>5.1 核心结论：All-to-All 对 buffer <em>不敏感</em></h3>
+<ul>
+<li>Calendar 调度器冲突时 <code>ReserveLink</code> 会 <code>t++</code> 等待 → 隐式 <strong>W=∞</strong>。</li>
+<li>大 M 时 makespan 已精确命中二分带宽下界；<strong>加深 buffer 无法进一步降低</strong>。</li>
+<li>Unlike AllGather：无 fork 共享前缀、无每节点 eject (N−1) 份多播副本的强耦合。</li>
+<li>Router buffer 主要用于 XY <strong>转角 1–2 cycle 对齐</strong>；W≥2 预期即饱和。</li>
+</ul>
+
+<h3>5.2 概念曲线（W vs makespan, M=1）</h3>
+<svg width="520" height="240" xmlns="http://www.w3.org/2000/svg">
+<text x="260" y="16" text-anchor="middle" font-size="12" fill="#334155">
+All-to-All：router buffer 深度 W vs makespan（12×16, M=1, 概念曲线）</text>
+<line x1="52" y1="204" x2="504" y2="204" stroke="#94a3b8"/>
+<line x1="52" y1="28" x2="52" y2="204" stroke="#94a3b8"/>
+<line x1="52" y1="62.2" x2="504" y2="62.2" stroke="#059669" stroke-dasharray="5 4"/>
+<text x="502" y="57.2" font-size="9" fill="#059669" text-anchor="end">地板 929 cy</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="52.0,41.0 108.5,53.9 165.0,62.2 221.5,62.2 278.0,62.2 334.5,62.2 391.0,62.2 447.5,62.2"/>
+<circle cx="52" cy="41" r="4" fill="#2563eb"/>
+<text x="52" y="33" text-anchor="middle" font-size="9">W=0 ~1068</text>
+<circle cx="165" cy="62" r="4" fill="#2563eb"/>
+<text x="165" y="54" text-anchor="middle" font-size="9">W=2 ~929</text>
+<circle cx="448" cy="62" r="4" fill="#94a3b8"/>
+<text x="448" y="76" text-anchor="middle" font-size="9" fill="#64748b">W=∞ 929</text>
+<text x="260" y="232" text-anchor="middle" font-size="10" fill="#64748b">每跳 router 等待上限 W →</text>
+<text x="14" y="116" text-anchor="middle" font-size="10" fill="#64748b"
+ transform="rotate(-90 14 116)">makespan</text>
+<p style="font-size:12px;color:#64748b;margin-top:8px">注：W=0~2 为机制推断（本仓库尚无 all-to-all 专用 W 扫描）；W=∞ 点与 calendar 仿真 M=1 makespan=929 一致。</p>
+</svg>
+
+<h3>5.3 三段行为</h3>
+<table>
+<tr><th>W</th><th>行为</th><th>All-to-All (12×16)</th><th>AllGather 对照 (M=1)</th></tr>
+<tr><td><strong>0</strong></td><td>刚性路径；冲突退回源 PE</td><td>预期 +10~30%（无专用扫描）</td><td>579 cy (2.82× LB*)</td></tr>
+<tr><td><strong>1~2</strong></td><td>转角对齐、局部错开</td><td>快速降至地板</td><td>475 / 424 cy</td></tr>
+<tr><td><strong>≥3 / ∞</strong></td><td>饱和平台</td><td><strong>929</strong> cy (M=1)</td><td>330 / 274 cy（仍 &gt;205）</td></tr>
+</table>
+
+<h3>5.4 实测：M  sweep（W=∞ calendar, healthy 12×16）</h3>
+<p>下列数据来自 <code>results/results.csv</code>。eff = 带宽项 bound / makespan（不含 pipeline drain 项）。</p>
+<table>
+<tr><th>M</th><th>makespan</th><th>带宽项 764×M</th><th>完整下界 764×M+166−M</th><th>eff (bound/makespan)</th></tr>
+<tr><td>1</td><td><strong>929</strong></td><td>764</td><td>929</td><td>0.8224</td></tr>
+<tr><td>4</td><td><strong>3218</strong></td><td>3056</td><td>3218</td><td>0.9497</td></tr>
+<tr style="background:#ecfdf5"><td>16</td><td><strong>12224</strong></td><td>12224</td><td>12374</td><td>1.0000</td></tr>
+<tr style="background:#ecfdf5"><td>64</td><td><strong>48896</strong></td><td>48896</td><td>48998</td><td>1.0000</td></tr>
+</table>
+
+<div style="overflow-x:auto"><svg width="560" height="280" xmlns="http://www.w3.org/2000/svg">
+<text x="54" y="22" font-size="14" font-weight="bold">All-to-All makespan vs M（calendar 仿真）</text>
+<line x1="54" y1="226" x2="506" y2="226" stroke="#64748b"/>
+<line x1="54" y1="54" x2="54" y2="226" stroke="#64748b"/>
+<line x1="54" y1="69.6" x2="506" y2="69.6" stroke="#059669" stroke-dasharray="5 4"/>
+<text x="502" y="65.6" font-size="9" fill="#059669" text-anchor="end">764×M 带宽项</text>
+<rect x="67.6" y="223.0" width="85.9" height="3.0" fill="#3b82f6"/>
+<text x="110.5" y="219.0" font-size="10" font-weight="bold" text-anchor="middle">929</text>
+<text x="110.5" y="240.0" font-size="10" text-anchor="middle">M=1</text>
+<rect x="180.6" y="215.7" width="85.9" height="10.3" fill="#3b82f6"/>
+<text x="223.5" y="211.7" font-size="10" font-weight="bold" text-anchor="middle">3218</text>
+<text x="223.5" y="240.0" font-size="10" text-anchor="middle">M=4</text>
+<rect x="293.6" y="186.9" width="85.9" height="39.1" fill="#3b82f6"/>
+<text x="336.5" y="182.9" font-size="10" font-weight="bold" text-anchor="middle">12224</text>
+<text x="336.5" y="240.0" font-size="10" text-anchor="middle">M=16</text>
+<rect x="406.6" y="69.6" width="85.9" height="156.4" fill="#3b82f6"/>
+<text x="449.5" y="65.6" font-size="10" font-weight="bold" text-anchor="middle">48896</text>
+<text x="449.5" y="240.0" font-size="10" text-anchor="middle">M=64</text>
+</svg></div>
+<p class="note">M=1 makespan 929 = 764×1 + 165（带宽 + pipeline drain，已命中完整下界）。
+M≥16 时 makespan = 764×M，eff=1.0。</p>
+
+<h3>5.5 设计建议</h3>
+<ul>
+<li><strong>大 M</strong>：优化二分槽流水线 + XY 路由，<em>不必</em>为 all-to-all 堆深 router FIFO。</li>
+<li><strong>小 M</strong>：report 中 eff&lt;1 是相对纯带宽项 764×M 的比值；含 drain 的完整 makespan 在 M=1,4 已达标。</li>
+<li><strong>强制 W=0</strong>：预期小幅 overhead 后仍贴近 <code>764×M + drain</code> 平台。</li>
+<li><strong>缺口</strong>：本仓库尚无 all-to-all 专用 W 扫描脚本（可参考 <code>sched_buffer_sweep.py</code> 改为单播路径）。</li>
+</ul>
+</div>
+
+<div class="card"><h2>6. 总结</h2>
+<ul>
+<li><strong>All-to-All 零 buffer 最优</strong>：XY 单播 + 二分槽注入 + 全局 link calendar；勿用 AllGather 多播树或 Hamilton 环。</li>
+<li><strong>Any-to-Any</strong>：预计算置换 + 最短路径；小 M 按路径贪心，大 M 同 all-to-all 槽流水线。</li>
+<li><strong>Buffer–makespan</strong>：曲线早饱和、惩罚远小于 AllGather；M 大时 makespan 由二分带宽锁定，与 W 无关。</li>
+</ul>
+</div>
+
+</body></html>

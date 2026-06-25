@@ -5,8 +5,8 @@ Every scheme below is strictly ring_buf=0 and eject_buf=0 (no router buffer; all
 waiting happens in the border AFIFOs), eject bandwidth 2 flit/cy, H=4, V=6.
 Schedules come from utils/sched_ring_zerobuf.py.
 
-  border_optimal : ring-shape-optimized quads, spread=0 -> makespan 240cy.
-  border_d5      : atomic pacing, single AFIFO <= 5 -> makespan ~387cy.
+  border_d5      : atomic pacing, single AFIFO <= 5 -> makespan 387cy (4096-sweep bi cfg).
+  grid_8x2_r2/r4 : 16x16 mesh, 8x2 grid border, atomic AFIFO<=5, ramp 2 or 4 flit/cy.
   ringfollow     : shape-opt ringfollow -> 416cy.
   global1        : 4 rings spliced into ONE global ring -> 754cy.
 
@@ -18,11 +18,17 @@ from pathlib import Path
 
 import sim_fused_rings as fr
 import sched_ring_zerobuf as S
+from sweep_buffer_pareto import build_grid_border
 from sweep_quad_ring_shapes import cfg_str, make_quads
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "dataflow_zerobuf.html"
 MX, MY = 16, 16
+H, V = 4, 6
+AFIFO_CAP = 5
+# 4096-sweep minimum-makespan bi border shape (mk=240 @ spread=0); atomic d5 uses same rings.
+BORDER_BI_CFG = (("vflip", 1), ("rect", 1), ("rect", 3), ("vflip", 3))
+GRID_8X2 = (8, 2)
 
 def quad_rings():
     hw, hh = MX // 2, MY // 2
@@ -46,7 +52,82 @@ def schedule_with_quads(cfg, deliv_fn, spread=0, lb_cross=False):
     return r, rings_from_quads(quads)
 
 
-def pack(name, label, note, result, ring_paths):
+def compute_conflicts(events_dict, ramp_bw, makespan):
+    """Detect router output-port conflicts in a fixed schedule.
+
+    At router R, cycle T, if >= 2 flits emit on the *same* output port -> conflict.
+    Mesh link (R->C): cap 1 flit/cy.  Down ramp at R: cap ramp_bw flit/cy.
+    """
+    ev = events_dict
+    n_ev = ev["n_ev"]
+    p_arr, c_arr, t_arr, arr_arr = ev["p"], ev["c"], ev["t"], ev["arr"]
+
+    link_buckets = {}
+    for i in range(n_ev):
+        key = (p_arr[i], c_arr[i], t_arr[i])
+        link_buckets.setdefault(key, []).append(i)
+    link_list = []
+    for (p, c, t), idxs in link_buckets.items():
+        if len(idxs) >= 2:
+            link_list.append({
+                "cy": t, "p": p, "c": c, "n": len(idxs), "ev": idxs[:24], "kind": "link",
+            })
+
+    order = sorted(range(n_ev), key=lambda i: (arr_arr[i], t_arr[i], i))
+    eject_buckets = {}
+    eject_at = [0] * n_ev
+    busy = {}
+
+    def reserve_down(node, earliest):
+        d = busy.setdefault(node, {})
+        t = earliest
+        while d.get(t, 0) >= ramp_bw:
+            t += 1
+        d[t] = d.get(t, 0) + 1
+        return t
+
+    for i in order:
+        nd = c_arr[i]
+        e = reserve_down(nd, arr_arr[i])
+        eject_at[i] = e
+        key = (nd, e)
+        eject_buckets.setdefault(key, []).append(i)
+
+    eject_list = []
+    for (nd, t), idxs in eject_buckets.items():
+        if len(idxs) > ramp_bw:
+            eject_list.append({
+                "cy": t, "p": nd, "c": -1, "n": len(idxs), "ev": idxs[:24], "kind": "eject",
+            })
+
+    mk = makespan + 1
+    at = [{"link": [], "eject": []} for _ in range(mk + 1)]
+    for item in link_list:
+        cy = item["cy"]
+        if cy <= mk:
+            at[cy]["link"].append(item)
+    for item in eject_list:
+        cy = item["cy"]
+        if cy <= mk:
+            at[cy]["eject"].append(item)
+
+    cycles_with = sorted({x["cy"] for x in link_list + eject_list})
+    return {
+        "link": link_list,
+        "eject": eject_list,
+        "at": at,
+        "eject_at": eject_at,
+        "n_link_conflicts": len(link_list),
+        "n_eject_conflicts": len(eject_list),
+        "n_flits_in_link_conflict": sum(x["n"] for x in link_list),
+        "n_flits_in_eject_conflict": sum(x["n"] for x in eject_list),
+        "n_cycles_with_conflict": len(cycles_with),
+        "clean": len(link_list) == 0 and len(eject_list) == 0,
+        "ramp_bw": ramp_bw,
+    }
+
+
+def pack(name, label, note, result, ring_paths, *, grid=None, cellmap=None, ramp_bw=None):
     ev = result["events"]
     mk = result["makespan"]
     s_, p_, c_, t_, lat_, arr_, k_ = [], [], [], [], [], [], []
@@ -60,7 +141,7 @@ def pack(name, label, note, result, ring_paths):
             start_at[t].append(i)
         if a <= mk:
             end_at[a].append(i)
-    return {
+    out = {
         "name": name,
         "label": label,
         "note": note,
@@ -80,48 +161,85 @@ def pack(name, label, note, result, ring_paths):
             "global": [0] * (mk + 1), "peak": 0, "peak_cy": 0,
         },
     }
+    if grid is not None:
+        out["grid"] = {"Qx": grid[0], "Qy": grid[1]}
+    if cellmap is not None:
+        out["cellmap"] = cellmap
+    if ramp_bw is not None:
+        out["ramp_bw"] = ramp_bw
+    else:
+        ramp_bw = 2
+    evd = out["events"]
+    out["conflicts"] = compute_conflicts(evd, ramp_bw, mk)
+    return out
+
+
+def grid_ring_paths(qx, qy):
+    wx, wy = MX // qx, MY // qy
+    return [fr.ham_cycle_rect(rx * wx, ry * wy, wx, wy)
+            for ry in range(qy) for rx in range(qx)]
+
+
+def grid_cell_map(qx, qy):
+    wx, wy = MX // qx, MY // qy
+    out = []
+    for s in range(MX * MY):
+        x, y = s % MX, s // MX
+        out.append((x // wx) + (y // wy) * qx)
+    return out
+
+
+def best_grid_atomic(qx, qy, ramp_bw):
+    deliv = lambda s, b: build_grid_border(s, qx, qy, b)
+    best_r, best_order = None, None
+    for order in ("interleave", "natural", "quad"):
+        r = S.schedule_atomic(MX, True, ramp_bw, deliv, afifo_cap=AFIFO_CAP,
+                              order=order, record_events=True)
+        if not r.get("ok") or r["afifo_depth"] > AFIFO_CAP:
+            continue
+        if best_r is None or r["makespan"] < best_r["makespan"]:
+            best_r, best_order = r, order
+    if best_r is None:
+        raise RuntimeError(f"grid {qx}x{qy} atomic AFIFO<={AFIFO_CAP} infeasible @ ramp={ramp_bw}")
+    return best_r, best_order
 
 
 def build():
-    fr.cfg(MX, MY, 4, 6)
-    from optimize_quad_shapes import chosen_cfg, quads_for, load_optimal
-    load_optimal()
+    fr.cfg(MX, MY, H, V)
     schemes = {}
+    qx, qy = GRID_8X2
+    gpaths = grid_ring_paths(qx, qy)
+    gcells = grid_cell_map(qx, qy)
 
-    def rings_from_sz(tag):
-        return [q["order"] for q in quads_for(MX, "border", tag)]
+    for ramp_bw, key, tag in ((2, "grid_8x2_r2", "2 flit/cy"), (4, "grid_8x2_r4", "4 flit/cy")):
+        r_g, order = best_grid_atomic(qx, qy, ramp_bw)
+        schemes[key] = pack(
+            f"grid {qx}x{qy} ramp={ramp_bw}", f"grid {qx}×{qy} · AFIFO≤5 · 下 ramp={tag}",
+            f"16×16 划分为 {qx}×{qy} 个 {MX // qx}×{MY // qy} 小环 + 格间短弧；"
+            f"<code>schedule_atomic</code> 源序 <b>{order}</b>；"
+            f"makespan=<b>{r_g['makespan']}</b>，单链路 AFIFO {r_g['afifo_depth']}，"
+            f"均衡 {r_g['afifo_balanced']['peak']}。router 零 buffer。",
+            r_g, gpaths, grid=GRID_8X2, cellmap=gcells, ramp_bw=ramp_bw)
 
-    # ---- 16×16 双向最优：环形状优化 border 240cy ----
-    quads_bi = quads_for(MX, "border", "bi")
-    deliv_bi = lambda s, b, q=quads_bi: S.deliv_border_quads(s, b, q)
-    r_opt = S.schedule(MX, True, 2, deliv_bi, spread=0, lb_cross=True,
-                       quads=quads_bi, record_events=True)
-    schemes["border_optimal"] = pack(
-        "border 240cy 最优", "border 短弧 · 环形状优化 240cy（AFIFO 均衡 40）",
-        "16×16 双向环形状优化最小 makespan=240（4096 组扫描最优）。"
-        f"单链路 AFIFO 峰值 {r_opt['afifo_depth']}，均衡峰值 "
-        f"<b>{r_opt['afifo_balanced']['peak']}</b>。"
-        + cfg_str(chosen_cfg(MX, "border", "bi")),
-        r_opt, rings_from_sz("bi"))
-
-    r_fast = S.schedule(MX, True, 2, deliv_bi, spread=0, quads=quads_bi)
-    schemes["border_fast"] = pack(
-        "border 240cy", "border 短弧 · 环形状优化（无 LB）",
-        f"同环形状 spread=0；均衡 AFIFO {r_fast['afifo_balanced']['peak']}。",
-        S.schedule(MX, True, 2, deliv_bi, spread=0, quads=quads_bi,
-                   record_events=True), rings_from_sz("bi"))
-
+    quads_d5 = make_quads(BORDER_BI_CFG)
+    deliv_d5 = lambda s, b, q=quads_d5: S.deliv_border_quads(s, b, q)
+    r_d5 = S.schedule_atomic(MX, True, 2, deliv_d5, afifo_cap=5, order="natural",
+                             record_events=True, quads=quads_d5)
     schemes["border_d5"] = pack(
         "border depth≤5", "border 短弧 · 单链路 AFIFO≤5（相位错开）",
-        "atomic 调度强制每条边界 AFIFO 深度 ≤5；环形状仍用优化配置。",
-        S.schedule_atomic(MX, True, 2, deliv_bi, afifo_cap=5,
-                          order="natural", record_events=True), rings_from_sz("bi"))
+        "4096 组扫描最优环形状 + <code>schedule_atomic</code> natural 源序；"
+        f"makespan=<b>{r_d5['makespan']}</b>，单链路 AFIFO {r_d5['afifo_depth']}，"
+        f"均衡 {r_d5['afifo_balanced']['peak']}。"
+        + cfg_str(BORDER_BI_CFG),
+        r_d5, [q["order"] for q in quads_d5])
 
     # ringfollow with optimized shape
+    from optimize_quad_shapes import quads_for, load_optimal
+    load_optimal()
     try:
         quads_rf = quads_for(MX, "ringfollow", "bi")
     except Exception:
-        quads_rf = quads_bi
+        quads_rf = quads_d5
     deliv_rf = lambda s, b, q=quads_rf: S.deliv_ringfollow_quads(s, b, q)
     r_rf = S.schedule(MX, True, 2, deliv_rf, spread=0, quads=quads_rf, record_events=True)
     schemes["ringfollow_opt"] = pack(
@@ -148,9 +266,9 @@ def build():
         "n": MX * MY,
         "pos": [[pad + (i % MX) * cell, pad + (i // MX) * cell] for i in range(MX * MY)],
         "qmap": [fr.quad_of(i) for i in range(MX * MY)],
-        "order": ["border_optimal", "border_fast", "border_d5",
+        "order": ["grid_8x2_r2", "grid_8x2_r4", "border_d5",
                   "ringfollow_opt", "ringfollow", "global1"],
-        "default": "border_optimal",
+        "default": "grid_8x2_r2",
         "schemes": schemes,
     }
     return cfg
@@ -178,7 +296,7 @@ button.sec{background:#64748b;}
 input[type=range]{flex:1;min-width:120px;}
 select{font-size:13px;padding:4px 6px;border-radius:4px;border:1px solid #cbd5e1;}
 #cyc{font-weight:700;color:#0f766e;font-variant-numeric:tabular-nums;min-width:3em;display:inline-block;}
-.statgrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px;}
+.statgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;font-size:12px;}
 .statgrid div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;}
 .statgrid b{display:block;font-size:18px;color:#0f766e;}
 .phase{height:8px;border-radius:4px;background:#e2e8f0;margin:8px 0;overflow:hidden;}
@@ -189,14 +307,18 @@ table.cmp{border-collapse:collapse;width:100%;font-size:12px;margin-top:6px;}
 table.cmp td,table.cmp th{border:1px solid #e2e8f0;padding:4px 6px;text-align:center;}
 table.cmp th{background:#ccfbf1;}
 table.cmp tr.on td{background:#fef9c3;font-weight:700;}
+.conf-ok{color:#059669;font-weight:700;}
+.conf-bad{color:#dc2626;font-weight:700;}
+#conflictPanel{font-size:12px;max-height:180px;overflow-y:auto;}
+#conflictPanel li{margin:4px 0;}
 </style></head><body>
 <header>
 <h1>16×16 零 router-buffer AllGather · cycle-by-cycle</h1>
-<p>4×(8×8 Hamilton 环)+ 跨界 AFIFO · H=4, V=6 · 双向, 下 ramp=2 ·
+<p>grid 8×2 / border 四象限环 + 跨界 AFIFO · H=4, V=6 · 双向 ·
 所有方案 <b>router 内零 buffer</b>（ring_buf=0, eject_buf=0），等待只发生在 AFIFO。
-<p><b>16×16 双向环形状优化 makespan=240</b>（4096 组 Hamilton 环扫描最优）。
-单链路 AFIFO 峰值较高，均衡深度见各方案。当前 makespan=<b id="hmk"></b> cy ·
-单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b></p>
+<p>当前方案下 ramp=<b id="hramp"></b> flit/cy · makespan=<b id="hmk"></b> cy ·
+单链路 AFIFO=<b id="haf"></b> · 均衡深度=<b id="hafb"></b> ·
+冲突检测=<b id="hconf"></b></p>
 </header>
 <div class="layout">
 <div>
@@ -231,16 +353,26 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 <div>单链路 AFIFO<b id="af">0</b></div>
 <div>均衡 AFIFO<b id="afb">0</b></div>
 <div>本 cycle 排队<b id="afnow">0</b></div>
+<div>链路冲突<b id="clink">0</b></div>
+<div>下ramp冲突<b id="ceject">0</b></div>
 </div>
 <p class="note" id="note"></p>
+<p class="note" id="confdef"><b>冲突定义</b>：同一 router 在同一 cycle 向<b>同一出端口</b>发出 ≥2 个 flit。
+Mesh 链路口容量 1 flit/cy；下 ramp 容量 = ramp_bw flit/cy。
+链路冲突在<b>发送 cycle</b>（t）标红；下 ramp 冲突在<b>eject cycle</b>标红。</p>
 </div>
 </div>
 <div>
+<div class="panel"><h2>冲突检测</h2>
+<p id="confSummary"></p>
+<ul id="conflictPanel"></ul>
+<button id="jumpconf" class="sec" style="margin-top:6px;font-size:12px;padding:5px 10px">跳到首个冲突 cycle</button>
+</div>
 <div class="panel"><h2>方案对比（均 router 零 buffer）</h2>
-<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th></tr></thead>
+<table class="cmp" id="cmp"><thead><tr><th>方案</th><th>makespan</th><th>单链路 AFIFO</th><th>均衡 AFIFO</th><th>冲突</th></tr></thead>
 <tbody id="cmpbody"></tbody></table>
-<p class="note"><b>240cy</b> 为环形状优化后 16×16 双向最小 makespan（比默认环 266cy 快 26cy）。
-单链路 AFIFO 峰值 ~45，均衡深度 ~40（需 depth&gt;5 或相位错开 atomic 454cy）。</p>
+<p class="note"><b>grid 8×2</b>：16×16 划为 8×2 个 2×8 Hamilton 小环 + 格间 AFIFO，atomic 单链路 AFIFO≤5。
+<b>border 387cy</b>：4096 组扫描四象限环 + natural 源序。240cy 需 spread=0 且无 AFIFO 上限。</p>
 </div>
 <div class="panel"><h2>AFIFO 深度曲线</h2>
 <canvas id="afc" width="280" height="150" style="width:100%;max-width:300px;display:block;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0"></canvas>
@@ -250,7 +382,7 @@ table.cmp tr.on td{background:#fef9c3;font-weight:700;}
 </div>
 <div class="panel"><h2>Hamilton 环路径</h2>
 <svg id="ringsvg" style="width:100%;max-width:280px;display:block;margin:0 auto"></svg>
-<p class="note">彩色=各环走向；红虚线=象限边界（AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
+<p class="note">彩色=各小环走向；红虚线=格间/象限边界（AFIFO）。圆点颜色=源节点，粗描边=本 cycle 正在 eject。</p>
 </div>
 </div>
 </div>
@@ -264,7 +396,19 @@ cv.width=D.W; cv.height=D.H;
 function pos(i){return D.pos[i];}
 function coord(i){return [i%D.mx,(i/D.mx)|0];}
 function hue(s){return 'hsl('+Math.round(s*360/D.n)+',72%,48%)';}
-function isCross(p,c){return D.qmap[p]!==D.qmap[c];}
+function isCross(p,c){
+  if(S.cellmap)return S.cellmap[p]!==S.cellmap[c];
+  return D.qmap[p]!==D.qmap[c];}
+function drawGridLines(ctx, sc, pad, stroke, lw, dash){
+  if(!S.grid)return false;
+  const wx=D.mx/S.grid.Qx, wy=D.my/S.grid.Qy;
+  ctx.save();ctx.strokeStyle=stroke;ctx.lineWidth=lw;
+  if(dash)ctx.setLineDash(dash);else ctx.setLineDash([]);
+  for(let i=1;i<S.grid.Qx;i++){const x=pad+i*wx*sc;
+    ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,pad+(D.my-1)*sc);ctx.stroke();}
+  for(let j=1;j<S.grid.Qy;j++){const y=pad+j*wy*sc;
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(pad+(D.mx-1)*sc,y);ctx.stroke();}
+  ctx.restore();return true;}
 
 // scheme dropdown + comparison table
 const schemeSel=document.getElementById('scheme');
@@ -277,9 +421,77 @@ function buildCmp(){const tb=document.getElementById('cmpbody');tb.innerHTML='';
   D.order.forEach(k=>{const sc=D.schemes[k];const tr=document.createElement('tr');
     if(k===key)tr.className='on';
     const balCls=sc.afifo_bal_peak<=5?' style="background:#dcfce7;font-weight:bold"':'';
+    const cf=sc.conflicts||{};
+    const cTxt=cf.clean?'<span class="conf-ok">无</span>':
+      '<span class="conf-bad">链路'+cf.n_link_conflicts+' 下ramp'+cf.n_eject_conflicts+'</span>';
     tr.innerHTML='<td>'+sc.label+'</td><td>'+sc.makespan+'</td><td>'+sc.afifo_depth+'</td>'
-      +'<td'+balCls+'>'+sc.afifo_bal_peak+'</td>';
+      +'<td'+balCls+'>'+sc.afifo_bal_peak+'</td><td>'+cTxt+'</td>';
     tb.appendChild(tr);});}
+
+function fmtCoord(n){const x=n%D.mx,y=(n/D.mx)|0;return '('+x+','+y+')';}
+function updateConflictPanel(k){
+  const C=S.conflicts||{at:[],clean:true,link:[],eject:[]};
+  const at=(C.at&&C.at[k])||{link:[],eject:[]};
+  let nLink=0,nEj=0;
+  at.link.forEach(x=>{nLink+=x.n;});
+  at.eject.forEach(x=>{nEj+=x.n;});
+  document.getElementById('clink').textContent=nLink;
+  document.getElementById('ceject').textContent=nEj;
+  const ul=document.getElementById('conflictPanel');
+  ul.innerHTML='';
+  if(C.clean){
+    document.getElementById('confSummary').innerHTML=
+      '<span class="conf-ok">✓ 全 schedule 无端口冲突</span>（共 '+S.events.n_ev+' 次链路发送均已错开）。';
+    return;
+  }
+  document.getElementById('confSummary').innerHTML=
+    '<span class="conf-bad">发现冲突</span>：链路端口 '+C.n_link_conflicts+
+    ' 处 / 下 ramp '+C.n_eject_conflicts+' 处；涉及 '+C.n_cycles_with_conflict+' 个 cycle。';
+  const show=at.link.concat(at.eject);
+  if(!show.length){
+    const li=document.createElement('li');li.textContent='当前 cycle '+k+' 无冲突';
+    ul.appendChild(li);return;
+  }
+  show.forEach(x=>{
+    const li=document.createElement('li');
+    if(x.kind==='link'||x.c>=0){
+      li.innerHTML='<b>链路</b> cy<b>'+x.cy+'</b> router '+fmtCoord(x.p)+
+        ' → '+fmtCoord(x.c)+'：<b>'+x.n+'</b> flit 同端口同发';
+    }else{
+      li.innerHTML='<b>下ramp</b> cy<b>'+x.cy+'</b> 节点 '+fmtCoord(x.p)+
+        '：<b>'+x.n+'</b> flit（cap '+((C.ramp_bw)||2)+'）';
+    }
+    ul.appendChild(li);
+  });
+}
+function drawConflicts(k){
+  const C=S.conflicts;if(!C||!C.at)return;
+  const at=C.at[k]||{link:[],eject:[]};
+  at.link.forEach(x=>{
+    const a=pos(x.p),b=pos(x.c);
+    ctx.strokeStyle='#dc2626';ctx.lineWidth=5;ctx.globalAlpha=0.9;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#dc2626';ctx.font='bold 11px sans-serif';
+    ctx.fillText('×'+x.n,a[0]+(b[0]-a[0])*0.4,a[1]+(b[1]-a[1])*0.4-8);
+    [x.p,x.c].forEach(nd=>{const p=pos(nd);
+      ctx.beginPath();ctx.arc(p[0],p[1],11,0,Math.PI*2);
+      ctx.strokeStyle='#dc2626';ctx.lineWidth=3;ctx.stroke();});
+  });
+  at.eject.forEach(x=>{
+    const p=pos(x.p);
+    ctx.beginPath();ctx.arc(p[0],p[1],13,0,Math.PI*2);
+    ctx.strokeStyle='#b91c1c';ctx.lineWidth=4;ctx.stroke();
+    ctx.fillStyle='#b91c1c';ctx.font='bold 11px sans-serif';
+    ctx.fillText('eject×'+x.n,p[0]+8,p[1]-10);
+  });
+}
+function firstConflictCy(){
+  const C=S.conflicts;if(!C)return 0;
+  for(const x of (C.link||[]))return x.cy;
+  for(const x of (C.eject||[]))return x.cy;
+  return 0;
+}
 
 const srcSel=document.getElementById('src');
 for(let s=0;s<D.n;s++){const [x,y]=coord(s);const o=document.createElement('option');
@@ -300,12 +512,24 @@ function drawRingSvg(){
     d+='Z';const el=document.createElementNS(NS,'path');el.setAttribute('d',d);
     el.setAttribute('fill','none');el.setAttribute('stroke',QCOL[qi%4]);
     el.setAttribute('stroke-width','1.6');el.setAttribute('opacity','0.85');svg.appendChild(el);});
-  const hw=D.mx/2,hh=D.my/2;
-  [['M',pad,pad+hh*sc,'L',pad+(D.mx-1)*sc,pad+hh*sc],
-   ['M',pad+hw*sc,pad,'L',pad+hw*sc,pad+(D.my-1)*sc]].forEach(a=>{
-    const l=document.createElementNS(NS,'line');l.setAttribute('x1',a[1]);l.setAttribute('y1',a[2]);
-    l.setAttribute('x2',a[3]);l.setAttribute('y2',a[4]);l.setAttribute('stroke','#dc2626');
-    l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);});
+  if(S.grid){
+    const wx=D.mx/S.grid.Qx, wy=D.my/S.grid.Qy;
+    for(let i=1;i<S.grid.Qx;i++){const x=pad+i*wx*sc;
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',x);l.setAttribute('y1',pad);
+      l.setAttribute('x2',x);l.setAttribute('y2',pad+(D.my-1)*sc);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
+    for(let j=1;j<S.grid.Qy;j++){const y=pad+j*wy*sc;
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',pad);l.setAttribute('y1',y);
+      l.setAttribute('x2',pad+(D.mx-1)*sc);l.setAttribute('y2',y);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);}
+  }else{
+    const hw=D.mx/2,hh=D.my/2;
+    [['M',pad,pad+hh*sc,'L',pad+(D.mx-1)*sc,pad+hh*sc],
+     ['M',pad+hw*sc,pad,'L',pad+hw*sc,pad+(D.my-1)*sc]].forEach(a=>{
+      const l=document.createElementNS(NS,'line');l.setAttribute('x1',a[1]);l.setAttribute('y1',a[2]);
+      l.setAttribute('x2',a[3]);l.setAttribute('y2',a[4]);l.setAttribute('stroke','#dc2626');
+      l.setAttribute('stroke-dasharray','4 3');l.setAttribute('stroke-width','1.4');svg.appendChild(l);});
+  }
 }
 
 let staticCv=null;
@@ -378,9 +602,11 @@ function ensureStatic(){
     if(x+1<D.mx){const[qx,qy]=pos(i+1);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}
     if(y+1<D.my){const[qx,qy]=pos(i+D.mx);c.beginPath();c.moveTo(px,py);c.lineTo(qx,qy);c.stroke();}}
   c.setLineDash([6,4]);c.strokeStyle='#dc2626';c.lineWidth=2;
-  const mx=D.pad+(hw-0.5)*D.cell,my=D.pad+(hh-0.5)*D.cell;
-  c.beginPath();c.moveTo(D.pad-10,my);c.lineTo(D.W-D.pad+10,my);c.stroke();
-  c.beginPath();c.moveTo(mx,D.pad-10);c.lineTo(mx,D.H-D.pad+10);c.stroke();
+  if(!drawGridLines(c,D.cell,D.pad,'#dc2626',2,[6,4])){
+    const mx=D.pad+(hw-0.5)*D.cell,my=D.pad+(hh-0.5)*D.cell;
+    c.beginPath();c.moveTo(D.pad-10,my);c.lineTo(D.W-D.pad+10,my);c.stroke();
+    c.beginPath();c.moveTo(mx,D.pad-10);c.lineTo(mx,D.H-D.pad+10);c.stroke();
+  }
   c.setLineDash([]);c.lineWidth=1.2;
   S.ring_paths.forEach((path,qi)=>{c.strokeStyle=QCOL[qi%4];c.globalAlpha=0.22;c.beginPath();
     path.forEach((nd,k)=>{const p=pos(nd);if(k)c.lineTo(p[0],p[1]);else c.moveTo(p[0],p[1]);});
@@ -424,6 +650,8 @@ function draw(k){
   document.getElementById('ej').textContent=ej;
   drawAfifoChart(k);
   highlightAfifoLink(k);
+  drawConflicts(k);
+  updateConflictPanel(k);
 }
 
 function syncScheme(){
@@ -435,6 +663,11 @@ function syncScheme(){
   document.getElementById('hmk').textContent=S.makespan;
   document.getElementById('haf').textContent=S.afifo_depth;
   document.getElementById('hafb').textContent=S.afifo_bal_peak;
+  document.getElementById('hramp').textContent=S.ramp_bw||2;
+  const C=S.conflicts||{clean:true};
+  document.getElementById('hconf').innerHTML=C.clean?
+    '<span class="conf-ok">无冲突</span>':
+    '<span class="conf-bad">链路'+C.n_link_conflicts+'/下ramp'+C.n_eject_conflicts+'</span>';
   document.getElementById('slider').max=S.makespan;
   document.getElementById('note').innerHTML='<span class="tag">'+S.name+'</span>'+S.note;
   document.getElementById('jumppeak').onclick=()=>{
@@ -443,6 +676,10 @@ function syncScheme(){
   };
   document.getElementById('jumpbal').onclick=()=>{
     const cy=(S.afifo_balanced&&S.afifo_balanced.peak_cy)||0;stop();
+    if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
+  };
+  document.getElementById('jumpconf').onclick=()=>{
+    const cy=firstConflictCy();if(!cy)return;stop();
     if(Math.abs(cy-cur)>1)rebuild(cy);else stepActive(cy);draw(cy);
   };
   buildCmp();drawRingSvg();rebuild(0);draw(0);
@@ -476,12 +713,14 @@ def render():
     data = json.dumps(cfg, separators=(",", ":"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(HTML.replace("__DATA__", data), encoding="utf-8")
-    sizes = {k: (v["makespan"], v["afifo_depth"], v["afifo_bal_peak"])
+    sizes = {k: (v["makespan"], v["afifo_depth"], v["afifo_bal_peak"],
+                 v["conflicts"]["clean"], v["conflicts"]["n_link_conflicts"])
              for k, v in cfg["schemes"].items()}
     print(f"Wrote {OUT}")
     for k in cfg["order"]:
-        mk, af, bal = sizes[k]
-        print(f"  {k:16s} makespan={mk:4d}  AFIFO_link={af:2d}  AFIFO_bal={bal}")
+        mk, af, bal, clean, ncf = sizes[k]
+        flag = "CLEAN" if clean else f"CONFLICT link={ncf}"
+        print(f"  {k:16s} makespan={mk:4d}  AFIFO_link={af:2d}  AFIFO_bal={bal}  {flag}")
 
 
 if __name__ == "__main__":

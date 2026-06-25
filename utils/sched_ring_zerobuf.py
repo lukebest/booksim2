@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Zero router-buffer ring scheduler that EXPLOITS link time-division.
 
-Model (H=4, V=6): a directed link of latency L is pipelined -- it can launch a
+Model (H=4, V=6, cross-AFIFO=10): a directed link of latency L is pipelined -- it can launch a
 new flit every cycle (cap 1/cycle on the SEND slot) while up to L flits are in
 flight.  So a region-internal ring link has free send-slots on most cycles, and
 a flit arriving from another quadrant via the AFIFO can be slotted into one of
@@ -59,7 +59,7 @@ def classify_subtrees(ch, s):
         while dq:
             p = dq.popleft()
             for c in ch.get(p, []):
-                lat = fr.edge_lat(p, c)
+                lat = fr.link_lat(p, c)
                 if fr.quad_of(p) != fr.quad_of(c):
                     crosses.append((p, c, lat))      # boundary: separate sub-tree
                     continue
@@ -75,31 +75,52 @@ def classify_subtrees(ch, s):
 
 
 class Calendar:
-    def __init__(self, ramp_bw):
+    def __init__(self, ramp_bw, flits=1):
         self.link = defaultdict(set)        # lk -> set(send cycles)
         self.eject = defaultdict(lambda: defaultdict(int))  # node -> cycle -> count
         self.ramp_bw = ramp_bw
+        self.flits = flits                  # message length (flits sent back-to-back)
 
     def fits(self, links, ejects, T):
+        m = self.flits
         for lk, rel in links:
-            if (T + rel) in self.link[lk]:
-                return False
+            base = T + rel
+            cyset = self.link[lk]
+            for i in range(m):
+                if (base + i) in cyset:
+                    return False
         for nd, rel in ejects:
-            if self.eject[nd][T + rel] >= self.ramp_bw:
-                return False
+            base = T + rel
+            ecnt = self.eject[nd]
+            for i in range(m):
+                if ecnt[base + i] >= self.ramp_bw:
+                    return False
         return True
 
     def commit(self, links, ejects, T):
+        m = self.flits
         for lk, rel in links:
-            self.link[lk].add(T + rel)
+            base = T + rel
+            for i in range(m):
+                self.link[lk].add(base + i)
         last = 0
         for nd, rel in ejects:
-            self.eject[nd][T + rel] += 1
-            last = max(last, T + rel)
+            base = T + rel
+            for i in range(m):
+                self.eject[nd][base + i] += 1
+            last = max(last, base + m - 1)
         return last
 
+    def reserve_link(self, lk, t):
+        """Reserve m consecutive send cycles starting at t on a single link."""
+        for i in range(self.flits):
+            self.link[lk].add(t + i)
+
     def cross_send_free(self, lk, t):
-        while t in self.link[lk]:
+        """First cycle with m consecutive free send slots on link lk."""
+        cyset = self.link[lk]
+        m = self.flits
+        while any((t + i) in cyset for i in range(m)):
             t += 1
         return t
 
@@ -220,9 +241,45 @@ def afifo_profile_balanced(afifo_intervals, sz, makespan):
     return {"global": global_d, "peak": g_peak, "peak_cy": g_peak_cy}
 
 
+def msg_flit_cells(ap, cs, flits):
+    """Per-cycle AFIFO occupancy (in flits) of one m-flit wormhole message whose
+    head arrives at `ap` and is sent across at `cs`.  Flit i enters the AFIFO at
+    ap+i and leaves at cs+i, so it is buffered during [ap+i, cs+i).  Returns
+    {cycle: flits_in_afifo}.  For flits=1 this is {t:1 for t in [ap, cs)}."""
+    cells = {}
+    end = cs + flits - 1
+    for t in range(ap, end):
+        arrived = min(t - ap + 1, flits)
+        departed = min(t - cs + 1, flits) if t >= cs else 0
+        v = arrived - departed
+        if v > 0:
+            cells[t] = v
+    return cells
+
+
+def afifo_peak_flits(afifo_intervals, flits):
+    """Peak per-link AFIFO depth in FLITS across all border links."""
+    gmax = 0
+    for ivs in afifo_intervals.values():
+        diff = defaultdict(int)
+        for ap, cs in ivs:
+            if cs <= ap and flits == 1:
+                continue
+            for i in range(flits):
+                diff[ap + i] += 1
+                diff[cs + i] -= 1
+        cur = peak = 0
+        for t in sorted(diff):
+            cur += diff[t]
+            if cur > peak:
+                peak = cur
+        gmax = max(gmax, peak)
+    return gmax
+
+
 def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
-             record_events=False, quads=None, lb_cross=False):
-    fr.cfg(sz, sz, 4, 6)
+             record_events=False, quads=None, lb_cross=False, flits=1):
+    fr.cfg(sz, sz, 4, 6, cross=fr.CROSS_LAT)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
@@ -235,7 +292,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
 
     lb_groups, lb_pair = (cross_lb_groups(sz) if lb_cross else (None, None))
 
-    cal = Calendar(ramp_bw)
+    cal = Calendar(ramp_bw, flits)
     makespan = 0
     max_off = 0
     afifo_intervals = defaultdict(list)   # lk -> [(start_wait, end_wait)]
@@ -278,7 +335,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
             for lk, rel in st["links"]:
                 p, c = divmod(lk, 100000)
                 snd = anchor + rel
-                lt = fr.edge_lat(p, c)
+                lt = fr.link_lat(p, c)
                 events.append((s, p, c, snd, lt, snd + lt, hop_kind(s, p, c)))
         return last, st
 
@@ -313,7 +370,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
             p, c = pick_cross(s, owner_root, p, c, lat, placed_roots)
             ap = arrive_abs[(s, owner_root, p)]
             st = sub[s][c]
-            llat = fr.edge_lat(p, c)
+            llat = fr.link_lat(p, c)
             cs = ap
             while True:
                 cs = cal.cross_send_free(p * 100000 + c, cs)   # free AFIFO send slot
@@ -323,7 +380,7 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
                 cs += 1
                 if cs - ap > off_limit:
                     return dict(ok=False)
-            cal.link[p * 100000 + c].add(cs)                   # reserve cross link
+            cal.reserve_link(p * 100000 + c, cs)               # reserve cross link (m flits)
             afifo_intervals[p * 100000 + c].append((ap, cs))   # waited in AFIFO
             if record_events:
                 events.append((s, p, c, cs, llat, cs + llat, 2))
@@ -334,27 +391,16 @@ def schedule(sz, bidir, ramp_bw, deliv_fn, off_limit=20000, spread=0,
                 if cc not in placed_roots:
                     pending.append((c, pp, cc, llat))
 
-    # AFIFO queue depth = peak overlap of wait intervals on any one border link
-    def peak(ivs):
-        ev = []
-        for a, b in ivs:
-            if b > a:
-                ev += [(a, 1), (b, -1)]
-        ev.sort()
-        cur = m = 0
-        for _, d in ev:
-            cur += d
-            m = max(m, cur)
-        return m
-    afifo_depth = max((peak(v) for v in afifo_intervals.values()), default=0)
+    # AFIFO queue depth = peak per-link buffered flits (flit-accurate for m>1)
+    afifo_depth = afifo_peak_flits(afifo_intervals, flits)
 
     # verify every node ejects exactly n-1
     ej_total = defaultdict(int)
     for nd, cyc in cal.eject.items():
         ej_total[nd] = sum(cyc.values())
-    ok = all(ej_total[nd] == n - 1 for nd in range(n))
+    ok = all(ej_total[nd] == (n - 1) * flits for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw,
+               max_inject_off=max_off, ramp_bw=ramp_bw, flits=flits,
                afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
                afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:
@@ -400,6 +446,57 @@ def deliv_border_quads(s, bidir, quads):
     return ch
 
 
+def deliv_border_bal_quads(s, bidir, quads):
+    """Border short-arc with a BALANCED diagonal quadrant.
+
+    The original deliv_border_quads routes the WHOLE diagonal quadrant (QD)
+    through the horizontal neighbour QH (every QD column is entered from the
+    north y-border).  Here the QD destinations are split in half:
+      * top  half of QD rows  -> reached via QH  (north y-border crossing)
+      * bottom half of QD rows -> reached via QV (west  x-border crossing)
+    so the diagonal load (e.g. 64 nodes for a 16x16 quadrant) is 32 via QH and
+    32 via QV.  This balances the two intermediate borders that previously were
+    asymmetric (the middle y-border carried QV+QD, the x-border only QH)."""
+    qi = fr.quad_of(s)
+    ch = defaultdict(list)
+    fr.add_ring_chain(ch, quads[qi]["order"], s, bidir)
+    hw, hh = fr._MX // 2, fr._MY // 2
+    qx = qi % 2
+    qy = qi // 2
+    qx0, qy0 = qx * hw, qy * hh
+    if qx == 0:
+        bxQ, arc_xs = hw - 1, list(range(hw, 2 * hw))
+    else:
+        bxQ, arc_xs = hw, list(range(hw - 1, -1, -1))
+    if qy == 0:
+        byQ, arc_ys = hh - 1, list(range(hh, 2 * hh))
+    else:
+        byQ, arc_ys = hh, list(range(hh - 1, -1, -1))
+    # QH (horizontal neighbour): cross x-border, arc across each home-region row
+    for y in range(qy0, qy0 + hh):
+        ch[fr.nid(bxQ, y)].append(fr.nid(arc_xs[0], y))
+        for k in range(len(arc_xs) - 1):
+            ch[fr.nid(arc_xs[k], y)].append(fr.nid(arc_xs[k + 1], y))
+    # QV (vertical neighbour): cross y-border, arc down each home-region column
+    for x in range(qx0, qx0 + hw):
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(len(arc_ys) - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    # diagonal QD, balanced split by rows:
+    half = len(arc_ys) // 2
+    #  top half rows of QD via QH: continue down QH columns for the first `half` rows
+    for x in arc_xs:
+        ch[fr.nid(x, byQ)].append(fr.nid(x, arc_ys[0]))
+        for k in range(half - 1):
+            ch[fr.nid(x, arc_ys[k])].append(fr.nid(x, arc_ys[k + 1]))
+    #  bottom half rows of QD via QV: cross x-border from QV border column, arc across
+    for y in arc_ys[half:]:
+        ch[fr.nid(bxQ, y)].append(fr.nid(arc_xs[0], y))
+        for k in range(len(arc_xs) - 1):
+            ch[fr.nid(arc_xs[k], y)].append(fr.nid(arc_xs[k + 1], y))
+    return ch
+
+
 def deliv_ringfollow(s, bidir):
     quads, _ = fr.quad_setup()
     return deliv_ringfollow_quads(s, bidir, quads)
@@ -433,7 +530,7 @@ def hop_kind(s, p, c):
 
 def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                     order="interleave", off_limit=20000, record_events=False,
-                    quads=None):
+                    quads=None, flits=1):
     """Per-source atomic placement with a global AFIFO-occupancy calendar.
 
     Each source is placed (home rigid sub-tree + all foreign sub-trees) at the
@@ -442,7 +539,7 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
     <= afifo_cap.  If a crossing would need to wait deeper than afifo_cap, the
     source's injection is bumped (pacing the home conveyor so flits reach the
     border no faster than the destination ring can drain them)."""
-    fr.cfg(sz, sz, 4, 6)
+    fr.cfg(sz, sz, 4, 6, cross=fr.CROSS_LAT)
     n = sz * sz
     deliveries = {s: deliv_fn(s, bidir) for s in range(n)}
     sub = {s: classify_subtrees(deliveries[s], s)[0] for s in range(n)}
@@ -467,13 +564,19 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
 
     def fits(st, anchor, tlink, teject):
         for lk, rel in st["links"]:
-            t = anchor + rel
-            if t in link_busy[lk] or t in tlink.get(lk, ()):
-                return False
+            base = anchor + rel
+            busy = link_busy[lk]
+            tl = tlink.get(lk, ())
+            for i in range(flits):
+                t = base + i
+                if t in busy or t in tl:
+                    return False
         for nd, rel in st["ejects"]:
-            t = anchor + rel
-            if eject_busy[nd][t] + teject.get((nd, t), 0) >= ramp_bw:
-                return False
+            base = anchor + rel
+            for i in range(flits):
+                t = base + i
+                if eject_busy[nd][t] + teject.get((nd, t), 0) >= ramp_bw:
+                    return False
         return True
 
     def try_source(s, off):
@@ -489,9 +592,11 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
             return None
         # tentatively record home
         for lk, rel in home["links"]:
-            tlink[lk].add(anchor0 + rel)
+            for i in range(flits):
+                tlink[lk].add(anchor0 + rel + i)
         for nd, rel in home["ejects"]:
-            teject[(nd, anchor0 + rel)] += 1
+            for i in range(flits):
+                teject[(nd, anchor0 + rel + i)] += 1
         for nd, rel in home["arrive_rel"].items():
             arrive[(s, nd)] = anchor0 + rel
         if record_events:
@@ -500,23 +605,26 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                 snd = anchor0 + rel
                 lt = fr.edge_lat(p, c)
                 evs.append((s, p, c, snd, lt, snd + lt, hop_kind(s, p, c)))
-        pending = deque((s, p, c, lat) for (p, c, lat) in home["crosses"])
+        pending = deque((s, p, c) for (p, c, _lat) in home["crosses"])
         placed = {s}
         while pending:
-            owner, p, c, lat = pending.popleft()
+            owner, p, c = pending.popleft()
             ap = arrive[(owner, p)]
             lk = p * 100000 + c
             st = sub[s][c]
+            hop = fr.edge_lat(p, c)
             cs = ap
             while True:
-                while cs in link_busy[lk] or cs in tlink.get(lk, ()):
+                while any((cs + i) in link_busy[lk] or (cs + i) in tlink.get(lk, ())
+                          for i in range(flits)):
                     cs += 1
-                anchor_c = cs + lat
+                anchor_c = cs + hop
                 if fits(st, anchor_c, tlink, teject):
-                    # AFIFO occupancy on [ap, cs)
+                    # AFIFO occupancy (flits) during [ap, cs+m-1)
                     if afifo_cap is not None:
-                        bad = any(afifo_occ[lk][t] + tafifo[(lk, t)] + 1 > afifo_cap
-                                  for t in range(ap, cs))
+                        cells = msg_flit_cells(ap, cs, flits)
+                        bad = any(afifo_occ[lk][t] + tafifo[(lk, t)] + v > afifo_cap
+                                  for t, v in cells.items())
                         if bad:
                             return None  # waiting too deep -> bump injection
                     break
@@ -524,27 +632,30 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
                 if cs - ap > off_limit:
                     return None
             # accept child sub-tree
-            tlink[lk].add(cs)
-            for t in range(ap, cs):
-                tafifo[(lk, t)] += 1
+            for i in range(flits):
+                tlink[lk].add(cs + i)
+            for t, v in msg_flit_cells(ap, cs, flits).items():
+                tafifo[(lk, t)] += v
             af_ivs.append((lk, ap, cs))
             for lk2, rel in st["links"]:
-                tlink[lk2].add(anchor_c + rel)
+                for i in range(flits):
+                    tlink[lk2].add(anchor_c + rel + i)
             for nd, rel in st["ejects"]:
-                teject[(nd, anchor_c + rel)] += 1
+                for i in range(flits):
+                    teject[(nd, anchor_c + rel + i)] += 1
             for nd, rel in st["arrive_rel"].items():
                 arrive[(c, nd)] = anchor_c + rel
             if record_events:
-                evs.append((s, p, c, cs, lat, cs + lat, 2))
+                evs.append((s, p, c, cs, hop, cs + hop, 2))
                 for lk2, rel in st["links"]:
                     p2, c2 = divmod(lk2, 100000)
                     snd = anchor_c + rel
                     lt = fr.edge_lat(p2, c2)
                     evs.append((s, p2, c2, snd, lt, snd + lt, hop_kind(s, p2, c2)))
             placed.add(c)
-            for (pp, cc, llat) in st["crosses"]:
+            for (pp, cc, _llat) in st["crosses"]:
                 if cc not in placed:
-                    pending.append((c, pp, cc, llat))
+                    pending.append((c, pp, cc))
         return dict(tlink=tlink, teject=teject, tafifo=tafifo, af_ivs=af_ivs,
                     arrive=arrive, evs=evs)
 
@@ -571,24 +682,13 @@ def schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=None,
         if record_events:
             events.extend(res["evs"])
 
-    def peak(ivs):
-        ev = []
-        for a, b in ivs:
-            if b > a:
-                ev += [(a, 1), (b, -1)]
-        ev.sort()
-        cur = m = 0
-        for _, d in ev:
-            cur += d
-            m = max(m, cur)
-        return m
-    afifo_depth = max((peak(v) for v in afifo_intervals.values()), default=0)
+    afifo_depth = afifo_peak_flits(afifo_intervals, flits)
     ej_total = defaultdict(int)
     for nd, cyc in eject_busy.items():
         ej_total[nd] = sum(cyc.values())
-    ok = all(ej_total[nd] == n - 1 for nd in range(n))
+    ok = all(ej_total[nd] == (n - 1) * flits for nd in range(n))
     out = dict(ok=ok, makespan=makespan, afifo_depth=afifo_depth,
-               max_inject_off=max_off, ramp_bw=ramp_bw,
+               max_inject_off=max_off, ramp_bw=ramp_bw, flits=flits,
                afifo_profile=afifo_profile(afifo_intervals, sz, makespan),
                afifo_balanced=afifo_profile_balanced(afifo_intervals, sz, makespan))
     if record_events:

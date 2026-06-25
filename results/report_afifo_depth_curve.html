@@ -7,8 +7,8 @@ table{border-collapse:collapse;width:100%;font-size:12px;} td,th{border:1px soli
 th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12px;}
 </style></head><body>
 <h1>Border 短弧：AFIFO 深度 vs Makespan</h1>
-<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6 · 环形状优化<br>
-更新：2026-06-23T02:11:07.360428+00:00 · 数据 <code>results/border_afifo_depth_sweep.json</code></p>
+<p class='note'>模型：router 零 buffer · 无阻塞 · 无冲突 · H=4, V=6, 跨界 AFIFO link=10cy · 环形状优化<br>
+更新：2026-06-24T08:36:35.466587+00:00 · 数据 <code>results/border_afifo_depth_sweep.json</code></p>
 <div class='card'><h2>双向环 @ 下 ramp=2</h2>
 <svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
 <text x="58" y="22" font-size="14" font-weight="bold">makespan vs 边界 AFIFO 深度上限（双向）</text>
@@ -62,47 +62,47 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
 <text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
 <text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
-<path d="M 58.0,313.1 L 71.3,313.1 L 84.6,313.6 L 97.9,313.6 L 111.2,313.6 L 124.5,313.6 L 164.3,313.6 L 217.5,313.6 L 270.7,313.6 L 323.8,313.6 L 377.0,313.6 L 483.3,313.6 L 589.7,313.6 L 656.1,313.6 L 669.4,313.6 L 682.7,313.6 L 696.0,313.6" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
+<path d="M 58.0,313.1 L 71.3,313.1 L 84.6,313.1 L 97.9,313.1 L 111.2,313.1 L 124.5,313.1 L 164.3,313.1 L 217.5,313.1 L 270.7,313.1 L 323.8,313.1 L 377.0,313.1 L 483.3,313.1 L 589.7,313.1 L 656.1,313.1 L 669.4,313.1 L 682.7,313.1 L 696.0,313.1" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
 <circle cx="58.0" cy="313.1" r="4" fill="#60a5fa"/>
 <circle cx="71.3" cy="313.1" r="4" fill="#60a5fa"/>
-<circle cx="84.6" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="97.9" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="111.2" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="124.5" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="164.3" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="217.5" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="270.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="323.8" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="377.0" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="483.3" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="589.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="656.1" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="669.4" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="682.7" cy="313.6" r="4" fill="#60a5fa"/>
-<circle cx="696.0" cy="313.6" r="4" fill="#60a5fa"/>
+<circle cx="84.6" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="97.9" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="111.2" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="124.5" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="164.3" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="217.5" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="270.7" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="323.8" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="377.0" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="483.3" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="589.7" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="656.1" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="669.4" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="682.7" cy="313.1" r="4" fill="#60a5fa"/>
+<circle cx="696.0" cy="313.1" r="4" fill="#60a5fa"/>
 <rect x="66" y="40" width="14" height="3" fill="#60a5fa"/>
 <text x="84" y="46" font-size="10">4×4 双向</text>
-<path d="M 58.0,272.1 L 71.3,281.6 L 84.6,286.1 L 97.9,286.1 L 111.2,286.1 L 124.5,292.4 L 164.3,292.4 L 217.5,292.4 L 270.7,292.4 L 323.8,292.4 L 377.0,292.4 L 483.3,292.4 L 589.7,292.4 L 656.1,292.4 L 669.4,292.4 L 682.7,292.4 L 696.0,292.4" fill="none" stroke="#34d399" stroke-width="2.5"/>
+<path d="M 58.0,272.1 L 71.3,281.6 L 84.6,286.1 L 97.9,286.1 L 111.2,287.9 L 124.5,287.9 L 164.3,287.9 L 217.5,287.9 L 270.7,287.9 L 323.8,287.9 L 377.0,287.9 L 483.3,287.9 L 589.7,287.9 L 656.1,287.9 L 669.4,287.9 L 682.7,287.9 L 696.0,287.9" fill="none" stroke="#34d399" stroke-width="2.5"/>
 <circle cx="58.0" cy="272.1" r="4" fill="#34d399"/>
 <circle cx="71.3" cy="281.6" r="4" fill="#34d399"/>
 <circle cx="84.6" cy="286.1" r="4" fill="#34d399"/>
 <circle cx="97.9" cy="286.1" r="4" fill="#34d399"/>
-<circle cx="111.2" cy="286.1" r="4" fill="#34d399"/>
-<circle cx="124.5" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="164.3" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="217.5" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="270.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="323.8" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="377.0" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="483.3" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="589.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="656.1" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="669.4" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="682.7" cy="292.4" r="4" fill="#34d399"/>
-<circle cx="696.0" cy="292.4" r="4" fill="#34d399"/>
+<circle cx="111.2" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="124.5" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="164.3" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="217.5" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="270.7" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="323.8" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="377.0" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="483.3" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="589.7" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="656.1" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="669.4" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="682.7" cy="287.9" r="4" fill="#34d399"/>
+<circle cx="696.0" cy="287.9" r="4" fill="#34d399"/>
 <rect x="166" y="40" width="14" height="3" fill="#34d399"/>
 <text x="184" y="46" font-size="10">8×8 双向</text>
-<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,157.2 L 669.4,219.9 L 682.7,219.9 L 696.0,219.9" fill="none" stroke="#f87171" stroke-width="2.5"/>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#f87171" stroke-width="2.5"/>
 <circle cx="58.0" cy="57.6" r="4" fill="#f87171"/>
 <circle cx="71.3" cy="129.7" r="4" fill="#f87171"/>
 <circle cx="84.6" cy="150.9" r="4" fill="#f87171"/>
@@ -116,10 +116,10 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <circle cx="377.0" cy="157.2" r="4" fill="#f87171"/>
 <circle cx="483.3" cy="157.2" r="4" fill="#f87171"/>
 <circle cx="589.7" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="656.1" cy="157.2" r="4" fill="#f87171"/>
-<circle cx="669.4" cy="219.9" r="4" fill="#f87171"/>
-<circle cx="682.7" cy="219.9" r="4" fill="#f87171"/>
-<circle cx="696.0" cy="219.9" r="4" fill="#f87171"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#f87171"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#f87171"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#f87171"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#f87171"/>
 <rect x="266" y="40" width="14" height="3" fill="#f87171"/>
 <text x="284" y="46" font-size="10">16×16 双向</text>
 </svg>
@@ -197,7 +197,7 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <circle cx="696.0" cy="314.7" r="4" fill="#3b82f6"/>
 <rect x="66" y="40" width="14" height="3" fill="#3b82f6"/>
 <text x="84" y="46" font-size="10">4×4 单向</text>
-<path d="M 58.0,262.5 L 71.3,263.2 L 84.6,263.2 L 97.9,263.2 L 111.2,263.2 L 124.5,263.2 L 164.3,263.2 L 217.5,263.2 L 270.7,285.9 L 323.8,285.9 L 377.0,285.9 L 483.3,285.9 L 589.7,285.9 L 656.1,285.9 L 669.4,285.9 L 682.7,285.9 L 696.0,285.9" fill="none" stroke="#059669" stroke-width="2.5"/>
+<path d="M 58.0,262.5 L 71.3,263.2 L 84.6,263.2 L 97.9,263.2 L 111.2,263.2 L 124.5,263.2 L 164.3,263.2 L 217.5,275.8 L 270.7,283.4 L 323.8,283.4 L 377.0,283.4 L 483.3,283.4 L 589.7,283.4 L 656.1,283.4 L 669.4,283.4 L 682.7,283.4 L 696.0,283.4" fill="none" stroke="#059669" stroke-width="2.5"/>
 <circle cx="58.0" cy="262.5" r="4" fill="#059669"/>
 <circle cx="71.3" cy="263.2" r="4" fill="#059669"/>
 <circle cx="84.6" cy="263.2" r="4" fill="#059669"/>
@@ -205,16 +205,16 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 <circle cx="111.2" cy="263.2" r="4" fill="#059669"/>
 <circle cx="124.5" cy="263.2" r="4" fill="#059669"/>
 <circle cx="164.3" cy="263.2" r="4" fill="#059669"/>
-<circle cx="217.5" cy="263.2" r="4" fill="#059669"/>
-<circle cx="270.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="323.8" cy="285.9" r="4" fill="#059669"/>
-<circle cx="377.0" cy="285.9" r="4" fill="#059669"/>
-<circle cx="483.3" cy="285.9" r="4" fill="#059669"/>
-<circle cx="589.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="656.1" cy="285.9" r="4" fill="#059669"/>
-<circle cx="669.4" cy="285.9" r="4" fill="#059669"/>
-<circle cx="682.7" cy="285.9" r="4" fill="#059669"/>
-<circle cx="696.0" cy="285.9" r="4" fill="#059669"/>
+<circle cx="217.5" cy="275.8" r="4" fill="#059669"/>
+<circle cx="270.7" cy="283.4" r="4" fill="#059669"/>
+<circle cx="323.8" cy="283.4" r="4" fill="#059669"/>
+<circle cx="377.0" cy="283.4" r="4" fill="#059669"/>
+<circle cx="483.3" cy="283.4" r="4" fill="#059669"/>
+<circle cx="589.7" cy="283.4" r="4" fill="#059669"/>
+<circle cx="656.1" cy="283.4" r="4" fill="#059669"/>
+<circle cx="669.4" cy="283.4" r="4" fill="#059669"/>
+<circle cx="682.7" cy="283.4" r="4" fill="#059669"/>
+<circle cx="696.0" cy="283.4" r="4" fill="#059669"/>
 <rect x="166" y="40" width="14" height="3" fill="#059669"/>
 <text x="184" y="46" font-size="10">8×8 单向</text>
 <path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
@@ -240,15 +240,16 @@ th{background:#e2e8f0;} td.l{text-align:left;} .note{color:#64748b;font-size:12p
 </svg>
 </div>
 <div class='card'><h2>数值表</h2>
-<table><tr><th>配置</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>8</th><th>12</th><th>16</th><th>20</th><th>24</th><th>32</th><th>40</th><th>45</th><th>46</th><th>47</th><th>48</th></tr><tr><td class='l'>4×4 单向</td><td>39</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td></tr><tr><td class='l'>4×4 双向</td><td>33</td><td>33</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td></tr><tr><td class='l'>8×8 单向</td><td>182</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td><td>117</td></tr><tr><td class='l'>8×8 双向</td><td>124</td><td>103</td><td>93</td><td>93</td><td>93</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td><td>79</td></tr><tr><td class='l'>16×16 单向</td><td>751</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td></tr><tr><td class='l'>16×16 双向</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>240</td><td>240</td><td>240</td></tr></table>
+<table><tr><th>配置</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>8</th><th>12</th><th>16</th><th>20</th><th>24</th><th>32</th><th>40</th><th>45</th><th>46</th><th>47</th><th>48</th></tr><tr><td class='l'>4×4 单向</td><td>39</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td></tr><tr><td class='l'>4×4 双向</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td></tr><tr><td class='l'>8×8 单向</td><td>182</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>180</td><td>145</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td></tr><tr><td class='l'>8×8 双向</td><td>124</td><td>103</td><td>93</td><td>93</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td></tr><tr><td class='l'>16×16 单向</td><td>751</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td><td>651</td></tr><tr><td class='l'>16×16 双向</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
 <p class='note'>每格为在该 AFIFO 深度上限下搜索到的最小 makespan（per-link peak ≤ cap）。
 搜索合并全部 spread 候选与各 cap 下 atomic 结果后按深度过滤，保证 cap 增大时 makespan 不升。
 cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 </div>
 
-<div class='card'><h2>案例：16×16 双向为何在 AFIFO≈46 后 makespan 骤降至 240？</h2>
-<p>表中可见：cap≤40 时 makespan 稳定在 <b>379 cy</b>；cap≥46 时降至 <b>240 cy</b>。
-若曲线只在 40 与 48 两点采样，会<strong>看起来像「到 48 才掉」</strong>——实际是<strong>门槛在 46</strong>（本 sweep 已补 45/46/47 采样点）。</p>
+<div class='card'><h2>案例：16×16 双向为何在深 AFIFO 后 makespan 骤降至 244？</h2>
+<p>表中可见：cap≤40 时 makespan 稳定在 <b>379 cy</b>（AFIFO 仅需 3）；
+cap≥45 时降至 <b>244 cy</b>（约 −36%）。本 sweep 在 40 与 45 之间未采样，
+故断崖<strong>首次出现在 cap=45</strong>——真实门槛是下面这套 <code>spread=0</code> 调度的 AFIFO 峰值深度 <b>41</b>。</p>
 
 <h3>1. 为什么会下降？——两种调度范式切换</h3>
 <p>cap≤40 时的最优方案来自 <code>schedule_atomic</code>（相位错开 / pacing）：</p>
@@ -257,27 +258,931 @@ cap=0 表示跨界不允许在 AFIFO 中等待。</p>
 <li>在 AFIFO 预算很小（深度≤3）时，只能大量「等」在边界，注入偏移累积 → makespan ≈379 cy，但 AFIFO 峰值仅 3。</li>
 <li>这是<strong>保守、低缓冲</strong>策略：用更长时间换更浅的 AFIFO。</li>
 </ul>
-<p>cap≥46 时，另一类方案变得可行：<code>schedule</code> 的 <strong>spread=0</strong>（环上链路时分插入）：</p>
+<p>cap≥41 时，另一类方案变得可行：<code>schedule</code> 的 <strong>spread=0</strong>（环上链路时分插入）：</p>
 <ul>
 <li>四象限 Hamilton 环先按固有节拍跑（Pass1 本象限 home 子树）；跨界 flit 插入环内链路空闲 send 槽（Pass2），允许在 AFIFO 中<strong>短暂排队</strong>。</li>
-<li>不强制 per-source 原子 pacing，跨界 burst 与环内 conveyer 更自然对齐 → makespan <b>240 cy</b>（约 −37%）。</li>
-<li>代价：单链路 AFIFO 峰值约 <b>46</b>（均衡深度约 40），必须用更深的边界 FIFO 承受等待。</li>
+<li>不强制 per-source 原子 pacing，跨界 burst 与环内 conveyer 更自然对齐 → makespan <b>244 cy</b>（约 −36%）。</li>
+<li>代价：单链路 AFIFO 峰值约 <b>41</b>（8 路并行均衡后约 36），必须用更深的边界 FIFO 承受等待。</li>
 </ul>
 <p><b>结论：</b>下降不是「缓冲越深传输越快」的连续渐变，而是<strong>低深度下只能用 atomic 保守调度；深度够深后 spread=0 的环时分调度才合法并显著更优</strong>。</p>
 
-<h3>2. 为什么门槛在 46（而不是 40 或 5）？</h3>
+<h3>2. 为什么门槛在 41（而不是 40 或 3）？</h3>
 <p>对每个候选调度，我们要求 <code>afifo_depth ≤ cap</code>（单链路峰值）。</p>
 <ul>
-<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>46</b>（环形状优化：vflip+90° / rect+90° / rect+270° / rect+90°）。</li>
-<li>cap=45 时该方案<strong>不被允许</strong>（46&gt;45），搜索只能在 atomic 等低深度方案里选 → 仍约 379 cy。</li>
-<li>cap=46 时 <code>spread=0</code> 首次入选候选集，240 &lt; 379，曲线<strong>断崖式</strong>下探。</li>
+<li><code>spread=0</code> 方案的实测峰值 AFIFO = <b>41</b>。</li>
+<li>cap&lt;41 时该方案<strong>不被允许</strong>，搜索只能在 atomic 等低深度方案里选 → 仍约 379 cy。</li>
+<li>cap≥41 时 <code>spread=0</code> 首次入选候选集，244 &lt; 379，曲线<strong>断崖式</strong>下探（本 sweep 首个满足的采样点为 cap=45）。</li>
 </ul>
-<p>cap=5 时虽也允许「深度≤5」，但 spread=0（峰值 46）仍不可行；atomic 在 cap=3 已到其自身最优 379，故 cap=5~40 平台不变。</p>
+<p>cap=3 时虽也允许「深度≤3」，但 spread=0（峰值 41）仍不可行；atomic 在 cap=3 已到其自身最优 379，故 cap=3~40 平台不变。</p>
 
 <h3>3. 与 eject 下界的关系</h3>
-<p>16×16 双向 eject 下界 = (N−1)/2 = <b>128 cy</b>。240 cy 约为下界的 1.88×，仍远高于下界——瓶颈在<strong>跨界+环内链路时分</strong>与 AFIFO 等待，而非下 ramp 带宽。</p>
+<p>16×16 双向 eject 下界 = ⌈(N−1)/2⌉ = <b>128 cy</b>。244 cy 约为下界的 1.91×，仍远高于下界——瓶颈在<strong>跨界+环内链路时分</strong>与 AFIFO 等待，而非下 ramp 带宽。</p>
 
 <p class='note'>cap≤40 最优：atomic/natural，mk=379，AFIFO峰值=3。
-cap≥46 最优：schedule spread=0，mk=240，AFIFO峰值=46，均衡深度≈40。</p>
+cap≥45 最优：schedule spread=0，mk=244，AFIFO峰值=41，均衡深度≈36。</p>
+</div>
+
+<div class='card'><h2>下 ramp = 4 flit/cycle/node</h2>
+<p class='note'>更新：2026-06-24T08:37:51.329924+00:00 ·
+<code>results/ramp4_afifo_depth_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only ramp4</code></p>
+<p>把每节点 eject（下 ramp）带宽提到 <b>4 flit/cy</b>（其余模型不变：router 零 buffer、跨界 AFIFO=10cy、环形状同上）。
+下 ramp 是<strong>每节点每周期能落地的 flit 数</strong>，与环方向无关，故单/双向环都给出 ramp=4 曲线。
+eject 下界 = ⌈(N−1)/4⌉，比 ramp=1/2 更低，注入相位更易错开。</p>
+
+<h3>双向环 @ 下 ramp=4</h3>
+<svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">makespan vs 边界 AFIFO 深度上限（双向, ramp=4）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">119</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">239</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">359</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">479</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">599</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,311.9 L 71.3,312.4 L 84.6,312.4 L 97.9,312.4 L 111.2,312.4 L 124.5,312.4 L 164.3,312.4 L 217.5,312.4 L 270.7,312.4 L 323.8,312.4 L 377.0,312.4 L 483.3,312.4 L 589.7,312.4 L 656.1,312.4 L 669.4,312.4 L 682.7,312.4 L 696.0,312.4" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
+<circle cx="58.0" cy="311.9" r="4" fill="#60a5fa"/>
+<circle cx="71.3" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="84.6" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="97.9" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="111.2" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="124.5" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="164.3" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="217.5" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="270.7" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="323.8" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="377.0" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="483.3" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="589.7" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="656.1" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="669.4" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="682.7" cy="312.4" r="4" fill="#60a5fa"/>
+<circle cx="696.0" cy="312.4" r="4" fill="#60a5fa"/>
+<rect x="66" y="40" width="14" height="3" fill="#60a5fa"/>
+<text x="84" y="46" font-size="10">4×4 双向</text>
+<path d="M 58.0,268.1 L 71.3,278.8 L 84.6,284.6 L 97.9,284.6 L 111.2,284.6 L 124.5,284.6 L 164.3,284.6 L 217.5,284.6 L 270.7,284.6 L 323.8,284.6 L 377.0,284.6 L 483.3,284.6 L 589.7,284.6 L 656.1,284.6 L 669.4,284.6 L 682.7,284.6 L 696.0,284.6" fill="none" stroke="#34d399" stroke-width="2.5"/>
+<circle cx="58.0" cy="268.1" r="4" fill="#34d399"/>
+<circle cx="71.3" cy="278.8" r="4" fill="#34d399"/>
+<circle cx="84.6" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="97.9" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="111.2" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="124.5" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="164.3" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="217.5" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="270.7" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="323.8" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="377.0" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="483.3" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="589.7" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="656.1" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="669.4" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="682.7" cy="284.6" r="4" fill="#34d399"/>
+<circle cx="696.0" cy="284.6" r="4" fill="#34d399"/>
+<rect x="166" y="40" width="14" height="3" fill="#34d399"/>
+<text x="184" y="46" font-size="10">8×8 双向</text>
+<path d="M 58.0,57.6 L 71.3,131.7 L 84.6,146.3 L 97.9,146.3 L 111.2,150.7 L 124.5,150.7 L 164.3,154.6 L 217.5,154.6 L 270.7,154.6 L 323.8,154.6 L 377.0,154.6 L 483.3,210.1 L 589.7,210.1 L 656.1,210.1 L 669.4,210.1 L 682.7,210.1 L 696.0,210.1" fill="none" stroke="#f87171" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#f87171"/>
+<circle cx="71.3" cy="131.7" r="4" fill="#f87171"/>
+<circle cx="84.6" cy="146.3" r="4" fill="#f87171"/>
+<circle cx="97.9" cy="146.3" r="4" fill="#f87171"/>
+<circle cx="111.2" cy="150.7" r="4" fill="#f87171"/>
+<circle cx="124.5" cy="150.7" r="4" fill="#f87171"/>
+<circle cx="164.3" cy="154.6" r="4" fill="#f87171"/>
+<circle cx="217.5" cy="154.6" r="4" fill="#f87171"/>
+<circle cx="270.7" cy="154.6" r="4" fill="#f87171"/>
+<circle cx="323.8" cy="154.6" r="4" fill="#f87171"/>
+<circle cx="377.0" cy="154.6" r="4" fill="#f87171"/>
+<circle cx="483.3" cy="210.1" r="4" fill="#f87171"/>
+<circle cx="589.7" cy="210.1" r="4" fill="#f87171"/>
+<circle cx="656.1" cy="210.1" r="4" fill="#f87171"/>
+<circle cx="669.4" cy="210.1" r="4" fill="#f87171"/>
+<circle cx="682.7" cy="210.1" r="4" fill="#f87171"/>
+<circle cx="696.0" cy="210.1" r="4" fill="#f87171"/>
+<rect x="266" y="40" width="14" height="3" fill="#f87171"/>
+<text x="284" y="46" font-size="10">16×16 双向</text>
+</svg>
+<h3>单向环 @ 下 ramp=4</h3>
+<svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">makespan vs 边界 AFIFO 深度上限（单向, ramp=4）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">130</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">260</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">391</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">521</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">652</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,311.4 L 71.3,311.9 L 84.6,311.9 L 97.9,311.9 L 111.2,311.9 L 124.5,311.9 L 164.3,311.9 L 217.5,311.9 L 270.7,311.9 L 323.8,311.9 L 377.0,311.9 L 483.3,311.9 L 589.7,311.9 L 656.1,311.9 L 669.4,311.9 L 682.7,311.9 L 696.0,311.9" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="311.4" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="311.9" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="311.9" r="4" fill="#3b82f6"/>
+<rect x="66" y="40" width="14" height="3" fill="#3b82f6"/>
+<text x="84" y="46" font-size="10">4×4 单向</text>
+<path d="M 58.0,270.3 L 71.3,277.0 L 84.6,277.0 L 97.9,277.0 L 111.2,277.0 L 124.5,277.0 L 164.3,277.0 L 217.5,277.0 L 270.7,277.0 L 323.8,277.0 L 377.0,277.0 L 483.3,277.0 L 589.7,277.0 L 656.1,277.0 L 669.4,277.0 L 682.7,277.0 L 696.0,277.0" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="270.3" r="4" fill="#059669"/>
+<circle cx="71.3" cy="277.0" r="4" fill="#059669"/>
+<circle cx="84.6" cy="277.0" r="4" fill="#059669"/>
+<circle cx="97.9" cy="277.0" r="4" fill="#059669"/>
+<circle cx="111.2" cy="277.0" r="4" fill="#059669"/>
+<circle cx="124.5" cy="277.0" r="4" fill="#059669"/>
+<circle cx="164.3" cy="277.0" r="4" fill="#059669"/>
+<circle cx="217.5" cy="277.0" r="4" fill="#059669"/>
+<circle cx="270.7" cy="277.0" r="4" fill="#059669"/>
+<circle cx="323.8" cy="277.0" r="4" fill="#059669"/>
+<circle cx="377.0" cy="277.0" r="4" fill="#059669"/>
+<circle cx="483.3" cy="277.0" r="4" fill="#059669"/>
+<circle cx="589.7" cy="277.0" r="4" fill="#059669"/>
+<circle cx="656.1" cy="277.0" r="4" fill="#059669"/>
+<circle cx="669.4" cy="277.0" r="4" fill="#059669"/>
+<circle cx="682.7" cy="277.0" r="4" fill="#059669"/>
+<circle cx="696.0" cy="277.0" r="4" fill="#059669"/>
+<rect x="166" y="40" width="14" height="3" fill="#059669"/>
+<text x="184" y="46" font-size="10">8×8 单向</text>
+<path d="M 58.0,57.6 L 71.3,80.0 L 84.6,161.5 L 97.9,161.5 L 111.2,161.5 L 124.5,161.5 L 164.3,161.5 L 217.5,161.5 L 270.7,161.5 L 323.8,161.5 L 377.0,161.5 L 483.3,161.5 L 589.7,161.5 L 656.1,161.5 L 669.4,161.5 L 682.7,161.5 L 696.0,161.5" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="80.0" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="161.5" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="161.5" r="4" fill="#dc2626"/>
+<rect x="266" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="284" y="46" font-size="10">16×16 单向</text>
+</svg>
+
+<h3>数值表（每格 = 该 AFIFO 上限下最小 makespan, ramp=4）</h3>
+<table><tr><th>配置</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>8</th><th>12</th><th>16</th><th>20</th><th>24</th><th>32</th><th>40</th><th>45</th><th>46</th><th>47</th><th>48</th></tr><tr><td class='l'>4×4 单向</td><td>37</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td><td>36</td></tr><tr><td class='l'>4×4 双向</td><td>33</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td><td>32</td></tr><tr><td class='l'>8×8 单向</td><td>129</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td><td>114</td></tr><tr><td class='l'>8×8 双向</td><td>123</td><td>101</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td></tr><tr><td class='l'>16×16 单向</td><td>604</td><td>554</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td><td>372</td></tr><tr><td class='l'>16×16 双向</td><td>555</td><td>403</td><td>373</td><td>373</td><td>364</td><td>364</td><td>356</td><td>356</td><td>356</td><td>356</td><td>356</td><td>242</td><td>242</td><td>242</td><td>242</td><td>242</td><td>242</td></tr></table>
+
+<h3>与原下 ramp 对比（最优 makespan）</h3>
+<table><tr><th>配置</th><th>N</th><th>原下 ramp</th><th>原最优 mk</th><th>ramp=4 最优 mk</th><th>ramp=4 eject 下界</th><th>mk/下界</th><th>对比原 ramp</th></tr><tr><td class='l'>4×4 单向</td><td>16</td><td>1</td><td>37 @cap1</td><td>36 @cap1</td><td>4</td><td>9.00×</td><td>−3%</td></tr><tr><td class='l'>4×4 双向</td><td>16</td><td>2</td><td>33 @cap0</td><td>32 @cap1</td><td>4</td><td>8.00×</td><td>−3%</td></tr><tr><td class='l'>8×8 单向</td><td>64</td><td>1</td><td>124 @cap16</td><td>114 @cap1</td><td>16</td><td>7.12×</td><td>−8%</td></tr><tr><td class='l'>8×8 双向</td><td>64</td><td>2</td><td>89 @cap4</td><td>89 @cap2</td><td>16</td><td>5.56×</td><td>−0%</td></tr><tr><td class='l'>16×16 单向</td><td>256</td><td>1</td><td>651 @cap1</td><td>372 @cap2</td><td>64</td><td>5.81×</td><td>−43%</td></tr><tr><td class='l'>16×16 双向</td><td>256</td><td>2</td><td>244 @cap45</td><td>242 @cap32</td><td>64</td><td>3.78×</td><td>−1%</td></tr></table>
+<p class='note'>下 ramp 加宽主要帮助 <strong>eject 受限</strong> 的配置：单向环（原 ramp=1，eject 下界最大）受益最明显；
+小尺寸或已被「跨界+环内链路时分」限制的配置，下 ramp 从 2→4 收益有限。</p>
+</div>
+
+<div class='card'><h2>数据大小（每报文 flit 数）vs makespan（边界 AFIFO ≤ 5 flit）</h2>
+<p class='note'>更新：2026-06-24T11:54:34.901044+00:00 ·
+<code>results/msg_size_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only size</code></p>
+<p>把每个 src→dst 投递从 1 flit 改为 <b>m flit</b> 的 wormhole 报文（router 零 buffer：
+报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
+跨界 AFIFO link = <b>6 cy</b>（H=4, V=6）。<strong>约束边界 AFIFO 深度 ≤ 5 flit</strong>（按 flit 精确计）。
+下 ramp 带宽取 <b>1、2 flit/cycle/node</b>（单向原生=1，双向原生=2）。</p>
+
+<h3>所有配置 @ 原生下 ramp</h3>
+<svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">makespan vs 数据大小（各配置原生下 ramp：单向=1，双向=2）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">509</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">1019</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">1529</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">2039</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">2549</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="536.5" y1="328" x2="536.5" y2="332" stroke="#64748b"/>
+<text x="536.5" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,323.8 L 217.5,320.8 L 377.0,317.4 L 536.5,316.4 L 696.0,313.0" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="323.8" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="320.8" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="317.4" r="4" fill="#3b82f6"/>
+<circle cx="536.5" cy="316.4" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="313.0" r="4" fill="#3b82f6"/>
+<rect x="66" y="40" width="14" height="3" fill="#3b82f6"/>
+<text x="84" y="46" font-size="10">4×4 单向</text>
+<path d="M 58.0,324.2 L 217.5,324.0 L 377.0,321.4 L 536.5,320.8 L 696.0,318.4" fill="none" stroke="#60a5fa" stroke-width="2.5"/>
+<circle cx="58.0" cy="324.2" r="4" fill="#60a5fa"/>
+<circle cx="217.5" cy="324.0" r="4" fill="#60a5fa"/>
+<circle cx="377.0" cy="321.4" r="4" fill="#60a5fa"/>
+<circle cx="536.5" cy="320.8" r="4" fill="#60a5fa"/>
+<circle cx="696.0" cy="318.4" r="4" fill="#60a5fa"/>
+<rect x="166" y="40" width="14" height="3" fill="#60a5fa"/>
+<text x="184" y="46" font-size="10">4×4 双向</text>
+<path d="M 58.0,307.4 L 217.5,299.5 L 377.0,282.7 L 536.5,281.2 L 696.0,262.4" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="307.4" r="4" fill="#059669"/>
+<circle cx="217.5" cy="299.5" r="4" fill="#059669"/>
+<circle cx="377.0" cy="282.7" r="4" fill="#059669"/>
+<circle cx="536.5" cy="281.2" r="4" fill="#059669"/>
+<circle cx="696.0" cy="262.4" r="4" fill="#059669"/>
+<rect x="266" y="40" width="14" height="3" fill="#059669"/>
+<text x="284" y="46" font-size="10">8×8 单向</text>
+<path d="M 58.0,318.7 L 217.5,309.1 L 377.0,297.8 L 536.5,290.8 L 696.0,276.8" fill="none" stroke="#34d399" stroke-width="2.5"/>
+<circle cx="58.0" cy="318.7" r="4" fill="#34d399"/>
+<circle cx="217.5" cy="309.1" r="4" fill="#34d399"/>
+<circle cx="377.0" cy="297.8" r="4" fill="#34d399"/>
+<circle cx="536.5" cy="290.8" r="4" fill="#34d399"/>
+<circle cx="696.0" cy="276.8" r="4" fill="#34d399"/>
+<rect x="366" y="40" width="14" height="3" fill="#34d399"/>
+<text x="384" y="46" font-size="10">8×8 双向</text>
+<path d="M 58.0,253.5 L 217.5,217.0 L 377.0,151.5 L 536.5,152.4 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="253.5" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="217.0" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="151.5" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="152.4" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
+<rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="484" y="46" font-size="10">16×16 单向</text>
+<path d="M 58.0,284.6 L 217.5,242.2 L 377.0,179.6 L 536.5,165.7 L 696.0,93.0" fill="none" stroke="#f87171" stroke-width="2.5"/>
+<circle cx="58.0" cy="284.6" r="4" fill="#f87171"/>
+<circle cx="217.5" cy="242.2" r="4" fill="#f87171"/>
+<circle cx="377.0" cy="179.6" r="4" fill="#f87171"/>
+<circle cx="536.5" cy="165.7" r="4" fill="#f87171"/>
+<circle cx="696.0" cy="93.0" r="4" fill="#f87171"/>
+<rect x="566" y="40" width="14" height="3" fill="#f87171"/>
+<text x="584" y="46" font-size="10">16×16 双向</text>
+</svg>
+<h3>数值表</h3>
+<table><tr><th>配置</th><th>m=1</th><th>m=2</th><th>m=3</th><th>m=4</th><th>m=5</th><th>eject 下界 m=1..5</th></tr><tr><td class='l'>4×4 单向 (ramp=1)</td><td>37</td><td>63</td><td>93</td><td>101</td><td>131</td><td>15/30/45/60/75</td></tr><tr><td class='l'>4×4 双向 (ramp=2)</td><td>33</td><td>35</td><td>58</td><td>63</td><td>84</td><td>8/15/23/30/38</td></tr><tr><td class='l'>8×8 单向 (ramp=1)</td><td>180</td><td>249</td><td>396</td><td>409</td><td>573</td><td>63/126/189/252/315</td></tr><tr><td class='l'>8×8 双向 (ramp=2)</td><td>81</td><td>165</td><td>264</td><td>325</td><td>447</td><td>32/63/95/126/158</td></tr><tr><td class='l'>16×16 单向 (ramp=1)</td><td>651</td><td>969</td><td>1541</td><td>1533</td><td>2361</td><td>255/510/765/1020/1275</td></tr><tr><td class='l'>16×16 双向 (ramp=2)</td><td>379</td><td>749</td><td>1296</td><td>1417</td><td>2052</td><td>128/255/383/510/638</td></tr></table>
+<p class='note'>eject 下界 = ⌈(N−1)·m / ramp⌉。</p>
+
+<h3>16×16 双向：makespan vs 数据大小（下 ramp=1/2）</h3><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">16×16 双向：下 ramp 吸收报文长度</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">637</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">1274</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">1911</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">2548</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">3186</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="536.5" y1="328" x2="536.5" y2="332" stroke="#64748b"/>
+<text x="536.5" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,248.3 L 217.5,149.9 L 377.0,108.1 L 536.5,85.1 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="248.3" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="149.9" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="108.1" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="85.1" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
+<rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="84" y="46" font-size="10">下 ramp=1</text>
+<path d="M 58.0,293.3 L 217.5,259.4 L 377.0,209.2 L 536.5,198.1 L 696.0,139.9" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="293.3" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="259.4" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="209.2" r="4" fill="#f59e0b"/>
+<circle cx="536.5" cy="198.1" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="139.9" r="4" fill="#f59e0b"/>
+<rect x="166" y="40" width="14" height="3" fill="#f59e0b"/>
+<text x="184" y="46" font-size="10">下 ramp=2</text>
+</svg><h3>8×8 双向：makespan vs 数据大小（下 ramp=1/2）</h3><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">8×8 双向：下 ramp 吸收报文长度</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">146</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">292</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">439</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">585</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">732</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="536.5" y1="328" x2="536.5" y2="332" stroke="#64748b"/>
+<text x="536.5" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">5</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">数据大小 m (flit/message)</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,255.8 L 217.5,216.7 L 377.0,119.8 L 536.5,95.5 L 696.0,57.6" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="255.8" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="216.7" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="119.8" r="4" fill="#dc2626"/>
+<circle cx="536.5" cy="95.5" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="57.6" r="4" fill="#dc2626"/>
+<rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="84" y="46" font-size="10">下 ramp=1</text>
+<path d="M 58.0,295.7 L 217.5,262.2 L 377.0,222.7 L 536.5,198.4 L 696.0,149.7" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="295.7" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="262.2" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="222.7" r="4" fill="#f59e0b"/>
+<circle cx="536.5" cy="198.4" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="149.7" r="4" fill="#f59e0b"/>
+<rect x="166" y="40" width="14" height="3" fill="#f59e0b"/>
+<text x="184" y="46" font-size="10">下 ramp=2</text>
+</svg>
+<p class='note'>关键规律（跨界 AFIFO=6 cy，边界 AFIFO ≤ 5 flit，下 ramp=1/2）：</p>
+<ul class='note'>
+<li><b>报文越大 makespan 增长越快（且超线性）</b>：除了「每链路串行 m flit + 每节点 eject (N−1)·m flit」两项随 m 线性增长外，
+<strong>AFIFO 只有 5 槽</strong>——一个 m-flit 报文在边界最多占 min(m, 等待) 个槽，m 越大能并发等待的报文越少，
+被迫拉大注入间隔（atomic pacing）。16×16 双向 @ramp2：m=1→m=5 的 makespan 增长约 <b>5.4×</b>（379 → 2052），明显快于 5×。</li>
+<li><b>下 ramp 的收益主要在 eject 受限区</b>：低 ramp、单向大环时 makespan≈eject 时间，加宽下 ramp 近似按倍数缩短——
+16×16 单向 m=1 从 ramp1 的 <b>651</b> 降到 ramp2 的 <b>364</b>（−44%）。</li>
+<li><b>大报文下瓶颈是链路 TDM + AFIFO pacing，不再是 eject</b>：16×16 双向 m=5 @ramp2 makespan <b>2052</b>，
+是 eject 下界 <b>638</b> 的约 <b>3.2×</b>；同配置 ramp1→ramp2 仍有明显收益（<b>2950</b> → <b>2052</b>），但远低于 eject 下界的 5× 线性缩放。</li>
+<li><strong>AFIFO≤5 的代价集中在大报文</strong>：m=1 在 cap=5 下与单 flit 深度曲线同列一致；m 增大后 pacing 开销迅速放大。</li>
+</ul>
+</div>
+
+<div class='card'><h2>对角象限均衡：半经水平邻居、半经垂直邻居</h2>
+<p class='note'>更新：2026-06-24T08:37:21.467183+00:00 ·
+<code>results/border_bal_afifo_depth_sweep.json</code> · <code>sched_ring_zerobuf.deliv_border_bal_quads</code></p>
+
+<h3>路由改动</h3>
+<p>原始 border 短弧把<strong>整个对角象限</strong>（QD，如左上源的 64 个目的点）全部经
+<strong>水平相邻象限 QH</strong> 投递（QD 每一列都从中线 y-border 进入）。
+均衡方案把 QD 的 64 个目的点<strong>对半拆分</strong>：</p>
+<ul>
+<li><b>上半 32 个</b>（QD 上半行）经 <strong>QH</strong>：从中线 y-border 进入，沿列向下短弧。</li>
+<li><b>下半 32 个</b>（QD 下半行）经 <strong>垂直相邻象限 QV</strong>：沿 QV 列向下后跨中线 x-border 进入 QD，沿行横向短弧。</li>
+</ul>
+<p>这样原本只承载 QH 流量的中线 x-border 也分担一半对角流量，两条中线边界负载更对称。</p>
+
+<h3>AFIFO 深度 vs makespan 的变化</h3>
+<table><tr><th>配置</th><th>原始 mk/afifo @cap5</th><th>均衡 mk/afifo @cap5</th><th>原始 最优 mk@cap/afifo</th><th>均衡 最优 mk@cap/afifo</th></tr><tr><td class='l'>4×4 单向</td><td>37 / 1</td><td>37 / 1</td><td>37 @1/1</td><td>37 @1/1</td></tr><tr><td class='l'>4×4 双向</td><td>33 / 0</td><td>33 / 0</td><td>33 @0/0</td><td>33 @0/0</td></tr><tr><td class='l'>8×8 单向</td><td>180 / 1</td><td>180 / 1</td><td>124 @16/13</td><td>126 @20/18</td></tr><tr><td class='l'>8×8 双向</td><td>89 / 4</td><td>93 / 4</td><td>89 @4/4</td><td>93 @4/4</td></tr><tr><td class='l'>16×16 单向</td><td>651 / 1</td><td>651 / 1</td><td>651 @1/1</td><td>651 @1/1</td></tr><tr><td class='l'>16×16 双向</td><td>379 / 3</td><td>399 / 4</td><td>244 @45/41</td><td>267 @40/40</td></tr></table>
+<p class='note'>表中「mk/afifo」= 该 AFIFO 上限下最优 makespan 与对应单链路 AFIFO 峰值；
+「最优」列为全 cap 扫描中的最小 makespan 及其首次达到的 cap/afifo 峰值。</p>
+
+<h3>结论</h3>
+<ul>
+<li><b>AFIFO 峰值下降</b>：在浅缓冲（atomic）区间，均衡把单链路 AFIFO 峰值显著降低。
+16×16 双向 cap=5 时：原始需 afifo=<b>5</b>（mk=404），均衡只需 afifo=<b>2</b>（mk=423）——峰值 −60%。
+8×8 单向 cap≥2：3→2；16×16 双向 cap=3~4：3→2。</li>
+<li><b>makespan 略升</b>：对角下半经 QV 要多走垂直象限的整列短弧，关键路径变长，双向配置约 +5%
+（16×16 双向最优 244→267，8×8 双向 89→93）。跨界时延=10cy 放大了这一代价。</li>
+<li><b>本质是权衡</b>：把对角流量摊到两条中线边界，<strong>用更浅的 AFIFO（更小的边界 FIFO 面积）换取约 5% 的 makespan</strong>。
+若 AFIFO 深度是受限/昂贵资源（如 GALS 边界异步 FIFO），均衡方案更优；若追求最短 makespan 且 FIFO 充足，原始单路径更快。</li>
+</ul>
+
+<h3>16×16 双向曲线对比</h3>
+<div><svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">16×16 双向：原始 vs 对角均衡（makespan vs AFIFO 上限）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">130</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">261</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">392</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">522</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">653</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,59.9 L 71.3,131.4 L 84.6,152.4 L 97.9,158.6 L 111.2,158.6 L 124.5,158.6 L 164.3,158.6 L 217.5,158.6 L 270.7,158.6 L 323.8,158.6 L 377.0,158.6 L 483.3,158.6 L 589.7,158.6 L 656.1,219.0 L 669.4,219.0 L 682.7,219.0 L 696.0,219.0" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="59.9" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="131.4" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="152.4" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="158.6" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="219.0" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="219.0" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="219.0" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="219.0" r="4" fill="#dc2626"/>
+<rect x="66" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="84" y="46" font-size="10">原始 单路径(全经 QH)</text>
+<path d="M 58.0,57.6 L 71.3,130.5 L 84.6,141.2 L 97.9,145.2 L 111.2,149.7 L 124.5,149.7 L 164.3,149.7 L 217.5,149.7 L 270.7,149.7 L 323.8,149.7 L 377.0,149.7 L 483.3,149.7 L 589.7,208.7 L 656.1,208.7 L 669.4,208.7 L 682.7,208.7 L 696.0,208.7" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#2563eb"/>
+<circle cx="71.3" cy="130.5" r="4" fill="#2563eb"/>
+<circle cx="84.6" cy="141.2" r="4" fill="#2563eb"/>
+<circle cx="97.9" cy="145.2" r="4" fill="#2563eb"/>
+<circle cx="111.2" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="124.5" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="164.3" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="217.5" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="270.7" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="323.8" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="377.0" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="483.3" cy="149.7" r="4" fill="#2563eb"/>
+<circle cx="589.7" cy="208.7" r="4" fill="#2563eb"/>
+<circle cx="656.1" cy="208.7" r="4" fill="#2563eb"/>
+<circle cx="669.4" cy="208.7" r="4" fill="#2563eb"/>
+<circle cx="682.7" cy="208.7" r="4" fill="#2563eb"/>
+<circle cx="696.0" cy="208.7" r="4" fill="#2563eb"/>
+<rect x="166" y="40" width="14" height="3" fill="#2563eb"/>
+<text x="184" y="46" font-size="10">均衡 (半 QH / 半 QV)</text>
+</svg></div>
+<p class='note'>低 cap 段两者接近（均衡略慢但 AFIFO 更浅）；高 cap 段原始 spread=0 在 cap≈45 探到 244，
+均衡在 cap≈40 探到 267（更早达平台但平台更高）。</p>
+</div>
+
+<div class='card'><h2>Router 每 port 缓冲 K × 边界 AFIFO 深度 A</h2>
+<p class='note'>更新：2026-06-24T08:37:50.063952+00:00 ·
+<code>results/router_afifo_depth_sweep.json</code> · 生成 <code>sweep_router_afifo_depth.py</code></p>
+<p>在现有「router 零 buffer（K=0）」曲线基础上，允许<strong>每个 router 输出 port / 下 ramp port</strong>
+峰值排队深度 ≤ <b>K</b>（flit），同时边界 AFIFO 单链路峰值 ≤ <b>A</b>。
+候选调度：strict（spread/atomic，K=0 时与上图相同）+ <strong>pipelined TDM</strong>（环内链路可短暂排队）。</p>
+
+<h3>机制要点</h3>
+<ul>
+<li><b>K=0</b>：与上文「router 零 buffer」完全相同；等待只能发生在边界 AFIFO（或源 PE 注入偏移）。</li>
+<li><b>K≥1</b>：环内 Hamilton 链路可「就绪但链路忙」时在 router 输出 port 排队；下 ramp 同理（<code>eject_buf</code>）。
+pipelined 典型需求 <code>ring_buf≈1</code>、<code>eject_buf≈2~3</code> → 往往需 <b>K≥2</b>（16×16 单向 pipelined 需 <b>K≥3</b>）。</li>
+<li><b>AFIFO 与 router buffer 解耦</b>：跨界等待仍在 AFIFO；加深 K 主要缓解<strong>象限内环</strong>与<strong>eject 对齐</strong>，不能替代深 AFIFO 对 spread=0 大跨界调度的需求。</li>
+</ul>
+
+<h3>各尺寸 @ AFIFO=48：makespan vs router cap K</h3>
+<table><tr><th>配置 (A=48)</th><th>K=0</th><th>K=1</th><th>K=2</th><th>K=3</th><th>K=4</th></tr><tr><td class='l'>4×4 单向</td><td>37</td><td>37</td><td>37</td><td>37</td><td>37</td></tr><tr><td class='l'>4×4 双向</td><td>33</td><td>33</td><td>33</td><td>33</td><td>33</td></tr><tr><td class='l'>8×8 单向</td><td>124</td><td>124</td><td>124</td><td>124</td><td>124</td></tr><tr><td class='l'>8×8 双向</td><td>89</td><td>89</td><td>89</td><td>89</td><td>89</td></tr><tr><td class='l'>16×16 单向</td><td>651</td><td>651</td><td>375</td><td>375</td><td>375</td></tr><tr><td class='l'>16×16 双向</td><td>244</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
+<p class='note'>4×4 单向 K≥2：37→36；8×8 单向 K≥2：117→114；16×16 单向 K≥3：651→366；
+16×16 双向 K≤4 与 K=0 相同（pipelined 需 ring_buf≈14）。</p>
+
+<h3>16×16 单向：K≥3 带来最大收益</h3>
+<p>K=0 时 A=48 最优 <b>651 cy</b>（atomic）；K≥3 时 pipelined <b>375 cy</b>
+（ring_buf=1, eject_buf=2, AFIFO=1）——
+<strong>约 −44%</strong>。K=1~2 仍不足以容纳 pipelined 的 eject 排队。</p>
+<svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">16×16 单向：makespan vs AFIFO（每条线 = router cap K）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">162</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">324</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">486</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">648</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">811</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#94a3b8"/>
+<circle cx="71.3" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="84.6" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="97.9" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="111.2" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="124.5" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="164.3" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="217.5" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="270.7" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="323.8" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="377.0" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="483.3" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="589.7" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="656.1" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="669.4" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="682.7" cy="93.6" r="4" fill="#94a3b8"/>
+<circle cx="696.0" cy="93.6" r="4" fill="#94a3b8"/>
+<rect x="66" y="40" width="14" height="3" fill="#94a3b8"/>
+<text x="84" y="46" font-size="10">router K=0</text>
+<path d="M 58.0,57.6 L 71.3,93.6 L 84.6,93.6 L 97.9,93.6 L 111.2,93.6 L 124.5,93.6 L 164.3,93.6 L 217.5,93.6 L 270.7,93.6 L 323.8,93.6 L 377.0,93.6 L 483.3,93.6 L 589.7,93.6 L 656.1,93.6 L 669.4,93.6 L 682.7,93.6 L 696.0,93.6" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="93.6" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="93.6" r="4" fill="#3b82f6"/>
+<rect x="166" y="40" width="14" height="3" fill="#3b82f6"/>
+<text x="184" y="46" font-size="10">router K=1</text>
+<path d="M 58.0,57.6 L 71.3,193.0 L 84.6,193.0 L 97.9,193.0 L 111.2,193.0 L 124.5,193.0 L 164.3,193.0 L 217.5,193.0 L 270.7,193.0 L 323.8,193.0 L 377.0,193.0 L 483.3,193.0 L 589.7,193.0 L 656.1,193.0 L 669.4,193.0 L 682.7,193.0 L 696.0,193.0" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#059669"/>
+<circle cx="71.3" cy="193.0" r="4" fill="#059669"/>
+<circle cx="84.6" cy="193.0" r="4" fill="#059669"/>
+<circle cx="97.9" cy="193.0" r="4" fill="#059669"/>
+<circle cx="111.2" cy="193.0" r="4" fill="#059669"/>
+<circle cx="124.5" cy="193.0" r="4" fill="#059669"/>
+<circle cx="164.3" cy="193.0" r="4" fill="#059669"/>
+<circle cx="217.5" cy="193.0" r="4" fill="#059669"/>
+<circle cx="270.7" cy="193.0" r="4" fill="#059669"/>
+<circle cx="323.8" cy="193.0" r="4" fill="#059669"/>
+<circle cx="377.0" cy="193.0" r="4" fill="#059669"/>
+<circle cx="483.3" cy="193.0" r="4" fill="#059669"/>
+<circle cx="589.7" cy="193.0" r="4" fill="#059669"/>
+<circle cx="656.1" cy="193.0" r="4" fill="#059669"/>
+<circle cx="669.4" cy="193.0" r="4" fill="#059669"/>
+<circle cx="682.7" cy="193.0" r="4" fill="#059669"/>
+<circle cx="696.0" cy="193.0" r="4" fill="#059669"/>
+<rect x="266" y="40" width="14" height="3" fill="#059669"/>
+<text x="284" y="46" font-size="10">router K=2</text>
+<path d="M 58.0,57.6 L 71.3,193.0 L 84.6,193.0 L 97.9,193.0 L 111.2,193.0 L 124.5,193.0 L 164.3,193.0 L 217.5,193.0 L 270.7,193.0 L 323.8,193.0 L 377.0,193.0 L 483.3,193.0 L 589.7,193.0 L 656.1,193.0 L 669.4,193.0 L 682.7,193.0 L 696.0,193.0" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#f59e0b"/>
+<circle cx="71.3" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="84.6" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="97.9" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="111.2" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="124.5" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="164.3" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="270.7" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="323.8" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="483.3" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="589.7" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="656.1" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="669.4" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="682.7" cy="193.0" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="193.0" r="4" fill="#f59e0b"/>
+<rect x="366" y="40" width="14" height="3" fill="#f59e0b"/>
+<text x="384" y="46" font-size="10">router K=3</text>
+<path d="M 58.0,57.6 L 71.3,193.0 L 84.6,193.0 L 97.9,193.0 L 111.2,193.0 L 124.5,193.0 L 164.3,193.0 L 217.5,193.0 L 270.7,193.0 L 323.8,193.0 L 377.0,193.0 L 483.3,193.0 L 589.7,193.0 L 656.1,193.0 L 669.4,193.0 L 682.7,193.0 L 696.0,193.0" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="193.0" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="193.0" r="4" fill="#dc2626"/>
+<rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="484" y="46" font-size="10">router K=4</text>
+</svg>
+
+<h3>16×16 双向：K≤4 几乎不改变平台</h3>
+<p>pipelined 需 <code>ring_buf≈14</code>（远超 K=4），故 K=1~4 与 K=0 重合：
+A=48 时 <b>244 cy</b>（spread=0）；浅 router FIFO 无法替代 AFIFO≈46 的断崖。</p>
+<svg width="720" height="380" xmlns="http://www.w3.org/2000/svg">
+<text x="58" y="22" font-size="14" font-weight="bold">16×16 双向：makespan vs AFIFO（每条线 = router cap K）</text>
+<line x1="58" y1="328" x2="696" y2="328" stroke="#64748b"/>
+<line x1="58" y1="36" x2="58" y2="328" stroke="#64748b"/>
+<line x1="54" y1="328.0" x2="696" y2="328.0" stroke="#e2e8f0"/>
+<text x="50" y="332.0" font-size="10" text-anchor="end">0</text>
+<line x1="54" y1="269.6" x2="696" y2="269.6" stroke="#e2e8f0"/>
+<text x="50" y="273.6" font-size="10" text-anchor="end">129</text>
+<line x1="54" y1="211.2" x2="696" y2="211.2" stroke="#e2e8f0"/>
+<text x="50" y="215.2" font-size="10" text-anchor="end">259</text>
+<line x1="54" y1="152.8" x2="696" y2="152.8" stroke="#e2e8f0"/>
+<text x="50" y="156.8" font-size="10" text-anchor="end">388</text>
+<line x1="54" y1="94.4" x2="696" y2="94.4" stroke="#e2e8f0"/>
+<text x="50" y="98.4" font-size="10" text-anchor="end">518</text>
+<line x1="54" y1="36.0" x2="696" y2="36.0" stroke="#e2e8f0"/>
+<text x="50" y="40.0" font-size="10" text-anchor="end">648</text>
+<line x1="58.0" y1="328" x2="58.0" y2="332" stroke="#64748b"/>
+<text x="58.0" y="346" font-size="10" text-anchor="middle">0</text>
+<line x1="71.3" y1="328" x2="71.3" y2="332" stroke="#64748b"/>
+<text x="71.3" y="346" font-size="10" text-anchor="middle">1</text>
+<line x1="84.6" y1="328" x2="84.6" y2="332" stroke="#64748b"/>
+<text x="84.6" y="346" font-size="10" text-anchor="middle">2</text>
+<line x1="97.9" y1="328" x2="97.9" y2="332" stroke="#64748b"/>
+<text x="97.9" y="346" font-size="10" text-anchor="middle">3</text>
+<line x1="111.2" y1="328" x2="111.2" y2="332" stroke="#64748b"/>
+<text x="111.2" y="346" font-size="10" text-anchor="middle">4</text>
+<line x1="124.5" y1="328" x2="124.5" y2="332" stroke="#64748b"/>
+<text x="124.5" y="346" font-size="10" text-anchor="middle">5</text>
+<line x1="164.3" y1="328" x2="164.3" y2="332" stroke="#64748b"/>
+<text x="164.3" y="346" font-size="10" text-anchor="middle">8</text>
+<line x1="217.5" y1="328" x2="217.5" y2="332" stroke="#64748b"/>
+<text x="217.5" y="346" font-size="10" text-anchor="middle">12</text>
+<line x1="270.7" y1="328" x2="270.7" y2="332" stroke="#64748b"/>
+<text x="270.7" y="346" font-size="10" text-anchor="middle">16</text>
+<line x1="323.8" y1="328" x2="323.8" y2="332" stroke="#64748b"/>
+<text x="323.8" y="346" font-size="10" text-anchor="middle">20</text>
+<line x1="377.0" y1="328" x2="377.0" y2="332" stroke="#64748b"/>
+<text x="377.0" y="346" font-size="10" text-anchor="middle">24</text>
+<line x1="483.3" y1="328" x2="483.3" y2="332" stroke="#64748b"/>
+<text x="483.3" y="346" font-size="10" text-anchor="middle">32</text>
+<line x1="589.7" y1="328" x2="589.7" y2="332" stroke="#64748b"/>
+<text x="589.7" y="346" font-size="10" text-anchor="middle">40</text>
+<line x1="656.1" y1="328" x2="656.1" y2="332" stroke="#64748b"/>
+<text x="656.1" y="346" font-size="10" text-anchor="middle">45</text>
+<line x1="669.4" y1="328" x2="669.4" y2="332" stroke="#64748b"/>
+<text x="669.4" y="346" font-size="10" text-anchor="middle">46</text>
+<line x1="682.7" y1="328" x2="682.7" y2="332" stroke="#64748b"/>
+<text x="682.7" y="346" font-size="10" text-anchor="middle">47</text>
+<line x1="696.0" y1="328" x2="696.0" y2="332" stroke="#64748b"/>
+<text x="696.0" y="346" font-size="10" text-anchor="middle">48</text>
+<text x="377.0" y="372" font-size="11" text-anchor="middle">边界 AFIFO 深度上限（per-link peak）</text>
+<text x="14" y="182.0" font-size="11" text-anchor="middle" transform="rotate(-90 14 182.0)">makespan (cy)</text>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#94a3b8"/>
+<circle cx="71.3" cy="129.7" r="4" fill="#94a3b8"/>
+<circle cx="84.6" cy="150.9" r="4" fill="#94a3b8"/>
+<circle cx="97.9" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="111.2" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="124.5" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="164.3" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="217.5" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="270.7" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="323.8" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="377.0" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="483.3" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="589.7" cy="157.2" r="4" fill="#94a3b8"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#94a3b8"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#94a3b8"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#94a3b8"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#94a3b8"/>
+<rect x="66" y="40" width="14" height="3" fill="#94a3b8"/>
+<text x="84" y="46" font-size="10">router K=0</text>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#3b82f6"/>
+<circle cx="71.3" cy="129.7" r="4" fill="#3b82f6"/>
+<circle cx="84.6" cy="150.9" r="4" fill="#3b82f6"/>
+<circle cx="97.9" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="111.2" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="124.5" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="164.3" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="217.5" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="270.7" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="323.8" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="377.0" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="483.3" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="589.7" cy="157.2" r="4" fill="#3b82f6"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#3b82f6"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#3b82f6"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#3b82f6"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#3b82f6"/>
+<rect x="166" y="40" width="14" height="3" fill="#3b82f6"/>
+<text x="184" y="46" font-size="10">router K=1</text>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#059669" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#059669"/>
+<circle cx="71.3" cy="129.7" r="4" fill="#059669"/>
+<circle cx="84.6" cy="150.9" r="4" fill="#059669"/>
+<circle cx="97.9" cy="157.2" r="4" fill="#059669"/>
+<circle cx="111.2" cy="157.2" r="4" fill="#059669"/>
+<circle cx="124.5" cy="157.2" r="4" fill="#059669"/>
+<circle cx="164.3" cy="157.2" r="4" fill="#059669"/>
+<circle cx="217.5" cy="157.2" r="4" fill="#059669"/>
+<circle cx="270.7" cy="157.2" r="4" fill="#059669"/>
+<circle cx="323.8" cy="157.2" r="4" fill="#059669"/>
+<circle cx="377.0" cy="157.2" r="4" fill="#059669"/>
+<circle cx="483.3" cy="157.2" r="4" fill="#059669"/>
+<circle cx="589.7" cy="157.2" r="4" fill="#059669"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#059669"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#059669"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#059669"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#059669"/>
+<rect x="266" y="40" width="14" height="3" fill="#059669"/>
+<text x="284" y="46" font-size="10">router K=2</text>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#f59e0b"/>
+<circle cx="71.3" cy="129.7" r="4" fill="#f59e0b"/>
+<circle cx="84.6" cy="150.9" r="4" fill="#f59e0b"/>
+<circle cx="97.9" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="111.2" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="124.5" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="164.3" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="217.5" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="270.7" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="323.8" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="377.0" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="483.3" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="589.7" cy="157.2" r="4" fill="#f59e0b"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#f59e0b"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#f59e0b"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#f59e0b"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#f59e0b"/>
+<rect x="366" y="40" width="14" height="3" fill="#f59e0b"/>
+<text x="384" y="46" font-size="10">router K=3</text>
+<path d="M 58.0,57.6 L 71.3,129.7 L 84.6,150.9 L 97.9,157.2 L 111.2,157.2 L 124.5,157.2 L 164.3,157.2 L 217.5,157.2 L 270.7,157.2 L 323.8,157.2 L 377.0,157.2 L 483.3,157.2 L 589.7,157.2 L 656.1,218.0 L 669.4,218.0 L 682.7,218.0 L 696.0,218.0" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle cx="58.0" cy="57.6" r="4" fill="#dc2626"/>
+<circle cx="71.3" cy="129.7" r="4" fill="#dc2626"/>
+<circle cx="84.6" cy="150.9" r="4" fill="#dc2626"/>
+<circle cx="97.9" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="111.2" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="124.5" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="164.3" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="217.5" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="270.7" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="323.8" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="377.0" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="483.3" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="589.7" cy="157.2" r="4" fill="#dc2626"/>
+<circle cx="656.1" cy="218.0" r="4" fill="#dc2626"/>
+<circle cx="669.4" cy="218.0" r="4" fill="#dc2626"/>
+<circle cx="682.7" cy="218.0" r="4" fill="#dc2626"/>
+<circle cx="696.0" cy="218.0" r="4" fill="#dc2626"/>
+<rect x="466" y="40" width="14" height="3" fill="#dc2626"/>
+<text x="484" y="46" font-size="10">router K=4</text>
+</svg>
+
+<h3>16×16 双向 · K×A 数值表（makespan）</h3>
+<table><tr><th>router↓ AFIFO→</th><th>A=0</th><th>A=1</th><th>A=2</th><th>A=3</th><th>A=4</th><th>A=5</th><th>A=8</th><th>A=12</th><th>A=16</th><th>A=20</th><th>A=24</th><th>A=32</th><th>A=40</th><th>A=45</th><th>A=46</th><th>A=47</th><th>A=48</th></tr><tr><td class='l'>K=0</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=1</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=2</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=3</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr><tr><td class='l'>K=4</td><td>600</td><td>440</td><td>393</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>379</td><td>244</td><td>244</td><td>244</td><td>244</td></tr></table>
 </div>
 </body></html>

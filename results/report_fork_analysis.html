@@ -42,6 +42,7 @@ ul, ol { margin:8px 0 8px 22px; }
 <li>Router 内 in-network fork：共享输入链路只计 1 次载荷；下 ramp <b>不做</b>多播复制。</li>
 <li><b>Router 缓冲预算 K</b>：max(link_buf, ramp_buf) ≤ K；边界 AFIFO 单独计数（本报告 Pareto 只约束 router 缓冲）。</li>
 <li><b>pipe_mk</b>：允许足够缓冲时的冲突无关流水线 makespan（<code>sim_fused_rings.simulate</code>）； peak buffer 由 <code>measure_buffers</code> 统计。</li>
+<li><b>树的棵数 T</b>（分叉 / 区域粒度）：把 allgather 投递结构按区域分解得到的<b>独立子树（区域）数</b>。 单个源 <code>s</code> 的投递 DAG 可视为 <b>1 个主干</b>（源所在区域的 Hamilton 环）+ <b>(T−1) 个分支</b>（向其余区域展开）。T 等价于本报告的切分数 Q：<b>全局环 T=1</b>、<b>border T=4</b>（主干=局部象限环，分支=其余 3 象限）、<b>multitree T=N=256</b>。详见下表。</li>
 </ul>
 <div class='formula'>
 T<sub>eject</sub> = ⌈(N−1) / ramp_bw⌉ &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -49,6 +50,20 @@ L<sub>max</sub> = max<sub>有向边 e</sub> |{源 s : s 的树路径经过 e}| &
 fill = max<sub>s,v</sub> latency(inject→v) + 2·ramp
 </div>
 <p>无冲突 makespan 下界：<b>max(fill, L<sub>max</sub>, T<sub>eject</sub>)</b>。实测 pipe_mk 紧贴该 max（见明细表「主导」列）。 <b>fill / L<sub>max</sub> 的详细定义与算例见 §1c。</b></p>
+<h3>树的棵数 T：主干 + 分支的区域分解</h3>
+<p><b>定义</b>：T 是把投递结构按区域分解后的<b>独立子树（区域）数</b>，与分叉位置是同一维度的另一种表述。 每棵子树由 <b>1 条主干</b>（区域内 Hamilton 环，源 flit 沿其串行推进）与若干 <b>分支</b>（跨区域短弧 / 列树）构成。 T 越大 → 主干环越短（fill↓），但根附近分叉越多、脊柱边被越多源共享（L<sub>max</sub>↑）。</p>
+<div class='formula'>
+主干环半周：fill ≈ H · (N / T) / 2 + 2·ramp &nbsp;&nbsp;|&nbsp;&nbsp; T 增 → fill↓、L<sub>max</sub>↑<br/>
+最优棵数：T<sup>*</sup> ≈ H（令 fill ≈ T<sub>eject</sub>，即 §2 的 Q<sup>*</sup> ≈ H）
+</div>
+<table><thead><tr><th>方案</th><th>棵数 T</th><th>主干（trunk）</th><th>分支（branch）</th></tr></thead><tbody>
+<tr><td>ring (Q=1)</td><td>1</td><td>全局 Hamilton 环（深而窄的单链）</td><td>无（仅根处一次分叉）</td></tr>
+<tr><td>border (Q=4)</td><td>4</td><td>源所在象限的局部 Hamilton 环</td><td>其余 3 个象限（跨界短弧）</td></tr>
+<tr><td>grid Qx×Qy</td><td>Qx·Qy</td><td>区域内 Hamilton 环</td><td>其余区域的边界展开</td></tr>
+<tr><td>hybrid B=k</td><td>B</td><td>带内 16×(MY/B) Hamilton 环</td><td>上下相邻带的列向树</td></tr>
+<tr><td>multitree (Q=N)</td><td>256 (=N)</td><td>退化为单节点（无环主干）</td><td>根处行+列全分叉到每个节点</td></tr>
+</tbody></table>
+<p class='meta'>注：T 与 §2「分叉位置参数化」中的 Q 一一对应（ring Q=1 → T=1；border Q=4 → T=4；multitree Q=N → T=256）。本节给出「主干 + 分支」的几何视角，§2 给出缓冲特征视角。</p>
 </div>
 <div class='card'><h2>1b. 术语说明：B、ramp_buf 与下 ramp 突发</h2>
 <h3>B（hybrid B=k 中的带数）</h3>
@@ -155,12 +170,12 @@ T<sub>eject</sub> = ⌈(N−1)/ramp_bw⌉ — 与树形无关的硬件地板
 </ul>
 </div>
 <div class='card'><h2>2. 分叉位置参数化</h2>
-<table><thead><tr><th>族</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>
-<tr><td>ring (Q=1)</td><td>根处双向/单向分叉，之后无分叉</td><td>是（≈半周长）</td><td>link=0, ramp≈0</td></tr>
-<tr><td>border / grid 2×2 (Q=4)</td><td>子环 + 2/3 级边界多播 + 短弧</td><td>中等</td><td>link≤2；ramp 随 rb 变化</td></tr>
-<tr><td>hybrid B=k</td><td>mesh 纵向切成 <b>B 条水平带</b>：带内 Hamilton 环 + 跨带列向树（见 §1b）</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>
-<tr><td>grid Qx×Qy</td><td>通用区域网格边界展开</td><td>Q 大时 fill↓</td><td>Q&gt;2 需 K≫2</td></tr>
-<tr><td>multitree (Q=N)</td><td>根处行+列全分叉</td><td>否（eject 主导）</td><td>ramp_buf≈120</td></tr>
+<table><thead><tr><th>族</th><th>棵数 T</th><th>分叉结构</th><th>典型 fill 主导?</th><th>缓冲特征</th></tr></thead><tbody>
+<tr><td>ring (Q=1)</td><td>1</td><td>根处双向/单向分叉，之后无分叉</td><td>是（≈半周长）</td><td>link=0, ramp≈0</td></tr>
+<tr><td>border / grid 2×2 (Q=4)</td><td>4</td><td>子环 + 2/3 级边界多播 + 短弧</td><td>中等</td><td>link≤2；ramp 随 rb 变化</td></tr>
+<tr><td>hybrid B=k</td><td>B</td><td>mesh 纵向切成 <b>B 条水平带</b>：带内 Hamilton 环 + 跨带列向树（见 §1b）</td><td>B 大时 fill↓</td><td>B≥4 时 ramp 突发</td></tr>
+<tr><td>grid Qx×Qy</td><td>Qx·Qy</td><td>通用区域网格边界展开</td><td>Q 大时 fill↓</td><td>Q&gt;2 需 K≫2</td></tr>
+<tr><td>multitree (Q=N)</td><td>256 (=N)</td><td>根处行+列全分叉</td><td>否（eject 主导）</td><td>ramp_buf≈120</td></tr>
 </tbody></table>
 <div class='insight'><b>Q* ≈ H 定理（工程判据）</b>：子环 fill ≈ H·(N/Q)/2。令 ≈ T<sub>eject</sub> 得 Q* ≈ H。 对 H=4，四象限 border 是无缓冲前沿；更细 grid 8×2 需 K≥56 才换到 mk=189。</div>
 </div>

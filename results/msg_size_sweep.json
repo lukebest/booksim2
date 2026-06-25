@@ -1,0 +1,375 @@
+{
+  "updated": "2026-06-24T11:54:34.901044+00:00",
+  "scheme": "border",
+  "model": "border short-arc, router_buf=0, wormhole m-flit messages, AFIFO cap=5, cross_lat=6",
+  "cross_lat": 6,
+  "msg_sizes": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "ramps": [
+    1,
+    2
+  ],
+  "cap": 5,
+  "configs": {
+    "4x4_uni": {
+      "size": 4,
+      "bidir": false,
+      "n": 16,
+      "native_ramp": 1,
+      "ring_shape": {
+        "cfg": [
+          [
+            "vflip",
+            0
+          ],
+          [
+            "rect",
+            0
+          ],
+          [
+            "rect",
+            0
+          ],
+          [
+            "vflip",
+            0
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:vflip+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:vflip+0\u00b0"
+      },
+      "by_ramp": {
+        "1": [
+          37,
+          63,
+          93,
+          101,
+          131
+        ],
+        "2": [
+          36,
+          39,
+          65,
+          77,
+          105
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          15,
+          30,
+          45,
+          60,
+          75
+        ],
+        "2": [
+          8,
+          15,
+          23,
+          30,
+          38
+        ]
+      }
+    },
+    "4x4_bi": {
+      "size": 4,
+      "bidir": true,
+      "n": 16,
+      "native_ramp": 2,
+      "ring_shape": {
+        "cfg": [
+          [
+            "rect",
+            0
+          ],
+          [
+            "rect",
+            0
+          ],
+          [
+            "rect",
+            0
+          ],
+          [
+            "rect",
+            0
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:rect+0\u00b0; Q1\u53f3\u4e0b:rect+0\u00b0; Q2\u5de6\u4e0a:rect+0\u00b0; Q3\u53f3\u4e0a:rect+0\u00b0"
+      },
+      "by_ramp": {
+        "1": [
+          37,
+          61,
+          91,
+          113,
+          149
+        ],
+        "2": [
+          33,
+          35,
+          58,
+          63,
+          84
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          15,
+          30,
+          45,
+          60,
+          75
+        ],
+        "2": [
+          8,
+          15,
+          23,
+          30,
+          38
+        ]
+      }
+    },
+    "8x8_uni": {
+      "size": 8,
+      "bidir": false,
+      "n": 64,
+      "native_ramp": 1,
+      "ring_shape": {
+        "cfg": [
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+      },
+      "by_ramp": {
+        "1": [
+          180,
+          249,
+          396,
+          409,
+          573
+        ],
+        "2": [
+          114,
+          195,
+          271,
+          325,
+          456
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          63,
+          126,
+          189,
+          252,
+          315
+        ],
+        "2": [
+          32,
+          63,
+          95,
+          126,
+          158
+        ]
+      }
+    },
+    "8x8_bi": {
+      "size": 8,
+      "bidir": true,
+      "n": 64,
+      "native_ramp": 2,
+      "ring_shape": {
+        "cfg": [
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "vflip",
+            3
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006); Q3\u53f3\u4e0a:vflip+270\u00b0\u987a(90\u00b0\u9006)"
+      },
+      "by_ramp": {
+        "1": [
+          181,
+          279,
+          522,
+          583,
+          678
+        ],
+        "2": [
+          81,
+          165,
+          264,
+          325,
+          447
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          63,
+          126,
+          189,
+          252,
+          315
+        ],
+        "2": [
+          32,
+          63,
+          95,
+          126,
+          158
+        ]
+      }
+    },
+    "16x16_uni": {
+      "size": 16,
+      "bidir": false,
+      "n": 256,
+      "native_ramp": 1,
+      "ring_shape": {
+        "cfg": [
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:vflip+90\u00b0\u987a; Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+      },
+      "by_ramp": {
+        "1": [
+          651,
+          969,
+          1541,
+          1533,
+          2361
+        ],
+        "2": [
+          364,
+          903,
+          1271,
+          1407,
+          2049
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          255,
+          510,
+          765,
+          1020,
+          1275
+        ],
+        "2": [
+          128,
+          255,
+          383,
+          510,
+          638
+        ]
+      }
+    },
+    "16x16_bi": {
+      "size": 16,
+      "bidir": true,
+      "n": 256,
+      "native_ramp": 2,
+      "ring_shape": {
+        "cfg": [
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ]
+        ],
+        "cfg_str": "Q0\u5de6\u4e0b:vflip+90\u00b0\u987a; Q1\u53f3\u4e0b:rect+90\u00b0\u987a; Q2\u5de6\u4e0a:rect+270\u00b0\u987a(90\u00b0\u9006); Q3\u53f3\u4e0a:rect+90\u00b0\u987a"
+      },
+      "by_ramp": {
+        "1": [
+          870,
+          1943,
+          2399,
+          2650,
+          2950
+        ],
+        "2": [
+          379,
+          749,
+          1296,
+          1417,
+          2052
+        ]
+      },
+      "eject_lb": {
+        "1": [
+          255,
+          510,
+          765,
+          1020,
+          1275
+        ],
+        "2": [
+          128,
+          255,
+          383,
+          510,
+          638
+        ]
+      }
+    }
+  },
+  "elapsed_s": 3932.9986655712128
+}
