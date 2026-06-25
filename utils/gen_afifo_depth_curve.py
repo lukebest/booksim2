@@ -469,8 +469,9 @@ eject 下界 = ⌈(N−1)/4⌉，比 ramp=1/2 更低，注入相位更易错开�
 
 
 def size_section(sdata):
-    """Makespan vs message (data) size m=1..5 flit. Wormhole, 0 router buffer:
-    a message occupies m consecutive cycles on every link and m eject cycles."""
+    """Makespan vs message (data) size m=1..5 flit (64 B/flit). Wormhole, 0
+    router buffer: a message occupies m consecutive cycles on every link and
+    m eject cycles."""
     if not sdata:
         return ""
     ms = sdata["msg_sizes"]
@@ -513,7 +514,8 @@ def size_section(sdata):
             f"<tr><td class='l'>{html.escape(label)} (ramp={rb})</td>{cells}<td>{lbcell}</td></tr>"
         )
     hdr = "".join(f"<th>m={m}</th>" for m in ms)
-    tbl = (f"<table><tr><th>配置</th>{hdr}<th>eject 下界 m=1..5</th></tr>"
+    m_range = f"m=1..{ms[-1]}" if ms else "m"
+    tbl = (f"<table><tr><th>配置</th>{hdr}<th>eject 下界 {m_range}</th></tr>"
            f"{''.join(rows)}</table>")
 
     # chart 2: representative configs, ramp 1/2 overlay
@@ -532,11 +534,14 @@ def size_section(sdata):
                              xlabel="数据大小 m (flit/message)")
             )
 
+    flit_b = sdata.get("flit_bytes", 64)
+    bus_b = sdata.get("bus_width_bytes", 64)
     return f"""
 <div class='card'><h2>数据大小（每报文 flit 数）vs makespan（边界 AFIFO ≤ {cap} flit）</h2>
 <p class='note'>更新：{html.escape(sdata.get('updated', ''))} ·
 <code>results/msg_size_sweep.json</code> · 生成 <code>sweep_ramp4_size.py --only size</code></p>
-<p>把每个 src→dst 投递从 1 flit 改为 <b>m flit</b> 的 wormhole 报文（router 零 buffer：
+<p><b>总线位宽 = {bus_b} B，flit 大小 = {flit_b} B</b>（1 flit/cycle 链路带宽 = {flit_b} B/cy）。
+把每个 src→dst 投递从 1 flit 改为 <b>m flit</b>（= m×{flit_b} B）的 wormhole 报文（router 零 buffer：
 报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
 跨界 AFIFO link = <b>{cross} cy</b>（H=4, V=6）。<strong>约束边界 AFIFO 深度 ≤ {cap} flit</strong>（按 flit 精确计）。
 下 ramp 带宽取 <b>1、2 flit/cycle/node</b>（单向原生=1，双向原生=2）。</p>

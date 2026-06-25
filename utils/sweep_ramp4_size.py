@@ -29,7 +29,9 @@ RAMP4_OUT = ROOT / "results" / "ramp4_afifo_depth_sweep.json"
 SIZE_OUT = ROOT / "results" / "msg_size_sweep.json"
 
 RAMP4 = 4
-MSG_SIZES = (1, 2, 3, 4, 5)
+FLIT_BYTES = 64
+BUS_WIDTH_BYTES = 64
+MSG_SIZES = tuple(range(1, 6))
 SIZE_RAMPS = (1, 2)
 SIZE_CROSS_LAT = 6       # border AFIFO link latency (cy); H=4, V=6
 SIZE_CAP = 5             # border AFIFO depth constrained to <= 5 FLITS
@@ -83,7 +85,10 @@ def run_size(sizes=SIZES, msg_sizes=MSG_SIZES, ramps=SIZE_RAMPS):
         "updated": datetime.now(timezone.utc).isoformat(),
         "scheme": "border",
         "model": ("border short-arc, router_buf=0, wormhole m-flit messages, "
-                  f"AFIFO cap={SIZE_CAP}, cross_lat={SIZE_CROSS_LAT}"),
+                  f"AFIFO cap={SIZE_CAP}, cross_lat={SIZE_CROSS_LAT}, "
+                  f"flit={FLIT_BYTES}B, bus={BUS_WIDTH_BYTES}B"),
+        "flit_bytes": FLIT_BYTES,
+        "bus_width_bytes": BUS_WIDTH_BYTES,
         "cross_lat": SIZE_CROSS_LAT,
         "msg_sizes": list(msg_sizes),
         "ramps": list(ramps),
@@ -120,6 +125,7 @@ def run_size(sizes=SIZES, msg_sizes=MSG_SIZES, ramps=SIZE_RAMPS):
                 "by_ramp": by_ramp,
                 "eject_lb": eject_lbs,
             }
+            SIZE_OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
     out["elapsed_s"] = time.time() - t0
     SIZE_OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
     print(f"Wrote {SIZE_OUT} ({out['elapsed_s']:.0f}s)")
