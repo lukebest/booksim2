@@ -111,26 +111,28 @@ def all_families(sz):
     return fams
 
 
-def evaluate(builder, bidir, ramp_bw):
+def evaluate(builder, bidir, ramp_bw, flits=1):
     n = fr._MX * fr._MY
     deliveries = {s: builder(s, bidir) for s in range(n)}
-    fill = max(tree_depth(deliveries[s], s) for s in range(n)) + 2 * fr.RAMP
+    fill = max(tree_depth(deliveries[s], s) for s in range(n)) + 2 * fr.RAMP + flits - 1
     Lmax = link_load(deliveries)
-    eject = (n - 1 + ramp_bw - 1) // ramp_bw
-    mk, lb, rbuf = fr.measure_buffers(deliveries, ramp_bw)
-    _, ej, bl, _ = fr.simulate(deliveries, ramp_bw)
-    ok = all(ej[x] == n - 1 for x in range(n))
+    eject = ((n - 1) * flits + ramp_bw - 1) // ramp_bw
+    mk, lb, rbuf = fr.measure_buffers(deliveries, ramp_bw, flits=flits)
+    _, ej, bl, _ = fr.simulate(deliveries, ramp_bw, flits=flits)
+    ok = all(ej[x] == (n - 1) * flits for x in range(n))
     peak = max(lb, rbuf)
-    dom = max((("fill", fill), ("Lmax", Lmax), ("eject", eject)), key=lambda kv: kv[1])[0]
+    dom = max((("fill", fill), ("Lmax", Lmax * flits), ("eject", eject)), key=lambda kv: kv[1])[0]
     return dict(fill=fill, Lmax=Lmax, eject=eject, pipe=mk, link_buf=lb,
                 ramp_buf=rbuf, buf_peak=peak, busiest=bl, ok=ok, dom=dom)
 
 
-def _best_ring_zerobuf(sz, bidir, ramp_bw, deliv_fn, quads, cap=AFIFO_CAP):
+def _best_ring_zerobuf(sz, bidir, ramp_bw, deliv_fn, quads, cap=AFIFO_CAP, flits=1, fast=False):
     best = None
-    for sp in range(25):
+    spreads = (0,) if fast else range(25)
+    for sp in spreads:
         for lb in (False, True):
-            r = S.schedule(sz, bidir, ramp_bw, deliv_fn, spread=sp, lb_cross=lb, quads=quads)
+            r = S.schedule(sz, bidir, ramp_bw, deliv_fn, spread=sp, lb_cross=lb,
+                           quads=quads, flits=flits)
             if not r.get("ok"):
                 continue
             if r["afifo_depth"] > cap or r["afifo_balanced"]["peak"] > cap:
@@ -141,7 +143,7 @@ def _best_ring_zerobuf(sz, bidir, ramp_bw, deliv_fn, quads, cap=AFIFO_CAP):
                 best = rec
     for order in ("interleave", "natural", "quad"):
         r = S.schedule_atomic(sz, bidir, ramp_bw, deliv_fn, afifo_cap=cap,
-                              order=order, quads=quads)
+                              order=order, quads=quads, flits=flits)
         if not r.get("ok") or r["afifo_balanced"]["peak"] > cap:
             continue
         rec = dict(makespan=r["makespan"], afifo=r["afifo_balanced"]["peak"],
@@ -151,9 +153,12 @@ def _best_ring_zerobuf(sz, bidir, ramp_bw, deliv_fn, quads, cap=AFIFO_CAP):
     return best
 
 
-def eval_strict_afifo5(name, builder, bidir, ramp_bw, sz):
+def eval_strict_afifo5(name, builder, bidir, ramp_bw, sz, flits=1, fast_border=False):
     """Strict router_buf=0; border AFIFO <= 5 where applicable."""
-    fr.cfg(sz, sz, 4, 6)
+    if flits > 1 or fast_border:
+        fr.cfg(sz, sz, 4, 6, cross=6)
+    else:
+        fr.cfg(sz, sz, 4, 6)
     Z.cfg(sz, sz, 4, 6)
     Z.init_ring()
     Z.init_quadrants()
@@ -163,7 +168,8 @@ def eval_strict_afifo5(name, builder, bidir, ramp_bw, sz):
     if name == "border (Q=4)":
         quads = quads_for(sz, "border", tag)
         deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
-        rec = _best_ring_zerobuf(sz, bidir, ramp_bw, deliv, quads)
+        rec = _best_ring_zerobuf(sz, bidir, ramp_bw, deliv, quads, flits=flits,
+                                 fast=fast_border)
         if rec:
             rec["mode"] = "ring_zerobuf"
             return rec
@@ -185,7 +191,7 @@ def eval_strict_afifo5(name, builder, bidir, ramp_bw, sz):
             return fp_from_edges(s, ch_to_edges(ch), mx, h, v, ramp_bw)
         raise ValueError(name)
 
-    mk, _, _, ok = Z.run_scheme(rigid_fp, ramp_bw)
+    mk, _, _, ok = Z.run_scheme(rigid_fp, ramp_bw, flits=flits)
     return dict(makespan=mk, ok=ok, afifo=0, mode="zerobuf_rigid", method="pack")
 
 
@@ -211,12 +217,12 @@ def burst_frontier(schemes, link_cap=LINK_CAP, ramp_caps=RAMP_BURST_CAPS):
     return out
 
 
-def sweep(sz=16, ramp_bws=(1, 2)):
+def sweep(sz=16, ramp_bws=(1, 2), flits=1, fast_border=False):
     fr.cfg(sz, sz, 4, 6)
     n = sz * sz
     fams = all_families(sz)
     out = dict(
-        mesh=f"{sz}x{sz}", n=n, H=4, V=6, ramp=1,
+        mesh=f"{sz}x{sz}", n=n, H=4, V=6, ramp=1, flits=flits,
         afifo_cap=AFIFO_CAP, link_cap=LINK_CAP,
         ramp_burst_caps=list(RAMP_BURST_CAPS),
         updated=datetime.now(timezone.utc).isoformat(),
@@ -231,17 +237,19 @@ def sweep(sz=16, ramp_bws=(1, 2)):
             for d, bidir in (("uni", False), ("bi", True)):
                 if d == "bi" and not has_bi:
                     continue
-                m = evaluate(fn, bidir, rb)
+                m = evaluate(fn, bidir, rb, flits=flits)
                 rec = dict(name=name, dir=d, ramp_bw=rb, **m)
                 schemes.append(rec)
-                srec = eval_strict_afifo5(name, fn, bidir, rb, sz)
+                srec = eval_strict_afifo5(name, fn, bidir, rb, sz, flits=flits,
+                                          fast_border=fast_border)
                 strict.append(dict(name=name, dir=d, ramp_bw=rb, **srec))
         schemes.sort(key=lambda s: (s["pipe"], s["buf_peak"]))
         strict.sort(key=lambda s: (s.get("makespan") or 1 << 30))
         out["schemes"][key] = schemes
         out["strict_afifo5"][key] = strict
+        eject_lb = ((n - 1) * flits + rb - 1) // rb
         out["burst_pareto"][key] = dict(
-            eject_lb=(n - 1 + rb - 1) // rb,
+            eject_lb=eject_lb,
             link_cap=LINK_CAP,
             by_ramp_burst=burst_frontier(schemes),
         )

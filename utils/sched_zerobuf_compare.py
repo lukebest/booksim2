@@ -476,7 +476,7 @@ def fp_hybrid_v(s, B, bidir, ramp_bw):
 # --------------------------------------------------------------------------
 # Rigid offset packer (conflict-free links + capacity-RAMP_BW ramps).
 # --------------------------------------------------------------------------
-def pack(footprints, ramp_bw, src_order):
+def pack(footprints, ramp_bw, src_order, flits=1):
     link_busy = defaultdict(dict)
     up_busy = defaultdict(dict)
     down_busy = defaultdict(dict)
@@ -499,9 +499,10 @@ def pack(footprints, ramp_bw, src_order):
             c = cap(kind)
             for cyc, ct in d.items():
                 if ct >= c:
-                    off = cyc - rel
-                    if off >= 0:
-                        forbidden.add(off)
+                    for i in range(flits):
+                        off = cyc - rel - i
+                        if off >= 0:
+                            forbidden.add(off)
         off = 0
         while off in forbidden:
             off += 1
@@ -510,20 +511,22 @@ def pack(footprints, ramp_bw, src_order):
         for kind, key, rel in slots:
             c = off + rel
             t = table(kind)
-            t[key][c] = t[key].get(c, 0) + 1
+            for i in range(flits):
+                t[key][c + i] = t[key].get(c + i, 0) + 1
             if kind == 'D':
-                makespan = max(makespan, c + RAMP)
+                makespan = max(makespan, c + flits - 1 + RAMP)
         max_off = max(max_off, off)
     return makespan, max_off, (link_busy, up_busy, down_busy)
 
 
-def verify(busy, ramp_bw):
+def verify(busy, ramp_bw, flits=1):
     link_busy, up_busy, down_busy = busy
     link_ok = all(ct <= 1 for d in link_busy.values() for ct in d.values())
     up_ok = all(ct <= ramp_bw for d in up_busy.values() for ct in d.values())
     down_ok = all(ct <= ramp_bw for d in down_busy.values() for ct in d.values())
     ejects = {n: sum(d.values()) for n, d in down_busy.items()}
-    eject_ok = all(ejects.get(n, 0) == N - 1 for n in range(N))
+    need = (N - 1) * flits
+    eject_ok = all(ejects.get(n, 0) == need for n in range(N))
     return link_ok and up_ok and down_ok and eject_ok
 
 
@@ -537,12 +540,12 @@ SRC_ORDERS = {
 }
 
 
-def run_scheme(build_fp, ramp_bw):
+def run_scheme(build_fp, ramp_bw, flits=1):
     foot = {s: build_fp(s) for s in range(N)}
     best = None
     for name, gen in SRC_ORDERS.items():
-        mk, mo, busy = pack(foot, ramp_bw, gen())
-        ok = verify(busy, ramp_bw)
+        mk, mo, busy = pack(foot, ramp_bw, gen(), flits=flits)
+        ok = verify(busy, ramp_bw, flits=flits)
         if best is None or mk < best[0]:
             best = (mk, mo, name, ok)
     return best  # (makespan, max_offset, order, ok)

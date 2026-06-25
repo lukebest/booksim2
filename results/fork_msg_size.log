@@ -1,0 +1,9 @@
+
+=== m=2 flit ===
+  ramp=1 strict: hybrid B=2 (uni) mk=757
+  ramp=1 burst R=6: ring (Q=1) (bi) mk=886
+  ramp=2 strict: hybrid B=8 (uni) mk=691
+  ramp=2 burst R=6: hybrid B=2 (bi) mk=498
+  done m=2 in 1939.2s
+
+=== m=3 flit ===

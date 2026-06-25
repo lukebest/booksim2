@@ -85,13 +85,15 @@ class Cal:
         self.cap = cap
         self.busy = defaultdict(dict)
 
-    def reserve(self, key, earliest):
+    def reserve(self, key, earliest, flits=1):
         d = self.busy[key]
         t = earliest
-        while d.get(t, 0) >= self.cap:
+        while True:
+            if all(d.get(t + i, 0) < self.cap for i in range(flits)):
+                for i in range(flits):
+                    d[t + i] = d.get(t + i, 0) + 1
+                return t
             t += 1
-        d[t] = d.get(t, 0) + 1
-        return t
 
     def busiest(self):
         return max((sum(d.values()) for d in self.busy.values()), default=0)
@@ -114,7 +116,7 @@ def add_ring_chain(ch, order, entry, bidir):
             ch[order[(i - k) % n]].append(order[(i - k - 1) % n])
 
 
-def simulate(deliveries, ramp_bw):
+def simulate(deliveries, ramp_bw, flits=1):
     link = Cal(1)
     down = Cal(ramp_bw)
     up = Cal(ramp_bw)
@@ -122,8 +124,8 @@ def simulate(deliveries, ramp_bw):
     seq = 0
     avail = {}
     for s, ch in deliveries.items():
-        inj = up.reserve(s, 0)
-        avail[(s, s)] = inj + RAMP
+        inj = up.reserve(s, 0, flits)
+        avail[(s, s)] = inj + flits - 1 + RAMP
         for c in ch.get(s, []):
             heapq.heappush(pq, (avail[(s, s)], seq, s, s, c))
             seq += 1
@@ -131,11 +133,11 @@ def simulate(deliveries, ramp_bw):
     eject = defaultdict(int)
     while pq:
         ready, _, s, p, c = heapq.heappop(pq)
-        send = link.reserve((p, c), ready)
-        arrive = send + link_lat(p, c)
-        e = down.reserve(c, arrive)
-        makespan = max(makespan, e + RAMP)
-        eject[c] += 1
+        send = link.reserve((p, c), ready, flits)
+        arrive = send + flits - 1 + link_lat(p, c)
+        e = down.reserve(c, arrive, flits)
+        makespan = max(makespan, e + flits - 1 + RAMP)
+        eject[c] += flits
         avail[(s, c)] = arrive
         for g in deliveries[s].get(c, []):
             heapq.heappush(pq, (arrive, seq, s, c, g))
@@ -144,7 +146,7 @@ def simulate(deliveries, ramp_bw):
 
 
 # ---------------------------------------------------------------------------
-def measure_buffers(deliveries, ramp_bw):
+def measure_buffers(deliveries, ramp_bw, flits=1):
     """Same event sim, but record how many flits must be HELD (buffered) at a
     router because a needed output link / down-ramp is busy.
 
@@ -163,22 +165,22 @@ def measure_buffers(deliveries, ramp_bw):
     seq = 0
     avail = {}
     for s, ch in deliveries.items():
-        inj = up.reserve(s, 0)
-        avail[(s, s)] = inj + RAMP
+        inj = up.reserve(s, 0, flits)
+        avail[(s, s)] = inj + flits - 1 + RAMP
         for c in ch.get(s, []):
             heapq.heappush(pq, (avail[(s, s)], seq, s, s, c))
             seq += 1
     makespan = 0
     while pq:
         ready, _, s, p, c = heapq.heappop(pq)
-        send = link.reserve((p, c), ready)
+        send = link.reserve((p, c), ready, flits)
         if send > ready:
             link_iv[(p, c)].append((ready, send))
-        arrive = send + link_lat(p, c)
-        e = down.reserve(c, arrive)
+        arrive = send + flits - 1 + link_lat(p, c)
+        e = down.reserve(c, arrive, flits)
         if e > arrive:
             ramp_iv[c].append((arrive, e))
-        makespan = max(makespan, e + RAMP)
+        makespan = max(makespan, e + flits - 1 + RAMP)
         avail[(s, c)] = arrive
         for g in deliveries[s].get(c, []):
             heapq.heappush(pq, (arrive, seq, s, c, g))
