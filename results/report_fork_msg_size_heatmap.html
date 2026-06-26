@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'/>
+<title>Allgather 最优 makespan / eject 下界 — 热力图</title>
+<style>
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; }
+body { font-family: system-ui, sans-serif; margin:0; padding:24px 32px 48px;
+       background:var(--bg); color:var(--text); line-height:1.55; max-width:960px; }
+h1 { font-size:1.55rem; margin:0 0 8px; }
+h2 { font-size:1.05rem; margin:18px 0 8px; color:#1e3a8a; }
+.card { background:var(--card); border:1px solid #e2e8f0; border-radius:10px;
+        padding:18px 22px; margin:16px 0; }
+.meta { color:var(--muted); font-size:.9rem; margin-bottom:16px; }
+.note { color:var(--muted); font-size:.88rem; }
+table.data { border-collapse:collapse; font-size:.82rem; margin-top:16px; }
+table.data th, table.data td { border:1px solid #e2e8f0; padding:6px 8px; text-align:center; }
+table.data th { background:#f1f5f9; }
+.legend { display:flex; align-items:center; gap:8px; margin:12px 0; font-size:.85rem; }
+.legend-bar { width:220px; height:14px; border-radius:4px; border:1px solid #cbd5e1; }
+</style></head><body>
+<h1>16×16 多方案 Allgather：makespan / eject 下界</h1>
+<p class='meta'>§1 严格 0 router buffer + 边界 AFIFO ≤ 5；每格取全方案族最小 makespan ÷ eject 下界 ⌈(N−1)·m / ramp⌉。 数据 <code>buffer_pareto_msg_size.json</code>，更新 2026-06-25T07:15:24.909038+00:00。</p>
+<div class='card'>
+<h2>热力图（纵轴 = 下 ramp 带宽，横轴 = 报文 m flit）</h2>
+<div class="legend"><span>1.24×</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(45,72%,50%),hsl(0,72%,45%))"></div><span>2.71×</span><span class="note">（绿≈贴近 eject 下界，红=开销大）</span></div>
+<svg width="448" height="200" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
+<text x="248" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">报文大小 m (flit)</text>
+<text x="116" y="28" text-anchor="middle" font-size="12" fill="#475569">2</text>
+<text x="204" y="28" text-anchor="middle" font-size="12" fill="#475569">3</text>
+<text x="292" y="28" text-anchor="middle" font-size="12" fill="#475569">4</text>
+<text x="380" y="28" text-anchor="middle" font-size="12" fill="#475569">5</text>
+<text x="62" y="68" text-anchor="end" font-size="12" fill="#475569">1 flit/cy</text>
+<rect x="74" y="38" width="84" height="52" rx="6" fill="hsl(121, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="116" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.48×</text>
+<text x="116" y="76" text-anchor="middle" font-size="9" fill="#334155">hybrid B=2 (uni)</text>
+<text x="116" y="86" text-anchor="middle" font-size="9" fill="#64748b">757/510 cy</text>
+<rect x="162" y="38" width="84" height="52" rx="6" fill="hsl(109, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="204" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.61×</text>
+<text x="204" y="76" text-anchor="middle" font-size="9" fill="#334155">hybrid B=8 (uni)</text>
+<text x="204" y="86" text-anchor="middle" font-size="9" fill="#64748b">1231/765 cy</text>
+<rect x="250" y="38" width="84" height="52" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="292" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.24×</text>
+<text x="292" y="76" text-anchor="middle" font-size="9" fill="#334155">hybrid B=8 (uni)</text>
+<text x="292" y="86" text-anchor="middle" font-size="9" fill="#64748b">1265/1020 cy</text>
+<rect x="338" y="38" width="84" height="52" rx="6" fill="hsl(140, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="380" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.29×</text>
+<text x="380" y="76" text-anchor="middle" font-size="9" fill="#334155">ring (Q=1) (uni)</text>
+<text x="380" y="86" text-anchor="middle" font-size="9" fill="#64748b">1644/1275 cy</text>
+<text x="62" y="124" text-anchor="end" font-size="12" fill="#475569">2 flit/cy</text>
+<rect x="74" y="94" width="84" height="52" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="116" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">2.71×</text>
+<text x="116" y="132" text-anchor="middle" font-size="9" fill="#334155">hybrid B=8 (uni)</text>
+<text x="116" y="142" text-anchor="middle" font-size="9" fill="#64748b">691/255 cy</text>
+<rect x="162" y="94" width="84" height="52" rx="6" fill="hsl(73, 72%, 51%)" stroke="#e2e8f0"/>
+<text x="204" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.97×</text>
+<text x="204" y="132" text-anchor="middle" font-size="9" fill="#334155">ring (Q=1) (bi)</text>
+<text x="204" y="142" text-anchor="middle" font-size="9" fill="#64748b">756/383 cy</text>
+<rect x="250" y="94" width="84" height="52" rx="6" fill="hsl(121, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="292" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">1.48×</text>
+<text x="292" y="132" text-anchor="middle" font-size="9" fill="#334155">ring (Q=1) (bi)</text>
+<text x="292" y="142" text-anchor="middle" font-size="9" fill="#64748b">757/510 cy</text>
+<rect x="338" y="94" width="84" height="52" rx="6" fill="hsl(32, 72%, 46%)" stroke="#e2e8f0"/>
+<text x="380" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">2.39×</text>
+<text x="380" y="132" text-anchor="middle" font-size="9" fill="#334155">ring (Q=1) (bi)</text>
+<text x="380" y="142" text-anchor="middle" font-size="9" fill="#64748b">1524/638 cy</text>
+<text x="248" y="192" text-anchor="middle" font-size="11" fill="#64748b">m (flit)</text>
+</svg>
+<p class='note'>格内：<b>比值</b> · 最优方案 · makespan/下界 (cy)。 比值范围 [1.24, 2.71]×。</p>
+<table class='data'><thead><tr><th>下 ramp</th><th>m</th><th>eject 下界</th><th>§1 最优方案</th><th>makespan</th><th>比值</th><th>标注</th></tr></thead><tbody><tr><td>1</td><td>2</td><td>510</td><td><b>hybrid B=2</b> (uni)</td><td>757</td><td>1.484</td><td>1.48×</td></tr><tr><td>1</td><td>3</td><td>765</td><td><b>hybrid B=8</b> (uni)</td><td>1231</td><td>1.609</td><td>1.61×</td></tr><tr><td>1</td><td>4</td><td>1020</td><td><b>hybrid B=8</b> (uni)</td><td>1265</td><td>1.240</td><td>1.24×</td></tr><tr><td>1</td><td>5</td><td>1275</td><td><b>ring (Q=1)</b> (uni)</td><td>1644</td><td>1.289</td><td>1.29×</td></tr><tr><td>2</td><td>2</td><td>255</td><td><b>hybrid B=8</b> (uni)</td><td>691</td><td>2.710</td><td>2.71×</td></tr><tr><td>2</td><td>3</td><td>383</td><td><b>ring (Q=1)</b> (bi)</td><td>756</td><td>1.974</td><td>1.97×</td></tr><tr><td>2</td><td>4</td><td>510</td><td><b>ring (Q=1)</b> (bi)</td><td>757</td><td>1.484</td><td>1.48×</td></tr><tr><td>2</td><td>5</td><td>638</td><td><b>ring (Q=1)</b> (bi)</td><td>1524</td><td>2.389</td><td>2.39×</td></tr></tbody></table>
+<p class='note'>复现：<code>python3 utils/sweep_fork_msg_size.py</code> → <code>python3 utils/gen_fork_msg_size_heatmap.py</code></p>
+</div></body></html>

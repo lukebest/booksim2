@@ -14,3 +14,17 @@
   done m=3 in 3811.4s
 
 === m=4 flit ===
+  ramp=1 strict: hybrid B=8 (uni) mk=1265
+  ramp=1 burst R=6: ring (Q=1) (bi) mk=1146
+  ramp=2 strict: ring (Q=1) (bi) mk=757
+  ramp=2 burst R=6: ring (Q=1) (bi) mk=1146
+  done m=4 in 6158.6s
+
+=== m=5 flit ===
+  ramp=1 strict: ring (Q=1) (uni) mk=1644
+  ramp=1 burst R=6: ring (Q=1) (uni) mk=2578
+  ramp=2 strict: ring (Q=1) (bi) mk=1524
+  ramp=2 burst R=6: ring (Q=1) (bi) mk=1276
+  done m=5 in 8774.1s
+
+Wrote /home/luke/workspace/booksim2/results/buffer_pareto_msg_size.json (20683.3s total)
