@@ -1,7 +1,7 @@
 {
-  "updated": "2026-06-24T11:54:34.901044+00:00",
+  "updated": "2026-06-27T02:13:30.954048+00:00",
   "scheme": "border",
-  "model": "border short-arc, router_buf=0, wormhole m-flit messages, AFIFO cap=5, cross_lat=6",
+  "model": "border short-arc, router_buf=0, wormhole m-flit; AFIFO cap=5; reported mk = min(wormhole search, m\u00d7mk(m=1) replay)",
   "cross_lat": 6,
   "msg_sizes": [
     1,
@@ -73,6 +73,54 @@
           30,
           38
         ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          37,
+          63,
+          93,
+          101,
+          131
+        ],
+        "2": [
+          36,
+          39,
+          65,
+          77,
+          105
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          37,
+          74,
+          111,
+          148,
+          185
+        ],
+        "2": [
+          36,
+          72,
+          108,
+          144,
+          180
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ]
       }
     },
     "4x4_bi": {
@@ -131,6 +179,54 @@
           23,
           30,
           38
+        ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          37,
+          61,
+          91,
+          113,
+          149
+        ],
+        "2": [
+          33,
+          35,
+          58,
+          63,
+          84
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          37,
+          74,
+          111,
+          148,
+          185
+        ],
+        "2": [
+          33,
+          66,
+          99,
+          132,
+          165
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
         ]
       }
     },
@@ -191,6 +287,54 @@
           126,
           158
         ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          180,
+          249,
+          396,
+          409,
+          573
+        ],
+        "2": [
+          114,
+          195,
+          271,
+          325,
+          456
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          180,
+          360,
+          540,
+          720,
+          900
+        ],
+        "2": [
+          114,
+          228,
+          342,
+          456,
+          570
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ]
       }
     },
     "8x8_bi": {
@@ -229,10 +373,10 @@
         ],
         "2": [
           81,
-          165,
-          264,
-          325,
-          447
+          162,
+          243,
+          324,
+          405
         ]
       },
       "eject_lb": {
@@ -249,6 +393,54 @@
           95,
           126,
           158
+        ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          181,
+          279,
+          522,
+          583,
+          678
+        ],
+        "2": [
+          81,
+          165,
+          264,
+          325,
+          447
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          181,
+          362,
+          543,
+          724,
+          905
+        ],
+        "2": [
+          81,
+          162,
+          243,
+          324,
+          405
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "replay",
+          "replay",
+          "replay",
+          "replay"
         ]
       }
     },
@@ -288,10 +480,10 @@
         ],
         "2": [
           364,
-          903,
-          1271,
+          728,
+          1092,
           1407,
-          2049
+          1820
         ]
       },
       "eject_lb": {
@@ -308,6 +500,54 @@
           383,
           510,
           638
+        ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          651,
+          969,
+          1541,
+          1533,
+          2361
+        ],
+        "2": [
+          364,
+          903,
+          1271,
+          1407,
+          2049
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          651,
+          1302,
+          1953,
+          2604,
+          3255
+        ],
+        "2": [
+          364,
+          728,
+          1092,
+          1456,
+          1820
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "replay",
+          "replay",
+          "wormhole",
+          "replay"
         ]
       }
     },
@@ -340,7 +580,7 @@
       "by_ramp": {
         "1": [
           870,
-          1943,
+          1740,
           2399,
           2650,
           2950
@@ -348,9 +588,9 @@
         "2": [
           379,
           749,
-          1296,
+          1137,
           1417,
-          2052
+          1895
         ]
       },
       "eject_lb": {
@@ -367,6 +607,54 @@
           383,
           510,
           638
+        ]
+      },
+      "by_ramp_wormhole": {
+        "1": [
+          870,
+          1943,
+          2399,
+          2650,
+          2950
+        ],
+        "2": [
+          379,
+          749,
+          1296,
+          1417,
+          2052
+        ]
+      },
+      "by_ramp_replay": {
+        "1": [
+          870,
+          1740,
+          2610,
+          3480,
+          4350
+        ],
+        "2": [
+          379,
+          758,
+          1137,
+          1516,
+          1895
+        ]
+      },
+      "by_ramp_method": {
+        "1": [
+          "wormhole",
+          "replay",
+          "wormhole",
+          "wormhole",
+          "wormhole"
+        ],
+        "2": [
+          "wormhole",
+          "wormhole",
+          "replay",
+          "wormhole",
+          "replay"
         ]
       }
     }

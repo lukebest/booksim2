@@ -475,9 +475,9 @@ def size_section(sdata):
     cross = sdata.get("cross_lat", 6)
     ramps = sdata.get("ramps", (1, 2))
 
-    def pts_for(key, ramp):
+    def pts_for(key, ramp, field="by_ramp"):
         cfg = sdata["configs"].get(key, {})
-        row = cfg.get("by_ramp", {}).get(str(ramp))
+        row = cfg.get(field, {}).get(str(ramp))
         if not row:
             return None
         return [{"cap": m, "makespan": mk} for m, mk in zip(ms, row)]
@@ -485,50 +485,81 @@ def size_section(sdata):
     def native_ramp(key):
         return 2 if key.endswith("_bi") else 1
 
-    # chart 1: all configs at native down-ramp (uni=1, bi=2)
+    # chart 1: all configs at native down-ramp (uni=1, bi=2) — corrected mk
     series_nat = []
     for key, label, color in SERIES:
         p = pts_for(key, native_ramp(key))
         if p:
             series_nat.append((label, color, p))
     chart_nat = line_chart(ms, series_nat,
-                           "makespan vs 数据大小（各配置原生下 ramp：单向=1，双向=2）",
+                           "makespan vs 数据大小（修正后：min(wormhole, m×mk₁)）",
                            xlabel="数据大小 m (flit/message)")
 
-    # table: configs × m at native ramp + eject LB
+    # table: corrected + wormhole + replay + method @ native ramp
     rows = []
     for key, label, _ in SERIES:
         cfg = sdata["configs"].get(key)
         if not cfg:
             continue
         rb = native_ramp(key)
-        row = cfg.get("by_ramp", {}).get(str(rb), [])
-        lb = cfg.get("eject_lb", {}).get(str(rb), [])
+        rs = str(rb)
+        row = cfg.get("by_ramp", {}).get(rs, [])
+        wh = cfg.get("by_ramp_wormhole", {}).get(rs, row)
+        rp = cfg.get("by_ramp_replay", {}).get(rs, [])
+        meth = cfg.get("by_ramp_method", {}).get(rs, [])
+        lb = cfg.get("eject_lb", {}).get(rs, [])
         cells = "".join(f"<td>{mk}</td>" for mk in row)
+        whcells = "".join(f"<td>{mk}</td>" for mk in wh)
+        rpcells = "".join(
+            f"<td>{r if r else '—'}</td>" for r in (rp or [])
+        )
+        mcells = "".join(
+            f"<td>{html.escape(m) if m else '—'}</td>" for m in (meth or [])
+        )
         lbcell = "/".join(str(x) for x in lb)
         rows.append(
-            f"<tr><td class='l'>{html.escape(label)} (ramp={rb})</td>{cells}<td>{lbcell}</td></tr>"
+            f"<tr><td class='l'>{html.escape(label)} (ramp={rb})</td>{cells}"
+            f"<td>{lbcell}</td></tr>"
         )
+        rows.append(
+            f"<tr><td class='l' style='padding-left:20px;color:#64748b'>↳ wormhole</td>"
+            f"{whcells}<td></td></tr>"
+        )
+        if rp:
+            rows.append(
+                f"<tr><td class='l' style='padding-left:20px;color:#64748b'>↳ m×mk₁ replay</td>"
+                f"{rpcells}<td></td></tr>"
+            )
+        if meth:
+            rows.append(
+                f"<tr><td class='l' style='padding-left:20px;color:#64748b'>↳ 取法</td>"
+                f"{mcells}<td></td></tr>"
+            )
     hdr = "".join(f"<th>m={m}</th>" for m in ms)
     m_range = f"m=1..{ms[-1]}" if ms else "m"
     tbl = (f"<table><tr><th>配置</th>{hdr}<th>eject 下界 {m_range}</th></tr>"
            f"{''.join(rows)}</table>")
 
-    # chart 2: representative configs, ramp 1/2 overlay
+    # chart 2: 16x16 bi — corrected vs wormhole vs replay @ ramp 1/2
     overlay_blocks = []
     for rep_key, rep_label in (("16x16_bi", "16×16 双向"),):
-        ramp_colors = {1: "#dc2626", 2: "#f59e0b"}
-        ser = []
         for rb in ramps:
-            p = pts_for(rep_key, rb)
-            if p:
-                ser.append((f"下 ramp={rb}", ramp_colors.get(rb, "#64748b"), p))
-        if ser:
-            overlay_blocks.append(
-                f"<h3>{rep_label}：makespan vs 数据大小（下 ramp=1/2）</h3>"
-                + line_chart(ms, ser, f"{rep_label}：下 ramp 吸收报文长度",
-                             xlabel="数据大小 m (flit/message)")
-            )
+            p_corr = pts_for(rep_key, rb)
+            p_wh = pts_for(rep_key, rb, "by_ramp_wormhole")
+            p_rp = pts_for(rep_key, rb, "by_ramp_replay")
+            ser = []
+            if p_corr:
+                ser.append((f"修正 mk (ramp={rb})", "#dc2626" if rb == 1 else "#f59e0b", p_corr))
+            if p_wh:
+                ser.append((f"wormhole 搜 (ramp={rb})", "#94a3b8", p_wh))
+            if p_rp:
+                ser.append((f"m×mk₁ 上界 (ramp={rb})", "#64748b", p_rp))
+            if ser:
+                overlay_blocks.append(
+                    f"<h3>{rep_label} · 下 ramp={rb}</h3>"
+                    + line_chart(ms, ser, f"{rep_label}：修正 vs wormhole vs replay",
+                                 xlabel="数据大小 m (flit/message)")
+                )
 
     flit_b = sdata.get("flit_bytes", 64)
     bus_b = sdata.get("bus_width_bytes", 64)
@@ -540,7 +571,9 @@ def size_section(sdata):
 把每个 src→dst 投递从 1 flit 改为 <b>m flit</b>（= m×{flit_b} B）的 wormhole 报文（router 零 buffer：
 报文在每条链路占 <b>m</b> 个连续周期，下 ramp 每周期至多吞吐 ramp_bw 个 flit）。
 跨界 AFIFO link = <b>{cross} cy</b>（H=4, V=6）。<strong>约束边界 AFIFO 深度 ≤ {cap} flit</strong>（按 flit 精确计）。
-下 ramp 带宽取 <b>1、2 flit/cycle/node</b>（单向原生=1，双向原生=2）。</p>
+下 ramp 带宽取 <b>1、2 flit/cycle/node</b>（单向原生=1，双向原生=2）。<br>
+<b>报告 makespan</b> = min(单次 wormhole 调度搜索, <b>m × mk(m=1)</b> 重放上界)；后者对应将 m 个 flit 拆成
+<b>m 次串行 m=1 allgather</b>（每轮 AFIFO 清零，显然可行）。</p>
 
 <h3>所有配置 @ 原生下 ramp</h3>
 {chart_nat}
@@ -555,9 +588,9 @@ def size_section(sdata):
 
 def size_note(sdata, ms, cap):
     """Data-driven analysis of the AFIFO<=cap makespan-vs-size curves."""
-    def val(key, ramp, m):
+    def val(key, ramp, m, field="by_ramp"):
         cfg = sdata["configs"].get(key, {})
-        row = cfg.get("by_ramp", {}).get(str(ramp))
+        row = cfg.get(field, {}).get(str(ramp))
         if not row or m not in ms:
             return None
         return row[ms.index(m)]
@@ -571,30 +604,31 @@ def size_note(sdata, ms, cap):
 
     mmax = ms[-1]
     cross = sdata.get("cross_lat", 6)
-    # eject-limited gain (uni big ring, ramp1 -> ramp2), m=1
     u_lo, u_hi = val("16x16_uni", 1, 1), val("16x16_uni", 2, 1)
     u_pct = f"−{round((1 - u_hi / u_lo) * 100)}%" if (u_lo and u_hi) else ""
-    # AFIFO-pacing blow-up at large m (compare to eject lower bound)
     bk = "16x16_bi"
     b_mk = val(bk, 2, mmax)
+    b_wh = val(bk, 2, mmax, "by_ramp_wormhole")
     b_lb = lb(bk, 2, mmax)
     b_ratio = f"{b_mk / b_lb:.1f}×" if (b_mk and b_lb) else ""
-    # ramp 1 vs 2 at largest m on 16x16 bi
     r1, r2 = val(bk, 1, mmax), val(bk, 2, mmax)
-    # growth of makespan with m at native ramp=2
     g1, g5 = val(bk, 2, 1), val(bk, 2, mmax)
     g_factor = f"{g5 / g1:.1f}×" if (g1 and g5) else ""
+    wh_g = f"{b_wh / g1:.1f}×" if (b_wh and g1) else ""
+    fix_note = ""
+    if b_wh and b_mk and b_wh > b_mk:
+        fix_note = (f"（wormhole 单 collective 搜到 <b>{b_wh}</b> cy，"
+                    f"已用 m×mk₁=<b>{b_mk}</b> 修正）</li><li>")
 
     return f"""<p class='note'>关键规律（跨界 AFIFO={cross} cy，边界 AFIFO ≤ {cap} flit，下 ramp=1/2）：</p>
 <ul class='note'>
-<li><b>报文越大 makespan 增长越快（且超线性）</b>：除了「每链路串行 m flit + 每节点 eject (N−1)·m flit」两项随 m 线性增长外，
-<strong>AFIFO 只有 {cap} 槽</strong>——一个 m-flit 报文在边界最多占 min(m, 等待) 个槽，m 越大能并发等待的报文越少，
-被迫拉大注入间隔（atomic pacing）。16×16 双向 @ramp2：m=1→m={mmax} 的 makespan 增长约 <b>{g_factor}</b>（{g1} → {g5}），明显快于 {mmax}×。</li>
-<li><b>下 ramp 的收益主要在 eject 受限区</b>：低 ramp、单向大环时 makespan≈eject 时间，加宽下 ramp 近似按倍数缩短——
-16×16 单向 m=1 从 ramp1 的 <b>{u_lo}</b> 降到 ramp2 的 <b>{u_hi}</b>（{u_pct}）。</li>
-<li><b>大报文下瓶颈是链路 TDM + AFIFO pacing，不再是 eject</b>：16×16 双向 m={mmax} @ramp2 makespan <b>{b_mk}</b>，
-是 eject 下界 <b>{b_lb}</b> 的约 <b>{b_ratio}</b>；同配置 ramp1→ramp2 仍有明显收益（<b>{r1}</b> → <b>{r2}</b>），但远低于 eject 下界的 {mmax}× 线性缩放。</li>
-<li><strong>AFIFO≤{cap} 的代价集中在大报文</strong>：m=1 在 cap={cap} 下与单 flit 深度曲线同列一致；m 增大后 pacing 开销迅速放大。</li>
+<li><b>m×mk₁ 重放上界</b>：任意 m 的可行 makespan 不超过 <b>m 次串行 m=1 allgather</b>；
+若 wormhole 单次搜索给出更大值，取 min。16×16 双向 @ramp2 m={mmax}：wormhole 搜 <b>{b_wh}</b> cy
+{fix_note}<b>修正后 m=1→m={mmax} 增长 {g_factor}</b>（{g1}→{g5}），不超过 {mmax}×（wormhole 原 {wh_g}）。</li>
+<li><b>下 ramp 的收益主要在 eject 受限区</b>：16×16 单向 m=1 从 ramp1 的 <b>{u_lo}</b> 降到 ramp2 的 <b>{u_hi}</b>（{u_pct}）。</li>
+<li><b>大报文下瓶颈仍是链路 TDM + AFIFO pacing</b>：16×16 双向 m={mmax} @ramp2 修正 makespan <b>{b_mk}</b>，
+约为 eject 下界 <b>{b_lb}</b> 的 <b>{b_ratio}</b>；ramp1→ramp2（<b>{r1}</b>→<b>{r2}</b>）。</li>
+<li><strong>AFIFO≤{cap}</strong>：m=1 与深度曲线 cap={cap} 列一致；m&gt;1 时若 wormhole 搜超 m×mk₁，说明单次 collective 搜索空间不完整，已用重放上界截断。</li>
 </ul>"""
 
 
