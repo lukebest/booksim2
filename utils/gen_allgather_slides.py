@@ -23,6 +23,7 @@ from sweep_quad_ring_shapes import make_quads
 
 MX = MY = 16
 H, V, RAMP, CROSS = 4, 6, 1, 6
+RAMP_BW = 1
 N = MX * MY
 AFIFO_CAP = 5
 MK_JSON = ROOT / "results" / "allgather_makespan.json"
@@ -118,13 +119,12 @@ def build_q1_schedule(bidir, flits=1):
     setup()
     order = q1_ring_order()
     pos = {nd: k for k, nd in enumerate(order)}
-    ramp = 1 if not bidir else 2
-    foot = {s: Z.fp_ring(s, order, pos, bidir, ramp) for s in range(N)}
-    mk, mo, busy, inj, events = Z.export_events(foot, ramp, list(range(N)), flits=flits)
-    util = sm.utilization_from_busy(busy, N, ramp, mk)
+    foot = {s: Z.fp_ring(s, order, pos, bidir, RAMP_BW) for s in range(N)}
+    mk, mo, busy, inj, events = Z.export_events(foot, RAMP_BW, list(range(N)), flits=flits)
+    util = sm.utilization_from_busy(busy, N, RAMP_BW, mk)
     slot = sm.slot_table_depth(events, MX, MY, mk)
     return dict(makespan=mk, busy=busy, events=events, util=util, slot=slot,
-                order=order, bidir=bidir, ramp=ramp)
+                order=order, bidir=bidir, ramp=RAMP_BW)
 
 
 def build_quad_schedule(scheme, flits=1):
@@ -137,12 +137,12 @@ def build_quad_schedule(scheme, flits=1):
     else:
         deliv = lambda s, b, q=quads: S.deliv_ringfollow_quads(s, b, q)
         order, cap = "quad", 3
-    r = S.schedule_atomic(MX, True, 2, deliv, afifo_cap=cap,
+    r = S.schedule_atomic(MX, True, RAMP_BW, deliv, afifo_cap=cap,
                           order=order, quads=quads, flits=flits,
                           record_events=True)
     if not r.get("ok"):
         return None
-    util = sm.utilization_from_events(r["events"], N, 2, r["makespan"], MX)
+    util = sm.utilization_from_events(r["events"], N, RAMP_BW, r["makespan"], MX)
     slot = sm.slot_table_depth(r["events"], MX, MY, r["makespan"])
     afifo_series = sm.afifo_occupancy_series(r.get("afifo_profile"), r["makespan"])
     return dict(makespan=r["makespan"], events=r["events"], util=util, slot=slot,
@@ -155,6 +155,34 @@ def load_makespan():
     if MK_JSON.exists():
         return json.loads(MK_JSON.read_text(encoding="utf-8"))
     return {"schemes": {}}
+
+
+def compute_afifo_cap_curve(scheme, caps=(0, 1, 2, 3, 4, 5, 8, 12, 16, 20)):
+    """AFIFO cap vs makespan at down-ramp=1 flit/cy/node."""
+    setup()
+    cfg = quad_shape_cfg(scheme)
+    quads = make_quads(cfg)
+    if scheme == "border":
+        deliv = lambda s, b, q=quads: S.deliv_border_quads(s, b, q)
+        orders = ("natural", "interleave", "quad")
+    else:
+        deliv = lambda s, b, q=quads: S.deliv_ringfollow_quads(s, b, q)
+        orders = ("quad", "interleave", "natural")
+    pts = []
+    for cap in caps:
+        cap_arg = 0 if cap == 0 else cap
+        best = None
+        for order in orders:
+            r = S.schedule_atomic(MX, True, RAMP_BW, deliv, afifo_cap=cap_arg,
+                                  order=order, quads=quads)
+            if not r.get("ok"):
+                continue
+            rec = (cap, r["makespan"], r["afifo_depth"], r["afifo_balanced"]["peak"])
+            if best is None or rec[1] < best[1]:
+                best = rec
+        if best:
+            pts.append(best)
+    return pts
 
 
 def load_afifo_sweep(path, key="16x16_bi"):
@@ -217,8 +245,10 @@ def svg_fault_ring(order, is_cycle, dead_nodes, dead_links, sacrificed=(), cell=
 def run_fault_scenarios():
     rows = []
     golden_order = hr.snake_cycle(MX, MY)
-    su = sr.simulate(golden_order, True, "uni", mx=MX, my=MY, h=H, vlat=V, ramp=RAMP)
-    sb = sr.simulate(golden_order, True, "bi", mx=MX, my=MY, h=H, vlat=V, ramp=RAMP)
+    su = sr.simulate(golden_order, True, "uni", mx=MX, my=MY, h=H, vlat=V,
+                     ramp=RAMP, ramp_bw=1)
+    sb = sr.simulate(golden_order, True, "bi", mx=MX, my=MY, h=H, vlat=V,
+                     ramp=RAMP, ramp_bw=RAMP_BW)
     rows.append({
         "name": "golden", "desc": "健康拓扑 boustrophedon snake",
         "feasible": True, "is_cycle": True, "order": golden_order,
@@ -235,11 +265,13 @@ def run_fault_scenarios():
                    ring_len=len(r["order"]) if r["order"] else 0)
         if r["feasible"] and r["order"]:
             if r["is_cycle"]:
-                su = sr.simulate(r["order"], True, "uni", mx=MX, my=MY, h=H, vlat=V)
+                su = sr.simulate(r["order"], True, "uni", mx=MX, my=MY, h=H, vlat=V,
+                                 ramp_bw=1)
                 rec["uni"] = su["makespan"]
             else:
                 rec["uni"] = None
-            sb = sr.simulate(r["order"], r["is_cycle"], "bi", mx=MX, my=MY, h=H, vlat=V)
+            sb = sr.simulate(r["order"], r["is_cycle"], "bi", mx=MX, my=MY, h=H, vlat=V,
+                             ramp_bw=RAMP_BW)
             rec["bi"] = sb["makespan"]
         else:
             rec["uni"] = rec["bi"] = None
@@ -396,8 +428,9 @@ def build_html():
     b2 = build_quad_schedule("ringfollow", 1)
     print("Running fault scenarios (16x16)...", flush=True)
     faults = run_fault_scenarios()
-    border_pts = load_afifo_sweep(BORDER_SWEEP)
-    ringfollow_pts = load_afifo_sweep(RINGFOLLOW_SWEEP)
+    print("Computing AFIFO cap curves @ ramp=1...", flush=True)
+    border_pts = compute_afifo_cap_curve("border")
+    ringfollow_pts = compute_afifo_cap_curve("ringfollow")
 
     order = q1_ring_order()
     ring_svg = svg_global_ring(order)
@@ -417,9 +450,9 @@ def build_html():
     slot_q4 = slot_table_html(q4["slot"], MX, MY) if q4 else ""
 
     mk = mkdata.get("schemes", {})
-    q1_bi_m1 = mk.get("q1_ring_bi", {}).get("1", {}).get("makespan", 754)
-    q4_m1 = mk.get("q4_border_bi", {}).get("1", {}).get("makespan", 379)
-    b2_m1 = mk.get("b2_ringfollow_bi", {}).get("1", {}).get("makespan", 426)
+    q1_bi_m1 = mk.get("q1_ring_bi", {}).get("1", {}).get("makespan", 558)
+    q4_m1 = mk.get("q4_border_bi", {}).get("1", {}).get("makespan")
+    b2_m1 = mk.get("b2_ringfollow_bi", {}).get("1", {}).get("makespan")
     q4_eject = q4["util"]["avg_eject_util"] if q4 else 0.0
     q4_link = q4["util"]["avg_link_util"] if q4 else 0.0
     q4_afifo_d = q4["afifo_depth"] if q4 else "N/A"
@@ -455,7 +488,7 @@ def build_html():
 
 <section class="slide" id="title">
 <h1>16×16 Mesh AllGather：Hamilton Ring 方案</h1>
-<p class="note">拓扑 16×16 (256 节点)，H=4 cy，V=6 cy，ramp=1 cy，链路 1 flit/cy，router 零 buffer</p>
+<p class="note">拓扑 16×16 (256 节点)，H=4 cy，V=6 cy，下 ramp=1 flit/cy/node（全方案统一），链路 1 flit/cy，router 零 buffer。Q1 采用水平 snake_cycle Hamilton 环。</p>
 <div class="kpi">
   <div><strong>{q1_bi_m1}</strong>Q1 全局环 bi m=1 (cy)</div>
   <div><strong>{q4_m1}</strong>Q4 border bi m=1 (cy)</div>
@@ -486,8 +519,7 @@ def build_html():
 
 <h2>1.3 Makespan vs Message Size (1–6 flit)</h2>
 <div class="card">{makespan_chart(mkdata)}
-<p class="note">Q1 uni @ ramp=1；Q1 bi / Q4 / B2 @ ramp=2。小 message 时 Q1 受环延迟 bound；
-m≥4 时 wormhole 扩展，Q4/B2 优势缩小。</p>
+<p class="note">全方案下 ramp=1 flit/cy/node。Q1 bi 采用水平 snake_cycle；小 message 时 Q4/B2 受 eject 带宽 bound（255×m cy 量级）。</p>
 </div>
 
 <h2>1.4 利用率分析</h2>
@@ -515,16 +547,16 @@ m≥4 时 wormhole 扩展，Q4/B2 优势缩小。</p>
 <div class="card">
 <p>{ALGO_Q4_NL}</p>
 <ul>
-<li><strong>Q4 (border)</strong>：跨界后以行/列短弧扩散，不沿 foreign 环完整绕行 → 小 size 延迟最低</li>
-<li><strong>B2 (ringfollow)</strong>：跨界后沿 destination reticle 完整 Hamilton 环传播 → 路由更简单</li>
+<li><strong>Q4 (border)</strong>：跨界后以行/列短弧扩散，不沿 foreign 环完整绕行 → 环传播延迟低，但受 eject 带宽约束</li>
+<li><strong>B2 (ringfollow)</strong>：跨界后沿 destination reticle 完整 Hamilton 环传播 → 路由更简单，环段更长</li>
 <li>Reticle 内 router 维持零 buffer；跨 reticle 等待仅发生在 AFIFO（cap≤5）</li>
 </ul>
 </div>
 
 <h2>2.2 小 Size Makespan 对比</h2>
 <div class="card">{makespan_chart(mkdata)}
-<p class="note">m&lt;4 flit 时 Q4/B2 相对 Q1 全局环 makespan 大幅降低（约 2×）。
-m≥4 时全局环 wormhole 效率提升，可能出现 crossover。</p>
+<p class="note">下 ramp=1 flit/cy/node 时，小 message 下 Q4/B2 受 eject bound（≈255×m cy）主导，
+makespan 高于 Q1 全局 snake 环（≈558 cy @ m=1）。m≥4 时 wormhole 扩展，差距随 size 增大。</p>
 </div>
 
 <h2>2.3 AFIFO 最大占用深度（3/4 flit 证明）</h2>
@@ -533,8 +565,8 @@ m≥4 时全局环 wormhole 效率提升，可能出现 crossover。</p>
 <div>{afifo_depth_chart(ringfollow_pts, "B2 ringfollow: makespan vs AFIFO cap")}</div>
 </div>
 <div class="card">
-<p class="note">AFIFO cap≥3 时 Q4 border bi peak=3 flit、balanced=2；B2 ringfollow peak=3。
-cap=5 为硬件预算，m=1 时 makespan 进入平台区。下方为 Q4 m=1 逐 cycle AFIFO 全局占用。</p>
+<p class="note">AFIFO cap 曲线 @ ramp=1。cap≥3 时 Q4 border peak=3 flit、balanced=2；B2 ringfollow peak=3。
+cap=5 为硬件预算。下方为 Q4 m=1 逐 cycle AFIFO 全局占用。</p>
 {afifo_chart_q4 if q4 else ""}
 <p>Q4 m=1：AFIFO peak={q4_afifo_d}，balanced peak={q4_afifo_b}</p>
 </div>
