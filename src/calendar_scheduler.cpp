@@ -357,6 +357,20 @@ CalendarResult CalendarScheduler::ScheduleAllGatherDimMultiTree(int msg_size) co
     result.efficiency = (double)result.theo_bound / (double)max(1, result.makespan);
   else
     result.efficiency = 0.0;
+
+  for(int n = 0; n < N; ++n) {
+    if(!_graph.IsAlive(n)) continue;
+    result.link_peak_occupancy[_graph.UpLinkId(n)] = msg_size;
+    result.link_peak_occupancy[_graph.DownLinkId(n)] = eject_count[n];
+  }
+  for(unordered_map<long long, int>::const_iterator it = link_load.begin();
+      it != link_load.end(); ++it) {
+    int parent = (int)(it->first / N);
+    int child = (int)(it->first % N);
+    int lid = _graph.LinkId(parent, child);
+    if(lid >= 0) result.link_peak_occupancy[lid] = it->second;
+  }
+
   return result;
 }
 

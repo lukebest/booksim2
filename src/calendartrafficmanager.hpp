@@ -7,6 +7,7 @@
 #include "mesh_graph.hpp"
 #include "collective.hpp"
 #include "calendar_scheduler.hpp"
+#include "collective_power.hpp"
 
 class CalendarTrafficManager : public TrafficManager {
 protected:
@@ -20,6 +21,10 @@ protected:
   int _anytoany_seed;
   std::string _fault_desc;
   std::string _result_csv;
+  const Configuration * _config;
+  bool _collective_power;
+  bool _has_power_result;
+  CollectivePowerResult _power_result;
 
   virtual bool _SingleSim();
 

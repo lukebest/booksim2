@@ -333,6 +333,7 @@ BookSimConfig::BookSimConfig( )
   AddStrField("fault_links", "");
   AddStrField("fault_desc", "healthy");
   AddStrField("result_csv", "");
+  _int_map["collective_power"] = 0;
 }
 
 
