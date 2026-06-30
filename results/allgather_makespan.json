@@ -1,0 +1,307 @@
+{
+  "updated": "2026-06-30T08:33:09.834169+00:00",
+  "mx": 16,
+  "my": 16,
+  "h": 4,
+  "v": 6,
+  "n": 256,
+  "afifo_cap": 5,
+  "cross_lat": 6,
+  "msg_sizes": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "schemes": {
+    "q1_ring_uni": {
+      "1": {
+        "makespan": 1474,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 1
+      },
+      "2": {
+        "makespan": 1475,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 1
+      },
+      "3": {
+        "makespan": 1476,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 1
+      },
+      "4": {
+        "makespan": 1477,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 1
+      },
+      "5": {
+        "makespan": 2957,
+        "max_inject_off": 1481,
+        "ok": true,
+        "ramp_bw": 1
+      },
+      "6": {
+        "makespan": 2985,
+        "max_inject_off": 1508,
+        "ok": true,
+        "ramp_bw": 1
+      }
+    },
+    "q1_ring_bi": {
+      "1": {
+        "makespan": 754,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 2
+      },
+      "2": {
+        "makespan": 755,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 2
+      },
+      "3": {
+        "makespan": 756,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 2
+      },
+      "4": {
+        "makespan": 757,
+        "max_inject_off": 0,
+        "ok": true,
+        "ramp_bw": 2
+      },
+      "5": {
+        "makespan": 1534,
+        "max_inject_off": 776,
+        "ok": true,
+        "ramp_bw": 2
+      },
+      "6": {
+        "makespan": 1609,
+        "max_inject_off": 856,
+        "ok": true,
+        "ramp_bw": 2
+      }
+    },
+    "q4_border_bi": {
+      "1": {
+        "makespan": 379,
+        "ok": true,
+        "method": "cached_msg_size_sweep"
+      },
+      "2": {
+        "makespan": 749,
+        "ok": true,
+        "method": "cached_msg_size_sweep"
+      },
+      "3": {
+        "makespan": 1137,
+        "ok": true,
+        "method": "cached_msg_size_sweep"
+      },
+      "4": {
+        "makespan": 1417,
+        "ok": true,
+        "method": "cached_msg_size_sweep"
+      },
+      "5": {
+        "makespan": 1895,
+        "ok": true,
+        "method": "cached_msg_size_sweep"
+      },
+      "6": {
+        "makespan": 3614,
+        "ok": true,
+        "afifo_depth": 5,
+        "afifo_balanced": 1,
+        "max_inject_off": 3461,
+        "cfg": [
+          [
+            "vflip",
+            1
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ]
+        ],
+        "method": "atomic"
+      }
+    },
+    "b2_ringfollow_bi": {
+      "1": {
+        "makespan": 426,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 3,
+        "max_inject_off": 220,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      },
+      "2": {
+        "makespan": 773,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 2,
+        "max_inject_off": 542,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      },
+      "3": {
+        "makespan": 1186,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 1,
+        "max_inject_off": 989,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      },
+      "4": {
+        "makespan": 1824,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 1,
+        "max_inject_off": 1631,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      },
+      "5": {
+        "makespan": 2527,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 1,
+        "max_inject_off": 2341,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      },
+      "6": {
+        "makespan": 2965,
+        "ok": true,
+        "afifo_depth": 3,
+        "afifo_balanced": 1,
+        "max_inject_off": 2778,
+        "cfg": [
+          [
+            "vflip",
+            3
+          ],
+          [
+            "rect",
+            3
+          ],
+          [
+            "rect",
+            1
+          ],
+          [
+            "rect",
+            3
+          ]
+        ],
+        "method": "atomic"
+      }
+    }
+  }
+}
