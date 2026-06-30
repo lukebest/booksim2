@@ -535,8 +535,8 @@ def build_html():
 
 <h2>1.5 Q1 各 Router 时隙表与深度</h2>
 <div class="card">
-<p class="note">时隙表深度 P = 各 router 在<b>非空 cycle</b>上、去 Local 端口的 mesh 交叉开关
-(in_dir→out_dir) 拓扑配置序列的最小重复周期（不含 inject/eject 与空闲 cycle）。
+<p class="note">时隙表深度 P = min(非空 cycle 上 mesh 拓扑 (in→out) 配置的时序重复周期,
+不同拓扑配置数)；不含 Local inject/eject 与空闲 cycle。
 左：256 router 深度热力图；右：代表性 router 明细。</p>
 {slot_q1}
 </div>
