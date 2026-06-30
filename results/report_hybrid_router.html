@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Hybrid TDM + Packet Router — Microarchitecture &amp; Area/Power</title>
+<script>
+MathJax = { tex: { inlineMath: [['\\(','\\)']], displayMath: [['\\[','\\]']] } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+:root { --bg:#f7f8fb; --card:#fff; --text:#0f172a; --muted:#64748b; --accent:#1e3a8a; }
+* { box-sizing:border-box; }
+body { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; margin:0; padding:28px 36px 64px;
+        background:var(--bg); color:var(--text); line-height:1.62; max-width:1060px; }
+h1 { font-size:1.65rem; margin:0 0 6px; }
+h2 { font-size:1.18rem; margin:24px 0 10px; color:var(--accent);
+      border-bottom:2px solid #e2e8f0; padding-bottom:5px; }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#334155; }
+.card { background:var(--card); border:1px solid #e2e8f0; border-radius:12px;
+         padding:20px 24px; margin:16px 0; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+.meta { color:var(--muted); font-size:.9rem; }
+table { border-collapse:collapse; width:100%; font-size:.88rem; margin:12px 0; }
+th, td { border:1px solid #e2e8f0; padding:7px 9px; text-align:center; }
+th { background:#f1f5f9; }
+td:first-child { text-align:left; }
+tr.highlight td { background:#ecfdf5; font-weight:600; }
+.note { color:var(--muted); font-size:.86rem; }
+code { font-family:"SF Mono",Menlo,Consolas,monospace; font-size:.86em;
+        background:#eef2f7; padding:1px 5px; border-radius:4px; }
+.tag { display:inline-block; background:#dbeafe; color:#1e40af;
+         padding:2px 8px; border-radius:4px; font-size:.82rem; margin-right:6px; }
+.diagram-grid { display:grid; grid-template-columns:1fr; gap:20px; }
+ul { margin:8px 0; padding-left:22px; }
+li { margin:5px 0; }
+.formula { background:#fbfdff; border:1px solid #e2e8f0; border-radius:8px;
+            padding:12px 16px; margin:10px 0; overflow-x:auto; }
+</style></head><body>
+
+<h1>Hybrid TDM + Packet-Switched Router</h1>
+<p class="meta">16×16 mesh（N=256），32nm ITRS（Orion 模型），W=128 bit/flit。
+生成脚本 <code>utils/gen_hybrid_router_report.py</code>。</p>
+
+<div class="card">
+<h2>1. 设计目标</h2>
+<p>NoC 需同时支持两类流量模式：</p>
+<ul>
+<li><strong>时隙表 TDM</strong>：离线 calendar 预配置，无冲突、无阻塞、无 router buffer（broadcast / allgather / reduce 等集合通信）。</li>
+<li><strong>分组交换 packet</strong>：statistical multiplexing + VC buffer，支持 all-to-all / any-to-any 等未知目的地流量。</li>
+</ul>
+<p>本节给出三种 router 微架构（TDM-only / packet-only / hybrid），评估面积与功耗，并分析异构 NoC 可行性。</p>
+</div>
+
+<div class="card">
+<h2>2. 模型参数</h2>
+<p><span class="tag">拓扑</span>16×16 mesh，5-port router（4 neighbor + local ramp）。</p>
+<p><span class="tag">TDM</span>num_vc=1，skid depth=2；slot-table depth=255 cy（allgather M=1 period）。</p>
+<p><span class="tag">Packet</span>num_vc=16，depth=8；iSLIP VC+SW allocator（面积估算）。</p>
+<p><span class="tag">Tech</span>32nm，Vdd=0.9V，fCLK=9.71GHz；Orion formulas from
+<code>src/power/power_module.cpp</code> + <code>src/power/techfile.txt</code>。</p>
+<p><span class="tag">Activity</span>dynamic power at α=0.15 average port utilization.</p>
+</div>
+
+<div class="card">
+<h2>3. 微架构设计</h2>
+<div class="diagram-grid">
+<svg width="520" height="200" xmlns="http://www.w3.org/2000/svg">
+<text x="260" y="18" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e3a8a">A. TDM / calendar router (conflict-free, zero alloc)</text>
+<rect x="30" y="70" width="80" height="50" rx="6" fill="#dbeafe" stroke="#64748b" stroke-width="1"/>
+<text x="70" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Input</text>
+<text x="70" y="103.0" text-anchor="middle" font-size="9" fill="#334155">skid x5</text>
+<rect x="140" y="55" width="100" height="80" rx="6" fill="#fef3c7" stroke="#64748b" stroke-width="1"/>
+<text x="190" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Slot-table</text>
+<text x="190" y="103.0" text-anchor="middle" font-size="9" fill="#334155">SRAM x5</text>
+<rect x="280" y="70" width="90" height="50" rx="6" fill="#dcfce7" stroke="#64748b" stroke-width="1"/>
+<text x="325" y="91.0" text-anchor="middle" font-size="9" fill="#334155">5x5</text>
+<text x="325" y="103.0" text-anchor="middle" font-size="9" fill="#334155">Crossbar</text>
+<rect x="410" y="70" width="80" height="50" rx="6" fill="#f3e8ff" stroke="#64748b" stroke-width="1"/>
+<text x="450" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Output</text>
+<text x="450" y="103.0" text-anchor="middle" font-size="9" fill="#334155">regs x5</text>
+<line x1="110" y1="95" x2="134" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="240" y1="95" x2="274" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="370" y1="95" x2="404" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<defs><marker id="ah" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#475569"/></marker></defs>
+</svg>
+<svg width="520" height="200" xmlns="http://www.w3.org/2000/svg">
+<text x="260" y="18" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e3a8a">B. Packet-switched router (stat-mux, bufferable)</text>
+<rect x="20" y="60" width="90" height="70" rx="6" fill="#dbeafe" stroke="#64748b" stroke-width="1"/>
+<text x="65" y="91.0" text-anchor="middle" font-size="9" fill="#334155">VC buffers</text>
+<text x="65" y="103.0" text-anchor="middle" font-size="9" fill="#334155">16x8 x5</text>
+<rect x="130" y="65" width="80" height="60" rx="6" fill="#fecaca" stroke="#64748b" stroke-width="1"/>
+<text x="170" y="91.0" text-anchor="middle" font-size="9" fill="#334155">VC+SW</text>
+<text x="170" y="103.0" text-anchor="middle" font-size="9" fill="#334155">alloc</text>
+<rect x="240" y="70" width="90" height="50" rx="6" fill="#dcfce7" stroke="#64748b" stroke-width="1"/>
+<text x="285" y="91.0" text-anchor="middle" font-size="9" fill="#334155">5x5</text>
+<text x="285" y="103.0" text-anchor="middle" font-size="9" fill="#334155">Crossbar</text>
+<rect x="360" y="70" width="80" height="50" rx="6" fill="#f3e8ff" stroke="#64748b" stroke-width="1"/>
+<text x="400" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Output</text>
+<text x="400" y="103.0" text-anchor="middle" font-size="9" fill="#334155">regs x5</text>
+<line x1="110" y1="95" x2="124" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="210" y1="95" x2="234" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="330" y1="95" x2="354" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<defs><marker id="ah" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#475569"/></marker></defs>
+</svg>
+<svg width="520" height="200" xmlns="http://www.w3.org/2000/svg">
+<text x="260" y="18" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e3a8a">C. Hybrid router (calendar priority + packet fallback)</text>
+<rect x="10" y="30" width="70" height="45" rx="6" fill="#dbeafe" stroke="#64748b" stroke-width="1"/>
+<text x="45" y="48.5" text-anchor="middle" font-size="9" fill="#334155">Skid</text>
+<text x="45" y="60.5" text-anchor="middle" font-size="9" fill="#334155">x5</text>
+<rect x="10" y="90" width="70" height="45" rx="6" fill="#bfdbfe" stroke="#64748b" stroke-width="1"/>
+<text x="45" y="108.5" text-anchor="middle" font-size="9" fill="#334155">VC buf</text>
+<text x="45" y="120.5" text-anchor="middle" font-size="9" fill="#334155">16x8</text>
+<rect x="95" y="55" width="55" height="40" rx="6" fill="#fde68a" stroke="#64748b" stroke-width="1"/>
+<text x="122" y="71.0" text-anchor="middle" font-size="9" fill="#334155">Mode</text>
+<text x="122" y="83.0" text-anchor="middle" font-size="9" fill="#334155">mux</text>
+<rect x="165" y="40" width="75" height="55" rx="6" fill="#fef3c7" stroke="#64748b" stroke-width="1"/>
+<text x="202" y="63.5" text-anchor="middle" font-size="9" fill="#334155">Slot</text>
+<text x="202" y="75.5" text-anchor="middle" font-size="9" fill="#334155">SRAM</text>
+<rect x="165" y="110" width="75" height="55" rx="6" fill="#fecaca" stroke="#64748b" stroke-width="1"/>
+<text x="202" y="133.5" text-anchor="middle" font-size="9" fill="#334155">Grant</text>
+<text x="202" y="145.5" text-anchor="middle" font-size="9" fill="#334155">arb</text>
+<rect x="260" y="70" width="85" height="50" rx="6" fill="#dcfce7" stroke="#64748b" stroke-width="1"/>
+<text x="302" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Crossbar</text>
+<rect x="380" y="70" width="75" height="50" rx="6" fill="#f3e8ff" stroke="#64748b" stroke-width="1"/>
+<text x="418" y="91.0" text-anchor="middle" font-size="9" fill="#334155">Output</text>
+<line x1="80" y1="52" x2="89" y2="70" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="80" y1="112" x2="89" y2="85" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="150" y1="75" x2="159" y2="67" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="150" y1="100" x2="159" y2="130" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="240" y1="95" x2="254" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<line x1="345" y1="95" x2="374" y2="95" stroke="#475569" stroke-width="1.2" marker-end="url(#ah)"/>
+<defs><marker id="ah" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#475569"/></marker></defs>
+</svg>
+</div>
+
+<h3>3.1 TDM / calendar router</h3>
+<ul>
+<li>每 output port 独立 <strong>slot-table SRAM</strong>（depth=255）：每 cycle 读出 {input-select, valid}，直接配置 crossbar。</li>
+<li>Input 仅 skid register（depth 2），<strong>无 VC allocator / SW allocator</strong>。</li>
+<li>离线 schedule 保证每 link ≤1 flit/cycle → 严格无冲突、无阻塞。</li>
+</ul>
+
+<h3>3.2 Packet-switched router</h3>
+<ul>
+<li>经典 input-queued VC router：16 VC × 8 deep SRAM / port。</li>
+<li>VC allocator + SW allocator（iSLIP）+ credit-based flow control。</li>
+<li>Buffer 吸收 contention → 支持任意目的地 all-to-all / any-to-any。</li>
+</ul>
+
+<h3>3.3 Hybrid router</h3>
+<ul>
+<li>共享 crossbar + output stage；并行 slot-table 与 VC buffer 路径。</li>
+<li><strong>Mode mux</strong>：calendar window → bypass latch；packet window → buffered+allocated path。</li>
+<li><strong>Grant arbiter</strong>：reserved slot 时 calendar grant 严格优先；unreserved slot 由 SW allocator 填充。</li>
+<li>面积 ≈ packet + slot-table + mux/arb（相对 packet +5.1%）。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>4. 单 Router 面积 / 功耗分解</h2>
+<table>
+<tr><th>Variant</th><th>Crossbar</th><th>Buffer</th><th>Slot-table</th>
+<th>Allocator</th><th>Mux/Grant</th><th>Output</th><th>Total area</th>
+<th>Dyn (W)</th><th>Leak (W)</th></tr>
+<tr><td>TDM / calendar</td><td>0.0105</td><td>0.0004</td><td>0.0016</td><td>0.0000</td><td>0.0000</td><td>0.0005</td><td><strong>0.0130</strong></td><td>0.12</td><td>0.03</td></tr>
+<tr><td>Packet-switched</td><td>0.0105</td><td>0.0252</td><td>0.0000</td><td>0.0055</td><td>0.0000</td><td>0.0005</td><td><strong>0.0417</strong></td><td>0.21</td><td>0.05</td></tr>
+<tr><td>Hybrid (TDM + packet)</td><td>0.0105</td><td>0.0252</td><td>0.0016</td><td>0.0055</td><td>0.0005</td><td>0.0005</td><td><strong>0.0438</strong></td><td>0.23</td><td>0.05</td></tr>
+</table>
+<p class="note">TDM buffer 面积极小（skid only）；packet 面积 dominated by VC SRAM + allocators。
+Hybrid = packet + slot-table + 0.0005 mm² mux overhead。</p>
+</div>
+
+<div class="card">
+<h2>5. 全网（256 nodes + channels）面积 / 功耗</h2>
+<svg width="560" height="300" xmlns="http://www.w3.org/2000/svg">
+<text x="280" y="22" text-anchor="middle" font-size="12" font-weight="bold" fill="#334155">Full NoC area breakdown (256 routers + mesh channels)</text>
+<line x1="70" y1="250" x2="540" y2="250" stroke="#94a3b8"/>
+<line x1="70" y1="40" x2="70" y2="250" stroke="#94a3b8"/>
+<rect x="70" y="284" width="10" height="10" fill="#2563eb"/><text x="84" y="293" font-size="9" fill="#475569">Router area</text>
+<rect x="200" y="284" width="10" height="10" fill="#059669"/><text x="214" y="293" font-size="9" fill="#475569">Channel area</text>
+<rect x="105" y="206.8" width="86" height="43.2" fill="#2563eb"/>
+<rect x="105" y="165.1" width="86" height="41.7" fill="#059669"/>
+<text x="148" y="159" text-anchor="middle" font-size="9" font-weight="bold">6.524</text>
+<text x="148" y="266" text-anchor="middle" font-size="9">TDM / calend</text>
+<rect x="262" y="111.2" width="86" height="138.8" fill="#2563eb"/>
+<rect x="262" y="69.5" width="86" height="41.7" fill="#059669"/>
+<text x="305" y="64" text-anchor="middle" font-size="9" font-weight="bold">13.874</text>
+<text x="305" y="266" text-anchor="middle" font-size="9">Packet-switc</text>
+<rect x="419" y="104.2" width="86" height="145.8" fill="#2563eb"/>
+<rect x="419" y="62.5" width="86" height="41.7" fill="#059669"/>
+<text x="462" y="57" text-anchor="middle" font-size="9" font-weight="bold">14.414</text>
+<text x="462" y="266" text-anchor="middle" font-size="9">Hybrid</text>
+<text x="12" y="145" font-size="9" fill="#64748b" transform="rotate(-90 12 145)">mm²</text>
+</svg>
+<table>
+<tr><th>Variant</th><th>Router area</th><th>Channel area</th><th>Total area</th>
+<th>Dynamic (W)</th><th>Leakage (W)</th><th>Total power (W)</th></tr>
+<tr><td>TDM / calendar</td><td>3.320</td><td>3.204</td><td><strong>6.524</strong></td><td>1216.59</td><td>27.26</td><td><strong>1243.85</strong></td></tr>
+<tr><td>Packet-switched</td><td>10.670</td><td>3.204</td><td><strong>13.874</strong></td><td>1241.79</td><td>33.21</td><td><strong>1275.00</strong></td></tr>
+<tr><td>Hybrid (TDM + packet)</td><td>11.210</td><td>3.204</td><td><strong>14.414</strong></td><td>1246.89</td><td>33.21</td><td><strong>1280.10</strong></td></tr>
+</table>
+<p class="note">Ordering: area(TDM) &lt; area(hybrid) &lt; area(packet)。
+TDM saves <strong>69%</strong> router area vs packet。
+Channel area = 3.204 mm²（960 directed mesh links + 512 ramp links）。</p>
+</div>
+
+<div class="card">
+<h2>6. 异构 NoC 分析</h2>
+<h3>6.1 放置策略</h3>
+<p>Interior 8×8（x,y ∈ [4,11]）部署 <strong>TDM-only</strong> router 作为 collective bisection backbone；
+外围 border 部署 <strong>packet-only</strong> router 服务 PE 注入与非规则 any-to-any。</p>
+<div style="overflow-x:auto"><svg width="408" height="432" xmlns="http://www.w3.org/2000/svg">
+<text x="204" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#334155">16x16 heterogeneous floorplan (interior TDM backbone, border packet routers)</text>
+<rect x="29" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="367" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="345" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="323" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="301" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="279" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="279" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="257" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="257" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="235" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="235" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="213" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="213" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="191" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="191" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="169" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="169" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="147" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="147" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="139" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="161" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="183" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="205" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="227" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="249" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="271" y="125" width="20" height="20" fill="#2563eb" opacity="0.75" rx="2"/>
+<rect x="293" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="125" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="103" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="81" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="59" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="29" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="51" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="73" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="95" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="117" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="139" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="161" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="183" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="205" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="227" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="249" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="271" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="293" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="315" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="337" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<rect x="359" y="37" width="20" height="20" fill="#ea580c" opacity="0.75" rx="2"/>
+<line x1="193" y1="36" x2="193" y2="404" stroke="#9333ea" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="28" y1="201" x2="380" y2="201" stroke="#9333ea" stroke-width="1" stroke-dasharray="4 3"/>
+<rect x="116" y="124" width="176" height="176" fill="none" stroke="#1e40af" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="376" y="426" text-anchor="end" font-size="9" fill="#64748b">TDM 64 nodes (25%) | packet 192 nodes</text>
+<rect x="28" y="410" width="10" height="10" fill="#2563eb"/><text x="42" y="419" font-size="9">TDM-only (collective backbone)</text><rect x="188" y="410" width="10" height="10" fill="#ea580c"/><text x="202" y="419" font-size="9">Packet-only (any-to-any edges)</text>
+</svg></div>
+
+<h3>6.2 TDM 比例 sweep</h3>
+<svg width="520" height="240" xmlns="http://www.w3.org/2000/svg">
+<text x="260" y="16" text-anchor="middle" font-size="11" fill="#334155">
+Heterogeneous NoC total area vs TDM fraction f</text>
+<line x1="52" y1="204" x2="504" y2="204" stroke="#94a3b8"/>
+<line x1="52" y1="28" x2="52" y2="204" stroke="#94a3b8"/>
+<line x1="52" y1="127.4" x2="504" y2="127.4"
+ stroke="#2563eb" stroke-dasharray="4 3"/>
+<text x="502" y="123.4" font-size="8" fill="#2563eb" text-anchor="end">all-TDM</text>
+<line x1="52" y1="41.0" x2="504" y2="41.0"
+ stroke="#ea580c" stroke-dasharray="4 3"/>
+<text x="502" y="37.0" font-size="8" fill="#ea580c" text-anchor="end">all-packet</text>
+<polyline fill="none" stroke="#059669" stroke-width="2.5" points="52.0,41.0 142.4,62.6 232.8,84.2 323.2,96.3 413.6,105.8 504.0,127.4"/>
+<text x="260" y="232" text-anchor="middle" font-size="9" fill="#64748b">TDM router fraction f →</text>
+</svg>
+<table>
+<tr><th>Config</th><th>#TDM</th><th>#Packet</th><th>Router area</th><th>Total area</th><th>Total power</th></tr>
+<tr><td>0% TDM</td><td>0</td><td>256</td><td>10.670</td><td>13.874</td><td>1275.00</td></tr>
+<tr><td>25% TDM</td><td>64</td><td>192</td><td>8.833</td><td>12.037</td><td>1267.21</td></tr>
+<tr><td>50% TDM</td><td>128</td><td>128</td><td>6.995</td><td>10.199</td><td>1259.42</td></tr>
+<tr><td>64% TDM</td><td>164</td><td>92</td><td>5.962</td><td>9.166</td><td>1255.05</td></tr>
+<tr><td>75% TDM</td><td>192</td><td>64</td><td>5.158</td><td>8.362</td><td>1251.64</td></tr>
+<tr><td>100% TDM</td><td>256</td><td>0</td><td>3.320</td><td>6.524</td><td>1243.85</td></tr>
+<tr class="highlight"><td>100% Hybrid</td><td colspan="2">256 unified</td><td>11.210</td><td><strong>14.414</strong></td><td><strong>1280.10</strong></td></tr>
+<tr class="highlight"><td>Representative mixed (8×8 interior)</td><td>64</td>
+<td>192</td><td colspan="3">Total area <strong>12.037</strong> mm²
+（vs all-packet 13.874 mm²，节省 13%）</td></tr>
+</table>
+
+<h3>6.3 可行性与权衡</h3>
+<ul>
+<li><strong>Packet → TDM 边界</strong>：packet 流量进入 TDM 区域需 admission control（AFIFO 或 reserved transit slot），否则破坏无冲突保证。</li>
+<li><strong>Any-to-any 穿越 TDM 岛</strong>：TDM-only router 无法服务未调度流 → 需空间分区或绕路（escape VC）。</li>
+<li><strong>Collective-dominated</strong>：异构 NoC 显著节省面积/功耗（本例 interior 方案 −13%），TDM backbone 精确命中 bisection 下界。</li>
+<li><strong>Global unpredictable any-to-any</strong>：需 all-packet 或 all-hybrid；异构仅在有明确 traffic 分区时最优。</li>
+<li><strong>Crossover</strong>：当 any-to-any 流量 &gt; ~30% 总带宽时，all-hybrid 或 all-packet 更优；collective-only 场景 all-TDM 最优。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>7. 设计建议</h2>
+<table>
+<tr><th>Workload</th><th>推荐 router</th><th>Total area</th><th>Notes</th></tr>
+<tr><td>纯集合通信（calendar）</td><td>All-TDM</td><td>6.524 mm²</td>
+<td>最低面积/功耗；不可服务 unscheduled traffic</td></tr>
+<tr><td>纯 all-to-all / any-to-any</td><td>All-packet</td><td>13.874 mm²</td>
+<td>最高灵活性；makespan 命中 bisection 下界（bufferable）</td></tr>
+<tr><td>混合 workload</td><td>All-hybrid</td><td>14.414 mm²</td>
+<td>单芯片统一；+5% vs packet</td></tr>
+<tr class="highlight"><td>Collective + edge any-to-any</td><td>Heterogeneous</td>
+<td>12.037 mm²</td><td>Interior TDM + border packet；最优 PPA 折中</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>8. 与现有 CollectivePowerModule 对照</h2>
+<p>本报告 analytical model 基于同一 Orion 32nm 公式。
+现有 C++ 仿真（<code>src/collective_power.cpp</code>）对 12×16 allgather M=16 给出
+≈66 mm² / 2935 W（含 calendar table + fork/reduce）。
+本报告 16×16 all-TDM router-only 3.320 mm² 量级一致
+（channel 与 fork 单元另计）。</p>
+</div>
+
+</body></html>
