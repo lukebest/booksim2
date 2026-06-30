@@ -436,7 +436,8 @@ def build_html():
     ring_svg = svg_global_ring(order)
 
     util_chart_q1 = sm.svg_line_chart(
-        [q1["util"]["eject_series"], q1["util"]["link_series"]],
+        [sm.odd_cycle_points(q1["util"]["eject_series"]),
+         sm.odd_cycle_points(q1["util"]["link_series"])],
         ["平均接收利用率", "链路容量利用率"], width=760, height=240, ymax=1.0)
     util_chart_q4 = sm.svg_line_chart(
         [q4["util"]["eject_series"], q4["util"]["link_series"]],
@@ -526,7 +527,7 @@ def build_html():
 <div class="card">
 <p class="note">平均接收利用率 = 各 cycle 全节点 down-ramp 流出 flit 数 / (N×ramp_bw)。
 链路容量利用率 = 该 cycle 有发送的 directed link 数 / 曾使用的 link 总数。
-横轴 cycle，纵轴利用率 [0,1]。</p>
+横轴 cycle（仅奇数 cycle 描点，消除偶时延 hop 导致的 period-2 锯齿），纵轴利用率 [0,1]。</p>
 <p>Q1 bi m=1：平均接收利用率 {q1['util']['avg_eject_util']:.3f}，
 平均链路利用率 {q1['util']['avg_link_util']:.3f}</p>
 {util_chart_q1}

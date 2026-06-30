@@ -147,24 +147,28 @@ def afifo_occupancy_series(afifo_profile, makespan):
     return g[: makespan + 1]
 
 
+def odd_cycle_points(series):
+    """Return [(cycle, util), ...] for odd cycles only."""
+    return [(c, v) for c, v in enumerate(series) if c % 2 == 1]
+
+
 def svg_line_chart(series_list, labels, width=720, height=220, ymax=None,
                    colors=("#2563eb", "#16a34a", "#ea580c")):
     """Simple inline SVG multi-line chart. series_list: list of [(x,y)...] or [y,...]."""
     if not series_list:
         return '<svg width="720" height="220"></svg>'
-    # normalize to list of y arrays
-    ys = []
+    # normalize to list of [(x, y), ...] point lists
+    pts_list = []
     for s in series_list:
         if s and isinstance(s[0], (list, tuple)):
-            ys.append([v for _, v in s])
+            pts_list.append([(float(x), float(v)) for x, v in s])
         else:
-            ys.append(list(s))
-    n = max(len(y) for y in ys)
-    for i, y in enumerate(ys):
-        if len(y) < n:
-            ys[i] = y + [0.0] * (n - len(y))
-    mx_y = ymax or max(max(y) for y in ys) or 1.0
+            pts_list.append([(float(i), float(v)) for i, v in enumerate(s)])
+    all_y = [v for pts in pts_list for _, v in pts]
+    mx_y = ymax or max(all_y) or 1.0
     mx_y = max(mx_y, 0.01)
+    x_min = min(x for pts in pts_list for x, _ in pts)
+    x_max = max(x for pts in pts_list for x, _ in pts)
     pad_l, pad_r, pad_t, pad_b = 48, 16, 16, 32
     iw = width - pad_l - pad_r
     ih = height - pad_t - pad_b
@@ -180,14 +184,15 @@ def svg_line_chart(series_list, labels, width=720, height=220, ymax=None,
         f'<text x="{pad_l+iw//2}" y="{height-4}" font-size="10" fill="#64748b" '
         f'text-anchor="middle">cycle</text>',
     ]
-    for yi, yarr in enumerate(ys):
+    x_span = max(x_max - x_min, 1.0)
+    for yi, pts in enumerate(pts_list):
         col = colors[yi % len(colors)]
-        pts = []
-        for x, v in enumerate(yarr):
-            px = pad_l + (x / max(n - 1, 1)) * iw
+        svg_pts = []
+        for x, v in pts:
+            px = pad_l + ((x - x_min) / x_span) * iw
             py = pad_t + ih - (v / mx_y) * ih
-            pts.append(f"{px:.1f},{py:.1f}")
-        lines.append(f'<polyline points="{" ".join(pts)}" fill="none" '
+            svg_pts.append(f"{px:.1f},{py:.1f}")
+        lines.append(f'<polyline points="{" ".join(svg_pts)}" fill="none" '
                      f'stroke="{col}" stroke-width="1.5"/>')
     for i, lab in enumerate(labels):
         col = colors[i % len(colors)]
