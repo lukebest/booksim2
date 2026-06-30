@@ -82,8 +82,40 @@ def dir_of(p, c, mx):
     return "L"
 
 
+MESH_DIRS = frozenset("EWNS")
+
+
+def topo_crossbar(cset):
+    """Source-agnostic mesh crossbar: drop Local inject/eject ports."""
+    return frozenset((i, o) for i, o in cset if i in MESH_DIRS and o in MESH_DIRS)
+
+
+def min_period_nonempty_topo(seq):
+    """Min period P over nonempty topo configs only (skip idle cycles).
+
+    Returns P = min(temporal repeat period, |distinct configs|) so that a
+    bi-directional ring with two transit configs reports P=2 even when the
+    packed schedule tail breaks strict temporal period-2.
+    """
+    win = [x for x in seq if x]
+    if not win:
+        return 0, 0, 0
+    ndist = len(set(win))
+    L = len(win)
+    temporal = L
+    for P in range(1, L + 1):
+        if all(win[i] == win[i + P] for i in range(L - P)):
+            temporal = P
+            break
+    P = min(temporal, ndist)
+    return P, L, ndist
+
+
 def slot_table_depth(events, mx, my, makespan):
-    """Per-router min period P of (in_dir->out_dir) crossbar pattern."""
+    """Per-router min period P of mesh (in_dir→out_dir) crossbar pattern.
+
+    Only nonempty cycles; Local inject/eject stripped (topology-only).
+    """
     arrive = {}
     for (s, p, c, t, lat, arr, kind) in events:
         arrive[(s, c)] = arr
@@ -109,23 +141,11 @@ def slot_table_depth(events, mx, my, makespan):
     series = {p: [frozenset() for _ in range(makespan + 1)] for p in range(n)}
     for (p, t), cset in conn.items():
         if 0 <= t <= makespan:
-            series[p][t] = frozenset(cset)
-
-    def min_period(seq):
-        idx = [i for i, x in enumerate(seq) if x]
-        if not idx:
-            return 0, 0, 0
-        lo, hi = idx[0], idx[-1]
-        win = seq[lo:hi + 1]
-        L = len(win)
-        for P in range(1, L + 1):
-            if all(win[i] == win[i + P] for i in range(L - P)):
-                return P, L, len(set(win))
-        return L, L, len(set(win))
+            series[p][t] = topo_crossbar(cset)
 
     per_router = {}
     for p in range(n):
-        P, span, ndist = min_period(series[p])
+        P, span, ndist = min_period_nonempty_topo(series[p])
         per_router[p] = {"period": P, "span": span, "distinct": ndist}
     depths = [r["period"] for r in per_router.values() if r["span"] > 0]
     return {

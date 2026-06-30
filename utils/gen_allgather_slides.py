@@ -295,7 +295,7 @@ def slot_table_html(slot_info, mx, my, sample_coords=None):
     tbl = (
         f"<p class='note'>{esc(summary)}</p>"
         f"<div class='two-col'><div>{heat}</div>"
-        f"<table><tr><th>坐标</th><th>id</th><th>深度P</th><th>活跃跨度</th>"
+        f"<table><tr><th>坐标</th><th>id</th><th>深度P</th><th>非空拓扑步</th>"
         f"<th>不同配置数</th></tr>{''.join(rows)}</table></div>"
     )
     return tbl
@@ -535,7 +535,8 @@ def build_html():
 
 <h2>1.5 Q1 各 Router 时隙表与深度</h2>
 <div class="card">
-<p class="note">时隙表深度 P = router 交叉开关 (in_dir→out_dir) 连接模式的最小重复周期。
+<p class="note">时隙表深度 P = 各 router 在<b>非空 cycle</b>上、去 Local 端口的 mesh 交叉开关
+(in_dir→out_dir) 拓扑配置序列的最小重复周期（不含 inject/eject 与空闲 cycle）。
 左：256 router 深度热力图；右：代表性 router 明细。</p>
 {slot_q1}
 </div>
@@ -579,7 +580,10 @@ cap=5 为硬件预算。下方为 Q4 m=1 逐 cycle AFIFO 全局占用。</p>
 </div>
 
 <h2>2.5 Q4 各 Router 时隙表（无冲突无阻塞）与深度</h2>
-<div class="card">{slot_q4}</div>
+<div class="card">
+<p class="note">深度定义同 §1.5：非空 cycle、mesh 拓扑 (in→out) 配置的最小重复周期。</p>
+{slot_q4}
+</div>
 </section>
 
 <section class="slide" id="fault">
