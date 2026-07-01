@@ -91,6 +91,65 @@ def run_hybrid_v(B, bidir):
     return best
 
 
+def _mirror_order(order, x0, C):
+    """Reflect a band's Hamilton cycle within its columns (spine left<->right)."""
+    return [Z.nid(2 * x0 + C - 1 - (Z.coord(nd)[0]), Z.coord(nd)[1]) for nd in order]
+
+
+def fp_hybrid_v_spine(s, B, bidir, ramp_bw, mirror_bands):
+    """fp_hybrid_v with per-band spine side: mirror_bands = set of band indices
+    whose vertical ring spine is moved to the right side of the band."""
+    C = MX // B
+    sx, sy = Z.coord(s)
+    x0 = (sx // C) * C
+    b = sx // C
+    order = Z.ham_cycle_vband(C, x0)
+    if b in mirror_bands:
+        order = _mirror_order(order, x0, C)
+    pos = {nd: k for k, nd in enumerate(order)}
+    slots, arr = Z._ring_arrivals(order, pos, s, bidir, ramp_bw)
+    for y in range(MY):
+        t = arr[Z.nid(x0, y)]
+        prev = Z.nid(x0, y)
+        for xx in range(x0 - 1, -1, -1):
+            cur = Z.nid(xx, y)
+            slots.append(('L', Z.lk(prev, cur), t)); t += H
+            slots.append(('D', cur, t)); prev = cur
+        t = arr[Z.nid(x0 + C - 1, y)]
+        prev = Z.nid(x0 + C - 1, y)
+        for xx in range(x0 + C, MX):
+            cur = Z.nid(xx, y)
+            slots.append(('L', Z.lk(prev, cur), t)); t += H
+            slots.append(('D', cur, t)); prev = cur
+    return slots
+
+
+def run_hybrid_v_spine(mirror_bands, B=2, bidir=True):
+    """Run hybrid B=2 vband with a specific spine placement; also report max delivery."""
+    foot = {s: fp_hybrid_v_spine(s, B, bidir, RAMP_BW, mirror_bands) for s in range(N)}
+    best = None
+    for order_name, gen in Z.SRC_ORDERS.items():
+        mk, mo, busy, inj, events = Z.export_events(foot, RAMP_BW, gen(), flits=1)
+        ok = Z.verify(busy, RAMP_BW)
+        rec = dict(mk=mk, method=f"pack:{order_name}", ok=ok, busy=busy,
+                   events=events, afifo_peak=0, afifo_series=[],
+                   mode="zerobuf_rigid", order=None, edges=None, max_off=mo, B=B,
+                   mirror_bands=mirror_bands)
+        if best is None or mk < best["mk"]:
+            best = rec
+    # max delivery over all sources (last D rel)
+    max_del = 0
+    for s in range(N):
+        fp = fp_hybrid_v_spine(s, B, bidir, RAMP_BW, mirror_bands)
+        last = max(rel for k, _, rel in fp if k == 'D')
+        max_del = max(max_del, last)
+    best["max_delivery"] = max_del
+    # spine columns per band (mirrored band -> spine at right edge x0+C-1)
+    C = MX // B
+    best["spine_cols"] = [(b + 1) * C - 1 if b in mirror_bands else b * C for b in range(B)]
+    return best
+
+
 def run_border(bidir):
     tag = "bi" if bidir else "uni"
     quads = quads_for(MX, "border", tag)
@@ -532,6 +591,102 @@ def svg_conflict_resolution(hybrid_rec):
     return "\n".join(tl) + "\n" + "\n".join(mr) + "\n" + explain
 
 
+def svg_spine_compare(configs):
+    """Three mini 16x16 panels showing band spine placement.
+
+    configs: list of (name, spine_cols) where spine_cols=[band0_col, band1_col].
+    """
+    cell = 9
+    pw = MX * cell
+    ph = MY * cell
+    gap = 34
+    pad = 16
+    top = 20
+    n = len(configs)
+    w = pad * 2 + n * pw + (n - 1) * gap
+    h = top + ph + 36
+    lines = [
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">',
+        f'<text x="8" y="14" font-size="11" font-weight="bold" fill="#1e3a8a">'
+        f'vband B=2 脊放置：两脊同两侧 / 同中间 / 一外一中</text>',
+    ]
+    for i, (name, spines) in enumerate(configs):
+        ox = pad + i * (pw + gap)
+        s0, s1 = spines
+        # band backgrounds
+        lines.append(
+            f'<rect x="{ox}" y="{top}" width="{(MX//2)*cell}" height="{ph}" '
+            f'fill="#eff6ff" stroke="#94a3b8" stroke-width="0.6"/>')
+        lines.append(
+            f'<rect x="{ox+(MX//2)*cell}" y="{top}" width="{(MX//2)*cell}" height="{ph}" '
+            f'fill="#f0fdf4" stroke="#94a3b8" stroke-width="0.6"/>')
+        # nodes
+        for y in range(MY):
+            for x in range(MX):
+                lines.append(
+                    f'<circle cx="{ox+x*cell+cell/2:.1f}" cy="{top+y*cell+cell/2:.1f}" '
+                    f'r="0.8" fill="#94a3b8"/>')
+        # partition dashed
+        lines.append(
+            f'<line x1="{ox+(MX//2)*cell}" y1="{top}" x2="{ox+(MX//2)*cell}" y2="{top+ph}" '
+            f'stroke="#dc2626" stroke-width="1.2" stroke-dasharray="4 3"/>')
+        # spine columns: band0 blue, band1 orange
+        for col, col_color in ((s0, "#2563eb"), (s1, "#ea580c")):
+            lines.append(
+                f'<rect x="{ox+col*cell+1}" y="{top+2}" width="{cell-2}" height="{ph-4}" '
+                f'fill="{col_color}" opacity="0.75"/>')
+        lines.append(
+            f'<text x="{ox+pw/2}" y="{top+ph+14}" font-size="10" fill="#334155" '
+            f'text-anchor="middle">{esc(name)}</text>')
+        lines.append(
+            f'<text x="{ox+pw/2}" y="{top+ph+28}" font-size="9" fill="#64748b" '
+            f'text-anchor="middle">脊 col {s0} / {s1}</text>')
+    lines.append(
+        f'<rect x="{pad}" y="{h-14}" width="10" height="8" fill="#2563eb" opacity="0.75"/>'
+        f'<text x="{pad+14}" y="{h-7}" font-size="9" fill="#475569">band0 脊</text>'
+        f'<rect x="{pad+70}" y="{h-14}" width="10" height="8" fill="#ea580c" opacity="0.75"/>'
+        f'<text x="{pad+84}" y="{h-7}" font-size="9" fill="#475569">band1 脊</text>'
+        f'<text x="{pad+150}" y="{h-7}" font-size="9" fill="#dc2626">红虚线=带边界</text>')
+    lines.append("</svg>")
+    return "\n".join(lines)
+
+
+def spine_compare_card():
+    """Run the three vband spine placements and build the comparison card."""
+    print("  spine placements...", flush=True)
+    cfgs = [
+        ("两侧 (outer)", {1}),
+        ("中间 (middle)", {0}),
+        ("混合 (default)", set()),
+    ]
+    recs = [(name, mb, run_hybrid_v_spine(mb)) for name, mb in cfgs]
+    svg = svg_spine_compare([(name, r["spine_cols"]) for name, _, r in recs])
+    rows = []
+    best_mk = min(r["mk"] for _, _, r in recs)
+    for name, _, r in recs:
+        cls = " class='best'" if r["mk"] == best_mk else ""
+        rows.append(
+            f"<tr{cls}><td>{esc(name)}</td><td>{r['spine_cols'][0]}</td><td>{r['spine_cols'][1]}</td>"
+            f"<td><b>{r['mk']}</b></td><td>{r['max_delivery']}</td><td>{r['max_off']}</td>"
+            f"<td>{esc(r['method'])}</td></tr>")
+    tbl = (
+        "<table><thead><tr><th>配置</th><th>band0 脊 col</th><th>band1 脊 col</th>"
+        "<th>makespan</th><th>全源 max delivery</th><th>packer 偏移</th><th>调度</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
+    return f"""
+<div class="card">
+<h2>vband B=2 脊放置对比</h2>
+<p class="note">vband 环脊默认在带最左列；用反射镜像可把脊翻到带最右列。三种放置：
+两脊同两侧（col 0 / 15）、两脊同中间（col 7 / 8）、一外一中（col 0 / 8，默认）。</p>
+{svg}
+{tbl}
+<p class="note">三者 makespan 相同：反射是带网格自同构，保持环周长与跨带树代价不变，
+仅把单源延迟在带内重分布；worst-case 源 delivery 与刚性 packer 密排偏移一致 → makespan 不变。
+单源差异（以 src0 为例）：脊在 col0 时 src0 last eject=331；脊在 col7 时=297——近脊源变快、远脊源变慢，
+但带内总存在对称的 worst-case 源仍为 331。</p>
+</div>"""
+
+
 def afifo_chart(series, mk, width=720, height=200):
     if not series:
         return "<p class='note'>无 AFIFO 等待（刚性 pack）。</p>"
@@ -954,6 +1109,8 @@ vband（8×16 纵向带 + 横向树 H=4）比 hband（16×8 横向带 + 纵向�
 <b>delivery 延迟受限</b>而非 ramp 受限——这正是它能大幅领先全局环的根本原因。
 vband 把长边（16）放在廉价的 H=4 链路上做横向树，短边（8）做纵向环脊，进一步压缩 delivery。</p>
 </div>
+
+{spine_compare_card()}
 
 <div class="card">
 <h2>说明</h2>
