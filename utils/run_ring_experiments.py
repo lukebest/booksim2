@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Sweep Hamilton-ring allgather over healthy + fault scenarios (uni & bi).
 
-For a 12x16 mesh (H=4, V=8, ramp=1) this:
+For a 16x16 mesh (H=4, V=6, ramp=1) this:
   * builds the golden (healthy) snake ring and simulates uni + bi allgather,
-  * for each link / node fault scenario, recovers a ring with the fault-aware
-    Hamiltonian search and simulates uni + bi allgather over it,
-  * compares each faulted ring against its same-mode golden,
+  * for each link / node / quadrant fault scenario, recovers a ring with the
+    fault-aware Hamiltonian search and simulates uni + bi allgather over it,
+  * also runs hybrid B=2 vband bi (0-buffer packer) under the same faults,
+  * compares each faulted case against its same-mode golden,
   * writes results/ring_results.csv and golden trace CSVs.
 
 Unidirectional allgather needs a closed cycle; for the odd (1x1, 3x3) node
@@ -19,18 +20,21 @@ from pathlib import Path
 
 import hamilton_ring as hr
 import sim_hamilton_ring as sr
+import sim_hybrid_v_fault as hv
 
 ROOT = Path(__file__).resolve().parents[1]
-MX, MY, H, V, RAMP = 12, 16, 4, 8, 1
+MX, MY, H, V, RAMP = 16, 16, 4, 6, 1
 
 FIELDS = [
     "ring_type", "fault_class", "region", "detail", "fault_desc",
     "feasible", "ring_is_cycle", "ring_len", "sacrificed", "makespan",
     "golden_makespan", "slowdown_pct", "eject_ok", "busiest_link", "reason",
+    "hybrid_vband_makespan", "hybrid_vband_golden", "hybrid_vband_slowdown_pct",
+    "hybrid_vband_feasible", "hybrid_vband_reason",
 ]
 
 
-def sim_row(ring_type, sc, res, golden, msg_size):
+def sim_row(ring_type, sc, res, golden, msg_size, hybrid_golden, hybrid_res):
     """Build one CSV row for (ring_type, scenario, recovered ring res)."""
     base = {
         "ring_type": ring_type,
@@ -40,7 +44,25 @@ def sim_row(ring_type, sc, res, golden, msg_size):
         "fault_desc": sc["desc"],
         "sacrificed": len(sc.get("sacrificed", [])),
         "golden_makespan": golden,
+        "hybrid_vband_golden": hybrid_golden,
     }
+    if hybrid_res["feasible"]:
+        hs = hybrid_res["makespan"]
+        hslow = (hs / hybrid_golden - 1.0) * 100.0 if hybrid_golden else 0.0
+        base.update(
+            hybrid_vband_makespan=hs,
+            hybrid_vband_slowdown_pct=f"{hslow:.1f}",
+            hybrid_vband_feasible="yes",
+            hybrid_vband_reason=hybrid_res.get("method", "ok"),
+        )
+    else:
+        base.update(
+            hybrid_vband_makespan="",
+            hybrid_vband_slowdown_pct="",
+            hybrid_vband_feasible="no",
+            hybrid_vband_reason=hybrid_res.get("reason", ""),
+        )
+
     if not res["feasible"]:
         base.update(feasible="no", ring_is_cycle="", ring_len="", makespan="",
                     slowdown_pct="", eject_ok="", busiest_link="",
@@ -86,6 +108,10 @@ def write_golden_traces(order, mode, outdir, msg_size):
     return res["makespan"]
 
 
+def hybrid_for_scenario(sc):
+    return hv.simulate(sc["dead_nodes"], sc["dead_links"], B=2, bidir=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--msg-size", type=int, default=1)
@@ -96,6 +122,10 @@ def main():
     args = ap.parse_args()
     outdir = args.outdir
     outdir.mkdir(parents=True, exist_ok=True)
+
+    hv.cfg(MX, MY, H, V, ramp_bw=1)
+    hybrid_golden = hv.golden_makespan(B=2)
+    print(f"golden hybrid B=2 vband bi: makespan={hybrid_golden}")
 
     golden_order = hr.snake_cycle(MX, MY)
     golden = {}
@@ -118,6 +148,11 @@ def main():
             "slowdown_pct": "0.0", "eject_ok": "True",
             "busiest_link": (MX * MY - 1) if mode == "uni" else (MX * MY) // 2,
             "reason": "healthy boustrophedon snake cycle",
+            "hybrid_vband_makespan": hybrid_golden,
+            "hybrid_vband_golden": hybrid_golden,
+            "hybrid_vband_slowdown_pct": "0.0",
+            "hybrid_vband_feasible": "yes",
+            "hybrid_vband_reason": "healthy",
         })
 
     scenarios = hr.all_scenarios(MX, MY) + hr.rebalanced_node_scenarios(MX, MY)
@@ -130,10 +165,13 @@ def main():
                 hr.build_adj(MX, MY, sc["dead_nodes"], sc["dead_links"]),
                 res["is_cycle"])
             assert ok, f"invalid ring for {sc['name']}"
+        hres = hybrid_for_scenario(sc)
         for mode in ("uni", "bi"):
-            rows.append(sim_row(mode, sc, res, golden[mode], args.msg_size))
+            rows.append(sim_row(mode, sc, res, golden[mode], args.msg_size,
+                                hybrid_golden, hres))
         kind = ("cycle" if res["is_cycle"] else "path") if res["feasible"] else "infeasible"
-        print(f"  {sc['name']:18s} -> {kind}")
+        hms = hres["makespan"] if hres["feasible"] else "INFEASIBLE"
+        print(f"  {sc['name']:18s} -> {kind}  hybrid_vband={hms}")
 
     write_csv(outdir / "ring_results.csv", FIELDS, rows)
 
@@ -141,11 +179,17 @@ def main():
         for mode in ("uni", "bi"):
             write_golden_traces(golden_order, mode, outdir, args.msg_size)
 
-    print("\nSummary (makespan / slowdown% vs golden):")
+    print("\nSummary (Hamilton bi / hybrid vband bi slowdown% vs golden):")
     for r in rows:
+        if r["ring_type"] != "bi":
+            continue
         ms = r["makespan"] if r["makespan"] != "" else "INFEASIBLE"
         sl = f"+{r['slowdown_pct']}%" if r["slowdown_pct"] not in ("", "0.0") else ""
-        print(f"  {r['ring_type']:3s} {r['fault_desc'][:42]:42s} {str(ms):>10s} {sl}")
+        hms = r.get("hybrid_vband_makespan") or "INFEASIBLE"
+        hsl = (f"+{r['hybrid_vband_slowdown_pct']}%"
+               if r.get("hybrid_vband_slowdown_pct") not in ("", "0.0", None) else "")
+        print(f"  {r['fault_desc'][:40]:40s} ring={str(ms):>6s}{sl:>8s}  "
+              f"hyb={str(hms):>6s}{hsl:>8s}")
 
 
 if __name__ == "__main__":

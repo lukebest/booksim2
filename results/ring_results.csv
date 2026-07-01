@@ -1,51 +1,59 @@
-ring_type,fault_class,region,detail,fault_desc,feasible,ring_is_cycle,ring_len,sacrificed,makespan,golden_makespan,slowdown_pct,eject_ok,busiest_link,reason
-uni,healthy,-,-,healthy (golden snake ring),yes,True,192,0,886,886,0.0,True,191,healthy boustrophedon snake cycle
-bi,healthy,-,-,healthy (golden snake ring),yes,True,192,0,474,474,0.0,True,96,healthy boustrophedon snake cycle
-uni,link,corner,1,"1 link fault(s) @ corner: (1,0)-(1,1)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,corner,1,"1 link fault(s) @ corner: (1,0)-(1,1)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,corner,2,"2 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,corner,2,"2 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,corner,3,"3 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1), (1,1)-(2,1)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,corner,3,"3 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1), (1,1)-(2,1)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,edge,1,"1 link fault(s) @ edge: (6,0)-(6,1)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,edge,1,"1 link fault(s) @ edge: (6,0)-(6,1)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,edge,2,"2 link fault(s) @ edge: (6,0)-(6,1), (7,0)-(7,1)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,edge,2,"2 link fault(s) @ edge: (6,0)-(6,1), (7,0)-(7,1)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,edge,3,"3 link fault(s) @ edge: (6,0)-(6,1), (7,0)-(7,1), (6,1)-(7,1)",yes,True,192,0,902,886,1.8,True,191,Hamiltonian cycle recovered
-bi,link,edge,3,"3 link fault(s) @ edge: (6,0)-(6,1), (7,0)-(7,1), (6,1)-(7,1)",yes,True,192,0,490,474,3.4,True,96,Hamiltonian cycle recovered
-uni,link,center,1,"1 link fault(s) @ center: (6,8)-(6,9)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,center,1,"1 link fault(s) @ center: (6,8)-(6,9)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,center,2,"2 link fault(s) @ center: (6,8)-(6,9), (7,8)-(7,9)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,center,2,"2 link fault(s) @ center: (6,8)-(6,9), (7,8)-(7,9)",yes,True,192,0,474,474,0.0,True,96,Hamiltonian cycle recovered
-uni,link,center,3,"3 link fault(s) @ center: (6,8)-(6,9), (7,8)-(7,9), (6,8)-(7,8)",yes,True,192,0,886,886,0.0,True,191,Hamiltonian cycle recovered
-bi,link,center,3,"3 link fault(s) @ center: (6,8)-(6,9), (7,8)-(7,9), (6,8)-(7,8)",yes,True,192,0,470,474,-0.8,True,96,Hamiltonian cycle recovered
-uni,node,corner,1x1,"1x1 node hole @ corner anchor (0,0)",no,False,191,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,corner,1x1,"1x1 node hole @ corner anchor (0,0)",yes,False,191,0,862,474,81.9,True,190,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node,edge,1x1,"1x1 node hole @ edge anchor (6,0)",no,False,191,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,edge,1x1,"1x1 node hole @ edge anchor (6,0)",yes,False,191,0,902,474,90.3,True,190,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node,center,1x1,"1x1 node hole @ center anchor (6,8)",no,False,191,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,center,1x1,"1x1 node hole @ center anchor (6,8)",yes,False,191,0,1002,474,111.4,True,190,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node,corner,2x2,"2x2 node hole @ corner anchor (0,0)",yes,True,188,0,870,886,-1.8,True,187,Hamiltonian cycle recovered
-bi,node,corner,2x2,"2x2 node hole @ corner anchor (0,0)",yes,True,188,0,466,474,-1.7,True,94,Hamiltonian cycle recovered
-uni,node,edge,2x2,"2x2 node hole @ edge anchor (6,0)",yes,True,188,0,886,886,0.0,True,187,Hamiltonian cycle recovered
-bi,node,edge,2x2,"2x2 node hole @ edge anchor (6,0)",yes,True,188,0,482,474,1.7,True,94,Hamiltonian cycle recovered
-uni,node,center,2x2,"2x2 node hole @ center anchor (6,8)",yes,True,188,0,886,886,0.0,True,187,Hamiltonian cycle recovered
-bi,node,center,2x2,"2x2 node hole @ center anchor (6,8)",yes,True,188,0,478,474,0.8,True,94,Hamiltonian cycle recovered
-uni,node,corner,3x3,"3x3 node hole @ corner anchor (0,0)",no,False,183,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,corner,3x3,"3x3 node hole @ corner anchor (0,0)",yes,False,183,0,830,474,75.1,True,182,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node,edge,3x3,"3x3 node hole @ edge anchor (5,0)",no,False,183,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,edge,3x3,"3x3 node hole @ edge anchor (5,0)",yes,False,183,0,934,474,97.0,True,182,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node,center,3x3,"3x3 node hole @ center anchor (5,7)",no,False,183,0,,886,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance)
-bi,node,center,3x3,"3x3 node hole @ center anchor (5,7)",yes,False,183,0,970,474,104.6,True,182,Hamiltonian path recovered (colour imbalance or no surviving cycle)
-uni,node_rebal,corner,1x1+1,"1x1 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(1,0)]",yes,True,190,1,886,886,0.0,True,189,Hamiltonian cycle recovered
-bi,node_rebal,corner,1x1+1,"1x1 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(1,0)]",yes,True,190,1,478,474,0.8,True,95,Hamiltonian cycle recovered
-uni,node_rebal,edge,1x1+1,"1x1 node hole @ edge anchor (6,0); 牺牲邻近 1 个节点恢复成环 [(5,0)]",yes,True,190,1,902,886,1.8,True,189,Hamiltonian cycle recovered
-bi,node_rebal,edge,1x1+1,"1x1 node hole @ edge anchor (6,0); 牺牲邻近 1 个节点恢复成环 [(5,0)]",yes,True,190,1,494,474,4.2,True,95,Hamiltonian cycle recovered
-uni,node_rebal,center,1x1+1,"1x1 node hole @ center anchor (6,8); 牺牲邻近 1 个节点恢复成环 [(6,7)]",yes,True,190,1,894,886,0.9,True,189,Hamiltonian cycle recovered
-bi,node_rebal,center,1x1+1,"1x1 node hole @ center anchor (6,8); 牺牲邻近 1 个节点恢复成环 [(6,7)]",yes,True,190,1,478,474,0.8,True,95,Hamiltonian cycle recovered
-uni,node_rebal,corner,3x3+1,"3x3 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(3,2)]",yes,True,182,1,910,886,2.7,True,181,Hamiltonian cycle recovered
-bi,node_rebal,corner,3x3+1,"3x3 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(3,2)]",yes,True,182,1,518,474,9.3,True,91,Hamiltonian cycle recovered
-uni,node_rebal,edge,3x3+1,"3x3 node hole @ edge anchor (5,0); 牺牲邻近 1 个节点恢复成环 [(4,0)]",yes,True,182,1,910,886,2.7,True,181,Hamiltonian cycle recovered
-bi,node_rebal,edge,3x3+1,"3x3 node hole @ edge anchor (5,0); 牺牲邻近 1 个节点恢复成环 [(4,0)]",yes,True,182,1,502,474,5.9,True,91,Hamiltonian cycle recovered
-uni,node_rebal,center,3x3+1,"3x3 node hole @ center anchor (5,7); 牺牲邻近 1 个节点恢复成环 [(7,6)]",yes,True,182,1,886,886,0.0,True,181,Hamiltonian cycle recovered
-bi,node_rebal,center,3x3+1,"3x3 node hole @ center anchor (5,7); 牺牲邻近 1 个节点恢复成环 [(7,6)]",yes,True,182,1,478,474,0.8,True,91,Hamiltonian cycle recovered
+ring_type,fault_class,region,detail,fault_desc,feasible,ring_is_cycle,ring_len,sacrificed,makespan,golden_makespan,slowdown_pct,eject_ok,busiest_link,reason,hybrid_vband_makespan,hybrid_vband_golden,hybrid_vband_slowdown_pct,hybrid_vband_feasible,hybrid_vband_reason
+uni,healthy,-,-,healthy (golden snake ring),yes,True,256,0,1082,1082,0.0,True,255,healthy boustrophedon snake cycle,334,334,0.0,yes,healthy
+bi,healthy,-,-,healthy (golden snake ring),yes,True,256,0,558,558,0.0,True,128,healthy boustrophedon snake cycle,334,334,0.0,yes,healthy
+uni,link,corner,1,"1 link fault(s) @ corner: (1,0)-(1,1)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,corner,1,"1 link fault(s) @ corner: (1,0)-(1,1)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,corner,2,"2 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,corner,2,"2 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,corner,3,"3 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1), (1,1)-(2,1)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,corner,3,"3 link fault(s) @ corner: (1,0)-(1,1), (2,0)-(2,1), (1,1)-(2,1)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,edge,1,"1 link fault(s) @ edge: (8,0)-(8,1)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,edge,1,"1 link fault(s) @ edge: (8,0)-(8,1)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,edge,2,"2 link fault(s) @ edge: (8,0)-(8,1), (9,0)-(9,1)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,edge,2,"2 link fault(s) @ edge: (8,0)-(8,1), (9,0)-(9,1)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,edge,3,"3 link fault(s) @ edge: (8,0)-(8,1), (9,0)-(9,1), (8,1)-(9,1)",yes,True,256,0,1090,1082,0.7,True,255,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,link,edge,3,"3 link fault(s) @ edge: (8,0)-(8,1), (9,0)-(9,1), (8,1)-(9,1)",yes,True,256,0,566,558,1.4,True,128,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,link,center,1,"1 link fault(s) @ center: (8,8)-(8,9)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,,334,,no,delivery infeasible (estimate)
+bi,link,center,1,"1 link fault(s) @ center: (8,8)-(8,9)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,,334,,no,delivery infeasible (estimate)
+uni,link,center,2,"2 link fault(s) @ center: (8,8)-(8,9), (9,8)-(9,9)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,308,334,-7.8,yes,latency-estimate
+bi,link,center,2,"2 link fault(s) @ center: (8,8)-(8,9), (9,8)-(9,9)",yes,True,256,0,558,558,0.0,True,128,Hamiltonian cycle recovered,308,334,-7.8,yes,latency-estimate
+uni,link,center,3,"3 link fault(s) @ center: (8,8)-(8,9), (9,8)-(9,9), (8,8)-(9,8)",yes,True,256,0,1082,1082,0.0,True,255,Hamiltonian cycle recovered,302,334,-9.6,yes,latency-estimate
+bi,link,center,3,"3 link fault(s) @ center: (8,8)-(8,9), (9,8)-(9,9), (8,8)-(9,8)",yes,True,256,0,556,558,-0.4,True,128,Hamiltonian cycle recovered,302,334,-9.6,yes,latency-estimate
+uni,node,corner,1x1,"1x1 node hole @ corner anchor (0,0)",no,False,255,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),300,334,-10.2,yes,latency-estimate
+bi,node,corner,1x1,"1x1 node hole @ corner anchor (0,0)",yes,False,255,0,1076,558,92.8,True,254,Hamiltonian path recovered (colour imbalance or no surviving cycle),300,334,-10.2,yes,latency-estimate
+uni,node,edge,1x1,"1x1 node hole @ edge anchor (8,0)",no,False,255,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),300,334,-10.2,yes,latency-estimate
+bi,node,edge,1x1,"1x1 node hole @ edge anchor (8,0)",yes,False,255,0,1100,558,97.1,True,254,Hamiltonian path recovered (colour imbalance or no surviving cycle),300,334,-10.2,yes,latency-estimate
+uni,node,center,1x1,"1x1 node hole @ center anchor (8,8)",no,False,255,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),327,334,-2.1,yes,latency-estimate
+bi,node,center,1x1,"1x1 node hole @ center anchor (8,8)",yes,False,255,0,1130,558,102.5,True,254,Hamiltonian path recovered (colour imbalance or no surviving cycle),327,334,-2.1,yes,latency-estimate
+uni,node,corner,2x2,"2x2 node hole @ corner anchor (0,0)",yes,True,252,0,1066,1082,-1.5,True,251,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,node,corner,2x2,"2x2 node hole @ corner anchor (0,0)",yes,True,252,0,550,558,-1.4,True,126,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,node,edge,2x2,"2x2 node hole @ edge anchor (8,0)",yes,True,252,0,1074,1082,-0.7,True,251,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,node,edge,2x2,"2x2 node hole @ edge anchor (8,0)",yes,True,252,0,558,558,0.0,True,126,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,node,center,2x2,"2x2 node hole @ center anchor (8,8)",yes,True,252,0,1074,1082,-0.7,True,251,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,node,center,2x2,"2x2 node hole @ center anchor (8,8)",yes,True,252,0,558,558,0.0,True,126,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,node,corner,3x3,"3x3 node hole @ corner anchor (0,0)",no,False,247,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),300,334,-10.2,yes,latency-estimate
+bi,node,corner,3x3,"3x3 node hole @ corner anchor (0,0)",yes,False,247,0,1044,558,87.1,True,246,Hamiltonian path recovered (colour imbalance or no surviving cycle),300,334,-10.2,yes,latency-estimate
+uni,node,edge,3x3,"3x3 node hole @ edge anchor (7,0)",no,False,247,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),329,334,-1.5,yes,latency-estimate
+bi,node,edge,3x3,"3x3 node hole @ edge anchor (7,0)",yes,False,247,0,1096,558,96.4,True,246,Hamiltonian path recovered (colour imbalance or no surviving cycle),329,334,-1.5,yes,latency-estimate
+uni,node,center,3x3,"3x3 node hole @ center anchor (7,7)",no,False,247,0,,1082,,,,unidirectional needs a closed cycle; only a Hamiltonian path exists (colour imbalance),299,334,-10.5,yes,latency-estimate
+bi,node,center,3x3,"3x3 node hole @ center anchor (7,7)",yes,False,247,0,1110,558,98.9,True,246,Hamiltonian path recovered (colour imbalance or no surviving cycle),299,334,-10.5,yes,latency-estimate
+uni,quadrant,corner,Q0,"1/4 象限 Q0 全部故障 (8x8 @ (0,0), 64 nodes)",yes,True,192,0,826,1082,-23.7,True,191,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,quadrant,corner,Q0,"1/4 象限 Q0 全部故障 (8x8 @ (0,0), 64 nodes)",yes,True,192,0,434,558,-22.2,True,96,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,quadrant,corner,Q1,"1/4 象限 Q1 全部故障 (8x8 @ (8,0), 64 nodes)",yes,True,192,0,826,1082,-23.7,True,191,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,quadrant,corner,Q1,"1/4 象限 Q1 全部故障 (8x8 @ (8,0), 64 nodes)",yes,True,192,0,434,558,-22.2,True,96,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,quadrant,edge,Q2,"1/4 象限 Q2 全部故障 (8x8 @ (0,8), 64 nodes)",yes,True,192,0,826,1082,-23.7,True,191,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,quadrant,edge,Q2,"1/4 象限 Q2 全部故障 (8x8 @ (0,8), 64 nodes)",yes,True,192,0,434,558,-22.2,True,96,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,quadrant,corner,Q3,"1/4 象限 Q3 全部故障 (8x8 @ (8,8), 64 nodes)",yes,True,192,0,826,1082,-23.7,True,191,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,quadrant,corner,Q3,"1/4 象限 Q3 全部故障 (8x8 @ (8,8), 64 nodes)",yes,True,192,0,434,558,-22.2,True,96,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,node_rebal,corner,1x1+1,"1x1 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(1,0)]",yes,True,254,1,1078,1082,-0.4,True,253,Hamiltonian cycle recovered,302,334,-9.6,yes,latency-estimate
+bi,node_rebal,corner,1x1+1,"1x1 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(1,0)]",yes,True,254,1,558,558,0.0,True,127,Hamiltonian cycle recovered,302,334,-9.6,yes,latency-estimate
+uni,node_rebal,edge,1x1+1,"1x1 node hole @ edge anchor (8,0); 牺牲邻近 1 个节点恢复成环 [(7,0)]",yes,True,254,1,1086,1082,0.4,True,253,Hamiltonian cycle recovered,345,334,3.3,yes,latency-estimate
+bi,node_rebal,edge,1x1+1,"1x1 node hole @ edge anchor (8,0); 牺牲邻近 1 个节点恢复成环 [(7,0)]",yes,True,254,1,566,558,1.4,True,127,Hamiltonian cycle recovered,345,334,3.3,yes,latency-estimate
+uni,node_rebal,center,1x1+1,"1x1 node hole @ center anchor (8,8); 牺牲邻近 1 个节点恢复成环 [(8,7)]",yes,True,254,1,1082,1082,0.0,True,253,Hamiltonian cycle recovered,,334,,no,delivery infeasible (estimate)
+bi,node_rebal,center,1x1+1,"1x1 node hole @ center anchor (8,8); 牺牲邻近 1 个节点恢复成环 [(8,7)]",yes,True,254,1,560,558,0.4,True,127,Hamiltonian cycle recovered,,334,,no,delivery infeasible (estimate)
+uni,node_rebal,corner,3x3+1,"3x3 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(3,2)]",yes,True,246,1,1090,1082,0.7,True,245,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+bi,node_rebal,corner,3x3+1,"3x3 node hole @ corner anchor (0,0); 牺牲邻近 1 个节点恢复成环 [(3,2)]",yes,True,246,1,586,558,5.0,True,123,Hamiltonian cycle recovered,300,334,-10.2,yes,latency-estimate
+uni,node_rebal,edge,3x3+1,"3x3 node hole @ edge anchor (7,0); 牺牲邻近 1 个节点恢复成环 [(6,0)]",yes,True,246,1,1074,1082,-0.7,True,245,Hamiltonian cycle recovered,322,334,-3.6,yes,latency-estimate
+bi,node_rebal,edge,3x3+1,"3x3 node hole @ edge anchor (7,0); 牺牲邻近 1 个节点恢复成环 [(6,0)]",yes,True,246,1,570,558,2.2,True,123,Hamiltonian cycle recovered,322,334,-3.6,yes,latency-estimate
+uni,node_rebal,center,3x3+1,"3x3 node hole @ center anchor (7,7); 牺牲邻近 1 个节点恢复成环 [(9,6)]",yes,True,246,1,1062,1082,-1.8,True,245,Hamiltonian cycle recovered,299,334,-10.5,yes,latency-estimate
+bi,node_rebal,center,3x3+1,"3x3 node hole @ center anchor (7,7); 牺牲邻近 1 个节点恢复成环 [(9,6)]",yes,True,246,1,550,558,-1.4,True,123,Hamiltonian cycle recovered,299,334,-10.5,yes,latency-estimate

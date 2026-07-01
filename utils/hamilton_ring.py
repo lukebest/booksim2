@@ -55,7 +55,7 @@ The search proceeds in stages (see find_ring):
   5. The returned order is validated (every surviving node once, every
      consecutive pair a surviving edge, closure for cycles) before use.
 
-Because the specified faults are small, localized holes/link-cuts on a 12x16
+Because the specified faults are small, localized holes/link-cuts on a 16x16
 grid, Warnsdorff + connectivity pruning resolves every scenario almost
 instantly; the time-budgeted full search is only a safety net.
 """
@@ -476,12 +476,41 @@ def rebalanced_node_scenarios(mx, my):
     return out
 
 
+def quadrant_fault_scenarios(mx, my):
+    """One full quadrant (mx/2 x my/2) dead — four corner placements."""
+    hw, hh = mx // 2, my // 2
+    if hw != hh:
+        raise ValueError("quadrant_fault_scenarios requires square quadrants")
+    quads = [
+        ("Q0", (0, 0)),
+        ("Q1", (hw, 0)),
+        ("Q2", (0, hh)),
+        ("Q3", (hw, hh)),
+    ]
+    out = []
+    for qname, (x0, y0) in quads:
+        dn = _block(x0, y0, hw, mx)
+        region = "corner" if qname in ("Q0", "Q1", "Q3") else "edge"
+        out.append({
+            "name": f"quad_{qname}",
+            "fault_class": "quadrant",
+            "region": region,
+            "detail": qname,
+            "dead_nodes": dn,
+            "dead_links": [],
+            "desc": f"1/4 象限 {qname} 全部故障 ({hw}x{hh} @ ({x0},{y0}), "
+                    f"{len(dn)} nodes)",
+        })
+    return out
+
+
 def all_scenarios(mx, my):
-    return link_fault_scenarios(mx, my) + node_fault_scenarios(mx, my)
+    return (link_fault_scenarios(mx, my) + node_fault_scenarios(mx, my)
+            + quadrant_fault_scenarios(mx, my))
 
 
 if __name__ == "__main__":
-    MX, MY = 12, 16
+    MX, MY = 16, 16
     base = snake_cycle(MX, MY)
     adj0 = build_adj(MX, MY)
     print(f"healthy snake cycle valid: {validate_ring(base, adj0, True)} "
