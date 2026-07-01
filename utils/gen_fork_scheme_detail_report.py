@@ -61,6 +61,36 @@ def run_ring(bidir):
     return best
 
 
+def run_hybrid(B, bidir):
+    """Rigid 0-buffer hybrid: B horizontal bands, local bi ring + vertical tree."""
+    foot = {s: Z.fp_hybrid(s, B, bidir, RAMP_BW) for s in range(N)}
+    best = None
+    for order_name, gen in Z.SRC_ORDERS.items():
+        mk, mo, busy, inj, events = Z.export_events(foot, RAMP_BW, gen(), flits=1)
+        ok = Z.verify(busy, RAMP_BW)
+        rec = dict(mk=mk, method=f"pack:{order_name}", ok=ok, busy=busy,
+                   events=events, afifo_peak=0, afifo_series=[],
+                   mode="zerobuf_rigid", order=None, edges=None, max_off=mo, B=B)
+        if best is None or mk < best["mk"]:
+            best = rec
+    return best
+
+
+def run_hybrid_v(B, bidir):
+    """Rigid 0-buffer hybrid: B VERTICAL bands, local vertical ring + horizontal tree."""
+    foot = {s: Z.fp_hybrid_v(s, B, bidir, RAMP_BW) for s in range(N)}
+    best = None
+    for order_name, gen in Z.SRC_ORDERS.items():
+        mk, mo, busy, inj, events = Z.export_events(foot, RAMP_BW, gen(), flits=1)
+        ok = Z.verify(busy, RAMP_BW)
+        rec = dict(mk=mk, method=f"pack:{order_name}", ok=ok, busy=busy,
+                   events=events, afifo_peak=0, afifo_series=[],
+                   mode="zerobuf_rigid", order=None, edges=None, max_off=mo, B=B)
+        if best is None or mk < best["mk"]:
+            best = rec
+    return best
+
+
 def run_border(bidir):
     tag = "bi" if bidir else "uni"
     quads = quads_for(MX, "border", tag)
@@ -279,6 +309,229 @@ def svg_grid(Qx, Qy, title):
     return svg_mesh_scheme(title, rects, ring, arc, cross)
 
 
+def svg_hybrid(B):
+    """Two horizontal bands: local Hamilton ring (blue) + vertical tree (orange)."""
+    R = MY // B
+    px, py, w, h, cell, pad, top = px_py()
+    lines = [
+        f'<svg width="{w}" height="{h+36}" viewBox="0 0 {w} {h+36}" xmlns="http://www.w3.org/2000/svg">',
+        '<defs>'
+        '<marker id="hr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">'
+        '<path d="M0,0 L6,3 L0,6 z" fill="#2563eb"/></marker>',
+        '<marker id="ht" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">'
+        '<path d="M0,0 L6,3 L0,6 z" fill="#ea580c"/></marker></defs>',
+        f'<text x="8" y="14" font-size="11" font-weight="bold" fill="#1e3a8a">'
+        f'hybrid B={B} · {B} 条 {MX}×{R} 水平带：带内双向环 + 跨带纵向树</text>',
+    ]
+    # band rects
+    band_colors = ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"]
+    for b in range(B):
+        y0 = b * R
+        lines.append(
+            f'<rect x="{pad}" y="{top+pad+(MY-y0-R)*cell:.1f}" width="{MX*cell:.1f}" '
+            f'height="{R*cell:.1f}" fill="{band_colors[b % 4]}" stroke="#94a3b8" '
+            f'stroke-width="0.8" opacity="0.5"/>')
+        lines.append(
+            f'<text x="{pad+4}" y="{top+pad+(MY-y0-R/2)*cell:.1f}" font-size="9" '
+            f'fill="#334155">band {b} · {MX}×{R}</text>')
+    # nodes
+    for y in range(MY):
+        for x in range(MX):
+            lines.append(f'<circle cx="{px(x):.1f}" cy="{py(y):.1f}" r="1.0" fill="#94a3b8"/>')
+    # local ring per band (sample from band 0 order)
+    for b in range(B):
+        order = Z.ham_cycle_band(R, b * R)
+        for i in range(len(order)):
+            u, v = order[i], order[(i + 1) % len(order)]
+            x1, y1 = px(u % MX), py(u // MX)
+            x2, y2 = px(v % MX), py(v // MX)
+            lines.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                f'stroke="#2563eb" stroke-width="1.0" opacity="0.45"/>')
+    # vertical tree arrows: sample columns 0, 5, 10, 15, between adjacent bands
+    cols = [0, 5, 10, 15]
+    for b in range(B - 1):
+        y_top = b * R + R - 1        # bottom row of upper band
+        y_bot = (b + 1) * R          # top row of lower band
+        for x in cols:
+            x1, y1 = px(x), py(y_top)
+            x2, y2 = px(x), py(y_bot)
+            lines.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                f'stroke="#ea580c" stroke-width="1.6" opacity="0.8" marker-end="url(#ht)"/>')
+    # partition dashed lines
+    for b in range(1, B):
+        yy = top + pad + (MY - b * R) * cell
+        lines.append(
+            f'<line x1="{pad}" y1="{yy:.1f}" x2="{pad+MX*cell:.1f}" y2="{yy:.1f}" '
+            f'stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 4"/>')
+    lines += [
+        f'<rect x="{pad}" y="{h+4}" width="10" height="10" fill="#2563eb"/>'
+        f'<text x="{pad+14}" y="{h+13}" font-size="10">带内 Hamilton 环（双向半弧）</text>',
+        f'<rect x="{pad+150}" y="{h+4}" width="10" height="10" fill="#ea580c"/>'
+        f'<text x="{pad+164}" y="{h+13}" font-size="10">跨带纵向树（phase B）</text>',
+        "</svg>",
+    ]
+    return "\n".join(lines)
+
+
+def svg_hybrid_v(B):
+    """B VERTICAL bands: local vertical Hamilton ring (blue) + horizontal tree (orange)."""
+    C = MX // B
+    px, py, w, h, cell, pad, top = px_py()
+    lines = [
+        f'<svg width="{w}" height="{h+36}" viewBox="0 0 {w} {h+36}" xmlns="http://www.w3.org/2000/svg">',
+        '<defs>'
+        '<marker id="vr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">'
+        '<path d="M0,0 L6,3 L0,6 z" fill="#2563eb"/></marker>',
+        '<marker id="vt" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">'
+        '<path d="M0,0 L6,3 L0,6 z" fill="#ea580c"/></marker></defs>',
+        f'<text x="8" y="14" font-size="11" font-weight="bold" fill="#1e3a8a">'
+        f'hybrid B={B} (vband) · {B} 条 {C}×{MY} 纵向带：带内纵向环 + 跨带横向树</text>',
+    ]
+    band_colors = ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"]
+    for b in range(B):
+        x0 = b * C
+        lines.append(
+            f'<rect x="{pad+x0*cell:.1f}" y="{top+pad}" width="{C*cell:.1f}" '
+            f'height="{MY*cell:.1f}" fill="{band_colors[b % 4]}" stroke="#94a3b8" '
+            f'stroke-width="0.8" opacity="0.5"/>')
+        lines.append(
+            f'<text x="{pad+(x0+C/2)*cell:.1f}" y="{top+pad+10}" font-size="9" '
+            f'text-anchor="middle" fill="#334155">band {b} · {C}×{MY}</text>')
+    for y in range(MY):
+        for x in range(MX):
+            lines.append(f'<circle cx="{px(x):.1f}" cy="{py(y):.1f}" r="1.0" fill="#94a3b8"/>')
+    # local vertical ring per band
+    for b in range(B):
+        order = Z.ham_cycle_vband(C, b * C)
+        for i in range(len(order)):
+            u, v = order[i], order[(i + 1) % len(order)]
+            x1, y1 = px(u % MX), py(u // MX)
+            x2, y2 = px(v % MX), py(v // MX)
+            lines.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                f'stroke="#2563eb" stroke-width="1.0" opacity="0.45"/>')
+    # horizontal tree arrows between adjacent bands (sample rows)
+    rows = [0, 5, 10, 15]
+    for b in range(B - 1):
+        x_left = b * C + C - 1      # rightmost col of left band
+        x_right = (b + 1) * C       # leftmost col of right band
+        for y in rows:
+            x1, y1 = px(x_left), py(y)
+            x2, y2 = px(x_right), py(y)
+            lines.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                f'stroke="#ea580c" stroke-width="1.6" opacity="0.8" marker-end="url(#vt)"/>')
+    # partition dashed lines
+    for b in range(1, B):
+        xx = pad + b * C * cell
+        lines.append(
+            f'<line x1="{xx:.1f}" y1="{top+pad}" x2="{xx:.1f}" y2="{top+pad+MY*cell:.1f}" '
+            f'stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 4"/>')
+    lines += [
+        f'<rect x="{pad}" y="{h+4}" width="10" height="10" fill="#2563eb"/>'
+        f'<text x="{pad+14}" y="{h+13}" font-size="10">带内纵向 Hamilton 环（双向半弧）</text>',
+        f'<rect x="{pad+170}" y="{h+4}" width="10" height="10" fill="#ea580c"/>'
+        f'<text x="{pad+184}" y="{h+13}" font-size="10">跨带横向树（phase B，H=4）</text>',
+        "</svg>",
+    ]
+    return "\n".join(lines)
+
+
+def svg_conflict_resolution(hybrid_rec):
+    """双向环 ramp=1 冲突消解示意图：d2 上 ramp 错开 + 不相交半弧 + packer 偏移。"""
+    B = hybrid_rec["B"]
+    R = MY // B
+    n_band = MX * R
+    a = n_band // 2
+    bb = (n_band - 1) - a
+    max_off = hybrid_rec.get("max_off", 0)
+    mk = hybrid_rec["mk"]
+    # --- (1) up-ramp d2 stagger timeline ---
+    tl = [
+        '<svg width="520" height="150" viewBox="0 0 520 150" xmlns="http://www.w3.org/2000/svg">',
+        '<text x="8" y="16" font-size="11" font-weight="bold" fill="#1e3a8a">'
+        '(1) 上 ramp 容量=1：双向两 flit 用 d2=1 错开注入</text>',
+    ]
+    # ramp capacity bars
+    for cyc in range(6):
+        xx = 60 + cyc * 36
+        tl.append(f'<rect x="{xx}" y="40" width="32" height="46" fill="#f1f5f9" stroke="#cbd5e1"/>')
+        tl.append(f'<text x="{xx+16}" y="100" font-size="9" fill="#64748b" text-anchor="middle">{cyc}</text>')
+    # fwd inject at rel 0
+    tl.append('<rect x="62" y="44" width="28" height="38" fill="#2563eb" opacity="0.85"/>')
+    tl.append('<text x="76" y="38" font-size="9" fill="#2563eb" text-anchor="middle">fwd</text>')
+    # bwd inject at rel 1 (d2=1)
+    tl.append('<rect x="98" y="44" width="28" height="38" fill="#ea580c" opacity="0.85"/>')
+    tl.append('<text x="112" y="38" font-size="9" fill="#ea580c" text-anchor="middle">bwd</text>')
+    tl.append('<text x="76" y="120" font-size="9" fill="#475569">rel=0</text>')
+    tl.append('<text x="112" y="120" font-size="9" fill="#475569">rel=1 (d2)</text>')
+    tl.append('<text x="200" y="60" font-size="10" fill="#334155">'
+              'ramp=1 → d2=1；ramp≥2 → d2=0（同拍注入）</text>')
+    tl.append('<text x="200" y="78" font-size="10" fill="#334155">'
+              '上 ramp 每 cycle ≤1 flit，满足容量。</text>')
+    tl.append('</svg>')
+    # --- (2) disjoint half-arc mini ring ---
+    mr = [
+        '<svg width="520" height="170" viewBox="0 0 520 170" xmlns="http://www.w3.org/2000/svg">',
+        '<text x="8" y="16" font-size="11" font-weight="bold" fill="#1e3a8a">'
+        '(2) 下 ramp：双向拆不相交半弧，每目的恰收 1 flit</text>',
+    ]
+    import math
+    cx, cy, rad = 150, 95, 55
+    # draw two arcs: fwd (blue) upper, bwd (orange) lower
+    n = n_band
+    s_idx = 0
+    pts = [(cx + rad * math.cos(2 * math.pi * k / n - math.pi / 2),
+            cy + rad * math.sin(2 * math.pi * k / n - math.pi / 2)) for k in range(n)]
+    # fwd half: indices 0..a ; bwd half: 0,-1..-bb
+    fwd_idx = list(range(a + 1))
+    bwd_idx = [(-k) % n for k in range(bb + 1)]
+    # fwd arc path
+    fp = " ".join(f"{pts[k][0]:.1f},{pts[k][1]:.1f}" for k in fwd_idx)
+    bp = " ".join(f"{pts[k][0]:.1f},{pts[k][1]:.1f}" for k in bwd_idx)
+    mr.append(f'<polyline points="{fp}" fill="none" stroke="#2563eb" stroke-width="3"/>')
+    mr.append(f'<polyline points="{bp}" fill="none" stroke="#ea580c" stroke-width="3"/>')
+    # source node
+    sx, sy = pts[0]
+    mr.append(f'<circle cx="{sx:.1f}" cy="{sy:.1f}" r="5" fill="#dc2626"/>')
+    mr.append(f'<text x="{sx+8:.1f}" y="{sy-8:.1f}" font-size="10" fill="#dc2626">s</text>')
+    # sample dest on fwd
+    dk = fwd_idx[len(fwd_idx) // 2]
+    mr.append(f'<circle cx="{pts[dk][0]:.1f}" cy="{pts[dk][1]:.1f}" r="4" fill="#2563eb"/>')
+    mr.append(f'<text x="{pts[dk][0]+6:.1f}" y="{pts[dk][1]+4:.1f}" font-size="9" fill="#2563eb">d (fwd)</text>')
+    dk2 = bwd_idx[len(bwd_idx) // 2]
+    mr.append(f'<circle cx="{pts[dk2][0]:.1f}" cy="{pts[dk2][1]:.1f}" r="4" fill="#ea580c"/>')
+    mr.append(f'<text x="{pts[dk2][0]-40:.1f}" y="{pts[dk2][1]+4:.1f}" font-size="9" fill="#ea580c">d (bwd)</text>')
+    mr.append(f'<text x="220" y="60" font-size="10" fill="#334155">'
+              f'带环 n={n}：fwd 半弧 {a+1} 节点，bwd 半弧 {bb+1} 节点</text>')
+    mr.append('<text x="220" y="80" font-size="10" fill="#334155">'
+              '两半弧仅在 s 处相交，其余节点不相交 →</text>')
+    mr.append('<text x="220" y="98" font-size="10" fill="#334155">'
+              '每个目的 d 从 s 恰收到 1 个 flit，单源下 ramp 不冲突。</text>')
+    mr.append('<text x="220" y="120" font-size="10" fill="#64748b">'
+              '蓝=fwd 半弧，橙=bwd 半弧，红=源 s</text>')
+    mr.append('</svg>')
+    # --- (3) packer explanation ---
+    explain = f"""
+<svg width="520" height="150" viewBox="0 0 520 150" xmlns="http://www.w3.org/2000/svg">
+<text x="8" y="16" font-size="11" font-weight="bold" fill="#1e3a8a">
+(3) 源间冲突：刚性偏移 packer（_pack_core）逐源选注入偏移 off</text>
+<text x="8" y="40" font-size="10" fill="#334155">
+为每个源 s 选最小 off，使其所有 eject/link 时刻不与已放置源在任一</text>
+<text x="8" y="56" font-size="10" fill="#334155">
+节点下 ramp（容量 1）或任一链路（容量 1）上撞 cycle。</text>
+<text x="8" y="80" font-size="10" fill="#334155">
+双向半弧把每源在每条下 ramp 上占用的时间窗减半 → 256 源密排偏移仅 {max_off} cy。</text>
+<text x="8" y="100" font-size="10" fill="#334155">
+实测 hybrid B={B} bi：max delivery ≈ {mk - max_off} cy，packer 偏移 {max_off} cy → makespan {mk} cy。</text>
+<text x="8" y="122" font-size="10" fill="#64748b">
+对照：单向全局环每源占全弧 → 密排需 1474 cy；双向全局环 754 cy。</text>
+</svg>"""
+    return "\n".join(tl) + "\n" + "\n".join(mr) + "\n" + explain
+
+
 def afifo_chart(series, mk, width=720, height=200):
     if not series:
         return "<p class='note'>无 AFIFO 等待（刚性 pack）。</p>"
@@ -425,6 +678,35 @@ def link_occupancy_series(events, makespan):
     return occ
 
 
+def total_directed_links():
+    """Directed mesh links (each carries 1 flit/cy). 2*(MX*(MY-1)+MY*(MX-1))."""
+    return 2 * (MX * (MY - 1) + MY * (MX - 1))
+
+
+def utilization_series(events, makespan):
+    """Average receive (eject) util and link-capacity util per cycle.
+
+    recv_util[t]  = ejects arriving at t  / (N * RAMP_BW)   (down-ramp capacity)
+    link_util[t]  = link sends at t       / total_directed_links
+    """
+    evs = events_to_std(events)
+    mk = makespan + 1
+    sends = [0] * mk
+    ejects = [0] * mk
+    for s, p, c, t, lat, arr, kind in evs:
+        if is_afifo_hop(kind):
+            continue
+        if 0 <= t < mk:
+            sends[t] += 1
+        if 0 <= arr < mk:
+            ejects[arr] += 1
+    ncap = N * RAMP_BW
+    lcap = total_directed_links()
+    recv = [ejects[t] / ncap for t in range(mk)]
+    link = [sends[t] / lcap for t in range(mk)]
+    return (recv, link, max(recv), max(link), lcap, ejects, sends)
+
+
 def topo_cfg_str(cset):
     return "+".join(f"{i}→{o}" for i, o in sorted(cset))
 
@@ -482,6 +764,11 @@ def scheme_section(key, title, rec, diagram_svg, bidir):
     slot_sum, heat, sample_tbl, full_tbl = slot_table_html(slot, full_table=True)
     buf_chart = buffer_chart(hold['router_occ'], 'router 内 flit 数')
     link_chart = buffer_chart(link_occ, '单链路 max 占用')
+    recv, linku, peak_recv, peak_linku, lcap, ejects, sends = utilization_series(evs, rec["mk"])
+    recv_chart = buffer_chart(recv, '平均接收利用率', height=150, ymax=1.0)
+    linku_chart = buffer_chart(linku, '链路容量利用率', height=150, ymax=1.0)
+    avg_recv = sum(recv) / max(len(recv), 1)
+    avg_linku = sum(linku) / max(len(linku), 1)
 
     return f"""
 <div class="card" id="{esc(key)}">
@@ -493,6 +780,8 @@ def scheme_section(key, title, rec, diagram_svg, bidir):
     <th>eject 下界</th><td>255 cy</td></tr>
 <tr><th>router 内最大滞留</th><td>{hold['max_hold']} cy</td>
     <th>单链路并发峰值</th><td>{peak_link} flit（0-buffer 要求 ≤1）</td></tr>
+<tr><th>平均接收利用率</th><td>{avg_recv*100:.1f}% (峰 {peak_recv*100:.1f}%)</td>
+    <th>平均链路利用率</th><td>{avg_linku*100:.1f}% (峰 {peak_linku*100:.1f}%)</td></tr>
 </table>
 <div class="two-col">
 <div>{diagram_svg}</div>
@@ -511,12 +800,24 @@ def scheme_section(key, title, rec, diagram_svg, bidir):
 {link_chart or '<p class="note">恒为 ≤1</p>'}
 </div>
 </div>
+<div class="two-col">
+<div>
+<h3>平均接收利用率（eject / (N·ramp_bw)）随时间</h3>
+{recv_chart}
+<p class="note">每 cycle 全网 eject 数 ÷ (256×1=256)。峰值 {peak_recv*100:.1f}%，均值 {avg_recv*100:.1f}%。</p>
+</div>
+<div>
+<h3>链路容量利用率（sends / {lcap} 定向链路）随时间</h3>
+{linku_chart}
+<p class="note">每 cycle 全网链路发送数 ÷ {lcap}。峰值 {peak_linku*100:.1f}%，均值 {avg_linku*100:.1f}%。</p>
+</div>
+</div>
 <h3>0-buffer 证明</h3>
 <ul class="note">
 <li>调度器断言 ok={'通过' if rec['ok'] else '失败'}（calendar 无 router/link 冲突）</li>
 <li>mesh hop 上 router 内滞留 max={hold['max_hold']} cy（不含 AFIFO 边界等待）</li>
 <li>任一 directed mesh 链路每 cycle 发送峰值={peak_link}；逐 cycle 单链路 max={peak_link_ts}（≤1 即无链路冲突）</li>
-<li>AFIFO 峰值 {rec['afifo_peak']} ≤ {AFIFO_CAP}；跨区等待在边界 AFIFO，不在 router</li>
+<li>AFIFO 峰值 {rec['afifo_peak']} ≤ {AFIFO_CAP}；{'刚性 pack 无边界 AFIFO 等待' if not rec['afifo_series'] else '跨区等待在边界 AFIFO，不在 router'}</li>
 </ul>
 <h3>时隙表深度 P（非空 cycle · mesh in→out 拓扑）</h3>
 <p class="note">{esc(slot_sum)}。P=1 表示 router 每周期至多一种转发配置（无缓冲排队所需的配置切换深度）。</p>
@@ -577,6 +878,11 @@ def main():
     schemes.append(("ring_bi", "全局 Hamilton 环 (Q=1)", r_ring, True,
                     svg_ring_global(hr.snake_cycle(MX, MY))))
 
+    # Hybrid B=2 v-band bi (global best @ ramp=1, AFIFO=0; vband < hband)
+    r_hyb2 = run_hybrid_v(2, True)
+    schemes.append(("hybrid_b2_bi", "hybrid B=2 纵向带环 + 横向树 (vband)", r_hyb2, True,
+                    svg_hybrid_v(2)))
+
     # Border uni (best @ ramp=1)
     r_border_u = run_border(False)
     schemes.append(("border_uni", "border (Q=4) 四象限环 + 短弧", r_border_u, False, svg_border()))
@@ -628,6 +934,26 @@ def main():
 </div>
 
 {''.join(sections)}
+
+<div class="card">
+<h2>双向环 ramp=1 冲突消解机制</h2>
+<p class="note">以 hybrid B=2 (vband) bi 为例说明双向 Hamilton 环在下 ramp=1 flit/cy 下如何不破规则。
+机制分三层：上 ramp 用 d2 错开；下 ramp 用不相交半弧；源间用刚性偏移 packer。
+vband（8×16 纵向带 + 横向树 H=4）比 hband（16×8 横向带 + 纵向树 V=6）更优：带环半周长 299&lt;364，
+跨带树 32&lt;48，故 makespan 334 &lt; 416。</p>
+{svg_conflict_resolution(r_hyb2)}
+<h3>对照数值</h3>
+<table>
+<tr><th>方案</th><th>方向</th><th>每源占用弧长</th><th>最大 delivery</th><th>packer 偏移</th><th>makespan</th></tr>
+<tr><td>全局环 Q=1</td><td>uni</td><td>全周长 ~1084 cy</td><td>~1084 cy</td><td>大</td><td>1474 cy</td></tr>
+<tr><td>全局环 Q=1</td><td>bi</td><td>半周长 ~542 cy</td><td>~542 cy</td><td>中</td><td>754 cy</td></tr>
+<tr><td>hybrid B=2 hband</td><td>bi</td><td>带半周长 364 cy</td><td>364+48=412 cy</td><td>2 cy</td><td>416 cy</td></tr>
+<tr class='best'><td>hybrid B=2 vband</td><td>bi</td><td>带半周长 299 cy</td><td>299+32=331 cy</td><td>{r_hyb2.get('max_off',0)} cy</td><td>{r_hyb2['mk']} cy</td></tr>
+</table>
+<p class="note">eject 下界 = 255 cy。hybrid B=2 vband bi 的 makespan {r_hyb2['mk']} &gt; 255，说明该方案是
+<b>delivery 延迟受限</b>而非 ramp 受限——这正是它能大幅领先全局环的根本原因。
+vband 把长边（16）放在廉价的 H=4 链路上做横向树，短边（8）做纵向环脊，进一步压缩 delivery。</p>
+</div>
 
 <div class="card">
 <h2>说明</h2>
