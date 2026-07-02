@@ -449,6 +449,100 @@ def find_ring_rebalanced(mx, my, dead_nodes, dead_links, time_budget=12.0):
             "reason": "no rebalanced cycle found within budget"}
 
 
+def _fault_boundary(mx, my, dead_nodes, dead_links):
+    """Surviving nodes adjacent to a fault (a dead node or a cut-link endpoint)
+    — the natural sacrifice candidates to break a local obstruction."""
+    dead = set(dead_nodes)
+    out = set()
+    for n in dead:
+        for m in grid_neighbors(n, mx, my):
+            out.add(m)
+    for a, b in dead_links:
+        for n in (a, b):
+            for m in grid_neighbors(n, mx, my):
+                out.add(m)
+    return [n for n in out if n not in dead]
+
+
+def find_ring_rebalanced_cycle(mx, my, dead_nodes, dead_links,
+                               time_budget=12.0, max_extra=2):
+    """Recover a Hamiltonian CYCLE around a fault by sacrificing a MINIMAL set
+    of extra boundary nodes, extending find_ring_rebalanced to the
+    colour-balanced-but-no-cycle case.
+
+      * colour-imbalanced hole (e.g. 1x1 / 3x3): sacrifice |c0-c1| majority-
+        colour boundary nodes (delegated to find_ring_rebalanced).
+      * colour-balanced but no cycle (e.g. a spine link/node cut splits the
+        band into a region with a colour-parity obstruction): sacrifice one
+        black + one white boundary node (preserving balance) to break the
+        obstruction.
+
+    Tries the smallest sacrifice first. Returns a find_ring-like dict with
+    'sacrificed' (extra disabled nodes) and 'dead_nodes_used'.
+    """
+    import itertools
+    import time as _t
+
+    dead = set(dead_nodes)
+    # 1. standard imbalance rebalance (handles odd holes with 1+ sacrifice)
+    r = find_ring_rebalanced(mx, my, dead, dead_links,
+                             time_budget=min(time_budget, 8.0))
+    if r["feasible"] and r["is_cycle"]:
+        return r
+
+    # 2. balanced-but-no-cycle: sacrifice pairs (one of each colour) near the
+    #    fault, ordered by closeness to the fault.
+    adj = build_adj(mx, my, dead, dead_links)
+    nodes = set(adj)
+    if not nodes or not is_connected(adj):
+        return {"feasible": False, "is_cycle": False, "order": None,
+                "sacrificed": [], "dead_nodes_used": sorted(dead),
+                "reason": "surviving graph disconnected"}
+    color_of = {n: _node_color(n, mx) for n in nodes}
+
+    # distance from each surviving node to the nearest fault point
+    fault_pts = set(dead)
+    for a, b in dead_links:
+        fault_pts |= {a, b}
+
+    def dist_to_fault(n):
+        x, y = coord(n, mx)
+        return min(abs(x - px) + abs(y - py) for px, py in
+                   (coord(p, mx) for p in fault_pts))
+
+    boundary = _fault_boundary(mx, my, dead, dead_links)
+    # widen slightly so the pair has enough candidates of each colour
+    extra = [n for n in nodes if n not in boundary]
+    extra.sort(key=lambda n: dist_to_fault(n))
+    cands = boundary + extra[:8]
+    cands = sorted(set(cands), key=lambda n: (dist_to_fault(n), n))
+    blacks = [n for n in cands if color_of[n] == 0]
+    whites = [n for n in cands if color_of[n] == 1]
+
+    per_try = min(3.0, time_budget)
+    deadline = _t.time() + time_budget
+    for a in blacks:
+        for b in whites:
+            if _t.time() > deadline:
+                break
+            trial = dead | {a, b}
+            adj2 = build_adj(mx, my, trial, dead_links)
+            if not is_connected(adj2):
+                continue
+            cc = color_counts(set(adj2), mx)
+            if cc[0] != cc[1]:
+                continue
+            r = find_ring(mx, my, trial, dead_links, time_budget=per_try)
+            if r["feasible"] and r["is_cycle"]:
+                r["sacrificed"] = sorted([a, b])
+                r["dead_nodes_used"] = sorted(trial)
+                return r
+
+    return {"feasible": False, "is_cycle": False, "order": None,
+            "sacrificed": [], "dead_nodes_used": sorted(dead),
+            "reason": "no rebalanced cycle found within budget"}
+
+
 def rebalanced_node_scenarios(mx, my):
     """For colour-imbalanced node holes (no cycle), produce a variant that
     sacrifices nearby nodes to restore a feasible Hamiltonian cycle."""

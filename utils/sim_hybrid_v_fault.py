@@ -48,20 +48,75 @@ def _links_to_local(dead_links, x0, C):
     return out
 
 
-def _band_ring(s, B, dead_nodes, dead_links):
+_BAND_RING_CACHE = {}
+
+
+def _band_ring_for_x0(x0, B, dead_nodes, dead_links):
+    """Recover the home band's Hamilton ring/path under faults, using the SAME
+    fault-aware pipeline as the global Hamilton ring: find_ring (cycle -> path)
+    then find_ring_rebalanced_cycle (sacrifice neighbours to restore a cycle,
+    for both colour-imbalanced and balanced-but-obstructed holes). Returns
+    (order, is_cycle, sacrificed_global) or None. Cached per band."""
     C = MX // B
-    sx, _ = Z.coord(s)
-    x0 = (sx // C) * C
+    key = (x0, C, frozenset(dead_nodes), frozenset(frozenset(l) for l in dead_links))
+    cached = _BAND_RING_CACHE.get(key)
+    if cached is not None:
+        return cached
+
     band_dead = [_global_to_band_local(n, x0, C)
                  for n in dead_nodes if x0 <= hr.coord(n, MX)[0] < x0 + C]
     band_links = _links_to_local(dead_links, x0, C)
     if not band_dead and not band_links:
-        return Z.ham_cycle_vband(C, x0), True
-    r = hr.find_ring(C, MY, band_dead, band_links, time_budget=15.0)
-    if not r["feasible"] or not r["order"]:
+        res = (Z.ham_cycle_vband(C, x0), True, set())
+        _BAND_RING_CACHE[key] = res
+        return res
+
+    def to_global(order):
+        return [_band_local_to_global(n, x0, C) for n in order]
+
+    result = None
+    # 1. standard fault-aware search (cycle, then path) with snake hint
+    r = hr.find_ring(C, MY, band_dead, band_links, time_budget=4.0)
+    if r["feasible"] and r["order"]:
+        result = (to_global(r["order"]), r["is_cycle"], set())
+
+    # 2. rebalance (sacrifice band neighbours) to restore a CYCLE. Handles both
+    #    colour-imbalanced holes and the balanced-but-no-cycle case (sacrifice
+    #    one black + one white boundary node to break a region parity
+    #    obstruction, e.g. a spine link/node cut). Preferred over an open path.
+    if result is None or not result[1]:
+        r = hr.find_ring_rebalanced_cycle(C, MY, band_dead, band_links,
+                                          time_budget=10.0)
+        if r["feasible"] and r["order"]:
+            sac = set(_band_local_to_global(n, x0, C) for n in r["sacrificed"])
+            result = (to_global(r["order"]), True, sac)
+
+    # 3. last resort: an open Hamilton path (bi allgather toward both ends).
+    if result is None:
+        adj = hr.build_adj(C, MY, band_dead, band_links)
+        if hr.is_connected(adj):
+            nodes = list(adj)
+            color_of = {n: ((n % C + n // C) & 1) for n in nodes}
+            import time as _t
+            deadline = _t.time() + 6.0
+            for s0 in sorted(nodes, key=lambda n: (len(adj[n]), n)):
+                o = hr._search(adj, s0, "path", color_of, snake_pos=None,
+                               deadline=deadline)
+                if o and hr.validate_ring(o, adj, False):
+                    result = (to_global(o), False, set())
+                    break
+
+    _BAND_RING_CACHE[key] = result
+    return result
+
+
+def _band_ring(s, B, dead_nodes, dead_links):
+    br = _band_ring_for_x0((Z.coord(s)[0] // (MX // B)) * (MX // B),
+                           B, dead_nodes, dead_links)
+    if br is None:
         return None
-    order = [_band_local_to_global(n, x0, C) for n in r["order"]]
-    return order, r["is_cycle"]
+    order, is_cycle, _sac = br
+    return order, is_cycle
 
 
 def _row_fork_left(slots, arr, y, x0, t0, edge_ok):
@@ -195,6 +250,40 @@ def _dijkstra(adj, src):
     return dist
 
 
+def _band_bi_arrivals(order, is_cycle, s, ramp_bw):
+    """Per-node arrival rels for a bi allgather over the band ring (cycle) or
+    open path. Mirrors Z._ring_arrivals for cycles and sim_hamilton_ring's
+    bi-on-path behaviour (source sends toward both ends) for paths."""
+    n = len(order)
+    pos = {nd: k for k, nd in enumerate(order)}
+    i = pos[s]
+    d2 = 0 if ramp_bw >= 2 else 1
+    arr = {s: Z.RAMP}
+    if is_cycle:
+        a = n // 2
+        b = (n - 1) - a
+        fwd = [order[(i + k) % n] for k in range(a + 1)]
+        bwd = [order[(i - k) % n] for k in range(b + 1)]
+        t = Z.RAMP
+        for k in range(len(fwd) - 1):
+            t += Z.edge_lat(fwd[k], fwd[k + 1])
+            arr[fwd[k + 1]] = t
+        t = Z.RAMP + d2
+        for k in range(len(bwd) - 1):
+            t += Z.edge_lat(bwd[k], bwd[k + 1])
+            arr[bwd[k + 1]] = t
+    else:
+        t = Z.RAMP
+        for k in range(i, n - 1):
+            t += Z.edge_lat(order[k], order[k + 1])
+            arr[order[k + 1]] = t
+        t = Z.RAMP + d2
+        for k in range(i, 0, -1):
+            t += Z.edge_lat(order[k], order[k - 1])
+            arr[order[k - 1]] = t
+    return arr
+
+
 def _estimate_latency(dead_nodes, dead_links, B, adj, alive, bidir=True):
     all_dist = {n: _dijkstra(adj, n) for n in alive}
     worst = 0
@@ -205,16 +294,17 @@ def _estimate_latency(dead_nodes, dead_links, B, adj, alive, bidir=True):
         order, is_cycle = br
         if not is_cycle and not bidir:
             return None
-        pos = {nd: k for k, nd in enumerate(order)}
-        _slots, arr = Z._ring_arrivals(order, pos, s, True, RAMP_BW)
+        arr = _band_bi_arrivals(order, is_cycle, s, RAMP_BW)
+        ring_nodes = set(order)
         C = MX // B
         sx, _ = Z.coord(s)
         x0 = (sx // C) * C
-        home = {n for n in adj if x0 <= n % MX < x0 + C}
-        entries = [(n, arr[n]) for n in arr if n in home]
+        entries = [(n, arr[n]) for n in arr if n in ring_nodes]
         mk = max(arr.values()) + Z.RAMP if arr else Z.RAMP
+        # every alive node not on the band ring (incl. sacrificed band nodes)
+        # receives s's flit via shortest path from a band-ring entry node.
         for d in adj:
-            if d == s or d in home:
+            if d == s or d in ring_nodes:
                 continue
             best = None
             for entry, t0 in entries:
@@ -246,7 +336,10 @@ def fp_hybrid_v_fault(s, B, bidir, ramp_bw, dead_nodes, dead_links, adj=None):
     if br is None:
         return None
     order, is_cycle = br
-    if not bidir and not is_cycle:
+    if not is_cycle:
+        # band only has an open path (cycle structurally impossible under this
+        # fault); the rigid cycle-based footprint is undefined here, so defer to
+        # the latency-estimate path used by simulate() for faulted cases.
         return None
     pos = {nd: k for k, nd in enumerate(order)}
     slots, arr = Z._ring_arrivals(order, pos, s, bidir, ramp_bw)
@@ -301,7 +394,26 @@ def simulate(dead_nodes=(), dead_links=(), B=2, bidir=True, ramp_bw=None):
             return {"feasible": False, "reason": "packer conflict (healthy)"}
         return {"feasible": True, **best, "alive": len(alive)}
 
-    lat = _estimate_latency(dead_nodes, dead_links, B, adj, alive, bidir)
+    # Faulted case: recover each band's ring (which may sacrifice some band
+    # nodes to keep a closed cycle, mirroring the global rebalance). Sacrificed
+    # nodes exit the allgather (not source, not receiver), like the global
+    # rebalanced scenarios.
+    C = MX // B
+    sacrifices = set()
+    for b in range(B):
+        br = _band_ring_for_x0(b * C, B, dead_nodes, dead_links)
+        if br is None:
+            return {"feasible": False, "reason": "band ring infeasible"}
+        sacrifices |= br[2]
+    all_dead = dead_nodes | sacrifices
+    alive_eff = [n for n in alive if n not in sacrifices]
+    if not alive_eff:
+        return {"feasible": False, "reason": "no participating nodes"}
+    adj_eff = hr.build_adj(MX, MY, all_dead, dead_links)
+    if not hr.is_connected(adj_eff):
+        return {"feasible": False, "reason": "surviving graph disconnected"}
+
+    lat = _estimate_latency(dead_nodes, dead_links, B, adj_eff, alive_eff, bidir)
     if lat is None:
         return {"feasible": False, "reason": "delivery infeasible (estimate)"}
     return {
@@ -310,7 +422,8 @@ def simulate(dead_nodes=(), dead_links=(), B=2, bidir=True, ramp_bw=None):
         "max_off": 0,
         "method": "latency-estimate",
         "pack_ok": False,
-        "alive": len(alive),
+        "alive": len(alive_eff),
+        "sacrificed": len(sacrifices),
     }
 
 
