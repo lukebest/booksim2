@@ -3,7 +3,7 @@
 a handful of live mesh_tb verification/sanity runs.
 
 Self-contained Chinese HTML report: SystemC cycle-level cross-reticle AFIFO
-study on a 4x4 mesh (reticle = quadrant = 2x2), comparing the global Hamilton
+study on a 16x16 mesh (reticle = quadrant = 8x8), comparing the global Hamilton
 bi ring and the hybrid B=2 vband bi scheme, and comparing the greedy vs
 slot-gated AFIFO read policy.
 """
@@ -12,11 +12,13 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 RESULTS = os.path.join(ROOT, "results")
 MESH_TB = os.path.join(ROOT, "sc", "mesh_tb")
+PLOT_SCRIPT = os.path.join(HERE, "plot_afifo_waveform.py")
 MX = MY = 16
 
 VCD_AFIFO_RE = re.compile(
@@ -61,6 +63,62 @@ def generate_vcd_waveform(scheme="ring", policy="gated", mx=MX):
             "nsend": int(ns), "wdom": int(wdom), "rdom": int(rdom),
         })
     return afifos, vcd_base + ".vcd"
+
+
+def generate_waveform_pngs(vcd_path, png_full, png_zoom=None, zoom_window=(0, 40000)):
+    """Render PNG waveform plots from a mesh_tb VCD via plot_afifo_waveform.py."""
+    subprocess.run([sys.executable, PLOT_SCRIPT, vcd_path, png_full], check=True)
+    if png_zoom is not None:
+        subprocess.run([sys.executable, PLOT_SCRIPT, vcd_path, png_zoom,
+                        "--window", str(zoom_window[0]), str(zoom_window[1])],
+                       check=True)
+
+
+def afifo_table_rows(afifos):
+    return "".join(
+        f"<tr><td>{a['idx']}</td><td>{a['p']} ({a['p_xy'][0]},{a['p_xy'][1]})</td>"
+        f"<td>{a['c']} ({a['c_xy'][0]},{a['c_xy'][1]})</td><td>{a['nsend']}</td>"
+        f"<td>Q{a['wdom']}&rarr;Q{a['rdom']}</td></tr>"
+        for a in afifos)
+
+
+def waveform_section(scheme, label, ncross, mx, afifos, vcd_path, png_full, png_zoom):
+    vcd_rel = os.path.relpath(vcd_path, ROOT)
+    png_rel = os.path.relpath(png_full, ROOT)
+    zoom_rel = os.path.relpath(png_zoom, ROOT)
+    rows = afifo_table_rows(afifos)
+    trace_name = f"sc_trace_{scheme}_{mx}x{mx}.trace"
+    vcd_base = f"sc_afifo_wave_{scheme}_{mx}x{mx}"
+    return f"""
+<section><h2>波形 — {label}（4 条最忙 AFIFO）</h2>
+<p class='note'>{mx}×{mx} 共有 {ncross} 个有向 AFIFO，波形仅 dump 流量最大的 4 条
+（<code>--vcd-busiest 4</code>），以控制 VCD 体积。VCD：
+<code>{vcd_rel}</code></p>
+<table class='tbl'><tr><th>#</th><th>写节点 p (x,y)</th><th>读节点 c (x,y)</th>
+<th>flit 数</th><th>跨界方向</th></tr>{rows}</table>
+<h3>AFIFO 状态波形图（gated, &sigma;=0.1, S=2, depth=8, seed=1）</h3>
+<p class='note'>由 <code>utils/plot_afifo_waveform.py</code> 从 VCD 解析生成。
+蓝 = 写侧物理占用 <code>wr_occ_phys</code>，红 = 读侧物理占用 <code>rd_occ_phys</code>，
+绿 = <code>wr_en</code>，黄 = <code>wr_stall</code>，青 = <code>rd_ok</code>（实际发生的读），
+紫 = <code>slot_free</code>（目的节点下游空时隙）。</p>
+<figure class='wavefig'>
+<img src="{png_rel}" alt="{label} AFIFO waveform (full trace)" />
+<figcaption>全程（约 {ncross} 条跨界链路对应的 makespan 周期）</figcaption>
+</figure>
+<figure class='wavefig'>
+<img src="{zoom_rel}" alt="{label} AFIFO waveform (zoom)" />
+<figcaption>放大窗口 0–40000 ps（约前 40 个域周期，便于观察脉冲细节）</figcaption>
+</figure>
+<pre>cd sc && make
+./mesh_tb --trace ../results/{trace_name} \\
+  --scheme {scheme} --policy gated --sigma 0.1 --sync 2 --depth 8 --seed 1 \\
+  --vcd ../results/{vcd_base} --vcd-busiest 4
+python3 utils/plot_afifo_waveform.py results/{vcd_base}.vcd \\
+  results/{vcd_base}.png
+python3 utils/plot_afifo_waveform.py results/{vcd_base}.vcd \\
+  results/{vcd_base}_zoom.png --window 0 40000
+gtkwave results/{vcd_base}.vcd</pre>
+</section>"""
 
 
 def run_mesh_tb(scheme, policy, sigma, sync, depth, seed, extra=None):
@@ -238,6 +296,18 @@ def terminology_section():
     <code>peak_occ</code>（可见占用）：读侧经 <code>S</code> 级同步器"看到"的写指针
     与读指针之差，用于 FIFO 内部空/满逻辑，通常比物理占用低 0&ndash;S 个 flit。
     容量规划应使用 <code>peak_phys_occ</code>。</dd>
+
+    <dt>collisions（下游冲突）</dt>
+    <dd>仅 <b>greedy</b> 读策略下可能 &gt; 0 的信息性计数。
+    greedy 在 AFIFO 非空时立即读出，不检查目的节点 <code>c</code> 本轮是否有空闲输出端口
+    （<code>slot_free</code>，由回放的全网调度导出：<code>busy[c][t] &lt; deg_out[c]</code>）。
+    若读出时 <code>slot_free==false</code>（目的节点该周期所有输出口已被占用），
+    记为一次 collision &mdash; 表示零缓冲路由器此时无法立刻转发该 flit，
+    需要额外输入缓冲"接住"，否则会发生端口冲突。
+    <b>gated</b>（slot-gated）策略令读使能 <code>rd_en = slot_free</code>，
+    仅在下游确有空时隙时才读，因此 collisions 恒为 0（代价是 AFIFO 占用略高、
+    可能产生更多 writer stall）。表中 <code>max_collisions</code> /
+    <code>mean_collisions</code> 来自 depth cap 扫描（S=2, &sigma;=0.1, 20 seeds）。</dd>
     </dl>
     </section>"""
 
@@ -250,12 +320,16 @@ def main():
     undirected = sweep.get("undirected_cross_edges", mx + my)
 
     print("Generating VCD waveform (4 busiest AFIFOs, ring)...")
-    wave_afifos, vcd_path = generate_vcd_waveform("ring", "gated", mx)
-    wave_rows = "".join(
-        f"<tr><td>{a['idx']}</td><td>{a['p']} ({a['p_xy'][0]},{a['p_xy'][1]})</td>"
-        f"<td>{a['c']} ({a['c_xy'][0]},{a['c_xy'][1]})</td><td>{a['nsend']}</td>"
-        f"<td>Q{a['wdom']}&rarr;Q{a['rdom']}</td></tr>"
-        for a in wave_afifos)
+    ring_afifos, ring_vcd = generate_vcd_waveform("ring", "gated", mx)
+    ring_png = os.path.join(RESULTS, f"sc_afifo_wave_ring_{mx}x{mx}.png")
+    ring_zoom = os.path.join(RESULTS, f"sc_afifo_wave_ring_{mx}x{mx}_zoom.png")
+    print("Generating VCD waveform (4 busiest AFIFOs, hybrid)...")
+    hyb_afifos, hyb_vcd = generate_vcd_waveform("hybrid", "gated", mx)
+    hyb_png = os.path.join(RESULTS, f"sc_afifo_wave_hybrid_{mx}x{mx}.png")
+    hyb_zoom = os.path.join(RESULTS, f"sc_afifo_wave_hybrid_{mx}x{mx}_zoom.png")
+    print("Rendering PNG waveforms...")
+    generate_waveform_pngs(ring_vcd, ring_png, ring_zoom)
+    generate_waveform_pngs(hyb_vcd, hyb_png, hyb_zoom)
 
     verify = run_verification()
     bad = check_gated_zero_collisions(sweep)
@@ -264,9 +338,17 @@ def main():
     hyb_s = sweep["schemes"]["hybrid"]
     rg = ring_s["policies"]["greedy"]["required_depth_probe"]["S2_sigma0.1"]
     hg = hyb_s["policies"]["greedy"]["required_depth_probe"]["S2_sigma0.1"]
+    ring_g_ds = ring_s["policies"]["greedy"]["depth_sweep"]["S2_sigma0.1"][1]
+    hyb_g_ds = hyb_s["policies"]["greedy"]["depth_sweep"]["S2_sigma0.1"][1]
 
     title = f"SystemC 周期级跨 Reticle AFIFO 仿真报告 ({mx}×{my}, reticle={ret})"
     term_sec = terminology_section()
+    ring_wave_sec = waveform_section("ring", "全局 Hamilton 双向环 (bi)",
+                                     ring_s["n_cross_links"], mx,
+                                     ring_afifos, ring_vcd, ring_png, ring_zoom)
+    hyb_wave_sec = waveform_section("hybrid", "Hybrid B=2 纵向带环 + 横向树 (bi)",
+                                    hyb_s["n_cross_links"], mx,
+                                    hyb_afifos, hyb_vcd, hyb_png, hyb_zoom)
     ring_sec = scheme_section("ring", "全局 Hamilton 双向环 (bi)", ring_s)
     hyb_sec = scheme_section("hybrid", "Hybrid B=2 纵向带环 + 横向树 (bi)", hyb_s)
 
@@ -326,6 +408,9 @@ section{{margin-bottom:18px}}
 .gloss dd{{margin:4px 0 8px 20px;color:#334155}}
 .side-by-side{{display:flex;gap:24px;flex-wrap:wrap}}
 svg.bars{{display:block;margin:8px 0;border:1px solid #e2e8f0;background:#fff}}
+.wavefig{{margin:12px 0;text-align:center}}
+.wavefig img{{max-width:100%;border:1px solid #e2e8f0;background:#fff}}
+.wavefig figcaption{{font-size:12px;color:#64748b;margin-top:4px}}
 code{{background:#f1f5f9;padding:1px 4px;border-radius:3px}}
 pre{{background:#f8fafc;border:1px solid #e2e8f0;padding:10px;font-size:12px;overflow-x:auto}}
 </style></head><body>
@@ -336,23 +421,8 @@ ring 踪迹启用 {ring_s['n_cross_links']} 条、hybrid 启用 {hyb_s['n_cross_
 四个 reticle 各一个独立时钟域 (同频 1ns, 独立相位 + 抖动 &sigma;)。
 读策略：<b>greedy</b> vs <b>gated</b>（空时隙门控读）。</p>
 {term_sec}
-<section><h2>波形查看 (gtkwave) — 4 条最忙 AFIFO</h2>
-<p class='note'>16×16 共有 {ring_s['n_cross_links']} 个有向 AFIFO，波形仅 dump 流量最大的 4 条
-（<code>--vcd-busiest 4</code>），以控制 VCD 体积。文件：
-<code>{os.path.relpath(vcd_path, ROOT)}</code></p>
-<table class='tbl'><tr><th>#</th><th>写节点 p (x,y)</th><th>读节点 c (x,y)</th>
-<th>flit 数</th><th>跨界方向</th></tr>{wave_rows}</table>
-<pre>cd sc
-make
-./mesh_tb --trace ../results/sc_trace_ring_{mx}x{my}.trace \\
-  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 8 --seed 1 \\
-  --vcd ../results/sc_afifo_wave_ring_{mx}x{mx} --vcd-busiest 4
-gtkwave ../results/sc_afifo_wave_ring_{mx}x{mx}.vcd</pre>
-<p class='note'>信号前缀 <code>afifo0_p7_c8_*</code> … <code>afifo3_*</code>（按流量排序）。
-<code>dom&lt;d&gt;_cyc</code> = reticle 本地周期；
-<code>wr_occ_phys</code>/<code>rd_occ_phys</code> = 物理占用；
-<code>wr_stall</code> = 写侧反压；<code>slot_free</code> = gated 下游空时隙。</p>
-</section>
+{ring_wave_sec}
+{hyb_wave_sec}
 {verify_html}
 {ring_sec}
 {hyb_sec}
@@ -361,9 +431,17 @@ gtkwave ../results/sc_afifo_wave_ring_{mx}x{mx}.vcd</pre>
 <li>{mx}×{my}：ring baseline {ring_s['baseline_makespan']} cy / hybrid {hyb_s['baseline_makespan']} cy；
 &sigma;=0.1, S=2 时 ring 总缓存 {rg['mean_total_buf_flits']:.0f} flits，
 hybrid {hg['mean_total_buf_flits']:.0f} flits（有向 AFIFO {ring_s['n_cross_links']} vs {hyb_s['n_cross_links']}）。</li>
-<li>所需深度 p95：ring {rg['p95_depth']} / hybrid {hg['p95_depth']} flit。</li>
-<li>gated 策略 collisions 恒为 0；greedy 在 ring 上可能有少量下游冲突（见深度扫描表）。</li>
-<li>建议默认 <b>slot-gated</b> 读策略；深度按各链路 peak_phys_occ 独立配置。</li>
+<li>所需深度 p95：ring {rg['p95_depth']} / hybrid {hg['p95_depth']} flit。
+hybrid 跨界流量更集中，单链路峰值可达 2 flit，与波形图中 <code>wr_occ_phys</code> 在 0&ndash;2 间起落一致。</li>
+<li><b>collisions</b>：greedy 在 AFIFO 非空时立即读出，若目的节点该周期无空闲输出口
+（<code>slot_free=0</code>）则记一次下游冲突。depth=2, S=2, &sigma;=0.1 时：
+ring greedy max={ring_g_ds['max_collisions']} / mean={ring_g_ds['mean_collisions']:.1f}；
+hybrid greedy max={hyb_g_ds['max_collisions']} / mean={hyb_g_ds['mean_collisions']:.1f}。
+gated 策略 collisions 恒为 0（仅在 <code>slot_free=1</code> 时才 <code>rd_ok</code>）。</li>
+<li>hybrid 波形（gated）中 <code>slot_free</code> 几乎全程为 1，<code>wr_en</code> 与 <code>rd_ok</code>
+紧密对齐，<code>wr_stall</code> 恒为 0，说明 depth=8 对该方案绰绰有余。</li>
+<li>建议默认 <b>slot-gated</b> 读策略；深度按各链路 peak_phys_occ 独立配置
+（ring 约 1 flit/link，hybrid 约 2 flit/link）。</li>
 </ul>
 </section>
 </body></html>"""
