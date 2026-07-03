@@ -119,6 +119,8 @@ def policy_table(sch_data, policy):
         html.append(f"<tr><td>{s}</td><td>{sg:.2f}</td><td>{p95}</td>"
                     f"<td>{mx}</td><td>{buf:.1f}</td></tr>")
     html.append("</table>")
+    html.append("<p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，"
+                "总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p>")
     return "".join(html)
 
 
@@ -167,12 +169,51 @@ def scheme_section(scheme, label, sch_data):
     return "".join(html)
 
 
+def terminology_section():
+    return """
+    <section><h2>术语说明</h2>
+    <dl class='gloss'>
+    <dt>S（同步器级数）</dt>
+    <dd>Gray 码写/读指针跨时钟域进入对侧时，在目标时钟域需要经过的触发器级数。
+    本仿真采用 Cummings 型双时钟 AFIFO 模型：写指针经 <code>S</code> 级移位寄存器同步到读域后，
+    读侧才能"看到"新的写进度，从而判断 FIFO 是否为空；满信号（almost-full）同样经
+    <code>S</code> 级同步回写域产生反压。工业界常用 <code>S=2</code>（双触发器同步器）。
+    <code>S</code> 越大，指针可见延迟越长，读侧空/满判断越保守，物理峰值占用通常越高
+    （读侧更晚才开始排水，写侧在同步窗口内可能多攒 flit）。</dd>
+
+    <dt>&sigma;（sigma，抖动）</dt>
+    <dd>每个时钟边沿相对于标称周期的随机相位游走标准差，单位为 <b>UI</b>
+    （Unit Interval，即 1 个时钟周期 = 1 UI）。例如 <code>&sigma;=0.1</code> 表示每周期边沿时刻
+    约有 10% 周期（RMS）的随机扰动，在 <code>&plusmn;0.5 UI</code> 内截断。
+    各 reticle 时钟<b>同频</b>（mesochronous），但静态相位独立、边沿时刻逐周期随机游走。
+    抖动会在少数周期翻转写/读边沿的 setup 关系，使有效 CDC 延迟在 <code>S</code> 与
+    <code>S+1</code> 个读周期之间跳变，从而略微抬高 AFIFO 峰值占用。</dd>
+
+    <dt>总缓存 flits</dt>
+    <dd>所有跨 reticle 边界 AFIFO 实例的<b>物理峰值占用之和</b>：
+    <code>&Sigma; peak_phys_occ</code>（单位：flit）。
+    每条链路的 <code>peak_phys_occ</code> 是该 AFIFO 在整个 allgather 过程中，
+    存储阵列中同时存在的最大 flit 数（<code>wptr &minus; rptr</code>，不含同步器可见性延迟）。
+    这是跨 die/reticle 边界缓冲区的<b>容量规划数</b>：若每条 AFIFO 均按各自峰值深度配置，
+    总 SRAM/bit 成本 = 总缓存 flits &times; flit 位宽（本报告未乘位宽，仅统计 flit 数）。
+    表中 "mean" 列为 Monte Carlo 多种子（随机相位）下的平均值。</dd>
+
+    <dt>peak_occ vs peak_phys_occ</dt>
+    <dd><code>peak_phys_occ</code>：真实存储占用（硬件必须实现的深度）。
+    <code>peak_occ</code>（可见占用）：读侧经 <code>S</code> 级同步器"看到"的写指针
+    与读指针之差，用于 FIFO 内部空/满逻辑，通常比物理占用低 0&ndash;S 个 flit。
+    容量规划应使用 <code>peak_phys_occ</code>。</dd>
+    </dl>
+    </section>"""
+
+
 def main():
     sweep = load_sweep()
     verify = run_verification()
     bad = check_gated_zero_collisions(sweep)
 
     title = "SystemC 周期级跨 Reticle AFIFO 仿真报告 (4×4, reticle=2×2)"
+    term_sec = terminology_section()
     ring_sec = scheme_section("ring", "全局 Hamilton 双向环 (bi)", sweep["schemes"]["ring"])
     hyb_sec = scheme_section("hybrid", "Hybrid B=2 纵向带环 + 横向树 (bi)",
                              sweep["schemes"]["hybrid"])
@@ -228,9 +269,13 @@ section{{margin-bottom:18px}}
 .tbl th{{background:#eef2ff}}
 .tbl tr:nth-child(even){{background:#f8fafc}}
 .note{{font-size:12px;color:#64748b;margin:4px 0}}
+.gloss{{font-size:13px;line-height:1.6;margin:8px 0}}
+.gloss dt{{font-weight:600;color:#1e40af;margin-top:10px}}
+.gloss dd{{margin:4px 0 8px 20px;color:#334155}}
 .side-by-side{{display:flex;gap:24px;flex-wrap:wrap}}
 svg.bars{{display:block;margin:8px 0;border:1px solid #e2e8f0;background:#fff}}
 code{{background:#f1f5f9;padding:1px 4px;border-radius:3px}}
+pre{{background:#f8fafc;border:1px solid #e2e8f0;padding:10px;font-size:12px;overflow-x:auto}}
 </style></head><body>
 <h1>{title}</h1>
 <p class='note'>拓扑 4×4 mesh，reticle = 象限 = 2×2 (边界 col/row 1|2)。四个 reticle 各一个独立时钟域
@@ -240,6 +285,23 @@ Gray 指针 AFIFO (sc/afifo.h)，S 级同步器；读策略对比 <b>greedy</b>(
 Python 侧仍复用 sim_hamilton_ring / sched_zerobuf_compare 产生的 0-buffer 刚性调度作为全网流量踪迹
 (utils/export_sc_trace.py)，SystemC 侧 (sc/mesh_tb.cpp) 做真正周期级、含时钟边沿与同步器移位寄存器的
 CDC 重放。</p>
+{term_sec}
+<section><h2>波形查看 (gtkwave)</h2>
+<p class='note'>仿真支持 VCD 波形 dump，可用 gtkwave 打开查看各 AFIFO 占用、读写握手与域内周期计数。</p>
+<pre>cd sc
+make
+./mesh_tb --trace ../results/sc_trace_ring_4x4.trace \\
+  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 4 --seed 1 \\
+  --vcd ../results/sc_afifo_wave_ring
+gtkwave ../results/sc_afifo_wave_ring.vcd</pre>
+<p class='note'>信号命名：<code>dom&lt;d&gt;_cyc</code> = reticle d 的本地周期计数；
+<code>x&lt;i&gt;_p&lt;src&gt;_c&lt;dst&gt;_wr_*</code> = 第 i 条跨界 AFIFO 写侧（写域时钟边沿更新）；
+<code>_rd_*</code> = 读侧（读域时钟边沿更新）。重点信号：
+<code>wr_occ_phys</code> / <code>rd_occ_phys</code> = 物理占用；
+<code>rd_occ_vis</code> = 经 S 级同步后读侧可见占用；
+<code>wr_stall</code> = 写侧因 FIFO 满而反压；
+<code>slot_free</code> = gated 策略下该周期下游是否有空闲输出端口。</p>
+</section>
 {verify_html}
 {ring_sec}
 {hyb_sec}

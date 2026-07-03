@@ -40,6 +40,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <sstream>
@@ -47,6 +48,24 @@
 #include <vector>
 
 #include "afifo.h"
+
+// Per-AFIFO VCD trace bundle. Writer-side and reader-side signals are updated
+// ONLY by their respective clock-domain SC_THREAD (sc_signal allows one driver).
+struct AfifoTrace {
+  sc_signal<int> wr_occ_phys;
+  sc_signal<int> wr_en;
+  sc_signal<int> wr_ok;
+  sc_signal<int> wr_stall;
+  sc_signal<int> rd_occ_phys;
+  sc_signal<int> rd_occ_vis;
+  sc_signal<int> rd_en;
+  sc_signal<int> rd_ok;
+  sc_signal<int> slot_free;
+};
+
+struct DomainTrace {
+  sc_signal<int> cycle;
+};
 
 // ---------------------------------------------------------------------------
 struct Trace {
@@ -100,9 +119,11 @@ static inline int quad_of(int node, int mx, int my) {
 // ---------------------------------------------------------------------------
 struct CrossLink {
   int p, c, wdom, rdom;
+  int trace_idx = -1;
   std::vector<int> sends;   // sorted scheduled write cycles (domain-local idx)
   size_t next_send_idx = 0;
   AsyncFifo* fifo = nullptr;
+  AfifoTrace* trace = nullptr;
   long collisions = 0;
   long delivered_count = 0;
   int last_delivered = -1;
@@ -121,6 +142,7 @@ struct Args {
   int margin = 120;
   bool phase0 = false;
   double force_phase_eps = -1.0;  // if >=0, override all non-ref phases (debug)
+  std::string vcd_path;          // empty => no waveform dump
 };
 
 static Args parse_args(int argc, char** argv) {
@@ -138,11 +160,13 @@ static Args parse_args(int argc, char** argv) {
     else if (s == "--margin") a.margin = std::atoi(next().c_str());
     else if (s == "--phase0") a.phase0 = true;
     else if (s == "--force-phase-eps") a.force_phase_eps = std::atof(next().c_str());
+    else if (s == "--vcd") a.vcd_path = next();
   }
   if (a.trace.empty()) {
     std::fprintf(stderr, "usage: mesh_tb --trace <path> [--scheme ring|hybrid] "
                           "[--policy greedy|gated] [--sigma f] [--sync i] "
-                          "[--depth i] [--seed u] [--margin i] [--phase0]\n");
+                          "[--depth i] [--seed u] [--margin i] [--phase0] "
+                          "[--vcd <file.vcd>]\n");
     std::exit(2);
   }
   return a;
@@ -154,9 +178,11 @@ static Args parse_args(int argc, char** argv) {
 SC_MODULE(Domain) {
   SC_HAS_PROCESS(Domain);
   Domain(sc_module_name nm, int id_, double phase0_, double sigma_,
-         long total_edges_, const std::string& policy_, unsigned seed_)
+         long total_edges_, const std::string& policy_, unsigned seed_,
+         DomainTrace* dom_trace_)
       : sc_module(nm), id(id_), phase0(phase0_), sigma(sigma_),
-        total_edges(total_edges_), policy(policy_), rng(seed_) {
+        total_edges(total_edges_), policy(policy_), rng(seed_),
+        dom_trace(dom_trace_) {
     SC_THREAD(proc);
   }
 
@@ -166,6 +192,7 @@ SC_MODULE(Domain) {
   long total_edges;
   std::string policy;
   std::mt19937 rng;
+  DomainTrace* dom_trace;
 
   std::vector<CrossLink*> as_writer;
   std::vector<CrossLink*> as_reader;
@@ -173,22 +200,44 @@ SC_MODULE(Domain) {
   std::map<int, std::vector<char>> slot_free;
   long cycle = 0;
 
+  static void update_afifo_wr_trace(CrossLink* cl) {
+    if (!cl || !cl->trace || !cl->fifo) return;
+    AfifoTrace& t = *cl->trace;
+    t.wr_occ_phys.write(cl->fifo->phys_occ_now());
+    t.wr_en.write(cl->fifo->last_wr_en() ? 1 : 0);
+    t.wr_ok.write(cl->fifo->last_wr_ok() ? 1 : 0);
+    t.wr_stall.write((cl->fifo->last_wr_en() && !cl->fifo->last_wr_ok()) ? 1 : 0);
+  }
+
+  static void update_afifo_rd_trace(CrossLink* cl, bool slot_ok) {
+    if (!cl || !cl->trace || !cl->fifo) return;
+    AfifoTrace& t = *cl->trace;
+    t.rd_occ_phys.write(cl->fifo->phys_occ_now());
+    t.rd_occ_vis.write(cl->fifo->last_occ());
+    t.rd_en.write(cl->fifo->last_rd_en() ? 1 : 0);
+    t.rd_ok.write(cl->fifo->last_rd_ok() ? 1 : 0);
+    t.slot_free.write(slot_ok ? 1 : 0);
+  }
+
   void proc() {
-    const double period = 1.0;  // ns, nominal
+    const double period_ps = 1000.0;  // 1 ns nominal period, traced in ps
     std::normal_distribution<double> gauss(0.0, sigma);
     double phase_state = std::max(-0.5, std::min(0.5, phase0));
 
-    double first_wait = phase_state * period;
-    if (first_wait < 0) first_wait += period;
-    wait(sc_time(first_wait, SC_NS));
+    double first_wait = phase_state;  // in UI (fraction of period)
+    if (first_wait < 0) first_wait += 1.0;
+    wait(sc_time(first_wait * period_ps, SC_PS));
 
     for (long e = 0; e < total_edges; ++e) {
+      if (dom_trace) dom_trace->cycle.write((int)cycle);
+
       // ---- writer side: push any overdue sends into their AFIFOs ----
       for (auto* cl : as_writer) {
         bool wr_en = (cl->next_send_idx < cl->sends.size() &&
                       cl->sends[cl->next_send_idx] <= cycle);
         bool wrote = cl->fifo->on_wr_edge(wr_en, cl->p);
         if (wr_en && wrote) ++cl->next_send_idx;
+        update_afifo_wr_trace(cl);
       }
       // ---- reader side: drain per policy ----
       for (auto* cl : as_reader) {
@@ -205,16 +254,17 @@ SC_MODULE(Domain) {
           cl->last_delivered = (int)cycle;
           if (policy == "greedy" && !slot_ok) ++cl->collisions;
         }
+        update_afifo_rd_trace(cl, slot_ok);
       }
       ++cycle;
       // ---- advance to next edge with bounded phase wander ----
       double wander = (sigma > 0.0) ? gauss(rng) : 0.0;
       double new_phase = std::max(-0.5, std::min(0.5, phase_state + wander));
-      double dt = period + (new_phase - phase_state) * period;
+      double dt_ui = 1.0 + (new_phase - phase_state);  // period + phase delta, in UI
       phase_state = new_phase;
-      const double floor_dt = 0.05 * period;  // safety floor, see afifo.h note
-      if (dt < floor_dt) dt = floor_dt;
-      wait(sc_time(dt, SC_NS));
+      const double floor_ui = 0.05;
+      if (dt_ui < floor_ui) dt_ui = floor_ui;
+      wait(sc_time(dt_ui * period_ps, SC_PS));
     }
   }
 };
@@ -270,6 +320,50 @@ int sc_main(int argc, char** argv) {
   for (size_t i = 0; i < cross_links.size(); ++i)
     cross_links[i].fifo = &fifos[i];
 
+  // ---- optional VCD waveform dump (gtkwave) ----
+  std::vector<std::unique_ptr<AfifoTrace>> afifo_traces;
+  std::vector<DomainTrace> dom_traces(4);
+  sc_trace_file* tf = nullptr;
+  std::string vcd_base;
+  if (!args.vcd_path.empty()) {
+    vcd_base = args.vcd_path;
+    if (vcd_base.size() > 4 &&
+        vcd_base.compare(vcd_base.size() - 4, 4, ".vcd") == 0)
+      vcd_base = vcd_base.substr(0, vcd_base.size() - 4);
+    tf = sc_create_vcd_trace_file(vcd_base.c_str());
+    tf->set_time_unit(1, SC_PS);
+    for (int d = 0; d < 4; ++d) {
+      char nm[32];
+      std::snprintf(nm, sizeof(nm), "dom%d_cyc", d);
+      sc_trace(tf, dom_traces[d].cycle, nm);
+    }
+    for (size_t i = 0; i < cross_links.size(); ++i) {
+      afifo_traces.emplace_back(std::make_unique<AfifoTrace>());
+      cross_links[i].trace_idx = (int)i;
+      cross_links[i].trace = afifo_traces.back().get();
+      AfifoTrace& at = *afifo_traces.back();
+      char pre[48];
+      std::snprintf(pre, sizeof(pre), "x%zu_p%d_c%d", i,
+                    cross_links[i].p, cross_links[i].c);
+      char nm[80];
+      auto reg = [&](sc_signal<int>& sig, const char* suffix) {
+        std::snprintf(nm, sizeof(nm), "%s_%s", pre, suffix);
+        sc_trace(tf, sig, nm);
+      };
+      reg(at.wr_occ_phys, "wr_occ_phys");
+      reg(at.wr_en, "wr_en");
+      reg(at.wr_ok, "wr_ok");
+      reg(at.wr_stall, "wr_stall");
+      reg(at.rd_occ_phys, "rd_occ_phys");
+      reg(at.rd_occ_vis, "rd_occ_vis");
+      reg(at.rd_en, "rd_en");
+      reg(at.rd_ok, "rd_ok");
+      reg(at.slot_free, "slot_free");
+    }
+    std::printf("VCD: %s.vcd  (gtkwave %s.vcd)\n", vcd_base.c_str(),
+                vcd_base.c_str());
+  }
+
   // ---- domains ----
   std::mt19937 master(args.seed);
   std::uniform_real_distribution<double> uphase(-0.5, 0.5);
@@ -293,7 +387,7 @@ int sc_main(int argc, char** argv) {
     char nm[32];
     std::snprintf(nm, sizeof(nm), "dom_%d", d);
     domains[d] = new Domain(nm, d, dom_phase[d], args.sigma, total_edges,
-                            args.policy, dom_seed[d]);
+                            args.policy, dom_seed[d], &dom_traces[d]);
   }
   for (auto& cl : cross_links) {
     domains[cl.wdom]->as_writer.push_back(&cl);
@@ -345,5 +439,6 @@ int sc_main(int argc, char** argv) {
   }
 
   for (auto* d : domains) delete d;
+  if (tf) sc_close_vcd_trace_file(tf);
   return 0;
 }

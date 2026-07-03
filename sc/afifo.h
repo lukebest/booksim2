@@ -40,15 +40,18 @@ class AsyncFifo {
     unsigned used = wrap(wptr_bin_ - rptr_bin_sync);
     bool full = used >= (unsigned)depth_;
 
+    last_wr_en_ = wr_en;
     if (wr_en && !full) {
       mem_[wptr_bin_ % depth_] = data;
       wptr_bin_ = wrap(wptr_bin_ + 1);
       wptr_gray_ = bin2gray(wptr_bin_);
       ++write_count_;
       update_phys_peak();
+      last_wr_ok_ = true;
       return true;
     }
     if (wr_en && full) ++wstall_count_;
+    last_wr_ok_ = false;
     return false;
   }
 
@@ -62,6 +65,7 @@ class AsyncFifo {
     unsigned wptr_bin_sync = gray2bin(synced_wptr_gray);
     bool empty = (wptr_bin_sync == rptr_bin_);
 
+    last_rd_en_ = rd_en;
     bool did_read = false;
     if (rd_en && !empty) {
       if (data_out) *data_out = mem_[rptr_bin_ % depth_];
@@ -74,6 +78,7 @@ class AsyncFifo {
     if ((int)occ_now > peak_occ_) peak_occ_ = (int)occ_now;
     last_occ_ = (int)occ_now;
     update_phys_peak();
+    last_rd_ok_ = did_read;
     return did_read;
   }
 
@@ -92,6 +97,13 @@ class AsyncFifo {
   // is the number of flit slots the physical memory array must actually hold,
   // i.e. the real buffer-cost / provisioning number.
   int peak_phys_occ() const { return peak_phys_occ_; }
+
+  // Snapshots from the most recent edge (for VCD / gtkwave tracing).
+  bool last_wr_en() const { return last_wr_en_; }
+  bool last_wr_ok() const { return last_wr_ok_; }
+  bool last_rd_en() const { return last_rd_en_; }
+  bool last_rd_ok() const { return last_rd_ok_; }
+  int phys_occ_now() const { return (int)wrap(wptr_bin_ - rptr_bin_); }
 
  private:
   void update_phys_peak() {
@@ -120,4 +132,6 @@ class AsyncFifo {
 
   long write_count_ = 0, read_count_ = 0, wstall_count_ = 0;
   int peak_occ_ = 0, last_occ_ = 0, peak_phys_occ_ = 0;
+  bool last_wr_en_ = false, last_wr_ok_ = false;
+  bool last_rd_en_ = false, last_rd_ok_ = false;
 };
