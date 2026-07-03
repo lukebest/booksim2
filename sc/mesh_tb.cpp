@@ -143,6 +143,7 @@ struct Args {
   bool phase0 = false;
   double force_phase_eps = -1.0;  // if >=0, override all non-ref phases (debug)
   std::string vcd_path;          // empty => no waveform dump
+  int vcd_busiest = 4;           // when --vcd: trace only the N busiest AFIFOs
 };
 
 static Args parse_args(int argc, char** argv) {
@@ -161,12 +162,13 @@ static Args parse_args(int argc, char** argv) {
     else if (s == "--phase0") a.phase0 = true;
     else if (s == "--force-phase-eps") a.force_phase_eps = std::atof(next().c_str());
     else if (s == "--vcd") a.vcd_path = next();
+    else if (s == "--vcd-busiest") a.vcd_busiest = std::atoi(next().c_str());
   }
   if (a.trace.empty()) {
     std::fprintf(stderr, "usage: mesh_tb --trace <path> [--scheme ring|hybrid] "
                           "[--policy greedy|gated] [--sigma f] [--sync i] "
                           "[--depth i] [--seed u] [--margin i] [--phase0] "
-                          "[--vcd <file.vcd>]\n");
+                          "[--vcd <file>] [--vcd-busiest N]\n");
     std::exit(2);
   }
   return a;
@@ -320,12 +322,24 @@ int sc_main(int argc, char** argv) {
   for (size_t i = 0; i < cross_links.size(); ++i)
     cross_links[i].fifo = &fifos[i];
 
-  // ---- optional VCD waveform dump (gtkwave) ----
+  // ---- optional VCD waveform dump (gtkwave); trace only selected AFIFOs ----
   std::vector<std::unique_ptr<AfifoTrace>> afifo_traces;
   std::vector<DomainTrace> dom_traces(4);
   sc_trace_file* tf = nullptr;
   std::string vcd_base;
+  std::vector<size_t> vcd_indices;
   if (!args.vcd_path.empty()) {
+    // Rank cross-links by traffic volume; pick top N for waveform.
+    std::vector<size_t> order(cross_links.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+      return cross_links[a].sends.size() > cross_links[b].sends.size();
+    });
+    int ntrace = args.vcd_busiest;
+    if (ntrace <= 0 || ntrace > (int)cross_links.size())
+      ntrace = (int)cross_links.size();
+    for (int k = 0; k < ntrace; ++k) vcd_indices.push_back(order[k]);
+
     vcd_base = args.vcd_path;
     if (vcd_base.size() > 4 &&
         vcd_base.compare(vcd_base.size() - 4, 4, ".vcd") == 0)
@@ -337,14 +351,15 @@ int sc_main(int argc, char** argv) {
       std::snprintf(nm, sizeof(nm), "dom%d_cyc", d);
       sc_trace(tf, dom_traces[d].cycle, nm);
     }
-    for (size_t i = 0; i < cross_links.size(); ++i) {
+    for (size_t ki = 0; ki < vcd_indices.size(); ++ki) {
+      size_t i = vcd_indices[ki];
       afifo_traces.emplace_back(std::make_unique<AfifoTrace>());
       cross_links[i].trace_idx = (int)i;
       cross_links[i].trace = afifo_traces.back().get();
       AfifoTrace& at = *afifo_traces.back();
-      char pre[48];
-      std::snprintf(pre, sizeof(pre), "x%zu_p%d_c%d", i,
-                    cross_links[i].p, cross_links[i].c);
+      auto& cl = cross_links[i];
+      char pre[64];
+      std::snprintf(pre, sizeof(pre), "afifo%zu_p%d_c%d", ki, cl.p, cl.c);
       char nm[80];
       auto reg = [&](sc_signal<int>& sig, const char* suffix) {
         std::snprintf(nm, sizeof(nm), "%s_%s", pre, suffix);
@@ -360,8 +375,14 @@ int sc_main(int argc, char** argv) {
       reg(at.rd_ok, "rd_ok");
       reg(at.slot_free, "slot_free");
     }
-    std::printf("VCD: %s.vcd  (gtkwave %s.vcd)\n", vcd_base.c_str(),
-                vcd_base.c_str());
+    std::printf("VCD: %s.vcd  (gtkwave %s.vcd)  tracing %zu/%zu AFIFOs\n",
+                vcd_base.c_str(), vcd_base.c_str(),
+                vcd_indices.size(), cross_links.size());
+    for (size_t ki = 0; ki < vcd_indices.size(); ++ki) {
+      auto& cl = cross_links[vcd_indices[ki]];
+      std::printf("  VCD_AFIFO[%zu] p=%d c=%d nsend=%zu wdom=%d rdom=%d\n",
+                  ki, cl.p, cl.c, cl.sends.size(), cl.wdom, cl.rdom);
+    }
   }
 
   // ---- domains ----

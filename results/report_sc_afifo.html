@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
-<title>SystemC 周期级跨 Reticle AFIFO 仿真报告 (4×4, reticle=2×2)</title>
+<title>SystemC 周期级跨 Reticle AFIFO 仿真报告 (16×16, reticle=8x8)</title>
 <style>
 body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:24px;color:#222;max-width:1200px}
 h1{font-size:22px;border-bottom:2px solid #3b82f6;padding-bottom:6px}
@@ -19,14 +19,12 @@ svg.bars{display:block;margin:8px 0;border:1px solid #e2e8f0;background:#fff}
 code{background:#f1f5f9;padding:1px 4px;border-radius:3px}
 pre{background:#f8fafc;border:1px solid #e2e8f0;padding:10px;font-size:12px;overflow-x:auto}
 </style></head><body>
-<h1>SystemC 周期级跨 Reticle AFIFO 仿真报告 (4×4, reticle=2×2)</h1>
-<p class='note'>拓扑 4×4 mesh，reticle = 象限 = 2×2 (边界 col/row 1|2)。四个 reticle 各一个独立时钟域
-(同频, 周期 1ns, 独立静态相位 + 每周期有界相位游走抖动 &sigma;)。跨界链路经 Cummings 型双时钟
-Gray 指针 AFIFO (sc/afifo.h)，S 级同步器；读策略对比 <b>greedy</b>(AFIFO 非空即读，可能与下游
-本地已调度流量冲突) vs <b>gated</b>(仅当下游节点有空闲输出端口时才读，杜绝冲突但可能增加占用/回压)。
-Python 侧仍复用 sim_hamilton_ring / sched_zerobuf_compare 产生的 0-buffer 刚性调度作为全网流量踪迹
-(utils/export_sc_trace.py)，SystemC 侧 (sc/mesh_tb.cpp) 做真正周期级、含时钟边沿与同步器移位寄存器的
-CDC 重放。</p>
+<h1>SystemC 周期级跨 Reticle AFIFO 仿真报告 (16×16, reticle=8x8)</h1>
+<p class='note'>拓扑 16×16 mesh，reticle = 象限 = 8x8 (边界 col/row 7|8)。
+物理无向跨界边 32 条（8 水平 + 8 垂直）；CDC 按有向 AFIFO 建模，
+ring 踪迹启用 36 条、hybrid 启用 40 条。
+四个 reticle 各一个独立时钟域 (同频 1ns, 独立相位 + 抖动 &sigma;)。
+读策略：<b>greedy</b> vs <b>gated</b>（空时隙门控读）。</p>
 
     <section><h2>术语说明</h2>
     <dl class='gloss'>
@@ -55,6 +53,12 @@ CDC 重放。</p>
     总 SRAM/bit 成本 = 总缓存 flits &times; flit 位宽（本报告未乘位宽，仅统计 flit 数）。
     表中 "mean" 列为 Monte Carlo 多种子（随机相位）下的平均值。</dd>
 
+    <dt>有向 vs 无向跨界链路</dt>
+    <dd>物理 mesh 上跨界边为<b>无向</b>（16×16 共 32 条：16 水平 + 16 垂直）。
+    CDC 实现为<b>有向</b> AFIFO（A&rarr;B 与 B&rarr;A 各一个），踪迹中实际启用的有向链路数
+    取决于 allgather 方案（ring 约 36 条，hybrid 约 40 条）。表中
+    <code>n_cross_links</code> 指有向 AFIFO 实例数，不是无向物理边数。</dd>
+
     <dt>peak_occ vs peak_phys_occ</dt>
     <dd><code>peak_phys_occ</code>：真实存储占用（硬件必须实现的深度）。
     <code>peak_occ</code>（可见占用）：读侧经 <code>S</code> 级同步器"看到"的写指针
@@ -62,21 +66,22 @@ CDC 重放。</p>
     容量规划应使用 <code>peak_phys_occ</code>。</dd>
     </dl>
     </section>
-<section><h2>波形查看 (gtkwave)</h2>
-<p class='note'>仿真支持 VCD 波形 dump，可用 gtkwave 打开查看各 AFIFO 占用、读写握手与域内周期计数。</p>
+<section><h2>波形查看 (gtkwave) — 4 条最忙 AFIFO</h2>
+<p class='note'>16×16 共有 36 个有向 AFIFO，波形仅 dump 流量最大的 4 条
+（<code>--vcd-busiest 4</code>），以控制 VCD 体积。文件：
+<code>results/sc_afifo_wave_ring_16x16.vcd</code></p>
+<table class='tbl'><tr><th>#</th><th>写节点 p (x,y)</th><th>读节点 c (x,y)</th>
+<th>flit 数</th><th>跨界方向</th></tr><tr><td>0</td><td>128 (0,8)</td><td>112 (0,7)</td><td>128</td><td>Q2&rarr;Q0</td></tr><tr><td>1</td><td>248 (8,15)</td><td>247 (7,15)</td><td>128</td><td>Q3&rarr;Q2</td></tr><tr><td>2</td><td>231 (7,14)</td><td>232 (8,14)</td><td>128</td><td>Q2&rarr;Q3</td></tr><tr><td>3</td><td>216 (8,13)</td><td>215 (7,13)</td><td>128</td><td>Q3&rarr;Q2</td></tr></table>
 <pre>cd sc
 make
-./mesh_tb --trace ../results/sc_trace_ring_4x4.trace \
-  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 4 --seed 1 \
-  --vcd ../results/sc_afifo_wave_ring
-gtkwave ../results/sc_afifo_wave_ring.vcd</pre>
-<p class='note'>信号命名：<code>dom&lt;d&gt;_cyc</code> = reticle d 的本地周期计数；
-<code>x&lt;i&gt;_p&lt;src&gt;_c&lt;dst&gt;_wr_*</code> = 第 i 条跨界 AFIFO 写侧（写域时钟边沿更新）；
-<code>_rd_*</code> = 读侧（读域时钟边沿更新）。重点信号：
-<code>wr_occ_phys</code> / <code>rd_occ_phys</code> = 物理占用；
-<code>rd_occ_vis</code> = 经 S 级同步后读侧可见占用；
-<code>wr_stall</code> = 写侧因 FIFO 满而反压；
-<code>slot_free</code> = gated 策略下该周期下游是否有空闲输出端口。</p>
+./mesh_tb --trace ../results/sc_trace_ring_16x16.trace \
+  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 8 --seed 1 \
+  --vcd ../results/sc_afifo_wave_ring_16x16 --vcd-busiest 4
+gtkwave ../results/sc_afifo_wave_ring_16x16.vcd</pre>
+<p class='note'>信号前缀 <code>afifo0_p7_c8_*</code> … <code>afifo3_*</code>（按流量排序）。
+<code>dom&lt;d&gt;_cyc</code> = reticle 本地周期；
+<code>wr_occ_phys</code>/<code>rd_occ_phys</code> = 物理占用；
+<code>wr_stall</code> = 写侧反压；<code>slot_free</code> = gated 下游空时隙。</p>
 </section>
 
     <section><h2>验证</h2>
@@ -87,12 +92,12 @@ gtkwave ../results/sc_afifo_wave_ring.vcd</pre>
     <h3>3. 退化情形 (相位对齐 --phase0, &sigma;=0, S=2, depth=64, greedy)</h3>
     <table class='tbl'><tr><th>方案</th><th>golden makespan</th>
     <th>跨界链路最后送达周期</th><th>writes==reads</th><th>collisions</th></tr>
-    <tr><td>ring</td><td>42</td>
-    <td>37</td>
+    <tr><td>ring</td><td>558</td>
+    <td>553</td>
     <td>True</td>
     <td>0</td></tr>
-    <tr><td>hybrid</td><td>34</td>
-    <td>27</td>
+    <tr><td>hybrid</td><td>334</td>
+    <td>303</td>
     <td>True</td>
     <td>0</td></tr>
     </table>
@@ -102,24 +107,20 @@ gtkwave ../results/sc_afifo_wave_ring.vcd</pre>
     (a) 写读数量守恒、(b) 送达时间与 golden 处于同一量级、无异常膨胀。</p>
     <h3>4. 同步器级数 S 单调性检查 (ring, &sigma;=0.1, seed=9, greedy)</h3>
     <table class='tbl'><tr><th>S</th><th>物理峰值占用</th>
-    <th>总缓存 flits</th><th>collisions</th></tr><tr><td>0</td><td>1</td><td>12</td><td>12</td></tr><tr><td>2</td><td>1</td><td>12</td><td>1</td></tr><tr><td>4</td><td>2</td><td>15</td><td>11</td></tr><tr><td>8</td><td>3</td><td>26</td><td>5</td></tr></table>
+    <th>总缓存 flits</th><th>collisions</th></tr><tr><td>0</td><td>1</td><td>36</td><td>1199</td></tr><tr><td>2</td><td>1</td><td>36</td><td>15</td></tr><tr><td>4</td><td>2</td><td>72</td><td>1284</td></tr><tr><td>8</td><td>3</td><td>108</td><td>1163</td></tr></table>
     <p class='note'>随 S 增大，物理峰值占用总体呈上升趋势（同步延迟更长，读侧更晚才能安全地"看到"
     写指针推进），符合 CDC 同步器的预期行为。</p>
     </section>
-<section><h2>全局 Hamilton 双向环 (bi)</h2><p class='note'>baseline makespan (Python golden) = 42 cy, 跨 reticle AFIFO 实例数 = 12。</p><h3>所需 AFIFO 深度 (物理峰值占用, depth=64 不设 cap, 30 seeds MC)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.05</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.10</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.20</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.00</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.05</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.10</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.20</td><td>1</td><td>1</td><td>12.0</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div><div><b>gated</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.05</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.10</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>2</td><td>0.20</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.00</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.05</td><td>1</td><td>1</td><td>12.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>12.1</td></tr><tr><td>3</td><td>0.20</td><td>2</td><td>2</td><td>12.3</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div></div><h3>深度 cap 扫描: writer stall / 下游冲突 (S=2, &sigma;=0.1, 20 seeds)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>5</td><td>1.10</td></tr></table></div><div><b>gated</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div></div><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#ef4444" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">5</text><rect x="270.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><text x="4" y="14" font-size="11" fill="#333">全局 Hamilton 双向环 (bi): depth=2, S=2, σ=0.1 时的下游冲突次数 (max over seeds)</text></svg><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">12.0</text><rect x="270.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">12.0</text><text x="4" y="14" font-size="11" fill="#333">全局 Hamilton 双向环 (bi): 平均所需总缓存 (flits, S=2, σ=0.1)</text></svg></section>
-<section><h2>Hybrid B=2 纵向带环 + 横向树 (bi)</h2><p class='note'>baseline makespan (Python golden) = 34 cy, 跨 reticle AFIFO 实例数 = 16。</p><h3>所需 AFIFO 深度 (物理峰值占用, depth=64 不设 cap, 30 seeds MC)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>2</td><td>0.05</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>2</td><td>0.10</td><td>2</td><td>2</td><td>23.9</td></tr><tr><td>2</td><td>0.20</td><td>2</td><td>2</td><td>23.9</td></tr><tr><td>3</td><td>0.00</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.05</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.20</td><td>2</td><td>3</td><td>24.0</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div><div><b>gated</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>2</td><td>0.05</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>2</td><td>0.10</td><td>2</td><td>2</td><td>23.9</td></tr><tr><td>2</td><td>0.20</td><td>2</td><td>2</td><td>23.9</td></tr><tr><td>3</td><td>0.00</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.05</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>24.0</td></tr><tr><td>3</td><td>0.20</td><td>2</td><td>3</td><td>24.0</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div></div><h3>深度 cap 扫描: writer stall / 下游冲突 (S=2, &sigma;=0.1, 20 seeds)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>74</td><td>65.5</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div><div><b>gated</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>74</td><td>65.5</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div></div><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><rect x="270.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><text x="4" y="14" font-size="11" fill="#333">Hybrid B=2 纵向带环 + 横向树 (bi): depth=2, S=2, σ=0.1 时的下游冲突次数 (max over seeds)</text></svg><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">23.933333333333334</text><rect x="270.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">23.933333333333334</text><text x="4" y="14" font-size="11" fill="#333">Hybrid B=2 纵向带环 + 横向树 (bi): 平均所需总缓存 (flits, S=2, σ=0.1)</text></svg></section>
+<section><h2>全局 Hamilton 双向环 (bi)</h2><p class='note'>baseline makespan (Python golden) = 558 cy, 跨 reticle AFIFO 实例数 = 36。</p><h3>所需 AFIFO 深度 (物理峰值占用, depth=64 不设 cap, 30 seeds MC)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.05</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.10</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.20</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>3</td><td>0.00</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>3</td><td>0.05</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>3</td><td>0.10</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>3</td><td>0.20</td><td>2</td><td>2</td><td>38.2</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div><div><b>gated</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.05</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.10</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>2</td><td>0.20</td><td>1</td><td>2</td><td>36.2</td></tr><tr><td>3</td><td>0.00</td><td>1</td><td>1</td><td>36.0</td></tr><tr><td>3</td><td>0.05</td><td>2</td><td>2</td><td>44.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>46.2</td></tr><tr><td>3</td><td>0.20</td><td>2</td><td>2</td><td>51.5</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div></div><h3>深度 cap 扫描: writer stall / 下游冲突 (S=2, &sigma;=0.1, 20 seeds)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>421</td><td>153.75</td></tr></table></div><div><b>gated</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>92</td><td>4.8</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div></div><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#ef4444" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">421</text><rect x="270.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><text x="4" y="14" font-size="11" fill="#333">全局 Hamilton 双向环 (bi): depth=2, S=2, σ=0.1 时的下游冲突次数 (max over seeds)</text></svg><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">36.0</text><rect x="270.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">36.0</text><text x="4" y="14" font-size="11" fill="#333">全局 Hamilton 双向环 (bi): 平均所需总缓存 (flits, S=2, σ=0.1)</text></svg></section>
+<section><h2>Hybrid B=2 纵向带环 + 横向树 (bi)</h2><p class='note'>baseline makespan (Python golden) = 334 cy, 跨 reticle AFIFO 实例数 = 40。</p><h3>所需 AFIFO 深度 (物理峰值占用, depth=64 不设 cap, 30 seeds MC)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.05</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.10</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.20</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.00</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.05</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.20</td><td>3</td><td>3</td><td>74.1</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div><div><b>gated</b><table class='tbl'><tr><th>S</th><th>&sigma; (UI)</th><th>p95 深度</th><th>max 深度</th><th>总缓存 flits (mean)</th></tr><tr><td>2</td><td>0.00</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.05</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.10</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>2</td><td>0.20</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.00</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.05</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.10</td><td>2</td><td>2</td><td>72.0</td></tr><tr><td>3</td><td>0.20</td><td>3</td><td>3</td><td>74.1</td></tr></table><p class='note'>列含义见上文「术语说明」：S=同步器级数，&sigma;=每周期相位抖动(UI)，总缓存 flits=&Sigma; peak_phys_occ（所有跨界 AFIFO 物理峰值占用之和）。</p></div></div><h3>深度 cap 扫描: writer stall / 下游冲突 (S=2, &sigma;=0.1, 20 seeds)</h3><div class='side-by-side'><div><b>greedy</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>8203</td><td>8099.2</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div><div><b>gated</b><table class='tbl'><tr><th>depth (cap)</th><th>max wstall</th><th>mean wstall</th><th>max collisions</th><th>mean collisions</th></tr><tr><td>1</td><td>8203</td><td>8099.2</td><td>0</td><td>0.00</td></tr><tr><td>2</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>3</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>4</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>5</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>6</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>7</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr><tr><td>8</td><td>0</td><td>0.0</td><td>0</td><td>0.00</td></tr></table></div></div><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><rect x="270.0" y="156.0" width="168.0" height="0.0" fill="#ef4444" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="154.0" font-size="9" text-anchor="middle" fill="#333">0</text><text x="4" y="14" font-size="11" fill="#333">Hybrid B=2 纵向带环 + 横向树 (bi): depth=2, S=2, σ=0.1 时的下游冲突次数 (max over seeds)</text></svg><svg viewBox="0 0 520 180" class="bars"><rect x="30.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="114.0" y="170" font-size="9" text-anchor="middle" fill="#333">greedy</text><text x="114.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">72.0</text><rect x="270.0" y="16.0" width="168.0" height="140.0" fill="#10b981" /><text x="354.0" y="170" font-size="9" text-anchor="middle" fill="#333">gated</text><text x="354.0" y="14.0" font-size="9" text-anchor="middle" fill="#333">72.0</text><text x="4" y="14" font-size="11" fill="#333">Hybrid B=2 纵向带环 + 横向树 (bi): 平均所需总缓存 (flits, S=2, σ=0.1)</text></svg></section>
 <section><h2>结论</h2>
 <ul>
-<li>4×4 规模下两方案的 AFIFO 所需深度都很小 (p95 &le; 2 flit)，&sigma;=0.1 时总缓存开销
-全局环 &asymp;12 flits，hybrid vband &asymp;24 flits（hybrid 跨界链路数更多: 16 vs 12）。</li>
-<li>gated 策略以设计不变式的方式 <b>杜绝了下游冲突</b> (collisions 恒为 0)，代价是在深度不足时
-(depth=1) 与 greedy 产生几乎相同的 writer stall —— 即在此规模下 gated 并未显著增加所需深度，
-是相对"免费"的安全策略。</li>
-<li>greedy 策略在 ring 方案上观测到少量下游冲突 (&sigma;=0.1, S=2 时 5~12 次，随机种子/S 而变)，
-在 hybrid 方案上该规模下未观测到冲突 —— 说明 ring 的跨界目的节点输出端口更容易与本地环调度
-"撞车"，hybrid 的树形分叉在跨界节点上余量更大。是否需要 slot-gated 读取取决于目标路由器能否
-承受这类偶发的额外输入压力；由于 gated 在本研究规模下几乎不增加深度/延迟成本，建议默认采用
-<b>slot-gated</b> 读取策略。</li>
+<li>16×16：ring baseline 558 cy / hybrid 334 cy；
+&sigma;=0.1, S=2 时 ring 总缓存 36 flits，
+hybrid 72 flits（有向 AFIFO 36 vs 40）。</li>
+<li>所需深度 p95：ring 1 / hybrid 2 flit。</li>
+<li>gated 策略 collisions 恒为 0；greedy 在 ring 上可能有少量下游冲突（见深度扫描表）。</li>
+<li>建议默认 <b>slot-gated</b> 读策略；深度按各链路 peak_phys_occ 独立配置。</li>
 </ul>
 </section>
 </body></html>

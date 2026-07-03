@@ -17,6 +17,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 RESULTS = os.path.join(ROOT, "results")
 MESH_TB = os.path.join(ROOT, "sc", "mesh_tb")
+MX = MY = 16
+
+VCD_AFIFO_RE = re.compile(
+    r"VCD_AFIFO\[(\d+)\] p=(\d+) c=(\d+) nsend=(\d+) wdom=(\d+) rdom=(\d+)")
 
 SUMMARY_RE = re.compile(
     r"SUMMARY scheme=(?P<scheme>\S+) policy=(?P<policy>\S+) "
@@ -29,9 +33,34 @@ SUMMARY_RE = re.compile(
     r"makespan_trace=(?P<mk>\d+)")
 
 
-def trace_path(scheme):
-    name = "sc_trace_ring_4x4.trace" if scheme == "ring" else "sc_trace_hybrid_4x4.trace"
+def trace_path(scheme, mx=MX, my=MY):
+    name = (f"sc_trace_ring_{mx}x{my}.trace" if scheme == "ring"
+            else f"sc_trace_hybrid_{mx}x{my}.trace")
     return os.path.join(RESULTS, name)
+
+
+def node_coord(n, mx=MX):
+    return n % mx, n // mx
+
+
+def generate_vcd_waveform(scheme="ring", policy="gated", mx=MX):
+    """Run mesh_tb with --vcd-busiest 4; return list of traced AFIFO metadata."""
+    vcd_base = os.path.join(RESULTS, f"sc_afifo_wave_{scheme}_{mx}x{mx}")
+    args = [MESH_TB, "--trace", trace_path(scheme, mx), "--scheme", scheme,
+            "--policy", policy, "--sigma", "0.1", "--sync", "2", "--depth", "8",
+            "--seed", "1", "--vcd", vcd_base, "--vcd-busiest", "4"]
+    out = subprocess.run(args, capture_output=True, text=True, check=True).stdout
+    afifos = []
+    for m in VCD_AFIFO_RE.finditer(out):
+        idx, p, c, ns, wdom, rdom = m.groups()
+        px, py = node_coord(int(p), mx)
+        cx, cy = node_coord(int(c), mx)
+        afifos.append({
+            "idx": int(idx), "p": int(p), "c": int(c),
+            "p_xy": (px, py), "c_xy": (cx, cy),
+            "nsend": int(ns), "wdom": int(wdom), "rdom": int(rdom),
+        })
+    return afifos, vcd_base + ".vcd"
 
 
 def run_mesh_tb(scheme, policy, sigma, sync, depth, seed, extra=None):
@@ -198,6 +227,12 @@ def terminology_section():
     总 SRAM/bit 成本 = 总缓存 flits &times; flit 位宽（本报告未乘位宽，仅统计 flit 数）。
     表中 "mean" 列为 Monte Carlo 多种子（随机相位）下的平均值。</dd>
 
+    <dt>有向 vs 无向跨界链路</dt>
+    <dd>物理 mesh 上跨界边为<b>无向</b>（16×16 共 32 条：16 水平 + 16 垂直）。
+    CDC 实现为<b>有向</b> AFIFO（A&rarr;B 与 B&rarr;A 各一个），踪迹中实际启用的有向链路数
+    取决于 allgather 方案（ring 约 36 条，hybrid 约 40 条）。表中
+    <code>n_cross_links</code> 指有向 AFIFO 实例数，不是无向物理边数。</dd>
+
     <dt>peak_occ vs peak_phys_occ</dt>
     <dd><code>peak_phys_occ</code>：真实存储占用（硬件必须实现的深度）。
     <code>peak_occ</code>（可见占用）：读侧经 <code>S</code> 级同步器"看到"的写指针
@@ -209,14 +244,31 @@ def terminology_section():
 
 def main():
     sweep = load_sweep()
+    mx = sweep.get("mx", MX)
+    my = sweep.get("my", MY)
+    ret = sweep.get("reticle", f"{mx//2}x{my//2}")
+    undirected = sweep.get("undirected_cross_edges", mx + my)
+
+    print("Generating VCD waveform (4 busiest AFIFOs, ring)...")
+    wave_afifos, vcd_path = generate_vcd_waveform("ring", "gated", mx)
+    wave_rows = "".join(
+        f"<tr><td>{a['idx']}</td><td>{a['p']} ({a['p_xy'][0]},{a['p_xy'][1]})</td>"
+        f"<td>{a['c']} ({a['c_xy'][0]},{a['c_xy'][1]})</td><td>{a['nsend']}</td>"
+        f"<td>Q{a['wdom']}&rarr;Q{a['rdom']}</td></tr>"
+        for a in wave_afifos)
+
     verify = run_verification()
     bad = check_gated_zero_collisions(sweep)
 
-    title = "SystemC 周期级跨 Reticle AFIFO 仿真报告 (4×4, reticle=2×2)"
+    ring_s = sweep["schemes"]["ring"]
+    hyb_s = sweep["schemes"]["hybrid"]
+    rg = ring_s["policies"]["greedy"]["required_depth_probe"]["S2_sigma0.1"]
+    hg = hyb_s["policies"]["greedy"]["required_depth_probe"]["S2_sigma0.1"]
+
+    title = f"SystemC 周期级跨 Reticle AFIFO 仿真报告 ({mx}×{my}, reticle={ret})"
     term_sec = terminology_section()
-    ring_sec = scheme_section("ring", "全局 Hamilton 双向环 (bi)", sweep["schemes"]["ring"])
-    hyb_sec = scheme_section("hybrid", "Hybrid B=2 纵向带环 + 横向树 (bi)",
-                             sweep["schemes"]["hybrid"])
+    ring_sec = scheme_section("ring", "全局 Hamilton 双向环 (bi)", ring_s)
+    hyb_sec = scheme_section("hybrid", "Hybrid B=2 纵向带环 + 横向树 (bi)", hyb_s)
 
     deg = verify["degenerate"]
     sync_rows = "".join(
@@ -278,45 +330,40 @@ code{{background:#f1f5f9;padding:1px 4px;border-radius:3px}}
 pre{{background:#f8fafc;border:1px solid #e2e8f0;padding:10px;font-size:12px;overflow-x:auto}}
 </style></head><body>
 <h1>{title}</h1>
-<p class='note'>拓扑 4×4 mesh，reticle = 象限 = 2×2 (边界 col/row 1|2)。四个 reticle 各一个独立时钟域
-(同频, 周期 1ns, 独立静态相位 + 每周期有界相位游走抖动 &sigma;)。跨界链路经 Cummings 型双时钟
-Gray 指针 AFIFO (sc/afifo.h)，S 级同步器；读策略对比 <b>greedy</b>(AFIFO 非空即读，可能与下游
-本地已调度流量冲突) vs <b>gated</b>(仅当下游节点有空闲输出端口时才读，杜绝冲突但可能增加占用/回压)。
-Python 侧仍复用 sim_hamilton_ring / sched_zerobuf_compare 产生的 0-buffer 刚性调度作为全网流量踪迹
-(utils/export_sc_trace.py)，SystemC 侧 (sc/mesh_tb.cpp) 做真正周期级、含时钟边沿与同步器移位寄存器的
-CDC 重放。</p>
+<p class='note'>拓扑 {mx}×{my} mesh，reticle = 象限 = {ret} (边界 col/row {mx//2-1}|{mx//2})。
+物理无向跨界边 {undirected} 条（{mx//2} 水平 + {my//2} 垂直）；CDC 按有向 AFIFO 建模，
+ring 踪迹启用 {ring_s['n_cross_links']} 条、hybrid 启用 {hyb_s['n_cross_links']} 条。
+四个 reticle 各一个独立时钟域 (同频 1ns, 独立相位 + 抖动 &sigma;)。
+读策略：<b>greedy</b> vs <b>gated</b>（空时隙门控读）。</p>
 {term_sec}
-<section><h2>波形查看 (gtkwave)</h2>
-<p class='note'>仿真支持 VCD 波形 dump，可用 gtkwave 打开查看各 AFIFO 占用、读写握手与域内周期计数。</p>
+<section><h2>波形查看 (gtkwave) — 4 条最忙 AFIFO</h2>
+<p class='note'>16×16 共有 {ring_s['n_cross_links']} 个有向 AFIFO，波形仅 dump 流量最大的 4 条
+（<code>--vcd-busiest 4</code>），以控制 VCD 体积。文件：
+<code>{os.path.relpath(vcd_path, ROOT)}</code></p>
+<table class='tbl'><tr><th>#</th><th>写节点 p (x,y)</th><th>读节点 c (x,y)</th>
+<th>flit 数</th><th>跨界方向</th></tr>{wave_rows}</table>
 <pre>cd sc
 make
-./mesh_tb --trace ../results/sc_trace_ring_4x4.trace \\
-  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 4 --seed 1 \\
-  --vcd ../results/sc_afifo_wave_ring
-gtkwave ../results/sc_afifo_wave_ring.vcd</pre>
-<p class='note'>信号命名：<code>dom&lt;d&gt;_cyc</code> = reticle d 的本地周期计数；
-<code>x&lt;i&gt;_p&lt;src&gt;_c&lt;dst&gt;_wr_*</code> = 第 i 条跨界 AFIFO 写侧（写域时钟边沿更新）；
-<code>_rd_*</code> = 读侧（读域时钟边沿更新）。重点信号：
-<code>wr_occ_phys</code> / <code>rd_occ_phys</code> = 物理占用；
-<code>rd_occ_vis</code> = 经 S 级同步后读侧可见占用；
-<code>wr_stall</code> = 写侧因 FIFO 满而反压；
-<code>slot_free</code> = gated 策略下该周期下游是否有空闲输出端口。</p>
+./mesh_tb --trace ../results/sc_trace_ring_{mx}x{my}.trace \\
+  --scheme ring --policy gated --sigma 0.1 --sync 2 --depth 8 --seed 1 \\
+  --vcd ../results/sc_afifo_wave_ring_{mx}x{mx} --vcd-busiest 4
+gtkwave ../results/sc_afifo_wave_ring_{mx}x{mx}.vcd</pre>
+<p class='note'>信号前缀 <code>afifo0_p7_c8_*</code> … <code>afifo3_*</code>（按流量排序）。
+<code>dom&lt;d&gt;_cyc</code> = reticle 本地周期；
+<code>wr_occ_phys</code>/<code>rd_occ_phys</code> = 物理占用；
+<code>wr_stall</code> = 写侧反压；<code>slot_free</code> = gated 下游空时隙。</p>
 </section>
 {verify_html}
 {ring_sec}
 {hyb_sec}
 <section><h2>结论</h2>
 <ul>
-<li>4×4 规模下两方案的 AFIFO 所需深度都很小 (p95 &le; 2 flit)，&sigma;=0.1 时总缓存开销
-全局环 &asymp;12 flits，hybrid vband &asymp;24 flits（hybrid 跨界链路数更多: 16 vs 12）。</li>
-<li>gated 策略以设计不变式的方式 <b>杜绝了下游冲突</b> (collisions 恒为 0)，代价是在深度不足时
-(depth=1) 与 greedy 产生几乎相同的 writer stall —— 即在此规模下 gated 并未显著增加所需深度，
-是相对"免费"的安全策略。</li>
-<li>greedy 策略在 ring 方案上观测到少量下游冲突 (&sigma;=0.1, S=2 时 5~12 次，随机种子/S 而变)，
-在 hybrid 方案上该规模下未观测到冲突 —— 说明 ring 的跨界目的节点输出端口更容易与本地环调度
-"撞车"，hybrid 的树形分叉在跨界节点上余量更大。是否需要 slot-gated 读取取决于目标路由器能否
-承受这类偶发的额外输入压力；由于 gated 在本研究规模下几乎不增加深度/延迟成本，建议默认采用
-<b>slot-gated</b> 读取策略。</li>
+<li>{mx}×{my}：ring baseline {ring_s['baseline_makespan']} cy / hybrid {hyb_s['baseline_makespan']} cy；
+&sigma;=0.1, S=2 时 ring 总缓存 {rg['mean_total_buf_flits']:.0f} flits，
+hybrid {hg['mean_total_buf_flits']:.0f} flits（有向 AFIFO {ring_s['n_cross_links']} vs {hyb_s['n_cross_links']}）。</li>
+<li>所需深度 p95：ring {rg['p95_depth']} / hybrid {hg['p95_depth']} flit。</li>
+<li>gated 策略 collisions 恒为 0；greedy 在 ring 上可能有少量下游冲突（见深度扫描表）。</li>
+<li>建议默认 <b>slot-gated</b> 读策略；深度按各链路 peak_phys_occ 独立配置。</li>
 </ul>
 </section>
 </body></html>"""

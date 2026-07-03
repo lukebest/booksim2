@@ -30,6 +30,8 @@ SC_DIR = os.path.join(ROOT, "sc")
 RESULTS = os.path.join(ROOT, "results")
 MESH_TB = os.path.join(SC_DIR, "mesh_tb")
 
+MX = MY = 16
+
 SCHEMES = ("ring", "hybrid")
 POLICIES = ("greedy", "gated")
 SIGMAS = (0.0, 0.05, 0.1, 0.2)
@@ -52,12 +54,13 @@ SUMMARY_RE = re.compile(
 
 def ensure_built():
     subprocess.run(["python3", os.path.join(HERE, "export_sc_trace.py"),
-                    "--mx", "4", "--my", "4"], check=True, cwd=HERE)
+                    "--mx", str(MX), "--my", str(MY)], check=True, cwd=HERE)
     subprocess.run(["make", "-C", SC_DIR], check=True)
 
 
 def trace_path(scheme):
-    name = "sc_trace_ring_4x4.trace" if scheme == "ring" else "sc_trace_hybrid_4x4.trace"
+    name = (f"sc_trace_ring_{MX}x{MY}.trace" if scheme == "ring"
+            else f"sc_trace_hybrid_{MX}x{MY}.trace")
     return os.path.join(RESULTS, name)
 
 
@@ -125,7 +128,9 @@ def required_depth_probe(scheme, policy, sigma, sync, seeds=DEPTH_PROBE_SEEDS):
 
 def main():
     ensure_built()
-    payload = {"mx": 4, "my": 4, "schemes": {}}
+    payload = {"mx": MX, "my": MY, "reticle": f"{MX//2}x{MY//2}",
+               "undirected_cross_edges": MX + MY,
+               "schemes": {}}
     for scheme in SCHEMES:
         base = run_once(scheme, "greedy", 0.0, 2, LARGE_DEPTH, 1)
         sch = {"baseline_makespan": base["makespan_trace"],
