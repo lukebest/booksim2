@@ -1,0 +1,146 @@
+[
+  {
+    "M": 1,
+    "name": "tree_reduce_bcast",
+    "makespan": 197,
+    "ok": true,
+    "lb": 212,
+    "efficiency": 0.9292452830188679
+  },
+  {
+    "M": 1,
+    "name": "ring_uni_rs_ag",
+    "makespan": 1083,
+    "ok": true,
+    "lb": 212,
+    "efficiency": 5.1084905660377355
+  },
+  {
+    "M": 1,
+    "name": "ring_bi_rs_ag",
+    "makespan": 559,
+    "ok": true,
+    "lb": 212,
+    "efficiency": 2.6367924528301887
+  },
+  {
+    "M": 2,
+    "name": "tree_reduce_bcast",
+    "makespan": 200,
+    "ok": true,
+    "lb": 213,
+    "efficiency": 0.9389671361502347
+  },
+  {
+    "M": 2,
+    "name": "ring_uni_rs_ag",
+    "makespan": 1084,
+    "ok": false,
+    "lb": 213,
+    "efficiency": 5.089201877934272
+  },
+  {
+    "M": 2,
+    "name": "ring_bi_rs_ag",
+    "makespan": 2519,
+    "ok": false,
+    "lb": 213,
+    "efficiency": 11.826291079812206
+  },
+  {
+    "M": 3,
+    "name": "tree_reduce_bcast",
+    "makespan": 203,
+    "ok": true,
+    "lb": 214,
+    "efficiency": 0.9485981308411215
+  },
+  {
+    "M": 3,
+    "name": "ring_uni_rs_ag",
+    "makespan": 1085,
+    "ok": false,
+    "lb": 214,
+    "efficiency": 5.070093457943925
+  },
+  {
+    "M": 3,
+    "name": "ring_bi_rs_ag",
+    "makespan": 3020,
+    "ok": false,
+    "lb": 214,
+    "efficiency": 14.11214953271028
+  },
+  {
+    "M": 4,
+    "name": "tree_reduce_bcast",
+    "makespan": 206,
+    "ok": true,
+    "lb": 215,
+    "efficiency": 0.958139534883721
+  },
+  {
+    "M": 4,
+    "name": "ring_uni_rs_ag",
+    "makespan": 1086,
+    "ok": false,
+    "lb": 215,
+    "efficiency": 5.051162790697674
+  },
+  {
+    "M": 4,
+    "name": "ring_bi_rs_ag",
+    "makespan": 3240,
+    "ok": false,
+    "lb": 215,
+    "efficiency": 15.069767441860465
+  },
+  {
+    "M": 5,
+    "name": "tree_reduce_bcast",
+    "makespan": 209,
+    "ok": true,
+    "lb": 216,
+    "efficiency": 0.9675925925925926
+  },
+  {
+    "M": 5,
+    "name": "ring_uni_rs_ag",
+    "makespan": 2977,
+    "ok": false,
+    "lb": 216,
+    "efficiency": 13.782407407407407
+  },
+  {
+    "M": 5,
+    "name": "ring_bi_rs_ag",
+    "makespan": 3970,
+    "ok": false,
+    "lb": 216,
+    "efficiency": 18.37962962962963
+  },
+  {
+    "M": 6,
+    "name": "tree_reduce_bcast",
+    "makespan": 212,
+    "ok": true,
+    "lb": 217,
+    "efficiency": 0.9769585253456221
+  },
+  {
+    "M": 6,
+    "name": "ring_uni_rs_ag",
+    "makespan": 3190,
+    "ok": false,
+    "lb": 217,
+    "efficiency": 14.700460829493087
+  },
+  {
+    "M": 6,
+    "name": "ring_bi_rs_ag",
+    "makespan": 4232,
+    "ok": false,
+    "lb": 217,
+    "efficiency": 19.502304147465438
+  }
+]
