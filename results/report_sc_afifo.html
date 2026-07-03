@@ -94,11 +94,11 @@ ring 踪迹启用 36 条、hybrid 启用 40 条。
 绿 = <code>wr_en</code>，黄 = <code>wr_stall</code>，青 = <code>rd_ok</code>（实际发生的读），
 紫 = <code>slot_free</code>（目的节点下游空时隙）。</p>
 <figure class='wavefig'>
-<img src="results/sc_afifo_wave_ring_16x16.png" alt="全局 Hamilton 双向环 (bi) AFIFO waveform (full trace)" />
+<img src="sc_afifo_wave_ring_16x16.png" alt="全局 Hamilton 双向环 (bi) AFIFO waveform (full trace)" />
 <figcaption>全程（约 36 条跨界链路对应的 makespan 周期）</figcaption>
 </figure>
 <figure class='wavefig'>
-<img src="results/sc_afifo_wave_ring_16x16_zoom.png" alt="全局 Hamilton 双向环 (bi) AFIFO waveform (zoom)" />
+<img src="sc_afifo_wave_ring_16x16_zoom.png" alt="全局 Hamilton 双向环 (bi) AFIFO waveform (zoom)" />
 <figcaption>放大窗口 0–40000 ps（约前 40 个域周期，便于观察脉冲细节）</figcaption>
 </figure>
 <pre>cd sc && make
@@ -124,11 +124,11 @@ gtkwave results/sc_afifo_wave_ring_16x16.vcd</pre>
 绿 = <code>wr_en</code>，黄 = <code>wr_stall</code>，青 = <code>rd_ok</code>（实际发生的读），
 紫 = <code>slot_free</code>（目的节点下游空时隙）。</p>
 <figure class='wavefig'>
-<img src="results/sc_afifo_wave_hybrid_16x16.png" alt="Hybrid B=2 纵向带环 + 横向树 (bi) AFIFO waveform (full trace)" />
+<img src="sc_afifo_wave_hybrid_16x16.png" alt="Hybrid B=2 纵向带环 + 横向树 (bi) AFIFO waveform (full trace)" />
 <figcaption>全程（约 40 条跨界链路对应的 makespan 周期）</figcaption>
 </figure>
 <figure class='wavefig'>
-<img src="results/sc_afifo_wave_hybrid_16x16_zoom.png" alt="Hybrid B=2 纵向带环 + 横向树 (bi) AFIFO waveform (zoom)" />
+<img src="sc_afifo_wave_hybrid_16x16_zoom.png" alt="Hybrid B=2 纵向带环 + 横向树 (bi) AFIFO waveform (zoom)" />
 <figcaption>放大窗口 0–40000 ps（约前 40 个域周期，便于观察脉冲细节）</figcaption>
 </figure>
 <pre>cd sc && make

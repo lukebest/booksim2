@@ -84,8 +84,9 @@ def afifo_table_rows(afifos):
 
 def waveform_section(scheme, label, ncross, mx, afifos, vcd_path, png_full, png_zoom):
     vcd_rel = os.path.relpath(vcd_path, ROOT)
-    png_rel = os.path.relpath(png_full, ROOT)
-    zoom_rel = os.path.relpath(png_zoom, ROOT)
+    # HTML lives in results/; PNGs are alongside it — use basename, not results/xxx
+    png_rel = os.path.basename(png_full)
+    zoom_rel = os.path.basename(png_zoom)
     rows = afifo_table_rows(afifos)
     trace_name = f"sc_trace_{scheme}_{mx}x{mx}.trace"
     vcd_base = f"sc_afifo_wave_{scheme}_{mx}x{mx}"
