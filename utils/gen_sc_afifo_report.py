@@ -313,6 +313,35 @@ def terminology_section():
     </section>"""
 
 
+def slot_free_model_section():
+    return """
+<section><h2>slot_free 模型说明</h2>
+<p class='note'>本节解释 hybrid 波形中 <code>slot_free</code> 信号为何全程为 1。</p>
+<p>当前下游空时隙判据定义为（见 <code>sc/mesh_tb.cpp</code>）：</p>
+<pre>deg_out[c]   = 节点 c 在整个 rigid 调度中使用的<b>不同</b>出链路数（出度）
+busy[c][t]   = 周期 t 时 c 实际在发的出链路数
+slot_free(c,t) = (busy[c][t] &lt; deg_out[c])   // "任一输出口空闲即放行"</pre>
+<p>这是一个<b>聚合判据</b>：只要 c 的出链路没有<b>全部</b>同时被占用，就认为下游有空时隙、
+可以读出 AFIFO。它不区分 arriving flit 需要的<b>具体下一跳输出端口</b>是否空闲。</p>
+<p>对 hybrid 16×16 波形所观察的 4 条最忙跨界 AFIFO 的读节点实测：</p>
+<table class='tbl'><tr><th>读节点 c</th><th>(x,y)</th><th>deg_out</th><th>max_busy</th>
+<th>blocked 周期数 (slot_free=0)</th></tr>
+<tr><td>200</td><td>(8,12)</td><td>4</td><td>2</td><td>0</td></tr>
+<tr><td>136</td><td>(8,8)</td><td>4</td><td>2</td><td>0</td></tr>
+<tr><td>135</td><td>(7,8)</td><td>3</td><td>2</td><td>0</td></tr>
+<tr><td>152</td><td>(8,9)</td><td>4</td><td>2</td><td>0</td></tr>
+</table>
+<p class='note'>rigid allgather 调度本身<b>无输出端口冲突</b>（同一节点同一周期最多在 2 条出链路上发），
+而这些跨界读节点 <code>deg_out</code> 为 3&ndash;4，故 <code>busy[c][t] &lt; deg_out[c]</code> 对所有 t 恒成立，
+<code>slot_free</code> 全程为 1。其后果：gated 在这些高扇出边界节点上 <code>rd_en = slot_free = 1</code>，
+与 greedy 完全等价，因此 hybrid greedy 的 collisions 也为 0。</p>
+<p class='note'>这是聚合判据的<b>建模局限</b>，不是波形渲染或仿真逻辑的错误。要让 <code>slot_free</code>
+反映真实的下游反压，需改为<b>按下一跳输出端口</b>判据：对每个 arriving flit，
+判断它离开 c 所需的那条具体出链路在该周期是否被 c 自身的调度占用。这需要为 AFIFO
+内的每个 flit 追加"下一跳"元数据并扩展 <code>afifo.h</code>，属于模型增强而非 bug 修复。</p>
+</section>"""
+
+
 def main():
     sweep = load_sweep()
     mx = sweep.get("mx", MX)
@@ -427,22 +456,27 @@ ring 踪迹启用 {ring_s['n_cross_links']} 条、hybrid 启用 {hyb_s['n_cross_
 {verify_html}
 {ring_sec}
 {hyb_sec}
+{slot_free_model_section()}
 <section><h2>结论</h2>
 <ul>
-<li>{mx}×{my}：ring baseline {ring_s['baseline_makespan']} cy / hybrid {hyb_s['baseline_makespan']} cy；
-&sigma;=0.1, S=2 时 ring 总缓存 {rg['mean_total_buf_flits']:.0f} flits，
-hybrid {hg['mean_total_buf_flits']:.0f} flits（有向 AFIFO {ring_s['n_cross_links']} vs {hyb_s['n_cross_links']}）。</li>
-<li>所需深度 p95：ring {rg['p95_depth']} / hybrid {hg['p95_depth']} flit。
-hybrid 跨界流量更集中，单链路峰值可达 2 flit，与波形图中 <code>wr_occ_phys</code> 在 0&ndash;2 间起落一致。</li>
+<li>{mx}×{my}：ring baseline {ring_s['baseline_makespan']} cy / hybrid {hyb_s['baseline_makespan']} cy（有向 AFIFO {ring_s['n_cross_links']} vs {hyb_s['n_cross_links']}）。</li>
+<li><b>最大单 AFIFO 深度</b>（&sigma;=0.1, S=2, 30 seeds MC 的 max 深度）：
+ring {rg['max_depth']} flit / hybrid {hg['max_depth']} flit。hybrid 跨界流量更集中，
+单链路峰值可达 {hg['max_depth']} flit，与波形图中 <code>wr_occ_phys</code> 在 0&ndash;{hg['max_depth']} 间起落一致；
+ring 单链路峰值仅 {rg['max_depth']} flit。</li>
 <li><b>collisions</b>：greedy 在 AFIFO 非空时立即读出，若目的节点该周期无空闲输出口
 （<code>slot_free=0</code>）则记一次下游冲突。depth=2, S=2, &sigma;=0.1 时：
 ring greedy max={ring_g_ds['max_collisions']} / mean={ring_g_ds['mean_collisions']:.1f}；
 hybrid greedy max={hyb_g_ds['max_collisions']} / mean={hyb_g_ds['mean_collisions']:.1f}。
 gated 策略 collisions 恒为 0（仅在 <code>slot_free=1</code> 时才 <code>rd_ok</code>）。</li>
-<li>hybrid 波形（gated）中 <code>slot_free</code> 几乎全程为 1，<code>wr_en</code> 与 <code>rd_ok</code>
-紧密对齐，<code>wr_stall</code> 恒为 0，说明 depth=8 对该方案绰绰有余。</li>
+<li><b>关于 hybrid 波形中 <code>slot_free</code> 全程为 1</b>：见「slot_free 模型说明」一节。
+当前 <code>slot_free(c,t) = busy[c][t] &lt; deg_out[c]</code>（"任一输出口空闲即放行"），
+而 hybrid 跨界读节点的 <code>deg_out</code> 为 3&ndash;4、任意周期最大同时占用 <code>max_busy</code> 仅 2
+（rigid allgather 调度本身无输出端口冲突），故该条件恒成立、<code>slot_free</code> 全程为 1，
+gated 在这些高扇出边界节点上退化为 greedy。这是"任一空闲口"聚合判据的局限，
+并非波形渲染错误。</li>
 <li>建议默认 <b>slot-gated</b> 读策略；深度按各链路 peak_phys_occ 独立配置
-（ring 约 1 flit/link，hybrid 约 2 flit/link）。</li>
+（ring 约 {rg['max_depth']} flit/link，hybrid 约 {hg['max_depth']} flit/link）。</li>
 </ul>
 </section>
 </body></html>"""
