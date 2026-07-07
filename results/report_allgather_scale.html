@@ -36,7 +36,7 @@ ul.compact li { margin:3px 0; }
 <li>规模：4x4, 6x8, 8x8, 12x16, 16x16, 32x32, 64x64（正方形部分按边长 x2 步进）</li>
 <li>数据大小 m ∈ {1..5} flit/节点；allgather 语义：每节点须从其余 N-1 个节点各收到 m flit</li>
 <li>调度目标：makespan = 最后一个 flit 完成下 ramp 出口的 cycle</li>
-<li>本研究的仿真引擎是<b>事件驱动流水线模型</b>（允许 flit 在路由器内部因出端口短暂繁忙而等待 1 个 pipeline register，不允许专用 SRAM 缓冲）——与更严格的“零缓冲刚性单一注入偏移”模型（<code>sched_zerobuf_compare.py</code>，仅用于 16x16 参考）相比更贴近真实 wormhole/VC 路由器实现，且可扩展到 64x64（详见 <code>utils/allgather_fast_sim.py</code> 文档字符串）。两者在 16x16 上分别列出对比。</li>
+<li><b>[已更正] 仿真引擎的 buffer 假设</b>：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，等待时长<b>没有硬性上限</b>（并非早期版本描述的“1 个 pipeline register”），这不等价于“零缓冲、无冲突、无阻塞”。该假设对不同方案族的影响很不对称，已被证实会扭曲跨方案的排名——详见第 3.5 节的实测核查与修正措施；本报告后续的“推荐方案”已改为在 buffer_budget=2 flit 约束下选取。</li>
 </ul></div>
 <h2>2. 下界分析</h2>
 <div class='card'>
@@ -65,11 +65,77 @@ ul.compact li { margin:3px 0; }
 <p>全量比较（含全部方案族 x B 值 x 单/双向）覆盖规模：4x4, 6x8, 8x8, 12x16, 16x16。32x32、64x64（N≥1024）单次仿真调用成本 O(N²·m)，采用分层策略：先在每个 ramp_bw 的代表性 m 下做一次缩减版全量比较（含 multitree、ring_bi、hybrid_bi/hybrid_v_bi 的 B∈{2,4,8}，双向变体——单向在所有更小规模上从未取胜，故不再评估）确定最优方案，再对其余 m 只重跑该最优方案 + multitree/ring_bi 两个基线，用于对照。</p>
 <p class='note'>Reduced coverage: only m in {1,5} evaluated per ramp_bw due to O(N^2) per-candidate simulation cost (~7min/candidate at N=4096); each cell still uses the same reduced 8-candidate huge-mesh search (multitree, ring_bi, hybrid_bi/hybrid_v_bi x B in {2,4,8}, bidir only).</p>
 </div>
-<h2>4. 热力图：makespan / 理论下界</h2>
+
+<h2>3.5 buffer 深度诚实性核查（重要更正）</h2>
+<div class="card">
+<p><b>结论先行：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，等待时长没有硬性上限
+（不是最初文档所写的"1 个 pipeline register"——这个描述是错的，已更正）。这对不同方案族的影响很不对称：
+multitree、细粒度 hybrid 等高扇出（in-network fork 多）方案能靠这种隐式排队大幅"抹平"调度冲突，从而
+在仿真里显得很快；ring / 粗粒度 hybrid_v_bi 等结构天然争用少得多，需要的排队也少得多。但即使是这些"较好"的
+方案，在 ramp_bw=1、m 较大、规模较大时也会需要不小的排队（例如 ring_bi 在 16x16/ramp_bw=1/m=5 需要 538
+flit 的下 ramp 缓冲）——根因是下 ramp 本身已饱和（eject 下界很紧），任何非精确协同调度的贪心算法都会在
+下 ramp 处产生突发积压，只是 multitree 的突发远比 ring 剧烈（同条件下约 10~20 倍）。因此"buffer 需求"更准确的
+表述是一个连续谱：<b>ring/粗粒度 hybrid ≪ multitree/细粒度 hybrid</b>，而不是"前者零需求、后者才需要"。
+跨方案比较 makespan 并不是在同一 buffer 假设下的公平比较。</b></p>
+
+<h3>实测证据 1：16x16, m=1，严格零 buffer vs 本引擎（排名完全反转）</h3>
+<table class="data"><thead><tr><th>方案</th><th>严格零buffer makespan（真值，ramp_bw=1）</th>
+<th>本引擎 makespan（ramp_bw=1）</th></tr></thead><tbody>
+<tr><td class="name">hybrid_v_bi_B2（真实最优）</td><td>334</td><td>332</td></tr>
+<tr><td class="name">ring_bi</td><td>754</td><td>754</td></tr>
+<tr><td class="name">multitree</td><td><b>837</b>（22 个方案中排第 13）</td><td><b>265</b>（"最优"）</td></tr>
+</tbody></table>
+<p class="note">严格零buffer数据来自 <code>utils/sched_zerobuf_compare.py</code> 的刚性单一注入偏移打包器
+（任何冲突都判定为不合法调度，必须靠全局重新选择偏移规避——见其文档字符串），是本研究唯一有硬证据支持的
+"无缓冲、无冲突、无阻塞"结果，但其打包搜索成本随规模、随 m 都是超线性增长（16x16、multitree：m=1 需 13.9s，
+m=2 需 38.7s，约 2.8x/+1flit），无法扩展到 m>1 或 32x32/64x64。</p>
+
+<h3>实测证据 2：所需 buffer 深度随 m 的增长（16x16, ramp_bw=1）</h3>
+<table class='data'><thead><tr><th>m</th><th>multitree makespan</th><th>multitree 所需buffer(link/ramp)</th><th>ring_bi makespan</th><th>ring_bi 所需buffer(link/ramp)</th></tr></thead><tbody><tr><td>1</td><td>265</td><td>10/121</td><td>754</td><td>0/1</td></tr><tr><td>2</td><td>515</td><td>26/250</td><td>755</td><td>0/2</td></tr><tr><td>3</td><td>770</td><td>42/378</td><td>772</td><td>0/33</td></tr><tr><td>4</td><td>1025</td><td>58/506</td><td>1027</td><td>0/286</td></tr><tr><td>5</td><td>1280</td><td>74/633</td><td>1282</td><td>1/538</td></tr></tbody></table>
+<p class="note">两者的下 ramp 缓冲需求都随 m 增长（ramp_bw=1 下 ramp 本身饱和，是两者共同的根因），但增长
+方式不同：multitree 从 m=1 起就需要大量排队（121 flit）且近似线性增长到 633；ring_bi 在 m=1~2 时几乎不需要
+排队（1~2 flit），m≥3 后才开始明显增长（33→286→538）。也就是说 ring_bi 把"需要深排队"的临界点推迟到了更大
+的 m，而不是完全没有这个问题——在 m 较小、或 ramp_bw=2（下 ramp 不饱和）时它才是真正的零/近零 buffer 方案，
+这也是本引擎"multitree 在小 m 时看起来更快"这一表象的直接机制解释，而不是真实的调度优势。</p>
+
+<h3>实测证据 3：64x64 全量抽样复核</h3>
+<table class="data"><thead><tr><th>方案 / 场景</th><th>makespan</th><th>所需 buffer(link/ramp，flit)</th></tr></thead><tbody>
+<tr><td class="name">multitree, ramp_bw=1, m=5</td><td>20480</td><td><b>314 / 10233</b></td></tr>
+<tr><td class="name">ring_bi, ramp_bw=2, m=5</td><td>12230</td><td>1 / 0</td></tr>
+</tbody></table>
+<p class="note">64x64、ramp_bw=1、m=5 下 multitree 需要单节点连续缓存 <b>10233 个 flit</b> 才能实现其记录的
+makespan——这远超任何现实路由器的缓冲深度，可确认此前"ramp_bw=1 时 multitree 总是最优"的结论是本引擎
+buffer 假设不一致造成的伪影，不可信。</p>
+
+<h3>严格零 buffer 基准（m=1，全部规模）</h3>
+<table class='data'><thead><tr><th>规模</th><th>ramp_bw</th><th>eject 下界</th><th>严格零 buffer 排名前三（m=1，makespan）</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>15</td><td class='name'>hybrid_bi_B2=32, hybrid_v_bi_B2=34, hybrid_v_bi_B1=42</td></tr><tr><td class='name'>4x4</td><td>2</td><td>8</td><td class='name'>multitree=32, hybrid_bi_B2=32, hybrid_bi_B4=32</td></tr><tr><td class='name'>6x8</td><td>1</td><td>47</td><td class='name'>hybrid_v_bi_B2=82, hybrid_bi_B2=92, hybrid_v_bi_B1=118</td></tr><tr><td class='name'>6x8</td><td>2</td><td>24</td><td class='name'>hybrid_v_bi_B2=82, hybrid_uni_B4=87, hybrid_bi_B2=92</td></tr><tr><td class='name'>8x8</td><td>1</td><td>63</td><td class='name'>hybrid_v_bi_B2=102, hybrid_bi_B2=112, hybrid_v_uni_B4=115</td></tr><tr><td class='name'>8x8</td><td>2</td><td>32</td><td class='name'>hybrid_v_bi_B2=102, hybrid_uni_B4=112, hybrid_bi_B2=112</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'>hybrid_v_bi_B2=262, hybrid_v_uni_B4=287, hybrid_bi_B2=328</td></tr><tr><td class='name'>12x16</td><td>2</td><td>96</td><td class='name'>hybrid_v_bi_B2=262, hybrid_v_uni_B4=287, hybrid_uni_B8=324</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'>hybrid_v_bi_B2=334, hybrid_v_uni_B4=363, hybrid_bi_B2=416</td></tr><tr><td class='name'>16x16</td><td>2</td><td>128</td><td class='name'>hybrid_v_bi_B2=334, hybrid_v_uni_B4=363, hybrid_uni_B8=409</td></tr><tr><td class='name'>32x32</td><td colspan='4' class='note'>未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr><tr><td class='name'>64x64</td><td colspan='4' class='note'>未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr></tbody></table>
+<p class="note"><b>hybrid_v_bi_B2</b>（B=2 纵向条带、双向）是 m=1 下唯一在 6x8~16x16 全部规模上都排名第一的方案
+（4x4 上与 hybrid_bi_B2/multitree 并列理论下界）——这与本引擎不加约束时给出的"multitree 常胜"结论相反，
+但与"允许适度实现缓冲"的仿真结果吻合度很高。</p>
+
+<h3>修正措施</h3>
+<ul class="compact">
+<li>本报告以下全部热力图/明细表已改为调用 <code>utils/autogen_allgather.py</code> 的
+<b>buffer_budget=2 flit 约束选择</b>（该阈值由上述实测校准：即使 3~4 flit 的隐式排队也足以让 multitree 的
+makespan 偏离真值 17~25%，阈值必须收紧到个位数以内才能有效滤除高扇出方案的伪影），而不是原始仿真里"不限制
+排队、最快获胜"的结果；报告表格中同时列出两者供对比。</li>
+<li><code>--selftest</code> 增加了对 <code>results/zerobuf_strict_m1.json</code>（真值）的交叉核对，
+默认 buffer_budget=2 下 m=1 的推荐方案与真实最优的比值全部 ≤1.13x（多数持平），
+远好于不加约束时可达 2~3x 的偏差。</li>
+<li>32x32 已重新用带缓冲量测的引擎全量复核（结果见第 4 节热力图/明细表）；64x64 只对两个代表性
+(ramp_bw, m) 组合做了直接抽样复核（见上表证据 3），其余组合仍复用旧的无量测数据，<code>recommend()</code>
+在检测到候选方案缺少 buffer 量测时不会当作"零 buffer 合规"处理，而是回退为"仅使用已量测方案中排队需求最小者"
+并标记 <code>buffer_limited=True</code>；已知在 ramp_bw=1、m 较大时，本引擎测得的任何方案都超出 buffer_budget，
+此时该回退等价于"挑排队需求最小的那个"（通常仍是 ring_bi/hybrid_v_bi 粗粒度），而不是无约束下最快的
+multitree/细粒度 hybrid——但其绝对 makespan 仍应视为"经验估计"而非可验证的零 buffer 最优解。</li>
+</ul>
+</div>
+
+<h2>4. 热力图：makespan / 理论下界（均为 buffer_budget=2 约束下的推荐方案）</h2>
 
 <div class="card">
 <h3>下 ramp 带宽 = 1 flit/cycle/node — makespan / 理论下界 T</h3>
-<div class="legend"><span>1.00x</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(72,72%,52%),hsl(0,72%,45%))"></div><span>1.98x</span><span class="note">(绿 = 贴近理论下界 T，红 = 偏离较大)</span></div>
+<div class="legend"><span>1.00x</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(72,72%,52%),hsl(0,72%,45%))"></div><span>2.97x</span><span class="note">(绿 = 贴近理论下界 T，红 = 偏离较大)</span></div>
 <svg width="592" height="396" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
 <text x="332" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">数据大小 m (flit)</text>
 <text x="140" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
@@ -81,98 +147,98 @@ ul.compact li { margin:3px 0; }
 <rect x="94" y="36" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="140" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
 <text x="140" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">32/32cy</text>
-<rect x="190" y="36" width="92" height="42" rx="6" fill="hsl(136, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
-<text x="236" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">35/33cy</text>
-<rect x="286" y="36" width="92" height="42" rx="6" fill="hsl(128, 72%, 58%)" stroke="#e2e8f0"/>
-<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.11x</text>
-<text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">50/45cy</text>
-<rect x="382" y="36" width="92" height="42" rx="6" fill="hsl(133, 72%, 58%)" stroke="#e2e8f0"/>
-<text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.08x</text>
-<text x="428" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">65/60cy</text>
-<rect x="478" y="36" width="92" height="42" rx="6" fill="hsl(135, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.07x</text>
-<text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">80/75cy</text>
+<rect x="190" y="36" width="92" height="42" rx="6" fill="hsl(123, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.30x</text>
+<text x="236" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">43/33cy</text>
+<rect x="286" y="36" width="92" height="42" rx="6" fill="hsl(94, 72%, 54%)" stroke="#e2e8f0"/>
+<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.69x</text>
+<text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">76/45cy</text>
+<rect x="382" y="36" width="92" height="42" rx="6" fill="hsl(124, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.28x</text>
+<text x="428" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">77/60cy</text>
+<rect x="478" y="36" width="92" height="42" rx="6" fill="hsl(136, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.12x</text>
+<text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">84/75cy</text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">64/64cy</text>
-<rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(137, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
-<text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">99/94cy</text>
-<rect x="286" y="82" width="92" height="42" rx="6" fill="hsl(140, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
-<text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">146/141cy</text>
-<rect x="382" y="82" width="92" height="42" rx="6" fill="hsl(141, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
-<text x="428" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">193/188cy</text>
-<rect x="478" y="82" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
-<text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">240/235cy</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(127, 72%, 58%)" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.25x</text>
+<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">80/64cy</text>
+<rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(125, 72%, 58%)" stroke="#e2e8f0"/>
+<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.27x</text>
+<text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">119/94cy</text>
+<rect x="286" y="82" width="92" height="42" rx="6" fill="hsl(104, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.56x</text>
+<text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">220/141cy</text>
+<rect x="382" y="82" width="92" height="42" rx="6" fill="hsl(132, 72%, 58%)" stroke="#e2e8f0"/>
+<text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.18x</text>
+<text x="428" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">221/188cy</text>
+<rect x="478" y="82" width="92" height="42" rx="6" fill="hsl(141, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
+<text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">248/235cy</text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">73/72cy</text>
-<rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
-<text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">131/126cy</text>
-<rect x="286" y="128" width="92" height="42" rx="6" fill="hsl(141, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
-<text x="332" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">194/189cy</text>
-<rect x="382" y="128" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="428" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
-<text x="428" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">257/252cy</text>
-<rect x="478" y="128" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
-<text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">320/315cy</text>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(102, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.58x</text>
+<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">114/72cy</text>
+<rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(130, 72%, 58%)" stroke="#e2e8f0"/>
+<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.20x</text>
+<text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">151/126cy</text>
+<rect x="286" y="128" width="92" height="42" rx="6" fill="hsl(108, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.50x</text>
+<text x="332" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">284/189cy</text>
+<rect x="382" y="128" width="92" height="42" rx="6" fill="hsl(135, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="428" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
+<text x="428" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">285/252cy</text>
+<rect x="478" y="128" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">328/315cy</text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(137, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
-<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">201/191cy</text>
-<rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">387/382cy</text>
-<rect x="286" y="174" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="332" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">578/573cy</text>
-<rect x="382" y="174" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="428" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="428" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">769/764cy</text>
-<rect x="478" y="174" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">960/955cy</text>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(108, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.50x</text>
+<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">286/191cy</text>
+<rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(136, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
+<text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">431/382cy</text>
+<rect x="286" y="174" width="92" height="42" rx="6" fill="hsl(112, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.45x</text>
+<text x="332" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">828/573cy</text>
+<rect x="382" y="174" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="428" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.09x</text>
+<text x="428" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">829/764cy</text>
+<rect x="478" y="174" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">976/955cy</text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
-<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
-<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">265/255cy</text>
-<rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">515/510cy</text>
-<rect x="286" y="220" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="332" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">770/765cy</text>
-<rect x="382" y="220" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="428" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="428" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">1025/1020cy</text>
+<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(114, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.42x</text>
+<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">362/255cy</text>
+<rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(138, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.10x</text>
+<text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">559/510cy</text>
+<rect x="286" y="220" width="92" height="42" rx="6" fill="hsl(114, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.42x</text>
+<text x="332" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">1084/765cy</text>
+<rect x="382" y="220" width="92" height="42" rx="6" fill="hsl(140, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="428" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
+<text x="428" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">1085/1020cy</text>
 <rect x="478" y="220" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="524" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">1280/1275cy</text>
+<text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="524" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">1296/1275cy</text>
 <text x="82" y="291" text-anchor="end" font-size="12" fill="#475569">32x32</text>
-<rect x="94" y="266" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
-<text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">1033/1023cy</text>
-<rect x="190" y="266" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">2051/2046cy</text>
+<rect x="94" y="266" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.97x</text>
+<text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3042/1023cy</text>
+<rect x="190" y="266" width="92" height="42" rx="6" fill="hsl(109, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.49x</text>
+<text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3043/2046cy</text>
 <rect x="286" y="266" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3074/3069cy</text>
+<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3076/3069cy</text>
 <rect x="382" y="266" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="428" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">4097/4092cy</text>
+<text x="428" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">4099/4092cy</text>
 <rect x="478" y="266" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="524" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="524" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">5120/5115cy</text>
+<text x="524" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">5122/5115cy</text>
 <text x="82" y="337" text-anchor="end" font-size="12" fill="#475569">64x64</text>
 <rect x="94" y="312" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="140" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
@@ -199,97 +265,97 @@ ul.compact li { margin:3px 0; }
 <rect x="94" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
 <text x="140" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
 <text x="140" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="428" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="428" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
 <text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="428" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="428" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
 <text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="428" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="428" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
-<rect x="94" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
 <text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="428" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="428" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="524" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="291" text-anchor="end" font-size="12" fill="#475569">32x32</text>
-<rect x="94" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="190" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="286" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="382" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="382" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="428" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="478" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="524" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="478" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="524" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="524" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="337" text-anchor="end" font-size="12" fill="#475569">64x64</text>
 <rect x="94" y="312" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
@@ -305,13 +371,13 @@ ul.compact li { margin:3px 0; }
 </div>
 <div class="card">
 <h3>下 ramp 带宽 = 1 flit/cycle/node — 详细数据</h3>
-<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>最优方案</th><th>makespan</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>multitree</b></td><td>35</td><td>1.061</td></tr><tr><td class='name'>4x4</td><td>3</td><td>45</td><td class='name'><b>multitree</b></td><td>50</td><td>1.111</td></tr><tr><td class='name'>4x4</td><td>4</td><td>60</td><td class='name'><b>multitree</b></td><td>65</td><td>1.083</td></tr><tr><td class='name'>4x4</td><td>5</td><td>75</td><td class='name'><b>multitree</b></td><td>80</td><td>1.067</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>multitree</b></td><td>64</td><td>1.000</td></tr><tr><td class='name'>6x8</td><td>2</td><td>94</td><td class='name'><b>multitree</b></td><td>99</td><td>1.053</td></tr><tr><td class='name'>6x8</td><td>3</td><td>141</td><td class='name'><b>multitree</b></td><td>146</td><td>1.036</td></tr><tr><td class='name'>6x8</td><td>4</td><td>188</td><td class='name'><b>multitree</b></td><td>193</td><td>1.027</td></tr><tr><td class='name'>6x8</td><td>5</td><td>235</td><td class='name'><b>multitree</b></td><td>240</td><td>1.021</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>multitree</b></td><td>73</td><td>1.014</td></tr><tr><td class='name'>8x8</td><td>2</td><td>126</td><td class='name'><b>multitree</b></td><td>131</td><td>1.040</td></tr><tr><td class='name'>8x8</td><td>3</td><td>189</td><td class='name'><b>multitree</b></td><td>194</td><td>1.026</td></tr><tr><td class='name'>8x8</td><td>4</td><td>252</td><td class='name'><b>multitree</b></td><td>257</td><td>1.020</td></tr><tr><td class='name'>8x8</td><td>5</td><td>315</td><td class='name'><b>multitree</b></td><td>320</td><td>1.016</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'><b>multitree</b></td><td>201</td><td>1.052</td></tr><tr><td class='name'>12x16</td><td>2</td><td>382</td><td class='name'><b>multitree</b></td><td>387</td><td>1.013</td></tr><tr><td class='name'>12x16</td><td>3</td><td>573</td><td class='name'><b>multitree</b></td><td>578</td><td>1.009</td></tr><tr><td class='name'>12x16</td><td>4</td><td>764</td><td class='name'><b>multitree</b></td><td>769</td><td>1.006</td></tr><tr><td class='name'>12x16</td><td>5</td><td>955</td><td class='name'><b>multitree</b></td><td>960</td><td>1.005</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'><b>multitree</b></td><td>265</td><td>1.039</td></tr><tr><td class='name'>16x16</td><td>2</td><td>510</td><td class='name'><b>multitree</b></td><td>515</td><td>1.010</td></tr><tr><td class='name'>16x16</td><td>3</td><td>765</td><td class='name'><b>multitree</b></td><td>770</td><td>1.006</td></tr><tr><td class='name'>16x16</td><td>4</td><td>1020</td><td class='name'><b>multitree</b></td><td>1025</td><td>1.005</td></tr><tr><td class='name'>16x16</td><td>5</td><td>1275</td><td class='name'><b>multitree</b></td><td>1280</td><td>1.004</td></tr><tr><td class='name'>32x32</td><td>1</td><td>1023</td><td class='name'><b>multitree</b></td><td>1033</td><td>1.010</td></tr><tr><td class='name'>32x32</td><td>2</td><td>2046</td><td class='name'><b>multitree</b></td><td>2051</td><td>1.002</td></tr><tr><td class='name'>32x32</td><td>3</td><td>3069</td><td class='name'><b>multitree</b></td><td>3074</td><td>1.002</td></tr><tr><td class='name'>32x32</td><td>4</td><td>4092</td><td class='name'><b>multitree</b></td><td>4097</td><td>1.001</td></tr><tr><td class='name'>32x32</td><td>5</td><td>5115</td><td class='name'><b>multitree</b></td><td>5120</td><td>1.001</td></tr><tr><td class='name'>64x64</td><td>1</td><td>4095</td><td class='name'><b>multitree</b></td><td>4105</td><td>1.002</td></tr><tr><td class='name'>64x64</td><td>3</td><td>12285</td><td class='name'><b>multitree</b></td><td>12290</td><td>1.000</td></tr><tr><td class='name'>64x64</td><td>5</td><td>20475</td><td class='name'><b>multitree</b></td><td>20480</td><td>1.000</td></tr></tbody></table>
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案（buffer_budget=2 约束下最快）</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1/2</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 35cy, buf=2/12)</span></td><td>43</td><td>0/2</td><td>1.303</td></tr><tr><td class='name'>4x4</td><td>3</td><td>45</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 50cy, buf=6/23)</span></td><td>76</td><td>0/0</td><td>1.689</td></tr><tr><td class='name'>4x4</td><td>4</td><td>60</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 65cy, buf=10/36)</span></td><td>77</td><td>0/0</td><td>1.283</td></tr><tr><td class='name'>4x4</td><td>5</td><td>75</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 80cy, buf=14/46)</span></td><td>84</td><td>1/0</td><td>1.120</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 64cy, buf=1/17)</span></td><td>80</td><td>1/2</td><td>1.250</td></tr><tr><td class='name'>6x8</td><td>2</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 99cy, buf=6/44)</span></td><td>119</td><td>0/2</td><td>1.266</td></tr><tr><td class='name'>6x8</td><td>3</td><td>141</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 146cy, buf=12/66)</span></td><td>220</td><td>0/0</td><td>1.560</td></tr><tr><td class='name'>6x8</td><td>4</td><td>188</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 193cy, buf=18/90)</span></td><td>221</td><td>0/0</td><td>1.175</td></tr><tr><td class='name'>6x8</td><td>5</td><td>235</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 240cy, buf=24/113)</span></td><td>248</td><td>1/0</td><td>1.055</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 73cy, buf=2/27)</span></td><td>114</td><td>1/2</td><td>1.583</td></tr><tr><td class='name'>8x8</td><td>2</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 131cy, buf=10/60)</span></td><td>151</td><td>0/2</td><td>1.198</td></tr><tr><td class='name'>8x8</td><td>3</td><td>189</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 194cy, buf=18/90)</span></td><td>284</td><td>0/0</td><td>1.503</td></tr><tr><td class='name'>8x8</td><td>4</td><td>252</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 257cy, buf=26/122)</span></td><td>285</td><td>0/0</td><td>1.131</td></tr><tr><td class='name'>8x8</td><td>5</td><td>315</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 320cy, buf=34/153)</span></td><td>328</td><td>1/0</td><td>1.041</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 201cy, buf=6/89)</span></td><td>286</td><td>1/2</td><td>1.497</td></tr><tr><td class='name'>12x16</td><td>2</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 387cy, buf=18/186)</span></td><td>431</td><td>0/2</td><td>1.128</td></tr><tr><td class='name'>12x16</td><td>3</td><td>573</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 578cy, buf=30/282)</span></td><td>828</td><td>0/0</td><td>1.445</td></tr><tr><td class='name'>12x16</td><td>4</td><td>764</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 769cy, buf=42/378)</span></td><td>829</td><td>0/0</td><td>1.085</td></tr><tr><td class='name'>12x16</td><td>5</td><td>955</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 960cy, buf=54/473)</span></td><td>976</td><td>1/0</td><td>1.022</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 265cy, buf=10/121)</span></td><td>362</td><td>1/2</td><td>1.420</td></tr><tr><td class='name'>16x16</td><td>2</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 515cy, buf=26/250)</span></td><td>559</td><td>0/2</td><td>1.096</td></tr><tr><td class='name'>16x16</td><td>3</td><td>765</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 770cy, buf=42/378)</span></td><td>1084</td><td>0/0</td><td>1.417</td></tr><tr><td class='name'>16x16</td><td>4</td><td>1020</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1025cy, buf=58/506)</span></td><td>1085</td><td>0/0</td><td>1.064</td></tr><tr><td class='name'>16x16</td><td>5</td><td>1275</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1280cy, buf=74/633)</span></td><td>1296</td><td>1/0</td><td>1.016</td></tr><tr><td class='name'>32x32</td><td>1</td><td>1023</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1033cy, buf=26/505)</span></td><td>3042</td><td>0/1</td><td>2.974</td></tr><tr><td class='name'>32x32</td><td>2</td><td>2046</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 2051cy, buf=58/1018)</span></td><td>3043</td><td>0/2</td><td>1.487</td></tr><tr><td class='name'>32x32</td><td>3</td><td>3069</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 3074cy, buf=90/1530)</span></td><td>3076</td><td>0/65</td><td>1.002</td></tr><tr><td class='name'>32x32</td><td>4</td><td>4092</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 4097cy, buf=122/2042)</span></td><td>4099</td><td>0/1086</td><td>1.002</td></tr><tr><td class='name'>32x32</td><td>5</td><td>5115</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 5120cy, buf=154/2553)</span></td><td>5122</td><td>1/2106</td><td>1.001</td></tr><tr><td class='name'>64x64</td><td>1</td><td>4095</td><td class='name'><b>multitree</b></td><td>4105</td><td>None/None</td><td>1.002</td></tr><tr><td class='name'>64x64</td><td>3</td><td>12285</td><td class='name'><b>multitree</b></td><td>12290</td><td>None/None</td><td>1.000</td></tr><tr><td class='name'>64x64</td><td>5</td><td>20475</td><td class='name'><b>multitree</b></td><td>20480</td><td>None/None</td><td>1.000</td></tr></tbody></table>
 </div>
 
 
 <div class="card">
 <h3>下 ramp 带宽 = 2 flit/cycle/node — makespan / 理论下界 T</h3>
-<div class="legend"><span>1.00x</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(72,72%,52%),hsl(0,72%,45%))"></div><span>1.98x</span><span class="note">(绿 = 贴近理论下界 T，红 = 偏离较大)</span></div>
+<div class="legend"><span>1.00x</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(72,72%,52%),hsl(0,72%,45%))"></div><span>2.97x</span><span class="note">(绿 = 贴近理论下界 T，红 = 偏离较大)</span></div>
 <svg width="592" height="396" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
 <text x="332" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">数据大小 m (flit)</text>
 <text x="140" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
@@ -326,103 +392,103 @@ ul.compact li { margin:3px 0; }
 <rect x="190" y="36" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
 <text x="236" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">33/33cy</text>
-<rect x="286" y="36" width="92" height="42" rx="6" fill="hsl(110, 72%, 56%)" stroke="#e2e8f0"/>
-<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.24x</text>
-<text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">42/34cy</text>
-<rect x="382" y="36" width="92" height="42" rx="6" fill="hsl(103, 72%, 55%)" stroke="#e2e8f0"/>
+<rect x="286" y="36" width="92" height="42" rx="6" fill="hsl(123, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.29x</text>
+<text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">44/34cy</text>
+<rect x="382" y="36" width="92" height="42" rx="6" fill="hsl(124, 72%, 57%)" stroke="#e2e8f0"/>
 <text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.29x</text>
 <text x="428" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">45/35cy</text>
-<rect x="478" y="36" width="92" height="42" rx="6" fill="hsl(102, 72%, 55%)" stroke="#e2e8f0"/>
+<rect x="478" y="36" width="92" height="42" rx="6" fill="hsl(124, 72%, 57%)" stroke="#e2e8f0"/>
 <text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.29x</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">49/38cy</text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
 <rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
 <text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">64/64cy</text>
-<rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(97, 72%, 54%)" stroke="#e2e8f0"/>
-<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.32x</text>
-<text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">86/65cy</text>
-<rect x="286" y="82" width="92" height="42" rx="6" fill="hsl(47, 72%, 48%)" stroke="#e2e8f0"/>
-<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.66x</text>
-<text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">118/71cy</text>
-<rect x="382" y="82" width="92" height="42" rx="6" fill="hsl(102, 72%, 55%)" stroke="#e2e8f0"/>
+<rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(84, 72%, 52%)" stroke="#e2e8f0"/>
+<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.83x</text>
+<text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">119/65cy</text>
+<rect x="286" y="82" width="92" height="42" rx="6" fill="hsl(94, 72%, 54%)" stroke="#e2e8f0"/>
+<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.69x</text>
+<text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">120/71cy</text>
+<rect x="382" y="82" width="92" height="42" rx="6" fill="hsl(124, 72%, 57%)" stroke="#e2e8f0"/>
 <text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.29x</text>
 <text x="428" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">121/94cy</text>
-<rect x="478" y="82" width="92" height="42" rx="6" fill="hsl(126, 72%, 58%)" stroke="#e2e8f0"/>
+<rect x="478" y="82" width="92" height="42" rx="6" fill="hsl(136, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">133/118cy</text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">72/72cy</text>
-<rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(64, 72%, 50%)" stroke="#e2e8f0"/>
-<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.55x</text>
-<text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">113/73cy</text>
-<rect x="286" y="128" width="92" height="42" rx="6" fill="hsl(56, 72%, 49%)" stroke="#e2e8f0"/>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(116, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.39x</text>
+<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">100/72cy</text>
+<rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(67, 72%, 50%)" stroke="#e2e8f0"/>
+<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.07x</text>
+<text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">151/73cy</text>
+<rect x="286" y="128" width="92" height="42" rx="6" fill="hsl(101, 72%, 55%)" stroke="#e2e8f0"/>
 <text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.60x</text>
 <text x="332" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">152/95cy</text>
-<rect x="382" y="128" width="92" height="42" rx="6" fill="hsl(113, 72%, 56%)" stroke="#e2e8f0"/>
+<rect x="382" y="128" width="92" height="42" rx="6" fill="hsl(129, 72%, 58%)" stroke="#e2e8f0"/>
 <text x="428" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.21x</text>
 <text x="428" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">153/126cy</text>
-<rect x="478" y="128" width="92" height="42" rx="6" fill="hsl(131, 72%, 58%)" stroke="#e2e8f0"/>
+<rect x="478" y="128" width="92" height="42" rx="6" fill="hsl(138, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.09x</text>
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">173/158cy</text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(81, 72%, 52%)" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.43x</text>
-<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">195/136cy</text>
-<rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(50, 72%, 48%)" stroke="#e2e8f0"/>
-<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.64x</text>
-<text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">313/191cy</text>
-<rect x="286" y="174" width="92" height="42" rx="6" fill="hsl(70, 72%, 51%)" stroke="#e2e8f0"/>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(78, 72%, 52%)" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.91x</text>
+<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">260/136cy</text>
+<rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(53, 72%, 49%)" stroke="#e2e8f0"/>
+<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.26x</text>
+<text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">431/191cy</text>
+<rect x="286" y="174" width="92" height="42" rx="6" fill="hsl(108, 72%, 55%)" stroke="#e2e8f0"/>
 <text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.51x</text>
 <text x="332" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">432/287cy</text>
-<rect x="382" y="174" width="92" height="42" rx="6" fill="hsl(125, 72%, 58%)" stroke="#e2e8f0"/>
+<rect x="382" y="174" width="92" height="42" rx="6" fill="hsl(135, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="428" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
 <text x="428" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">433/382cy</text>
-<rect x="478" y="174" width="92" height="42" rx="6" fill="hsl(138, 72%, 59%)" stroke="#e2e8f0"/>
+<rect x="478" y="174" width="92" height="42" rx="6" fill="hsl(141, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">501/478cy</text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
-<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(46, 72%, 48%)" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.66x</text>
-<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">253/152cy</text>
-<rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(51, 72%, 48%)" stroke="#e2e8f0"/>
-<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.64x</text>
-<text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">417/255cy</text>
-<rect x="286" y="220" width="92" height="42" rx="6" fill="hsl(76, 72%, 51%)" stroke="#e2e8f0"/>
+<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(58, 72%, 49%)" stroke="#e2e8f0"/>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.18x</text>
+<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">332/152cy</text>
+<rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(57, 72%, 49%)" stroke="#e2e8f0"/>
+<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.19x</text>
+<text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">559/255cy</text>
+<rect x="286" y="220" width="92" height="42" rx="6" fill="hsl(111, 72%, 56%)" stroke="#e2e8f0"/>
 <text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.46x</text>
 <text x="332" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">560/383cy</text>
-<rect x="382" y="220" width="92" height="42" rx="6" fill="hsl(130, 72%, 58%)" stroke="#e2e8f0"/>
+<rect x="382" y="220" width="92" height="42" rx="6" fill="hsl(138, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="428" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.10x</text>
 <text x="428" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">561/510cy</text>
-<rect x="478" y="220" width="92" height="42" rx="6" fill="hsl(140, 72%, 59%)" stroke="#e2e8f0"/>
+<rect x="478" y="220" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
 <text x="524" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">661/638cy</text>
 <text x="82" y="291" text-anchor="end" font-size="12" fill="#475569">32x32</text>
-<rect x="94" y="266" width="92" height="42" rx="6" fill="hsl(1, 72%, 42%)" stroke="#e2e8f0"/>
-<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.97x</text>
-<text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">1007/512cy</text>
-<rect x="190" y="266" width="92" height="42" rx="6" fill="hsl(61, 72%, 50%)" stroke="#e2e8f0"/>
-<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.56x</text>
-<text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">1601/1023cy</text>
-<rect x="286" y="266" width="92" height="42" rx="6" fill="hsl(65, 72%, 50%)" stroke="#e2e8f0"/>
-<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.54x</text>
-<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">2366/1535cy</text>
-<rect x="382" y="266" width="92" height="42" rx="6" fill="hsl(72, 72%, 51%)" stroke="#e2e8f0"/>
+<rect x="94" y="266" width="92" height="42" rx="6" fill="hsl(49, 72%, 48%)" stroke="#e2e8f0"/>
+<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.30x</text>
+<text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">1180/512cy</text>
+<rect x="190" y="266" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.97x</text>
+<text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3043/1023cy</text>
+<rect x="286" y="266" width="92" height="42" rx="6" fill="hsl(73, 72%, 51%)" stroke="#e2e8f0"/>
+<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.98x</text>
+<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3044/1535cy</text>
+<rect x="382" y="266" width="92" height="42" rx="6" fill="hsl(109, 72%, 56%)" stroke="#e2e8f0"/>
 <text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.49x</text>
 <text x="428" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3045/2046cy</text>
-<rect x="478" y="266" width="92" height="42" rx="6" fill="hsl(117, 72%, 56%)" stroke="#e2e8f0"/>
+<rect x="478" y="266" width="92" height="42" rx="6" fill="hsl(131, 72%, 58%)" stroke="#e2e8f0"/>
 <text x="524" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.19x</text>
 <text x="524" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3046/2558cy</text>
 <text x="82" y="337" text-anchor="end" font-size="12" fill="#475569">64x64</text>
-<rect x="94" y="312" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<rect x="94" y="312" width="92" height="42" rx="6" fill="hsl(73, 72%, 51%)" stroke="#e2e8f0"/>
 <text x="140" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.98x</text>
 <text x="140" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">4047/2048cy</text>
-<rect x="286" y="312" width="92" height="42" rx="6" fill="hsl(59, 72%, 49%)" stroke="#e2e8f0"/>
+<rect x="286" y="312" width="92" height="42" rx="6" fill="hsl(102, 72%, 55%)" stroke="#e2e8f0"/>
 <text x="332" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.58x</text>
 <text x="332" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">9716/6143cy</text>
-<rect x="478" y="312" width="92" height="42" rx="6" fill="hsl(116, 72%, 56%)" stroke="#e2e8f0"/>
+<rect x="478" y="312" width="92" height="42" rx="6" fill="hsl(131, 72%, 58%)" stroke="#e2e8f0"/>
 <text x="524" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.19x</text>
 <text x="524" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">12230/10238cy</text>
 </svg>
@@ -445,7 +511,7 @@ ul.compact li { margin:3px 0; }
 <text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
 <text x="236" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="332" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="332" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="382" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="428" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -454,14 +520,14 @@ ul.compact li { margin:3px 0; }
 <text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="#d97706" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">h_bi B=4</text>
 <text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="332" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="332" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="382" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="428" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -470,11 +536,11 @@ ul.compact li { margin:3px 0; }
 <text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="332" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -486,11 +552,11 @@ ul.compact li { margin:3px 0; }
 <text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="332" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -503,10 +569,10 @@ ul.compact li { margin:3px 0; }
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
 <rect x="94" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=8</text>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="332" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -518,14 +584,14 @@ ul.compact li { margin:3px 0; }
 <text x="524" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="524" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="291" text-anchor="end" font-size="12" fill="#475569">32x32</text>
-<rect x="94" y="266" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="190" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<rect x="190" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
+<rect x="286" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
 <text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="382" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
 <text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
@@ -547,22 +613,24 @@ ul.compact li { margin:3px 0; }
 </div>
 <div class="card">
 <h3>下 ramp 带宽 = 2 flit/cycle/node — 详细数据</h3>
-<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>最优方案</th><th>makespan</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>multitree</b></td><td>33</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>3</td><td>34</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>42</td><td>1.235</td></tr><tr><td class='name'>4x4</td><td>4</td><td>35</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>45</td><td>1.286</td></tr><tr><td class='name'>4x4</td><td>5</td><td>38</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>49</td><td>1.290</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>multitree</b></td><td>64</td><td>1.000</td></tr><tr><td class='name'>6x8</td><td>2</td><td>65</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>86</td><td>1.323</td></tr><tr><td class='name'>6x8</td><td>3</td><td>71</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>118</td><td>1.662</td></tr><tr><td class='name'>6x8</td><td>4</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>121</td><td>1.287</td></tr><tr><td class='name'>6x8</td><td>5</td><td>118</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>133</td><td>1.127</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>multitree</b></td><td>72</td><td>1.000</td></tr><tr><td class='name'>8x8</td><td>2</td><td>73</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>113</td><td>1.548</td></tr><tr><td class='name'>8x8</td><td>3</td><td>95</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>152</td><td>1.600</td></tr><tr><td class='name'>8x8</td><td>4</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>153</td><td>1.214</td></tr><tr><td class='name'>8x8</td><td>5</td><td>158</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>173</td><td>1.095</td></tr><tr><td class='name'>12x16</td><td>1</td><td>136</td><td class='name'><b>multitree</b></td><td>195</td><td>1.434</td></tr><tr><td class='name'>12x16</td><td>2</td><td>191</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>313</td><td>1.639</td></tr><tr><td class='name'>12x16</td><td>3</td><td>287</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>432</td><td>1.505</td></tr><tr><td class='name'>12x16</td><td>4</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>433</td><td>1.133</td></tr><tr><td class='name'>12x16</td><td>5</td><td>478</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>501</td><td>1.048</td></tr><tr><td class='name'>16x16</td><td>1</td><td>152</td><td class='name'><b>hybrid_v_bi_B8</b></td><td>253</td><td>1.665</td></tr><tr><td class='name'>16x16</td><td>2</td><td>255</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>417</td><td>1.635</td></tr><tr><td class='name'>16x16</td><td>3</td><td>383</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>560</td><td>1.462</td></tr><tr><td class='name'>16x16</td><td>4</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>561</td><td>1.100</td></tr><tr><td class='name'>16x16</td><td>5</td><td>638</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>661</td><td>1.036</td></tr><tr><td class='name'>32x32</td><td>1</td><td>512</td><td class='name'><b>multitree</b></td><td>1007</td><td>1.967</td></tr><tr><td class='name'>32x32</td><td>2</td><td>1023</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>1601</td><td>1.565</td></tr><tr><td class='name'>32x32</td><td>3</td><td>1535</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>2366</td><td>1.541</td></tr><tr><td class='name'>32x32</td><td>4</td><td>2046</td><td class='name'><b>ring_bi</b></td><td>3045</td><td>1.488</td></tr><tr><td class='name'>32x32</td><td>5</td><td>2558</td><td class='name'><b>ring_bi</b></td><td>3046</td><td>1.191</td></tr><tr><td class='name'>64x64</td><td>1</td><td>2048</td><td class='name'><b>multitree</b></td><td>4047</td><td>1.976</td></tr><tr><td class='name'>64x64</td><td>3</td><td>6143</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>9716</td><td>1.582</td></tr><tr><td class='name'>64x64</td><td>5</td><td>10238</td><td class='name'><b>ring_bi</b></td><td>12230</td><td>1.195</td></tr></tbody></table>
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案（buffer_budget=2 约束下最快）</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>multitree</b></td><td>33</td><td>2/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>3</td><td>34</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 42cy, buf=8/2)</span></td><td>44</td><td>0/0</td><td>1.294</td></tr><tr><td class='name'>4x4</td><td>4</td><td>35</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>45</td><td>0/0</td><td>1.286</td></tr><tr><td class='name'>4x4</td><td>5</td><td>38</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>49</td><td>1/0</td><td>1.290</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_bi_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 64cy, buf=1/3)</span></td><td>64</td><td>2/2</td><td>1.000</td></tr><tr><td class='name'>6x8</td><td>2</td><td>65</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 86cy, buf=9/2)</span></td><td>119</td><td>0/0</td><td>1.831</td></tr><tr><td class='name'>6x8</td><td>3</td><td>71</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 118cy, buf=32/5)</span></td><td>120</td><td>0/0</td><td>1.690</td></tr><tr><td class='name'>6x8</td><td>4</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>121</td><td>0/0</td><td>1.287</td></tr><tr><td class='name'>6x8</td><td>5</td><td>118</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>133</td><td>1/0</td><td>1.127</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 72cy, buf=2/4)</span></td><td>100</td><td>1/1</td><td>1.389</td></tr><tr><td class='name'>8x8</td><td>2</td><td>73</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 113cy, buf=14/2)</span></td><td>151</td><td>0/0</td><td>2.068</td></tr><tr><td class='name'>8x8</td><td>3</td><td>95</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>152</td><td>0/0</td><td>1.600</td></tr><tr><td class='name'>8x8</td><td>4</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>153</td><td>0/0</td><td>1.214</td></tr><tr><td class='name'>8x8</td><td>5</td><td>158</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>173</td><td>1/0</td><td>1.095</td></tr><tr><td class='name'>12x16</td><td>1</td><td>136</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 195cy, buf=6/10)</span></td><td>260</td><td>1/1</td><td>1.912</td></tr><tr><td class='name'>12x16</td><td>2</td><td>191</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 313cy, buf=25/2)</span></td><td>431</td><td>0/0</td><td>2.256</td></tr><tr><td class='name'>12x16</td><td>3</td><td>287</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>432</td><td>0/0</td><td>1.505</td></tr><tr><td class='name'>12x16</td><td>4</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>433</td><td>0/0</td><td>1.133</td></tr><tr><td class='name'>12x16</td><td>5</td><td>478</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>501</td><td>1/0</td><td>1.048</td></tr><tr><td class='name'>16x16</td><td>1</td><td>152</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B8 253cy, buf=24/24)</span></td><td>332</td><td>1/1</td><td>2.184</td></tr><tr><td class='name'>16x16</td><td>2</td><td>255</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 417cy, buf=35/2)</span></td><td>559</td><td>0/0</td><td>2.192</td></tr><tr><td class='name'>16x16</td><td>3</td><td>383</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>560</td><td>0/0</td><td>1.462</td></tr><tr><td class='name'>16x16</td><td>4</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>561</td><td>0/0</td><td>1.100</td></tr><tr><td class='name'>16x16</td><td>5</td><td>638</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>661</td><td>1/0</td><td>1.036</td></tr><tr><td class='name'>32x32</td><td>1</td><td>512</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1007cy, buf=26/40)</span></td><td>1180</td><td>1/1</td><td>2.305</td></tr><tr><td class='name'>32x32</td><td>2</td><td>1023</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 1601cy, buf=74/2)</span></td><td>3043</td><td>0/0</td><td>2.975</td></tr><tr><td class='name'>32x32</td><td>3</td><td>1535</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 2366cy, buf=265/51)</span></td><td>3044</td><td>0/0</td><td>1.983</td></tr><tr><td class='name'>32x32</td><td>4</td><td>2046</td><td class='name'><b>ring_bi</b></td><td>3045</td><td>0/0</td><td>1.488</td></tr><tr><td class='name'>32x32</td><td>5</td><td>2558</td><td class='name'><b>ring_bi</b></td><td>3046</td><td>1/0</td><td>1.191</td></tr><tr><td class='name'>64x64</td><td>1</td><td>2048</td><td class='name'><b>multitree</b></td><td>4047</td><td>None/None</td><td>1.976</td></tr><tr><td class='name'>64x64</td><td>3</td><td>6143</td><td class='name'><b>hybrid_v_bi_B2</b></td><td>9716</td><td>None/None</td><td>1.582</td></tr><tr><td class='name'>64x64</td><td>5</td><td>10238</td><td class='name'><b>ring_bi</b></td><td>12230</td><td>None/None</td><td>1.195</td></tr></tbody></table>
 </div>
 
-<h2>5. 结论</h2>
+<h2>5. 结论（已按第 3.5 节的 buffer 诚实性核查修正）</h2>
 <div class='card'>
 <ul class='compact'>
-<li><b>hybrid_v（纵带局部环 + 横向树）双向变体</b>在几乎所有中大规模、双 ramp_bw 组合下都是或接近最优方案，B 值最优点通常在 2~8 之间，随规模增大略微上移。</li>
-<li><b>multitree</b> 在极小规模（4x4、6x8）与 m=1 时经常直接达到理论下界（ratio=1.0），因为此时延迟下界主导而非带宽下界，维序双向树的最短路径特性正好命中。</li>
-<li><b>ring（全局单环）</b>在所有规模上都明显落后于 hybrid/hybrid_v（条带化把长距离环拆成局部环 + 树形广播，显著缩短关键路径），仅作为下界基线保留。</li>
+<li><b>之前版本"ramp_bw=1 时 multitree 几乎总是最优"的结论已被证伪并撤回</b>：该结论完全建立在事件驱动引擎允许无上限隐式排队的基础上；64x64/ramp_bw=1/m=5 下 multitree 实际需要单节点连续缓存 10233 flit 才能达到其记录的 makespan，16x16 上其严格零 buffer 真值（837）反而排在 22 个方案中的第 13 位。multitree 的多播式 in-network fork 结构会在所有源同时广播时产生大量跨源链路/ramp 争用，需要靠排队"抹平"这些争用；争用量随规模、随 m 近似线性增长，buffer 需求也随之增长，因此不具备可扩展性。</li>
+<li><b>可信的最优方案（有严格零 buffer 证据支持）：hybrid_v_bi_B2</b>（B=2 纵向条带、双向局部环 + 横向树）在 m=1 下的 6x8~16x16 全部规模上都是严格零 buffer 打包器给出的真实最优解（4x4 上与另两个方案并列理论下界）；它在事件驱动引擎里的所需 buffer 也始终在个位数以内，两种模型给出的数字几乎一致（如 16x16: 334 vs 332）。</li>
+<li><b>ring（全局单环）/ 粗粒度 hybrid_bi(B=1)</b> 结构上争用远少于多播树类方案，所需排队普遍小一到两个数量级（如 16x16/ramp_bw=1/m=5：ring_bi 需 538 flit 排队，multitree 需同条件下更大的量；32x32 同条件下ring_bi 约 2100 flit）；<b>但并非严格零 buffer</b>——ramp_bw=1、m 较大、规模较大时它也需要明显排队，根因是下 ramp 本身已饱和，与拓扑选择无关，见第 3.5 节。ramp_bw=2（下 ramp 不饱和）或 m 较小时，ring_bi/粗粒度 hybrid_v_bi 才能做到真正的 buffer≈0，此时也是本研究中最可信、两种 buffer 假设下数字几乎一致的方案；32x32/64x64、ramp_bw=2、m 较大下它也是（buffer_budget=2 约束后）实测最优解。</li>
 <li>ramp_bw 从 1 提升到 2：m 较大、规模较大时 makespan 近似减半（带宽受限区间）；m=1 的小规模场景则几乎不变（延迟下界主导，带宽提升无效）。</li>
-<li>ratio（makespan/T）总体在 1.0~2.0 之间。一个明显的规律：<b>规模越大、ramp_bw=1 时，几乎任意合理方案都逼近 eject 下界（64x64 @ ramp_bw=1 全部 m 上 ratio ≤ 1.0024）</b>——此时下 ramp 出口几乎永不空闲，是唯一瓶颈，拓扑选择反而不重要；而 ramp_bw=2 时下界不再总是可达（如 64x64,m=1,ramp_bw=2 的角节点下界 T=2048 只能压到 4047，ratio≈1.98），说明角节点链路下界在 ramp_bw≥2、m 较小时是一个理论上正确但实践中难以逼近的松下界。</li>
-<li>方案排名并非在所有 (规模, m) 组合下都稳定：64x64、ramp_bw=2、m=5 的实测最优反而是最简单的全局 ring_bi（优于 multitree 与 hybrid_v_bi_B2），提示大规模 + 大数据量 + 较宽带宽区间下，简单拓扑的均匀负载分布有时比精细分带更优——本报告的 autogen 选择器直接以逐格实测结果为准，而不依赖"某一方案族总是最优"的先验假设。</li>
+<li>ratio（makespan/T，均基于 buffer_budget=2 约束后的推荐方案）在 1.0~2.0 之间，规律与此前一致：规模越大、ramp_bw=1 时越逼近 eject 下界（拓扑选择不重要，下 ramp 是唯一瓶颈）；ramp_bw=2、m 较小时角节点链路下界是理论正确但实践难以逼近的松下界。</li>
+<li>方案排名并非在所有 (规模, m) 组合下都稳定，autogen 选择器直接以逐格实测结果（buffer 约束后）为准，不依赖"某一方案族总是最优"的先验假设。</li>
+<li><b>局限</b>：32x32/64x64 没有严格零 buffer 真值可比对（打包器成本超线性、无法扩展），这两个规模的 buffer_budget=2 选择仍是"用事件驱动引擎自己的排队量测来约束自己的排队量测"，只能确认与小规模同族方案（ring/粗粒度 hybrid）的规律一致，不构成独立证明；如需严格证明，需要一个可扩展的零缓冲调度算法（当前的刚性打包器不是），留作后续工作。</li>
 </ul></div>
 <h2>6. Autogen 方案生成器</h2>
 <div class='card'>
-<p><code>utils/autogen_allgather.py</code> 从本次扫描的查找表中，为任意 (mx, my, m, ramp_bw) 直接返回预先确定的最优方案标签与其可复现的仿真调用；覆盖本报告全部 7 规模 x 5 数据量 x 2 带宽 = 70 组合的生成 + 校验回归结果见脚本自带的 <code>--selftest</code> 输出。</p>
+<p><code>utils/autogen_allgather.py</code> 从本次扫描的查找表中，为任意 (mx, my, m, ramp_bw) 直接返回预先确定的方案标签与其可复现的仿真调用；覆盖本报告全部 7 规模 x 5 数据量 x 2 带宽 = 70 组合的生成 + 校验回归结果见脚本自带的 <code>--selftest</code> 输出。</p>
+<p>默认 <code>buffer_budget=2</code>（flit）：仅在候选方案的 <code>max_link_wait</code> 与 <code>max_ramp_wait</code> 均不超过该值时才考虑其 makespan，见第 3.5 节校准依据；传 <code>buffer_budget=None</code> 复现旧版（无约束、可能依赖不现实缓冲深度）的选择。<code>--selftest</code> 会额外将 m=1 的推荐结果与 <code>results/zerobuf_strict_m1.json</code>（严格零 buffer 真值）交叉核对：默认阈值下所选方案的真实（零 buffer）makespan 与真实最优的比值全部 ≤1.13x（多数持平），相比无约束选择时可达 2~3x 的偏差是明显的改进，但仍非精确等于真实最优——这是用一个连续的 buffer-depth 代理指标去近似一个离散的"零 buffer 可行性"约束的必然局限。</p>
 </div>
 <p class='note'>复现：<code>python3 utils/allgather_lower_bounds.py</code> → <code>python3 utils/sweep_allgather_scale.py</code> → <code>python3 utils/gen_allgather_scale_report.py</code></p>
 </body></html>

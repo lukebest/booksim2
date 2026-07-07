@@ -98,9 +98,11 @@ def reduced_candidates(mx, my, winner_name, winner_fn, winner_args):
 
 def eval_candidate(mx, my, ramp_bw, flits, name, fn, extra_args):
     t0 = time.time()
-    mk, ok, bad = fn(mx, my, H, V, ramp_bw, flits, *extra_args)
+    mk, ok, bad, max_link_wait, max_ramp_wait = fn(mx, my, H, V, ramp_bw, flits, *extra_args)
     dt = time.time() - t0
-    return {"name": name, "makespan": mk, "ok": ok, "bad": bad, "time_s": round(dt, 3)}
+    return {"name": name, "makespan": mk, "ok": ok, "bad": bad,
+            "max_link_wait": max_link_wait, "max_ramp_wait": max_ramp_wait,
+            "time_s": round(dt, 3)}
 
 
 def sweep_cell(mx, my, ramp_bw, flits, candidates, log_prefix=""):
@@ -109,6 +111,7 @@ def sweep_cell(mx, my, ramp_bw, flits, candidates, log_prefix=""):
         r = eval_candidate(mx, my, ramp_bw, flits, name, fn, extra)
         results.append(r)
         print(f"{log_prefix}{name:20s} mk={r['makespan']:7d} ok={r['ok']!s:5s} "
+              f"buf(link/ramp)={r['max_link_wait']:4d}/{r['max_ramp_wait']:4d} "
               f"({r['time_s']:.2f}s)")
     feas = [r for r in results if r["ok"]]
     best = min(feas, key=lambda r: r["makespan"]) if feas else None

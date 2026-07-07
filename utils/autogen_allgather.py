@@ -6,6 +6,22 @@ scheme that results/allgather_scale_sweep.json found to have the lowest
 makespan, plus the callable that reproduces it against
 utils/allgather_fast_sim.py.
 
+IMPORTANT -- buffer-depth caveat (see results/report_allgather_scale.html
+sec. "buffer 深度诚实性核查"): the event-driven engine used for the sweep
+allows a flit to wait an UNBOUNDED number of cycles at a contended link or
+down-ramp, which is NOT the same as a real zero/small-buffer router. This is
+fine for schemes whose contention-free structure happens to need ~0 wait
+(ring, coarse-B hybrid/hybrid_v), but for high-fanout schemes (multitree,
+fine-B hybrid) the recorded makespan can rely on 100+ flit deep buffering
+that no realistic router has -- confirmed empirically: at 16x16/bw=1,
+multitree's required down-ramp buffer grows ~linearly with message size (121
+/250/378/506/633 flits for m=1..5), while ring_bi needs 0 in every case.
+recommend()/gen_schedule() therefore default to `buffer_budget=8` (flits) and
+pick the best-makespan scheme AMONG those whose recorded max_link_wait and
+max_ramp_wait both fit that budget, rather than the unconstrained-fastest
+scheme. Pass buffer_budget=None to get the old (buffer-unaware, optimistic)
+selection.
+
 Primary mode: exact lookup against the swept grid (7 sizes x 5 flits x 2
 ramp_bw = 70 combinations, matching the study's scope). --selftest re-runs
 the simulator for every one of those 70 combinations and checks the
@@ -32,6 +48,13 @@ SWEEP_JSON = ROOT / "results" / "allgather_scale_sweep.json"
 
 FLITS = [1, 2, 3, 4, 5]
 RAMP_BWS = [1, 2]
+# flits; see module docstring. Calibrated empirically, NOT a realistic-router
+# guess: at 6x8/8x8 bw=2, multitree needs only 3-4 cycles of implicit wait
+# yet its TRUE (rigid, zero-buffer) makespan is still 17-25% worse than the
+# real winner (96 vs 82, 125 vs 102) -- even single-digit smoothing distorts
+# the ranking, so the budget must be tight (a couple of cycles), not "a few
+# flits of realistic skid buffer".
+DEFAULT_BUFFER_BUDGET = 2
 
 
 def _load_sweep():
@@ -105,7 +128,7 @@ def _fallback_choice(sweep, mx, my, ramp_bw):
     return name, fn, (B, bidir)
 
 
-def gen_schedule(mx, my, flits, ramp_bw, sweep=None):
+def gen_schedule(mx, my, flits, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Plan-spec-named entry point (== recommend()). NOTE ON FORMAT: the
     original plan asked for a schedule in the same "per-source injection
     offset + footprint slots" format as sched_zerobuf_compare.apply_offsets().
@@ -116,25 +139,69 @@ def gen_schedule(mx, my, flits, ramp_bw, sweep=None):
     return instead is the (scheme, replay-args) pair that reproduces the
     recorded-optimal run via allgather_fast_sim, plus its makespan/T/ratio.
     """
-    return recommend(mx, my, flits, ramp_bw, sweep)
+    return recommend(mx, my, flits, ramp_bw, sweep, buffer_budget=buffer_budget)
 
 
-def recommend(mx, my, m, ramp_bw, sweep=None):
+def _pick_within_budget(cell, buffer_budget):
+    """Among cell['results'] (ok=True candidates with recorded max_link_wait/
+    max_ramp_wait), return the best-makespan one that fits buffer_budget, or
+    None if every candidate exceeds it OR lacks buffer instrumentation
+    (missing stats must NOT silently default to "0 = safe" -- that would
+    let unverified huge-mesh candidates slip through the filter)."""
+    feas = [r for r in cell.get("results", [])
+            if r.get("ok") and r.get("max_link_wait") is not None
+            and r.get("max_ramp_wait") is not None
+            and r["max_link_wait"] <= buffer_budget
+            and r["max_ramp_wait"] <= buffer_budget]
+    return min(feas, key=lambda r: r["makespan"]) if feas else None
+
+
+def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Return dict: scheme name, fn+args to reproduce it, predicted makespan,
     lower bound T, ratio, and whether this came from an exact sweep lookup
-    or the coarse fallback heuristic."""
+    or the coarse fallback heuristic.
+
+    buffer_budget (flits): only consider candidates whose recorded
+    max_link_wait/max_ramp_wait both fit this budget (see module docstring).
+    Pass None to reproduce the old buffer-unaware "fastest wins" selection.
+    """
     sweep = sweep or _load_sweep()
     key = f"{mx}x{my}"
     block = sweep["data"].get(key)
     cell = block["bw"].get(str(ramp_bw), {}).get(str(m)) if block else None
 
     if cell and cell.get("best"):
-        name = cell["best"]["name"]
+        picked = cell["best"]
+        buffer_limited = False
+        if buffer_budget is not None:
+            within = _pick_within_budget(cell, buffer_budget)
+            if within is not None and within["name"] != picked["name"]:
+                picked = within
+                buffer_limited = True
+            elif within is None:
+                # Nothing fits the budget (e.g. ramp_bw=1 at large N/m: even
+                # the "good" schemes need real buffering because the down
+                # ramp itself is saturated, not because of topology choice
+                # -- see report sec 3.5). Don't silently fall back to the
+                # unconstrained-fastest pick; prefer whichever instrumented
+                # candidate needs the LEAST buffer, so the recommendation is
+                # at least "least-bad", and flag it clearly either way.
+                instrumented = [r for r in cell.get("results", [])
+                                if r.get("ok") and r.get("max_link_wait") is not None
+                                and r.get("max_ramp_wait") is not None]
+                if instrumented:
+                    picked = min(instrumented,
+                                 key=lambda r: max(r["max_link_wait"], r["max_ramp_wait"]))
+                buffer_limited = True
+        name = picked["name"]
         fn, extra = _fn_for(name, mx, my)
         return {
             "mx": mx, "my": my, "m": m, "ramp_bw": ramp_bw,
             "scheme": name, "fn": fn, "args": (mx, my, sweep["h"], sweep["v"], ramp_bw, m) + extra,
-            "makespan": cell["best"]["makespan"], "T": cell["T"], "ratio": cell["ratio"],
+            "makespan": picked["makespan"],
+            "max_link_wait": picked.get("max_link_wait"), "max_ramp_wait": picked.get("max_ramp_wait"),
+            "T": cell["T"], "ratio": round(picked["makespan"] / cell["T"], 4) if cell["T"] else None,
+            "buffer_budget": buffer_budget, "buffer_limited": buffer_limited,
             "source": "sweep",
         }
 
@@ -143,19 +210,51 @@ def recommend(mx, my, m, ramp_bw, sweep=None):
     return {
         "mx": mx, "my": my, "m": m, "ramp_bw": ramp_bw,
         "scheme": name, "fn": fn, "args": (mx, my, h, v, ramp_bw, m) + extra,
-        "makespan": None, "T": None, "ratio": None,
+        "makespan": None, "max_link_wait": None, "max_ramp_wait": None,
+        "T": None, "ratio": None, "buffer_budget": buffer_budget, "buffer_limited": None,
         "source": "fallback",
     }
 
 
-def selftest(sweep=None, replay_huge=False):
+STRICT_M1_JSON = ROOT / "results" / "zerobuf_strict_m1.json"
+
+
+def _check_strict_m1(sweep, buffer_budget):
+    """Where we have TRUE zero-buffer ground truth (results/zerobuf_strict_m1
+    .json, rigid packer, m=1 only -- see sweep_zerobuf_strict.py), confirm
+    that the buffer-budget-filtered recommend() pick is at least as good as
+    (or ties/undercuts because it's still an optimistic event-driven number,
+    never worse in scheme *choice* quality) the true winner's family. This
+    is a sanity check on the buffer_budget heuristic, not a strict equality
+    check -- the event-driven makespan is not directly comparable to the
+    rigid-packer makespan."""
+    if not STRICT_M1_JSON.exists():
+        return []
+    strict = json.loads(STRICT_M1_JSON.read_text(encoding="utf-8"))
+    notes = []
+    for size, block in strict["data"].items():
+        mx, my = (int(x) for x in size.split("x"))
+        for rb_str, b in block["bw"].items():
+            rb = int(rb_str)
+            true_best = b["best"]["name"]
+            true_mk = b["best"]["makespan"]
+            rec = recommend(mx, my, 1, rb, sweep, buffer_budget=buffer_budget)
+            notes.append((size, rb, true_best, true_mk, rec["scheme"], rec.get("buffer_limited")))
+    return notes
+
+
+def selftest(sweep=None, replay_huge=False, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Regression check across the swept grid. For N < HUGE_N (cheap, <1s per
     call) this re-runs the simulator and checks the makespan matches exactly.
     For N >= HUGE_N (32x32/64x64, each replay costs minutes -- see report
     section 3) it only checks table consistency (name resolves to a valid
     scheme + args) by default, since those cells were already verified
     in-line by sweep_allgather_scale.py's own ok=verify_ejects() check at
-    generation time; pass replay_huge=True to also re-simulate them (slow)."""
+    generation time; pass replay_huge=True to also re-simulate them (slow).
+
+    Also cross-references m=1 picks against the TRUE zero-buffer ranking in
+    results/zerobuf_strict_m1.json (see sweep_zerobuf_strict.py) as a sanity
+    check on the buffer_budget heuristic."""
     sweep = sweep or _load_sweep()
     sizes = [tuple(int(x) for x in s.split("x")) for s in sweep["sizes"]]
     total = 0
@@ -167,7 +266,7 @@ def selftest(sweep=None, replay_huge=False):
         for rb in RAMP_BWS:
             for m in FLITS:
                 total += 1
-                rec = recommend(mx, my, m, rb, sweep)
+                rec = recommend(mx, my, m, rb, sweep, buffer_budget=buffer_budget)
                 if rec["source"] != "sweep":
                     skipped += 1
                     continue
@@ -176,7 +275,7 @@ def selftest(sweep=None, replay_huge=False):
                     skipped += 1
                     continue
                 checked += 1
-                mk, ok, bad = rec["fn"](*rec["args"])
+                mk, ok, bad, _mlw, _mrw = rec["fn"](*rec["args"])
                 if not ok or mk != rec["makespan"]:
                     mismatches.append((mx, my, m, rb,
                                         f"replay mk={mk} ok={ok} vs recorded {rec['makespan']}"))
@@ -184,7 +283,29 @@ def selftest(sweep=None, replay_huge=False):
           f"(not-yet-swept or huge-mesh table-only check), {len(mismatches)} mismatches")
     for mm in mismatches[:20]:
         print("  MISMATCH", mm)
+
+    print(f"\nbuffer_budget={buffer_budget} vs TRUE zero-buffer (m=1) ground truth:")
+    strict = json.loads(STRICT_M1_JSON.read_text(encoding="utf-8")) if STRICT_M1_JSON.exists() else None
+    for size, rb, true_best, true_mk, picked, limited in _check_strict_m1(sweep, buffer_budget):
+        flag = "(buffer-limited)" if limited else ""
+        match = "OK " if _same_family(true_best, picked) else "differs"
+        picked_true_mk = None
+        if strict:
+            for r in strict["data"][size]["bw"][str(rb)]["results"]:
+                if r["name"] == picked:
+                    picked_true_mk = r["makespan"]
+                    break
+        gap = f"(true zero-buf mk of pick={picked_true_mk}, vs optimum {true_mk}, " \
+              f"{picked_true_mk/true_mk:.2f}x)" if picked_true_mk else ""
+        print(f"  {size:8s} bw={rb}  true_zerobuf_best={true_best:16s}(mk={true_mk}) "
+              f"recommend()={picked:16s} {match} {flag} {gap}")
     return len(mismatches) == 0
+
+
+def _same_family(a, b):
+    fa = NAME_RE.match(a)
+    fb = NAME_RE.match(b)
+    return bool(fa and fb and fa.group(1) == fb.group(1))
 
 
 def main():
@@ -194,23 +315,30 @@ def main():
     ap.add_argument("--m", type=int, default=1, help="message size in flits")
     ap.add_argument("--bw", type=int, default=1, choices=(1, 2), help="down-ramp bandwidth")
     ap.add_argument("--json", default=None, help="write the recommendation to this JSON path")
+    ap.add_argument("--buffer-budget", type=float, default=DEFAULT_BUFFER_BUDGET,
+                     help="max acceptable link/ramp wait in flits (see module docstring); "
+                          "use 0 for strict/near-zero-buffer, a large number or 'none' for "
+                          "the old buffer-unaware fastest-wins selection")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--replay-huge", action="store_true",
                      help="also re-simulate 32x32/64x64 cells in --selftest (slow, minutes)")
     args = ap.parse_args()
 
+    buffer_budget = None if str(args.buffer_budget).lower() == "none" else args.buffer_budget
+
     if args.selftest:
-        ok = selftest(replay_huge=args.replay_huge)
+        ok = selftest(replay_huge=args.replay_huge, buffer_budget=buffer_budget)
         raise SystemExit(0 if ok else 1)
 
     if args.mx is None or args.my is None:
         ap.error("--mx/--my required unless --selftest")
 
-    rec = gen_schedule(args.mx, args.my, args.m, args.bw)
-    print(f"mesh={args.mx}x{args.my} m={args.m} ramp_bw={args.bw} "
-          f"-> scheme={rec['scheme']} (source={rec['source']})")
+    rec = gen_schedule(args.mx, args.my, args.m, args.bw, buffer_budget=buffer_budget)
+    print(f"mesh={args.mx}x{args.my} m={args.m} ramp_bw={args.bw} buffer_budget={buffer_budget} "
+          f"-> scheme={rec['scheme']} (source={rec['source']}, buffer_limited={rec.get('buffer_limited')})")
     if rec["makespan"] is not None:
-        print(f"   makespan={rec['makespan']} T={rec['T']} ratio={rec['ratio']:.3f}")
+        print(f"   makespan={rec['makespan']} T={rec['T']} ratio={rec['ratio']:.3f} "
+              f"buf(link/ramp)={rec.get('max_link_wait')}/{rec.get('max_ramp_wait')}")
 
     if args.json:
         out = {k: v for k, v in rec.items() if k != "fn"}

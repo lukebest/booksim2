@@ -15,9 +15,12 @@ import html
 import json
 from pathlib import Path
 
+import autogen_allgather as A
+
 ROOT = Path(__file__).resolve().parents[1]
 LB_JSON = ROOT / "results" / "allgather_lb.json"
 SWEEP_JSON = ROOT / "results" / "allgather_scale_sweep.json"
+STRICT_JSON = ROOT / "results" / "zerobuf_strict_m1.json"
 HTML_PATH = ROOT / "results" / "report_allgather_scale.html"
 
 SIZE_ORDER = ["4x4", "6x8", "8x8", "12x16", "16x16", "32x32", "64x64"]
@@ -81,13 +84,21 @@ def ratio_color(r, rmin, rmax):
 
 
 def collect_cells(sweep):
-    """Return {(size,rb,m): cell} and global (rmin,rmax) over ratio."""
+    """Return {(size,rb,m): cell} and global (rmin,rmax) over ratio.
+
+    cell['best'] is overwritten with the BUFFER-BUDGET-AWARE pick from
+    autogen_allgather.recommend() (see results/report section "buffer 深度
+    诚实性核查"): the raw per-cell "fastest" candidate in the sweep JSON can
+    rely on unbounded implicit in-network queuing, which is not a credible
+    zero/small-buffer result for high-fanout schemes. cell['raw_best'] keeps
+    the original unconstrained-fastest candidate for comparison."""
     cells = {}
     ratios = []
     for size in SIZE_ORDER:
         block = sweep["data"].get(size)
         if not block:
             continue
+        mx, my = (int(x) for x in size.split("x"))
         for rb in RAMP_BWS:
             bwblock = block["bw"].get(str(rb))
             if not bwblock:
@@ -96,8 +107,20 @@ def collect_cells(sweep):
                 cell = bwblock.get(str(m))
                 if not cell or not cell.get("best"):
                     continue
-                cells[(size, rb, m)] = cell
-                ratios.append(cell["ratio"])
+                raw_best = cell["best"]
+                rec = A.recommend(mx, my, m, rb, sweep)
+                picked = {
+                    "name": rec["scheme"], "makespan": rec["makespan"],
+                    "max_link_wait": rec.get("max_link_wait"),
+                    "max_ramp_wait": rec.get("max_ramp_wait"),
+                }
+                new_cell = dict(cell)
+                new_cell["raw_best"] = raw_best
+                new_cell["best"] = picked
+                new_cell["buffer_limited"] = rec.get("buffer_limited")
+                new_cell["ratio"] = round(picked["makespan"] / cell["T"], 4) if cell["T"] else None
+                cells[(size, rb, m)] = new_cell
+                ratios.append(new_cell["ratio"])
     return cells, ratios
 
 
@@ -187,13 +210,19 @@ def detail_table(cells, rb):
             if not cell:
                 continue
             b = cell["best"]
+            raw = cell.get("raw_best", b)
+            buf = f"{b.get('max_link_wait')}/{b.get('max_ramp_wait')}"
+            raw_flag = (f" &nbsp;<span class='note'>(未加缓冲约束时仿真最快: "
+                        f"{esc(raw['name'])} {raw['makespan']}cy, buf={raw.get('max_link_wait')}/"
+                        f"{raw.get('max_ramp_wait')})</span>") if raw["name"] != b["name"] else ""
             rows.append(
                 f"<tr><td class='name'>{size}</td><td>{m}</td><td>{cell['T']}</td>"
-                f"<td class='name'><b>{esc(b['name'])}</b></td><td>{b['makespan']}</td>"
-                f"<td>{cell['ratio']:.3f}</td></tr>"
+                f"<td class='name'><b>{esc(b['name'])}</b>{raw_flag}</td><td>{b['makespan']}</td>"
+                f"<td>{buf}</td><td>{cell['ratio']:.3f}</td></tr>"
             )
     hdr = ("<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th>"
-           "<th>最优方案</th><th>makespan</th><th>比值</th></tr></thead><tbody>")
+           "<th>推荐方案（buffer_budget=2 约束下最快）</th><th>makespan</th>"
+           "<th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody>")
     return hdr + "".join(rows) + "</tbody></table>"
 
 
@@ -228,6 +257,114 @@ SCHEME_DIAGRAMS = """
 <li><b>hybrid_v（纵带）</b>：hybrid 的转置——将 MX 列切成 B 个纵向条带，条带内局部环 + 每行沿横向二次转发到其它条带。历史数据显示这是 16x16 上表现最好的方案族。</li>
 </ul>
 <p class="note">quad（4 象限环+中心交换）与 border（象限环+边界多点注入）在 16x16 上已经系统性落后于 hybrid/hybrid_v（quad_bi=1097/523cy、border_bi=540cy，对比 hybrid_v_bi=334cy，见 <code>results/zerobuf_16x16.json</code>），本次多规模扫描不再重复评估，仅在 16x16 处引用作参考。</p>
+</div>
+"""
+
+
+def strict_m1_table():
+    if not STRICT_JSON.exists():
+        return "<p class='note'>未找到 results/zerobuf_strict_m1.json</p>"
+    strict = json.loads(STRICT_JSON.read_text(encoding="utf-8"))
+    rows = []
+    for size in SIZE_ORDER:
+        block = strict["data"].get(size)
+        if not block:
+            rows.append(f"<tr><td class='name'>{size}</td><td colspan='4' class='note'>"
+                        f"未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr>")
+            continue
+        for rb_str in ("1", "2"):
+            b = block["bw"][rb_str]
+            top3 = sorted((r for r in b["results"] if r["ok"]), key=lambda r: r["makespan"])[:3]
+            top_str = ", ".join(f"{r['name']}={r['makespan']}" for r in top3)
+            rows.append(f"<tr><td class='name'>{size}</td><td>{rb_str}</td>"
+                        f"<td>{b['eject_lb']}</td><td class='name'>{top_str}</td></tr>")
+    hdr = ("<table class='data'><thead><tr><th>规模</th><th>ramp_bw</th><th>eject 下界</th>"
+           "<th>严格零 buffer 排名前三（m=1，makespan）</th></tr></thead><tbody>")
+    return hdr + "".join(rows) + "</tbody></table>"
+
+
+def buffer_growth_table(sweep):
+    rows = []
+    cell16 = sweep["data"].get("16x16", {}).get("bw", {}).get("1", {})
+    for m in FLITS:
+        c = cell16.get(str(m))
+        if not c:
+            continue
+        mt = next((r for r in c["results"] if r["name"] == "multitree"), None)
+        rb = next((r for r in c["results"] if r["name"] == "ring_bi"), None)
+        rows.append(f"<tr><td>{m}</td>"
+                    f"<td>{mt['makespan']}</td><td>{mt['max_link_wait']}/{mt['max_ramp_wait']}</td>"
+                    f"<td>{rb['makespan']}</td><td>{rb['max_link_wait']}/{rb['max_ramp_wait']}</td></tr>")
+    hdr = ("<table class='data'><thead><tr><th>m</th>"
+           "<th>multitree makespan</th><th>multitree 所需buffer(link/ramp)</th>"
+           "<th>ring_bi makespan</th><th>ring_bi 所需buffer(link/ramp)</th></tr></thead><tbody>")
+    return hdr + "".join(rows) + "</tbody></table>"
+
+
+BUFFER_HONESTY_SECTION = """
+<h2>3.5 buffer 深度诚实性核查（重要更正）</h2>
+<div class="card">
+<p><b>结论先行：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，等待时长没有硬性上限
+（不是最初文档所写的"1 个 pipeline register"——这个描述是错的，已更正）。这对不同方案族的影响很不对称：
+multitree、细粒度 hybrid 等高扇出（in-network fork 多）方案能靠这种隐式排队大幅"抹平"调度冲突，从而
+在仿真里显得很快；ring / 粗粒度 hybrid_v_bi 等结构天然争用少得多，需要的排队也少得多。但即使是这些"较好"的
+方案，在 ramp_bw=1、m 较大、规模较大时也会需要不小的排队（例如 ring_bi 在 16x16/ramp_bw=1/m=5 需要 538
+flit 的下 ramp 缓冲）——根因是下 ramp 本身已饱和（eject 下界很紧），任何非精确协同调度的贪心算法都会在
+下 ramp 处产生突发积压，只是 multitree 的突发远比 ring 剧烈（同条件下约 10~20 倍）。因此"buffer 需求"更准确的
+表述是一个连续谱：<b>ring/粗粒度 hybrid ≪ multitree/细粒度 hybrid</b>，而不是"前者零需求、后者才需要"。
+跨方案比较 makespan 并不是在同一 buffer 假设下的公平比较。</b></p>
+
+<h3>实测证据 1：16x16, m=1，严格零 buffer vs 本引擎（排名完全反转）</h3>
+<table class="data"><thead><tr><th>方案</th><th>严格零buffer makespan（真值，ramp_bw=1）</th>
+<th>本引擎 makespan（ramp_bw=1）</th></tr></thead><tbody>
+<tr><td class="name">hybrid_v_bi_B2（真实最优）</td><td>334</td><td>332</td></tr>
+<tr><td class="name">ring_bi</td><td>754</td><td>754</td></tr>
+<tr><td class="name">multitree</td><td><b>837</b>（22 个方案中排第 13）</td><td><b>265</b>（"最优"）</td></tr>
+</tbody></table>
+<p class="note">严格零buffer数据来自 <code>utils/sched_zerobuf_compare.py</code> 的刚性单一注入偏移打包器
+（任何冲突都判定为不合法调度，必须靠全局重新选择偏移规避——见其文档字符串），是本研究唯一有硬证据支持的
+"无缓冲、无冲突、无阻塞"结果，但其打包搜索成本随规模、随 m 都是超线性增长（16x16、multitree：m=1 需 13.9s，
+m=2 需 38.7s，约 2.8x/+1flit），无法扩展到 m>1 或 32x32/64x64。</p>
+
+<h3>实测证据 2：所需 buffer 深度随 m 的增长（16x16, ramp_bw=1）</h3>
+{buffer_growth}
+<p class="note">两者的下 ramp 缓冲需求都随 m 增长（ramp_bw=1 下 ramp 本身饱和，是两者共同的根因），但增长
+方式不同：multitree 从 m=1 起就需要大量排队（121 flit）且近似线性增长到 633；ring_bi 在 m=1~2 时几乎不需要
+排队（1~2 flit），m≥3 后才开始明显增长（33→286→538）。也就是说 ring_bi 把"需要深排队"的临界点推迟到了更大
+的 m，而不是完全没有这个问题——在 m 较小、或 ramp_bw=2（下 ramp 不饱和）时它才是真正的零/近零 buffer 方案，
+这也是本引擎"multitree 在小 m 时看起来更快"这一表象的直接机制解释，而不是真实的调度优势。</p>
+
+<h3>实测证据 3：64x64 全量抽样复核</h3>
+<table class="data"><thead><tr><th>方案 / 场景</th><th>makespan</th><th>所需 buffer(link/ramp，flit)</th></tr></thead><tbody>
+<tr><td class="name">multitree, ramp_bw=1, m=5</td><td>20480</td><td><b>314 / 10233</b></td></tr>
+<tr><td class="name">ring_bi, ramp_bw=2, m=5</td><td>12230</td><td>1 / 0</td></tr>
+</tbody></table>
+<p class="note">64x64、ramp_bw=1、m=5 下 multitree 需要单节点连续缓存 <b>10233 个 flit</b> 才能实现其记录的
+makespan——这远超任何现实路由器的缓冲深度，可确认此前"ramp_bw=1 时 multitree 总是最优"的结论是本引擎
+buffer 假设不一致造成的伪影，不可信。</p>
+
+<h3>严格零 buffer 基准（m=1，全部规模）</h3>
+{strict_table}
+<p class="note"><b>hybrid_v_bi_B2</b>（B=2 纵向条带、双向）是 m=1 下唯一在 6x8~16x16 全部规模上都排名第一的方案
+（4x4 上与 hybrid_bi_B2/multitree 并列理论下界）——这与本引擎不加约束时给出的"multitree 常胜"结论相反，
+但与"允许适度实现缓冲"的仿真结果吻合度很高。</p>
+
+<h3>修正措施</h3>
+<ul class="compact">
+<li>本报告以下全部热力图/明细表已改为调用 <code>utils/autogen_allgather.py</code> 的
+<b>buffer_budget=2 flit 约束选择</b>（该阈值由上述实测校准：即使 3~4 flit 的隐式排队也足以让 multitree 的
+makespan 偏离真值 17~25%，阈值必须收紧到个位数以内才能有效滤除高扇出方案的伪影），而不是原始仿真里"不限制
+排队、最快获胜"的结果；报告表格中同时列出两者供对比。</li>
+<li><code>--selftest</code> 增加了对 <code>results/zerobuf_strict_m1.json</code>（真值）的交叉核对，
+默认 buffer_budget=2 下 m=1 的推荐方案与真实最优的比值全部 ≤1.13x（多数持平），
+远好于不加约束时可达 2~3x 的偏差。</li>
+<li>32x32 已重新用带缓冲量测的引擎全量复核（结果见第 4 节热力图/明细表）；64x64 只对两个代表性
+(ramp_bw, m) 组合做了直接抽样复核（见上表证据 3），其余组合仍复用旧的无量测数据，<code>recommend()</code>
+在检测到候选方案缺少 buffer 量测时不会当作"零 buffer 合规"处理，而是回退为"仅使用已量测方案中排队需求最小者"
+并标记 <code>buffer_limited=True</code>；已知在 ramp_bw=1、m 较大时，本引擎测得的任何方案都超出 buffer_budget，
+此时该回退等价于"挑排队需求最小的那个"（通常仍是 ring_bi/hybrid_v_bi 粗粒度），而不是无约束下最快的
+multitree/细粒度 hybrid——但其绝对 makespan 仍应视为"经验估计"而非可验证的零 buffer 最优解。</li>
+</ul>
 </div>
 """
 
@@ -275,10 +412,10 @@ def build_report(lb, sweep):
         "<li>规模：4x4, 6x8, 8x8, 12x16, 16x16, 32x32, 64x64（正方形部分按边长 x2 步进）</li>",
         "<li>数据大小 m ∈ {1..5} flit/节点；allgather 语义：每节点须从其余 N-1 个节点各收到 m flit</li>",
         "<li>调度目标：makespan = 最后一个 flit 完成下 ramp 出口的 cycle</li>",
-        "<li>本研究的仿真引擎是<b>事件驱动流水线模型</b>（允许 flit 在路由器内部因出端口短暂繁忙而等待 1 个 pipeline register，"
-        "不允许专用 SRAM 缓冲）——与更严格的“零缓冲刚性单一注入偏移”模型（<code>sched_zerobuf_compare.py</code>，仅用于 16x16 参考）"
-        "相比更贴近真实 wormhole/VC 路由器实现，且可扩展到 64x64（详见 <code>utils/allgather_fast_sim.py</code> 文档字符串）。"
-        "两者在 16x16 上分别列出对比。</li>",
+        "<li><b>[已更正] 仿真引擎的 buffer 假设</b>：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，"
+        "等待时长<b>没有硬性上限</b>（并非早期版本描述的“1 个 pipeline register”），这不等价于“零缓冲、无冲突、无阻塞”。"
+        "该假设对不同方案族的影响很不对称，已被证实会扭曲跨方案的排名——详见第 3.5 节的实测核查与修正措施；"
+        "本报告后续的“推荐方案”已改为在 buffer_budget=2 flit 约束下选取。</li>",
         "</ul></div>",
 
         "<h2>2. 下界分析</h2>",
@@ -308,34 +445,56 @@ def build_report(lb, sweep):
         (f"<p class='note'>{esc(sweep['notes']['64x64'])}</p>" if sweep.get("notes", {}).get("64x64") else ""),
         "</div>",
 
-        "<h2>4. 热力图：makespan / 理论下界</h2>",
+        BUFFER_HONESTY_SECTION.format(
+            buffer_growth=buffer_growth_table(sweep),
+            strict_table=strict_m1_table(),
+        ),
+
+        "<h2>4. 热力图：makespan / 理论下界（均为 buffer_budget=2 约束下的推荐方案）</h2>",
         *sections,
 
-        "<h2>5. 结论</h2>",
+        "<h2>5. 结论（已按第 3.5 节的 buffer 诚实性核查修正）</h2>",
         "<div class='card'>",
         "<ul class='compact'>",
-        "<li><b>hybrid_v（纵带局部环 + 横向树）双向变体</b>在几乎所有中大规模、双 ramp_bw 组合下都是或接近最优方案，"
-        "B 值最优点通常在 2~8 之间，随规模增大略微上移。</li>",
-        "<li><b>multitree</b> 在极小规模（4x4、6x8）与 m=1 时经常直接达到理论下界（ratio=1.0），"
-        "因为此时延迟下界主导而非带宽下界，维序双向树的最短路径特性正好命中。</li>",
-        "<li><b>ring（全局单环）</b>在所有规模上都明显落后于 hybrid/hybrid_v（条带化把长距离环拆成局部环 + 树形广播，"
-        "显著缩短关键路径），仅作为下界基线保留。</li>",
+        "<li><b>之前版本\"ramp_bw=1 时 multitree 几乎总是最优\"的结论已被证伪并撤回</b>："
+        "该结论完全建立在事件驱动引擎允许无上限隐式排队的基础上；64x64/ramp_bw=1/m=5 下 multitree 实际需要单节点"
+        "连续缓存 10233 flit 才能达到其记录的 makespan，16x16 上其严格零 buffer 真值（837）反而排在 22 个方案中的第 13 位。"
+        "multitree 的多播式 in-network fork 结构会在所有源同时广播时产生大量跨源链路/ramp 争用，需要靠排队"
+        "\"抹平\"这些争用；争用量随规模、随 m 近似线性增长，buffer 需求也随之增长，因此不具备可扩展性。</li>",
+        "<li><b>可信的最优方案（有严格零 buffer 证据支持）：hybrid_v_bi_B2</b>（B=2 纵向条带、双向局部环 + 横向树）"
+        "在 m=1 下的 6x8~16x16 全部规模上都是严格零 buffer 打包器给出的真实最优解（4x4 上与另两个方案并列理论下界）；"
+        "它在事件驱动引擎里的所需 buffer 也始终在个位数以内，两种模型给出的数字几乎一致（如 16x16: 334 vs 332）。</li>",
+        "<li><b>ring（全局单环）/ 粗粒度 hybrid_bi(B=1)</b> 结构上争用远少于多播树类方案，所需排队普遍小一到两个"
+        "数量级（如 16x16/ramp_bw=1/m=5：ring_bi 需 538 flit 排队，multitree 需同条件下更大的量；32x32 同条件下"
+        "ring_bi 约 2100 flit）；<b>但并非严格零 buffer</b>——ramp_bw=1、m 较大、规模较大时它也需要明显排队，"
+        "根因是下 ramp 本身已饱和，与拓扑选择无关，见第 3.5 节。ramp_bw=2（下 ramp 不饱和）或 m 较小时，"
+        "ring_bi/粗粒度 hybrid_v_bi 才能做到真正的 buffer≈0，此时也是本研究中最可信、两种 buffer 假设下数字"
+        "几乎一致的方案；32x32/64x64、ramp_bw=2、m 较大下它也是（buffer_budget=2 约束后）实测最优解。</li>",
         "<li>ramp_bw 从 1 提升到 2：m 较大、规模较大时 makespan 近似减半（带宽受限区间）；"
         "m=1 的小规模场景则几乎不变（延迟下界主导，带宽提升无效）。</li>",
-        "<li>ratio（makespan/T）总体在 1.0~2.0 之间。一个明显的规律：<b>规模越大、ramp_bw=1 时，几乎任意合理方案都逼近 eject 下界"
-        "（64x64 @ ramp_bw=1 全部 m 上 ratio ≤ 1.0024）</b>——此时下 ramp 出口几乎永不空闲，是唯一瓶颈，拓扑选择反而不重要；"
-        "而 ramp_bw=2 时下界不再总是可达（如 64x64,m=1,ramp_bw=2 的角节点下界 T=2048 只能压到 4047，ratio≈1.98），"
-        "说明角节点链路下界在 ramp_bw≥2、m 较小时是一个理论上正确但实践中难以逼近的松下界。</li>",
-        "<li>方案排名并非在所有 (规模, m) 组合下都稳定：64x64、ramp_bw=2、m=5 的实测最优反而是最简单的全局 ring_bi"
-        "（优于 multitree 与 hybrid_v_bi_B2），提示大规模 + 大数据量 + 较宽带宽区间下，简单拓扑的均匀负载分布有时比精细分带更优——"
-        "本报告的 autogen 选择器直接以逐格实测结果为准，而不依赖\"某一方案族总是最优\"的先验假设。</li>",
+        "<li>ratio（makespan/T，均基于 buffer_budget=2 约束后的推荐方案）在 1.0~2.0 之间，规律与此前一致："
+        "规模越大、ramp_bw=1 时越逼近 eject 下界（拓扑选择不重要，下 ramp 是唯一瓶颈）；ramp_bw=2、m 较小时"
+        "角节点链路下界是理论正确但实践难以逼近的松下界。</li>",
+        "<li>方案排名并非在所有 (规模, m) 组合下都稳定，autogen 选择器直接以逐格实测结果（buffer 约束后）为准，"
+        "不依赖\"某一方案族总是最优\"的先验假设。</li>",
+        "<li><b>局限</b>：32x32/64x64 没有严格零 buffer 真值可比对（打包器成本超线性、无法扩展），"
+        "这两个规模的 buffer_budget=2 选择仍是\"用事件驱动引擎自己的排队量测来约束自己的排队量测\"，"
+        "只能确认与小规模同族方案（ring/粗粒度 hybrid）的规律一致，不构成独立证明；如需严格证明，"
+        "需要一个可扩展的零缓冲调度算法（当前的刚性打包器不是），留作后续工作。</li>",
         "</ul></div>",
 
         "<h2>6. Autogen 方案生成器</h2>",
         "<div class='card'>",
         "<p><code>utils/autogen_allgather.py</code> 从本次扫描的查找表中，为任意 (mx, my, m, ramp_bw) 直接返回预先确定的"
-        "最优方案标签与其可复现的仿真调用；覆盖本报告全部 7 规模 x 5 数据量 x 2 带宽 = 70 组合的生成 + 校验回归结果见脚本自带的 "
+        "方案标签与其可复现的仿真调用；覆盖本报告全部 7 规模 x 5 数据量 x 2 带宽 = 70 组合的生成 + 校验回归结果见脚本自带的 "
         "<code>--selftest</code> 输出。</p>",
+        "<p>默认 <code>buffer_budget=2</code>（flit）：仅在候选方案的 <code>max_link_wait</code> 与 "
+        "<code>max_ramp_wait</code> 均不超过该值时才考虑其 makespan，见第 3.5 节校准依据；传 "
+        "<code>buffer_budget=None</code> 复现旧版（无约束、可能依赖不现实缓冲深度）的选择。"
+        "<code>--selftest</code> 会额外将 m=1 的推荐结果与 <code>results/zerobuf_strict_m1.json</code>"
+        "（严格零 buffer 真值）交叉核对：默认阈值下所选方案的真实（零 buffer）makespan 与真实最优的比值全部 ≤1.13x"
+        "（多数持平），相比无约束选择时可达 2~3x 的偏差是明显的改进，但仍非精确等于真实最优——"
+        "这是用一个连续的 buffer-depth 代理指标去近似一个离散的\"零 buffer 可行性\"约束的必然局限。</p>",
         "</div>",
 
         f"<p class='note'>复现：<code>python3 utils/allgather_lower_bounds.py</code> → "

@@ -16,18 +16,33 @@ This module keeps the SAME exact per-source delivery topologies (dimensional
 tree / Hamilton ring / horizontal-band or vertical-band local-ring + tree) but
 schedules them EVENT-DRIVEN: each hop is reserved at the earliest cycle its
 own link/ramp is free, in causal (heapq) order, using FastCal's O(1)-amortized
-union-find calendar (utils/fast_zerobuf_pack.py). This allows a flit to wait
-at most a few cycles in a router's own pipeline register when its outgoing
-port is briefly busy -- the same model already used (and reported as the
-"golden"/canonical numbers) by utils/sim_hamilton_ring.py and
-utils/sim_dim_multitree.py for this project's ring/fault-tolerance studies.
-It is a strictly more realistic assumption for a wormhole/VC router than "zero
-buffering, ever", and it scales to 64x64 (N=4096) in seconds instead of hours.
+union-find calendar (utils/fast_zerobuf_pack.py).
 
-Because it is a different (slightly more permissive) buffering assumption
-than the strict 0-buffer packer, its numbers are not bit-identical to
-results/zerobuf_16x16.json at 16x16 (they are equal or lower); both are
-reported side by side at 16x16 in the study for transparency.
+CORRECTION (previously this docstring said flits wait "at most a few cycles
+in a router's own pipeline register" -- that was WRONG and has been
+disproved empirically; see results/report_allgather_scale.html sec 3.5):
+FastCal.reserve() finds the NEXT FREE cycle with NO upper bound on the wait,
+i.e. this models an UNBOUNDED per-resource queue, not a small pipeline
+register. Measured worst case: multitree at 64x64/ramp_bw=1/m=5 needs a
+single node to hold 10233 flits at its down-ramp to realize its recorded
+makespan. This unbounded-wait assumption is NOT equally "free" across
+schemes: high-fanout schemes (multitree, fine-B hybrid) rely on much deeper
+implicit queuing than low-fanout ones (ring, coarse-B hybrid/hybrid_v), so
+raw cross-scheme makespan comparisons from this engine are NOT an
+apples-to-apples zero/small-buffer comparison. utils/autogen_allgather.py's
+recommend() compensates by filtering on each candidate's recorded
+max_link_wait/max_ramp_wait (buffer_budget, default 2 flits) before picking
+the fastest -- use that, not raw run_*() results, when buffer realism
+matters. sched_zerobuf_compare.py's rigid packer remains the only source of
+TRUE zero-buffer numbers (utils/sweep_zerobuf_strict.py, m=1 only, up to
+16x16 -- its own cost blows up faster than linearly with message size m, not
+just mesh size).
+
+Because it is a different (more permissive) buffering assumption than the
+strict 0-buffer packer, its numbers are not bit-identical to
+results/zerobuf_16x16.json / results/zerobuf_strict_m1.json (they are equal
+or lower, sometimes substantially so); both are reported side by side in the
+study for transparency.
 
 Scheme families implemented (same shapes as sched_zerobuf_compare.py):
   multitree   : bidirectional X-then-Y dimensional multicast tree per source.
@@ -235,13 +250,19 @@ def simulate_tree_family(children_per_source, n, mx, h, v, ramp_bw, flits,
                 seq += 1
 
     makespan = 0
+    max_link_wait = 0
+    max_ramp_wait = 0
     down_eject_count = defaultdict(int)
     while pq:
         ready, _, s, p, c, k = heapq.heappop(pq)
         lat = edge_lat(p, c, mx, h, v)
         send = link_cal.reserve((p, c), ready, 1)
+        if send - ready > max_link_wait:
+            max_link_wait = send - ready
         arrive = send + lat
         eject = down_cal.reserve(c, arrive, ramp_bw)
+        if eject - arrive > max_ramp_wait:
+            max_ramp_wait = eject - arrive
         done = eject + ramp
         if done > makespan:
             makespan = done
@@ -249,7 +270,7 @@ def simulate_tree_family(children_per_source, n, mx, h, v, ramp_bw, flits,
         for gc in children_per_source[s].get(c, ()):
             heapq.heappush(pq, (arrive, seq, s, c, gc, k))
             seq += 1
-    return makespan, down_eject_count
+    return makespan, down_eject_count, max_link_wait, max_ramp_wait
 
 
 def verify_ejects(down_eject_count, n, flits):
@@ -264,9 +285,9 @@ def verify_ejects(down_eject_count, n, flits):
 def run_multitree(mx, my, h, v, ramp_bw, flits):
     n = mx * my
     children = {s: multitree_children(s, mx, my) for s in range(n)}
-    mk, ejc = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
+    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
     ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad
+    return mk, ok, bad, mlw, mrw
 
 
 def run_ring(mx, my, h, v, ramp_bw, flits, bidir):
@@ -274,25 +295,25 @@ def run_ring(mx, my, h, v, ramp_bw, flits, bidir):
     order = ham_cycle_band(mx, my, 0) if my >= 2 else [nid(x, 0, mx) for x in range(mx)]
     pos = {nd: k for k, nd in enumerate(order)}
     children = {s: ring_children(s, order, pos, bidir) for s in range(n)}
-    mk, ejc = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
+    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
     ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad
+    return mk, ok, bad, mlw, mrw
 
 
 def run_hybrid(mx, my, h, v, ramp_bw, flits, B, bidir):
     n = mx * my
     children = {s: hybrid_children(s, mx, my, B, bidir) for s in range(n)}
-    mk, ejc = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
+    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
     ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad
+    return mk, ok, bad, mlw, mrw
 
 
 def run_hybrid_v(mx, my, h, v, ramp_bw, flits, B, bidir):
     n = mx * my
     children = {s: hybrid_v_children(s, mx, my, B, bidir) for s in range(n)}
-    mk, ejc = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
+    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
     ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad
+    return mk, ok, bad, mlw, mrw
 
 
 def divisors_pow2(m):
