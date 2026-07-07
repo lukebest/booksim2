@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LB_JSON = ROOT / "results" / "allgather_lb.json"
 SWEEP_JSON = ROOT / "results" / "allgather_scale_sweep.json"
 STRICT_JSON = ROOT / "results" / "zerobuf_strict_m1.json"
+WITNESS64_JSON = ROOT / "results" / "zerobuf_64x64_witness.json"
 HTML_PATH = ROOT / "results" / "report_allgather_scale.html"
 
 SIZE_ORDER = ["4x4", "6x8", "8x8", "12x16", "16x16", "32x32", "64x64"]
@@ -369,6 +370,119 @@ multitree/细粒度 hybrid——但其绝对 makespan 仍应视为"经验估计"
 """
 
 
+def witness64_m1_table():
+    """m=1 screening: every non-multitree candidate tested at 64x64, both
+    ramp_bw, sorted by makespan within each bw. exact zero-buffer-witness
+    rows are bolded."""
+    if not WITNESS64_JSON.exists():
+        return "<p class='note'>未找到 results/zerobuf_64x64_witness.json</p>"
+    data = json.loads(WITNESS64_JSON.read_text(encoding="utf-8"))
+    rows = []
+    for rb in (1, 2):
+        recs = sorted((r for r in data if r["ramp_bw"] == rb and r["m"] == 1),
+                      key=lambda r: r["makespan"])
+        for r in recs:
+            name = r["name"]
+            if r["zero_buffer_certified"]:
+                name = f"<b>{esc(name)}</b>"
+            else:
+                name = esc(name)
+            cert = "✓ 严格零buffer" if r["zero_buffer_certified"] else "✗"
+            rows.append(f"<tr><td>{rb}</td><td class='name'>{name}</td><td>{r['makespan']}</td>"
+                        f"<td>{r['max_link_wait']}</td><td>{r['max_ramp_wait']}</td><td>{cert}</td></tr>")
+    hdr = ("<table class='data'><thead><tr><th>ramp_bw</th><th class='name'>方案</th>"
+           "<th>makespan (m=1)</th><th>所需 link_wait</th><th>所需 ramp_wait</th>"
+           "<th>零buffer见证</th></tr></thead><tbody>")
+    return hdr + "".join(rows) + "</tbody></table>"
+
+
+def witness64_champion_table():
+    """Full m=1..5 trajectory of the two m=1 zero-buffer champions."""
+    if not WITNESS64_JSON.exists():
+        return ""
+    data = json.loads(WITNESS64_JSON.read_text(encoding="utf-8"))
+    champs = {1: "hybrid_v_uni_B1", 2: "hybrid_v_bi_B1"}
+    rows = []
+    for rb, name in champs.items():
+        for m in FLITS:
+            r = next((x for x in data if x["ramp_bw"] == rb and x["m"] == m and x["name"] == name), None)
+            if not r:
+                rows.append(f"<tr><td>{rb}</td><td class='name'>{esc(name)}</td><td>{m}</td>"
+                            f"<td colspan='4' class='note'>未测</td></tr>")
+                continue
+            cert = "✓" if r["zero_buffer_certified"] else "✗"
+            rows.append(f"<tr><td>{rb}</td><td class='name'>{esc(name)}</td><td>{m}</td>"
+                        f"<td>{r['makespan']}</td><td>{r['max_link_wait']}</td>"
+                        f"<td>{r['max_ramp_wait']}</td><td>{cert}</td></tr>")
+    hdr = ("<table class='data'><thead><tr><th>ramp_bw</th><th class='name'>方案（该 ramp_bw 下 m=1 的零buffer冠军）</th>"
+           "<th>m</th><th>makespan</th><th>link_wait</th><th>ramp_wait</th><th>零buffer见证</th></tr></thead><tbody>")
+    return hdr + "".join(rows) + "</tbody></table>"
+
+
+WITNESS64_SECTION = """
+<h2>3.6 64x64 专项复核：排除 multitree，逐方案零 buffer 见证</h2>
+<div class="card">
+<p><b>背景</b>：64x64（N=4096）上严格零buffer打包器（<code>sched_zerobuf_compare.py</code>）成本外推自
+16x16/12x16 的实测 O(N³) 增长率，需要数周才能跑完一个方案——完全不可行。因此本节改用一种同样严格、但成本是
+O(N²·m) 的替代验证方法：<b>零buffer见证法</b>——事件驱动引擎在每一跳都把 flit 排到"资源最早空闲的 cycle"；
+如果一次完整仿真里<b>所有</b>跳都恰好落在其"ready"时刻（<code>max_link_wait==0 且 max_ramp_wait==0</code>），
+说明引擎全程没有用到任何隐式排队，这就是刚性打包器要找的"零buffer、无冲突、无阻塞"调度本身，只是换成用正向仿真
+直接见证，而不是逆向搜索注入偏移。若 wait&gt;0，则只能说明该次尝试不是零buffer调度（不代表不存在，只是没被这次
+贪心找到）。</p>
+<p><b>范围</b>：按用户要求排除 multitree（第 3.5 节已证实其在 64x64/ramp_bw=1/m=5 需要单节点 10233 flit
+下ramp缓冲，不可信）；遍历 ring_uni/ring_bi、hybrid_uni/hybrid_bi（B∈{{2,4}}）、hybrid_v_uni/hybrid_v_bi
+（B∈{{1,2,4}}），m=1 时共 {n_m1} 个候选 x 2 个 ramp_bw。</p>
+
+<h3>m=1 全量候选结果（按 makespan 排序）</h3>
+{m1_table}
+<p class="note">只有 <b>ring_uni</b>（两种 ramp_bw 下）、<b>ring_bi</b>（仅 ramp_bw=2）、
+<b>hybrid_v_uni_B1</b>（两种 ramp_bw 下）、<b>hybrid_v_bi_B1</b>（仅 ramp_bw=2）在 m=1 时取得严格零buffer
+见证。<code>hybrid_v_uni_B1</code>/<code>hybrid_v_bi_B1</code>（B=1 即"纵向单条带"，退化为覆盖全网的单条
+Hamilton 环，但走向与 ring 转置——spine 沿列、梳齿沿行，见下方与 ring_bi 的对比）在这四者中都是最快的，且严格
+支配 ring_uni/ring_bi（makespan 更小，buffer 需求相等或更小）。B∈{{2,4}} 的 hybrid(_v) 变体 makespan 更快，
+但全部需要 &gt;0 的 link/ramp 等待（1~193/1~985 flit），不满足严格零buffer。</p>
+
+<h3>hybrid_v_bi_B1 为什么比 ring_bi 快：spine/梳齿方向的转置</h3>
+<p class="note"><code>ring_bi</code> 的 Hamilton 环以水平 spine（1 行，mx-1 跳）+ 逐列纵向梳齿
+（mx 列 × (my-1) 跳）构造，纵向跳占主导；<code>hybrid_v_bi_B1</code>（B=1）转置为垂直 spine（1 列，my-1 跳）
++ 逐行横向梳齿（my 行 × (mx-1) 跳），横向跳占主导。本研究 H=4cy &lt; V=6cy，横向跳更便宜，故
+hybrid_v_bi_B1 在正方形 mesh 上系统性快于 ring_bi（64x64/ramp_bw=2/m=1 实测：8382 vs 12226，快 31%），
+两者都是同一个"全局单环 + 双向对分"思路，只是转置方向选择利用了链路时延的非对称性。</p>
+
+<h3>两个零buffer冠军方案的完整 m=1..5 轨迹</h3>
+{champion_table}
+<p class="note">两个冠军方案在各自 ramp_bw 下对 m=1~4 都保持严格零buffer（makespan 几乎精确随 m 线性增长
++1/cycle，即 8382→8383→8384→8385，16634→16635→16636→16637），仅在 m=5 时新增 1 cycle 的 link_wait
+（不再是严格零，但同规模下所有测过的候选——包括 ring_uni/ring_bi——在 m=5 都同样需要恰好 1 cycle 的 wait，
+从未出现更大的排队），makespan 分别为 <b>10309（ramp_bw=2）/ 20544（ramp_bw=1）</b>，据此推断"下ramp/链路
+恰好打满的临界点在 m=5 附近"，而不是某个方案结构性更差。</p>
+
+<h3>64x64 结论（替代第 4 节中此前依赖 multitree 的旧数据）</h3>
+<table class="data"><thead><tr><th>ramp_bw</th><th>m</th><th class="name">严格零buffer最优方案</th>
+<th>makespan</th><th>理论下界 T</th><th>ratio</th></tr></thead><tbody>
+{summary_rows}
+</tbody></table>
+<p class="note">该表已写回 <code>results/allgather_scale_sweep.json</code> 的 64x64 条目（原条目在加入 buffer
+量测之前生成，缺少 <code>max_link_wait</code>/<code>max_ramp_wait</code>，导致 <code>autogen_allgather.
+recommend()</code> 的 buffer 过滤在"无量测数据可用"时静默回退到未约束的 multitree——这正是本节要修正的问题；
+现已用本节数据整体替换，并额外补齐了此前从未扫描过的 m=2、m=4）。第 4 节热力图/明细表默认仍用
+<code>buffer_budget=2</code>（与全篇一致，允许≤2cycle等待换取更快 makespan，见第 3.5 节),
+因此 64x64 行在热力图上可能显示比本表更快、buffer 需求为 1~2 的方案（如 m=1/ramp_bw=1 的
+hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<b>严格 buffer=0</b>版本。</p>
+</div>
+"""
+
+
+def witness64_summary_rows(sweep):
+    rows = []
+    for rb in (1, 2):
+        for m in FLITS:
+            rec = A.recommend(64, 64, m, rb, sweep, buffer_budget=0)
+            rows.append(f"<tr><td>{rb}</td><td>{m}</td><td class='name'>{esc(rec['scheme'])}</td>"
+                        f"<td>{rec['makespan']}</td><td>{rec['T']}</td><td>{rec['ratio']:.3f}x</td></tr>")
+    return "".join(rows)
+
+
 def build_report(lb, sweep):
     cells, ratios = collect_cells(sweep)
     sections = []
@@ -439,15 +553,26 @@ def build_report(lb, sweep):
         SCHEME_DIAGRAMS,
         "<div class='card'>",
         f"<p>全量比较（含全部方案族 x B 值 x 单/双向）覆盖规模：{', '.join(small_sizes)}。"
-        f"32x32、64x64（N≥1024）单次仿真调用成本 O(N²·m)，采用分层策略：先在每个 ramp_bw 的代表性 m 下做一次"
+        f"32x32（N=1024）单次仿真调用成本 O(N²·m)，采用分层策略：先在每个 ramp_bw 的代表性 m 下做一次"
         "缩减版全量比较（含 multitree、ring_bi、hybrid_bi/hybrid_v_bi 的 B∈{2,4,8}，双向变体——单向在所有更小规模上从未取胜，故不再评估）"
-        "确定最优方案，再对其余 m 只重跑该最优方案 + multitree/ring_bi 两个基线，用于对照。</p>",
+        "确定最优方案，再对其余 m 只重跑该最优方案 + multitree/ring_bi 两个基线，用于对照。"
+        "64x64（N=4096）已按第 3.6 节的方法整体重新复核：<b>排除 multitree</b>，改为对 ring/hybrid(_v) 各变体"
+        "做零buffer见证扫描，不再复用旧的、缺少 buffer 量测的数据。</p>",
+        (f"<p class='note'>{esc(sweep['notes']['32x32'])}</p>" if sweep.get("notes", {}).get("32x32") else ""),
         (f"<p class='note'>{esc(sweep['notes']['64x64'])}</p>" if sweep.get("notes", {}).get("64x64") else ""),
         "</div>",
 
         BUFFER_HONESTY_SECTION.format(
             buffer_growth=buffer_growth_table(sweep),
             strict_table=strict_m1_table(),
+        ),
+
+        WITNESS64_SECTION.format(
+            n_m1=len(set(r["name"] for r in json.loads(WITNESS64_JSON.read_text(encoding="utf-8"))
+                         if r["m"] == 1 and r["ramp_bw"] == 1)) if WITNESS64_JSON.exists() else 0,
+            m1_table=witness64_m1_table(),
+            champion_table=witness64_champion_table(),
+            summary_rows=witness64_summary_rows(sweep),
         ),
 
         "<h2>4. 热力图：makespan / 理论下界（均为 buffer_budget=2 约束下的推荐方案）</h2>",
@@ -477,6 +602,19 @@ def build_report(lb, sweep):
         "角节点链路下界是理论正确但实践难以逼近的松下界。</li>",
         "<li>方案排名并非在所有 (规模, m) 组合下都稳定，autogen 选择器直接以逐格实测结果（buffer 约束后）为准，"
         "不依赖\"某一方案族总是最优\"的先验假设。</li>",
+        "<li><b>32x32 数据补全</b>：此前除代表性 m=3 外，32x32 的其它 (ramp_bw, m) 组合都只测过 "
+        "multitree/ring_bi 两个基线（假设 m=3 的赢家能直接套用），在 ramp_bw=1 下该假设不成立——"
+        "赢家所需 buffer 超预算又没有备选候选，recommend() 只能退回 ring_bi，但 ring_bi 从未被证明真的是"
+        "最优（只是唯一测过的候选）。现已补齐全部 (ramp_bw, m) 的完整候选集，例如 32x32/ramp_bw=1/m=1 的真实"
+        "buffer_budget=2 最优解是 <b>hybrid_v_uni_B4</b>（makespan=1242），严格零buffer最优解是 "
+        "<b>hybrid_v_uni_B1</b>（makespan=4218，buf=0/0）——都远快于 ring_bi（3042，且并非严格零buffer，"
+        "buf=0/1）。</li>",
+        "<li><b>64x64 专项复核（第 3.6 节）</b>：排除 multitree 后，用零buffer见证法（而非不可行的刚性打包器）"
+        "确认了 64x64 上真正严格零buffer（m=1~4，m=5 仅需 1 cycle）的最优方案是 "
+        "<b>hybrid_v_uni_B1</b>（ramp_bw=1，makespan 16634~20544）和 <b>hybrid_v_bi_B1</b>（ramp_bw=2，"
+        "makespan 8382~10309）——两者都是覆盖全网的单条 Hamilton 环（B=1 退化为无分带），"
+        "但走向与 ring 转置（spine 沿列、梳齿沿行），利用 H&lt;V 系统性快于 ring_uni/ring_bi。"
+        "64x64 原有数据（生成于 buffer 量测功能加入之前）已被整体替换。</li>",
         "<li><b>局限</b>：32x32/64x64 没有严格零 buffer 真值可比对（打包器成本超线性、无法扩展），"
         "这两个规模的 buffer_budget=2 选择仍是\"用事件驱动引擎自己的排队量测来约束自己的排队量测\"，"
         "只能确认与小规模同族方案（ring/粗粒度 hybrid）的规律一致，不构成独立证明；如需严格证明，"

@@ -190,8 +190,12 @@ def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGE
                                 if r.get("ok") and r.get("max_link_wait") is not None
                                 and r.get("max_ramp_wait") is not None]
                 if instrumented:
+                    # tie-break equal buffer needs by makespan, not list order
+                    # (a real bug found via 64x64/m=5: ring_uni and the much
+                    # faster hybrid_v_bi_B1 both needed max-wait=1, and list
+                    # order alone was silently picking the slower one).
                     picked = min(instrumented,
-                                 key=lambda r: max(r["max_link_wait"], r["max_ramp_wait"]))
+                                 key=lambda r: (max(r["max_link_wait"], r["max_ramp_wait"]), r["makespan"]))
                 buffer_limited = True
         name = picked["name"]
         fn, extra = _fn_for(name, mx, my)

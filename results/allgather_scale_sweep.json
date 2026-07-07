@@ -7689,13 +7689,148 @@
                 "time_s": 6.277
               },
               {
+                "name": "ring_uni",
+                "makespan": 6018,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3042,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 1,
-                "time_s": 3.889
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6018,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3042,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4218,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2142,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 3044,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1605,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 4
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 2234,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 1180,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1572,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 3,
+                "max_ramp_wait": 5
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1146,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 96,
+                "max_ramp_wait": 203
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1242,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1059,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 112,
+                "max_ramp_wait": 291
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1288,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 96,
+                "max_ramp_wait": 224
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 1047,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 60,
+                "max_ramp_wait": 484
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1232,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 97,
+                "max_ramp_wait": 191
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 1044,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 69,
+                "max_ramp_wait": 505
               }
             ],
             "best": {
@@ -7722,13 +7857,148 @@
                 "time_s": 12.873
               },
               {
+                "name": "ring_uni",
+                "makespan": 6019,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3043,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 2,
-                "time_s": 7.607
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6019,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3043,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4219,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2143,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 3059,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 3,
+                "max_ramp_wait": 4
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 2081,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 44,
+                "max_ramp_wait": 503
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 2239,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 2072,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 74,
+                "max_ramp_wait": 567
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 2437,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 210,
+                "max_ramp_wait": 232
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 2065,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 252,
+                "max_ramp_wait": 738
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 2240,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 266,
+                "max_ramp_wait": 290
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 2061,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 254,
+                "max_ramp_wait": 785
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 2257,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 235,
+                "max_ramp_wait": 694
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 2057,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 139,
+                "max_ramp_wait": 1088
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 2201,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 238,
+                "max_ramp_wait": 665
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 2056,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 146,
+                "max_ramp_wait": 1103
               }
             ],
             "best": {
@@ -7755,13 +8025,148 @@
                 "time_s": 25.758
               },
               {
+                "name": "ring_uni",
+                "makespan": 6021,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 4099,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 1086,
-                "time_s": 14.836
+                "max_ramp_wait": 1086
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6021,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 1086
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4221,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 1986
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 4249,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 190,
+                "max_ramp_wait": 192
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 400,
+                "max_ramp_wait": 1212
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 4153,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 183,
+                "max_ramp_wait": 184
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 471,
+                "max_ramp_wait": 1272
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 4280,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 614,
+                "max_ramp_wait": 861
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 553,
+                "max_ramp_wait": 1742
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 4170,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 619,
+                "max_ramp_wait": 842
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 562,
+                "max_ramp_wait": 1819
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 4247,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 497,
+                "max_ramp_wait": 1598
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 307,
+                "max_ramp_wait": 2247
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 4181,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 504,
+                "max_ramp_wait": 1572
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 313,
+                "max_ramp_wait": 2247
               }
             ],
             "best": {
@@ -7788,13 +8193,148 @@
                 "time_s": 31.053
               },
               {
+                "name": "ring_uni",
+                "makespan": 6052,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 5122,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 1,
-                "max_ramp_wait": 2106,
-                "time_s": 18.463
+                "max_ramp_wait": 2106
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6052,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 2106
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 5152,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 2556
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 5244,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 314,
+                "max_ramp_wait": 315
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 602,
+                "max_ramp_wait": 1571
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 5176,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 294,
+                "max_ramp_wait": 295
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 640,
+                "max_ramp_wait": 1611
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 5285,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 785,
+                "max_ramp_wait": 1136
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 709,
+                "max_ramp_wait": 2290
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 5212,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 791,
+                "max_ramp_wait": 1111
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 711,
+                "max_ramp_wait": 2332
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 5261,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 629,
+                "max_ramp_wait": 2036
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 389,
+                "max_ramp_wait": 2823
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 5200,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 631,
+                "max_ramp_wait": 2017
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 392,
+                "max_ramp_wait": 2820
               }
             ],
             "best": {
@@ -7910,13 +8450,76 @@
                 "time_s": 6.476
               },
               {
+                "name": "ring_uni",
+                "makespan": 6018,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3042,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 0,
-                "time_s": 4.403
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6018,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3042,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4218,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2142,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 3044,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1605,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 2234,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
               },
               {
                 "name": "hybrid_v_bi_B2",
@@ -7924,18 +8527,80 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 1,
-                "max_ramp_wait": 1,
-                "time_s": 4.408
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1572,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 3,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1146,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 96,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1242,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1044,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 112,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1288,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 96,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 995,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 60,
+                "max_ramp_wait": 48
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1232,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 97,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 986,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 69,
+                "max_ramp_wait": 50
               }
             ],
             "best": {
-              "name": "multitree",
-              "makespan": 1007,
+              "name": "hybrid_v_bi_B8",
+              "makespan": 986,
               "ok": true,
               "bad": [],
-              "max_link_wait": 26,
-              "max_ramp_wait": 40,
-              "time_s": 6.476
+              "max_link_wait": 69,
+              "max_ramp_wait": 50
             },
             "T": 512,
             "ratio": 1.9668
@@ -7952,13 +8617,76 @@
                 "time_s": 11.605
               },
               {
+                "name": "ring_uni",
+                "makespan": 6019,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3043,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 0,
-                "time_s": 7.357
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6019,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3043,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4219,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2143,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 3059,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 3,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1694,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 44,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 2239,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 0
               },
               {
                 "name": "hybrid_v_bi_B2",
@@ -7966,8 +8694,71 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 74,
-                "max_ramp_wait": 2,
-                "time_s": 8.65
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 2437,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 210,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1919,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 252,
+                "max_ramp_wait": 81
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 2240,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 266,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1825,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 254,
+                "max_ramp_wait": 92
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 2257,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 235,
+                "max_ramp_wait": 55
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 1943,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 139,
+                "max_ramp_wait": 113
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 2201,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 238,
+                "max_ramp_wait": 52
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 1937,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 146,
+                "max_ramp_wait": 120
               }
             ],
             "best": {
@@ -7976,8 +8767,7 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 74,
-              "max_ramp_wait": 2,
-              "time_s": 8.65
+              "max_ramp_wait": 2
             },
             "T": 1023,
             "ratio": 1.565
@@ -7994,13 +8784,76 @@
                 "time_s": 24.97
               },
               {
+                "name": "ring_uni",
+                "makespan": 6021,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3045,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 0,
-                "time_s": 15.138
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6021,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3045,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4221,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2145,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 4249,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 190,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 3211,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 400,
+                "max_ramp_wait": 116
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 4153,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 183,
+                "max_ramp_wait": 0
               },
               {
                 "name": "hybrid_v_bi_B2",
@@ -8008,18 +8861,80 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 471,
-                "max_ramp_wait": 149,
-                "time_s": 17.79
+                "max_ramp_wait": 149
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 4280,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 614,
+                "max_ramp_wait": 80
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 3627,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 553,
+                "max_ramp_wait": 260
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 4170,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 619,
+                "max_ramp_wait": 65
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 3613,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 562,
+                "max_ramp_wait": 282
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 4247,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 497,
+                "max_ramp_wait": 143
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 3859,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 307,
+                "max_ramp_wait": 255
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 4181,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 504,
+                "max_ramp_wait": 138
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 3853,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 313,
+                "max_ramp_wait": 259
               }
             ],
             "best": {
-              "name": "ring_bi",
-              "makespan": 3045,
+              "name": "hybrid_v_bi_B1",
+              "makespan": 2145,
               "ok": true,
               "bad": [],
               "max_link_wait": 0,
-              "max_ramp_wait": 0,
-              "time_s": 15.138
+              "max_ramp_wait": 0
             },
             "T": 2046,
             "ratio": 1.4883
@@ -8036,13 +8951,76 @@
                 "time_s": 28.537
               },
               {
+                "name": "ring_uni",
+                "makespan": 6052,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3046,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 1,
-                "max_ramp_wait": 0,
-                "time_s": 17.036
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6052,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3046,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 5152,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 2597,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 5244,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 314,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 3934,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 602,
+                "max_ramp_wait": 212
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 5176,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 294,
+                "max_ramp_wait": 0
               },
               {
                 "name": "hybrid_v_bi_B2",
@@ -8050,18 +9028,80 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 640,
-                "max_ramp_wait": 227,
-                "time_s": 21.945
+                "max_ramp_wait": 227
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 5285,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 785,
+                "max_ramp_wait": 123
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 4523,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 709,
+                "max_ramp_wait": 359
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 5212,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 791,
+                "max_ramp_wait": 104
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 4509,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 711,
+                "max_ramp_wait": 367
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 5261,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 629,
+                "max_ramp_wait": 191
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 4819,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 389,
+                "max_ramp_wait": 324
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 5200,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 631,
+                "max_ramp_wait": 181
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 4813,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 392,
+                "max_ramp_wait": 326
               }
             ],
             "best": {
-              "name": "ring_bi",
-              "makespan": 3046,
+              "name": "hybrid_v_bi_B1",
+              "makespan": 2597,
               "ok": true,
               "bad": [],
               "max_link_wait": 1,
-              "max_ramp_wait": 0,
-              "time_s": 17.036
+              "max_ramp_wait": 0
             },
             "T": 2558,
             "ratio": 1.1908
@@ -8077,272 +9117,441 @@
       "bw": {
         "1": {
           "3": {
-            "results": [
-              {
-                "name": "multitree",
-                "makespan": 12290,
-                "ok": true,
-                "bad": [],
-                "time_s": 421.734
-              },
-              {
-                "name": "ring_bi",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 284.913
-              },
-              {
-                "name": "hybrid_bi_B2",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 335.018
-              },
-              {
-                "name": "hybrid_v_bi_B2",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 362.949
-              },
-              {
-                "name": "hybrid_bi_B4",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 401.286
-              },
-              {
-                "name": "hybrid_v_bi_B4",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 422.143
-              },
-              {
-                "name": "hybrid_bi_B8",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 469.128
-              },
-              {
-                "name": "hybrid_v_bi_B8",
-                "makespan": 12292,
-                "ok": true,
-                "bad": [],
-                "time_s": 490.512
-              }
-            ],
+            "T": 12285,
             "best": {
-              "name": "multitree",
-              "makespan": 12290,
+              "name": "hybrid_v_uni_B1",
+              "makespan": 16636,
               "ok": true,
               "bad": [],
-              "time_s": 421.734
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
             },
-            "T": 12285,
-            "ratio": 1.0004
+            "results": [
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 16636,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
           },
           "1": {
-            "results": [
-              {
-                "name": "multitree",
-                "makespan": 4105,
-                "ok": true,
-                "bad": [],
-                "time_s": 140.538
-              },
-              {
-                "name": "ring_bi",
-                "makespan": 12226,
-                "ok": true,
-                "bad": [],
-                "time_s": 84.391
-              }
-            ],
-            "best": {
-              "name": "multitree",
-              "makespan": 4105,
-              "ok": true,
-              "bad": [],
-              "time_s": 140.538
-            },
             "T": 4095,
-            "ratio": 1.0024
-          },
-          "5": {
-            "results": [
-              {
-                "name": "multitree",
-                "makespan": 20480,
-                "ok": true,
-                "bad": [],
-                "time_s": 776.261
-              },
-              {
-                "name": "ring_bi",
-                "makespan": 20482,
-                "ok": true,
-                "bad": [],
-                "time_s": 531.28
-              }
-            ],
             "best": {
-              "name": "multitree",
-              "makespan": 20480,
+              "name": "hybrid_v_bi_B4",
+              "makespan": 4164,
               "ok": true,
               "bad": [],
-              "time_s": 776.261
+              "max_link_wait": 383,
+              "max_ramp_wait": 985
             },
-            "T": 20475,
-            "ratio": 1.0002
-          }
-        },
-        "2": {
-          "3": {
             "results": [
               {
-                "name": "multitree",
-                "makespan": 12104,
+                "name": "ring_uni",
+                "makespan": 24322,
                 "ok": true,
                 "bad": [],
-                "time_s": 411.931
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
               },
               {
-                "name": "ring_bi",
+                "name": "hybrid_uni_B2",
                 "makespan": 12228,
                 "ok": true,
                 "bad": [],
-                "time_s": 270.447
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
               },
               {
-                "name": "hybrid_bi_B2",
-                "makespan": 10185,
+                "name": "hybrid_v_uni_B2",
+                "makespan": 8570,
                 "ok": true,
                 "bad": [],
-                "time_s": 304.183
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
               },
               {
-                "name": "hybrid_v_bi_B2",
-                "makespan": 9716,
+                "name": "hybrid_uni_B4",
+                "makespan": 6214,
                 "ok": true,
                 "bad": [],
-                "time_s": 320.468
+                "max_link_wait": 4,
+                "max_ramp_wait": 8
               },
               {
-                "name": "hybrid_bi_B4",
-                "makespan": 10939,
+                "name": "hybrid_v_uni_B4",
+                "makespan": 4538,
                 "ok": true,
                 "bad": [],
-                "time_s": 348.318
-              },
-              {
-                "name": "hybrid_v_bi_B4",
-                "makespan": 10824,
-                "ok": true,
-                "bad": [],
-                "time_s": 363.816
-              },
-              {
-                "name": "hybrid_bi_B8",
-                "makespan": 11564,
-                "ok": true,
-                "bad": [],
-                "time_s": 396.678
-              },
-              {
-                "name": "hybrid_v_bi_B8",
-                "makespan": 11550,
-                "ok": true,
-                "bad": [],
-                "time_s": 410.349
-              }
-            ],
-            "best": {
-              "name": "hybrid_v_bi_B2",
-              "makespan": 9716,
-              "ok": true,
-              "bad": [],
-              "time_s": 320.468
-            },
-            "T": 6143,
-            "ratio": 1.5816
-          },
-          "1": {
-            "results": [
-              {
-                "name": "multitree",
-                "makespan": 4047,
-                "ok": true,
-                "bad": [],
-                "time_s": 122.415
+                "max_link_wait": 1,
+                "max_ramp_wait": 2
               },
               {
                 "name": "ring_bi",
                 "makespan": 12226,
                 "ok": true,
                 "bad": [],
-                "time_s": 79.024
+                "max_link_wait": 0,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 6281,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 5
               },
               {
                 "name": "hybrid_v_bi_B2",
                 "makespan": 4412,
                 "ok": true,
                 "bad": [],
-                "time_s": 88.827
-              }
-            ],
-            "best": {
-              "name": "multitree",
-              "makespan": 4047,
-              "ok": true,
-              "bad": [],
-              "time_s": 122.415
-            },
-            "T": 2048,
-            "ratio": 1.9761
-          },
-          "5": {
-            "results": [
+                "max_link_wait": 1,
+                "max_ramp_wait": 3
+              },
               {
-                "name": "multitree",
-                "makespan": 20167,
+                "name": "hybrid_bi_B4",
+                "makespan": 4341,
                 "ok": true,
                 "bad": [],
-                "time_s": 670.262
+                "max_link_wait": 193,
+                "max_ramp_wait": 496
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 4164,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 383,
+                "max_ramp_wait": 985
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 16634,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8382,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 1
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "5": {
+            "T": 20475,
+            "best": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 20544,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 1,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "ring_uni",
+                "makespan": 24388,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 20544,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "2": {
+            "T": 8190,
+            "best": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 16635,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 16635,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "4": {
+            "T": 16380,
+            "best": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 16637,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 16637,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          }
+        },
+        "2": {
+          "3": {
+            "T": 6143,
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 8384,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8384,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "1": {
+            "T": 2048,
+            "best": {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 4140,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 383,
+              "max_ramp_wait": 2
+            },
+            "results": [
+              {
+                "name": "ring_uni",
+                "makespan": 24322,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 12228,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 8570,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 6214,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 4,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 4538,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12226,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 6281,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 2,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 4412,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 1
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 4341,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 193,
+                "max_ramp_wait": 3
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 4140,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 383,
+                "max_ramp_wait": 2
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 16634,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8382,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "5": {
+            "T": 10238,
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 10309,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 1,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "ring_uni",
+                "makespan": 24388,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 20544,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
               },
               {
                 "name": "ring_bi",
                 "makespan": 12230,
                 "ok": true,
                 "bad": [],
-                "time_s": 427.044
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
               },
               {
-                "name": "hybrid_v_bi_B2",
-                "makespan": 16098,
+                "name": "hybrid_v_bi_B1",
+                "makespan": 10309,
                 "ok": true,
                 "bad": [],
-                "time_s": 531.653
+                "max_link_wait": 1,
+                "max_ramp_wait": 0
               }
             ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "2": {
+            "T": 4095,
             "best": {
-              "name": "ring_bi",
-              "makespan": 12230,
+              "name": "hybrid_v_bi_B1",
+              "makespan": 8383,
               "ok": true,
               "bad": [],
-              "time_s": 427.044
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
             },
-            "T": 10238,
-            "ratio": 1.1946
+            "results": [
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8383,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
+          },
+          "4": {
+            "T": 8190,
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 8385,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "results": [
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8385,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              }
+            ],
+            "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
           }
         }
       }
     }
   },
   "notes": {
-    "64x64": "Reduced coverage: only m in {1,5} evaluated per ramp_bw due to O(N^2) per-candidate simulation cost (~7min/candidate at N=4096); each cell still uses the same reduced 8-candidate huge-mesh search (multitree, ring_bi, hybrid_bi/hybrid_v_bi x B in {2,4,8}, bidir only)."
+    "64x64": "2026-07-07 \u8d77 64x64 \u6570\u636e\u5df2\u6574\u4f53\u66ff\u6362\uff1a\u6392\u9664 multitree\uff08\u5df2\u8bc1\u5b9e\u9700\u8981\u5355\u8282\u70b9 10233 flit \u4e0bramp\u7f13\u51b2\uff0c\u89c1 3.5 \u8282\uff09\uff0c\u6539\u4e3a\u5bf9 ring_uni/ring_bi/hybrid_(v_)uni/bi \u7684 B\u2208{1,2,4} \u53d8\u4f53\u505a zero-buffer witness \u590d\u6838\uff08max_link_wait==max_ramp_wait==0 \u65f6\u89c6\u4e3a\u5df2\u8bc1\u660e\u7684\u4e25\u683c\u96f6buffer\u8c03\u5ea6\uff0c\u89c1 3.6 \u8282\u65b9\u6cd5\u8bf4\u660e\uff09\u3002m=2/4 \u6b64\u524d\u4ece\u672a\u88ab\u626b\u63cf\uff0c\u73b0\u6309\u540c\u65b9\u6cd5\u8865\u9f50\uff08\u53ea\u590d\u6838\u4e86\u5f53\u524dramp_bw \u4e0b m=1 \u7684 zero-buffer \u51a0\u519b\u65b9\u6848\u7684 m=2..4 \u6570\u636e\u70b9\uff0c\u975e\u5168\u91cf\u5019\u9009\u91cd\u626b\uff09\u3002",
+    "32x32": "2026-07-07 \u4fee\u6b63\uff1a\u6b64\u524d 32x32 \u9664 m=3\uff08\u4ee3\u8868\u6027 m\uff09\u5916\u7684\u6240\u6709 (ramp_bw, m) \u7ec4\u5408\u90fd\u53ea\u6d4b\u8fc7 multitree/ring_bi\uff08+ramp_bw=2 \u4e0b\u7684 hybrid_v_bi_B2\uff09\uff0c\u5047\u8bbe m=3 \u7684\u8d62\u5bb6\u80fd\u76f4\u63a5\u5957\u7528\u5230\u5176\u5b83 m\u2014\u2014\u8be5\u5047\u8bbe\u5728 ramp_bw=1 \u4e0b\u4e0d\u6210\u7acb\uff08\u8d62\u5bb6\u6240\u9700 buffer \u8d85\u9884\u7b97\uff0c\u4e14\u6ca1\u6709\u5907\u9009\u7684 hybrid/hybrid_v \u5019\u9009\u53ef\u7528\uff0c\u5bfc\u81f4 recommend() \u9000\u5316\u4e3a ring_bi\uff0c\u4f46 ring_bi \u4e5f\u4ece\u672a\u771f\u6b63\u88ab\u8bc1\u660e\u662f\u5f53\u65f6\u552f\u4e00\u6d4b\u8fc7\u7684\u5019\u9009\u4e4b\u5916\u7684\u6700\u4f18\u89e3\uff09\u3002\u73b0\u5df2\u5bf9\u5168\u90e8 (ramp_bw, m) \u8865\u9f50\u5b8c\u6574\u5019\u9009\u96c6\uff08ring_uni/bi\u3001hybrid_(v_)uni/bi \u7684 B\u2208{1,2,4,8}\uff09\u3002"
   }
 }

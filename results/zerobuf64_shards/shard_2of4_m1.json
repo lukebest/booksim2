@@ -1,0 +1,57 @@
+[
+  {
+    "name": "ring_bi",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 12226,
+    "ok": true,
+    "max_link_wait": 0,
+    "max_ramp_wait": 1,
+    "zero_buffer_certified": false,
+    "time_s": 107.1
+  },
+  {
+    "name": "hybrid_bi_B2",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 6281,
+    "ok": true,
+    "max_link_wait": 2,
+    "max_ramp_wait": 5,
+    "zero_buffer_certified": false,
+    "time_s": 118.4
+  },
+  {
+    "name": "hybrid_v_bi_B2",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 4412,
+    "ok": true,
+    "max_link_wait": 1,
+    "max_ramp_wait": 3,
+    "zero_buffer_certified": false,
+    "time_s": 116.4
+  },
+  {
+    "name": "hybrid_bi_B4",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 4341,
+    "ok": true,
+    "max_link_wait": 193,
+    "max_ramp_wait": 496,
+    "zero_buffer_certified": false,
+    "time_s": 145.7
+  },
+  {
+    "name": "hybrid_v_bi_B4",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 4164,
+    "ok": true,
+    "max_link_wait": 383,
+    "max_ramp_wait": 985,
+    "zero_buffer_certified": false,
+    "time_s": 128.8
+  }
+]
