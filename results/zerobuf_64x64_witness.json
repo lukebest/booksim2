@@ -392,5 +392,16 @@
     "max_ramp_wait": 0,
     "zero_buffer_certified": true,
     "time_s": 307
+  },
+  {
+    "name": "hybrid_v_bi_B1",
+    "ramp_bw": 1,
+    "m": 2,
+    "makespan": 8383,
+    "ok": true,
+    "max_link_wait": 0,
+    "max_ramp_wait": 2,
+    "zero_buffer_certified": false,
+    "time_s": 295
   }
 ]

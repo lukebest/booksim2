@@ -36,7 +36,7 @@ ul.compact li { margin:3px 0; }
 <li>规模：4x4, 6x8, 8x8, 12x16, 16x16, 32x32, 64x64（正方形部分按边长 x2 步进）</li>
 <li>数据大小 m ∈ {1..5} flit/节点；allgather 语义：每节点须从其余 N-1 个节点各收到 m flit</li>
 <li>调度目标：makespan = 最后一个 flit 完成下 ramp 出口的 cycle</li>
-<li><b>[已更正] 仿真引擎的 buffer 假设</b>：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，等待时长<b>没有硬性上限</b>（并非早期版本描述的“1 个 pipeline register”），这不等价于“零缓冲、无冲突、无阻塞”。该假设对不同方案族的影响很不对称，已被证实会扭曲跨方案的排名——详见第 3.5 节的实测核查与修正措施；本报告后续的“推荐方案”已改为在 buffer_budget=2 flit 约束下选取。</li>
+<li><b>[已更正] 仿真引擎的 buffer 假设</b>：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，等待时长<b>没有硬性上限</b>（并非早期版本描述的“1 个 pipeline register”），这不等价于“零缓冲、无冲突、无阻塞”。该假设对不同方案族的影响很不对称，已被证实会扭曲跨方案的排名——详见第 3.5 节的实测核查、第 3.7 节的buffer_budget 过滤器双方向失真更正；本报告 m=1 小规模行的“推荐方案”已改为直接采用刚性打包器真值，m&gt;1 与大规模行在 buffer_budget=2 约束下选取（其局限见 3.7）。</li>
 </ul></div>
 <h2>2. 下界分析</h2>
 <div class='card'>
@@ -63,7 +63,7 @@ ul.compact li { margin:3px 0; }
 
 <div class='card'>
 <p>全量比较（含全部方案族 x B 值 x 单/双向）覆盖规模：4x4, 6x8, 8x8, 12x16, 16x16。32x32（N=1024）单次仿真调用成本 O(N²·m)，采用分层策略：先在每个 ramp_bw 的代表性 m 下做一次缩减版全量比较（含 multitree、ring_bi、hybrid_bi/hybrid_v_bi 的 B∈{2,4,8}，双向变体——单向在所有更小规模上从未取胜，故不再评估）确定最优方案，再对其余 m 只重跑该最优方案 + multitree/ring_bi 两个基线，用于对照。64x64（N=4096）已按第 3.6 节的方法整体重新复核：<b>排除 multitree</b>，改为对 ring/hybrid(_v) 各变体做零buffer见证扫描，不再复用旧的、缺少 buffer 量测的数据。</p>
-<p class='note'>2026-07-07 修正：此前 32x32 除 m=3（代表性 m）外的所有 (ramp_bw, m) 组合都只测过 multitree/ring_bi（+ramp_bw=2 下的 hybrid_v_bi_B2），假设 m=3 的赢家能直接套用到其它 m——该假设在 ramp_bw=1 下不成立（赢家所需 buffer 超预算，且没有备选的 hybrid/hybrid_v 候选可用，导致 recommend() 退化为 ring_bi，但 ring_bi 也从未真正被证明是当时唯一测过的候选之外的最优解）。现已对全部 (ramp_bw, m) 补齐完整候选集（ring_uni/bi、hybrid_(v_)uni/bi 的 B∈{1,2,4,8}）。</p>
+<p class='note'>2026-07-07 修正：此前 32x32 除 m=3（代表性 m）外的所有 (ramp_bw, m) 组合都只测过 multitree/ring_bi（+ramp_bw=2 下的 hybrid_v_bi_B2），假设 m=3 的赢家能直接套用到其它 m——该假设在 ramp_bw=1 下不成立（赢家所需 buffer 超预算，且没有备选的 hybrid/hybrid_v 候选可用，导致 recommend() 退化为 ring_bi，但 ring_bi 也从未真正被证明是当时唯一测过的候选之外的最优解）。现已对全部 (ramp_bw, m)——含 m=3 本身（此前 m=3 也只测了双向 B∈{2,4,8} 变体，缺 uni/B1 变体）——补齐完整候选集（ring_uni/bi、hybrid_(v_)uni/bi 的 B∈{1,2,4,8}）。</p>
 <p class='note'>2026-07-07 起 64x64 数据已整体替换：排除 multitree（已证实需要单节点 10233 flit 下ramp缓冲，见 3.5 节），改为对 ring_uni/ring_bi/hybrid_(v_)uni/bi 的 B∈{1,2,4} 变体做 zero-buffer witness 复核（max_link_wait==max_ramp_wait==0 时视为已证明的严格零buffer调度，见 3.6 节方法说明）。m=2/4 此前从未被扫描，现按同方法补齐（只复核了当前ramp_bw 下 m=1 的 zero-buffer 冠军方案的 m=2..4 数据点，非全量候选重扫）。</p>
 </div>
 
@@ -171,20 +171,87 @@ hybrid_v_bi_B1 在正方形 mesh 上系统性快于 ring_bi（64x64/ramp_bw=2/m=
 恰好打满的临界点在 m=5 附近"，而不是某个方案结构性更差。</p>
 
 <h3>64x64 结论（替代第 4 节中此前依赖 multitree 的旧数据）</h3>
+<h4>严格 buffer=0（buffer_budget=0，本次用户明确要求的版本）</h4>
 <table class="data"><thead><tr><th>ramp_bw</th><th>m</th><th class="name">严格零buffer最优方案</th>
 <th>makespan</th><th>理论下界 T</th><th>ratio</th></tr></thead><tbody>
 <tr><td>1</td><td>1</td><td class='name'>hybrid_v_uni_B1</td><td>16634</td><td>4095</td><td>4.062x</td></tr><tr><td>1</td><td>2</td><td class='name'>hybrid_v_uni_B1</td><td>16635</td><td>8190</td><td>2.031x</td></tr><tr><td>1</td><td>3</td><td class='name'>hybrid_v_uni_B1</td><td>16636</td><td>12285</td><td>1.354x</td></tr><tr><td>1</td><td>4</td><td class='name'>hybrid_v_uni_B1</td><td>16637</td><td>16380</td><td>1.016x</td></tr><tr><td>1</td><td>5</td><td class='name'>hybrid_v_uni_B1</td><td>20544</td><td>20475</td><td>1.003x</td></tr><tr><td>2</td><td>1</td><td class='name'>hybrid_v_bi_B1</td><td>8382</td><td>2048</td><td>4.093x</td></tr><tr><td>2</td><td>2</td><td class='name'>hybrid_v_bi_B1</td><td>8383</td><td>4095</td><td>2.047x</td></tr><tr><td>2</td><td>3</td><td class='name'>hybrid_v_bi_B1</td><td>8384</td><td>6143</td><td>1.365x</td></tr><tr><td>2</td><td>4</td><td class='name'>hybrid_v_bi_B1</td><td>8385</td><td>8190</td><td>1.024x</td></tr><tr><td>2</td><td>5</td><td class='name'>hybrid_v_bi_B1</td><td>10309</td><td>10238</td><td>1.007x</td></tr>
 </tbody></table>
-<p class="note">该表已写回 <code>results/allgather_scale_sweep.json</code> 的 64x64 条目（原条目在加入 buffer
+
+<h4>buffer_budget=2（报告默认标准，允许≤2cycle 排队换取更快 makespan）</h4>
+<table class="data"><thead><tr><th>ramp_bw</th><th>m</th><th class="name">推荐方案</th>
+<th>makespan</th><th>理论下界 T</th><th>ratio</th></tr></thead><tbody>
+<tr><td>1</td><td>1</td><td class='name'>hybrid_v_uni_B4</td><td>4538</td><td>4095</td><td>1.108x</td></tr><tr><td>1</td><td>2</td><td class='name'>hybrid_v_bi_B1</td><td>8383</td><td>8190</td><td>1.024x</td></tr><tr><td>1</td><td>3</td><td class='name'>hybrid_v_uni_B1</td><td>16636</td><td>12285</td><td>1.354x</td></tr><tr><td>1</td><td>4</td><td class='name'>hybrid_v_uni_B1</td><td>16637</td><td>16380</td><td>1.016x</td></tr><tr><td>1</td><td>5</td><td class='name'>hybrid_v_uni_B1</td><td>20544</td><td>20475</td><td>1.003x</td></tr><tr><td>2</td><td>1</td><td class='name'>hybrid_v_bi_B2</td><td>4412</td><td>2048</td><td>2.154x</td></tr><tr><td>2</td><td>2</td><td class='name'>hybrid_v_bi_B1</td><td>8383</td><td>4095</td><td>2.047x</td></tr><tr><td>2</td><td>3</td><td class='name'>hybrid_v_bi_B1</td><td>8384</td><td>6143</td><td>1.365x</td></tr><tr><td>2</td><td>4</td><td class='name'>hybrid_v_bi_B1</td><td>8385</td><td>8190</td><td>1.024x</td></tr><tr><td>2</td><td>5</td><td class='name'>hybrid_v_bi_B1</td><td>10309</td><td>10238</td><td>1.007x</td></tr>
+</tbody></table>
+<p class="note"><b>ramp_bw=1 下 bi vs uni 的关键取舍</b>：严格零buffer（上表）在 ramp_bw=1 下只能选
+<b>hybrid_v_uni_B1</b>（单向），因为双向的 hybrid_v_bi_B1 在 ramp_bw=1 下需要少量下ramp排队
+（m=1: 0/1，m=2: 0/2），不满足严格零buffer。但允许≤2cycle 排队后（下表），<b>hybrid_v_bi_B1 在 m=2 被放行，
+makespan 从 16635 降到 8383（快一倍）</b>——这正是用户复核发现的：64x64/ramp_bw=1/m=2 下 hybrid_v_bi_B1
+更优。bi 比 uni 快约 2x 的原因是双向对分使最远跳数减半，代价是下ramp在 ramp_bw=1（饱和）时出现 1~2 cycle
+的突发排队。m=1 时 hybrid_v_bi_B1 在 ramp_bw=1 下需 0/1（也≤2），故 budget=2 下 m=1 同样改选 hybrid_v_bi_B1
+（8382）而非 uni（16634）。</p>
+
+<p class="note">上表（严格 buffer=0）已写回 <code>results/allgather_scale_sweep.json</code> 的 64x64 条目（原条目在加入 buffer
 量测之前生成，缺少 <code>max_link_wait</code>/<code>max_ramp_wait</code>，导致 <code>autogen_allgather.
 recommend()</code> 的 buffer 过滤在"无量测数据可用"时静默回退到未约束的 multitree——这正是本节要修正的问题；
-现已用本节数据整体替换，并额外补齐了此前从未扫描过的 m=2、m=4）。第 4 节热力图/明细表默认仍用
-<code>buffer_budget=2</code>（与全篇一致，允许≤2cycle等待换取更快 makespan，见第 3.5 节),
-因此 64x64 行在热力图上可能显示比本表更快、buffer 需求为 1~2 的方案（如 m=1/ramp_bw=1 的
-hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<b>严格 buffer=0</b>版本。</p>
+现已用本节数据整体替换，并额外补齐了此前从未扫描过的 m=2、m=4）。下表（buffer_budget=2）即第 4 节热力图/明细表
+对 64x64 行所用的推荐方案——两表对照可看清"严格零buffer"与"允许≤2cycle 排队"在该规模的 makespan 差距
+（ramp_bw=1、m=1~2 差约 2x，m≥3 后差距收窄，因下ramp饱和后 uni 也得排队）。</p>
 </div>
 
-<h2>4. 热力图：makespan / 理论下界（均为 buffer_budget=2 约束下的推荐方案）</h2>
+
+<h2>3.7 方法论更正：buffer_budget 过滤器的双方向失真（重要）</h2>
+<div class="card">
+<p><b>结论先行</b>：第 3.5 节引入的 <code>buffer_budget</code> 过滤器（用事件驱动引擎记录的
+<code>max_link_wait</code>/<code>max_ramp_wait</code> 来剔除"需要深排队"的方案）存在一个根本性缺陷——
+<b>事件驱动引擎是贪心调度器，它记录的 wait 是它"碰巧构造出的那个调度"的排队量，而不是该方案"所需缓冲的下界"</b>。
+两者不是一回事，过滤器因此会在两个方向上都失真：</p>
+<ul class="compact">
+<li><b>过度剔除</b>：一个方案明明存在零buffer调度（刚性打包器证明确实存在），但贪心调度器没找到那个零冲突的注入偏移，
+于是用排队"抹平"了冲突，记录到非零 wait——过滤器据此把它剔除。<b>典型：16x16/ramp_bw=1/m=1 的
+hybrid_v_bi_B2</b>，刚性打包器证明其零buffer makespan=334，但事件驱动引擎记录 buf=1/3，被 buffer_budget=2 剔除。</li>
+<li><b>漏放</b>：一个方案的快 makespan 实际上<b>依赖</b>排队才能达到（其真零buffer makespan 远高于此），
+但贪心碰巧只用了很少的排队，过滤器据此放行。<b>典型：4x4/ramp_bw=1/m=1 的 multitree</b>，事件驱动 mk=32 buf=1/2
+通过 budget=2 过滤，但其真零buffer makespan=51——这个 32 是靠排队偷来的，不是零buffer能力。</li>
+</ul>
+
+<h3>失真实例（16x16/ramp_bw=1/m=1，用户复核发现）</h3>
+<table class="data"><thead><tr><th class="name">方案</th><th>事件驱动 makespan</th>
+<th>事件驱动 buf(link/ramp)</th><th>刚性打包器 真零buffer makespan</th><th>buffer_budget=2 过滤器判定</th>
+<th>是否正确</th></tr></thead><tbody>
+<tr><td class="name">hybrid_v_bi_B2</td><td>332</td><td>1/3</td><td><b>334（真零buffer）</b></td>
+<td>剔除（ramp 3&gt;2）</td><td class="name"><b>✗ 错误剔除</b></td></tr>
+<tr><td class="name">hybrid_v_uni_B4</td><td>362</td><td>1/2</td><td>363</td><td>放行 → 被选为"最优"</td>
+<td class="name">✗ 次优被当成最优</td></tr>
+<tr><td class="name">multitree (4x4 类比)</td><td>32</td><td>1/2</td><td>51</td><td>放行（1/2≤2）</td>
+<td class="name"><b>✗ 错误放行</b></td></tr>
+</tbody></table>
+<p class="note">修正前报告在此格推荐 hybrid_v_uni_B4（362cy），比真零buffer最优 hybrid_v_bi_B2（334cy）慢 8.4%——
+正是用户指出的偏差。同类偏差此前出现在 4x4/6x8/8x8/12x16/16x16 的全部 m=1 单元（selftest 标为 "differs"），
+均已被本次修正消除。</p>
+
+<h3>修正措施</h3>
+<ul class="compact">
+<li><b>凡有刚性打包器真值的地方，一律以真值为准</b>：<code>autogen_allgather.recommend()</code> 已改为，
+当 (规模, ramp_bw, m=1) 存在 <code>results/zerobuf_strict_m1.json</code> 真值时（4x4/6x8/8x8/12x16/16x16，
+两种 ramp_bw），直接返回刚性打包器给出的最优方案及其真零buffer makespan，不再走 buffer_budget 过滤器；
+返回结果同时附带该方案在事件驱动引擎里的 makespan/buf 供对比，并标记 <code>source=strict_zerobuf</code>。
+修正后上述 10 个 m=1 单元的推荐方案与真值 100% 一致（selftest 全部 OK，比值 1.00x）。</li>
+<li><b>真值不可得处的诚实声明</b>：m&gt;1 与 32x32/64x64 没有刚性打包器真值（成本超线性、不可行），
+仍只能用事件驱动 + buffer_budget 过滤器作为<b>启发式估计</b>。鉴于上述双方向失真，这些格的推荐方案
+<b>应视为"贪心调度下、排队≤budget 的最快方案"，而非"零buffer最优解"</b>——可能仍然在过度剔除确实存在零buffer
+调度的方案（无法证伪，因没有真值）。这是当前方法的已知局限，留待可扩展的零缓冲调度算法后续解决。</li>
+<li>第 4 节热力图/明细表的 m=1 小规模行已自动改为真值来源（标注"严格零buffer真值"），m&gt;1 与大规模行
+仍为事件驱动估计（标注其 raw_best 与 buf 以便审视）。</li>
+</ul>
+
+<h3>严格零 buffer 基准（m=1，全部规模，真值）</h3>
+<table class='data'><thead><tr><th>规模</th><th>ramp_bw</th><th>eject 下界</th><th>严格零 buffer 排名前三（m=1，makespan）</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>15</td><td class='name'>hybrid_bi_B2=32, hybrid_v_bi_B2=34, hybrid_v_bi_B1=42</td></tr><tr><td class='name'>4x4</td><td>2</td><td>8</td><td class='name'>multitree=32, hybrid_bi_B2=32, hybrid_bi_B4=32</td></tr><tr><td class='name'>6x8</td><td>1</td><td>47</td><td class='name'>hybrid_v_bi_B2=82, hybrid_bi_B2=92, hybrid_v_bi_B1=118</td></tr><tr><td class='name'>6x8</td><td>2</td><td>24</td><td class='name'>hybrid_v_bi_B2=82, hybrid_uni_B4=87, hybrid_bi_B2=92</td></tr><tr><td class='name'>8x8</td><td>1</td><td>63</td><td class='name'>hybrid_v_bi_B2=102, hybrid_bi_B2=112, hybrid_v_uni_B4=115</td></tr><tr><td class='name'>8x8</td><td>2</td><td>32</td><td class='name'>hybrid_v_bi_B2=102, hybrid_uni_B4=112, hybrid_bi_B2=112</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'>hybrid_v_bi_B2=262, hybrid_v_uni_B4=287, hybrid_bi_B2=328</td></tr><tr><td class='name'>12x16</td><td>2</td><td>96</td><td class='name'>hybrid_v_bi_B2=262, hybrid_v_uni_B4=287, hybrid_uni_B8=324</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'>hybrid_v_bi_B2=334, hybrid_v_uni_B4=363, hybrid_bi_B2=416</td></tr><tr><td class='name'>16x16</td><td>2</td><td>128</td><td class='name'>hybrid_v_bi_B2=334, hybrid_v_uni_B4=363, hybrid_uni_B8=409</td></tr><tr><td class='name'>32x32</td><td colspan='4' class='note'>未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr><tr><td class='name'>64x64</td><td colspan='4' class='note'>未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr></tbody></table>
+<p class="note"><b>hybrid_v_bi_B2</b>（B=2 纵向条带、双向）是 m=1 下 6x8~16x16 全部规模上的真零buffer最优解
+（4x4 上 hybrid_bi_B2 与之并列理论下界 32，4x4/ramp_bw=2 上 multitree 并列）。这是本研究唯一有硬证据支持的
+"无缓冲、无冲突、无阻塞"最优结论。</p>
+</div>
+
+<h2>4. 热力图：makespan / 理论下界（m=1 小规模=刚性打包器真值；m&gt;1 与大规模=buffer_budget=2 约束下的推荐方案）</h2>
 
 <div class="card">
 <h3>下 ramp 带宽 = 1 flit/cycle/node — makespan / 理论下界 T</h3>
@@ -213,9 +280,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.12x</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">84/75cy</text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(117, 72%, 57%)" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.25x</text>
-<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">80/64cy</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(114, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.28x</text>
+<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">82/64cy</text>
 <rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(115, 72%, 56%)" stroke="#e2e8f0"/>
 <text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.27x</text>
 <text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">119/94cy</text>
@@ -229,9 +296,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">248/235cy</text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(80, 72%, 52%)" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.58x</text>
-<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">114/72cy</text>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(99, 72%, 54%)" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.42x</text>
+<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">102/72cy</text>
 <rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(123, 72%, 57%)" stroke="#e2e8f0"/>
 <text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.20x</text>
 <text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">151/126cy</text>
@@ -245,9 +312,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">328/315cy</text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(90, 72%, 53%)" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.50x</text>
-<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">286/191cy</text>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(104, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.37x</text>
+<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">262/191cy</text>
 <rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(131, 72%, 58%)" stroke="#e2e8f0"/>
 <text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
 <text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">431/382cy</text>
@@ -261,9 +328,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">976/955cy</text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
-<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(98, 72%, 54%)" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.42x</text>
-<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">362/255cy</text>
+<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(111, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.31x</text>
+<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">334/255cy</text>
 <rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(134, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.10x</text>
 <text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">559/510cy</text>
@@ -283,9 +350,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <rect x="190" y="266" width="92" height="42" rx="6" fill="hsl(140, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
 <text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">2143/2046cy</text>
-<rect x="286" y="266" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">3076/3069cy</text>
+<rect x="286" y="266" width="92" height="42" rx="6" fill="hsl(103, 72%, 55%)" stroke="#e2e8f0"/>
+<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.38x</text>
+<text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">4220/3069cy</text>
 <rect x="382" y="266" width="92" height="42" rx="6" fill="hsl(141, 72%, 60%)" stroke="#e2e8f0"/>
 <text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
 <text x="428" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9">4221/4092cy</text>
@@ -296,9 +363,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <rect x="94" y="312" width="92" height="42" rx="6" fill="hsl(133, 72%, 59%)" stroke="#e2e8f0"/>
 <text x="140" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.11x</text>
 <text x="140" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">4538/4095cy</text>
-<rect x="190" y="312" width="92" height="42" rx="6" fill="hsl(30, 72%, 46%)" stroke="#e2e8f0"/>
-<text x="236" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.03x</text>
-<text x="236" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">16635/8190cy</text>
+<rect x="190" y="312" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="236" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="236" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">8383/8190cy</text>
 <rect x="286" y="312" width="92" height="42" rx="6" fill="hsl(106, 72%, 55%)" stroke="#e2e8f0"/>
 <text x="332" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.35x</text>
 <text x="332" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9">16636/12285cy</text>
@@ -321,8 +388,8 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="428" y="26" text-anchor="middle" font-size="12" fill="#475569">4</text>
 <text x="524" y="26" text-anchor="middle" font-size="12" fill="#475569">5</text>
 <text x="82" y="61" text-anchor="end" font-size="12" fill="#475569">4x4</text>
-<rect x="94" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
-<text x="140" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">multitree</text>
+<rect x="94" y="36" width="92" height="42" rx="6" fill="#d97706" stroke="#e2e8f0"/>
+<text x="140" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">h_bi B=2</text>
 <text x="140" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="36" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -354,7 +421,7 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
 <rect x="94" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="128" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -370,7 +437,7 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
 <rect x="94" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="174" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -386,7 +453,7 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
 <rect x="94" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="220" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -407,8 +474,8 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <rect x="190" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
-<rect x="286" y="266" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
-<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">ring_bi</text>
+<rect x="286" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="332" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
 <text x="332" y="299" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="382" y="266" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="428" y="284" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
@@ -421,7 +488,7 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="140" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=4</text>
 <text x="140" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="312" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
-<text x="236" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
+<text x="236" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="236" y="345" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="286" y="312" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="332" y="330" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_uni B=1</text>
@@ -436,7 +503,7 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 </div>
 <div class="card">
 <h3>下 ramp 带宽 = 1 flit/cycle/node — 详细数据</h3>
-<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案（buffer_budget=2 约束下最快）</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1/2</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 35cy, buf=2/12)</span></td><td>43</td><td>0/2</td><td>1.303</td></tr><tr><td class='name'>4x4</td><td>3</td><td>45</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 50cy, buf=6/23)</span></td><td>76</td><td>0/0</td><td>1.689</td></tr><tr><td class='name'>4x4</td><td>4</td><td>60</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 65cy, buf=10/36)</span></td><td>77</td><td>0/0</td><td>1.283</td></tr><tr><td class='name'>4x4</td><td>5</td><td>75</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 80cy, buf=14/46)</span></td><td>84</td><td>1/0</td><td>1.120</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 64cy, buf=1/17)</span></td><td>80</td><td>1/2</td><td>1.250</td></tr><tr><td class='name'>6x8</td><td>2</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 99cy, buf=6/44)</span></td><td>119</td><td>0/2</td><td>1.266</td></tr><tr><td class='name'>6x8</td><td>3</td><td>141</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 146cy, buf=12/66)</span></td><td>220</td><td>0/0</td><td>1.560</td></tr><tr><td class='name'>6x8</td><td>4</td><td>188</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 193cy, buf=18/90)</span></td><td>221</td><td>0/0</td><td>1.175</td></tr><tr><td class='name'>6x8</td><td>5</td><td>235</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 240cy, buf=24/113)</span></td><td>248</td><td>1/0</td><td>1.055</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 73cy, buf=2/27)</span></td><td>114</td><td>1/2</td><td>1.583</td></tr><tr><td class='name'>8x8</td><td>2</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 131cy, buf=10/60)</span></td><td>151</td><td>0/2</td><td>1.198</td></tr><tr><td class='name'>8x8</td><td>3</td><td>189</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 194cy, buf=18/90)</span></td><td>284</td><td>0/0</td><td>1.503</td></tr><tr><td class='name'>8x8</td><td>4</td><td>252</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 257cy, buf=26/122)</span></td><td>285</td><td>0/0</td><td>1.131</td></tr><tr><td class='name'>8x8</td><td>5</td><td>315</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 320cy, buf=34/153)</span></td><td>328</td><td>1/0</td><td>1.041</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 201cy, buf=6/89)</span></td><td>286</td><td>1/2</td><td>1.497</td></tr><tr><td class='name'>12x16</td><td>2</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 387cy, buf=18/186)</span></td><td>431</td><td>0/2</td><td>1.128</td></tr><tr><td class='name'>12x16</td><td>3</td><td>573</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 578cy, buf=30/282)</span></td><td>828</td><td>0/0</td><td>1.445</td></tr><tr><td class='name'>12x16</td><td>4</td><td>764</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 769cy, buf=42/378)</span></td><td>829</td><td>0/0</td><td>1.085</td></tr><tr><td class='name'>12x16</td><td>5</td><td>955</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 960cy, buf=54/473)</span></td><td>976</td><td>1/0</td><td>1.022</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 265cy, buf=10/121)</span></td><td>362</td><td>1/2</td><td>1.420</td></tr><tr><td class='name'>16x16</td><td>2</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 515cy, buf=26/250)</span></td><td>559</td><td>0/2</td><td>1.096</td></tr><tr><td class='name'>16x16</td><td>3</td><td>765</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 770cy, buf=42/378)</span></td><td>1084</td><td>0/0</td><td>1.417</td></tr><tr><td class='name'>16x16</td><td>4</td><td>1020</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1025cy, buf=58/506)</span></td><td>1085</td><td>0/0</td><td>1.064</td></tr><tr><td class='name'>16x16</td><td>5</td><td>1275</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1280cy, buf=74/633)</span></td><td>1296</td><td>1/0</td><td>1.016</td></tr><tr><td class='name'>32x32</td><td>1</td><td>1023</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1033cy, buf=26/505)</span></td><td>1242</td><td>1/2</td><td>1.214</td></tr><tr><td class='name'>32x32</td><td>2</td><td>2046</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 2051cy, buf=58/1018)</span></td><td>2143</td><td>0/2</td><td>1.047</td></tr><tr><td class='name'>32x32</td><td>3</td><td>3069</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 3074cy, buf=90/1530)</span></td><td>3076</td><td>0/65</td><td>1.002</td></tr><tr><td class='name'>32x32</td><td>4</td><td>4092</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 4097cy, buf=122/2042)</span></td><td>4221</td><td>0/0</td><td>1.032</td></tr><tr><td class='name'>32x32</td><td>5</td><td>5115</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 5120cy, buf=154/2553)</span></td><td>5152</td><td>1/0</td><td>1.007</td></tr><tr><td class='name'>64x64</td><td>1</td><td>4095</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B4 4164cy, buf=383/985)</span></td><td>4538</td><td>1/2</td><td>1.108</td></tr><tr><td class='name'>64x64</td><td>2</td><td>8190</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>16635</td><td>0/0</td><td>2.031</td></tr><tr><td class='name'>64x64</td><td>3</td><td>12285</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>16636</td><td>0/0</td><td>1.354</td></tr><tr><td class='name'>64x64</td><td>4</td><td>16380</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>16637</td><td>0/0</td><td>1.016</td></tr><tr><td class='name'>64x64</td><td>5</td><td>20475</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>20544</td><td>1/0</td><td>1.003</td></tr></tbody></table>
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>hybrid_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 32cy, buf=1/3; 未加缓冲约束时仿真最快: multitree 32cy)</span></td><td>32</td><td>0/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 35cy, buf=2/12)</span></td><td>43</td><td>0/2</td><td>1.303</td></tr><tr><td class='name'>4x4</td><td>3</td><td>45</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 50cy, buf=6/23)</span></td><td>76</td><td>0/0</td><td>1.689</td></tr><tr><td class='name'>4x4</td><td>4</td><td>60</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 65cy, buf=10/36)</span></td><td>77</td><td>0/0</td><td>1.283</td></tr><tr><td class='name'>4x4</td><td>5</td><td>75</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 80cy, buf=14/46)</span></td><td>84</td><td>1/0</td><td>1.120</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 80cy, buf=1/2; 未加缓冲约束时仿真最快: multitree 64cy)</span></td><td>82</td><td>0/0</td><td>1.281</td></tr><tr><td class='name'>6x8</td><td>2</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 99cy, buf=6/44)</span></td><td>119</td><td>0/2</td><td>1.266</td></tr><tr><td class='name'>6x8</td><td>3</td><td>141</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 146cy, buf=12/66)</span></td><td>220</td><td>0/0</td><td>1.560</td></tr><tr><td class='name'>6x8</td><td>4</td><td>188</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 193cy, buf=18/90)</span></td><td>221</td><td>0/0</td><td>1.175</td></tr><tr><td class='name'>6x8</td><td>5</td><td>235</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 240cy, buf=24/113)</span></td><td>248</td><td>1/0</td><td>1.055</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 100cy, buf=1/3; 未加缓冲约束时仿真最快: multitree 73cy)</span></td><td>102</td><td>0/0</td><td>1.417</td></tr><tr><td class='name'>8x8</td><td>2</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 131cy, buf=10/60)</span></td><td>151</td><td>0/2</td><td>1.198</td></tr><tr><td class='name'>8x8</td><td>3</td><td>189</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 194cy, buf=18/90)</span></td><td>284</td><td>0/0</td><td>1.503</td></tr><tr><td class='name'>8x8</td><td>4</td><td>252</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 257cy, buf=26/122)</span></td><td>285</td><td>0/0</td><td>1.131</td></tr><tr><td class='name'>8x8</td><td>5</td><td>315</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 320cy, buf=34/153)</span></td><td>328</td><td>1/0</td><td>1.041</td></tr><tr><td class='name'>12x16</td><td>1</td><td>191</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 260cy, buf=1/3; 未加缓冲约束时仿真最快: multitree 201cy)</span></td><td>262</td><td>0/0</td><td>1.372</td></tr><tr><td class='name'>12x16</td><td>2</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 387cy, buf=18/186)</span></td><td>431</td><td>0/2</td><td>1.128</td></tr><tr><td class='name'>12x16</td><td>3</td><td>573</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 578cy, buf=30/282)</span></td><td>828</td><td>0/0</td><td>1.445</td></tr><tr><td class='name'>12x16</td><td>4</td><td>764</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 769cy, buf=42/378)</span></td><td>829</td><td>0/0</td><td>1.085</td></tr><tr><td class='name'>12x16</td><td>5</td><td>955</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 960cy, buf=54/473)</span></td><td>976</td><td>1/0</td><td>1.022</td></tr><tr><td class='name'>16x16</td><td>1</td><td>255</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 332cy, buf=1/3; 未加缓冲约束时仿真最快: multitree 265cy)</span></td><td>334</td><td>0/0</td><td>1.310</td></tr><tr><td class='name'>16x16</td><td>2</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 515cy, buf=26/250)</span></td><td>559</td><td>0/2</td><td>1.096</td></tr><tr><td class='name'>16x16</td><td>3</td><td>765</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 770cy, buf=42/378)</span></td><td>1084</td><td>0/0</td><td>1.417</td></tr><tr><td class='name'>16x16</td><td>4</td><td>1020</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1025cy, buf=58/506)</span></td><td>1085</td><td>0/0</td><td>1.064</td></tr><tr><td class='name'>16x16</td><td>5</td><td>1275</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1280cy, buf=74/633)</span></td><td>1296</td><td>1/0</td><td>1.016</td></tr><tr><td class='name'>32x32</td><td>1</td><td>1023</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 1033cy, buf=26/505)</span></td><td>1242</td><td>1/2</td><td>1.214</td></tr><tr><td class='name'>32x32</td><td>2</td><td>2046</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 2051cy, buf=58/1018)</span></td><td>2143</td><td>0/2</td><td>1.047</td></tr><tr><td class='name'>32x32</td><td>3</td><td>3069</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 3074cy, buf=90/1530)</span></td><td>4220</td><td>0/0</td><td>1.375</td></tr><tr><td class='name'>32x32</td><td>4</td><td>4092</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 4097cy, buf=122/2042)</span></td><td>4221</td><td>0/0</td><td>1.032</td></tr><tr><td class='name'>32x32</td><td>5</td><td>5115</td><td class='name'><b>hybrid_v_uni_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 5120cy, buf=154/2553)</span></td><td>5152</td><td>1/0</td><td>1.007</td></tr><tr><td class='name'>64x64</td><td>1</td><td>4095</td><td class='name'><b>hybrid_v_uni_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B4 4164cy, buf=383/985)</span></td><td>4538</td><td>1/2</td><td>1.108</td></tr><tr><td class='name'>64x64</td><td>2</td><td>8190</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8383</td><td>0/2</td><td>1.024</td></tr><tr><td class='name'>64x64</td><td>3</td><td>12285</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>16636</td><td>0/0</td><td>1.354</td></tr><tr><td class='name'>64x64</td><td>4</td><td>16380</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>16637</td><td>0/0</td><td>1.016</td></tr><tr><td class='name'>64x64</td><td>5</td><td>20475</td><td class='name'><b>hybrid_v_uni_B1</b></td><td>20544</td><td>1/0</td><td>1.003</td></tr></tbody></table>
 </div>
 
 
@@ -467,9 +534,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.29x</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">49/38cy</text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
-<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">64/64cy</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="hsl(114, 72%, 56%)" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.28x</text>
+<text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">82/64cy</text>
 <rect x="190" y="82" width="92" height="42" rx="6" fill="hsl(53, 72%, 49%)" stroke="#e2e8f0"/>
 <text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.83x</text>
 <text x="236" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">119/65cy</text>
@@ -483,9 +550,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.13x</text>
 <text x="524" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">133/118cy</text>
 <text x="82" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
-<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(102, 72%, 55%)" stroke="#e2e8f0"/>
-<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.39x</text>
-<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">100/72cy</text>
+<rect x="94" y="128" width="92" height="42" rx="6" fill="hsl(99, 72%, 54%)" stroke="#e2e8f0"/>
+<text x="140" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.42x</text>
+<text x="140" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">102/72cy</text>
 <rect x="190" y="128" width="92" height="42" rx="6" fill="hsl(26, 72%, 45%)" stroke="#e2e8f0"/>
 <text x="236" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.07x</text>
 <text x="236" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">151/73cy</text>
@@ -499,9 +566,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.09x</text>
 <text x="524" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">173/158cy</text>
 <text x="82" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
-<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(44, 72%, 47%)" stroke="#e2e8f0"/>
-<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.91x</text>
-<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">260/136cy</text>
+<rect x="94" y="174" width="92" height="42" rx="6" fill="hsl(42, 72%, 47%)" stroke="#e2e8f0"/>
+<text x="140" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.93x</text>
+<text x="140" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">262/136cy</text>
 <rect x="190" y="174" width="92" height="42" rx="6" fill="hsl(5, 72%, 43%)" stroke="#e2e8f0"/>
 <text x="236" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.26x</text>
 <text x="236" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">431/191cy</text>
@@ -515,9 +582,9 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
 <text x="524" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">501/478cy</text>
 <text x="82" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
-<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
-<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.18x</text>
-<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">332/152cy</text>
+<rect x="94" y="220" width="92" height="42" rx="6" fill="hsl(12, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="140" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.20x</text>
+<text x="140" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">334/152cy</text>
 <rect x="190" y="220" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
 <text x="236" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.19x</text>
 <text x="236" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">559/255cy</text>
@@ -591,8 +658,8 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 <text x="524" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
 <text x="524" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <text x="82" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
-<rect x="94" y="82" width="92" height="42" rx="6" fill="#d97706" stroke="#e2e8f0"/>
-<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">h_bi B=4</text>
+<rect x="94" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
+<text x="140" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=2</text>
 <text x="140" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9"></text>
 <rect x="190" y="82" width="92" height="42" rx="6" fill="#dc2626" stroke="#e2e8f0"/>
 <text x="236" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">hv_bi B=1</text>
@@ -690,21 +757,21 @@ hybrid_v_uni_B4=4538cy）——本节给出的才是本次用户明确要求的<
 </div>
 <div class="card">
 <h3>下 ramp 带宽 = 2 flit/cycle/node — 详细数据</h3>
-<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案（buffer_budget=2 约束下最快）</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b></td><td>32</td><td>1/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>multitree</b></td><td>33</td><td>2/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>3</td><td>34</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 42cy, buf=8/2)</span></td><td>44</td><td>0/0</td><td>1.294</td></tr><tr><td class='name'>4x4</td><td>4</td><td>35</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>45</td><td>0/0</td><td>1.286</td></tr><tr><td class='name'>4x4</td><td>5</td><td>38</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>49</td><td>1/0</td><td>1.290</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_bi_B4</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 64cy, buf=1/3)</span></td><td>64</td><td>2/2</td><td>1.000</td></tr><tr><td class='name'>6x8</td><td>2</td><td>65</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 86cy, buf=9/2)</span></td><td>119</td><td>0/0</td><td>1.831</td></tr><tr><td class='name'>6x8</td><td>3</td><td>71</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 118cy, buf=32/5)</span></td><td>120</td><td>0/0</td><td>1.690</td></tr><tr><td class='name'>6x8</td><td>4</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>121</td><td>0/0</td><td>1.287</td></tr><tr><td class='name'>6x8</td><td>5</td><td>118</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>133</td><td>1/0</td><td>1.127</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 72cy, buf=2/4)</span></td><td>100</td><td>1/1</td><td>1.389</td></tr><tr><td class='name'>8x8</td><td>2</td><td>73</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 113cy, buf=14/2)</span></td><td>151</td><td>0/0</td><td>2.068</td></tr><tr><td class='name'>8x8</td><td>3</td><td>95</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>152</td><td>0/0</td><td>1.600</td></tr><tr><td class='name'>8x8</td><td>4</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>153</td><td>0/0</td><td>1.214</td></tr><tr><td class='name'>8x8</td><td>5</td><td>158</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>173</td><td>1/0</td><td>1.095</td></tr><tr><td class='name'>12x16</td><td>1</td><td>136</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: multitree 195cy, buf=6/10)</span></td><td>260</td><td>1/1</td><td>1.912</td></tr><tr><td class='name'>12x16</td><td>2</td><td>191</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 313cy, buf=25/2)</span></td><td>431</td><td>0/0</td><td>2.256</td></tr><tr><td class='name'>12x16</td><td>3</td><td>287</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>432</td><td>0/0</td><td>1.505</td></tr><tr><td class='name'>12x16</td><td>4</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>433</td><td>0/0</td><td>1.133</td></tr><tr><td class='name'>12x16</td><td>5</td><td>478</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>501</td><td>1/0</td><td>1.048</td></tr><tr><td class='name'>16x16</td><td>1</td><td>152</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B8 253cy, buf=24/24)</span></td><td>332</td><td>1/1</td><td>2.184</td></tr><tr><td class='name'>16x16</td><td>2</td><td>255</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 417cy, buf=35/2)</span></td><td>559</td><td>0/0</td><td>2.192</td></tr><tr><td class='name'>16x16</td><td>3</td><td>383</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>560</td><td>0/0</td><td>1.462</td></tr><tr><td class='name'>16x16</td><td>4</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>561</td><td>0/0</td><td>1.100</td></tr><tr><td class='name'>16x16</td><td>5</td><td>638</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>661</td><td>1/0</td><td>1.036</td></tr><tr><td class='name'>32x32</td><td>1</td><td>512</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B8 986cy, buf=69/50)</span></td><td>1180</td><td>1/1</td><td>2.305</td></tr><tr><td class='name'>32x32</td><td>2</td><td>1023</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 1601cy, buf=74/2)</span></td><td>2143</td><td>0/0</td><td>2.095</td></tr><tr><td class='name'>32x32</td><td>3</td><td>1535</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 2366cy, buf=265/51)</span></td><td>3044</td><td>0/0</td><td>1.983</td></tr><tr><td class='name'>32x32</td><td>4</td><td>2046</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>2145</td><td>0/0</td><td>1.048</td></tr><tr><td class='name'>32x32</td><td>5</td><td>2558</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>2597</td><td>1/0</td><td>1.015</td></tr><tr><td class='name'>64x64</td><td>1</td><td>2048</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B4 4140cy, buf=383/2)</span></td><td>4412</td><td>1/1</td><td>2.154</td></tr><tr><td class='name'>64x64</td><td>2</td><td>4095</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8383</td><td>0/0</td><td>2.047</td></tr><tr><td class='name'>64x64</td><td>3</td><td>6143</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8384</td><td>0/0</td><td>1.365</td></tr><tr><td class='name'>64x64</td><td>4</td><td>8190</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8385</td><td>0/0</td><td>1.024</td></tr><tr><td class='name'>64x64</td><td>5</td><td>10238</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>10309</td><td>1/0</td><td>1.007</td></tr></tbody></table>
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th><th>推荐方案</th><th>makespan</th><th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>32</td><td class='name'><b>multitree</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 32cy, buf=1/0; 未加缓冲约束时仿真最快: multitree 32cy)</span></td><td>32</td><td>0/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>2</td><td>33</td><td class='name'><b>multitree</b></td><td>33</td><td>2/0</td><td>1.000</td></tr><tr><td class='name'>4x4</td><td>3</td><td>34</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 42cy, buf=8/2)</span></td><td>44</td><td>0/0</td><td>1.294</td></tr><tr><td class='name'>4x4</td><td>4</td><td>35</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>45</td><td>0/0</td><td>1.286</td></tr><tr><td class='name'>4x4</td><td>5</td><td>38</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>49</td><td>1/0</td><td>1.290</td></tr><tr><td class='name'>6x8</td><td>1</td><td>64</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 80cy, buf=1/1; 未加缓冲约束时仿真最快: multitree 64cy)</span></td><td>82</td><td>0/0</td><td>1.281</td></tr><tr><td class='name'>6x8</td><td>2</td><td>65</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 86cy, buf=9/2)</span></td><td>119</td><td>0/0</td><td>1.831</td></tr><tr><td class='name'>6x8</td><td>3</td><td>71</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 118cy, buf=32/5)</span></td><td>120</td><td>0/0</td><td>1.690</td></tr><tr><td class='name'>6x8</td><td>4</td><td>94</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>121</td><td>0/0</td><td>1.287</td></tr><tr><td class='name'>6x8</td><td>5</td><td>118</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>133</td><td>1/0</td><td>1.127</td></tr><tr><td class='name'>8x8</td><td>1</td><td>72</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 100cy, buf=1/1; 未加缓冲约束时仿真最快: multitree 72cy)</span></td><td>102</td><td>0/0</td><td>1.417</td></tr><tr><td class='name'>8x8</td><td>2</td><td>73</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 113cy, buf=14/2)</span></td><td>151</td><td>0/0</td><td>2.068</td></tr><tr><td class='name'>8x8</td><td>3</td><td>95</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>152</td><td>0/0</td><td>1.600</td></tr><tr><td class='name'>8x8</td><td>4</td><td>126</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>153</td><td>0/0</td><td>1.214</td></tr><tr><td class='name'>8x8</td><td>5</td><td>158</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>173</td><td>1/0</td><td>1.095</td></tr><tr><td class='name'>12x16</td><td>1</td><td>136</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 260cy, buf=1/1; 未加缓冲约束时仿真最快: multitree 195cy)</span></td><td>262</td><td>0/0</td><td>1.927</td></tr><tr><td class='name'>12x16</td><td>2</td><td>191</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 313cy, buf=25/2)</span></td><td>431</td><td>0/0</td><td>2.256</td></tr><tr><td class='name'>12x16</td><td>3</td><td>287</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>432</td><td>0/0</td><td>1.505</td></tr><tr><td class='name'>12x16</td><td>4</td><td>382</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>433</td><td>0/0</td><td>1.133</td></tr><tr><td class='name'>12x16</td><td>5</td><td>478</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>501</td><td>1/0</td><td>1.048</td></tr><tr><td class='name'>16x16</td><td>1</td><td>152</td><td class='name'><b>hybrid_v_bi_B2</b> <span class='note'>(严格零buffer真值)</span> &nbsp;<span class='note'>(同方案事件驱动仿真: 332cy, buf=1/1; 未加缓冲约束时仿真最快: hybrid_v_bi_B8 253cy)</span></td><td>334</td><td>0/0</td><td>2.197</td></tr><tr><td class='name'>16x16</td><td>2</td><td>255</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 417cy, buf=35/2)</span></td><td>559</td><td>0/0</td><td>2.192</td></tr><tr><td class='name'>16x16</td><td>3</td><td>383</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>560</td><td>0/0</td><td>1.462</td></tr><tr><td class='name'>16x16</td><td>4</td><td>510</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>561</td><td>0/0</td><td>1.100</td></tr><tr><td class='name'>16x16</td><td>5</td><td>638</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>661</td><td>1/0</td><td>1.036</td></tr><tr><td class='name'>32x32</td><td>1</td><td>512</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B8 986cy, buf=69/50)</span></td><td>1180</td><td>1/1</td><td>2.305</td></tr><tr><td class='name'>32x32</td><td>2</td><td>1023</td><td class='name'><b>hybrid_v_bi_B1</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 1601cy, buf=74/2)</span></td><td>2143</td><td>0/0</td><td>2.095</td></tr><tr><td class='name'>32x32</td><td>3</td><td>1535</td><td class='name'><b>ring_bi</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B2 2366cy, buf=265/51)</span></td><td>3044</td><td>0/0</td><td>1.983</td></tr><tr><td class='name'>32x32</td><td>4</td><td>2046</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>2145</td><td>0/0</td><td>1.048</td></tr><tr><td class='name'>32x32</td><td>5</td><td>2558</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>2597</td><td>1/0</td><td>1.015</td></tr><tr><td class='name'>64x64</td><td>1</td><td>2048</td><td class='name'><b>hybrid_v_bi_B2</b> &nbsp;<span class='note'>(未加缓冲约束时仿真最快: hybrid_v_bi_B4 4140cy, buf=383/2)</span></td><td>4412</td><td>1/1</td><td>2.154</td></tr><tr><td class='name'>64x64</td><td>2</td><td>4095</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8383</td><td>0/0</td><td>2.047</td></tr><tr><td class='name'>64x64</td><td>3</td><td>6143</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8384</td><td>0/0</td><td>1.365</td></tr><tr><td class='name'>64x64</td><td>4</td><td>8190</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>8385</td><td>0/0</td><td>1.024</td></tr><tr><td class='name'>64x64</td><td>5</td><td>10238</td><td class='name'><b>hybrid_v_bi_B1</b></td><td>10309</td><td>1/0</td><td>1.007</td></tr></tbody></table>
 </div>
 
 <h2>5. 结论（已按第 3.5 节的 buffer 诚实性核查修正）</h2>
 <div class='card'>
 <ul class='compact'>
 <li><b>之前版本"ramp_bw=1 时 multitree 几乎总是最优"的结论已被证伪并撤回</b>：该结论完全建立在事件驱动引擎允许无上限隐式排队的基础上；64x64/ramp_bw=1/m=5 下 multitree 实际需要单节点连续缓存 10233 flit 才能达到其记录的 makespan，16x16 上其严格零 buffer 真值（837）反而排在 22 个方案中的第 13 位。multitree 的多播式 in-network fork 结构会在所有源同时广播时产生大量跨源链路/ramp 争用，需要靠排队"抹平"这些争用；争用量随规模、随 m 近似线性增长，buffer 需求也随之增长，因此不具备可扩展性。</li>
-<li><b>可信的最优方案（有严格零 buffer 证据支持）：hybrid_v_bi_B2</b>（B=2 纵向条带、双向局部环 + 横向树）在 m=1 下的 6x8~16x16 全部规模上都是严格零 buffer 打包器给出的真实最优解（4x4 上与另两个方案并列理论下界）；它在事件驱动引擎里的所需 buffer 也始终在个位数以内，两种模型给出的数字几乎一致（如 16x16: 334 vs 332）。</li>
+<li><b>可信的最优方案（有严格零 buffer 证据支持）：hybrid_v_bi_B2</b>（B=2 纵向条带、双向局部环 + 横向树）在 m=1 下的 6x8~16x16 全部规模上都是<b>刚性打包器给出的真零buffer最优解</b>（4x4 上 hybrid_bi_B2 与之并列理论下界，4x4/ramp_bw=2 上 multitree 并列），makespan=82/102/262/334，所需 buffer 严格为 0。第 3.7 节修正后，报告 m=1 小规模行的推荐方案已与此真值 100% 一致（此前因 buffer_budget 过滤器的双方向失真，曾错误地推荐 hybrid_v_uni_B4 等次优方案，慢 8~13%）。</li>
 <li><b>ring（全局单环）/ 粗粒度 hybrid_bi(B=1)</b> 结构上争用远少于多播树类方案，所需排队普遍小一到两个数量级（如 16x16/ramp_bw=1/m=5：ring_bi 需 538 flit 排队，multitree 需同条件下更大的量；32x32 同条件下ring_bi 约 2100 flit）；<b>但并非严格零 buffer</b>——ramp_bw=1、m 较大、规模较大时它也需要明显排队，根因是下 ramp 本身已饱和，与拓扑选择无关，见第 3.5 节。ramp_bw=2（下 ramp 不饱和）或 m 较小时，ring_bi/粗粒度 hybrid_v_bi 才能做到真正的 buffer≈0，此时也是本研究中最可信、两种 buffer 假设下数字几乎一致的方案；32x32/64x64、ramp_bw=2、m 较大下它也是（buffer_budget=2 约束后）实测最优解。</li>
 <li>ramp_bw 从 1 提升到 2：m 较大、规模较大时 makespan 近似减半（带宽受限区间）；m=1 的小规模场景则几乎不变（延迟下界主导，带宽提升无效）。</li>
 <li>ratio（makespan/T，均基于 buffer_budget=2 约束后的推荐方案）在 1.0~2.0 之间，规律与此前一致：规模越大、ramp_bw=1 时越逼近 eject 下界（拓扑选择不重要，下 ramp 是唯一瓶颈）；ramp_bw=2、m 较小时角节点链路下界是理论正确但实践难以逼近的松下界。</li>
 <li>方案排名并非在所有 (规模, m) 组合下都稳定，autogen 选择器直接以逐格实测结果（buffer 约束后）为准，不依赖"某一方案族总是最优"的先验假设。</li>
 <li><b>32x32 数据补全</b>：此前除代表性 m=3 外，32x32 的其它 (ramp_bw, m) 组合都只测过 multitree/ring_bi 两个基线（假设 m=3 的赢家能直接套用），在 ramp_bw=1 下该假设不成立——赢家所需 buffer 超预算又没有备选候选，recommend() 只能退回 ring_bi，但 ring_bi 从未被证明真的是最优（只是唯一测过的候选）。现已补齐全部 (ramp_bw, m) 的完整候选集，例如 32x32/ramp_bw=1/m=1 的真实buffer_budget=2 最优解是 <b>hybrid_v_uni_B4</b>（makespan=1242），严格零buffer最优解是 <b>hybrid_v_uni_B1</b>（makespan=4218，buf=0/0）——都远快于 ring_bi（3042，且并非严格零buffer，buf=0/1）。</li>
 <li><b>64x64 专项复核（第 3.6 节）</b>：排除 multitree 后，用零buffer见证法（而非不可行的刚性打包器）确认了 64x64 上真正严格零buffer（m=1~4，m=5 仅需 1 cycle）的最优方案是 <b>hybrid_v_uni_B1</b>（ramp_bw=1，makespan 16634~20544）和 <b>hybrid_v_bi_B1</b>（ramp_bw=2，makespan 8382~10309）——两者都是覆盖全网的单条 Hamilton 环（B=1 退化为无分带），但走向与 ring 转置（spine 沿列、梳齿沿行），利用 H&lt;V 系统性快于 ring_uni/ring_bi。64x64 原有数据（生成于 buffer 量测功能加入之前）已被整体替换。</li>
-<li><b>局限</b>：32x32/64x64 没有严格零 buffer 真值可比对（打包器成本超线性、无法扩展），这两个规模的 buffer_budget=2 选择仍是"用事件驱动引擎自己的排队量测来约束自己的排队量测"，只能确认与小规模同族方案（ring/粗粒度 hybrid）的规律一致，不构成独立证明；如需严格证明，需要一个可扩展的零缓冲调度算法（当前的刚性打包器不是），留作后续工作。</li>
+<li><b>局限</b>：32x32/64x64 与所有 m&gt;1 的格子没有严格零 buffer 真值可比对（打包器成本随规模、随 m 超线性增长，无法扩展）。这些格的 buffer_budget=2 选择仍是"用事件驱动引擎自己的排队量测来约束自己的排队量测"，且第 3.7 节已证实该过滤器会双方向失真（过度剔除确实存在零buffer调度的方案、漏放依赖排队才快的方案），故这些格的推荐方案应视为<b>启发式估计</b>而非可证明的零buffer最优；如需严格证明，需要一个可扩展的零缓冲调度算法（当前的刚性打包器不是），留作后续工作。</li>
 </ul></div>
 <h2>6. Autogen 方案生成器</h2>
 <div class='card'>

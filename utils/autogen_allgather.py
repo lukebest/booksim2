@@ -156,19 +156,91 @@ def _pick_within_budget(cell, buffer_budget):
     return min(feas, key=lambda r: r["makespan"]) if feas else None
 
 
+def _strict_lookup(mx, my, ramp_bw):
+    """TRUE zero-buffer ground truth for (size, ramp_bw, m=1) where the rigid
+    packer (sched_zerobuf_compare.py) was run -- it searches per-source
+    injection offsets that eliminate ALL contention, so its best scheme +
+    makespan is the AUTHORITATIVE zero-buffer answer. This MUST be preferred
+    over the event-driven engine's greedy wait whenever available, because
+    greedy wait is NOT a reliable proxy for "buffer needed": a scheme can be
+    zero-buffer-capable yet show nonzero greedy wait (the greedy scheduler
+    just didn't find the zero-conflict offset -- e.g. hybrid_v_bi_B2 at
+    16x16/bw=1: ED buf=1/3 but strict mk=334 with TRUE zero buffer), and
+    conversely a scheme can show small greedy wait yet genuinely need
+    queuing to hit its ED makespan (e.g. multitree at 4x4/bw=1: ED buf=1/2
+    passes a budget=2 filter, but its TRUE zero-buffer makespan is 51, not
+    the ED 32). See report sec 3.5/3.7. Returns the strict best dict or None."""
+    if not STRICT_M1_JSON.exists():
+        return None
+    strict = json.loads(STRICT_M1_JSON.read_text(encoding="utf-8"))
+    block = strict["data"].get(f"{mx}x{my}")
+    if not block:
+        return None
+    b = block["bw"].get(str(ramp_bw))
+    if not b:
+        return None
+    return b["best"]
+
+
 def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Return dict: scheme name, fn+args to reproduce it, predicted makespan,
-    lower bound T, ratio, and whether this came from an exact sweep lookup
-    or the coarse fallback heuristic.
+    lower bound T, ratio, and whether this came from an exact sweep lookup,
+    the strict zero-buffer ground truth, or the coarse fallback heuristic.
 
     buffer_budget (flits): only consider candidates whose recorded
     max_link_wait/max_ramp_wait both fit this budget (see module docstring).
     Pass None to reproduce the old buffer-unaware "fastest wins" selection.
+
+    IMPORTANT: when TRUE zero-buffer ground truth is available (m=1, sizes
+    4x4..16x16, both ramp_bw -- see _strict_lookup), it is returned as the
+    authoritative answer regardless of buffer_budget (except budget=None,
+    which explicitly asks for the unconstrained queuing-assisted number).
+    The event-driven + buffer_budget filter is a FALLBACK for m>1 and for
+    32x32/64x64 where the rigid packer is computationally infeasible; it is
+    known to both over-exclude (zero-buffer-capable schemes with nonzero
+    greedy wait) and under-exclude (queuing-dependent schemes with small
+    greedy wait) -- see report sec 3.7.
     """
     sweep = sweep or _load_sweep()
     key = f"{mx}x{my}"
     block = sweep["data"].get(key)
     cell = block["bw"].get(str(ramp_bw), {}).get(str(m)) if block else None
+
+    # Authoritative zero-buffer path: rigid packer ground truth (m=1 only).
+    if m == 1 and buffer_budget is not None:
+        strict_best = _strict_lookup(mx, my, ramp_bw)
+        if strict_best:
+            name = strict_best["name"]
+            try:
+                fn, extra = _fn_for(name, mx, my)
+            except ValueError:
+                # strict best is a scheme the ED engine can't reproduce
+                # (e.g. border/quad, not re-implemented in allgather_fast_sim);
+                # fall through to the ED+filter path instead.
+                fn = None
+            if fn is not None:
+                T = cell["T"] if cell else None
+                # also surface the ED makespan/buf for the same scheme so the
+                # caller can see how much the greedy scheduler diverged from
+                # the proven zero-buffer schedule.
+                ed_mk = ed_link = ed_ramp = None
+                if cell:
+                    ed = next((r for r in cell.get("results", [])
+                               if r["name"] == name), None)
+                    if ed:
+                        ed_mk = ed["makespan"]
+                        ed_link = ed.get("max_link_wait")
+                        ed_ramp = ed.get("max_ramp_wait")
+                return {
+                    "mx": mx, "my": my, "m": m, "ramp_bw": ramp_bw,
+                    "scheme": name, "fn": fn, "args": (mx, my, sweep["h"], sweep["v"], ramp_bw, m) + extra,
+                    "makespan": strict_best["makespan"],
+                    "max_link_wait": 0, "max_ramp_wait": 0,
+                    "ed_makespan": ed_mk, "ed_max_link_wait": ed_link, "ed_max_ramp_wait": ed_ramp,
+                    "T": T, "ratio": round(strict_best["makespan"] / T, 4) if T else None,
+                    "buffer_budget": buffer_budget, "buffer_limited": False,
+                    "source": "strict_zerobuf",
+                }
 
     if cell and cell.get("best"):
         picked = cell["best"]

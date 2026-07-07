@@ -7602,13 +7602,60 @@
                 "time_s": 22.14
               },
               {
+                "name": "ring_uni",
+                "makespan": 6020,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
                 "name": "ring_bi",
                 "makespan": 3076,
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 0,
-                "max_ramp_wait": 65,
-                "time_s": 12.959
+                "max_ramp_wait": 65
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 6020,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 65
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 4220,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 964
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 3240,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 65,
+                "max_ramp_wait": 67
               },
               {
                 "name": "hybrid_bi_B2",
@@ -7616,8 +7663,15 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 205,
-                "max_ramp_wait": 856,
-                "time_s": 15.071
+                "max_ramp_wait": 856
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 3131,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 74,
+                "max_ramp_wait": 76
               },
               {
                 "name": "hybrid_v_bi_B2",
@@ -7625,8 +7679,15 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 265,
-                "max_ramp_wait": 912,
-                "time_s": 17.124
+                "max_ramp_wait": 912
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 3267,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 436,
+                "max_ramp_wait": 587
               },
               {
                 "name": "hybrid_bi_B4",
@@ -7634,8 +7695,15 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 393,
-                "max_ramp_wait": 1201,
-                "time_s": 17.416
+                "max_ramp_wait": 1201
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 3143,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 441,
+                "max_ramp_wait": 566
               },
               {
                 "name": "hybrid_v_bi_B4",
@@ -7643,8 +7711,15 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 403,
-                "max_ramp_wait": 1273,
-                "time_s": 16.326
+                "max_ramp_wait": 1273
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 3233,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 367,
+                "max_ramp_wait": 1160
               },
               {
                 "name": "hybrid_bi_B8",
@@ -7652,8 +7727,15 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 227,
-                "max_ramp_wait": 1673,
-                "time_s": 21.758
+                "max_ramp_wait": 1673
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 3170,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 374,
+                "max_ramp_wait": 1121
               },
               {
                 "name": "hybrid_v_bi_B8",
@@ -7661,8 +7743,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 228,
-                "max_ramp_wait": 1673,
-                "time_s": 21.705
+                "max_ramp_wait": 1673
               }
             ],
             "best": {
@@ -9281,12 +9362,12 @@
           "2": {
             "T": 8190,
             "best": {
-              "name": "hybrid_v_uni_B1",
-              "makespan": 16635,
+              "name": "hybrid_v_bi_B1",
+              "makespan": 8383,
               "ok": true,
               "bad": [],
               "max_link_wait": 0,
-              "max_ramp_wait": 0
+              "max_ramp_wait": 2
             },
             "results": [
               {
@@ -9296,6 +9377,14 @@
                 "bad": [],
                 "max_link_wait": 0,
                 "max_ramp_wait": 0
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 8383,
+                "ok": true,
+                "bad": [],
+                "max_link_wait": 0,
+                "max_ramp_wait": 2
               }
             ],
             "note": "multitree excluded; zero-buffer-witness verified (see sweep_64x64_zerobuf_witness.py / report sec 3.6)"
@@ -9552,6 +9641,6 @@
   },
   "notes": {
     "64x64": "2026-07-07 \u8d77 64x64 \u6570\u636e\u5df2\u6574\u4f53\u66ff\u6362\uff1a\u6392\u9664 multitree\uff08\u5df2\u8bc1\u5b9e\u9700\u8981\u5355\u8282\u70b9 10233 flit \u4e0bramp\u7f13\u51b2\uff0c\u89c1 3.5 \u8282\uff09\uff0c\u6539\u4e3a\u5bf9 ring_uni/ring_bi/hybrid_(v_)uni/bi \u7684 B\u2208{1,2,4} \u53d8\u4f53\u505a zero-buffer witness \u590d\u6838\uff08max_link_wait==max_ramp_wait==0 \u65f6\u89c6\u4e3a\u5df2\u8bc1\u660e\u7684\u4e25\u683c\u96f6buffer\u8c03\u5ea6\uff0c\u89c1 3.6 \u8282\u65b9\u6cd5\u8bf4\u660e\uff09\u3002m=2/4 \u6b64\u524d\u4ece\u672a\u88ab\u626b\u63cf\uff0c\u73b0\u6309\u540c\u65b9\u6cd5\u8865\u9f50\uff08\u53ea\u590d\u6838\u4e86\u5f53\u524dramp_bw \u4e0b m=1 \u7684 zero-buffer \u51a0\u519b\u65b9\u6848\u7684 m=2..4 \u6570\u636e\u70b9\uff0c\u975e\u5168\u91cf\u5019\u9009\u91cd\u626b\uff09\u3002",
-    "32x32": "2026-07-07 \u4fee\u6b63\uff1a\u6b64\u524d 32x32 \u9664 m=3\uff08\u4ee3\u8868\u6027 m\uff09\u5916\u7684\u6240\u6709 (ramp_bw, m) \u7ec4\u5408\u90fd\u53ea\u6d4b\u8fc7 multitree/ring_bi\uff08+ramp_bw=2 \u4e0b\u7684 hybrid_v_bi_B2\uff09\uff0c\u5047\u8bbe m=3 \u7684\u8d62\u5bb6\u80fd\u76f4\u63a5\u5957\u7528\u5230\u5176\u5b83 m\u2014\u2014\u8be5\u5047\u8bbe\u5728 ramp_bw=1 \u4e0b\u4e0d\u6210\u7acb\uff08\u8d62\u5bb6\u6240\u9700 buffer \u8d85\u9884\u7b97\uff0c\u4e14\u6ca1\u6709\u5907\u9009\u7684 hybrid/hybrid_v \u5019\u9009\u53ef\u7528\uff0c\u5bfc\u81f4 recommend() \u9000\u5316\u4e3a ring_bi\uff0c\u4f46 ring_bi \u4e5f\u4ece\u672a\u771f\u6b63\u88ab\u8bc1\u660e\u662f\u5f53\u65f6\u552f\u4e00\u6d4b\u8fc7\u7684\u5019\u9009\u4e4b\u5916\u7684\u6700\u4f18\u89e3\uff09\u3002\u73b0\u5df2\u5bf9\u5168\u90e8 (ramp_bw, m) \u8865\u9f50\u5b8c\u6574\u5019\u9009\u96c6\uff08ring_uni/bi\u3001hybrid_(v_)uni/bi \u7684 B\u2208{1,2,4,8}\uff09\u3002"
+    "32x32": "2026-07-07 \u4fee\u6b63\uff1a\u6b64\u524d 32x32 \u9664 m=3\uff08\u4ee3\u8868\u6027 m\uff09\u5916\u7684\u6240\u6709 (ramp_bw, m) \u7ec4\u5408\u90fd\u53ea\u6d4b\u8fc7 multitree/ring_bi\uff08+ramp_bw=2 \u4e0b\u7684 hybrid_v_bi_B2\uff09\uff0c\u5047\u8bbe m=3 \u7684\u8d62\u5bb6\u80fd\u76f4\u63a5\u5957\u7528\u5230\u5176\u5b83 m\u2014\u2014\u8be5\u5047\u8bbe\u5728 ramp_bw=1 \u4e0b\u4e0d\u6210\u7acb\uff08\u8d62\u5bb6\u6240\u9700 buffer \u8d85\u9884\u7b97\uff0c\u4e14\u6ca1\u6709\u5907\u9009\u7684 hybrid/hybrid_v \u5019\u9009\u53ef\u7528\uff0c\u5bfc\u81f4 recommend() \u9000\u5316\u4e3a ring_bi\uff0c\u4f46 ring_bi \u4e5f\u4ece\u672a\u771f\u6b63\u88ab\u8bc1\u660e\u662f\u5f53\u65f6\u552f\u4e00\u6d4b\u8fc7\u7684\u5019\u9009\u4e4b\u5916\u7684\u6700\u4f18\u89e3\uff09\u3002\u73b0\u5df2\u5bf9\u5168\u90e8 (ramp_bw, m)\u2014\u2014\u542b m=3 \u672c\u8eab\uff08\u6b64\u524d m=3 \u4e5f\u53ea\u6d4b\u4e86\u53cc\u5411 B\u2208{2,4,8} \u53d8\u4f53\uff0c\u7f3a uni/B1 \u53d8\u4f53\uff09\u2014\u2014\u8865\u9f50\u5b8c\u6574\u5019\u9009\u96c6\uff08ring_uni/bi\u3001hybrid_(v_)uni/bi \u7684 B\u2208{1,2,4,8}\uff09\u3002"
   }
 }
