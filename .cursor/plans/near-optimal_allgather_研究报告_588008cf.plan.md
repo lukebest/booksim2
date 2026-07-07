@@ -4,22 +4,22 @@ overview: 在 2D mesh（4x4~64x64、6x8、12x16）× 数据大小（1~5 flit）�
 todos:
   - id: lb
     content: 实现下界分析脚本 allgather_lower_bounds.py 并输出 JSON
-    status: in_progress
+    status: completed
   - id: sweep
     content: 实现规模×数据量×带宽扫描脚本 sweep_allgather_scale.py（复用 sched_zerobuf_compare）
-    status: pending
+    status: completed
   - id: big
     content: 优化 64x64 大规模打包性能并完成全量扫描
-    status: pending
+    status: completed
   - id: ilp
     content: 小规模 CP-SAT 交叉验证
-    status: pending
+    status: completed
   - id: report
     content: 生成热力图与 HTML 研究报告
-    status: pending
+    status: completed
   - id: autogen
     content: 实现 autogen_allgather.py 并跑 70 组合回归验证
-    status: pending
+    status: completed
 isProject: false
 ---
 

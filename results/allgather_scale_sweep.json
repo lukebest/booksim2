@@ -1,0 +1,6656 @@
+{
+  "h": 4,
+  "v": 6,
+  "sizes": [
+    "4x4",
+    "6x8",
+    "8x8",
+    "12x16",
+    "16x16",
+    "32x32",
+    "64x64"
+  ],
+  "flits": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "ramp_bws": [
+    1,
+    2
+  ],
+  "huge_n": 1024,
+  "data": {
+    "4x4": {
+      "mx": 4,
+      "my": 4,
+      "n": 16,
+      "huge": false,
+      "bw": {
+        "1": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 74,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 42,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 32,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.001
+            },
+            "T": 32,
+            "ratio": 1.0
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 35,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 83,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 83,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 35,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 75,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 43,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 51,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 37,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 35,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.001
+            },
+            "T": 33,
+            "ratio": 1.0606
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 53,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 76,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 50,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.002
+            },
+            "T": 45,
+            "ratio": 1.1111
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 65,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 85,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 85,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 65,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 77,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 65,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.002
+            },
+            "T": 60,
+            "ratio": 1.0833
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 80,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 88,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 88,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 80,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 80,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.003
+            },
+            "T": 75,
+            "ratio": 1.0667
+          }
+        },
+        "2": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 46,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.0
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 74,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 42,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 32,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 32,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.0
+            },
+            "T": 32,
+            "ratio": 1.0
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 33,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 83,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 83,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 47,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 33,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 75,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 43,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 51,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 33,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 33,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.001
+            },
+            "T": 33,
+            "ratio": 1.0
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 44,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 48,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 48,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 53,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 44,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 76,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 44,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 52,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 42,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 42,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.001
+            },
+            "T": 34,
+            "ratio": 1.2353
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 55,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 85,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.001
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 49,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 85,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 49,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 55,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 77,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 45,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 65,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 53,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 45,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.002
+            },
+            "T": 35,
+            "ratio": 1.2857
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 88,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 88,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 50,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 82,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 67,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 84,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 49,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 80,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.002
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 65,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.003
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 49,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.002
+            },
+            "T": 38,
+            "ratio": 1.2895
+          }
+        }
+      }
+    },
+    "6x8": {
+      "mx": 6,
+      "my": 8,
+      "n": 48,
+      "huge": false,
+      "bw": {
+        "1": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 64,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.006
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 266,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.004
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 140,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.006
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 266,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 140,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 92,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 87,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 64,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 218,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.006
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 118,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 134,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 80,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 64,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.006
+            },
+            "T": 64,
+            "ratio": 1.0
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 99,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.012
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 267,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 141,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 267,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 141,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 151,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 105,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 105,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 99,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.012
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 219,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 119,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 136,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 103,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.012
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 99,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.012
+            },
+            "T": 94,
+            "ratio": 1.0532
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 146,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.019
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 268,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 268,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 167,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 149,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 146,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 220,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.019
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 153,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 146,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.019
+            },
+            "T": 141,
+            "ratio": 1.0355
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 193,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.026
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 269,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.025
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 269,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 207,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.025
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 193,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 221,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 200,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 193,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.026
+            },
+            "T": 188,
+            "ratio": 1.0266
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 240,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 274,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 274,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 254,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.031
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.031
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 240,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.032
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 248,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.029
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 250,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.027
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 240,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.033
+            },
+            "T": 235,
+            "ratio": 1.0213
+          }
+        },
+        "2": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 64,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 266,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 140,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.004
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 266,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.004
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 140,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 148,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 92,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 87,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.004
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 64,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 218,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.004
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 118,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 134,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 80,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.005
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 64,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.005
+            },
+            "T": 64,
+            "ratio": 1.0
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 93,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 267,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 141,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 267,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 141,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 151,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 97,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 105,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 93,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 219,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 119,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 136,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 86,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 86,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.009
+            },
+            "T": 65,
+            "ratio": 1.3231
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 134,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 268,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.014
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 142,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.014
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 268,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 142,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 167,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.014
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 128,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 149,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 134,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 220,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 120,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 153,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.013
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 118,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 118,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.017
+            },
+            "T": 71,
+            "ratio": 1.662
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 175,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 269,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 143,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 269,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 143,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 207,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.019
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 163,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.02
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 175,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.026
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 221,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.019
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 121,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 200,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 153,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 121,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.018
+            },
+            "T": 94,
+            "ratio": 1.2872
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 217,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.029
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 274,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.02
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 144,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 274,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 144,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 254,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.025
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 199,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.025
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 242,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.027
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 217,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 248,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 133,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 250,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 189,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 133,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.023
+            },
+            "T": 118,
+            "ratio": 1.1271
+          }
+        }
+      }
+    },
+    "8x8": {
+      "mx": 8,
+      "my": 8,
+      "n": 64,
+      "huge": false,
+      "bw": {
+        "1": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 73,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 354,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 186,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 354,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 186,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 188,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 113,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 103,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 73,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 282,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 150,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 170,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 100,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 114,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 74,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.011
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 73,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.011
+            },
+            "T": 72,
+            "ratio": 1.0139
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 131,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 355,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 187,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 355,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 187,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 192,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 137,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 137,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 131,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 283,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 151,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 172,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 135,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 135,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 133,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.022
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 131,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.024
+            },
+            "T": 126,
+            "ratio": 1.0397
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 194,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.036
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 356,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.031
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 356,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 218,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.029
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 197,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 194,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.035
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 284,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.027
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 203,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.029
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.034
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 196,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.035
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 194,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.036
+            },
+            "T": 189,
+            "ratio": 1.0265
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 257,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.05
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 357,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 357,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.04
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 278,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.045
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.047
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 257,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.049
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 285,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.032
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.042
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 265,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.039
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.046
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.044
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.048
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 257,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.05
+            },
+            "T": 252,
+            "ratio": 1.0198
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 320,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.065
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 364,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.051
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 364,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.053
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 341,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.05
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.059
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.057
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 320,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.064
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.043
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.054
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.05
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.062
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.062
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.061
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 320,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.065
+            },
+            "T": 315,
+            "ratio": 1.0159
+          }
+        },
+        "2": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 72,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 354,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 186,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 354,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 186,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 188,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 113,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 103,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 72,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 282,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 150,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 170,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 100,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.009
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 114,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.008
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 72,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.01
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 72,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.009
+            },
+            "T": 72,
+            "ratio": 1.0
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 121,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 355,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 187,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 355,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 187,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 192,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 127,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 137,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 121,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.019
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 283,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.015
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 151,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 172,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.016
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 113,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.018
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 135,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.017
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 119,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.021
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 113,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.018
+            },
+            "T": 73,
+            "ratio": 1.5479
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 176,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.031
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 356,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 188,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 356,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 188,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.025
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 218,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.027
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 164,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.027
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 197,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 176,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 284,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.023
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 152,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.026
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 203,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.024
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 158,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.028
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 174,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 152,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.026
+            },
+            "T": 95,
+            "ratio": 1.6
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 231,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.042
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 357,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 189,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 357,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 189,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 278,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.034
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 211,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.037
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.039
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 231,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 285,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.03
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 153,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.033
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 265,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.034
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 205,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.038
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 257,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.039
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 229,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 153,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.033
+            },
+            "T": 126,
+            "ratio": 1.2143
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 287,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.053
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 364,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.037
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 190,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.044
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 364,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.038
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 190,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.043
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 341,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.042
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 259,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.05
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 322,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.05
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 287,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.051
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.041
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 173,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.045
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.045
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 253,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.051
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 320,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.051
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 285,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.054
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 173,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.045
+            },
+            "T": 158,
+            "ratio": 1.0949
+          }
+        }
+      }
+    },
+    "12x16": {
+      "mx": 12,
+      "my": 16,
+      "n": 192,
+      "huge": false,
+      "bw": {
+        "1": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 201,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.127
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1106,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.093
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 566,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.098
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1106,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.1
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 566,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.107
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.099
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.107
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 321,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.105
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 219,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.123
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 213,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.118
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 201,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.122
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 826,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.098
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 430,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.104
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 466,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.1
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 260,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.099
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 286,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.101
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 208,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.124
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 201,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.127
+            },
+            "T": 191,
+            "ratio": 1.0524
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 387,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.271
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1107,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.185
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 567,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1107,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.19
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 567,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.203
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 585,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.196
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 401,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.231
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.232
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 393,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.26
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 393,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.262
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 387,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.268
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 827,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.186
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 431,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.201
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 470,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.202
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 395,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.236
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 445,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.229
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 391,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.265
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 387,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.271
+            },
+            "T": 382,
+            "ratio": 1.0131
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 578,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.433
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1108,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.274
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.329
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1108,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.288
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.334
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 636,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.323
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.378
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 643,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.382
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.416
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 581,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.416
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 578,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.426
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 828,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.282
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.342
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 595,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.332
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.384
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 608,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.377
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.437
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 578,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.433
+            },
+            "T": 573,
+            "ratio": 1.0087
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 769,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.597
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1109,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.367
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.467
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1109,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.402
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.469
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 819,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.447
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.531
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 825,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.521
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.593
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.589
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 769,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.604
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 829,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.377
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.474
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 785,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.459
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.542
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 791,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.522
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.613
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 769,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.597
+            },
+            "T": 764,
+            "ratio": 1.0065
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 960,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.807
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1120,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.469
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.592
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1120,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.475
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.599
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1005,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.582
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.687
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1005,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.682
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.782
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.773
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 960,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.79
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 976,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.506
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.633
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 982,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.602
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.722
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 985,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.691
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.813
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 960,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.807
+            },
+            "T": 955,
+            "ratio": 1.0052
+          }
+        },
+        "2": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.112
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1106,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.093
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 566,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.097
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1106,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.092
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 566,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.1
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 580,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.095
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 328,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.099
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 321,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.098
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 219,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.101
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 213,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.103
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 195,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.109
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 826,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.101
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 430,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.098
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 466,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.097
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 260,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.099
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 286,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.099
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 199,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.103
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 195,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.112
+            },
+            "T": 136,
+            "ratio": 1.4338
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 369,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.238
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1107,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.168
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 567,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1107,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.173
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 567,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.187
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 585,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.192
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 349,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.196
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 359,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.218
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 393,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.218
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 369,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.226
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 827,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.174
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 431,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 470,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.186
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 313,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.198
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 445,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.195
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 349,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.22
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 313,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.198
+            },
+            "T": 191,
+            "ratio": 1.6387
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 548,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.382
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1108,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.252
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 568,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.285
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1108,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.264
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 568,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.291
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 636,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.283
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 476,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.311
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 643,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.316
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 524,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.348
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 581,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.351
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 548,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.366
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 828,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.254
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 432,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.292
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 595,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.292
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 454,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.323
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 608,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.309
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 514,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.369
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 432,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.292
+            },
+            "T": 287,
+            "ratio": 1.5052
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 727,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.52
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1109,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.346
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 569,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.391
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1109,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.345
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 569,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.397
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 819,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.393
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 619,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.43
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 825,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.429
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 691,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.488
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.497
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 727,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.498
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 829,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.357
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 433,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.387
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 785,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.402
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 597,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.444
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 791,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.425
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 681,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.508
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 433,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.387
+            },
+            "T": 382,
+            "ratio": 1.1335
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 907,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.679
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1120,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.433
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 570,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.494
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1120,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.441
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 570,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.497
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1005,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.49
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 763,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.56
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1005,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.564
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 859,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.632
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 962,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.635
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 907,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.653
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 976,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.463
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 501,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.519
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 982,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.508
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 741,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.582
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 985,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.565
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 849,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.663
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 501,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.519
+            },
+            "T": 478,
+            "ratio": 1.0481
+          }
+        }
+      }
+    },
+    "16x16": {
+      "mx": 16,
+      "my": 16,
+      "n": 256,
+      "huge": false,
+      "bw": {
+        "1": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 265,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.25
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1474,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.18
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 754,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.2
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1474,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 754,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.194
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 756,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.202
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 418,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.194
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 404,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.198
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 288,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.228
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 277,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.224
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 265,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.245
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1082,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.188
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 558,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.203
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 602,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 332,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.197
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 362,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.201
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 276,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.234
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 275,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.218
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 266,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.243
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 265,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.25
+            },
+            "T": 255,
+            "ratio": 1.0392
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 515,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.542
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.352
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 755,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.373
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.361
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 755,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.376
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 762,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.373
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 529,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.452
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 618,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.449
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 521,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.549
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 521,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.524
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 515,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.54
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1083,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.359
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 559,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.383
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 606,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.406
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 525,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.456
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 592,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.435
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 520,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.505
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 519,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.504
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 517,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.535
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 515,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.542
+            },
+            "T": 510,
+            "ratio": 1.0098
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 770,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.864
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1476,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.534
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.649
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1476,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.547
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.66
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 839,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.621
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.741
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 837,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.729
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.834
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 773,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.853
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 770,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.87
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1084,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.528
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.675
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 795,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.653
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.753
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 804,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.731
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.844
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.837
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 772,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.87
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 770,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.864
+            },
+            "T": 765,
+            "ratio": 1.0065
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1025,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.221
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1477,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.702
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.895
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1477,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.716
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.906
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1097,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.86
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.03
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1086,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.018
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.223
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.201
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 1025,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.214
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1085,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.698
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.904
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 1049,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.861
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.041
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1051,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.017
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.183
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.171
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.194
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 1025,
+              "ok": true,
+              "bad": [],
+              "time_s": 1.221
+            },
+            "T": 1020,
+            "ratio": 1.0049
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1280,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.576
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1492,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.877
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.133
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1492,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.884
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.141
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1340,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.105
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.337
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1330,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.313
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.55
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.541
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 1280,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.585
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1296,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.949
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.237
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 1304,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.202
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.353
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1301,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.296
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.645
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.553
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.595
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 1280,
+              "ok": true,
+              "bad": [],
+              "time_s": 1.576
+            },
+            "T": 1275,
+            "ratio": 1.0039
+          }
+        },
+        "2": {
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 255,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.233
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1474,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.172
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 754,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.195
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1474,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.185
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 754,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.193
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 756,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.205
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 418,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.197
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 404,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.191
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 288,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.207
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 277,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.201
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 255,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.225
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1082,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.178
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 558,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.19
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 602,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.197
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 332,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.194
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 362,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.202
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 254,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.206
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 274,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.197
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 253,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.22
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B8",
+              "makespan": 253,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.22
+            },
+            "T": 152,
+            "ratio": 1.6645
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 489,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.483
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.332
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 755,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.382
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1475,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.353
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 755,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.377
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 762,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.372
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 451,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.385
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 618,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.391
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 471,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.447
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 521,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.445
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 489,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.458
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1083,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.331
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 559,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.368
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 606,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.361
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 417,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.396
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 592,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.401
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 465,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.435
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 519,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.459
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 487,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.528
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 417,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.396
+            },
+            "T": 255,
+            "ratio": 1.6353
+          },
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 728,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.815
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1476,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.517
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 756,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.566
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1476,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.514
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 756,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.572
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 839,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.564
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 620,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.608
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 837,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.609
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 692,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.681
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 773,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.701
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 728,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.743
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1084,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.514
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 560,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.571
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 795,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.566
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 606,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.622
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 804,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.618
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 686,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.707
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 771,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.704
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 726,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.735
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 560,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.571
+            },
+            "T": 383,
+            "ratio": 1.4621
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 967,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.04
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1477,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.664
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 757,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.748
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1477,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.66
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 757,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.746
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1097,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.75
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 811,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.834
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1086,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.877
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 915,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.989
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1027,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.97
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 967,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.003
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1085,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.653
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 561,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.757
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 1049,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.744
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 797,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.858
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1051,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.852
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 909,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.97
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1025,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.966
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 965,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.997
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 561,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.757
+            },
+            "T": 510,
+            "ratio": 1.1
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1207,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.382
+              },
+              {
+                "name": "ring_uni",
+                "makespan": 1492,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.821
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 758,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.932
+              },
+              {
+                "name": "hybrid_uni_B1",
+                "makespan": 1492,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.825
+              },
+              {
+                "name": "hybrid_bi_B1",
+                "makespan": 758,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.947
+              },
+              {
+                "name": "hybrid_uni_B2",
+                "makespan": 1340,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.939
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 1003,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.087
+              },
+              {
+                "name": "hybrid_uni_B4",
+                "makespan": 1330,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.082
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 1139,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.275
+              },
+              {
+                "name": "hybrid_uni_B8",
+                "makespan": 1282,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.28
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 1207,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.276
+              },
+              {
+                "name": "hybrid_v_uni_B1",
+                "makespan": 1296,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.879
+              },
+              {
+                "name": "hybrid_v_bi_B1",
+                "makespan": 661,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.997
+              },
+              {
+                "name": "hybrid_v_uni_B2",
+                "makespan": 1304,
+                "ok": true,
+                "bad": [],
+                "time_s": 0.967
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 989,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.132
+              },
+              {
+                "name": "hybrid_v_uni_B4",
+                "makespan": 1301,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.09
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 1133,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.323
+              },
+              {
+                "name": "hybrid_v_uni_B8",
+                "makespan": 1280,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.274
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 1205,
+                "ok": true,
+                "bad": [],
+                "time_s": 1.319
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 661,
+              "ok": true,
+              "bad": [],
+              "time_s": 0.997
+            },
+            "T": 638,
+            "ratio": 1.0361
+          }
+        }
+      }
+    },
+    "32x32": {
+      "mx": 32,
+      "my": 32,
+      "n": 1024,
+      "huge": true,
+      "bw": {
+        "1": {
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 3074,
+                "ok": true,
+                "bad": [],
+                "time_s": 22.755
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 15.615
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 19.093
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 19.226
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 22.468
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 22.695
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 24.585
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 3076,
+                "ok": true,
+                "bad": [],
+                "time_s": 38.377
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 3074,
+              "ok": true,
+              "bad": [],
+              "time_s": 22.755
+            },
+            "T": 3069,
+            "ratio": 1.0016
+          },
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1033,
+                "ok": true,
+                "bad": [],
+                "time_s": 15.194
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3042,
+                "ok": true,
+                "bad": [],
+                "time_s": 10.388
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 1033,
+              "ok": true,
+              "bad": [],
+              "time_s": 15.194
+            },
+            "T": 1023,
+            "ratio": 1.0098
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 2051,
+                "ok": true,
+                "bad": [],
+                "time_s": 19.123
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3043,
+                "ok": true,
+                "bad": [],
+                "time_s": 9.005
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 2051,
+              "ok": true,
+              "bad": [],
+              "time_s": 19.123
+            },
+            "T": 2046,
+            "ratio": 1.0024
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 4097,
+                "ok": true,
+                "bad": [],
+                "time_s": 31.83
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 4099,
+                "ok": true,
+                "bad": [],
+                "time_s": 21.598
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 4097,
+              "ok": true,
+              "bad": [],
+              "time_s": 31.83
+            },
+            "T": 4092,
+            "ratio": 1.0012
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 5120,
+                "ok": true,
+                "bad": [],
+                "time_s": 40.82
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 5122,
+                "ok": true,
+                "bad": [],
+                "time_s": 27.413
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 5120,
+              "ok": true,
+              "bad": [],
+              "time_s": 40.82
+            },
+            "T": 5115,
+            "ratio": 1.001
+          }
+        },
+        "2": {
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 2984,
+                "ok": true,
+                "bad": [],
+                "time_s": 21.56
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3044,
+                "ok": true,
+                "bad": [],
+                "time_s": 13.817
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 2490,
+                "ok": true,
+                "bad": [],
+                "time_s": 15.615
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 2366,
+                "ok": true,
+                "bad": [],
+                "time_s": 16.456
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 2732,
+                "ok": true,
+                "bad": [],
+                "time_s": 18.404
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 2718,
+                "ok": true,
+                "bad": [],
+                "time_s": 19.305
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 2900,
+                "ok": true,
+                "bad": [],
+                "time_s": 21.441
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 2894,
+                "ok": true,
+                "bad": [],
+                "time_s": 22.132
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 2366,
+              "ok": true,
+              "bad": [],
+              "time_s": 16.456
+            },
+            "T": 1535,
+            "ratio": 1.5414
+          },
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1007,
+                "ok": true,
+                "bad": [],
+                "time_s": 6.796
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3042,
+                "ok": true,
+                "bad": [],
+                "time_s": 5.114
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 1180,
+                "ok": true,
+                "bad": [],
+                "time_s": 5.267
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 1007,
+              "ok": true,
+              "bad": [],
+              "time_s": 6.796
+            },
+            "T": 512,
+            "ratio": 1.9668
+          },
+          "2": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 1993,
+                "ok": true,
+                "bad": [],
+                "time_s": 13.622
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3043,
+                "ok": true,
+                "bad": [],
+                "time_s": 9.01
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 1601,
+                "ok": true,
+                "bad": [],
+                "time_s": 10.738
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 1601,
+              "ok": true,
+              "bad": [],
+              "time_s": 10.738
+            },
+            "T": 1023,
+            "ratio": 1.565
+          },
+          "4": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 3975,
+                "ok": true,
+                "bad": [],
+                "time_s": 28.797
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3045,
+                "ok": true,
+                "bad": [],
+                "time_s": 18.489
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 3133,
+                "ok": true,
+                "bad": [],
+                "time_s": 22.382
+              }
+            ],
+            "best": {
+              "name": "ring_bi",
+              "makespan": 3045,
+              "ok": true,
+              "bad": [],
+              "time_s": 18.489
+            },
+            "T": 2046,
+            "ratio": 1.4883
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 4967,
+                "ok": true,
+                "bad": [],
+                "time_s": 36.892
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 3046,
+                "ok": true,
+                "bad": [],
+                "time_s": 24.001
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 3901,
+                "ok": true,
+                "bad": [],
+                "time_s": 30.275
+              }
+            ],
+            "best": {
+              "name": "ring_bi",
+              "makespan": 3046,
+              "ok": true,
+              "bad": [],
+              "time_s": 24.001
+            },
+            "T": 2558,
+            "ratio": 1.1908
+          }
+        }
+      }
+    },
+    "64x64": {
+      "mx": 64,
+      "my": 64,
+      "n": 4096,
+      "huge": true,
+      "bw": {
+        "1": {
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 12290,
+                "ok": true,
+                "bad": [],
+                "time_s": 421.734
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 284.913
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 335.018
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 362.949
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 401.286
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 422.143
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 469.128
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 12292,
+                "ok": true,
+                "bad": [],
+                "time_s": 490.512
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 12290,
+              "ok": true,
+              "bad": [],
+              "time_s": 421.734
+            },
+            "T": 12285,
+            "ratio": 1.0004
+          },
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 4105,
+                "ok": true,
+                "bad": [],
+                "time_s": 140.538
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12226,
+                "ok": true,
+                "bad": [],
+                "time_s": 84.391
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 4105,
+              "ok": true,
+              "bad": [],
+              "time_s": 140.538
+            },
+            "T": 4095,
+            "ratio": 1.0024
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 20480,
+                "ok": true,
+                "bad": [],
+                "time_s": 776.261
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 20482,
+                "ok": true,
+                "bad": [],
+                "time_s": 531.28
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 20480,
+              "ok": true,
+              "bad": [],
+              "time_s": 776.261
+            },
+            "T": 20475,
+            "ratio": 1.0002
+          }
+        },
+        "2": {
+          "3": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 12104,
+                "ok": true,
+                "bad": [],
+                "time_s": 411.931
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12228,
+                "ok": true,
+                "bad": [],
+                "time_s": 270.447
+              },
+              {
+                "name": "hybrid_bi_B2",
+                "makespan": 10185,
+                "ok": true,
+                "bad": [],
+                "time_s": 304.183
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 9716,
+                "ok": true,
+                "bad": [],
+                "time_s": 320.468
+              },
+              {
+                "name": "hybrid_bi_B4",
+                "makespan": 10939,
+                "ok": true,
+                "bad": [],
+                "time_s": 348.318
+              },
+              {
+                "name": "hybrid_v_bi_B4",
+                "makespan": 10824,
+                "ok": true,
+                "bad": [],
+                "time_s": 363.816
+              },
+              {
+                "name": "hybrid_bi_B8",
+                "makespan": 11564,
+                "ok": true,
+                "bad": [],
+                "time_s": 396.678
+              },
+              {
+                "name": "hybrid_v_bi_B8",
+                "makespan": 11550,
+                "ok": true,
+                "bad": [],
+                "time_s": 410.349
+              }
+            ],
+            "best": {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 9716,
+              "ok": true,
+              "bad": [],
+              "time_s": 320.468
+            },
+            "T": 6143,
+            "ratio": 1.5816
+          },
+          "1": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 4047,
+                "ok": true,
+                "bad": [],
+                "time_s": 122.415
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12226,
+                "ok": true,
+                "bad": [],
+                "time_s": 79.024
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 4412,
+                "ok": true,
+                "bad": [],
+                "time_s": 88.827
+              }
+            ],
+            "best": {
+              "name": "multitree",
+              "makespan": 4047,
+              "ok": true,
+              "bad": [],
+              "time_s": 122.415
+            },
+            "T": 2048,
+            "ratio": 1.9761
+          },
+          "5": {
+            "results": [
+              {
+                "name": "multitree",
+                "makespan": 20167,
+                "ok": true,
+                "bad": [],
+                "time_s": 670.262
+              },
+              {
+                "name": "ring_bi",
+                "makespan": 12230,
+                "ok": true,
+                "bad": [],
+                "time_s": 427.044
+              },
+              {
+                "name": "hybrid_v_bi_B2",
+                "makespan": 16098,
+                "ok": true,
+                "bad": [],
+                "time_s": 531.653
+              }
+            ],
+            "best": {
+              "name": "ring_bi",
+              "makespan": 12230,
+              "ok": true,
+              "bad": [],
+              "time_s": 427.044
+            },
+            "T": 10238,
+            "ratio": 1.1946
+          }
+        }
+      }
+    }
+  },
+  "notes": {
+    "64x64": "Reduced coverage: only m in {1,5} evaluated per ramp_bw due to O(N^2) per-candidate simulation cost (~7min/candidate at N=4096); each cell still uses the same reduced 8-candidate huge-mesh search (multitree, ring_bi, hybrid_bi/hybrid_v_bi x B in {2,4,8}, bidir only)."
+  }
+}
