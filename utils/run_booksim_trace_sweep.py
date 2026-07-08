@@ -45,6 +45,8 @@ def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq"):
     row_csv = ROOT / "results" / "booksim_trace_row.csv"
     sim_mk = None
     stalls = None
+    total_rec = None
+    total_exp = None
     ok = rc.returncode == 0
     if row_csv.exists():
         lines = row_csv.read_text(encoding="utf-8").strip().splitlines()
@@ -52,13 +54,21 @@ def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq"):
             parts = lines[-1].split(",")
             if len(parts) >= 3:
                 sim_mk = int(float(parts[2]))
+            if len(parts) >= 4:
+                total_rec = int(float(parts[3]))
+            if len(parts) >= 5:
+                total_exp = int(float(parts[4]))
             if len(parts) >= 6:
                 stalls = int(float(parts[5]))
+            if total_rec is not None and total_exp is not None:
+                ok = total_rec >= total_exp
     return {
         "ok": ok,
         "returncode": rc.returncode,
         "sim_makespan": sim_mk,
         "expected_makespan": expected_mk,
+        "total_received": total_rec,
+        "total_expected": total_exp,
         "buffer_full_stalls": stalls,
         "stdout_tail": rc.stdout[-800:] if rc.stdout else "",
         "stderr_tail": rc.stderr[-400:] if rc.stderr else "",
