@@ -67,7 +67,12 @@ class IQRouter : public Router {
   int _vc_alloc_delay;
   int _sw_alloc_delay;
   
+protected:
+
   map<int, Flit *> _in_queue_flits;
+  virtual void _PreInputQueuing();
+
+private:
 
   deque<pair<int, pair<Credit *, int> > > _proc_credits;
 
@@ -119,7 +124,6 @@ class IQRouter : public Router {
   bool _SWAllocAddReq(int input, int vc, int output);
 
   void _InputQueuing( );
-
   void _RouteEvaluate( );
   void _VCAllocEvaluate( );
   void _SWHoldEvaluate( );

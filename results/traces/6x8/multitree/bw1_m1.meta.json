@@ -1,0 +1,15 @@
+{
+  "mx": 6,
+  "my": 8,
+  "n": 48,
+  "h": 4,
+  "v": 6,
+  "scheme": "multitree",
+  "ramp_bw": 1,
+  "m": 1,
+  "expected_makespan": 149,
+  "num_hop_events": 2256,
+  "max_hop_cycle": 142,
+  "num_tree_sources": 48,
+  "num_fork_rows": 2304
+}

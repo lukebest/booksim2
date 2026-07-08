@@ -45,6 +45,7 @@
 
 //////////////////Sub router types//////////////////////
 #include "iq_router.hpp"
+#include "fork_iq_router.hpp"
 #include "event_router.hpp"
 #include "chaos_router.hpp"
 ///////////////////////////////////////////////////////
@@ -134,6 +135,8 @@ Router *Router::NewRouter( const Configuration& config,
   Router *r = NULL;
   if ( type == "iq" ) {
     r = new IQRouter( config, parent, name, id, inputs, outputs );
+  } else if ( type == "fork_iq" ) {
+    r = new ForkIQRouter( config, parent, name, id, inputs, outputs );
   } else if ( type == "event" ) {
     r = new EventRouter( config, parent, name, id, inputs, outputs );
   } else if ( type == "chaos" ) {

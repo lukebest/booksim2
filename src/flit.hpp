@@ -77,6 +77,10 @@ public:
   // phase in multi-phase algorithms
   mutable int ph;
 
+  // Allgather trace / fork extensions
+  int gather_src;
+  int trace_ph;   // 0=hop unicast, 100=fork tree flit (expand at router)
+
   // Fields for arbitrary data
   void* data ;
 

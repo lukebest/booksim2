@@ -1,0 +1,15 @@
+{
+  "mx": 6,
+  "my": 8,
+  "n": 48,
+  "h": 4,
+  "v": 6,
+  "scheme": "hybrid_bi_B4",
+  "ramp_bw": 2,
+  "m": 5,
+  "expected_makespan": 398,
+  "num_hop_events": 11280,
+  "max_hop_cycle": 391,
+  "num_tree_sources": 48,
+  "num_fork_rows": 2304
+}

@@ -79,6 +79,8 @@ void Flit::Reset()
   pri = 0;
   intm =-1;
   ph = -1;
+  gather_src = -1;
+  trace_ph = 0;
   data = 0;
 }  
 

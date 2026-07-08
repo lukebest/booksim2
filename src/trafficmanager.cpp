@@ -37,6 +37,7 @@
 #include "trafficmanager.hpp"
 #include "batchtrafficmanager.hpp"
 #include "calendartrafficmanager.hpp"
+#include "tracetrafficmanager.hpp"
 #include "random_utils.hpp" 
 #include "vc.hpp"
 #include "packet_reply_info.hpp"
@@ -52,6 +53,8 @@ TrafficManager * TrafficManager::New(Configuration const & config,
         result = new BatchTrafficManager(config, net);
     } else if(sim_type == "calendar") {
         result = new CalendarTrafficManager(config, net);
+    } else if(sim_type == "trace") {
+        result = new TraceTrafficManager(config, net);
     } else {
         cerr << "Unknown simulation type: " << sim_type << endl;
     } 

@@ -333,6 +333,13 @@ BookSimConfig::BookSimConfig( )
   AddStrField("fault_links", "");
   AddStrField("fault_desc", "healthy");
   AddStrField("result_csv", "");
+
+  //==================Trace allgather simulation============
+  AddStrField("trace_mode", "hop");
+  AddStrField("trace_file", "");
+  AddStrField("fork_file", "");
+  _int_map["expected_makespan"] = 0;
+  _int_map["trace_drain_slack"] = 256;
 }
 
 

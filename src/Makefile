@@ -31,6 +31,7 @@ INCPATH = -I. -Iarbiters -Iallocators -Irouters -Inetworks -Ipower
 CPPFLAGS += -Wall $(INCPATH) $(DEFINE)
 CPPFLAGS += -O3
 CPPFLAGS += -g
+CPPFLAGS += -DTRACK_STALLS
 LFLAGS +=
 
 PROG := booksim

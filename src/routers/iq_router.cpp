@@ -336,8 +336,13 @@ bool IQRouter::_ReceiveCredits( )
 // input queuing
 //------------------------------------------------------------------------------
 
+void IQRouter::_PreInputQueuing( )
+{
+}
+
 void IQRouter::_InputQueuing( )
 {
+  _PreInputQueuing();
   for(map<int, Flit *>::const_iterator iter = _in_queue_flits.begin();
       iter != _in_queue_flits.end();
       ++iter) {
