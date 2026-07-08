@@ -7,14 +7,16 @@
   "scheme": "hybrid_v_bi_B2",
   "ramp_bw": 1,
   "m": 4,
-  "expected_makespan": 528,
+  "expected_makespan": 328,
   "num_hop_events": 9024,
-  "max_hop_cycle": 523,
-  "num_tree_sources": 96,
+  "max_hop_cycle": 323,
+  "num_tree_sources": 192,
   "num_fork_rows": 2304,
   "batches": [
-    2,
-    2
+    1,
+    1,
+    1,
+    1
   ],
-  "source": "hybrid_v_tdm_batches"
+  "source": "hybrid_v_m1_repeat"
 }

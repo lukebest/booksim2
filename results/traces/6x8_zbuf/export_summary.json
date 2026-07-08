@@ -25,13 +25,14 @@
     "scheme": "hybrid_v_bi_B2",
     "ramp_bw": 1,
     "m": 2,
-    "expected_makespan": 264,
+    "expected_makespan": 164,
     "num_hop_events": 4512,
-    "max_hop_cycle": 259,
-    "num_tree_sources": 48,
+    "max_hop_cycle": 159,
+    "num_tree_sources": 96,
     "num_fork_rows": 2304,
     "batches": [
-      2
+      1,
+      1
     ],
     "source": "rigid_pack",
     "ok": true
@@ -45,13 +46,14 @@
     "scheme": "hybrid_v_bi_B2",
     "ramp_bw": 1,
     "m": 3,
-    "expected_makespan": 346,
+    "expected_makespan": 246,
     "num_hop_events": 6768,
-    "max_hop_cycle": 341,
-    "num_tree_sources": 96,
+    "max_hop_cycle": 241,
+    "num_tree_sources": 144,
     "num_fork_rows": 2304,
     "batches": [
-      2,
+      1,
+      1,
       1
     ],
     "source": "rigid_pack",
@@ -66,14 +68,16 @@
     "scheme": "hybrid_v_bi_B2",
     "ramp_bw": 1,
     "m": 4,
-    "expected_makespan": 528,
+    "expected_makespan": 328,
     "num_hop_events": 9024,
-    "max_hop_cycle": 523,
-    "num_tree_sources": 96,
+    "max_hop_cycle": 323,
+    "num_tree_sources": 192,
     "num_fork_rows": 2304,
     "batches": [
-      2,
-      2
+      1,
+      1,
+      1,
+      1
     ],
     "source": "rigid_pack",
     "ok": true
@@ -87,14 +91,16 @@
     "scheme": "hybrid_v_bi_B2",
     "ramp_bw": 1,
     "m": 5,
-    "expected_makespan": 610,
+    "expected_makespan": 410,
     "num_hop_events": 11280,
-    "max_hop_cycle": 605,
-    "num_tree_sources": 144,
+    "max_hop_cycle": 405,
+    "num_tree_sources": 240,
     "num_fork_rows": 2304,
     "batches": [
-      2,
-      2,
+      1,
+      1,
+      1,
+      1,
       1
     ],
     "source": "rigid_pack",

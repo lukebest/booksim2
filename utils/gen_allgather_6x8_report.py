@@ -422,7 +422,7 @@ def build_html(data, h, v, bsim):
 <ul class="compact">
 <li><b>ring_uni</b>：任意 m 均有 rigid 0-buffer 调度（如 m=5@rb=1：rigid mk=309 vs ED 贪心 mk=274+link wait）。</li>
 <li><b>ring_bi</b>：rb=1 时前/后环 TDM + 分轮（m=2 单轮双 flit；m=3→2+1，m=4→2+2，m=5→2+2+1）均可 rigid 0-buffer；rb=2 全部 m 可单轮 pack。</li>
-<li><b>hybrid_v_bi_B2</b>：rb=1 时 m=2 前/后环 TDM <b>可行</b>（单轮 mk=264）；采用与 ring_bi 相同分轮 [2]/[2,1]/…；注：m=2 若改 m×m=1 串行仅 164 cy 更优但需多轮注入。</li>
+<li><b>hybrid_v_bi_B2</b>：rb=1 时 m≥2 走 <b>m 轮 m=1 串行</b>（m=2 单轮 TDM 虽可行但 mk=264 &gt; 2×82，不采用）；rb=2 单轮 rigid pack。</li>
 </ul>
 </div>
 {scheme_sections}
@@ -453,7 +453,7 @@ def build_html(data, h, v, bsim):
 <thead><tr><th>维度</th><th>方案一 tree</th><th>方案二 ring/hybrid</th><th>方案三 row→col</th></tr></thead>
 <tbody>
 <tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>126 cy (hybrid rigid) / 140 (ring_bi)</td><td><b>71 cy</b></td></tr>
-<tr><td class="name">rigid 0-buffer 适用范围</td><td>6×8 全部 m</td><td>ring_uni / ring_bi / hybrid_v_bi_B2 全部 m（rb=1 分轮 TDM）</td><td>任意 m</td></tr>
+<tr><td class="name">rigid 0-buffer 适用范围</td><td>6×8 全部 m</td><td>ring_uni / ring_bi 全部 m（rb=1 分轮 TDM）；hybrid rb=1 为 m×m=1 串行</td><td>任意 m</td></tr>
 <tr><td class="name">额外本地暂存</td><td>0</td><td>0</td><td>5m flit/节点</td></tr>
 <tr><td class="name">m 增大趋势</td><td>rigid mk 线性升</td><td>ring 最慢；hybrid rigid 较快但 rb=1 受限</td><td>两阶段串行，小 m 最优</td></tr>
 <tr><td class="name">适用场景</td><td>可接受较长 rigid mk</td><td>ring 简单 0-buffer；hybrid 要快且能开 rb=2</td><td>小 m + 高下环带宽 + SRAM</td></tr>

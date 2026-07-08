@@ -283,80 +283,11 @@ def _verify_ring_round(busy, ramp_bw, flits, n):
     return _verify_scheme_round(busy, ramp_bw, flits, n)
 
 
-def fp_hybrid_v_bi_flits(s, ramp_bw, flits, B=2, mx=None, my=None):
-    """hybrid_v_bi: local vertical ring + row fork; per-flit up-ramp TDM @ rb=1."""
-    if mx is not None or my is not None:
-        S.cfg(mx or MX, my or MY, H, V)
-        S.init_ring()
-    if flits == 1 or ramp_bw >= 2:
-        return S.fp_hybrid_v(s, B, True, ramp_bw)
-    C = S.MX // B
-    sx, _ = S.coord(s)
-    x0 = (sx // C) * C
-    order = S.ham_cycle_vband(C, x0)
-    pos = {nd: k for k, nd in enumerate(order)}
-    d2 = 1
-    period = d2 + 1
-    slots = []
-    for f in range(flits):
-        base = f * period
-        n = len(order)
-        i = pos[s]
-        a = n // 2
-        b = (n - 1) - a
-        fwd = [order[(i + k) % n] for k in range(a + 1)]
-        bwd = [order[(i - k) % n] for k in range(b + 1)]
-        arr = {s: S.RAMP + base}
-        slots.append(("U", s, base))
-        sf, _ = S._arc(fwd, S.RAMP + base)
-        slots.append(("U", s, base + d2))
-        sb, _ = S._arc(bwd, S.RAMP + base + d2)
-        slots += sf + sb
-        t = S.RAMP + base
-        for k in range(len(fwd) - 1):
-            t += S.edge_lat(fwd[k], fwd[k + 1])
-            arr[fwd[k + 1]] = t
-        t = S.RAMP + base + d2
-        for k in range(len(bwd) - 1):
-            t += S.edge_lat(bwd[k], bwd[k + 1])
-            arr[bwd[k + 1]] = t
-        for y in range(S.MY):
-            t = arr[S.nid(x0, y)]
-            prev = S.nid(x0, y)
-            for xx in range(x0 - 1, -1, -1):
-                cur = S.nid(xx, y)
-                slots.append(("L", S.lk(prev, cur), t))
-                t += S.H
-                slots.append(("D", cur, t))
-                prev = cur
-            t = arr[S.nid(x0 + C - 1, y)]
-            prev = S.nid(x0 + C - 1, y)
-            for xx in range(x0 + C, S.MX):
-                cur = S.nid(xx, y)
-                slots.append(("L", S.lk(prev, cur), t))
-                t += S.H
-                slots.append(("D", cur, t))
-                prev = cur
-    return slots
-
-
-_HYBRID_V_B2_M2_TDM_OK = None
-
-
-def hybrid_v_bi_m2_tdm_ok(B=2, mx=None, my=None):
-    """Probe whether hybrid_v_bi can rigid-pack m=2 @ ramp_bw=1 with up-ramp TDM."""
-    global _HYBRID_V_B2_M2_TDM_OK
-    if _HYBRID_V_B2_M2_TDM_OK is None:
-        _HYBRID_V_B2_M2_TDM_OK = (
-            pack_hybrid_v_bi_round(1, 2, B=B, mx=mx, my=my) is not None
-        )
-    return _HYBRID_V_B2_M2_TDM_OK
-
-
 def hybrid_v_bi_batch_plan(m, ramp_bw, B=2):
+    """hybrid_v_bi_B2 @ ramp_bw=1: m 轮 m=1 串行（优于单轮 m=2 TDM）。"""
     if ramp_bw != 1:
         return [m]
-    return rb1_tdm_batch_plan(m, ramp_bw, hybrid_v_bi_m2_tdm_ok(B))
+    return [1] * m
 
 
 def pack_hybrid_v_bi_round(ramp_bw, batch_flits, B=2, mx=None, my=None):
@@ -365,40 +296,32 @@ def pack_hybrid_v_bi_round(ramp_bw, batch_flits, B=2, mx=None, my=None):
     S.cfg(mx, my, H, V)
     S.init_ring()
     n = mx * my
-    foot = {
-        s: fp_hybrid_v_bi_flits(s, ramp_bw, batch_flits, B=B, mx=mx, my=my)
-        for s in range(n)
-    }
-    pack_flits = 1 if ramp_bw == 1 and batch_flits > 1 else batch_flits
+    assert batch_flits == 1
+    foot = {s: S.fp_hybrid_v(s, B, True, ramp_bw) for s in range(n)}
     best = None
     best_order = None
     for _, gen in S.SRC_ORDERS.items():
         order = gen()
-        mk, _, busy = S.pack(foot, ramp_bw, order, flits=pack_flits)
-        ok = (
-            _verify_scheme_round(busy, ramp_bw, batch_flits, n)
-            if pack_flits == 1
-            else S.verify(busy, ramp_bw, flits=batch_flits)
-        )
-        if ok and (best is None or mk < best):
+        mk, _, busy = S.pack(foot, ramp_bw, order, flits=1)
+        if _verify_scheme_round(busy, ramp_bw, 1, n) and (best is None or mk < best):
             best, best_order = mk, order
     if best is None:
         return None
-    _, _, _, inj, _ = S.export_events(foot, ramp_bw, best_order, flits=pack_flits)
+    _, _, _, inj, _ = S.export_events(foot, ramp_bw, best_order, flits=1)
     return {
         "makespan": best,
         "order": best_order,
         "foot": foot,
         "inj": inj,
-        "batch": batch_flits,
+        "batch": 1,
         "n": n,
     }
 
 
 def pack_hybrid_v_bi_B2(ramp_bw, flits, mx=None, my=None, B=2):
-    """Rigid 0-buffer hybrid_v_bi_B2 @ rb=1: TDM if m=2 pack ok, else m×m=1 rounds."""
+    """Rigid 0-buffer hybrid_v_bi_B2 @ rb=1: m 轮 m=1 串行。"""
     batches = hybrid_v_bi_batch_plan(flits, ramp_bw, B)
-    if len(batches) == 1 and not (ramp_bw == 1 and flits > 1):
+    if len(batches) == 1:
         return pack_scheme(
             lambda s, rb, B=B: S.fp_hybrid_v(s, B, True, rb),
             ramp_bw,
@@ -418,14 +341,13 @@ def pack_hybrid_v_bi_B2(ramp_bw, flits, mx=None, my=None, B=2):
         rounds.append(pr)
         t0 += pr["makespan"]
         flit_base += b
-    source = "hybrid_v_tdm_batches" if hybrid_v_bi_m2_tdm_ok(B) else "hybrid_v_m1_repeat"
     return {
         "makespan": t0,
         "rounds": rounds,
         "batches": batches,
         "m": flits,
         "order": rounds[0]["order"],
-        "source": source,
+        "source": "hybrid_v_m1_repeat",
     }
 
 
