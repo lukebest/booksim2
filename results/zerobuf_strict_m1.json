@@ -1,0 +1,1191 @@
+{
+  "h": 4,
+  "v": 6,
+  "m": 1,
+  "sizes": [
+    "4x4",
+    "6x8",
+    "8x8",
+    "12x16",
+    "16x16",
+    "32x32"
+  ],
+  "data": {
+    "4x4": {
+      "mx": 4,
+      "my": 4,
+      "h": 4,
+      "v": 6,
+      "n": 16,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 15,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 51,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 32,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 49,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 74,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 50,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 42,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 34,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 45,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 47,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 48,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 50,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_bi_B2",
+            "makespan": 32
+          },
+          "time_s": 0.07
+        },
+        "2": {
+          "eject_lb": 8,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 32,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 46,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 32,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 32,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 74,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 50,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 42,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 33,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 43,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 38,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 38,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 32,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "multitree",
+            "makespan": 32
+          },
+          "time_s": 0.14
+        }
+      }
+    },
+    "6x8": {
+      "mx": 6,
+      "my": 8,
+      "h": 4,
+      "v": 6,
+      "n": 48,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 47,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 149,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 266,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 140,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 266,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 147,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 134,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 140,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 92,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 136,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 155,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 218,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 134,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 118,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 133,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 181,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 154,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 163,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 82
+          },
+          "time_s": 1.57
+        },
+        "2": {
+          "eject_lb": 24,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 96,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 266,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 140,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 266,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 147,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 87,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 140,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 92,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 92,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 96,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 218,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 134,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 118,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 82,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 133,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 107,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 111,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 98,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 82
+          },
+          "time_s": 2.77
+        }
+      }
+    },
+    "8x8": {
+      "mx": 8,
+      "my": 8,
+      "h": 4,
+      "v": 6,
+      "n": 64,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 63,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 173,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 354,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 186,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 354,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 187,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 189,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 186,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 112,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 201,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 192,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 282,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 170,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 115,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 150,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 102,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 229,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 177,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 240,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 195,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 198,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 102
+          },
+          "time_s": 3.94
+        },
+        "2": {
+          "eject_lb": 32,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 125,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 354,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 186,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 354,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 187,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 112,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 186,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 112,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 129,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 125,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 282,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 170,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 114,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 150,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 102,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 133,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 175,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 131,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 137,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 126,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 102
+          },
+          "time_s": 6.74
+        }
+      }
+    },
+    "12x16": {
+      "mx": 12,
+      "my": 16,
+      "h": 4,
+      "v": 6,
+      "n": 192,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 191,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 661,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 1106,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 566,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 1106,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 579,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 604,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B8",
+              "makespan": 634,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 566,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 328,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 642,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 633,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B16",
+              "makespan": 503,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 826,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 466,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 287,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 430,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 262,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 750,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 539,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 865,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 586,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 574,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 262
+          },
+          "time_s": 119.02
+        },
+        "2": {
+          "eject_lb": 96,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 392,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 1106,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 566,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 1106,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 579,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 448,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B8",
+              "makespan": 324,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 566,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 328,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 533,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 388,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B16",
+              "makespan": 392,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 826,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 466,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 287,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 430,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 262,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 586,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 539,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 395,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 524,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 403,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 262
+          },
+          "time_s": 192.4
+        }
+      }
+    },
+    "16x16": {
+      "mx": 16,
+      "my": 16,
+      "h": 4,
+      "v": 6,
+      "n": 256,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 255,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 837,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 1474,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 754,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 1474,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 755,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 863,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B8",
+              "makespan": 848,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 754,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 416,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 815,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 942,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B16",
+              "makespan": 667,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 1082,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 602,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 363,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B8",
+              "makespan": 840,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 558,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 334,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 938,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B8",
+              "makespan": 830,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 717,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 1097,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 437,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 540,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 334
+          },
+          "time_s": null
+        },
+        "2": {
+          "eject_lb": 128,
+          "results": [
+            {
+              "name": "multitree",
+              "makespan": 504,
+              "ok": true
+            },
+            {
+              "name": "ring_uni",
+              "makespan": 1474,
+              "ok": true
+            },
+            {
+              "name": "ring_bi",
+              "makespan": 754,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B1",
+              "makespan": 1474,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B2",
+              "makespan": 755,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B4",
+              "makespan": 604,
+              "ok": true
+            },
+            {
+              "name": "hybrid_uni_B8",
+              "makespan": 409,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B1",
+              "makespan": 754,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B2",
+              "makespan": 416,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B4",
+              "makespan": 777,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B8",
+              "makespan": 506,
+              "ok": true
+            },
+            {
+              "name": "hybrid_bi_B16",
+              "makespan": 504,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 1082,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B2",
+              "makespan": 602,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B4",
+              "makespan": 363,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_uni_B8",
+              "makespan": 437,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B1",
+              "makespan": 558,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 334,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B4",
+              "makespan": 756,
+              "ok": true
+            },
+            {
+              "name": "hybrid_v_bi_B8",
+              "makespan": 490,
+              "ok": true
+            },
+            {
+              "name": "quad_uni",
+              "makespan": 717,
+              "ok": true
+            },
+            {
+              "name": "quad_bi",
+              "makespan": 523,
+              "ok": true
+            },
+            {
+              "name": "border_uni",
+              "makespan": 437,
+              "ok": true
+            },
+            {
+              "name": "border_bi",
+              "makespan": 540,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 334
+          },
+          "time_s": null
+        }
+      }
+    },
+    "32x32": {
+      "mx": 32,
+      "my": 32,
+      "h": 4,
+      "v": 6,
+      "n": 1024,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 1023,
+          "results": [
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 1182,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 1182
+          },
+          "time_s": 995.4,
+          "note": "single-scheme rigid packer run (full study infeasible)"
+        }
+      }
+    }
+  }
+}

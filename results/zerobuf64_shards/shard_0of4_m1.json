@@ -1,0 +1,57 @@
+[
+  {
+    "name": "ring_uni",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 24322,
+    "ok": true,
+    "max_link_wait": 0,
+    "max_ramp_wait": 0,
+    "zero_buffer_certified": true,
+    "time_s": 99.2
+  },
+  {
+    "name": "hybrid_uni_B2",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 12228,
+    "ok": true,
+    "max_link_wait": 1,
+    "max_ramp_wait": 1,
+    "zero_buffer_certified": false,
+    "time_s": 107.2
+  },
+  {
+    "name": "hybrid_v_uni_B2",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 8570,
+    "ok": true,
+    "max_link_wait": 1,
+    "max_ramp_wait": 1,
+    "zero_buffer_certified": false,
+    "time_s": 107.0
+  },
+  {
+    "name": "hybrid_uni_B4",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 6214,
+    "ok": true,
+    "max_link_wait": 4,
+    "max_ramp_wait": 8,
+    "zero_buffer_certified": false,
+    "time_s": 117.2
+  },
+  {
+    "name": "hybrid_v_uni_B4",
+    "ramp_bw": 1,
+    "m": 1,
+    "makespan": 4538,
+    "ok": true,
+    "max_link_wait": 1,
+    "max_ramp_wait": 2,
+    "zero_buffer_certified": false,
+    "time_s": 111.6
+  }
+]

@@ -481,6 +481,30 @@ def pack(footprints, ramp_bw, src_order, flits=1):
     return mk, max_off, busy
 
 
+def apply_offsets(footprints, inject_offsets, src_order, ramp_bw, flits=1):
+    """Replay fixed per-source inject offsets; ramp cap is ``ramp_bw``."""
+    link_busy = defaultdict(dict)
+    up_busy = defaultdict(dict)
+    down_busy = defaultdict(dict)
+
+    def table(kind):
+        return link_busy if kind == 'L' else up_busy if kind == 'U' else down_busy
+
+    makespan = 0
+    max_off = 0
+    for s in src_order:
+        off = inject_offsets[s]
+        max_off = max(max_off, off)
+        for kind, key, rel in footprints[s]:
+            cyc = off + rel
+            t = table(kind)
+            for i in range(flits):
+                t[key][cyc + i] = t[key].get(cyc + i, 0) + 1
+            if kind == 'D':
+                makespan = max(makespan, cyc + flits - 1 + RAMP)
+    return makespan, max_off, (link_busy, up_busy, down_busy)
+
+
 def export_events(footprints, ramp_bw, src_order, flits=1):
     """Run pack and emit per-link send events for cycle-by-cycle visualization.
 
@@ -599,14 +623,28 @@ SRC_ORDERS = {
 }
 
 
-def run_scheme(build_fp, ramp_bw, flits=1):
+def run_scheme(build_fp, ramp_bw, flits=1, build_fp_lo=None):
+    """Greedy pack at ``ramp_bw``. When ``ramp_bw > 1``, also try BW=1 footprints
+    packed at ramp 1 with offsets reused at ``ramp_bw`` (ramp cap only relaxes)."""
     foot = {s: build_fp(s) for s in range(N)}
+    foot_lo = None
+    if ramp_bw > 1:
+        lo_fn = build_fp_lo or build_fp
+        foot_lo = {s: lo_fn(s) for s in range(N)}
     best = None
     for name, gen in SRC_ORDERS.items():
-        mk, mo, busy = pack(foot, ramp_bw, gen(), flits=flits)
+        order = gen()
+        mk, mo, busy = pack(foot, ramp_bw, order, flits=flits)
         ok = verify(busy, ramp_bw, flits=flits)
         if best is None or mk < best[0]:
             best = (mk, mo, name, ok)
+        if foot_lo is not None:
+            _, _, _, inj, _ = export_events(foot_lo, 1, order, flits=flits)
+            mk_lo, mo_lo, busy_lo = apply_offsets(
+                foot_lo, inj, order, ramp_bw, flits=flits)
+            ok_lo = verify(busy_lo, ramp_bw, flits=flits)
+            if mk_lo < best[0]:
+                best = (mk_lo, mo_lo, f"{name}+bw1", ok_lo)
     return best  # (makespan, max_offset, order, ok)
 
 
@@ -623,26 +661,66 @@ def divisors_bands():
 def study(ramp_bw):
     out = {}
     out["multitree"] = run_scheme(fp_multitree, ramp_bw)
-    out["ring_uni"] = run_scheme(lambda s: fp_ring(s, RING_ORDER, RING_POS, False, ramp_bw), ramp_bw)
-    out["ring_bi"] = run_scheme(lambda s: fp_ring(s, RING_ORDER, RING_POS, True, ramp_bw), ramp_bw)
+    out["ring_uni"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_ring(s, RING_ORDER, RING_POS, False, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_ring(s, RING_ORDER, RING_POS, False, 1),
+    )
+    out["ring_bi"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_ring(s, RING_ORDER, RING_POS, True, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_ring(s, RING_ORDER, RING_POS, True, 1),
+    )
     out["hybrid_uni"] = {}
     out["hybrid_bi"] = {}
     for B in divisors_bands():
         R = MY // B
         if R >= 2:
-            out["hybrid_uni"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, False, ramp_bw), ramp_bw)
-        out["hybrid_bi"][B] = run_scheme(lambda s, B=B: fp_hybrid(s, B, True, ramp_bw), ramp_bw)
+            out["hybrid_uni"][B] = run_scheme(
+                lambda s, B=B, rb=ramp_bw: fp_hybrid(s, B, False, rb),
+                ramp_bw,
+                build_fp_lo=lambda s, B=B: fp_hybrid(s, B, False, 1),
+            )
+        out["hybrid_bi"][B] = run_scheme(
+            lambda s, B=B, rb=ramp_bw: fp_hybrid(s, B, True, rb),
+            ramp_bw,
+            build_fp_lo=lambda s, B=B: fp_hybrid(s, B, True, 1),
+        )
     out["hybrid_v_uni"] = {}
     out["hybrid_v_bi"] = {}
     for B in divisors_bands():
         C = MX // B
         if C >= 2:
-            out["hybrid_v_uni"][B] = run_scheme(lambda s, B=B: fp_hybrid_v(s, B, False, ramp_bw), ramp_bw)
-            out["hybrid_v_bi"][B] = run_scheme(lambda s, B=B: fp_hybrid_v(s, B, True, ramp_bw), ramp_bw)
-    out["quad_uni"] = run_scheme(lambda s: fp_quadrant(s, False, ramp_bw), ramp_bw)
-    out["quad_bi"] = run_scheme(lambda s: fp_quadrant(s, True, ramp_bw), ramp_bw)
-    out["border_uni"] = run_scheme(lambda s: fp_border(s, False, ramp_bw), ramp_bw)
-    out["border_bi"] = run_scheme(lambda s: fp_border(s, True, ramp_bw), ramp_bw)
+            out["hybrid_v_uni"][B] = run_scheme(
+                lambda s, B=B, rb=ramp_bw: fp_hybrid_v(s, B, False, rb),
+                ramp_bw,
+                build_fp_lo=lambda s, B=B: fp_hybrid_v(s, B, False, 1),
+            )
+            out["hybrid_v_bi"][B] = run_scheme(
+                lambda s, B=B, rb=ramp_bw: fp_hybrid_v(s, B, True, rb),
+                ramp_bw,
+                build_fp_lo=lambda s, B=B: fp_hybrid_v(s, B, True, 1),
+            )
+    out["quad_uni"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_quadrant(s, False, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_quadrant(s, False, 1),
+    )
+    out["quad_bi"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_quadrant(s, True, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_quadrant(s, True, 1),
+    )
+    out["border_uni"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_border(s, False, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_border(s, False, 1),
+    )
+    out["border_bi"] = run_scheme(
+        lambda s, rb=ramp_bw: fp_border(s, True, rb),
+        ramp_bw,
+        build_fp_lo=lambda s: fp_border(s, True, 1),
+    )
     return out
 
 
