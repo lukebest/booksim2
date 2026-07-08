@@ -17,11 +17,15 @@ OUT_JSON = ROOT / "results" / "booksim_trace_sweep.json"
 
 
 def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq"):
+    if trace_mode == "tree" and fork_file:
+        fork_cfg = str(fork_file.relative_to(ROOT))
+    else:
+        fork_cfg = "none"
     cfg_lines = BASE_CONFIG.read_text(encoding="utf-8").splitlines()
     overrides = {
         "trace_mode": trace_mode,
         "trace_file": str(trace_file.relative_to(ROOT)),
-        "fork_file": str(fork_file.relative_to(ROOT)) if fork_file else "",
+        "fork_file": fork_cfg,
         "expected_makespan": str(expected_mk),
         "msg_size": str(m),
         "router": router,
