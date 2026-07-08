@@ -1,15 +1,54 @@
 [
   {
     "ok": false,
-    "returncode": -6,
-    "sim_makespan": null,
+    "returncode": 255,
+    "sim_makespan": 480,
     "expected_makespan": 266,
-    "buffer_full_stalls": null,
-    "stdout_tail": " 4\n\t connected to router 44 using link 199 at outport 3 lat 1\n\t connected to router 45 using link 200 at outport 4 lat 4\nrouter 45\n\t connected to router 39 using link 201 at outport 1 lat 6\n\t connected to router 44 using link 202 at outport 2 lat 4\n\t connected to router 45 using link 203 at outport 3 lat 1\n\t connected to router 46 using link 204 at outport 4 lat 4\nrouter 46\n\t connected to router 40 using link 205 at outport 1 lat 6\n\t connected to router 45 using link 206 at outport 2 lat 4\n\t connected to router 46 using link 207 at outport 3 lat 1\n\t connected to router 47 using link 208 at outport 4 lat 4\nrouter 47\n\t connected to router 41 using link 209 at outport 1 lat 6\n\t connected to router 46 using link 210 at outport 2 lat 4\n\t connected to router 47 using link 211 at outport 3 lat 1\n",
-    "stderr_tail": "booksim: routers/iq_router.cpp:2180: void IQRouter::_SwitchUpdate(): Assertion `GetSimTime() == time' failed.\n",
+    "buffer_full_stalls": 0,
+    "stdout_tail": "r 46 using link 204 at outport 4 lat 4\nrouter 46\n\t connected to router 40 using link 205 at outport 1 lat 6\n\t connected to router 45 using link 206 at outport 2 lat 4\n\t connected to router 46 using link 207 at outport 3 lat 1\n\t connected to router 47 using link 208 at outport 4 lat 4\nrouter 47\n\t connected to router 41 using link 209 at outport 1 lat 6\n\t connected to router 46 using link 210 at outport 2 lat 4\n\t connected to router 47 using link 211 at outport 3 lat 1\n========================== Routing table  =====================\n=== Trace Allgather Simulation ===\ntrace_mode: hop\nexpected_makespan: 266\nsim_makespan: 480\ntotal_received: 2256 / 2256\nbuffer_full_stalls: 0\nDraining remaining packets ...\nTime taken is 485 cycles\n====== Overall Traffic Statistics ======\nTotal run time 0.0230901\n",
+    "stderr_tail": "",
     "route": "A_hop",
     "scheme": "ring_uni",
     "ramp_bw": 1,
     "m": 1
+  },
+  {
+    "ok": true,
+    "returncode": 0,
+    "sim_makespan": -1,
+    "expected_makespan": 266,
+    "buffer_full_stalls": 0,
+    "stdout_tail": " to router 45 using link 203 at outport 3 lat 1\n\t connected to router 46 using link 204 at outport 4 lat 4\nrouter 46\n\t connected to router 40 using link 205 at outport 1 lat 6\n\t connected to router 45 using link 206 at outport 2 lat 4\n\t connected to router 46 using link 207 at outport 3 lat 1\n\t connected to router 47 using link 208 at outport 4 lat 4\nrouter 47\n\t connected to router 41 using link 209 at outport 1 lat 6\n\t connected to router 46 using link 210 at outport 2 lat 4\n\t connected to router 47 using link 211 at outport 3 lat 1\n========================== Routing table  =====================\n=== Trace Allgather Simulation ===\ntrace_mode: tree\nexpected_makespan: 266\nsim_makespan: -1\ntotal_received: 0 / 2256\nbuffer_full_stalls: 0\nSimulation unstable, ending ...\nTotal run time 0.0150201\n",
+    "stderr_tail": "Trace sim incomplete at t=1291 received=0/2256\n",
+    "route": "B_tree",
+    "scheme": "ring_uni",
+    "ramp_bw": 1,
+    "m": 1
+  },
+  {
+    "ok": true,
+    "returncode": 0,
+    "sim_makespan": 943,
+    "expected_makespan": 267,
+    "buffer_full_stalls": 0,
+    "stdout_tail": "o router 45 using link 203 at outport 3 lat 1\n\t connected to router 46 using link 204 at outport 4 lat 4\nrouter 46\n\t connected to router 40 using link 205 at outport 1 lat 6\n\t connected to router 45 using link 206 at outport 2 lat 4\n\t connected to router 46 using link 207 at outport 3 lat 1\n\t connected to router 47 using link 208 at outport 4 lat 4\nrouter 47\n\t connected to router 41 using link 209 at outport 1 lat 6\n\t connected to router 46 using link 210 at outport 2 lat 4\n\t connected to router 47 using link 211 at outport 3 lat 1\n========================== Routing table  =====================\n=== Trace Allgather Simulation ===\ntrace_mode: hop\nexpected_makespan: 267\nsim_makespan: 943\ntotal_received: 2256 / 4512\nbuffer_full_stalls: 0\nSimulation unstable, ending ...\nTotal run time 0.051275\n",
+    "stderr_tail": "Trace sim incomplete at t=1553 received=2256/4512\n",
+    "route": "A_hop",
+    "scheme": "ring_uni",
+    "ramp_bw": 1,
+    "m": 2
+  },
+  {
+    "ok": true,
+    "returncode": 0,
+    "sim_makespan": -1,
+    "expected_makespan": 267,
+    "buffer_full_stalls": 0,
+    "stdout_tail": "d to router 45 using link 203 at outport 3 lat 1\n\t connected to router 46 using link 204 at outport 4 lat 4\nrouter 46\n\t connected to router 40 using link 205 at outport 1 lat 6\n\t connected to router 45 using link 206 at outport 2 lat 4\n\t connected to router 46 using link 207 at outport 3 lat 1\n\t connected to router 47 using link 208 at outport 4 lat 4\nrouter 47\n\t connected to router 41 using link 209 at outport 1 lat 6\n\t connected to router 46 using link 210 at outport 2 lat 4\n\t connected to router 47 using link 211 at outport 3 lat 1\n========================== Routing table  =====================\n=== Trace Allgather Simulation ===\ntrace_mode: tree\nexpected_makespan: 267\nsim_makespan: -1\ntotal_received: 0 / 4512\nbuffer_full_stalls: 0\nSimulation unstable, ending ...\nTotal run time 0.014061\n",
+    "stderr_tail": "Trace sim incomplete at t=1293 received=0/4512\n",
+    "route": "B_tree",
+    "scheme": "ring_uni",
+    "ramp_bw": 1,
+    "m": 2
   }
 ]

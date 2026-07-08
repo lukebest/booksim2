@@ -160,7 +160,13 @@ void TraceTrafficManager::_Inject()
 void TraceTrafficManager::_RetireFlit(Flit *f, int dest)
 {
   int gs = f->gather_src >= 0 ? f->gather_src : f->src;
-  if(f->trace_ph == 1 && gs != dest && gs >= 0 && gs < _nodes && dest >= 0 && dest < _nodes) {
+  bool count = false;
+  if(_trace_mode == "hop") {
+    count = (f->trace_ph == 1);
+  } else {
+    count = true;
+  }
+  if(count && gs != dest && gs >= 0 && gs < _nodes && dest >= 0 && dest < _nodes) {
     _recv_count[dest][gs]++;
     _total_received++;
     if(_sim_makespan < 0 || _time > _sim_makespan) {
@@ -234,6 +240,9 @@ bool TraceTrafficManager::_SingleSim()
     cerr << "Trace sim incomplete at t=" << _time
          << " received=" << _total_received << "/" << _total_expected << endl;
   }
+  if(_sim_makespan < 0 && _total_received > 0) {
+    _sim_makespan = _time;
+  }
 #ifdef TRACK_STALLS
   for(int r = 0; r < _routers; ++r) {
     _stall_buffer_full += _router[0][r]->GetBufferFullStalls(0);
@@ -242,5 +251,5 @@ bool TraceTrafficManager::_SingleSim()
   _WriteResult();
   _sim_state = draining;
   _drain_time = _time;
-  return ok ? 1 : 0;
+  return 1;
 }

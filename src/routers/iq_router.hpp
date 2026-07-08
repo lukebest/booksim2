@@ -69,7 +69,7 @@ class IQRouter : public Router {
   
 protected:
 
-  map<int, Flit *> _in_queue_flits;
+  multimap<int, Flit *> _in_queue_flits;
   virtual void _PreInputQueuing();
 
 private:

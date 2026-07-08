@@ -42,13 +42,14 @@ Flit * ForkIQRouter::_CloneForkFlit(Flit const * f, int dest) const
   c->ph = f->ph;
   c->trace_ph = 0;
   c->data = f->data;
+  c->vc = -1;
   return c;
 }
 
 void ForkIQRouter::_PreInputQueuing()
 {
-  map<int, Flit *> expanded;
-  for(map<int, Flit *>::iterator iter = _in_queue_flits.begin();
+  multimap<int, Flit *> expanded;
+  for(multimap<int, Flit *>::iterator iter = _in_queue_flits.begin();
       iter != _in_queue_flits.end(); ++iter) {
     int const input = iter->first;
     Flit * f = iter->second;
@@ -62,12 +63,17 @@ void ForkIQRouter::_PreInputQueuing()
       continue;
     }
     bool ok = true;
+    (void)ok;
     vector<Flit *> clones;
     if(act.eject) {
-      clones.push_back(_CloneForkFlit(f, _id));
+      Flit * e = _CloneForkFlit(f, _id);
+      e->trace_ph = 0;
+      clones.push_back(e);
     }
     for(size_t i = 0; i < act.forwards.size(); ++i) {
-      clones.push_back(_CloneForkFlit(f, act.forwards[i]));
+      Flit * c = _CloneForkFlit(f, act.forwards[i]);
+      c->trace_ph = 100;
+      clones.push_back(c);
     }
     if(clones.empty()) {
       ++_fork_failures;
@@ -75,7 +81,9 @@ void ForkIQRouter::_PreInputQueuing()
       continue;
     }
     for(size_t i = 0; i < clones.size(); ++i) {
-      clones[i]->id = f->id + (int)i;
+      clones[i]->id = f->id + (int)((i + 1) * 1000000);
+      clones[i]->pid = f->pid + (int)((i + 1) * 1000000);
+      clones[i]->vc = -1;
       expanded.insert(make_pair(input, clones[i]));
     }
     f->Free();
