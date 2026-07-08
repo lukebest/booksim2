@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run BookSim2 trace sweep for 6x8 allgather (Route A hop + Route B tree)."""
+"""Run BookSim2 trace sweep for 6x8 allgather (Route B tree + fork by default)."""
 
 import argparse
 import csv
@@ -11,12 +11,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOOKSIM = ROOT / "src" / "booksim"
 BASE_CONFIG = ROOT / "runfiles" / "traceconfig"
-TRACE_DIR = ROOT / "results" / "traces" / "6x8"
+TRACE_DIR_DEFAULT = ROOT / "results" / "traces" / "6x8"
 OUT_CSV = ROOT / "results" / "booksim_trace_sweep.csv"
 OUT_JSON = ROOT / "results" / "booksim_trace_sweep.json"
+OUT_CSV_ZBUF = ROOT / "results" / "booksim_zbuf_6x8_sweep.csv"
+OUT_JSON_ZBUF = ROOT / "results" / "booksim_zbuf_6x8_sweep.json"
 
 
-def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq"):
+def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq", meta_scheme=""):
     if trace_mode == "tree" and fork_file:
         fork_cfg = str(fork_file.relative_to(ROOT))
     else:
@@ -30,6 +32,7 @@ def run_one(trace_mode, trace_file, fork_file, expected_mk, m, router="iq"):
         "msg_size": str(m),
         "router": router,
         "result_csv": "results/booksim_trace_row.csv",
+        "trace_drain_slack": str(512 + m * 256),
     }
     out_lines = []
     for line in cfg_lines:
@@ -79,13 +82,23 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=0, help="max cases (0=all)")
     ap.add_argument("--scheme", default=None)
-    ap.add_argument("--mode", choices=["hop", "tree", "both"], default="both")
+    ap.add_argument("--mode", choices=["hop", "tree", "both"], default="tree")
+    ap.add_argument("--trace-dir", default=None, help="trace root (default: results/traces/6x8)")
+    ap.add_argument("--zbuf-report", action="store_true",
+                    help="6x8 zero-buffer report traces -> booksim_zbuf_6x8_sweep.json (Route B only)")
     args = ap.parse_args()
 
     if not BOOKSIM.exists():
         raise SystemExit(f"Build BookSim first: make -C src  ({BOOKSIM} missing)")
 
-    summary = json.loads((TRACE_DIR / "export_summary.json").read_text(encoding="utf-8"))
+    trace_dir = Path(args.trace_dir) if args.trace_dir else TRACE_DIR_DEFAULT
+    if args.zbuf_report:
+        trace_dir = ROOT / "results" / "traces" / "6x8_zbuf"
+        args.mode = "tree"
+    out_json = OUT_JSON_ZBUF if args.zbuf_report else OUT_JSON
+    out_csv = OUT_CSV_ZBUF if args.zbuf_report else OUT_CSV
+
+    summary = json.loads((trace_dir / "export_summary.json").read_text(encoding="utf-8"))
     cases = [c for c in summary if c.get("ok")]
     if args.scheme:
         cases = [c for c in cases if c["scheme"] == args.scheme]
@@ -97,30 +110,32 @@ def main():
         scheme = meta["scheme"]
         rb = meta["ramp_bw"]
         m = meta["m"]
-        stem = TRACE_DIR / scheme / f"bw{rb}_m{m}"
-        if not stem.with_suffix(".hop").exists():
+        stem = trace_dir / scheme / f"bw{rb}_m{m}"
+        if not stem.with_suffix(".tree").exists() or not stem.with_suffix(".fork").exists():
             continue
         if args.mode in ("hop", "both"):
+            if not stem.with_suffix(".hop").exists():
+                continue
             r = run_one("hop", stem.with_suffix(".hop"), stem.with_suffix(".fork"),
-                        meta["expected_makespan"], m, router="iq")
+                        meta["expected_makespan"], m, router="iq", meta_scheme=scheme)
             r.update({"route": "A_hop", "scheme": scheme, "ramp_bw": rb, "m": m})
             results.append(r)
             print(f"A {scheme} bw={rb} m={m} ok={r['ok']} sim={r['sim_makespan']} exp={meta['expected_makespan']} stalls={r['buffer_full_stalls']}")
         if args.mode in ("tree", "both"):
             r = run_one("tree", stem.with_suffix(".tree"), stem.with_suffix(".fork"),
-                        meta["expected_makespan"], m, router="iq")
+                        meta["expected_makespan"], m, router="iq", meta_scheme=scheme)
             r.update({"route": "B_tree", "scheme": scheme, "ramp_bw": rb, "m": m})
             results.append(r)
             print(f"B {scheme} bw={rb} m={m} ok={r['ok']} sim={r['sim_makespan']} exp={meta['expected_makespan']} stalls={r['buffer_full_stalls']}")
 
-    OUT_JSON.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    out_json.write_text(json.dumps(results, indent=2), encoding="utf-8")
     if results:
-        with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+        with open(out_csv, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=sorted(results[0].keys()))
             w.writeheader()
             for row in results:
                 w.writerow(row)
-    print(f"Wrote {OUT_JSON} ({len(results)} rows)")
+    print(f"Wrote {out_json} ({len(results)} rows)")
 
 
 if __name__ == "__main__":

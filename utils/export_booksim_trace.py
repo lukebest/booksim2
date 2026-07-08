@@ -79,14 +79,15 @@ def pack_scheme(build_fp, ramp_bw, flits, mx=None, my=None):
     return {"makespan": best, "order": best_order, "foot": foot, "inj": inj, "n": n}
 
 
-def footprint_to_hops(foot, inj, src_order, flits, flit_count_fn=None):
+def footprint_to_hops(foot, inj, src_order, flits, flit_count_fn=None,
+                      flit_idx_offset=0, per_source_flits=None):
     """Convert rigid footprints to per-hop injection events."""
     if flit_count_fn is None:
         flit_count_fn = lambda s: flits
     events = []
     for s in src_order:
         off = inj[s]
-        nf = flit_count_fn(s)
+        nf = per_source_flits[s] if per_source_flits else flit_count_fn(s)
         slots = foot[s]
         d_rel = {}
         for kind, key, rel in slots:
@@ -99,14 +100,16 @@ def footprint_to_hops(foot, inj, src_order, flits, flit_count_fn=None):
             lat = S.edge_lat(p, c)
             arr = rel + lat
             base = off + rel
-            for i in range(nf):
+            pack_flits = 1 if per_source_flits else nf
+            for i in range(pack_flits):
+                fi = flit_idx_offset + i
                 is_final = d_rel.get(c, -1) == arr + i
                 events.append({
                     "inject": p,
                     "dest": c,
                     "cycle": base + i,
                     "gather_src": s,
-                    "flit_idx": i,
+                    "flit_idx": fi,
                     "final": int(is_final),
                 })
     events.sort(key=lambda e: (e["cycle"], e["inject"], e["dest"], e["gather_src"]))
@@ -210,19 +213,348 @@ def row_col_pack(ramp_bw, flits):
     }
 
 
+def rb1_tdm_batch_plan(m, ramp_bw, m2_tdm_ok):
+    """Batch waves @ ramp_bw=1 when per-flit up-ramp TDM works for m=2."""
+    if ramp_bw != 1:
+        return [m]
+    if not m2_tdm_ok:
+        return [1] * m
+    if m == 1:
+        return [1]
+    if m == 2:
+        return [2]
+    if m == 3:
+        return [2, 1]
+    if m == 4:
+        return [2, 2]
+    if m == 5:
+        return [2, 2, 1]
+    raise ValueError(f"unsupported m={m}")
+
+
+def ring_bi_batch_plan(m, ramp_bw):
+    """Split ring_bi @ ramp_bw=1 into TDM rounds (fwd/bwd stagger + batch waves)."""
+    if ramp_bw != 1:
+        return [m]
+    return rb1_tdm_batch_plan(m, ramp_bw, m2_tdm_ok=True)
+
+
+def fp_ring_bi_flits(s, ramp_bw, flits, mx=None, my=None):
+    """Bidirectional ring footprint; per-flit up-ramp TDM when ramp_bw=1 and flits>1."""
+    if mx is not None or my is not None:
+        S.cfg(mx or MX, my or MY, H, V)
+        S.init_ring()
+    order, pos = S.RING_ORDER, S.RING_POS
+    if flits == 1 or ramp_bw >= 2:
+        return S.fp_ring(s, order, pos, True, ramp_bw)
+    i = pos[s]
+    n = len(order)
+    a = n // 2
+    b = (n - 1) - a
+    fwd = [order[(i + k) % n] for k in range(a + 1)]
+    bwd = [order[(i - k) % n] for k in range(b + 1)]
+    d2 = 1
+    period = d2 + 1
+    slots = []
+    for f in range(flits):
+        base = f * period
+        slots.append(("U", s, base))
+        sf, _ = S._arc(fwd, S.RAMP + base)
+        slots.append(("U", s, base + d2))
+        sb, _ = S._arc(bwd, S.RAMP + base + d2)
+        slots += sf + sb
+    return slots
+
+
+def _verify_scheme_round(busy, ramp_bw, flits, n):
+    link_busy, up_busy, down_busy = busy
+    if not all(ct <= 1 for d in link_busy.values() for ct in d.values()):
+        return False
+    if not all(ct <= ramp_bw for d in up_busy.values() for ct in d.values()):
+        return False
+    if not all(ct <= ramp_bw for d in down_busy.values() for ct in d.values()):
+        return False
+    need = (n - 1) * flits
+    ejects = {node: sum(d.values()) for node, d in down_busy.items()}
+    return all(ejects.get(node, 0) == need for node in range(n))
+
+
+def _verify_ring_round(busy, ramp_bw, flits, n):
+    return _verify_scheme_round(busy, ramp_bw, flits, n)
+
+
+def fp_hybrid_v_bi_flits(s, ramp_bw, flits, B=2, mx=None, my=None):
+    """hybrid_v_bi: local vertical ring + row fork; per-flit up-ramp TDM @ rb=1."""
+    if mx is not None or my is not None:
+        S.cfg(mx or MX, my or MY, H, V)
+        S.init_ring()
+    if flits == 1 or ramp_bw >= 2:
+        return S.fp_hybrid_v(s, B, True, ramp_bw)
+    C = S.MX // B
+    sx, _ = S.coord(s)
+    x0 = (sx // C) * C
+    order = S.ham_cycle_vband(C, x0)
+    pos = {nd: k for k, nd in enumerate(order)}
+    d2 = 1
+    period = d2 + 1
+    slots = []
+    for f in range(flits):
+        base = f * period
+        n = len(order)
+        i = pos[s]
+        a = n // 2
+        b = (n - 1) - a
+        fwd = [order[(i + k) % n] for k in range(a + 1)]
+        bwd = [order[(i - k) % n] for k in range(b + 1)]
+        arr = {s: S.RAMP + base}
+        slots.append(("U", s, base))
+        sf, _ = S._arc(fwd, S.RAMP + base)
+        slots.append(("U", s, base + d2))
+        sb, _ = S._arc(bwd, S.RAMP + base + d2)
+        slots += sf + sb
+        t = S.RAMP + base
+        for k in range(len(fwd) - 1):
+            t += S.edge_lat(fwd[k], fwd[k + 1])
+            arr[fwd[k + 1]] = t
+        t = S.RAMP + base + d2
+        for k in range(len(bwd) - 1):
+            t += S.edge_lat(bwd[k], bwd[k + 1])
+            arr[bwd[k + 1]] = t
+        for y in range(S.MY):
+            t = arr[S.nid(x0, y)]
+            prev = S.nid(x0, y)
+            for xx in range(x0 - 1, -1, -1):
+                cur = S.nid(xx, y)
+                slots.append(("L", S.lk(prev, cur), t))
+                t += S.H
+                slots.append(("D", cur, t))
+                prev = cur
+            t = arr[S.nid(x0 + C - 1, y)]
+            prev = S.nid(x0 + C - 1, y)
+            for xx in range(x0 + C, S.MX):
+                cur = S.nid(xx, y)
+                slots.append(("L", S.lk(prev, cur), t))
+                t += S.H
+                slots.append(("D", cur, t))
+                prev = cur
+    return slots
+
+
+_HYBRID_V_B2_M2_TDM_OK = None
+
+
+def hybrid_v_bi_m2_tdm_ok(B=2, mx=None, my=None):
+    """Probe whether hybrid_v_bi can rigid-pack m=2 @ ramp_bw=1 with up-ramp TDM."""
+    global _HYBRID_V_B2_M2_TDM_OK
+    if _HYBRID_V_B2_M2_TDM_OK is None:
+        _HYBRID_V_B2_M2_TDM_OK = (
+            pack_hybrid_v_bi_round(1, 2, B=B, mx=mx, my=my) is not None
+        )
+    return _HYBRID_V_B2_M2_TDM_OK
+
+
+def hybrid_v_bi_batch_plan(m, ramp_bw, B=2):
+    if ramp_bw != 1:
+        return [m]
+    return rb1_tdm_batch_plan(m, ramp_bw, hybrid_v_bi_m2_tdm_ok(B))
+
+
+def pack_hybrid_v_bi_round(ramp_bw, batch_flits, B=2, mx=None, my=None):
+    mx = mx or MX
+    my = my or MY
+    S.cfg(mx, my, H, V)
+    S.init_ring()
+    n = mx * my
+    foot = {
+        s: fp_hybrid_v_bi_flits(s, ramp_bw, batch_flits, B=B, mx=mx, my=my)
+        for s in range(n)
+    }
+    pack_flits = 1 if ramp_bw == 1 and batch_flits > 1 else batch_flits
+    best = None
+    best_order = None
+    for _, gen in S.SRC_ORDERS.items():
+        order = gen()
+        mk, _, busy = S.pack(foot, ramp_bw, order, flits=pack_flits)
+        ok = (
+            _verify_scheme_round(busy, ramp_bw, batch_flits, n)
+            if pack_flits == 1
+            else S.verify(busy, ramp_bw, flits=batch_flits)
+        )
+        if ok and (best is None or mk < best):
+            best, best_order = mk, order
+    if best is None:
+        return None
+    _, _, _, inj, _ = S.export_events(foot, ramp_bw, best_order, flits=pack_flits)
+    return {
+        "makespan": best,
+        "order": best_order,
+        "foot": foot,
+        "inj": inj,
+        "batch": batch_flits,
+        "n": n,
+    }
+
+
+def pack_hybrid_v_bi_B2(ramp_bw, flits, mx=None, my=None, B=2):
+    """Rigid 0-buffer hybrid_v_bi_B2 @ rb=1: TDM if m=2 pack ok, else m×m=1 rounds."""
+    batches = hybrid_v_bi_batch_plan(flits, ramp_bw, B)
+    if len(batches) == 1 and not (ramp_bw == 1 and flits > 1):
+        return pack_scheme(
+            lambda s, rb, B=B: S.fp_hybrid_v(s, B, True, rb),
+            ramp_bw,
+            flits,
+            mx=mx,
+            my=my,
+        )
+    rounds = []
+    t0 = 0
+    flit_base = 0
+    for b in batches:
+        pr = pack_hybrid_v_bi_round(ramp_bw, b, B=B, mx=mx, my=my)
+        if not pr:
+            return None
+        pr["t0"] = t0
+        pr["flit_base"] = flit_base
+        rounds.append(pr)
+        t0 += pr["makespan"]
+        flit_base += b
+    source = "hybrid_v_tdm_batches" if hybrid_v_bi_m2_tdm_ok(B) else "hybrid_v_m1_repeat"
+    return {
+        "makespan": t0,
+        "rounds": rounds,
+        "batches": batches,
+        "m": flits,
+        "order": rounds[0]["order"],
+        "source": source,
+    }
+
+
+def pack_ring_bi_round(ramp_bw, batch_flits, mx=None, my=None):
+    """One rigid 0-buffer round for ring_bi (batch_flits flits per source)."""
+    mx = mx or MX
+    my = my or MY
+    S.cfg(mx, my, H, V)
+    S.init_ring()
+    n = mx * my
+    foot = {
+        s: fp_ring_bi_flits(s, ramp_bw, batch_flits, mx=mx, my=my)
+        for s in range(n)
+    }
+    pack_flits = 1 if ramp_bw == 1 and batch_flits > 1 else batch_flits
+    best = None
+    best_order = None
+    for _, gen in S.SRC_ORDERS.items():
+        order = gen()
+        mk, _, busy = S.pack(foot, ramp_bw, order, flits=pack_flits)
+        ok = (
+            _verify_ring_round(busy, ramp_bw, batch_flits, n)
+            if pack_flits == 1
+            else S.verify(busy, ramp_bw, flits=batch_flits)
+        )
+        if ok and (best is None or mk < best):
+            best, best_order = mk, order
+    if best is None:
+        return None
+    _, _, _, inj, _ = S.export_events(foot, ramp_bw, best_order, flits=pack_flits)
+    return {
+        "makespan": best,
+        "order": best_order,
+        "foot": foot,
+        "inj": inj,
+        "batch": batch_flits,
+        "n": n,
+    }
+
+
+def pack_ring_bi(ramp_bw, flits, mx=None, my=None):
+    """Rigid 0-buffer ring_bi: TDM fwd/bwd @ rb=1; batched waves for m>=3."""
+    batches = ring_bi_batch_plan(flits, ramp_bw)
+    if len(batches) == 1 and not (ramp_bw == 1 and flits > 1):
+        return pack_scheme(
+            lambda s, rb: S.fp_ring(s, S.RING_ORDER, S.RING_POS, True, rb),
+            ramp_bw,
+            flits,
+            mx=mx,
+            my=my,
+        )
+    rounds = []
+    t0 = 0
+    flit_base = 0
+    for b in batches:
+        pr = pack_ring_bi_round(ramp_bw, b, mx=mx, my=my)
+        if not pr:
+            return None
+        pr["t0"] = t0
+        pr["flit_base"] = flit_base
+        rounds.append(pr)
+        t0 += pr["makespan"]
+        flit_base += b
+    return {
+        "makespan": t0,
+        "rounds": rounds,
+        "batches": batches,
+        "m": flits,
+        "order": rounds[0]["order"],
+        "source": "ring_bi_tdm_batches",
+    }
+
+
+def hops_from_batched_rounds(rounds):
+    hops = []
+    for r in rounds:
+        inj = {s: r["t0"] + r["inj"][s] for s in r["inj"]}
+        psf = {s: r["batch"] for s in range(r["n"])}
+        hops.extend(
+            footprint_to_hops(
+                r["foot"],
+                inj,
+                r["order"],
+                r["batch"],
+                flit_idx_offset=r["flit_base"],
+                per_source_flits=psf,
+            )
+        )
+    hops.sort(key=lambda e: (e["cycle"], e["inject"], e["dest"], e["gather_src"]))
+    return hops
+
+
+def tree_fork_from_batched_rounds(rounds):
+    trees = []
+    forks = None
+    for r in rounds:
+        inj = {s: r["t0"] + r["inj"][s] for s in r["inj"]}
+        t, f = footprint_to_fork(r["foot"], inj, r["order"], r["batch"])
+        for tr in t:
+            trees.append({
+                "gather_src": tr["gather_src"],
+                "inject_cycle": tr["inject_cycle"],
+                "num_flits": tr["num_flits"],
+            })
+        if forks is None:
+            forks = f
+    trees.sort(key=lambda t: (t["inject_cycle"], t["gather_src"]))
+    return trees, forks
+
+
 def write_trace_bundle(out_stem, scheme, ramp_bw, flits, packed, extra=None, flit_count_fn=None):
-    foot, inj, order = packed["foot"], packed["inj"], packed["order"]
-    hops = footprint_to_hops(foot, inj, order, flits, flit_count_fn)
+    if packed.get("rounds"):
+        hops = hops_from_batched_rounds(packed["rounds"])
+        tree, fork = tree_fork_from_batched_rounds(packed["rounds"])
+        expected_mk = packed["makespan"]
+    else:
+        foot, inj, order = packed["foot"], packed["inj"], packed["order"]
+        hops = footprint_to_hops(foot, inj, order, flits, flit_count_fn)
+        tree, fork = footprint_to_fork(foot, inj, order, flits, flit_count_fn)
+        expected_mk = packed["makespan"]
     ok, info = verify_hop_trace(hops)
     if not ok:
         raise RuntimeError(f"hop verify failed {scheme} bw={ramp_bw} m={flits}: {info}")
     max_cycle = info
-    tree, fork = footprint_to_fork(foot, inj, order, flits, flit_count_fn)
 
     meta = {
         "mx": MX, "my": MY, "n": N, "h": H, "v": V,
         "scheme": scheme, "ramp_bw": ramp_bw, "m": flits,
-        "expected_makespan": packed["makespan"],
+        "expected_makespan": expected_mk,
         "num_hop_events": len(hops),
         "max_hop_cycle": max_cycle,
         "num_tree_sources": len(tree),
@@ -230,10 +562,13 @@ def write_trace_bundle(out_stem, scheme, ramp_bw, flits, packed, extra=None, fli
     }
     if extra:
         meta.update(extra)
+    if packed.get("batches"):
+        meta["batches"] = packed["batches"]
+        meta["source"] = packed.get("source", "ring_bi_tdm_batches")
 
     out_stem.parent.mkdir(parents=True, exist_ok=True)
     with open(out_stem.with_suffix(".hop"), "w", encoding="utf-8") as f:
-        f.write(f"# scheme={scheme} ramp_bw={ramp_bw} m={flits} expected_mk={packed['makespan']}\n")
+        f.write(f"# scheme={scheme} ramp_bw={ramp_bw} m={flits} expected_mk={expected_mk}\n")
         for e in hops:
             f.write(f"HOP {e['inject']} {e['dest']} {e['cycle']} {e['gather_src']} {e['flit_idx']} {e['final']}\n")
 

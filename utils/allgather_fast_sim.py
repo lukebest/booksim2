@@ -228,7 +228,7 @@ def hybrid_v_children(s, mx, my, B, bidir):
 # Generic event-driven engine: shared link/ramp calendars across all sources.
 # --------------------------------------------------------------------------
 def simulate_tree_family(children_per_source, n, mx, h, v, ramp_bw, flits,
-                          ramp=RAMP):
+                          ramp=RAMP, hop_out=None):
     """Note: a hop's "own availability" (when its parent-side copy landed) is
     always exactly the `ready` timestamp it was pushed onto the heap with --
     every push sets ready=arrive (or inj+ramp for the root) at the same time
@@ -259,6 +259,15 @@ def simulate_tree_family(children_per_source, n, mx, h, v, ramp_bw, flits,
         send = link_cal.reserve((p, c), ready, 1)
         if send - ready > max_link_wait:
             max_link_wait = send - ready
+        if hop_out is not None:
+            hop_out.append({
+                "inject": p,
+                "dest": c,
+                "cycle": send,
+                "gather_src": s,
+                "flit_idx": k,
+                "final": int(c != s),
+            })
         arrive = send + lat
         eject = down_cal.reserve(c, arrive, ramp_bw)
         if eject - arrive > max_ramp_wait:
@@ -282,38 +291,52 @@ def verify_ejects(down_eject_count, n, flits):
 # --------------------------------------------------------------------------
 # Scheme runners.
 # --------------------------------------------------------------------------
-def run_multitree(mx, my, h, v, ramp_bw, flits):
+def _run_tree(children, mx, my, h, v, ramp_bw, flits, hop_out=None):
     n = mx * my
-    children = {s: multitree_children(s, mx, my) for s in range(n)}
-    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
+    mk, ejc, mlw, mrw = simulate_tree_family(
+        children, n, mx, h, v, ramp_bw, flits, hop_out=hop_out)
     ok, bad = verify_ejects(ejc, n, flits)
     return mk, ok, bad, mlw, mrw
 
 
-def run_ring(mx, my, h, v, ramp_bw, flits, bidir):
+def run_multitree(mx, my, h, v, ramp_bw, flits, hop_out=None):
+    children = {s: multitree_children(s, mx, my) for s in range(mx * my)}
+    return _run_tree(children, mx, my, h, v, ramp_bw, flits, hop_out)
+
+
+def run_ring(mx, my, h, v, ramp_bw, flits, bidir, hop_out=None):
     n = mx * my
     order = ham_cycle_band(mx, my, 0) if my >= 2 else [nid(x, 0, mx) for x in range(mx)]
     pos = {nd: k for k, nd in enumerate(order)}
     children = {s: ring_children(s, order, pos, bidir) for s in range(n)}
-    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
-    ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad, mlw, mrw
+    return _run_tree(children, mx, my, h, v, ramp_bw, flits, hop_out)
 
 
-def run_hybrid(mx, my, h, v, ramp_bw, flits, B, bidir):
-    n = mx * my
-    children = {s: hybrid_children(s, mx, my, B, bidir) for s in range(n)}
-    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
-    ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad, mlw, mrw
+def run_hybrid(mx, my, h, v, ramp_bw, flits, B, bidir, hop_out=None):
+    children = {s: hybrid_children(s, mx, my, B, bidir) for s in range(mx * my)}
+    return _run_tree(children, mx, my, h, v, ramp_bw, flits, hop_out)
 
 
-def run_hybrid_v(mx, my, h, v, ramp_bw, flits, B, bidir):
-    n = mx * my
-    children = {s: hybrid_v_children(s, mx, my, B, bidir) for s in range(n)}
-    mk, ejc, mlw, mrw = simulate_tree_family(children, n, mx, h, v, ramp_bw, flits)
-    ok, bad = verify_ejects(ejc, n, flits)
-    return mk, ok, bad, mlw, mrw
+def run_hybrid_v(mx, my, h, v, ramp_bw, flits, B, bidir, hop_out=None):
+    children = {s: hybrid_v_children(s, mx, my, B, bidir) for s in range(mx * my)}
+    return _run_tree(children, mx, my, h, v, ramp_bw, flits, hop_out)
+
+
+def run_scheme_hops(name, mx, my, h, v, ramp_bw, flits):
+    """Event-driven sim with per-hop recording. Returns (makespan, ok, hops, mlw, mrw)."""
+    hops = []
+    if name == "multitree":
+        mk, ok, bad, mlw, mrw = run_multitree(mx, my, h, v, ramp_bw, flits, hop_out=hops)
+    elif name == "ring_uni":
+        mk, ok, bad, mlw, mrw = run_ring(mx, my, h, v, ramp_bw, flits, False, hop_out=hops)
+    elif name == "ring_bi":
+        mk, ok, bad, mlw, mrw = run_ring(mx, my, h, v, ramp_bw, flits, True, hop_out=hops)
+    elif name == "hybrid_v_bi_B2":
+        mk, ok, bad, mlw, mrw = run_hybrid_v(mx, my, h, v, ramp_bw, flits, 2, True, hop_out=hops)
+    else:
+        raise ValueError(name)
+    hops.sort(key=lambda e: (e["cycle"], e["inject"], e["dest"], e["gather_src"]))
+    return mk, ok, hops, mlw, mrw
 
 
 def divisors_pow2(m):

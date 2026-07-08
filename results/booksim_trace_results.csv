@@ -1,0 +1,4 @@
+trace_mode,expected_makespan,sim_makespan,total_received,total_expected,buffer_full_stalls
+hop,71,-1,0,2256,0
+tree,96,62,282,2256,0
+tree,96,94,2256,2256,0

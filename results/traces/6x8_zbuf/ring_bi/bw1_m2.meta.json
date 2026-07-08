@@ -1,0 +1,19 @@
+{
+  "mx": 6,
+  "my": 8,
+  "n": 48,
+  "h": 4,
+  "v": 6,
+  "scheme": "ring_bi",
+  "ramp_bw": 1,
+  "m": 2,
+  "expected_makespan": 142,
+  "num_hop_events": 4512,
+  "max_hop_cycle": 135,
+  "num_tree_sources": 48,
+  "num_fork_rows": 2304,
+  "batches": [
+    2
+  ],
+  "source": "ring_bi_tdm_batches"
+}

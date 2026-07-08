@@ -336,6 +336,7 @@ BookSimConfig::BookSimConfig( )
 
   //==================Trace allgather simulation============
   AddStrField("trace_mode", "hop");
+  AddStrField("trace_completion", "allgather");
   AddStrField("trace_file", "");
   AddStrField("fork_file", "");
   _int_map["expected_makespan"] = 0;

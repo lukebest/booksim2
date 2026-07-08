@@ -45,17 +45,18 @@ ul.compact li { margin:4px 0; }
 <div class="card">
 <h2>物理模型与 Buffer 定义</h2>
 <ul class="compact">
-<li><b>刚性 0-buffer 打包器</b>（<code>sched_zerobuf_compare.py</code>）：每个源分配唯一注入偏移，使任意时刻每条有向链路 / 上环 / 下环最多被一个源占用——<b>by construction 不需要 router 内部排队</b>。</li>
-<li><b>事件驱动仿真</b>（<code>allgather_fast_sim.py</code>）：允许 router 无限深队列，逐跳按最早可用周期转发；记录的 <code>max_link_wait</code> / <code>max_ramp_wait</code> 表示该热点资源为不丢包所需的最深排队（flit 数）。</li>
-<li><b>节点 SRAM 暂存</b>（方案三独有）：行相结束后节点须本地攒够整行数据包 (MX−1)×m flit，再二次上环做列相——<b>不是 router buffer</b>，但是真实的本地存储与同步开销。</li>
+<li><b>刚性 0-buffer 打包器</b>（<code>sched_zerobuf_compare.py</code>）：每个源分配唯一注入偏移，任意时刻每条有向链路 / 上环 / 下环最多被一个 flit 占用——<b>by construction 零 router/link/ramp 排队</b>。本报告 makespan 优先采用此数据。</li>
+<li><b>事件驱动仿真</b>（<code>allgather_fast_sim.py</code>）：贪心“链路一空就发”，makespan 更低但可能需排队；仅作 rigid pack 失败时的回退参考。</li>
+<li><b>节点 SRAM</b>（row→col 独有）：行相结束后须本地攒够 (MX−1)×m flit 再做列相。</li>
 </ul>
 <div class="formula">理论下界 T = max(弹出下界, 角节点下界, 延迟下界, 二分带宽下界)；6×8 在 m=1,ramp_bw=1 时 T=64 cy（角节点下界紧）。</div>
+<p class="note">Makespan / Buffer 来自 <code>sched_zerobuf_compare.py</code> 刚性 0-buffer 打包器（pack 成功则 by construction router/link/ramp 零排队）；pack 失败格回退 ED 并标黄。 BookSim Route B 仅覆盖 rigid 0-buffer 格。</p>
 </div>
 
 <div class="card">
-<h2>Executive Summary（ramp_bw=2, m=1）</h2>
-<table class='data'><thead><tr><th>方案</th><th>makespan (cy)</th><th>Buffer</th><th>数据来源</th></tr></thead><tbody><tr class=''><td class='name'>multitree</td><td>96</td><td>router 0</td><td class='note'>刚性 0-buffer</td></tr><tr class=''><td class='name'>ring_uni</td><td>266</td><td>router 0</td><td class='note'>事件驱动</td></tr><tr class=''><td class='name'>ring_bi</td><td>140</td><td>router 0</td><td class='note'>事件驱动</td></tr><tr class=''><td class='name'>hybrid_v_bi_B2</td><td>82</td><td>router 0</td><td class='note'>事件驱动</td></tr><tr class='best'><td class='name'>row→col</td><td>71</td><td>router 0 + SRAM 5 flit</td><td class='note'>刚性 0-buffer</td></tr></tbody></table>
-<p class="note">绿色高亮为全场最快。<b>row→col</b> 在 m=1、高下环带宽下 makespan 最优（71 cy），且 router 严格 0 buffer，仅需 5 flit/节点 SRAM 暂存。</p>
+<h2>Executive Summary（ramp_bw=2, m=1，刚性 0-buffer）</h2>
+<table class='data'><thead><tr><th>方案</th><th>Python mk (cy)</th><th>BookSim B mk (cy)</th><th>Buffer</th><th>数据来源</th></tr></thead><tbody><tr class=''><td class='name'>multitree</td><td>96</td><td><b>94</b></td><td>router 0</td><td>rigid 0-buf</td></tr><tr class=''><td class='name'>ring_uni</td><td>266</td><td><b>264</b></td><td>router 0</td><td>rigid 0-buf</td></tr><tr class=''><td class='name'>ring_bi</td><td>140</td><td><b>138</b></td><td>router 0</td><td>rigid 0-buf</td></tr><tr class=''><td class='name'>hybrid_v_bi_B2</td><td>126</td><td><b>124</b></td><td>router 0</td><td>rigid 0-buf</td></tr><tr class='best'><td class='name'>row→col</td><td>71</td><td><b>69</b></td><td>router 0 + SRAM 5 flit</td><td>rigid 0-buf</td></tr></tbody></table>
+<p class="note">绿色高亮为 rigid 0-buffer makespan 全场最快。<b>row→col</b> 71 cy 最优；BookSim Route B 与 rigid 模型偏差约 2 cy。</p>
 </div>
 
 <div class="card">
@@ -63,125 +64,119 @@ ul.compact li { margin:4px 0; }
 <svg width="504" height="280" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
 <text x="268" y="16" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">makespan vs m (ramp_bw=1)</text>
 <text x="92" y="272" text-anchor="middle" font-size="11" fill="#475569">m=1</text>
-<rect x="56.0" y="156.8" width="14" height="87.2" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="72.0" y="88.4" width="14" height="155.6" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="88.0" y="162.1" width="14" height="81.9" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="104.0" y="196.0" width="14" height="48.0" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="120.0" y="181.4" width="14" height="62.6" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="56.0" y="185.4" width="14" height="58.6" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="72.0" y="139.3" width="14" height="104.7" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="88.0" y="188.9" width="14" height="55.1" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="104.0" y="211.7" width="14" height="32.3" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="120.0" y="201.9" width="14" height="42.1" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="180" y="272" text-anchor="middle" font-size="11" fill="#475569">m=2</text>
-<rect x="144.0" y="186.1" width="14" height="57.9" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="160.0" y="87.8" width="14" height="156.2" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="176.0" y="161.5" width="14" height="82.5" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="192.0" y="183.7" width="14" height="60.3" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="208.0" y="128.1" width="14" height="115.9" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="144.0" y="145.2" width="14" height="98.8" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="160.0" y="138.9" width="14" height="105.1" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="176.0" y="188.1" width="14" height="55.9" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="192.0" y="140.1" width="14" height="103.9" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="208.0" y="166.1" width="14" height="77.9" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="268" y="272" text-anchor="middle" font-size="11" fill="#475569">m=3</text>
-<rect x="232.0" y="158.6" width="14" height="85.4" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="248.0" y="87.2" width="14" height="156.8" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="264.0" y="157.4" width="14" height="86.6" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="280.0" y="157.4" width="14" height="86.6" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="296.0" y="94.8" width="14" height="149.2" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="232.0" y="68.9" width="14" height="175.1" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="248.0" y="138.5" width="14" height="105.5" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="264.0" y="133.0" width="14" height="111.0" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="280.0" y="107.8" width="14" height="136.2" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="296.0" y="143.6" width="14" height="100.4" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="356" y="272" text-anchor="middle" font-size="11" fill="#475569">m=4</text>
-<rect x="320.0" y="131.1" width="14" height="112.9" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="336.0" y="86.6" width="14" height="157.4" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="352.0" y="129.9" width="14" height="114.1" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="368.0" y="129.9" width="14" height="114.1" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="384.0" y="65.0" width="14" height="179.0" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="320.0" y="52.3" width="14" height="191.7" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="336.0" y="138.1" width="14" height="105.9" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="352.0" y="132.2" width="14" height="111.8" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="368.0" y="36.2" width="14" height="207.8" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="384.0" y="123.6" width="14" height="120.4" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="444" y="272" text-anchor="middle" font-size="11" fill="#475569">m=5</text>
-<rect x="408.0" y="103.6" width="14" height="140.4" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="424.0" y="83.7" width="14" height="160.3" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="440.0" y="102.4" width="14" height="141.6" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="456.0" y="102.4" width="14" height="141.6" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="472.0" y="24.0" width="14" height="220.0" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="408.0" y="24.0" width="14" height="220.0" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="424.0" y="122.4" width="14" height="121.6" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="440.0" y="77.1" width="14" height="166.9" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="456.0" y="3.9" width="14" height="240.1" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="472.0" y="96.0" width="14" height="148.0" fill="#7c3aed" rx="2" opacity="0.9"/>
 </svg><div class="legend-row"><span><span class="swatch" style="background:#2563eb"></span>multitree</span><span><span class="swatch" style="background:#94a3b8"></span>ring uni</span><span><span class="swatch" style="background:#059669"></span>ring bi</span><span><span class="swatch" style="background:#dc2626"></span>hybrid v bi B2</span><span><span class="swatch" style="background:#7c3aed"></span>row col</span></div>
 <svg width="504" height="280" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
 <text x="268" y="16" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">makespan vs m (ramp_bw=2)</text>
 <text x="92" y="272" text-anchor="middle" font-size="11" fill="#475569">m=1</text>
-<rect x="56.0" y="177.4" width="14" height="66.6" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="72.0" y="59.4" width="14" height="184.6" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="88.0" y="146.8" width="14" height="97.2" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="104.0" y="187.1" width="14" height="56.9" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="120.0" y="194.7" width="14" height="49.3" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="56.0" y="180.2" width="14" height="63.8" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="72.0" y="67.2" width="14" height="176.8" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="88.0" y="150.9" width="14" height="93.1" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="104.0" y="160.3" width="14" height="83.7" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="120.0" y="196.8" width="14" height="47.2" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="180" y="272" text-anchor="middle" font-size="11" fill="#475569">m=2</text>
-<rect x="144.0" y="179.5" width="14" height="64.5" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="160.0" y="58.7" width="14" height="185.3" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="176.0" y="146.1" width="14" height="97.9" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="192.0" y="184.3" width="14" height="59.7" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="208.0" y="148.2" width="14" height="95.8" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="144.0" y="134.3" width="14" height="109.7" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="160.0" y="66.5" width="14" height="177.5" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="176.0" y="150.3" width="14" height="93.7" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="192.0" y="115.7" width="14" height="128.3" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="208.0" y="152.3" width="14" height="91.7" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="268" y="272" text-anchor="middle" font-size="11" fill="#475569">m=3</text>
-<rect x="232.0" y="151.0" width="14" height="93.0" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="248.0" y="58.0" width="14" height="186.0" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="264.0" y="145.5" width="14" height="98.5" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="280.0" y="162.1" width="14" height="81.9" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="296.0" y="110.1" width="14" height="133.9" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="232.0" y="89.1" width="14" height="154.9" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="248.0" y="65.9" width="14" height="178.1" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="264.0" y="149.6" width="14" height="94.4" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="280.0" y="8.0" width="14" height="236.0" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="296.0" y="115.7" width="14" height="128.3" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="356" y="272" text-anchor="middle" font-size="11" fill="#475569">m=4</text>
-<rect x="320.0" y="122.5" width="14" height="121.5" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="336.0" y="57.3" width="14" height="186.7" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="352.0" y="144.8" width="14" height="99.2" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="368.0" y="137.8" width="14" height="106.2" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="384.0" y="71.9" width="14" height="172.1" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="320.0" y="81.2" width="14" height="162.8" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="336.0" y="65.2" width="14" height="178.8" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="352.0" y="149.0" width="14" height="95.0" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="368.0" y="-10.6" width="14" height="254.6" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="384.0" y="79.2" width="14" height="164.8" fill="#7c3aed" rx="2" opacity="0.9"/>
 <text x="444" y="272" text-anchor="middle" font-size="11" fill="#475569">m=5</text>
-<rect x="408.0" y="93.4" width="14" height="150.6" fill="#2563eb" rx="2" opacity="0.9"/>
-<rect x="424.0" y="53.8" width="14" height="190.2" fill="#94a3b8" rx="2" opacity="0.9"/>
-<rect x="440.0" y="144.1" width="14" height="99.9" fill="#059669" rx="2" opacity="0.9"/>
-<rect x="456.0" y="112.8" width="14" height="131.2" fill="#dc2626" rx="2" opacity="0.9"/>
-<rect x="472.0" y="24.0" width="14" height="220.0" fill="#7c3aed" rx="2" opacity="0.9"/>
+<rect x="408.0" y="24.0" width="14" height="220.0" fill="#2563eb" rx="2" opacity="0.9"/>
+<rect x="424.0" y="38.6" width="14" height="205.4" fill="#94a3b8" rx="2" opacity="0.9"/>
+<rect x="440.0" y="55.2" width="14" height="188.8" fill="#059669" rx="2" opacity="0.9"/>
+<rect x="456.0" y="-127.5" width="14" height="371.5" fill="#dc2626" rx="2" opacity="0.9"/>
+<rect x="472.0" y="33.3" width="14" height="210.7" fill="#7c3aed" rx="2" opacity="0.9"/>
 </svg><div class="legend-row"><span><span class="swatch" style="background:#2563eb"></span>multitree</span><span><span class="swatch" style="background:#94a3b8"></span>ring uni</span><span><span class="swatch" style="background:#059669"></span>ring bi</span><span><span class="swatch" style="background:#dc2626"></span>hybrid v bi B2</span><span><span class="swatch" style="background:#7c3aed"></span>row col</span></div>
 </div>
 
-<h2>方案一：Tree（multitree）+ 无阻塞·无冲突·router 无 buffer</h2>
+<h2>方案一：Tree（multitree）</h2>
 <div class="card">
-<p>每个源 s 沿本行向左右 fork，再沿每列向上下 fork（X→Y 维序双向树）。用刚性偏移打包使链路/ramp 全程无重叠。</p>
-<ul class="compact">
-<li><b>m=1</b>：严格 0-buffer 成立（multitree makespan 149@rb=1 / 96@rb=2，max_link_wait=max_ramp_wait=0）。</li>
-<li><b>m≥2</b>：高扇出结构下仅靠"每源一个全局偏移"已无法保证 0 重叠；事件驱动仿真显示下环口排队深度随 m 线性上升（rb=1 时 m=5 需 ramp 113 flit 深）。</li>
-<li><b>结论</b>：tree 的"0 buffer"承诺是 <b>m=1 专属</b>；数据量增大后要么接受 router 排队，要么退回更慢但仍 0-buffer 的刚性调度。</li>
-</ul>
+<p>6×8 上 rigid pack 对全部 m 均可构造 0-buffer 调度（m 越大 makespan 越高；ED 贪心可更低但需 router 排队）。</p>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>149</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.328</td></tr><tr class=''><td>2</td><td>94</td><td><b>99</b></td><td>link 6 / ramp 44</td><td>1.053</td></tr><tr class=''><td>3</td><td>141</td><td><b>146</b></td><td>link 12 / ramp 66</td><td>1.035</td></tr><tr class=''><td>4</td><td>188</td><td><b>193</b></td><td>link 18 / ramp 90</td><td>1.027</td></tr><tr class=''><td>5</td><td>235</td><td><b>240</b></td><td>link 24 / ramp 113</td><td>1.021</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>149</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>147</b><br><span class="tag tag-ok">ok</span></td><td>2.328</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>251</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>249</b><br><span class="tag tag-ok">ok</span></td><td>2.670</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>445</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>443</b><br><span class="tag tag-ok">ok</span></td><td>3.156</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>487</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>485</b><br><span class="tag tag-ok">ok</span></td><td>2.590</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>559</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>557</b><br><span class="tag tag-ok">ok</span></td><td>2.379</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>96</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.500</td></tr><tr class=''><td>2</td><td>65</td><td><b>93</b></td><td>link 6 / ramp 9</td><td>1.431</td></tr><tr class=''><td>3</td><td>71</td><td><b>134</b></td><td>link 12 / ramp 16</td><td>1.887</td></tr><tr class=''><td>4</td><td>94</td><td><b>175</b></td><td>link 18 / ramp 25</td><td>1.862</td></tr><tr class=''><td>5</td><td>118</td><td><b>217</b></td><td>link 24 / ramp 31</td><td>1.839</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>96</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>94</b><br><span class="tag tag-ok">ok</span></td><td>1.500</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>165</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>163</b><br><span class="tag tag-ok">ok</span></td><td>2.538</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>233</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>231</b><br><span class="tag tag-ok">ok</span></td><td>3.282</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>245</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>243</b><br><span class="tag tag-ok">ok</span></td><td>2.606</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>331</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>329</b><br><span class="tag tag-ok">ok</span></td><td>2.805</td></tr></tbody></table>
 </div>
 
 <h2>方案二：ring_uni / ring_bi / hybrid_v_bi_B2</h2>
 <div class="card">
 <ul class="compact">
-<li><b>ring_uni</b>：48 点 Hamilton 单向环，每跳 1 前驱 1 后继，<b>几乎恒 0 buffer</b>（link≤1, ramp=0），但 makespan 最差且几乎不随 ramp_bw 改善。</li>
-<li><b>ring_bi</b>：双向环，下环口 2 路汇合；link 侧仍近 0，ramp 侧随 m 增大出现排队（rb=1 最高 104 flit）；<b>rb=2 时 ramp 排队被带宽翻倍压回 0</b>。</li>
-<li><b>hybrid_v_bi_B2</b>：2 个 3 列纵带内局部环 + 逐行横向 fork；makespan 全场最优（m=1: 82 cy），但 buffer 诉求也最大（m=5@rb=1: link 56 / ramp 140 flit）。</li>
+<li><b>ring_uni</b>：任意 m 均有 rigid 0-buffer 调度（如 m=5@rb=1：rigid mk=309 vs ED 贪心 mk=274+link wait）。</li>
+<li><b>ring_bi</b>：rb=1 时前/后环 TDM + 分轮（m=2 单轮双 flit；m=3→2+1，m=4→2+2，m=5→2+2+1）均可 rigid 0-buffer；rb=2 全部 m 可单轮 pack。</li>
+<li><b>hybrid_v_bi_B2</b>：rb=1 时 m=2 前/后环 TDM <b>可行</b>（单轮 mk=264）；采用与 ring_bi 相同分轮 [2]/[2,1]/…；注：m=2 若改 m×m=1 串行仅 164 cy 更优但需多轮注入。</li>
 </ul>
-<p class="note">规律：扇出/汇聚度越高 → makespan 越短、router 排队越深。buffer 需求 ring_uni &lt; ring_bi &lt; hybrid_v_bi_B2，与 makespan 优劣正好相反。</p>
 </div>
 
 <div class="card">
 <h3>方案一：multitree（X→Y 维序树）</h3>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>149</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.328</td></tr><tr class=''><td>2</td><td>94</td><td><b>99</b></td><td>link 6 / ramp 44</td><td>1.053</td></tr><tr class=''><td>3</td><td>141</td><td><b>146</b></td><td>link 12 / ramp 66</td><td>1.035</td></tr><tr class=''><td>4</td><td>188</td><td><b>193</b></td><td>link 18 / ramp 90</td><td>1.027</td></tr><tr class=''><td>5</td><td>235</td><td><b>240</b></td><td>link 24 / ramp 113</td><td>1.021</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>149</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>147</b><br><span class="tag tag-ok">ok</span></td><td>2.328</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>251</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>249</b><br><span class="tag tag-ok">ok</span></td><td>2.670</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>445</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>443</b><br><span class="tag tag-ok">ok</span></td><td>3.156</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>487</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>485</b><br><span class="tag tag-ok">ok</span></td><td>2.590</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>559</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>557</b><br><span class="tag tag-ok">ok</span></td><td>2.379</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>96</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.500</td></tr><tr class=''><td>2</td><td>65</td><td><b>93</b></td><td>link 6 / ramp 9</td><td>1.431</td></tr><tr class=''><td>3</td><td>71</td><td><b>134</b></td><td>link 12 / ramp 16</td><td>1.887</td></tr><tr class=''><td>4</td><td>94</td><td><b>175</b></td><td>link 18 / ramp 25</td><td>1.862</td></tr><tr class=''><td>5</td><td>118</td><td><b>217</b></td><td>link 24 / ramp 31</td><td>1.839</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>96</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>94</b><br><span class="tag tag-ok">ok</span></td><td>1.500</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>165</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>163</b><br><span class="tag tag-ok">ok</span></td><td>2.538</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>233</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>231</b><br><span class="tag tag-ok">ok</span></td><td>3.282</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>245</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>243</b><br><span class="tag tag-ok">ok</span></td><td>2.606</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>331</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>329</b><br><span class="tag tag-ok">ok</span></td><td>2.805</td></tr></tbody></table>
 </div>
 
 <div class="card">
 <h3>方案二：ring_uni（全局单向 Hamilton 环）</h3>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>266</b></td><td><span class="tag tag-ok">router 0</span></td><td>4.156</td></tr><tr class=''><td>2</td><td>94</td><td><b>267</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.840</td></tr><tr class=''><td>3</td><td>141</td><td><b>268</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.901</td></tr><tr class=''><td>4</td><td>188</td><td><b>269</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.431</td></tr><tr class=''><td>5</td><td>235</td><td><b>274</b></td><td>link 1 / ramp 0</td><td>1.166</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>266</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>264</b><br><span class="tag tag-ok">ok</span></td><td>4.156</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>267</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>265</b><br><span class="tag tag-ok">ok</span></td><td>2.840</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>268</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>266</b><br><span class="tag tag-ok">ok</span></td><td>1.901</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>269</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>267</b><br><span class="tag tag-ok">ok</span></td><td>1.431</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>309</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>307</b><br><span class="tag tag-ok">ok</span></td><td>1.315</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>266</b></td><td><span class="tag tag-ok">router 0</span></td><td>4.156</td></tr><tr class=''><td>2</td><td>65</td><td><b>267</b></td><td><span class="tag tag-ok">router 0</span></td><td>4.108</td></tr><tr class=''><td>3</td><td>71</td><td><b>268</b></td><td><span class="tag tag-ok">router 0</span></td><td>3.775</td></tr><tr class=''><td>4</td><td>94</td><td><b>269</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.862</td></tr><tr class=''><td>5</td><td>118</td><td><b>274</b></td><td>link 1 / ramp 0</td><td>2.322</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>266</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>264</b><br><span class="tag tag-ok">ok</span></td><td>4.156</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>267</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>265</b><br><span class="tag tag-ok">ok</span></td><td>4.108</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>268</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>266</b><br><span class="tag tag-ok">ok</span></td><td>3.775</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>269</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>267</b><br><span class="tag tag-ok">ok</span></td><td>2.862</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>309</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>307</b><br><span class="tag tag-ok">ok</span></td><td>2.619</td></tr></tbody></table>
 </div>
 
 <div class="card">
 <h3>方案二：ring_bi（全局双向 Hamilton 环）</h3>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>140</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.188</td></tr><tr class=''><td>2</td><td>94</td><td><b>141</b></td><td>link 0 / ramp 2</td><td>1.500</td></tr><tr class=''><td>3</td><td>141</td><td><b>148</b></td><td>link 0 / ramp 12</td><td>1.050</td></tr><tr class=''><td>4</td><td>188</td><td><b>195</b></td><td>link 0 / ramp 58</td><td>1.037</td></tr><tr class=''><td>5</td><td>235</td><td><b>242</b></td><td>link 1 / ramp 104</td><td>1.030</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>140</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>138</b><br><span class="tag tag-ok">ok</span></td><td>2.188</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>142</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>139</b><br><span class="tag tag-ok">ok</span></td><td>1.511</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>282</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>280</b><br><span class="tag tag-ok">ok</span></td><td>2.000</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>284</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>281</b><br><span class="tag tag-ok">ok</span></td><td>1.511</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>424</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>422</b><br><span class="tag tag-ok">ok</span></td><td>1.804</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>140</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.188</td></tr><tr class=''><td>2</td><td>65</td><td><b>141</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.169</td></tr><tr class=''><td>3</td><td>71</td><td><b>142</b></td><td><span class="tag tag-ok">router 0</span></td><td>2.000</td></tr><tr class=''><td>4</td><td>94</td><td><b>143</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.521</td></tr><tr class=''><td>5</td><td>118</td><td><b>144</b></td><td>link 1 / ramp 0</td><td>1.220</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>140</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>138</b><br><span class="tag tag-ok">ok</span></td><td>2.188</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>141</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>139</b><br><span class="tag tag-ok">ok</span></td><td>2.169</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>142</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>140</b><br><span class="tag tag-ok">ok</span></td><td>2.000</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>143</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>141</b><br><span class="tag tag-ok">ok</span></td><td>1.521</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>284</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>282</b><br><span class="tag tag-ok">ok</span></td><td>2.407</td></tr></tbody></table>
 </div>
 
 <div class="card">
 <h3>方案二：hybrid_v_bi_B2（2 纵带环 + 横向 fork）</h3>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>82</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.281</td></tr><tr class=''><td>2</td><td>94</td><td><b>103</b></td><td>link 9 / ramp 30</td><td>1.096</td></tr><tr class=''><td>3</td><td>141</td><td><b>148</b></td><td>link 32 / ramp 66</td><td>1.050</td></tr><tr class=''><td>4</td><td>188</td><td><b>195</b></td><td>link 44 / ramp 104</td><td>1.037</td></tr><tr class=''><td>5</td><td>235</td><td><b>242</b></td><td>link 56 / ramp 140</td><td>1.030</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>82</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>80</b><br><span class="tag tag-ok">ok</span></td><td>1.281</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>264</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>261</b><br><span class="tag tag-ok">ok</span></td><td>2.809</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>346</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>344</b><br><span class="tag tag-ok">ok</span></td><td>2.454</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>528</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>525</b><br><span class="tag tag-ok">ok</span></td><td>2.809</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>610</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>608</b><br><span class="tag tag-ok">ok</span></td><td>2.596</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>82</b></td><td><span class="tag tag-ok">router 0</span></td><td>1.281</td></tr><tr class=''><td>2</td><td>65</td><td><b>86</b></td><td>link 9 / ramp 2</td><td>1.323</td></tr><tr class=''><td>3</td><td>71</td><td><b>118</b></td><td>link 32 / ramp 5</td><td>1.662</td></tr><tr class=''><td>4</td><td>94</td><td><b>153</b></td><td>link 44 / ramp 19</td><td>1.628</td></tr><tr class=''><td>5</td><td>118</td><td><b>189</b></td><td>link 56 / ramp 36</td><td>1.602</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>makespan</th><th>调度来源</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>126</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>124</b><br><span class="tag tag-ok">ok</span></td><td>1.969</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>193</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>191</b><br><span class="tag tag-ok">ok</span></td><td>2.969</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>355</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>353</b><br><span class="tag tag-ok">ok</span></td><td>5.000</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>383</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>381</b><br><span class="tag tag-ok">ok</span></td><td>4.074</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>559</b></td><td><span class="tag tag-ok">rigid 0-buf</span></td><td><span class="tag tag-ok">router 0</span></td><td><b>557</b><br><span class="tag tag-ok">ok</span></td><td>4.737</td></tr></tbody></table>
 </div>
 
 
@@ -199,10 +194,10 @@ ul.compact li { margin:4px 0; }
 </ul>
 <h3>时序（Ttotal = T1 + T2，两阶段严格串行）</h3>
 <h4>ramp_bw = 1</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th><th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th><th>Buffer 诉求</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>107</b></td><td>22</td><td>85</td><td>5</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 5 flit</span></td><td>1.672</td></tr><tr class=''><td>2</td><td>94</td><td><b>198</b></td><td>29</td><td>169</td><td>10</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 10 flit</span></td><td>2.106</td></tr><tr class=''><td>3</td><td>141</td><td><b>255</b></td><td>38</td><td>217</td><td>15</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 15 flit</span></td><td>1.809</td></tr><tr class=''><td>4</td><td>188</td><td><b>306</b></td><td>41</td><td>265</td><td>20</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 20 flit</span></td><td>1.628</td></tr><tr class=''><td>5</td><td>235</td><td><b>376</b></td><td>63</td><td>313</td><td>25</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 25 flit</span></td><td>1.600</td></tr></tbody></table>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th><th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>107</b></td><td>22</td><td>85</td><td>5</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 5 flit</span></td><td><b>105</b><br><span class="tag tag-ok">ok</span></td><td>1.672</td></tr><tr class='zbuf'><td>2</td><td>94</td><td><b>198</b></td><td>29</td><td>169</td><td>10</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 10 flit</span></td><td><b>196</b><br><span class="tag tag-ok">ok</span></td><td>2.106</td></tr><tr class='zbuf'><td>3</td><td>141</td><td><b>255</b></td><td>38</td><td>217</td><td>15</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 15 flit</span></td><td><b>253</b><br><span class="tag tag-ok">ok</span></td><td>1.809</td></tr><tr class='zbuf'><td>4</td><td>188</td><td><b>306</b></td><td>41</td><td>265</td><td>20</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 20 flit</span></td><td><b>304</b><br><span class="tag tag-ok">ok</span></td><td>1.628</td></tr><tr class='zbuf'><td>5</td><td>235</td><td><b>376</b></td><td>63</td><td>313</td><td>25</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 25 flit</span></td><td><b>374</b><br><span class="tag tag-ok">ok</span></td><td>1.600</td></tr></tbody></table>
 <h4>ramp_bw = 2</h4>
-<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th><th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th><th>Buffer 诉求</th><th>mk/T</th></tr></thead><tbody><tr class=''><td>1</td><td>64</td><td><b>71</b></td><td>22</td><td>49</td><td>5</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 5 flit</span></td><td>1.109</td></tr><tr class=''><td>2</td><td>65</td><td><b>138</b></td><td>23</td><td>115</td><td>10</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 10 flit</span></td><td>2.123</td></tr><tr class=''><td>3</td><td>71</td><td><b>193</b></td><td>24</td><td>169</td><td>15</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 15 flit</span></td><td>2.718</td></tr><tr class=''><td>4</td><td>94</td><td><b>248</b></td><td>25</td><td>223</td><td>20</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 20 flit</span></td><td>2.638</td></tr><tr class=''><td>5</td><td>118</td><td><b>317</b></td><td>40</td><td>277</td><td>25</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 25 flit</span></td><td>2.686</td></tr></tbody></table>
-<p class="note">rb=2,m=1 时 Ttotal=71 cy 优于全部其他方案；m≥2 因无流水重叠迅速落后（如 rb=1,m=3 时 255 cy vs multitree 146 / hybrid_v_bi_B2 148）。</p>
+<table class='data'><thead><tr><th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th><th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th><th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody><tr class='zbuf'><td>1</td><td>64</td><td><b>71</b></td><td>22</td><td>49</td><td>5</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 5 flit</span></td><td><b>69</b><br><span class="tag tag-ok">ok</span></td><td>1.109</td></tr><tr class='zbuf'><td>2</td><td>65</td><td><b>138</b></td><td>23</td><td>115</td><td>10</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 10 flit</span></td><td><b>136</b><br><span class="tag tag-ok">ok</span></td><td>2.123</td></tr><tr class='zbuf'><td>3</td><td>71</td><td><b>193</b></td><td>24</td><td>169</td><td>15</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 15 flit</span></td><td><b>191</b><br><span class="tag tag-ok">ok</span></td><td>2.718</td></tr><tr class='zbuf'><td>4</td><td>94</td><td><b>248</b></td><td>25</td><td>223</td><td>20</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 20 flit</span></td><td><b>246</b><br><span class="tag tag-ok">ok</span></td><td>2.638</td></tr><tr class='zbuf'><td>5</td><td>118</td><td><b>317</b></td><td>40</td><td>277</td><td>25</td><td><span class="tag tag-ok">router 0</span><br><span class="tag tag-info">SRAM 25 flit</span></td><td><b>315</b><br><span class="tag tag-ok">ok</span></td><td>2.686</td></tr></tbody></table>
+<p class="note">rb=2,m=1 时 Ttotal=71 cy 为 rigid 0-buffer 全场最快。</p>
 </div>
 
 <div class="card">
@@ -210,15 +205,15 @@ ul.compact li { margin:4px 0; }
 <table class="data">
 <thead><tr><th>维度</th><th>方案一 tree</th><th>方案二 ring/hybrid</th><th>方案三 row→col</th></tr></thead>
 <tbody>
-<tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>82 cy (hybrid_v_bi_B2)</td><td><b>71 cy</b></td></tr>
-<tr><td class="name">router 0-buffer 适用范围</td><td>仅 m=1</td><td>ring_uni 几乎全程；hybrid 需深队列</td><td>任意 m</td></tr>
+<tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>126 cy (hybrid rigid) / 140 (ring_bi)</td><td><b>71 cy</b></td></tr>
+<tr><td class="name">rigid 0-buffer 适用范围</td><td>6×8 全部 m</td><td>ring_uni / ring_bi / hybrid_v_bi_B2 全部 m（rb=1 分轮 TDM）</td><td>任意 m</td></tr>
 <tr><td class="name">额外本地暂存</td><td>0</td><td>0</td><td>5m flit/节点</td></tr>
-<tr><td class="name">m 增大趋势</td><td>排队深度线性升</td><td>hybrid 排队最深、makespan 最优</td><td>两阶段串行，大 m 落后</td></tr>
-<tr><td class="name">适用场景</td><td>小 payload + 可接受深 router 队列</td><td>追求低 makespan、可开 router buffer</td><td>小 m + 高下环带宽 + 可开 SRAM</td></tr>
+<tr><td class="name">m 增大趋势</td><td>rigid mk 线性升</td><td>ring 最慢；hybrid rigid 较快但 rb=1 受限</td><td>两阶段串行，小 m 最优</td></tr>
+<tr><td class="name">适用场景</td><td>可接受较长 rigid mk</td><td>ring 简单 0-buffer；hybrid 要快且能开 rb=2</td><td>小 m + 高下环带宽 + SRAM</td></tr>
 </tbody>
 </table>
 </div>
 
-<p class="meta">Generated by <code>utils/gen_allgather_6x8_report.py</code> · sweep: <code>results/allgather_scale_sweep.json</code></p>
+<p class="meta">Generated by <code>utils/gen_allgather_6x8_report.py</code> · rigid pack + <code>results/allgather_scale_sweep.json</code> (ED fallback) · BookSim: <code>results/booksim_zbuf_6x8_sweep.json</code></p>
 </body>
 </html>

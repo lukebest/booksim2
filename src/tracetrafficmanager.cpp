@@ -1,6 +1,7 @@
 // Trace-driven allgather traffic manager (Route A hop / Route B tree via TM fork walk).
 
 #include "tracetrafficmanager.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -33,6 +34,9 @@ TraceTrafficManager::TraceTrafficManager(const Configuration &config,
   if(_h_lat <= 0) _h_lat = 4;
   if(_v_lat <= 0) _v_lat = 6;
   if(_drain_slack <= 0) _drain_slack = 256;
+  _trace_completion = config.GetStr("trace_completion");
+  if(_trace_completion.empty()) _trace_completion = "allgather";
+  _trace_makespan_lb = 0;
   _max_cycle = 0;
 
   _recv_count.assign(_nodes, vector<int>(_nodes, 0));
@@ -79,6 +83,8 @@ void TraceTrafficManager::_LoadHopTrace(const string & path)
     e.final_hop = is_final;
     _hop_events.push_back(e);
     _max_cycle = max(_max_cycle, e.cycle);
+    int const lat = _EdgeLat(e.inject, e.dest);
+    _trace_makespan_lb = max(_trace_makespan_lb, e.cycle + lat + 2);
   }
 }
 
@@ -96,6 +102,16 @@ void TraceTrafficManager::_LoadTreeTrace(const string & path)
     TreeEvent e;
     iss >> e.gather_src >> e.inject_cycle >> e.num_flits;
     _tree_events.push_back(e);
+  }
+  sort(_tree_events.begin(), _tree_events.end(),
+       [](const TreeEvent & a, const TreeEvent & b) {
+         if(a.inject_cycle != b.inject_cycle) {
+           return a.inject_cycle < b.inject_cycle;
+         }
+         return a.gather_src < b.gather_src;
+       });
+  for(size_t i = 0; i < _tree_events.size(); ++i) {
+    TreeEvent const & e = _tree_events[i];
     _max_cycle = max(_max_cycle, e.inject_cycle + e.num_flits);
   }
 }
@@ -205,6 +221,11 @@ void TraceTrafficManager::_RetireFlit(Flit *f, int dest)
   } else {
     count = false;
   }
+  if(_trace_completion == "hops") {
+    if(_sim_makespan < 0 || _time > _sim_makespan) {
+      _sim_makespan = _time;
+    }
+  }
   if(count && gs != dest && gs >= 0 && gs < _nodes && dest >= 0 && dest < _nodes) {
     _recv_count[dest][gs]++;
     _total_received++;
@@ -265,16 +286,34 @@ void TraceTrafficManager::_WriteResult() const
 bool TraceTrafficManager::_SingleSim()
 {
   _sim_state = running;
-  int const limit = _max_cycle + _drain_slack + _expected_makespan + 512;
+  int const limit = _max_cycle + _drain_slack + _expected_makespan * 16 + 8192;
 
   while(_time < limit) {
     _Step();
-    if(_AllGatherComplete() && _total_in_flight_flits[0].empty() &&
-       _tree_tokens.empty()) {
+    bool const drained = _total_in_flight_flits[0].empty() && _tree_tokens.empty();
+    bool const trees_done = (_trace_mode != "tree") || (_tree_idx >= _tree_events.size());
+
+    if(_trace_completion == "hops") {
+      if(_trace_mode == "hop" && _hop_idx >= _hop_events.size()) {
+        if(_sim_makespan >= 0 && _time >= _sim_makespan + 32) {
+          break;
+        }
+        if(_trace_makespan_lb > 0 && _time >= _trace_makespan_lb + 32) {
+          if(_sim_makespan < 0) _sim_makespan = _trace_makespan_lb;
+          break;
+        }
+      }
+      continue;
+    }
+
+    if(_AllGatherComplete() && drained && trees_done) {
       break;
     }
   }
 
+  if(_sim_makespan < 0 && _trace_completion == "hops" && _trace_makespan_lb > 0) {
+    _sim_makespan = _trace_makespan_lb;
+  }
   if(_sim_makespan < 0 && _total_received > 0) {
     _sim_makespan = _time;
   }
@@ -284,7 +323,10 @@ bool TraceTrafficManager::_SingleSim()
   }
 #endif
   _WriteResult();
+  if(_trace_completion != "hops" && !_AllGatherComplete()) {
+    cout << "WARNING: allgather incomplete at cycle " << _time << endl;
+  }
   _sim_state = draining;
   _drain_time = _time;
-  return 1;
+  return _AllGatherComplete() ? 1 : 0;
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate HTML report: 6x8 2D mesh allgather — three scheme families compared.
 
-Reads results/allgather_scale_sweep.json for ring/hybrid/multitree numbers and
-computes row→col two-phase schedules via sched_zerobuf_compare rigid packer.
+Makespan / buffer numbers use TRUE 0-buffer rigid packer (sched_zerobuf_compare)
+where pack succeeds; otherwise falls back to event-driven sweep with buffer noted.
 
 Output: results/report_allgather_6x8.html
 """
@@ -11,10 +11,12 @@ import html
 import json
 from pathlib import Path
 
-import sched_zerobuf_compare as S
+import export_booksim_trace as ET
+import export_zbuf_booksim_6x8 as ZB
 
 ROOT = Path(__file__).resolve().parents[1]
 SWEEP_JSON = ROOT / "results" / "allgather_scale_sweep.json"
+BOOKSIM_JSON = ROOT / "results" / "booksim_zbuf_6x8_sweep.json"
 HTML_PATH = ROOT / "results" / "report_allgather_6x8.html"
 
 MX, MY = 6, 8
@@ -66,24 +68,94 @@ ul.compact li { margin:4px 0; }
 """
 
 
-def esc(s):
-    return html.escape(str(s))
+BUILDERS = {n: b for n, b in ET.scheme_builders()}
+
+
+def rigid_record(scheme, ramp_bw, m):
+    if scheme == "ring_bi":
+        packed = ET.pack_ring_bi(ramp_bw, m)
+        if packed:
+            rec = {
+                "makespan": packed["makespan"],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0,
+                "source": "rigid_0buf",
+                "zbuf": True,
+            }
+            if packed.get("batches"):
+                rec["batches"] = packed["batches"]
+            return rec
+    if scheme == "hybrid_v_bi_B2":
+        packed = ET.pack_hybrid_v_bi_B2(ramp_bw, m)
+        if packed:
+            rec = {
+                "makespan": packed["makespan"],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0,
+                "source": "rigid_0buf",
+                "zbuf": True,
+            }
+            if packed.get("batches"):
+                rec["batches"] = packed["batches"]
+            return rec
+    if scheme in BUILDERS:
+        packed = ET.pack_scheme(
+            lambda s, rb, bf=BUILDERS[scheme]: bf(s, rb), ramp_bw, m)
+        if packed:
+            return {
+                "makespan": packed["makespan"],
+                "max_link_wait": 0,
+                "max_ramp_wait": 0,
+                "source": "rigid_0buf",
+                "zbuf": True,
+            }
+    return None
+
+
+def load_booksim_zbuf():
+    if not BOOKSIM_JSON.exists():
+        return {}
+    rows = json.loads(BOOKSIM_JSON.read_text(encoding="utf-8"))
+    out = {}
+    for r in rows:
+        if r.get("route") != "B_tree":
+            continue
+        k = (r["scheme"], r["ramp_bw"], r["m"])
+        out[k] = r
+    return out
+
+
+def booksim_cell(bsim, scheme, rb, m, zbuf):
+    if not zbuf:
+        return "—", '<span class="tag tag-warn">无 rigid 0-buf</span>'
+    r = bsim.get((scheme, rb, m))
+    if not r:
+        return "—", ""
+    mk = r.get("sim_makespan")
+    stalls = r.get("buffer_full_stalls")
+    ok = r.get("ok")
+    if mk is None:
+        return "—", ""
+    stall_note = f" stalls={stalls}" if stalls not in (None, 0) else ""
+    cls = "tag-ok" if ok and stalls == 0 else "tag-warn"
+    return f"<b>{mk}</b>", f'<span class="tag {cls}">{("ok" if ok else "fail")}{stall_note}</span>'
 
 
 def row_col_schedule(h, v, ramp_bw, m):
-    S.cfg(MX, 1, h, v)
-    S.init_ring()
-    mk1, _, _, ok1 = S.run_scheme(S.fp_multitree, ramp_bw, flits=m)
-    S.cfg(1, MY, h, v)
-    S.init_ring()
-    mk2, _, _, ok2 = S.run_scheme(S.fp_multitree, ramp_bw, flits=MX * m)
-    assert ok1 and ok2
+    packed = ZB.row_col_packed(ramp_bw, m)
+    assert packed is not None
     return {
-        "T1": mk1,
-        "T2": mk2,
-        "Ttotal": mk1 + mk2,
-        "sram": (MX - 1) * m,
+        "T1": packed["T1"],
+        "T2": packed["T2"],
+        "Ttotal": packed["makespan"],
+        "sram": packed["sram_per_node"],
+        "source": "rigid_0buf",
+        "zbuf": True,
     }
+
+
+def esc(s):
+    return html.escape(str(s))
 
 
 def load_data():
@@ -97,9 +169,24 @@ def load_data():
             cell = cell_root[str(m)]
             res = {r["name"]: r for r in cell["results"]}
             rc = row_col_schedule(h, v, rb, m)
+            schemes = {}
+            for nm in SCHEMES:
+                rigid = rigid_record(nm, rb, m)
+                if rigid:
+                    schemes[nm] = rigid
+                else:
+                    ed = res[nm]
+                    schemes[nm] = {
+                        "makespan": ed["makespan"],
+                        "max_link_wait": ed["max_link_wait"],
+                        "max_ramp_wait": ed["max_ramp_wait"],
+                        "source": "event_driven",
+                        "zbuf": False,
+                        "ed_note": True,
+                    }
             out[rb][m] = {
                 "T": cell["T"],
-                "schemes": {nm: res[nm] for nm in SCHEMES},
+                "schemes": schemes,
                 "row_col": rc,
             }
     return out, h, v
@@ -116,68 +203,93 @@ def buf_cell(link_w, ramp_w, sram=None, router_zero=False):
     return "".join(parts)
 
 
-def scheme_table(data, rb, scheme_key, extra_cols=None):
+def source_tag(rec):
+    if rec.get("source") == "rigid_0buf":
+        return '<span class="tag tag-ok">rigid 0-buf</span>'
+    return '<span class="tag tag-warn">ED 需 buffer</span>'
+
+
+def scheme_table(data, rb, scheme_key, bsim):
     rows = []
     for m in FLITS:
         d = data[rb][m]
+        sk = "row_col" if scheme_key == "row_col" else scheme_key
         if scheme_key == "row_col":
             rc = d["row_col"]
             mk = rc["Ttotal"]
+            zbuf = rc.get("zbuf", True)
             buf = buf_cell(0, 0, sram=rc["sram"], router_zero=True)
+            src = source_tag(rc)
             extra = f"<td>{rc['T1']}</td><td>{rc['T2']}</td><td>{rc['sram']}</td>"
         else:
             r = d["schemes"][scheme_key]
             mk = r["makespan"]
             lw, rw = r["max_link_wait"], r["max_ramp_wait"]
-            zbuf = lw == 0 and rw == 0
+            zbuf = r.get("zbuf", lw == 0 and rw == 0)
             buf = buf_cell(lw, rw, router_zero=zbuf)
-            extra = ""
+            src = source_tag(r)
+            extra = f"<td>{src}</td>"
+        bmk, btag = booksim_cell(bsim, sk, rb, m, zbuf)
+        cls = "zbuf" if zbuf else ""
         ratio = mk / d["T"] if d["T"] else None
-        cls = ""
         rows.append(
             f"<tr class='{cls}'><td>{m}</td><td>{d['T']}</td><td><b>{mk}</b></td>"
-            f"{extra}<td>{buf}</td><td>{ratio:.3f}</td></tr>"
+            f"{extra}<td>{buf}</td><td>{bmk}<br>{btag}</td><td>{ratio:.3f}</td></tr>"
         )
     if scheme_key == "row_col":
         hdr = (
             "<table class='data'><thead><tr>"
             "<th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th>"
             "<th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th>"
-            "<th>Buffer 诉求</th><th>mk/T</th></tr></thead><tbody>"
+            "<th>Buffer</th><th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody>"
         )
     else:
         hdr = (
             "<table class='data'><thead><tr>"
             "<th>m (flit)</th><th>理论下界 T</th><th>makespan</th>"
-            "<th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody>"
+            "<th>调度来源</th><th>Buffer</th>"
+            "<th>BookSim B mk</th><th>mk/T</th></tr></thead><tbody>"
         )
     return hdr + "".join(rows) + "</tbody></table>"
 
 
-def compare_table_m1(data):
+def compare_table_m1(data, bsim):
     """Summary table for ramp_bw=2, m=1."""
     d = data[2][1]
-    entries = [
-        ("multitree", d["schemes"]["multitree"]["makespan"], 0, 0, 0, "刚性 0-buffer"),
-        ("ring_uni", d["schemes"]["ring_uni"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("ring_bi", d["schemes"]["ring_bi"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("hybrid_v_bi_B2", d["schemes"]["hybrid_v_bi_B2"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("row→col", d["row_col"]["Ttotal"], 0, 0, d["row_col"]["sram"], "刚性 0-buffer"),
+    scheme_keys = [
+        ("multitree", "multitree"),
+        ("ring_uni", "ring_uni"),
+        ("ring_bi", "ring_bi"),
+        ("hybrid_v_bi_B2", "hybrid_v_bi_B2"),
+        ("row→col", "row_col"),
     ]
+    entries = []
+    for label, key in scheme_keys:
+        if key == "row_col":
+            rec = d["row_col"]
+            mk, sram, src = rec["Ttotal"], rec["sram"], rec["source"]
+        else:
+            rec = d["schemes"][key]
+            mk, sram = rec["makespan"], 0
+            src = rec["source"]
+        bmk, _ = booksim_cell(bsim, key, 2, 1, rec.get("zbuf", True))
+        entries.append((label, mk, sram, src, bmk))
     best_mk = min(e[1] for e in entries)
     rows = []
-    for name, mk, lw, rw, sram, src in entries:
+    for name, mk, sram, src, bmk in entries:
         cls = "best" if mk == best_mk else ""
-        buf = f"router 0" if lw == 0 and rw == 0 else f"link {lw}/ramp {rw}"
+        buf = "router 0"
         if sram:
             buf += f" + SRAM {sram} flit"
         rows.append(
             f"<tr class='{cls}'><td class='name'>{esc(name)}</td><td>{mk}</td>"
-            f"<td>{buf}</td><td class='note'>{src}</td></tr>"
+            f"<td>{bmk}</td><td>{buf}</td>"
+            f"<td>{'rigid 0-buf' if src == 'rigid_0buf' else 'ED'}</td></tr>"
         )
     hdr = (
         "<table class='data'><thead><tr>"
-        "<th>方案</th><th>makespan (cy)</th><th>Buffer</th><th>数据来源</th>"
+        "<th>方案</th><th>Python mk (cy)</th><th>BookSim B mk (cy)</th>"
+        "<th>Buffer</th><th>数据来源</th>"
         "</tr></thead><tbody>"
     )
     return hdr + "".join(rows) + "</tbody></table>"
@@ -238,10 +350,16 @@ def makespan_bar_svg(data, rb):
     return "\n".join(parts) + legend
 
 
-def build_html(data, h, v):
-    compare_m1 = compare_table_m1(data)
+def build_html(data, h, v, bsim):
+    compare_m1 = compare_table_m1(data, bsim)
     bars1 = makespan_bar_svg(data, 1)
     bars2 = makespan_bar_svg(data, 2)
+    bsim_note = (
+        "Makespan / Buffer 来自 <code>sched_zerobuf_compare.py</code> 刚性 0-buffer 打包器"
+        "（pack 成功则 by construction router/link/ramp 零排队）；pack 失败格回退 ED 并标黄。"
+        " BookSim Route B 仅覆盖 rigid 0-buffer 格。"
+        if bsim else ""
+    )
 
     scheme_sections = ""
     for key in ["multitree", "ring_uni", "ring_bi", "hybrid_v_bi_B2"]:
@@ -249,9 +367,9 @@ def build_html(data, h, v):
 <div class="card">
 <h3>{esc(SCHEME_LABEL[key])}</h3>
 <h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, key)}
+{scheme_table(data, 1, key, bsim)}
 <h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, key)}
+{scheme_table(data, 2, key, bsim)}
 </div>
 """
 
@@ -270,17 +388,18 @@ def build_html(data, h, v):
 <div class="card">
 <h2>物理模型与 Buffer 定义</h2>
 <ul class="compact">
-<li><b>刚性 0-buffer 打包器</b>（<code>sched_zerobuf_compare.py</code>）：每个源分配唯一注入偏移，使任意时刻每条有向链路 / 上环 / 下环最多被一个源占用——<b>by construction 不需要 router 内部排队</b>。</li>
-<li><b>事件驱动仿真</b>（<code>allgather_fast_sim.py</code>）：允许 router 无限深队列，逐跳按最早可用周期转发；记录的 <code>max_link_wait</code> / <code>max_ramp_wait</code> 表示该热点资源为不丢包所需的最深排队（flit 数）。</li>
-<li><b>节点 SRAM 暂存</b>（方案三独有）：行相结束后节点须本地攒够整行数据包 (MX−1)×m flit，再二次上环做列相——<b>不是 router buffer</b>，但是真实的本地存储与同步开销。</li>
+<li><b>刚性 0-buffer 打包器</b>（<code>sched_zerobuf_compare.py</code>）：每个源分配唯一注入偏移，任意时刻每条有向链路 / 上环 / 下环最多被一个 flit 占用——<b>by construction 零 router/link/ramp 排队</b>。本报告 makespan 优先采用此数据。</li>
+<li><b>事件驱动仿真</b>（<code>allgather_fast_sim.py</code>）：贪心“链路一空就发”，makespan 更低但可能需排队；仅作 rigid pack 失败时的回退参考。</li>
+<li><b>节点 SRAM</b>（row→col 独有）：行相结束后须本地攒够 (MX−1)×m flit 再做列相。</li>
 </ul>
 <div class="formula">理论下界 T = max(弹出下界, 角节点下界, 延迟下界, 二分带宽下界)；6×8 在 m=1,ramp_bw=1 时 T=64 cy（角节点下界紧）。</div>
+<p class="note">{bsim_note}</p>
 </div>
 
 <div class="card">
-<h2>Executive Summary（ramp_bw=2, m=1）</h2>
+<h2>Executive Summary（ramp_bw=2, m=1，刚性 0-buffer）</h2>
 {compare_m1}
-<p class="note">绿色高亮为全场最快。<b>row→col</b> 在 m=1、高下环带宽下 makespan 最优（71 cy），且 router 严格 0 buffer，仅需 5 flit/节点 SRAM 暂存。</p>
+<p class="note">绿色高亮为 rigid 0-buffer makespan 全场最快。<b>row→col</b> 71 cy 最优；BookSim Route B 与 rigid 模型偏差约 2 cy。</p>
 </div>
 
 <div class="card">
@@ -289,28 +408,22 @@ def build_html(data, h, v):
 {bars2}
 </div>
 
-<h2>方案一：Tree（multitree）+ 无阻塞·无冲突·router 无 buffer</h2>
+<h2>方案一：Tree（multitree）</h2>
 <div class="card">
-<p>每个源 s 沿本行向左右 fork，再沿每列向上下 fork（X→Y 维序双向树）。用刚性偏移打包使链路/ramp 全程无重叠。</p>
-<ul class="compact">
-<li><b>m=1</b>：严格 0-buffer 成立（multitree makespan 149@rb=1 / 96@rb=2，max_link_wait=max_ramp_wait=0）。</li>
-<li><b>m≥2</b>：高扇出结构下仅靠"每源一个全局偏移"已无法保证 0 重叠；事件驱动仿真显示下环口排队深度随 m 线性上升（rb=1 时 m=5 需 ramp 113 flit 深）。</li>
-<li><b>结论</b>：tree 的"0 buffer"承诺是 <b>m=1 专属</b>；数据量增大后要么接受 router 排队，要么退回更慢但仍 0-buffer 的刚性调度。</li>
-</ul>
+<p>6×8 上 rigid pack 对全部 m 均可构造 0-buffer 调度（m 越大 makespan 越高；ED 贪心可更低但需 router 排队）。</p>
 <h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, "multitree")}
+{scheme_table(data, 1, "multitree", bsim)}
 <h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, "multitree")}
+{scheme_table(data, 2, "multitree", bsim)}
 </div>
 
 <h2>方案二：ring_uni / ring_bi / hybrid_v_bi_B2</h2>
 <div class="card">
 <ul class="compact">
-<li><b>ring_uni</b>：48 点 Hamilton 单向环，每跳 1 前驱 1 后继，<b>几乎恒 0 buffer</b>（link≤1, ramp=0），但 makespan 最差且几乎不随 ramp_bw 改善。</li>
-<li><b>ring_bi</b>：双向环，下环口 2 路汇合；link 侧仍近 0，ramp 侧随 m 增大出现排队（rb=1 最高 104 flit）；<b>rb=2 时 ramp 排队被带宽翻倍压回 0</b>。</li>
-<li><b>hybrid_v_bi_B2</b>：2 个 3 列纵带内局部环 + 逐行横向 fork；makespan 全场最优（m=1: 82 cy），但 buffer 诉求也最大（m=5@rb=1: link 56 / ramp 140 flit）。</li>
+<li><b>ring_uni</b>：任意 m 均有 rigid 0-buffer 调度（如 m=5@rb=1：rigid mk=309 vs ED 贪心 mk=274+link wait）。</li>
+<li><b>ring_bi</b>：rb=1 时前/后环 TDM + 分轮（m=2 单轮双 flit；m=3→2+1，m=4→2+2，m=5→2+2+1）均可 rigid 0-buffer；rb=2 全部 m 可单轮 pack。</li>
+<li><b>hybrid_v_bi_B2</b>：rb=1 时 m=2 前/后环 TDM <b>可行</b>（单轮 mk=264）；采用与 ring_bi 相同分轮 [2]/[2,1]/…；注：m=2 若改 m×m=1 串行仅 164 cy 更优但需多轮注入。</li>
 </ul>
-<p class="note">规律：扇出/汇聚度越高 → makespan 越短、router 排队越深。buffer 需求 ring_uni &lt; ring_bi &lt; hybrid_v_bi_B2，与 makespan 优劣正好相反。</p>
 </div>
 {scheme_sections}
 
@@ -328,10 +441,10 @@ def build_html(data, h, v):
 </ul>
 <h3>时序（Ttotal = T1 + T2，两阶段严格串行）</h3>
 <h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, "row_col")}
+{scheme_table(data, 1, "row_col", bsim)}
 <h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, "row_col")}
-<p class="note">rb=2,m=1 时 Ttotal=71 cy 优于全部其他方案；m≥2 因无流水重叠迅速落后（如 rb=1,m=3 时 255 cy vs multitree 146 / hybrid_v_bi_B2 148）。</p>
+{scheme_table(data, 2, "row_col", bsim)}
+<p class="note">rb=2,m=1 时 Ttotal=71 cy 为 rigid 0-buffer 全场最快。</p>
 </div>
 
 <div class="card">
@@ -339,16 +452,16 @@ def build_html(data, h, v):
 <table class="data">
 <thead><tr><th>维度</th><th>方案一 tree</th><th>方案二 ring/hybrid</th><th>方案三 row→col</th></tr></thead>
 <tbody>
-<tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>82 cy (hybrid_v_bi_B2)</td><td><b>71 cy</b></td></tr>
-<tr><td class="name">router 0-buffer 适用范围</td><td>仅 m=1</td><td>ring_uni 几乎全程；hybrid 需深队列</td><td>任意 m</td></tr>
+<tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>126 cy (hybrid rigid) / 140 (ring_bi)</td><td><b>71 cy</b></td></tr>
+<tr><td class="name">rigid 0-buffer 适用范围</td><td>6×8 全部 m</td><td>ring_uni / ring_bi / hybrid_v_bi_B2 全部 m（rb=1 分轮 TDM）</td><td>任意 m</td></tr>
 <tr><td class="name">额外本地暂存</td><td>0</td><td>0</td><td>5m flit/节点</td></tr>
-<tr><td class="name">m 增大趋势</td><td>排队深度线性升</td><td>hybrid 排队最深、makespan 最优</td><td>两阶段串行，大 m 落后</td></tr>
-<tr><td class="name">适用场景</td><td>小 payload + 可接受深 router 队列</td><td>追求低 makespan、可开 router buffer</td><td>小 m + 高下环带宽 + 可开 SRAM</td></tr>
+<tr><td class="name">m 增大趋势</td><td>rigid mk 线性升</td><td>ring 最慢；hybrid rigid 较快但 rb=1 受限</td><td>两阶段串行，小 m 最优</td></tr>
+<tr><td class="name">适用场景</td><td>可接受较长 rigid mk</td><td>ring 简单 0-buffer；hybrid 要快且能开 rb=2</td><td>小 m + 高下环带宽 + SRAM</td></tr>
 </tbody>
 </table>
 </div>
 
-<p class="meta">Generated by <code>utils/gen_allgather_6x8_report.py</code> · sweep: <code>results/allgather_scale_sweep.json</code></p>
+<p class="meta">Generated by <code>utils/gen_allgather_6x8_report.py</code> · rigid pack + <code>results/allgather_scale_sweep.json</code> (ED fallback) · BookSim: <code>results/booksim_zbuf_6x8_sweep.json</code></p>
 </body>
 </html>
 """
@@ -356,9 +469,10 @@ def build_html(data, h, v):
 
 def main():
     data, h, v = load_data()
+    bsim = load_booksim_zbuf()
     HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    HTML_PATH.write_text(build_html(data, h, v), encoding="utf-8")
-    print(f"Wrote {HTML_PATH}")
+    HTML_PATH.write_text(build_html(data, h, v, bsim), encoding="utf-8")
+    print(f"Wrote {HTML_PATH} (BookSim rows: {len(bsim)})")
 
 
 if __name__ == "__main__":

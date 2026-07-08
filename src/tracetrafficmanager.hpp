@@ -37,6 +37,8 @@ protected:
   int _my;
   int _h_lat;
   int _v_lat;
+  std::string _trace_completion;
+  int _trace_makespan_lb;
   size_t _hop_idx;
   size_t _tree_idx;
 

@@ -1,0 +1,1092 @@
+buffer_full_stalls,expected_makespan,m,ok,ramp_bw,returncode,route,scheme,sim_makespan,stderr_tail,stdout_tail,total_expected,total_received
+0,82,1,True,1,255,B_tree,hybrid_v_bi_B2,80,,"ter 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 82
+sim_makespan: 80
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 322 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.018631
+",2256,2256
+0,264,2,True,1,255,B_tree,hybrid_v_bi_B2,261,,"er 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 264
+sim_makespan: 261
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 800 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.04129
+",4512,4512
+0,346,3,True,1,255,B_tree,hybrid_v_bi_B2,344,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 346
+sim_makespan: 344
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1099 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.061439
+",6768,6768
+0,528,4,True,1,255,B_tree,hybrid_v_bi_B2,525,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 528
+sim_makespan: 525
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1572 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.087935
+",9024,9024
+0,610,5,True,1,255,B_tree,hybrid_v_bi_B2,608,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 610
+sim_makespan: 608
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1869 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.108558
+",11280,11280
+0,126,1,True,2,255,B_tree,hybrid_v_bi_B2,124,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 126
+sim_makespan: 124
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 366 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.020571
+",2256,2256
+0,193,2,True,2,255,B_tree,hybrid_v_bi_B2,191,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 193
+sim_makespan: 191
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 723 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.040031
+",4512,4512
+0,355,3,True,2,255,B_tree,hybrid_v_bi_B2,353,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 355
+sim_makespan: 353
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1180 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.065254
+",6768,6768
+0,383,4,True,2,255,B_tree,hybrid_v_bi_B2,381,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 383
+sim_makespan: 381
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1531 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.086606
+",9024,9024
+0,559,5,True,2,255,B_tree,hybrid_v_bi_B2,557,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 559
+sim_makespan: 557
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 2105 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.114476
+",11280,11280
+0,149,1,True,1,255,B_tree,multitree,147,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 149
+sim_makespan: 147
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 466 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.023021
+",2256,2256
+0,251,2,True,1,255,B_tree,multitree,249,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 251
+sim_makespan: 249
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 894 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.046463
+",4512,4512
+0,445,3,True,1,255,B_tree,multitree,443,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 445
+sim_makespan: 443
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1493 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0743461
+",6768,6768
+0,487,4,True,1,255,B_tree,multitree,485,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 487
+sim_makespan: 485
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1980 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0967929
+",9024,9024
+0,559,5,True,1,255,B_tree,multitree,557,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 559
+sim_makespan: 557
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 2473 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.127957
+",11280,11280
+0,96,1,True,2,255,B_tree,multitree,94,,"er 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 96
+sim_makespan: 94
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 490 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0222549
+",2256,2256
+0,165,2,True,2,255,B_tree,multitree,163,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 165
+sim_makespan: 163
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 901 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.044071
+",4512,4512
+0,233,3,True,2,255,B_tree,multitree,231,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 233
+sim_makespan: 231
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1346 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.068887
+",6768,6768
+0,245,4,True,2,255,B_tree,multitree,243,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 245
+sim_makespan: 243
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1743 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0882621
+",9024,9024
+0,331,5,True,2,255,B_tree,multitree,329,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 331
+sim_makespan: 329
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 2169 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.113938
+",11280,11280
+0,140,1,True,1,255,B_tree,ring_bi,138,,"er 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 140
+sim_makespan: 138
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 268 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.01721
+",2256,2256
+0,142,2,True,1,255,B_tree,ring_bi,139,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 142
+sim_makespan: 139
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 535 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0334618
+",4512,4512
+0,282,3,True,1,255,B_tree,ring_bi,280,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 282
+sim_makespan: 280
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 781 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.052037
+",6768,6768
+0,284,4,True,1,255,B_tree,ring_bi,281,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 284
+sim_makespan: 281
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1056 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0714831
+",9024,9024
+0,424,5,True,1,255,B_tree,ring_bi,422,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 424
+sim_makespan: 422
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1301 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.093003
+",11280,11280
+0,140,1,True,2,255,B_tree,ring_bi,138,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 140
+sim_makespan: 138
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 268 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0171409
+",2256,2256
+0,141,2,True,2,255,B_tree,ring_bi,139,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 141
+sim_makespan: 139
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 535 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.035208
+",4512,4512
+0,142,3,True,2,255,B_tree,ring_bi,140,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 142
+sim_makespan: 140
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 808 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0544319
+",6768,6768
+0,143,4,True,2,255,B_tree,ring_bi,141,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 143
+sim_makespan: 141
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1072 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.069757
+",9024,9024
+0,284,5,True,2,255,B_tree,ring_bi,282,," using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 284
+sim_makespan: 282
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1561 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0997231
+",11280,11280
+0,266,1,True,1,255,B_tree,ring_uni,264,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 266
+sim_makespan: 264
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 484 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0227571
+",2256,2256
+0,267,2,True,1,255,B_tree,ring_uni,265,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 267
+sim_makespan: 265
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 947 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.044239
+",4512,4512
+0,268,3,True,1,255,B_tree,ring_uni,266,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 268
+sim_makespan: 266
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1425 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.069864
+",6768,6768
+0,269,4,True,1,255,B_tree,ring_uni,267,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 269
+sim_makespan: 267
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1887 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0940359
+",9024,9024
+0,309,5,True,1,255,B_tree,ring_uni,307,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 309
+sim_makespan: 307
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 2368 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.120868
+",11280,11280
+0,266,1,True,2,255,B_tree,ring_uni,264,,"r 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 266
+sim_makespan: 264
+total_received: 2256 / 2256
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 484 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.022378
+",2256,2256
+0,267,2,True,2,255,B_tree,ring_uni,265,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 267
+sim_makespan: 265
+total_received: 4512 / 4512
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 947 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0451601
+",4512,4512
+0,268,3,True,2,255,B_tree,ring_uni,266,," 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 268
+sim_makespan: 266
+total_received: 6768 / 6768
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1425 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.069437
+",6768,6768
+0,269,4,True,2,255,B_tree,ring_uni,267,,"46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 269
+sim_makespan: 267
+total_received: 9024 / 9024
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 1887 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.0898709
+",9024,9024
+0,309,5,True,2,255,B_tree,ring_uni,307,,"6 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 309
+sim_makespan: 307
+total_received: 11280 / 11280
+buffer_full_stalls: 0
+Draining remaining packets ...
+Time taken is 2368 cycles
+====== Overall Traffic Statistics ======
+Total run time 0.118105
+",11280,11280
+0,107,1,True,1,0,B_tree,row_col,105,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 107
+sim_makespan: 105
+total_received: 2352 / 2256
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 10754
+Simulation unstable, ending ...
+Total run time 0.125976
+",2256,2352
+0,198,2,True,1,0,B_tree,row_col,196,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 198
+sim_makespan: 196
+total_received: 4704 / 4512
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 12539
+Simulation unstable, ending ...
+Total run time 0.164297
+",4512,4704
+0,255,3,True,1,0,B_tree,row_col,253,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 255
+sim_makespan: 253
+total_received: 7056 / 6768
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 13764
+Simulation unstable, ending ...
+Total run time 0.194725
+",6768,7056
+0,306,4,True,1,0,B_tree,row_col,304,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 306
+sim_makespan: 304
+total_received: 9408 / 9024
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 14887
+Simulation unstable, ending ...
+Total run time 0.228256
+",9024,9408
+0,376,5,True,1,0,B_tree,row_col,374,,"connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 376
+sim_makespan: 374
+total_received: 11760 / 11280
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 16333
+Simulation unstable, ending ...
+Total run time 0.255152
+",11280,11760
+0,71,1,True,2,0,B_tree,row_col,69,,"1
+	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 71
+sim_makespan: 69
+total_received: 2352 / 2256
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 10124
+Simulation unstable, ending ...
+Total run time 0.128421
+",2256,2352
+0,138,2,True,2,0,B_tree,row_col,136,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 138
+sim_makespan: 136
+total_received: 4704 / 4512
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 11525
+Simulation unstable, ending ...
+Total run time 0.145393
+",4512,4704
+0,193,3,True,2,0,B_tree,row_col,191,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 193
+sim_makespan: 191
+total_received: 7056 / 6768
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 12728
+Simulation unstable, ending ...
+Total run time 0.170189
+",6768,7056
+0,248,4,True,2,0,B_tree,row_col,246,,"	 connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 248
+sim_makespan: 246
+total_received: 9408 / 9024
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 13907
+Simulation unstable, ending ...
+Total run time 0.203568
+",9024,9408
+0,317,5,True,2,0,B_tree,row_col,315,,"connected to router 46 using link 204 at outport 4 lat 4
+router 46
+	 connected to router 40 using link 205 at outport 1 lat 6
+	 connected to router 45 using link 206 at outport 2 lat 4
+	 connected to router 46 using link 207 at outport 3 lat 1
+	 connected to router 47 using link 208 at outport 4 lat 4
+router 47
+	 connected to router 41 using link 209 at outport 1 lat 6
+	 connected to router 46 using link 210 at outport 2 lat 4
+	 connected to router 47 using link 211 at outport 3 lat 1
+========================== Routing table  =====================
+=== Trace Allgather Simulation ===
+trace_mode: tree
+expected_makespan: 317
+sim_makespan: 315
+total_received: 11760 / 11280
+buffer_full_stalls: 0
+WARNING: allgather incomplete at cycle 15330
+Simulation unstable, ending ...
+Total run time 0.265584
+",11280,11760

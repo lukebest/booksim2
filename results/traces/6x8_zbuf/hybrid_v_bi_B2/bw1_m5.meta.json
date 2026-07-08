@@ -1,0 +1,21 @@
+{
+  "mx": 6,
+  "my": 8,
+  "n": 48,
+  "h": 4,
+  "v": 6,
+  "scheme": "hybrid_v_bi_B2",
+  "ramp_bw": 1,
+  "m": 5,
+  "expected_makespan": 610,
+  "num_hop_events": 11280,
+  "max_hop_cycle": 605,
+  "num_tree_sources": 144,
+  "num_fork_rows": 2304,
+  "batches": [
+    2,
+    2,
+    1
+  ],
+  "source": "hybrid_v_tdm_batches"
+}
