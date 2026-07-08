@@ -109,7 +109,7 @@ def collect_cells(sweep):
                 if not cell or not cell.get("best"):
                     continue
                 raw_best = cell["best"]
-                rec = A.recommend(mx, my, m, rb, sweep)
+                rec = A.recommend(mx, my, m, rb, sweep, buffer_budget=0)
                 picked = {
                     "name": rec["scheme"], "makespan": rec["makespan"],
                     "max_link_wait": rec.get("max_link_wait"),
@@ -235,7 +235,7 @@ def detail_table(cells, rb):
                 f"<td>{buf}</td><td>{cell['ratio']:.3f}</td></tr>"
             )
     hdr = ("<table class='data'><thead><tr><th>规模</th><th>m</th><th>理论下界 T</th>"
-           "<th>推荐方案</th><th>makespan</th>"
+           "<th>推荐方案（零buffer最优）</th><th>makespan</th>"
            "<th>所需 buffer(link/ramp,单位flit)</th><th>比值</th></tr></thead><tbody>")
     return hdr + "".join(rows) + "</tbody></table>"
 
@@ -661,7 +661,8 @@ def build_report(lb, sweep):
 
         METHOD_FIX_SECTION.format(strict_table=strict_m1_table()),
 
-        "<h2>4. 热力图：makespan / 理论下界（m=1 小规模=刚性打包器真值；m&gt;1 与大规模=buffer_budget=2 约束下的推荐方案）</h2>",
+        "<h2>4. 热力图：makespan / 理论下界（零 buffer 最优方案：max_link_wait=max_ramp_wait=0；"
+        "m=1 小规模=刚性打包器真值）</h2>",
         *sections,
 
         "<h2>5. 结论（已按第 3.5 节的 buffer 诚实性核查修正）</h2>",

@@ -182,6 +182,13 @@ def _strict_lookup(mx, my, ramp_bw):
     return b["best"]
 
 
+def _pick_zero_buffer(cell):
+    """Best makespan among candidates with max_link_wait==max_ramp_wait==0."""
+    zc = [r for r in cell.get("results", [])
+          if r.get("ok") and r.get("max_link_wait") == 0 and r.get("max_ramp_wait") == 0]
+    return min(zc, key=lambda r: r["makespan"]) if zc else None
+
+
 def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Return dict: scheme name, fn+args to reproduce it, predicted makespan,
     lower bound T, ratio, and whether this came from an exact sweep lookup,
@@ -245,7 +252,23 @@ def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGE
     if cell and cell.get("best"):
         picked = cell["best"]
         buffer_limited = False
-        if buffer_budget is not None:
+
+        # Strict zero-buffer selection (buffer_budget == 0): prefer precomputed
+        # best_zero_buffer on cell, else witness-filtered min makespan.
+        if buffer_budget == 0:
+            bz = cell.get("best_zero_buffer") or _pick_zero_buffer(cell)
+            if bz:
+                picked = bz
+                buffer_limited = False
+            else:
+                instrumented = [r for r in cell.get("results", [])
+                                if r.get("ok") and r.get("max_link_wait") is not None
+                                and r.get("max_ramp_wait") is not None]
+                if instrumented:
+                    picked = min(instrumented,
+                                 key=lambda r: (max(r["max_link_wait"], r["max_ramp_wait"]), r["makespan"]))
+                buffer_limited = True
+        elif buffer_budget is not None:
             within = _pick_within_budget(cell, buffer_budget)
             if within is not None and within["name"] != picked["name"]:
                 picked = within
