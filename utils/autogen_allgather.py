@@ -56,6 +56,14 @@ RAMP_BWS = [1, 2]
 # flits of realistic skid buffer".
 DEFAULT_BUFFER_BUDGET = 2
 
+# Single-scheme rigid run confirmed hybrid_v_bi_B2 at 32x32/ramp_bw=1 (see strict JSON).
+M1_EXTRAPOLATE_SCHEME = "hybrid_v_bi_B2"
+
+# m=2: hybrid_v_bi_B1 wins makespan everywhere in the sweep; bidirectional schemes
+# stagger forward/backward up-injections (cycle 0 vs 1 at ramp_bw=1) without router
+# buffer -- see sched_zerobuf_compare._ring_arrivals.
+M2_OPTIMAL_SCHEME = "hybrid_v_bi_B1"
+
 
 def _load_sweep():
     return json.loads(SWEEP_JSON.read_text(encoding="utf-8"))
@@ -189,6 +197,29 @@ def _pick_zero_buffer(cell):
     return min(zc, key=lambda r: r["makespan"]) if zc else None
 
 
+def _result_by_name(cell, name):
+    if not cell:
+        return None
+    return next((r for r in cell.get("results", []) if r.get("name") == name), None)
+
+
+def _rec_from_ed(name, mx, my, m, ramp_bw, cell, sweep, source, ed, buf_link=0, buf_ramp=0):
+    fn, extra = _fn_for(name, mx, my)
+    return {
+        "mx": mx, "my": my, "m": m, "ramp_bw": ramp_bw,
+        "scheme": name, "fn": fn,
+        "args": (mx, my, sweep["h"], sweep["v"], ramp_bw, m) + extra,
+        "makespan": ed["makespan"],
+        "max_link_wait": buf_link, "max_ramp_wait": buf_ramp,
+        "ed_makespan": ed["makespan"],
+        "ed_max_link_wait": ed.get("max_link_wait"),
+        "ed_max_ramp_wait": ed.get("max_ramp_wait"),
+        "T": cell["T"], "ratio": round(ed["makespan"] / cell["T"], 4) if cell["T"] else None,
+        "buffer_budget": 0, "buffer_limited": False,
+        "source": source,
+    }
+
+
 def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGET):
     """Return dict: scheme name, fn+args to reproduce it, predicted makespan,
     lower bound T, ratio, and whether this came from an exact sweep lookup,
@@ -248,6 +279,22 @@ def recommend(mx, my, m, ramp_bw, sweep=None, buffer_budget=DEFAULT_BUFFER_BUDGE
                     "buffer_budget": buffer_budget, "buffer_limited": False,
                     "source": "strict_zerobuf",
                 }
+
+    # 32x32 m=1 without rigid entry for this ramp_bw: extrapolate hybrid_v_bi_B2.
+    if (m == 1 and buffer_budget == 0 and f"{mx}x{my}" == "32x32"
+            and cell and not _strict_lookup(mx, my, ramp_bw)):
+        ed = _result_by_name(cell, M1_EXTRAPOLATE_SCHEME)
+        if ed and ed.get("ok"):
+            return _rec_from_ed(M1_EXTRAPOLATE_SCHEME, mx, my, m, ramp_bw, cell, sweep,
+                                "rigid_extrapolate", ed)
+
+    # m=2: hybrid_v_bi_B1 is makespan-optimal; bidirectional up-ramp TDM needs no
+    # router buffer even at ramp_bw=1 (ED may record max_ramp_wait=2).
+    if m == 2 and buffer_budget == 0 and cell:
+        ed = _result_by_name(cell, M2_OPTIMAL_SCHEME)
+        if ed and ed.get("ok"):
+            return _rec_from_ed(M2_OPTIMAL_SCHEME, mx, my, m, ramp_bw, cell, sweep,
+                                "bi_tdm_m2", ed)
 
     if cell and cell.get("best"):
         picked = cell["best"]

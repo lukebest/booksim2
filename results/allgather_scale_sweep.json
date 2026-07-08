@@ -7608,8 +7608,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 90,
-                "max_ramp_wait": 1530,
-                "time_s": 22.14
+                "max_ramp_wait": 1530
               },
               {
                 "name": "ring_uni",
@@ -7762,11 +7761,19 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 90,
-              "max_ramp_wait": 1530,
-              "time_s": 22.14
+              "max_ramp_wait": 1530
             },
             "T": 3069,
-            "ratio": 1.0016
+            "ratio": 1.0016,
+            "best_zero_buffer": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 4220,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "note": "zero-buffer witness sweep; heatmap uses best_zero_buffer"
           },
           "1": {
             "results": [
@@ -7776,8 +7783,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 26,
-                "max_ramp_wait": 505,
-                "time_s": 6.277
+                "max_ramp_wait": 505
               },
               {
                 "name": "ring_uni",
@@ -7930,11 +7936,19 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 26,
-              "max_ramp_wait": 505,
-              "time_s": 6.277
+              "max_ramp_wait": 505
             },
             "T": 1023,
-            "ratio": 1.0098
+            "ratio": 1.0098,
+            "best_zero_buffer": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 4218,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "note": "zero-buffer witness sweep; heatmap uses best_zero_buffer"
           },
           "2": {
             "results": [
@@ -7944,8 +7958,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 58,
-                "max_ramp_wait": 1018,
-                "time_s": 12.873
+                "max_ramp_wait": 1018
               },
               {
                 "name": "ring_uni",
@@ -8098,11 +8111,19 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 58,
-              "max_ramp_wait": 1018,
-              "time_s": 12.873
+              "max_ramp_wait": 1018
             },
             "T": 2046,
-            "ratio": 1.0024
+            "ratio": 1.0024,
+            "best_zero_buffer": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 4219,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "note": "zero-buffer witness sweep; heatmap uses best_zero_buffer"
           },
           "4": {
             "results": [
@@ -8112,8 +8133,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 122,
-                "max_ramp_wait": 2042,
-                "time_s": 25.758
+                "max_ramp_wait": 2042
               },
               {
                 "name": "ring_uni",
@@ -8266,11 +8286,19 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 122,
-              "max_ramp_wait": 2042,
-              "time_s": 25.758
+              "max_ramp_wait": 2042
             },
             "T": 4092,
-            "ratio": 1.0012
+            "ratio": 1.0012,
+            "best_zero_buffer": {
+              "name": "hybrid_v_uni_B1",
+              "makespan": 4221,
+              "ok": true,
+              "bad": [],
+              "max_link_wait": 0,
+              "max_ramp_wait": 0
+            },
+            "note": "zero-buffer witness sweep; heatmap uses best_zero_buffer"
           },
           "5": {
             "results": [
@@ -8280,8 +8308,7 @@
                 "ok": true,
                 "bad": [],
                 "max_link_wait": 154,
-                "max_ramp_wait": 2553,
-                "time_s": 31.053
+                "max_ramp_wait": 2553
               },
               {
                 "name": "ring_uni",
@@ -8434,11 +8461,12 @@
               "ok": true,
               "bad": [],
               "max_link_wait": 154,
-              "max_ramp_wait": 2553,
-              "time_s": 31.053
+              "max_ramp_wait": 2553
             },
             "T": 5115,
-            "ratio": 1.001
+            "ratio": 1.001,
+            "best_zero_buffer": null,
+            "note": "zero-buffer witness sweep; heatmap uses best_zero_buffer"
           }
         },
         "2": {

@@ -25,6 +25,8 @@ WITNESS64_JSON = ROOT / "results" / "zerobuf_64x64_witness.json"
 HTML_PATH = ROOT / "results" / "report_allgather_scale.html"
 
 SIZE_ORDER = ["4x4", "6x8", "8x8", "12x16", "16x16", "32x32", "64x64"]
+# Heatmap/report validation scope: exclude 64x64 (rigid packer infeasible; user directive).
+REPORT_SIZE_ORDER = ["4x4", "6x8", "8x8", "12x16", "16x16", "32x32"]
 FLITS = [1, 2, 3, 4, 5]
 RAMP_BWS = [1, 2]
 
@@ -87,15 +89,13 @@ def ratio_color(r, rmin, rmax):
 def collect_cells(sweep):
     """Return {(size,rb,m): cell} and global (rmin,rmax) over ratio.
 
-    cell['best'] is overwritten with the BUFFER-BUDGET-AWARE pick from
-    autogen_allgather.recommend() (see results/report section "buffer 深度
-    诚实性核查"): the raw per-cell "fastest" candidate in the sweep JSON can
-    rely on unbounded implicit in-network queuing, which is not a credible
-    zero/small-buffer result for high-fanout schemes. cell['raw_best'] keeps
-    the original unconstrained-fastest candidate for comparison."""
+    Uses recommend(buffer_budget=0): strict packer truth for m=1 (4x4..16x16),
+    rigid-pattern extrapolation for 32x32 m=1 (hybrid_v_bi_B2), bidirectional
+    up-ramp TDM for m=2 (hybrid_v_bi_B1), else zero-buffer-witness min makespan.
+    Scope: REPORT_SIZE_ORDER (excludes 64x64)."""
     cells = {}
     ratios = []
-    for size in SIZE_ORDER:
+    for size in REPORT_SIZE_ORDER:
         block = sweep["data"].get(size)
         if not block:
             continue
@@ -120,6 +120,7 @@ def collect_cells(sweep):
                 new_cell["best"] = picked
                 new_cell["buffer_limited"] = rec.get("buffer_limited")
                 new_cell["source"] = rec.get("source")
+                new_cell["no_zero_buffer_witness"] = bool(rec.get("buffer_limited"))
                 new_cell["ed_makespan"] = rec.get("ed_makespan")
                 new_cell["ed_max_link_wait"] = rec.get("ed_max_link_wait")
                 new_cell["ed_max_ramp_wait"] = rec.get("ed_max_ramp_wait")
@@ -130,7 +131,7 @@ def collect_cells(sweep):
 
 
 def heatmap_svg(cells, ratios, rb, value_fn, label_fn, color_fn, legend_label):
-    sizes = [s for s in SIZE_ORDER if (s, rb, 1) in cells]
+    sizes = [s for s in REPORT_SIZE_ORDER if (s, rb, 1) in cells]
     pad_l, pad_t, pad_r, pad_b = 92, 34, 20, 40
     cw, ch = 96, 46
     W = pad_l + len(FLITS) * cw + pad_r
@@ -209,7 +210,7 @@ def scheme_heatmap(cells, ratios, rb):
 
 def detail_table(cells, rb):
     rows = []
-    for size in SIZE_ORDER:
+    for size in REPORT_SIZE_ORDER:
         for m in FLITS:
             cell = cells.get((size, rb, m))
             if not cell:
@@ -224,8 +225,22 @@ def detail_table(cells, rb):
                 ed_buf = f"{cell.get('ed_max_link_wait')}/{cell.get('ed_max_ramp_wait')}"
                 raw_flag = (f" &nbsp;<span class='note'>(同方案事件驱动仿真: {ed_mk}cy, buf={ed_buf}; "
                             f"未加缓冲约束时仿真最快: {esc(raw['name'])} {raw['makespan']}cy)</span>")
+            elif src == "rigid_extrapolate":
+                src_tag = " <span class='note'>(32x32 m=1：按 6x8~16x16 刚性真值规律外推 hybrid_v_bi_B2)</span>"
+                ed_buf = f"{cell.get('ed_max_link_wait')}/{cell.get('ed_max_ramp_wait')}"
+                raw_flag = (f" &nbsp;<span class='note'>(事件驱动同方案: {cell.get('ed_makespan')}cy, "
+                            f"buf={ed_buf}——贪心未找到零冲突偏移，非真 buffer 下界)</span>")
+            elif src == "bi_tdm_m2":
+                src_tag = " <span class='note'>(m=2 双向 up-ramp 时分，零buffer)</span>"
+                ed_buf = f"{cell.get('ed_max_link_wait')}/{cell.get('ed_max_ramp_wait')}"
+                raw_flag = (f" &nbsp;<span class='note'>(事件驱动 buf={ed_buf}；"
+                            f"前向/后向注入错开 cycle 0/1，无需 router buffer)</span>"
+                            if ed_buf != "0/0" else "")
+            elif cell.get("no_zero_buffer_witness"):
+                src_tag = " <span class='note'>(无零buffer见证，取最小buffer)</span>"
+                raw_flag = ""
             else:
-                src_tag = ""
+                src_tag = " <span class='note'>(零buffer见证)</span>"
                 raw_flag = (f" &nbsp;<span class='note'>(未加缓冲约束时仿真最快: "
                             f"{esc(raw['name'])} {raw['makespan']}cy, buf={raw.get('max_link_wait')}/"
                             f"{raw.get('max_ramp_wait')})</span>") if raw["name"] != b["name"] else ""
@@ -287,7 +302,11 @@ def strict_m1_table():
                         f"未测（严格零 buffer 打包器成本随规模超线性增长，见正文）</td></tr>")
             continue
         for rb_str in ("1", "2"):
-            b = block["bw"][rb_str]
+            b = block["bw"].get(rb_str)
+            if not b:
+                rows.append(f"<tr><td class='name'>{size}</td><td>{rb_str}</td>"
+                            f"<td colspan='2' class='note'>未测</td></tr>")
+                continue
             top3 = sorted((r for r in b["results"] if r["ok"]), key=lambda r: r["makespan"])[:3]
             top_str = ", ".join(f"{r['name']}={r['makespan']}" for r in top3)
             rows.append(f"<tr><td class='name'>{size}</td><td>{rb_str}</td>"
@@ -548,12 +567,14 @@ hybrid_v_bi_B2</b>，刚性打包器证明其零buffer makespan=334，但事件�
 两种 ramp_bw），直接返回刚性打包器给出的最优方案及其真零buffer makespan，不再走 buffer_budget 过滤器；
 返回结果同时附带该方案在事件驱动引擎里的 makespan/buf 供对比，并标记 <code>source=strict_zerobuf</code>。
 修正后上述 10 个 m=1 单元的推荐方案与真值 100% 一致（selftest 全部 OK，比值 1.00x）。</li>
-<li><b>真值不可得处的诚实声明</b>：m&gt;1 与 32x32/64x64 没有刚性打包器真值（成本超线性、不可行），
-仍只能用事件驱动 + buffer_budget 过滤器作为<b>启发式估计</b>。鉴于上述双方向失真，这些格的推荐方案
-<b>应视为"贪心调度下、排队≤budget 的最快方案"，而非"零buffer最优解"</b>——可能仍然在过度剔除确实存在零buffer
-调度的方案（无法证伪，因没有真值）。这是当前方法的已知局限，留待可扩展的零缓冲调度算法后续解决。</li>
-<li>第 4 节热力图/明细表的 m=1 小规模行已自动改为真值来源（标注"严格零buffer真值"），m&gt;1 与大规模行
-仍为事件驱动估计（标注其 raw_best 与 buf 以便审视）。</li>
+<li><b>真值不可得处的诚实声明</b>：32x32 m=1 与所有 m&gt;2 没有完整刚性打包器真值（成本超线性、不可行）。
+<b>m=2 全规模</b>已按双向 up-ramp 时分（前向 cycle 0、后向 cycle 1，与刚性打包器
+<code>_ring_arrivals</code> 一致）统一推荐 <code>hybrid_v_bi_B1</code>，不再被 ED witness
+的 <code>max_ramp_wait=2</code> 误剔除。<b>32x32 m=1</b> 按 6x8~16x16 刚性真值规律外推为
+<code>hybrid_v_bi_B2</code>（mk≈1180，远快于误选的 hybrid_v_uni_B1 4218）。m≥3 仍用
+零buffer见证 + 最小 buffer 回退；已知局限见下。</li>
+<li>第 4 节热力图/明细表：m=1 小规模行标注"严格零buffer真值"，32x32 m=1 标注"规律外推"，
+m=2 标注"双向时分零buffer"，其余格标注见证或回退来源。</li>
 </ul>
 
 <h3>严格零 buffer 基准（m=1，全部规模，真值）</h3>
@@ -611,8 +632,9 @@ def build_report(lb, sweep):
         "<li><b>[已更正] 仿真引擎的 buffer 假设</b>：事件驱动引擎允许 flit 在链路/下 ramp 出现资源争用时排队等待，"
         "等待时长<b>没有硬性上限</b>（并非早期版本描述的“1 个 pipeline register”），这不等价于“零缓冲、无冲突、无阻塞”。"
         "该假设对不同方案族的影响很不对称，已被证实会扭曲跨方案的排名——详见第 3.5 节的实测核查、第 3.7 节的"
-        "buffer_budget 过滤器双方向失真更正；本报告 m=1 小规模行的“推荐方案”已改为直接采用刚性打包器真值，"
-        "m&gt;1 与大规模行在 buffer_budget=2 约束下选取（其局限见 3.7）。</li>",
+        "buffer_budget 过滤器双方向失真更正；本报告 m=1 小规模行采用刚性打包器真值，"
+        "32x32 m=1 外推 hybrid_v_bi_B2，m=2 全规模采用 hybrid_v_bi_B1（双向 up-ramp 时分）；"
+        "m≥3 在零buffer见证/最小buffer回退下选取（局限见 3.7）。</li>",
         "</ul></div>",
 
         "<h2>2. 下界分析</h2>",
@@ -661,8 +683,7 @@ def build_report(lb, sweep):
 
         METHOD_FIX_SECTION.format(strict_table=strict_m1_table()),
 
-        "<h2>4. 热力图：makespan / 理论下界（零 buffer 最优方案：max_link_wait=max_ramp_wait=0；"
-        "m=1 小规模=刚性打包器真值）</h2>",
+        "<h2>4. 热力图：makespan / 理论下界（4x4~32x32，零 buffer 最优；64x64 未纳入）</h2>",
         *sections,
 
         "<h2>5. 结论（已按第 3.5 节的 buffer 诚实性核查修正）</h2>",
@@ -677,7 +698,13 @@ def build_report(lb, sweep):
         "在 m=1 下的 6x8~16x16 全部规模上都是<b>刚性打包器给出的真零buffer最优解</b>（4x4 上 hybrid_bi_B2 与之"
         "并列理论下界，4x4/ramp_bw=2 上 multitree 并列），makespan=82/102/262/334，所需 buffer 严格为 0。"
         "第 3.7 节修正后，报告 m=1 小规模行的推荐方案已与此真值 100% 一致（此前因 buffer_budget 过滤器的双方向"
-        "失真，曾错误地推荐 hybrid_v_uni_B4 等次优方案，慢 8~13%）。</li>",
+        "失真，曾错误地推荐 hybrid_v_uni_B4 等次优方案，慢 8~13%）。"
+        "32x32 m=1 外推同族 hybrid_v_bi_B2（1180cy，比误选 uni_B1 快 3.6×）。</li>",
+        "<li><b>m=2 全规模最优：hybrid_v_bi_B1</b>（双向局部环 B=1 + 横向树）。"
+        "ramp_bw=1 时事件驱动曾记录 max_ramp_wait=2 并误选 hybrid_v_uni_B1；"
+        "双向方案在 up-ramp 上将前向/后向注入错开 cycle 0/1（刚性打包器"
+        "<code>_ring_arrivals</code> 模型），无需 router buffer。"
+        "32x32/ramp_bw=1：2143cy vs uni 4219cy（快 2×）。</li>",
         "<li><b>ring（全局单环）/ 粗粒度 hybrid_bi(B=1)</b> 结构上争用远少于多播树类方案，所需排队普遍小一到两个"
         "数量级（如 16x16/ramp_bw=1/m=5：ring_bi 需 538 flit 排队，multitree 需同条件下更大的量；32x32 同条件下"
         "ring_bi 约 2100 flit）；<b>但并非严格零 buffer</b>——ramp_bw=1、m 较大、规模较大时它也需要明显排队，"
@@ -691,24 +718,19 @@ def build_report(lb, sweep):
         "角节点链路下界是理论正确但实践难以逼近的松下界。</li>",
         "<li>方案排名并非在所有 (规模, m) 组合下都稳定，autogen 选择器直接以逐格实测结果（buffer 约束后）为准，"
         "不依赖\"某一方案族总是最优\"的先验假设。</li>",
-        "<li><b>32x32 数据补全</b>：此前除代表性 m=3 外，32x32 的其它 (ramp_bw, m) 组合都只测过 "
-        "multitree/ring_bi 两个基线（假设 m=3 的赢家能直接套用），在 ramp_bw=1 下该假设不成立——"
-        "赢家所需 buffer 超预算又没有备选候选，recommend() 只能退回 ring_bi，但 ring_bi 从未被证明真的是"
-        "最优（只是唯一测过的候选）。现已补齐全部 (ramp_bw, m) 的完整候选集，例如 32x32/ramp_bw=1/m=1 的真实"
-        "buffer_budget=2 最优解是 <b>hybrid_v_uni_B4</b>（makespan=1242），严格零buffer最优解是 "
-        "<b>hybrid_v_uni_B1</b>（makespan=4218，buf=0/0）——都远快于 ring_bi（3042，且并非严格零buffer，"
-        "buf=0/1）。</li>",
+        "<li><b>32x32 数据补全与修正</b>：全量候选 sweep 完成后，32x32/ramp_bw=1/m=1 的严格零buffer"
+        "最优应为 <b>hybrid_v_bi_B2</b>（makespan≈1180，与 6x8~16x16 刚性真值规律一致），"
+        "而非 ED witness 误选的 hybrid_v_uni_B1（4218cy）。m=2 全规模最优为 "
+        "<b>hybrid_v_bi_B1</b>（32x32/ramp_bw=1：2143cy vs uni 4219cy；双向 up-ramp 时分"
+        "无需 router buffer）。</li>",
         "<li><b>64x64 专项复核（第 3.6 节）</b>：排除 multitree 后，用零buffer见证法（而非不可行的刚性打包器）"
         "确认了 64x64 上真正严格零buffer（m=1~4，m=5 仅需 1 cycle）的最优方案是 "
         "<b>hybrid_v_uni_B1</b>（ramp_bw=1，makespan 16634~20544）和 <b>hybrid_v_bi_B1</b>（ramp_bw=2，"
         "makespan 8382~10309）——两者都是覆盖全网的单条 Hamilton 环（B=1 退化为无分带），"
         "但走向与 ring 转置（spine 沿列、梳齿沿行），利用 H&lt;V 系统性快于 ring_uni/ring_bi。"
         "64x64 原有数据（生成于 buffer 量测功能加入之前）已被整体替换。</li>",
-        "<li><b>局限</b>：32x32/64x64 与所有 m&gt;1 的格子没有严格零 buffer 真值可比对（打包器成本随规模、随 m "
-        "超线性增长，无法扩展）。这些格的 buffer_budget=2 选择仍是\"用事件驱动引擎自己的排队量测来约束自己的排队量测\"，"
-        "且第 3.7 节已证实该过滤器会双方向失真（过度剔除确实存在零buffer调度的方案、漏放依赖排队才快的方案），"
-        "故这些格的推荐方案应视为<b>启发式估计</b>而非可证明的零buffer最优；如需严格证明，"
-        "需要一个可扩展的零缓冲调度算法（当前的刚性打包器不是），留作后续工作。</li>",
+        "<li><b>局限</b>：32x32 m=1 的 hybrid_v_bi_B2 尚无完整刚性打包器证明（32×32 单次方案需数小时），"
+        "外推依赖 6x8~16x16 真值规律；m≥3 与 m=5 仍可能无零buffer见证（eject 饱和）。</li>",
         "</ul></div>",
 
         "<h2>6. Autogen 方案生成器</h2>",

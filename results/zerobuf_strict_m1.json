@@ -7,7 +7,8 @@
     "6x8",
     "8x8",
     "12x16",
-    "16x16"
+    "16x16",
+    "32x32"
   ],
   "data": {
     "4x4": {
@@ -1157,6 +1158,32 @@
             "makespan": 334
           },
           "time_s": null
+        }
+      }
+    },
+    "32x32": {
+      "mx": 32,
+      "my": 32,
+      "h": 4,
+      "v": 6,
+      "n": 1024,
+      "quad_available": true,
+      "bw": {
+        "1": {
+          "eject_lb": 1023,
+          "results": [
+            {
+              "name": "hybrid_v_bi_B2",
+              "makespan": 1182,
+              "ok": true
+            }
+          ],
+          "best": {
+            "name": "hybrid_v_bi_B2",
+            "makespan": 1182
+          },
+          "time_s": 995.4,
+          "note": "single-scheme rigid packer run (full study infeasible)"
         }
       }
     }
