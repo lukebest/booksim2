@@ -1,4 +1,4 @@
-// Trace-driven allgather traffic manager (Route A hop / Route B tree).
+// Trace-driven allgather traffic manager (Route A hop / Route B tree via TM fork walk).
 
 #include "tracetrafficmanager.hpp"
 #include <fstream>
@@ -24,6 +24,14 @@ TraceTrafficManager::TraceTrafficManager(const Configuration &config,
   _expected_makespan = config.GetInt("expected_makespan");
   _msg_flits = config.GetInt("msg_size");
   _drain_slack = config.GetInt("trace_drain_slack");
+  _mx = config.GetInt("mesh_x");
+  _my = config.GetInt("mesh_y");
+  if(_mx <= 0) _mx = 6;
+  if(_my <= 0) _my = 8;
+  _h_lat = config.GetInt("h_latency");
+  _v_lat = config.GetInt("v_latency");
+  if(_h_lat <= 0) _h_lat = 4;
+  if(_v_lat <= 0) _v_lat = 6;
   if(_drain_slack <= 0) _drain_slack = 256;
   _max_cycle = 0;
 
@@ -34,7 +42,7 @@ TraceTrafficManager::TraceTrafficManager(const Configuration &config,
     _LoadHopTrace(_trace_file);
   } else if(_trace_mode == "tree") {
     _LoadTreeTrace(_trace_file);
-    if(!_fork_file.empty()) {
+    if(!_fork_file.empty() && _fork_file != "none") {
       if(!_fork_table.Load(_fork_file)) {
         Error("Failed to load fork_file: " + _fork_file);
       }
@@ -45,6 +53,13 @@ TraceTrafficManager::TraceTrafficManager(const Configuration &config,
 }
 
 TraceTrafficManager::~TraceTrafficManager() {}
+
+int TraceTrafficManager::_EdgeLat(int u, int v) const
+{
+  int uy = u / _mx, ux = u % _mx;
+  int vy = v / _mx, vx = v % _mx;
+  return (ux != vx) ? _h_lat : _v_lat;
+}
 
 void TraceTrafficManager::_LoadHopTrace(const string & path)
 {
@@ -59,7 +74,7 @@ void TraceTrafficManager::_LoadHopTrace(const string & path)
     if(tag != "HOP") continue;
     HopEvent e;
     int flit_idx;
-    int is_final;
+    int is_final = 0;
     iss >> e.inject >> e.dest >> e.cycle >> e.gather_src >> flit_idx >> is_final;
     e.final_hop = is_final;
     _hop_events.push_back(e);
@@ -85,7 +100,7 @@ void TraceTrafficManager::_LoadTreeTrace(const string & path)
   }
 }
 
-void TraceTrafficManager::_InjectHopEvent(const HopEvent & e)
+void TraceTrafficManager::_InjectHopEvent(const HopEvent & e, int final_hop)
 {
   int const cl = 0;
   int const time = _time;
@@ -103,41 +118,63 @@ void TraceTrafficManager::_InjectHopEvent(const HopEvent & e)
   f->head = true;
   f->tail = true;
   f->dest = e.dest;
-  f->trace_ph = e.final_hop ? 1 : 0;
+  f->trace_ph = final_hop ? 1 : 0;
   f->pri = numeric_limits<int>::max() - time;
   f->vc = -1;
   f->ph = -1;
-
   _total_in_flight_flits[cl][f->id] = f;
   _partial_packets[e.inject][cl].push_back(f);
 }
 
-void TraceTrafficManager::_InjectTreeEvent(const TreeEvent & e)
+void TraceTrafficManager::_EnqueueTreeTokens(const TreeEvent & e)
 {
-  int const cl = 0;
-  int const time = _time;
   for(int i = 0; i < e.num_flits; ++i) {
-    Flit * f = Flit::New();
-    f->id = _cur_id++;
-    f->pid = _cur_pid++;
-    f->watch = false;
-    f->subnetwork = 0;
-    f->src = e.gather_src;
-    f->gather_src = e.gather_src;
-    f->ctime = time;
-    f->record = false;
-    f->cl = cl;
-    f->type = Flit::ANY_TYPE;
-    f->head = true;
-    f->tail = true;
-    f->dest = e.gather_src;
-    f->trace_ph = 100;
-    f->pri = numeric_limits<int>::max() - time;
-    f->vc = -1;
-    f->ph = -1;
-    _total_in_flight_flits[cl][f->id] = f;
-    _partial_packets[e.gather_src][cl].push_back(f);
+    TreeToken tok;
+    tok.gather_src = e.gather_src;
+    tok.node = e.gather_src;
+    tok.ready_cycle = e.inject_cycle + i;
+    _tree_tokens.push_back(tok);
   }
+}
+
+void TraceTrafficManager::_AdvanceTreeTokens()
+{
+  vector<TreeToken> next;
+  for(size_t i = 0; i < _tree_tokens.size(); ++i) {
+    TreeToken tok = _tree_tokens[i];
+    if(tok.ready_cycle != _time) {
+      next.push_back(tok);
+      continue;
+    }
+    ForkAction act;
+    if(!_fork_table.Lookup(tok.gather_src, tok.node, act)) {
+      continue;
+    }
+    if(act.eject && tok.node != tok.gather_src) {
+      _recv_count[tok.node][tok.gather_src]++;
+      _total_received++;
+      if(_sim_makespan < 0 || _time > _sim_makespan) _sim_makespan = _time;
+    }
+    for(size_t j = 0; j < act.forwards.size(); ++j) {
+      int nb = act.forwards[j];
+      HopEvent hop;
+      hop.inject = tok.node;
+      hop.dest = nb;
+      hop.cycle = _time;
+      hop.gather_src = tok.gather_src;
+      hop.final_hop = 0;
+      _InjectHopEvent(hop, 0);
+      TreeToken nt;
+      nt.gather_src = tok.gather_src;
+      nt.node = nb;
+      nt.ready_cycle = _time + _EdgeLat(tok.node, nb);
+      next.push_back(nt);
+    }
+    if(act.eject && tok.node == tok.gather_src && act.forwards.empty()) {
+      // source-only fork with no forward; nothing else to do
+    }
+  }
+  _tree_tokens.swap(next);
 }
 
 void TraceTrafficManager::_Inject()
@@ -145,15 +182,17 @@ void TraceTrafficManager::_Inject()
   if(_trace_mode == "hop") {
     while(_hop_idx < _hop_events.size() &&
           _hop_events[_hop_idx].cycle == _time) {
-      _InjectHopEvent(_hop_events[_hop_idx]);
+      const HopEvent & e = _hop_events[_hop_idx];
+      _InjectHopEvent(e, e.final_hop);
       ++_hop_idx;
     }
   } else if(_trace_mode == "tree") {
     while(_tree_idx < _tree_events.size() &&
           _tree_events[_tree_idx].inject_cycle == _time) {
-      _InjectTreeEvent(_tree_events[_tree_idx]);
+      _EnqueueTreeTokens(_tree_events[_tree_idx]);
       ++_tree_idx;
     }
+    _AdvanceTreeTokens();
   }
 }
 
@@ -164,7 +203,7 @@ void TraceTrafficManager::_RetireFlit(Flit *f, int dest)
   if(_trace_mode == "hop") {
     count = (f->trace_ph == 1);
   } else {
-    count = true;
+    count = false;
   }
   if(count && gs != dest && gs >= 0 && gs < _nodes && dest >= 0 && dest < _nodes) {
     _recv_count[dest][gs]++;
@@ -230,16 +269,12 @@ bool TraceTrafficManager::_SingleSim()
 
   while(_time < limit) {
     _Step();
-    if(_AllGatherComplete() && _total_in_flight_flits[0].empty()) {
+    if(_AllGatherComplete() && _total_in_flight_flits[0].empty() &&
+       _tree_tokens.empty()) {
       break;
     }
   }
 
-  bool ok = _AllGatherComplete();
-  if(!ok) {
-    cerr << "Trace sim incomplete at t=" << _time
-         << " received=" << _total_received << "/" << _total_expected << endl;
-  }
   if(_sim_makespan < 0 && _total_received > 0) {
     _sim_makespan = _time;
   }

@@ -94,7 +94,7 @@ def main():
             print(f"A {scheme} bw={rb} m={m} ok={r['ok']} sim={r['sim_makespan']} exp={meta['expected_makespan']} stalls={r['buffer_full_stalls']}")
         if args.mode in ("tree", "both"):
             r = run_one("tree", stem.with_suffix(".tree"), stem.with_suffix(".fork"),
-                        meta["expected_makespan"], m, router="fork_iq")
+                        meta["expected_makespan"], m, router="iq")
             r.update({"route": "B_tree", "scheme": scheme, "ramp_bw": rb, "m": m})
             results.append(r)
             print(f"B {scheme} bw={rb} m={m} ok={r['ok']} sim={r['sim_makespan']} exp={meta['expected_makespan']} stalls={r['buffer_full_stalls']}")

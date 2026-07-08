@@ -45,4 +45,7 @@ warmup_periods = 0;
 measure_stats = 0;
 priority = none;
 
-// Route B: use router = fork_iq and trace_mode = tree
+mesh_x = 6;
+mesh_y = 8;
+h_latency = 4;
+v_latency = 6;

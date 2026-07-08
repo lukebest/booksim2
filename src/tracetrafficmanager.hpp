@@ -19,6 +19,11 @@ protected:
     int inject_cycle;
     int num_flits;
   };
+  struct TreeToken {
+    int gather_src;
+    int node;
+    int ready_cycle;
+  };
 
   std::string _trace_mode;
   std::string _trace_file;
@@ -28,11 +33,16 @@ protected:
   int _msg_flits;
   int _max_cycle;
   int _drain_slack;
+  int _mx;
+  int _my;
+  int _h_lat;
+  int _v_lat;
   size_t _hop_idx;
   size_t _tree_idx;
 
   std::vector<HopEvent> _hop_events;
   std::vector<TreeEvent> _tree_events;
+  std::vector<TreeToken> _tree_tokens;
   ForkTable _fork_table;
 
   std::vector<std::vector<int> > _recv_count;
@@ -50,8 +60,10 @@ protected:
 
   void _LoadHopTrace(const std::string & path);
   void _LoadTreeTrace(const std::string & path);
-  void _InjectHopEvent(const HopEvent & e);
-  void _InjectTreeEvent(const TreeEvent & e);
+  void _InjectHopEvent(const HopEvent & e, int final_hop);
+  void _EnqueueTreeTokens(const TreeEvent & e);
+  void _AdvanceTreeTokens();
+  int _EdgeLat(int u, int v) const;
   bool _AllGatherComplete() const;
   void _WriteResult() const;
 

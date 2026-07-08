@@ -8,28 +8,30 @@ ForkIQRouter::ForkIQRouter(Configuration const & config, Module *parent,
   : IQRouter(config, parent, name, id, inputs, outputs), _fork_failures(0)
 {
   string fork_path = config.GetStr("fork_file");
-  if(!fork_path.empty()) {
+  if(!fork_path.empty() && fork_path != "none") {
     if(!_fork_table.Load(fork_path)) {
       Error("ForkIQRouter: failed to load fork_file " + fork_path);
     }
   }
 }
 
-ForkIQRouter::~ForkIQRouter() {}
+ForkIQRouter::~ForkIQRouter() {
+  while(!_fork_deferred.empty()) {
+    _fork_deferred.front().second->Free();
+    _fork_deferred.pop_front();
+  }
+}
 
 Flit * ForkIQRouter::_CloneForkFlit(Flit const * f, int dest) const
 {
   Flit * c = Flit::New();
   c->type = f->type;
-  c->vc = f->vc;
   c->cl = f->cl;
-  c->head = f->head;
-  c->tail = f->tail;
+  c->head = true;
+  c->tail = true;
   c->ctime = f->ctime;
   c->itime = f->itime;
   c->atime = f->atime;
-  c->id = f->id;
-  c->pid = f->pid;
   c->record = f->record;
   c->src = f->src;
   c->gather_src = f->gather_src;
@@ -40,53 +42,57 @@ Flit * ForkIQRouter::_CloneForkFlit(Flit const * f, int dest) const
   c->subnetwork = f->subnetwork;
   c->intm = f->intm;
   c->ph = f->ph;
-  c->trace_ph = 0;
+  c->trace_ph = 100;
   c->data = f->data;
   c->vc = -1;
+  static int _fork_seq = 1 << 20;
+  c->id = _fork_seq++;
+  c->pid = _fork_seq++;
   return c;
 }
 
 void ForkIQRouter::_PreInputQueuing()
 {
-  multimap<int, Flit *> expanded;
+  if(!_fork_deferred.empty()) {
+    pair<int, Flit *> item = _fork_deferred.front();
+    _fork_deferred.pop_front();
+    _in_queue_flits.insert(item);
+  }
+
+  multimap<int, Flit *> keep;
   for(multimap<int, Flit *>::iterator iter = _in_queue_flits.begin();
       iter != _in_queue_flits.end(); ++iter) {
     int const input = iter->first;
     Flit * f = iter->second;
     if(!f || f->trace_ph != 100) {
-      expanded.insert(*iter);
+      keep.insert(*iter);
       continue;
     }
     ForkAction act;
-    if(!_fork_table.Lookup(f->gather_src >= 0 ? f->gather_src : f->src, _id, act)) {
-      expanded.insert(*iter);
+    int const gs = f->gather_src >= 0 ? f->gather_src : f->src;
+    if(!_fork_table.Lookup(gs, _id, act)) {
+      keep.insert(*iter);
       continue;
     }
-    bool ok = true;
-    (void)ok;
-    vector<Flit *> clones;
-    if(act.eject) {
-      Flit * e = _CloneForkFlit(f, _id);
-      e->trace_ph = 0;
-      clones.push_back(e);
-    }
+    vector<int> outs;
+    if(act.eject) outs.push_back(_id);
     for(size_t i = 0; i < act.forwards.size(); ++i) {
-      Flit * c = _CloneForkFlit(f, act.forwards[i]);
-      c->trace_ph = 100;
-      clones.push_back(c);
+      outs.push_back(act.forwards[i]);
     }
-    if(clones.empty()) {
+    if(outs.empty()) {
       ++_fork_failures;
       f->Free();
       continue;
     }
-    for(size_t i = 0; i < clones.size(); ++i) {
-      clones[i]->id = f->id + (int)((i + 1) * 1000000);
-      clones[i]->pid = f->pid + (int)((i + 1) * 1000000);
-      clones[i]->vc = -1;
-      expanded.insert(make_pair(input, clones[i]));
+    f->dest = outs[0];
+    f->trace_ph = (outs[0] == (int)_id) ? 0 : 100;
+    f->vc = -1;
+    keep.insert(make_pair(input, f));
+    for(size_t i = 1; i < outs.size(); ++i) {
+      Flit * c = _CloneForkFlit(f, outs[i]);
+      if(outs[i] == (int)_id) c->trace_ph = 0;
+      _fork_deferred.push_back(make_pair(input, c));
     }
-    f->Free();
   }
-  _in_queue_flits.swap(expanded);
+  _in_queue_flits.swap(keep);
 }
