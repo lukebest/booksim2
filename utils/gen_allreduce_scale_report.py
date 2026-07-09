@@ -315,7 +315,7 @@ def lb_table(lb):
     return hdr + "".join(rows) + "</tbody></table>"
 
 
-def analyze_findings(cells):
+def analyze_findings(cells, lb):
     inc_wins = 0
     node_wins = 0
     rb_wins = 0
@@ -340,6 +340,8 @@ def analyze_findings(cells):
         if size in ("12x16", "16x16") and bo.get("algo") == "tree_bcast":
             large_rb += 1
 
+    h, v = lb.get("h", 7), lb.get("v", 9)
+    d16 = lb["data"]["16x16"]["modes"]["inc"]["1"]["mesh_diameter"]
     total = len(cells)
     return f"""
 <ul class="compact">
@@ -349,10 +351,10 @@ def analyze_findings(cells):
 <li><b>算法结构选型</b>：Reduce+Broadcast (RB) 在 {rb_wins}/{total} 格胜出，RS+AG 在 {rsag_wins}/{total} 格胜出。
     小 mesh（4x4/6x8/8x8）上 RS+AG 在 INC 模式下占 {small_rsag}/15 格；
     大 mesh（12x16/16x16）上 RB 在 INC 模式下占 {large_rb}/10 格。</li>
-<li><b>临界点</b>：当 mesh 直径 &gt; ~90 cycle 且 m &le; 5 时，单 Hamilton 环 RS 的 O(N) 步延迟超过树形 RB 的 O(&radic;N) 直径延迟，
-    即使 AG 段采用库中最优方案也无法挽回；此时 tree_reduce_bcast 稳定为 makespan 最优（比值 ~1.00-1.03）。</li>
+<li><b>临界点</b>：H={h} V={v} 下 16×16 mesh 直径约 {d16} cycle；当环 RS 的 O(N) 步延迟超过树形 RB 的直径延迟时，
+    即使 AG 段采用库中最优方案也无法挽回，tree_reduce_bcast 稳定为 makespan 最优（比值 ~1.00–1.05）。</li>
 <li><b>无 INC 场景</b>：所有规模上 tree_reduce_bcast 均为该模式下的最优方案（RS+AG 的 RS 段因 12cy/merge 代价过高）。
-    大 mesh + 大 m 时 makespan 比值可达 2.0（16x16, m=5），表明无 INC 时 reduce 代价成为主导瓶颈。</li>
+    大 mesh + 大 m 时 makespan 相对下界比值显著升高，表明无 INC 时 reduce 代价成为主导瓶颈。</li>
 <li><b>推荐配置</b>：
     <ul>
     <li>有 INC + 小/中 mesh + 小 m &rarr; <b>ring RS + 最优 AG</b></li>
@@ -454,7 +456,7 @@ PE&harr;router ramp 各 1 cycle，链路带宽 1 flit/cycle。</p>
 
 <div class="card">
 <h2>7. 分析结论与推荐</h2>
-{analyze_findings(cells)}
+{analyze_findings(cells, lb)}
 <h3>方案族说明</h3>
 <ul class="compact">
 <li><b>tree_reduce_bcast</b>：每源沿维度序路径 reduce 到 mesh 中心 root（{inc_lat}cy/merge 或 {node_red_lat}cy 绕行），root 弹出后再沿维序多播树 broadcast 到全部节点。</li>

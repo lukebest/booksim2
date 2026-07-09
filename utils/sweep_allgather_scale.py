@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LB_JSON = ROOT / "results" / "allgather_lb.json"
 OUT_JSON = ROOT / "results" / "allgather_scale_sweep.json"
 
-H, V = 4, 6
+H, V = 7, 9
 SIZES = [(4, 4), (6, 8), (8, 8), (12, 16), (16, 16), (32, 32), (64, 64)]
 FLITS = [1, 2, 3, 4, 5]
 RAMP_BWS = [1, 2]
@@ -96,19 +96,19 @@ def reduced_candidates(mx, my, winner_name, winner_fn, winner_args):
     return cands
 
 
-def eval_candidate(mx, my, ramp_bw, flits, name, fn, extra_args):
+def eval_candidate(mx, my, ramp_bw, flits, name, fn, extra_args, h=H, v=V):
     t0 = time.time()
-    mk, ok, bad, max_link_wait, max_ramp_wait = fn(mx, my, H, V, ramp_bw, flits, *extra_args)
+    mk, ok, bad, max_link_wait, max_ramp_wait = fn(mx, my, h, v, ramp_bw, flits, *extra_args)
     dt = time.time() - t0
     return {"name": name, "makespan": mk, "ok": ok, "bad": bad,
             "max_link_wait": max_link_wait, "max_ramp_wait": max_ramp_wait,
             "time_s": round(dt, 3)}
 
 
-def sweep_cell(mx, my, ramp_bw, flits, candidates, log_prefix=""):
+def sweep_cell(mx, my, ramp_bw, flits, candidates, log_prefix="", h=H, v=V):
     results = []
     for name, fn, extra in candidates:
-        r = eval_candidate(mx, my, ramp_bw, flits, name, fn, extra)
+        r = eval_candidate(mx, my, ramp_bw, flits, name, fn, extra, h, v)
         results.append(r)
         print(f"{log_prefix}{name:20s} mk={r['makespan']:7d} ok={r['ok']!s:5s} "
               f"buf(link/ramp)={r['max_link_wait']:4d}/{r['max_ramp_wait']:4d} "
@@ -127,7 +127,7 @@ def find_fn(name, mx, my, huge=False):
     raise KeyError(name)
 
 
-def sweep_size(mx, my, lb_data, verbose=True):
+def sweep_size(mx, my, lb_data, verbose=True, h=H, v=V):
     n = mx * my
     key = f"{mx}x{my}"
     huge = n >= HUGE_N
@@ -145,15 +145,15 @@ def sweep_size(mx, my, lb_data, verbose=True):
             if huge:
                 if winner_cache is None:
                     cands = full_candidates(mx, my, huge=True)
-                    results, best = sweep_cell(mx, my, rb, m, cands, prefix)
+                    results, best = sweep_cell(mx, my, rb, m, cands, prefix, h, v)
                     winner_cache = (best["name"], *find_fn(best["name"], mx, my, huge=True))
                 else:
                     wname, wfn, wargs = winner_cache
                     cands = reduced_candidates(mx, my, wname, wfn, wargs)
-                    results, best = sweep_cell(mx, my, rb, m, cands, prefix)
+                    results, best = sweep_cell(mx, my, rb, m, cands, prefix, h, v)
             else:
                 cands = full_candidates(mx, my)
-                results, best = sweep_cell(mx, my, rb, m, cands, prefix)
+                results, best = sweep_cell(mx, my, rb, m, cands, prefix, h, v)
 
             t = lb_data["data"][key]["bw"][str(rb)][str(m)]["T"]
             cell = {
@@ -171,12 +171,15 @@ def sweep_size(mx, my, lb_data, verbose=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--h", type=int, default=H)
+    ap.add_argument("--v", type=int, default=V)
     ap.add_argument("--sizes", default=None,
                      help="comma-separated MXxMY list to restrict, e.g. 4x4,8x8")
     ap.add_argument("--json", default=str(OUT_JSON))
     ap.add_argument("--out-partial", action="store_true",
                      help="write JSON after every size (crash-safe for long 64x64 runs)")
     args = ap.parse_args()
+    h, v = args.h, args.v
 
     lb_data = json.loads(LB_JSON.read_text(encoding="utf-8"))
 
@@ -186,18 +189,20 @@ def main():
         sizes = [(mx, my) for mx, my in SIZES if f"{mx}x{my}" in want]
 
     out_path = Path(args.json)
-    payload = {"h": H, "v": V, "sizes": [f"{mx}x{my}" for mx, my in SIZES],
+    payload = {"h": h, "v": v, "sizes": [f"{mx}x{my}" for mx, my in SIZES],
                "flits": FLITS, "ramp_bws": RAMP_BWS, "huge_n": HUGE_N, "data": {}}
     if out_path.exists():
         try:
             payload = json.loads(out_path.read_text(encoding="utf-8"))
+            payload["h"] = h
+            payload["v"] = v
         except Exception:
             pass
 
     for mx, my in sizes:
         key = f"{mx}x{my}"
         t0 = time.time()
-        payload["data"][key] = sweep_size(mx, my, lb_data)
+        payload["data"][key] = sweep_size(mx, my, lb_data, h=h, v=v)
         print(f"=== {key} done in {time.time()-t0:.1f}s ===\n")
         if args.out_partial:
             out_path.parent.mkdir(parents=True, exist_ok=True)

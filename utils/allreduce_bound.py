@@ -8,7 +8,7 @@ M flits per node.
 
 from __future__ import annotations
 
-MX, MY, H, V, RAMP = 16, 16, 4, 6, 1
+MX, MY, H, V, RAMP = 16, 16, 7, 9, 1
 N = MX * MY
 DEFAULT_ROOT = 8 + 8 * MX  # mesh centre (8,8)
 INC_LAT_DEFAULT = 3
@@ -181,14 +181,14 @@ def bound_table(M_values=(1, 2, 3, 4, 5, 6), r_lat=R_LAT_DEFAULT, ramp_bw=1,
 
 
 def sweep_lower_bounds(sizes, flits, ramp_bw=1, inc_lat=INC_LAT_DEFAULT,
-                       node_red_lat=NODE_RED_LAT_DEFAULT):
+                       node_red_lat=NODE_RED_LAT_DEFAULT, h=H, v=V):
     """Compute lower bounds for all (size, m, reduce_mode) cells."""
-    out = {"h": H, "v": V, "ramp": RAMP, "inc_lat": inc_lat,
+    out = {"h": h, "v": v, "ramp": RAMP, "inc_lat": inc_lat,
            "node_red_lat": node_red_lat, "ramp_bw": ramp_bw,
            "sizes": [f"{mx}x{my}" for mx, my in sizes], "flits": list(flits),
            "data": {}}
     for mx, my in sizes:
-        cfg(mx, my)
+        cfg(mx, my, h, v)
         key = f"{mx}x{my}"
         out["data"][key] = {"mx": mx, "my": my, "n": mx * my, "modes": {}}
         for mode in ("inc", "node"):

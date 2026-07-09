@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LB_JSON = ROOT / "results" / "allreduce_lb.json"
 OUT_JSON = ROOT / "results" / "allreduce_scale_sweep.json"
 
-H, V = 4, 6
+H, V = 7, 9
 SIZES = [(4, 4), (6, 8), (8, 8), (12, 16), (16, 16)]
 FLITS = [1, 2, 3, 4, 5]
 RAMP_BW = 1
@@ -30,16 +30,25 @@ INC_LAT = 3
 NODE_RED_LAT = 12
 
 
-def sweep(inc_lat=INC_LAT, node_red_lat=NODE_RED_LAT, ramp_bw=RAMP_BW):
+def _apply_hv(h, v):
+    global H, V
+    H, V = h, v
+    ab.H, ab.V = h, v
+    sa.H, sa.V = h, v
+
+
+def sweep(inc_lat=INC_LAT, node_red_lat=NODE_RED_LAT, ramp_bw=RAMP_BW,
+          h=H, v=V):
+    _apply_hv(h, v)
     ag_data = None
     if sa.AG_SWEEP_JSON.exists():
         ag_data = json.loads(sa.AG_SWEEP_JSON.read_text(encoding="utf-8"))
 
-    lb = ab.sweep_lower_bounds(SIZES, FLITS, ramp_bw, inc_lat, node_red_lat)
+    lb = ab.sweep_lower_bounds(SIZES, FLITS, ramp_bw, inc_lat, node_red_lat, h, v)
     LB_JSON.write_text(json.dumps(lb, indent=2), encoding="utf-8")
 
     out = {
-        "h": H, "v": V, "ramp": 1,
+        "h": h, "v": v, "ramp": 1,
         "inc_lat": inc_lat, "node_red_lat": node_red_lat,
         "ramp_bw": ramp_bw,
         "sizes": [f"{mx}x{my}" for mx, my in SIZES],
@@ -84,11 +93,13 @@ def sweep(inc_lat=INC_LAT, node_red_lat=NODE_RED_LAT, ramp_bw=RAMP_BW):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--h", type=int, default=H)
+    ap.add_argument("--v", type=int, default=V)
     ap.add_argument("--inc-lat", type=int, default=INC_LAT)
     ap.add_argument("--node-red-lat", type=int, default=NODE_RED_LAT)
     ap.add_argument("--ramp-bw", type=int, default=RAMP_BW)
     args = ap.parse_args()
-    sweep(args.inc_lat, args.node_red_lat, args.ramp_bw)
+    sweep(args.inc_lat, args.node_red_lat, args.ramp_bw, args.h, args.v)
 
 
 if __name__ == "__main__":

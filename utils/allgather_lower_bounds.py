@@ -43,7 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "allgather_lb.json"
 
-H_DEFAULT, V_DEFAULT, RAMP = 4, 6, 1
+H_DEFAULT, V_DEFAULT, RAMP = 7, 9, 1
 
 SIZES = [(4, 4), (6, 8), (8, 8), (12, 16), (16, 16), (32, 32), (64, 64)]
 FLITS = [1, 2, 3, 4, 5]

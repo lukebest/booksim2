@@ -15,7 +15,7 @@ import allreduce_bound as ab
 import hamilton_ring as hr
 import sched_zerobuf_compare as sz
 
-H, V, RAMP = 4, 6, 1
+H, V, RAMP = 7, 9, 1
 INC_LAT = 3
 NODE_RED_LAT = 12
 RAMP_BW = 1

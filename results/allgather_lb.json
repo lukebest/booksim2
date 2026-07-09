@@ -1,6 +1,6 @@
 {
-  "h": 4,
-  "v": 6,
+  "h": 7,
+  "v": 9,
   "ramp": 1,
   "sizes": [
     "4x4",
@@ -32,9 +32,9 @@
           "1": {
             "eject_lb": 15,
             "corner_lb": 8,
-            "latency_lb": 32,
+            "latency_lb": 50,
             "bisect_lb": 2,
-            "T": 32,
+            "T": 50,
             "binding": [
               "latency"
             ]
@@ -42,9 +42,9 @@
           "2": {
             "eject_lb": 30,
             "corner_lb": 15,
-            "latency_lb": 33,
+            "latency_lb": 51,
             "bisect_lb": 4,
-            "T": 33,
+            "T": 51,
             "binding": [
               "latency"
             ]
@@ -52,17 +52,17 @@
           "3": {
             "eject_lb": 45,
             "corner_lb": 23,
-            "latency_lb": 34,
+            "latency_lb": 52,
             "bisect_lb": 6,
-            "T": 45,
+            "T": 52,
             "binding": [
-              "eject"
+              "latency"
             ]
           },
           "4": {
             "eject_lb": 60,
             "corner_lb": 30,
-            "latency_lb": 35,
+            "latency_lb": 53,
             "bisect_lb": 8,
             "T": 60,
             "binding": [
@@ -72,7 +72,7 @@
           "5": {
             "eject_lb": 75,
             "corner_lb": 38,
-            "latency_lb": 36,
+            "latency_lb": 54,
             "bisect_lb": 10,
             "T": 75,
             "binding": [
@@ -84,9 +84,9 @@
           "1": {
             "eject_lb": 8,
             "corner_lb": 8,
-            "latency_lb": 32,
+            "latency_lb": 50,
             "bisect_lb": 2,
-            "T": 32,
+            "T": 50,
             "binding": [
               "latency"
             ]
@@ -94,9 +94,9 @@
           "2": {
             "eject_lb": 15,
             "corner_lb": 15,
-            "latency_lb": 33,
+            "latency_lb": 51,
             "bisect_lb": 4,
-            "T": 33,
+            "T": 51,
             "binding": [
               "latency"
             ]
@@ -104,9 +104,9 @@
           "3": {
             "eject_lb": 23,
             "corner_lb": 23,
-            "latency_lb": 34,
+            "latency_lb": 52,
             "bisect_lb": 6,
-            "T": 34,
+            "T": 52,
             "binding": [
               "latency"
             ]
@@ -114,9 +114,9 @@
           "4": {
             "eject_lb": 30,
             "corner_lb": 30,
-            "latency_lb": 35,
+            "latency_lb": 53,
             "bisect_lb": 8,
-            "T": 35,
+            "T": 53,
             "binding": [
               "latency"
             ]
@@ -124,12 +124,11 @@
           "5": {
             "eject_lb": 38,
             "corner_lb": 38,
-            "latency_lb": 36,
+            "latency_lb": 54,
             "bisect_lb": 10,
-            "T": 38,
+            "T": 54,
             "binding": [
-              "eject",
-              "corner"
+              "latency"
             ]
           }
         }
@@ -144,9 +143,9 @@
           "1": {
             "eject_lb": 47,
             "corner_lb": 24,
-            "latency_lb": 64,
+            "latency_lb": 100,
             "bisect_lb": 4,
-            "T": 64,
+            "T": 100,
             "binding": [
               "latency"
             ]
@@ -154,17 +153,17 @@
           "2": {
             "eject_lb": 94,
             "corner_lb": 47,
-            "latency_lb": 65,
+            "latency_lb": 101,
             "bisect_lb": 8,
-            "T": 94,
+            "T": 101,
             "binding": [
-              "eject"
+              "latency"
             ]
           },
           "3": {
             "eject_lb": 141,
             "corner_lb": 71,
-            "latency_lb": 66,
+            "latency_lb": 102,
             "bisect_lb": 12,
             "T": 141,
             "binding": [
@@ -174,7 +173,7 @@
           "4": {
             "eject_lb": 188,
             "corner_lb": 94,
-            "latency_lb": 67,
+            "latency_lb": 103,
             "bisect_lb": 16,
             "T": 188,
             "binding": [
@@ -184,7 +183,7 @@
           "5": {
             "eject_lb": 235,
             "corner_lb": 118,
-            "latency_lb": 68,
+            "latency_lb": 104,
             "bisect_lb": 20,
             "T": 235,
             "binding": [
@@ -196,9 +195,9 @@
           "1": {
             "eject_lb": 24,
             "corner_lb": 24,
-            "latency_lb": 64,
+            "latency_lb": 100,
             "bisect_lb": 4,
-            "T": 64,
+            "T": 100,
             "binding": [
               "latency"
             ]
@@ -206,9 +205,9 @@
           "2": {
             "eject_lb": 47,
             "corner_lb": 47,
-            "latency_lb": 65,
+            "latency_lb": 101,
             "bisect_lb": 8,
-            "T": 65,
+            "T": 101,
             "binding": [
               "latency"
             ]
@@ -216,29 +215,27 @@
           "3": {
             "eject_lb": 71,
             "corner_lb": 71,
-            "latency_lb": 66,
+            "latency_lb": 102,
             "bisect_lb": 12,
-            "T": 71,
+            "T": 102,
             "binding": [
-              "eject",
-              "corner"
+              "latency"
             ]
           },
           "4": {
             "eject_lb": 94,
             "corner_lb": 94,
-            "latency_lb": 67,
+            "latency_lb": 103,
             "bisect_lb": 16,
-            "T": 94,
+            "T": 103,
             "binding": [
-              "eject",
-              "corner"
+              "latency"
             ]
           },
           "5": {
             "eject_lb": 118,
             "corner_lb": 118,
-            "latency_lb": 68,
+            "latency_lb": 104,
             "bisect_lb": 20,
             "T": 118,
             "binding": [
@@ -258,9 +255,9 @@
           "1": {
             "eject_lb": 63,
             "corner_lb": 32,
-            "latency_lb": 72,
+            "latency_lb": 114,
             "bisect_lb": 4,
-            "T": 72,
+            "T": 114,
             "binding": [
               "latency"
             ]
@@ -268,7 +265,7 @@
           "2": {
             "eject_lb": 126,
             "corner_lb": 63,
-            "latency_lb": 73,
+            "latency_lb": 115,
             "bisect_lb": 8,
             "T": 126,
             "binding": [
@@ -278,7 +275,7 @@
           "3": {
             "eject_lb": 189,
             "corner_lb": 95,
-            "latency_lb": 74,
+            "latency_lb": 116,
             "bisect_lb": 12,
             "T": 189,
             "binding": [
@@ -288,7 +285,7 @@
           "4": {
             "eject_lb": 252,
             "corner_lb": 126,
-            "latency_lb": 75,
+            "latency_lb": 117,
             "bisect_lb": 16,
             "T": 252,
             "binding": [
@@ -298,7 +295,7 @@
           "5": {
             "eject_lb": 315,
             "corner_lb": 158,
-            "latency_lb": 76,
+            "latency_lb": 118,
             "bisect_lb": 20,
             "T": 315,
             "binding": [
@@ -310,9 +307,9 @@
           "1": {
             "eject_lb": 32,
             "corner_lb": 32,
-            "latency_lb": 72,
+            "latency_lb": 114,
             "bisect_lb": 4,
-            "T": 72,
+            "T": 114,
             "binding": [
               "latency"
             ]
@@ -320,9 +317,9 @@
           "2": {
             "eject_lb": 63,
             "corner_lb": 63,
-            "latency_lb": 73,
+            "latency_lb": 115,
             "bisect_lb": 8,
-            "T": 73,
+            "T": 115,
             "binding": [
               "latency"
             ]
@@ -330,18 +327,17 @@
           "3": {
             "eject_lb": 95,
             "corner_lb": 95,
-            "latency_lb": 74,
+            "latency_lb": 116,
             "bisect_lb": 12,
-            "T": 95,
+            "T": 116,
             "binding": [
-              "eject",
-              "corner"
+              "latency"
             ]
           },
           "4": {
             "eject_lb": 126,
             "corner_lb": 126,
-            "latency_lb": 75,
+            "latency_lb": 117,
             "bisect_lb": 16,
             "T": 126,
             "binding": [
@@ -352,7 +348,7 @@
           "5": {
             "eject_lb": 158,
             "corner_lb": 158,
-            "latency_lb": 76,
+            "latency_lb": 118,
             "bisect_lb": 20,
             "T": 158,
             "binding": [
@@ -372,17 +368,17 @@
           "1": {
             "eject_lb": 191,
             "corner_lb": 96,
-            "latency_lb": 136,
+            "latency_lb": 214,
             "bisect_lb": 8,
-            "T": 191,
+            "T": 214,
             "binding": [
-              "eject"
+              "latency"
             ]
           },
           "2": {
             "eject_lb": 382,
             "corner_lb": 191,
-            "latency_lb": 137,
+            "latency_lb": 215,
             "bisect_lb": 16,
             "T": 382,
             "binding": [
@@ -392,7 +388,7 @@
           "3": {
             "eject_lb": 573,
             "corner_lb": 287,
-            "latency_lb": 138,
+            "latency_lb": 216,
             "bisect_lb": 24,
             "T": 573,
             "binding": [
@@ -402,7 +398,7 @@
           "4": {
             "eject_lb": 764,
             "corner_lb": 382,
-            "latency_lb": 139,
+            "latency_lb": 217,
             "bisect_lb": 32,
             "T": 764,
             "binding": [
@@ -412,7 +408,7 @@
           "5": {
             "eject_lb": 955,
             "corner_lb": 478,
-            "latency_lb": 140,
+            "latency_lb": 218,
             "bisect_lb": 40,
             "T": 955,
             "binding": [
@@ -424,9 +420,9 @@
           "1": {
             "eject_lb": 96,
             "corner_lb": 96,
-            "latency_lb": 136,
+            "latency_lb": 214,
             "bisect_lb": 8,
-            "T": 136,
+            "T": 214,
             "binding": [
               "latency"
             ]
@@ -434,18 +430,17 @@
           "2": {
             "eject_lb": 191,
             "corner_lb": 191,
-            "latency_lb": 137,
+            "latency_lb": 215,
             "bisect_lb": 16,
-            "T": 191,
+            "T": 215,
             "binding": [
-              "eject",
-              "corner"
+              "latency"
             ]
           },
           "3": {
             "eject_lb": 287,
             "corner_lb": 287,
-            "latency_lb": 138,
+            "latency_lb": 216,
             "bisect_lb": 24,
             "T": 287,
             "binding": [
@@ -456,7 +451,7 @@
           "4": {
             "eject_lb": 382,
             "corner_lb": 382,
-            "latency_lb": 139,
+            "latency_lb": 217,
             "bisect_lb": 32,
             "T": 382,
             "binding": [
@@ -467,7 +462,7 @@
           "5": {
             "eject_lb": 478,
             "corner_lb": 478,
-            "latency_lb": 140,
+            "latency_lb": 218,
             "bisect_lb": 40,
             "T": 478,
             "binding": [
@@ -487,7 +482,7 @@
           "1": {
             "eject_lb": 255,
             "corner_lb": 128,
-            "latency_lb": 152,
+            "latency_lb": 242,
             "bisect_lb": 8,
             "T": 255,
             "binding": [
@@ -497,7 +492,7 @@
           "2": {
             "eject_lb": 510,
             "corner_lb": 255,
-            "latency_lb": 153,
+            "latency_lb": 243,
             "bisect_lb": 16,
             "T": 510,
             "binding": [
@@ -507,7 +502,7 @@
           "3": {
             "eject_lb": 765,
             "corner_lb": 383,
-            "latency_lb": 154,
+            "latency_lb": 244,
             "bisect_lb": 24,
             "T": 765,
             "binding": [
@@ -517,7 +512,7 @@
           "4": {
             "eject_lb": 1020,
             "corner_lb": 510,
-            "latency_lb": 155,
+            "latency_lb": 245,
             "bisect_lb": 32,
             "T": 1020,
             "binding": [
@@ -527,7 +522,7 @@
           "5": {
             "eject_lb": 1275,
             "corner_lb": 638,
-            "latency_lb": 156,
+            "latency_lb": 246,
             "bisect_lb": 40,
             "T": 1275,
             "binding": [
@@ -539,9 +534,9 @@
           "1": {
             "eject_lb": 128,
             "corner_lb": 128,
-            "latency_lb": 152,
+            "latency_lb": 242,
             "bisect_lb": 8,
-            "T": 152,
+            "T": 242,
             "binding": [
               "latency"
             ]
@@ -549,7 +544,7 @@
           "2": {
             "eject_lb": 255,
             "corner_lb": 255,
-            "latency_lb": 153,
+            "latency_lb": 243,
             "bisect_lb": 16,
             "T": 255,
             "binding": [
@@ -560,7 +555,7 @@
           "3": {
             "eject_lb": 383,
             "corner_lb": 383,
-            "latency_lb": 154,
+            "latency_lb": 244,
             "bisect_lb": 24,
             "T": 383,
             "binding": [
@@ -571,7 +566,7 @@
           "4": {
             "eject_lb": 510,
             "corner_lb": 510,
-            "latency_lb": 155,
+            "latency_lb": 245,
             "bisect_lb": 32,
             "T": 510,
             "binding": [
@@ -582,7 +577,7 @@
           "5": {
             "eject_lb": 638,
             "corner_lb": 638,
-            "latency_lb": 156,
+            "latency_lb": 246,
             "bisect_lb": 40,
             "T": 638,
             "binding": [
@@ -602,7 +597,7 @@
           "1": {
             "eject_lb": 1023,
             "corner_lb": 512,
-            "latency_lb": 312,
+            "latency_lb": 498,
             "bisect_lb": 16,
             "T": 1023,
             "binding": [
@@ -612,7 +607,7 @@
           "2": {
             "eject_lb": 2046,
             "corner_lb": 1023,
-            "latency_lb": 313,
+            "latency_lb": 499,
             "bisect_lb": 32,
             "T": 2046,
             "binding": [
@@ -622,7 +617,7 @@
           "3": {
             "eject_lb": 3069,
             "corner_lb": 1535,
-            "latency_lb": 314,
+            "latency_lb": 500,
             "bisect_lb": 48,
             "T": 3069,
             "binding": [
@@ -632,7 +627,7 @@
           "4": {
             "eject_lb": 4092,
             "corner_lb": 2046,
-            "latency_lb": 315,
+            "latency_lb": 501,
             "bisect_lb": 64,
             "T": 4092,
             "binding": [
@@ -642,7 +637,7 @@
           "5": {
             "eject_lb": 5115,
             "corner_lb": 2558,
-            "latency_lb": 316,
+            "latency_lb": 502,
             "bisect_lb": 80,
             "T": 5115,
             "binding": [
@@ -654,7 +649,7 @@
           "1": {
             "eject_lb": 512,
             "corner_lb": 512,
-            "latency_lb": 312,
+            "latency_lb": 498,
             "bisect_lb": 16,
             "T": 512,
             "binding": [
@@ -665,7 +660,7 @@
           "2": {
             "eject_lb": 1023,
             "corner_lb": 1023,
-            "latency_lb": 313,
+            "latency_lb": 499,
             "bisect_lb": 32,
             "T": 1023,
             "binding": [
@@ -676,7 +671,7 @@
           "3": {
             "eject_lb": 1535,
             "corner_lb": 1535,
-            "latency_lb": 314,
+            "latency_lb": 500,
             "bisect_lb": 48,
             "T": 1535,
             "binding": [
@@ -687,7 +682,7 @@
           "4": {
             "eject_lb": 2046,
             "corner_lb": 2046,
-            "latency_lb": 315,
+            "latency_lb": 501,
             "bisect_lb": 64,
             "T": 2046,
             "binding": [
@@ -698,7 +693,7 @@
           "5": {
             "eject_lb": 2558,
             "corner_lb": 2558,
-            "latency_lb": 316,
+            "latency_lb": 502,
             "bisect_lb": 80,
             "T": 2558,
             "binding": [
@@ -718,7 +713,7 @@
           "1": {
             "eject_lb": 4095,
             "corner_lb": 2048,
-            "latency_lb": 632,
+            "latency_lb": 1010,
             "bisect_lb": 32,
             "T": 4095,
             "binding": [
@@ -728,7 +723,7 @@
           "2": {
             "eject_lb": 8190,
             "corner_lb": 4095,
-            "latency_lb": 633,
+            "latency_lb": 1011,
             "bisect_lb": 64,
             "T": 8190,
             "binding": [
@@ -738,7 +733,7 @@
           "3": {
             "eject_lb": 12285,
             "corner_lb": 6143,
-            "latency_lb": 634,
+            "latency_lb": 1012,
             "bisect_lb": 96,
             "T": 12285,
             "binding": [
@@ -748,7 +743,7 @@
           "4": {
             "eject_lb": 16380,
             "corner_lb": 8190,
-            "latency_lb": 635,
+            "latency_lb": 1013,
             "bisect_lb": 128,
             "T": 16380,
             "binding": [
@@ -758,7 +753,7 @@
           "5": {
             "eject_lb": 20475,
             "corner_lb": 10238,
-            "latency_lb": 636,
+            "latency_lb": 1014,
             "bisect_lb": 160,
             "T": 20475,
             "binding": [
@@ -770,7 +765,7 @@
           "1": {
             "eject_lb": 2048,
             "corner_lb": 2048,
-            "latency_lb": 632,
+            "latency_lb": 1010,
             "bisect_lb": 32,
             "T": 2048,
             "binding": [
@@ -781,7 +776,7 @@
           "2": {
             "eject_lb": 4095,
             "corner_lb": 4095,
-            "latency_lb": 633,
+            "latency_lb": 1011,
             "bisect_lb": 64,
             "T": 4095,
             "binding": [
@@ -792,7 +787,7 @@
           "3": {
             "eject_lb": 6143,
             "corner_lb": 6143,
-            "latency_lb": 634,
+            "latency_lb": 1012,
             "bisect_lb": 96,
             "T": 6143,
             "binding": [
@@ -803,7 +798,7 @@
           "4": {
             "eject_lb": 8190,
             "corner_lb": 8190,
-            "latency_lb": 635,
+            "latency_lb": 1013,
             "bisect_lb": 128,
             "T": 8190,
             "binding": [
@@ -814,7 +809,7 @@
           "5": {
             "eject_lb": 10238,
             "corner_lb": 10238,
-            "latency_lb": 636,
+            "latency_lb": 1014,
             "bisect_lb": 160,
             "T": 10238,
             "binding": [
