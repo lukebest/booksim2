@@ -203,17 +203,17 @@ def main():
         key = f"{mx}x{my}"
         t0 = time.time()
         payload["data"][key] = sweep_size(mx, my, lb_data, h=h, v=v)
-        print(f"=== {key} done in {time.time()-t0:.1f}s ===\n")
+        print(f"=== {key} done in {time.time()-t0:.1f}s ===\n", flush=True)
         if args.out_partial:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
-            print(f"(partial) wrote {out_path}")
+            print(f"(partial) wrote {out_path}", flush=True)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
-    print(f"Wrote {out_path}")
+    print(f"Wrote {out_path}", flush=True)
 
 
 if __name__ == "__main__":
