@@ -333,6 +333,61 @@ def fp_multitree(s):
     return slots
 
 
+def fp_axis_ccw(s):
+    """Cross-axis multicast + CCW-90° fanout from each arm node.
+
+    Phase A: source floods its row and column (four arms).
+    Phase B: each arm node turns 90° CCW relative to the arm direction
+    (right→up, left→down, up→left, down→right) and floods that ray,
+    covering the four quadrants. Intra-source link-disjoint by construction.
+    """
+    sx, sy = coord(s)
+    slots = [('U', s, 0)]
+    arr = {s: RAMP}
+
+    def hop(prev, cur, t, lat):
+        slots.append(('L', lk(prev, cur), t))
+        t2 = t + lat
+        slots.append(('D', cur, t2))
+        arr[cur] = t2
+        return cur, t2
+
+    t, prev = RAMP, s
+    for x in range(sx + 1, MX):
+        prev, t = hop(prev, nid(x, sy), t, H)
+    t, prev = RAMP, s
+    for x in range(sx - 1, -1, -1):
+        prev, t = hop(prev, nid(x, sy), t, H)
+    t, prev = RAMP, s
+    for y in range(sy - 1, -1, -1):
+        prev, t = hop(prev, nid(sx, y), t, V)
+    t, prev = RAMP, s
+    for y in range(sy + 1, MY):
+        prev, t = hop(prev, nid(sx, y), t, V)
+
+    for x in range(sx + 1, MX):
+        t = arr[nid(x, sy)]
+        prev = nid(x, sy)
+        for y in range(sy - 1, -1, -1):
+            prev, t = hop(prev, nid(x, y), t, V)
+    for x in range(sx - 1, -1, -1):
+        t = arr[nid(x, sy)]
+        prev = nid(x, sy)
+        for y in range(sy + 1, MY):
+            prev, t = hop(prev, nid(x, y), t, V)
+    for y in range(sy - 1, -1, -1):
+        t = arr[nid(sx, y)]
+        prev = nid(sx, y)
+        for x in range(sx - 1, -1, -1):
+            prev, t = hop(prev, nid(x, y), t, H)
+    for y in range(sy + 1, MY):
+        t = arr[nid(sx, y)]
+        prev = nid(sx, y)
+        for x in range(sx + 1, MX):
+            prev, t = hop(prev, nid(x, y), t, H)
+    return slots
+
+
 def _arc(chain, start_rel):
     """Rigid slots for a flit leaving chain[0] at start_rel, visiting chain[1:]."""
     slots = []
@@ -476,13 +531,18 @@ def fp_hybrid_v(s, B, bidir, ramp_bw):
 # --------------------------------------------------------------------------
 # Rigid offset packer (conflict-free links + capacity-RAMP_BW ramps).
 # --------------------------------------------------------------------------
-def pack(footprints, ramp_bw, src_order, flits=1):
-    mk, max_off, busy = _pack_core(footprints, ramp_bw, src_order, flits=flits)
+def pack(footprints, ramp_bw, src_order, flits=1, up_cap=None, down_cap=None):
+    mk, max_off, busy = _pack_core(
+        footprints, ramp_bw, src_order, flits=flits,
+        up_cap=up_cap, down_cap=down_cap)
     return mk, max_off, busy
 
 
-def apply_offsets(footprints, inject_offsets, src_order, ramp_bw, flits=1):
-    """Replay fixed per-source inject offsets; ramp cap is ``ramp_bw``."""
+def apply_offsets(footprints, inject_offsets, src_order, ramp_bw, flits=1,
+                  up_cap=None, down_cap=None):
+    """Replay fixed per-source inject offsets; ramp caps default to ``ramp_bw``."""
+    uc = ramp_bw if up_cap is None else up_cap
+    dc = ramp_bw if down_cap is None else down_cap
     link_busy = defaultdict(dict)
     up_busy = defaultdict(dict)
     down_busy = defaultdict(dict)
@@ -502,15 +562,20 @@ def apply_offsets(footprints, inject_offsets, src_order, ramp_bw, flits=1):
                 t[key][cyc + i] = t[key].get(cyc + i, 0) + 1
             if kind == 'D':
                 makespan = max(makespan, cyc + flits - 1 + RAMP)
+    # caps unused here (replay only); kept for API symmetry with pack
+    _ = (uc, dc)
     return makespan, max_off, (link_busy, up_busy, down_busy)
 
 
-def export_events(footprints, ramp_bw, src_order, flits=1):
+def export_events(footprints, ramp_bw, src_order, flits=1,
+                  up_cap=None, down_cap=None):
     """Run pack and emit per-link send events for cycle-by-cycle visualization.
 
     Returns (makespan, max_offset, busy, inject_offsets, events) where each event is
     (source, p, c, send_t, lat, arr_t, kind) and kind is 'link'.
     """
+    uc = ramp_bw if up_cap is None else up_cap
+    dc = ramp_bw if down_cap is None else down_cap
     inject_offsets = {}
     events = []
     link_busy = defaultdict(dict)
@@ -521,7 +586,11 @@ def export_events(footprints, ramp_bw, src_order, flits=1):
         return link_busy if kind == 'L' else up_busy if kind == 'U' else down_busy
 
     def cap(kind):
-        return 1 if kind == 'L' else ramp_bw
+        if kind == 'L':
+            return 1
+        if kind == 'U':
+            return uc
+        return dc
 
     makespan = 0
     max_off = 0
@@ -559,7 +628,9 @@ def export_events(footprints, ramp_bw, src_order, flits=1):
     return makespan, max_off, busy, inject_offsets, events
 
 
-def _pack_core(footprints, ramp_bw, src_order, flits=1):
+def _pack_core(footprints, ramp_bw, src_order, flits=1, up_cap=None, down_cap=None):
+    uc = ramp_bw if up_cap is None else up_cap
+    dc = ramp_bw if down_cap is None else down_cap
     link_busy = defaultdict(dict)
     up_busy = defaultdict(dict)
     down_busy = defaultdict(dict)
@@ -568,7 +639,11 @@ def _pack_core(footprints, ramp_bw, src_order, flits=1):
         return link_busy if kind == 'L' else up_busy if kind == 'U' else down_busy
 
     def cap(kind):
-        return 1 if kind == 'L' else ramp_bw
+        if kind == 'L':
+            return 1
+        if kind == 'U':
+            return uc
+        return dc
 
     makespan = 0
     max_off = 0
@@ -602,11 +677,13 @@ def _pack_core(footprints, ramp_bw, src_order, flits=1):
     return makespan, max_off, (link_busy, up_busy, down_busy)
 
 
-def verify(busy, ramp_bw, flits=1):
+def verify(busy, ramp_bw, flits=1, up_cap=None, down_cap=None):
+    uc = ramp_bw if up_cap is None else up_cap
+    dc = ramp_bw if down_cap is None else down_cap
     link_busy, up_busy, down_busy = busy
     link_ok = all(ct <= 1 for d in link_busy.values() for ct in d.values())
-    up_ok = all(ct <= ramp_bw for d in up_busy.values() for ct in d.values())
-    down_ok = all(ct <= ramp_bw for d in down_busy.values() for ct in d.values())
+    up_ok = all(ct <= uc for d in up_busy.values() for ct in d.values())
+    down_ok = all(ct <= dc for d in down_busy.values() for ct in d.values())
     ejects = {n: sum(d.values()) for n, d in down_busy.items()}
     need = (N - 1) * flits
     eject_ok = all(ejects.get(n, 0) == need for n in range(N))
