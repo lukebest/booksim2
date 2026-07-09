@@ -1,68 +1,94 @@
 #!/usr/bin/env python3
-"""Generate HTML report: 6x8 2D mesh allgather — three scheme families compared.
-
-Reads results/allgather_scale_sweep.json for ring/hybrid/multitree numbers and
-computes row→col two-phase schedules via sched_zerobuf_compare rigid packer.
+"""Generate HTML report: 6×8 allgather — rigid 0-buffer schedules, H=7/V=9.
 
 Output: results/report_allgather_6x8.html
 """
 
 import html
-import json
 from pathlib import Path
 
-import sched_zerobuf_compare as S
+import allgather_6x8_rigid as R
 
 ROOT = Path(__file__).resolve().parents[1]
-SWEEP_JSON = ROOT / "results" / "allgather_scale_sweep.json"
 HTML_PATH = ROOT / "results" / "report_allgather_6x8.html"
 
-MX, MY = 6, 8
+H, V = 7, 9
+MX, MY = R.MX, R.MY
 N = MX * MY
 FLITS = [1, 2, 3, 4, 5]
-RAMP_BWS = [1, 2]
-SCHEMES = ["multitree", "ring_uni", "ring_bi", "hybrid_v_bi_B2"]
+RBS = [1, 2]
 
+SCHEMES = [
+    "row_col", "border_bi_Q4", "border_uni_Q4",
+    "hybrid_v_bi_B2", "multitree", "ring_bi", "ring_uni",
+]
 SCHEME_LABEL = {
-    "multitree": "方案一：multitree（X→Y 维序树）",
-    "ring_uni": "方案二：ring_uni（全局单向 Hamilton 环）",
-    "ring_bi": "方案二：ring_bi（全局双向 Hamilton 环）",
-    "hybrid_v_bi_B2": "方案二：hybrid_v_bi_B2（2 纵带环 + 横向 fork）",
-    "row_col": "方案三：row→col 二阶段 allgather",
+    "row_col": "row→col",
+    "border_bi_Q4": "hybrid_bi_Q4",
+    "border_uni_Q4": "hybrid_uni_Q4",
+    "hybrid_v_bi_B2": "hybrid_v_bi_B2",
+    "multitree": "multitree",
+    "ring_bi": "ring_bi",
+    "ring_uni": "ring_uni",
+}
+SCHEME_DESC = {
+    "row_col": "先按行 allgather，再按列 allgather（两阶段）",
+    "border_bi_Q4": "border (Q=4)：4 象限环（长边贴中心边界）+ 边界短弧双向注入",
+    "border_uni_Q4": "border (Q=4)：4 象限环 + 边界短弧单向注入",
+    "hybrid_v_bi_B2": "2 个纵向条带内双向环 + 逐行横向 fork",
+    "multitree": "每源 X→Y 维序双向多播树",
+    "ring_bi": "全局 48 点 Hamilton 双向环",
+    "ring_uni": "全局 48 点 Hamilton 单向环",
+}
+SCHEME_COLOR = {
+    "row_col": "#7c3aed",
+    "border_bi_Q4": "#b45309",
+    "border_uni_Q4": "#d97706",
+    "hybrid_v_bi_B2": "#dc2626",
+    "multitree": "#2563eb",
+    "ring_bi": "#059669",
+    "ring_uni": "#94a3b8",
 }
 
 CSS = """
-:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; }
-body { font-family: system-ui, -apple-system, sans-serif; margin:0; padding:24px 32px 56px;
-       background:var(--bg); color:var(--text); line-height:1.65; max-width:1080px; }
-h1 { font-size:1.55rem; margin:0 0 6px; }
-h2 { font-size:1.12rem; margin:28px 0 10px; color:#1e3a8a; border-top:1px solid #e2e8f0; padding-top:20px; }
-h3 { font-size:1.0rem; margin:16px 0 8px; color:#334155; }
-.card { background:var(--card); border:1px solid #e2e8f0; border-radius:10px;
-        padding:20px 24px; margin:16px 0; }
-.meta { color:var(--muted); font-size:.9rem; }
-.note { color:var(--muted); font-size:.87rem; }
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; }
+body { font-family: system-ui, -apple-system, sans-serif; margin:0; padding:28px 32px 64px;
+       background:var(--bg); color:var(--text); line-height:1.65; max-width:1040px; }
+h1 { font-size:1.6rem; margin:0 0 4px; }
+h2 { font-size:1.18rem; margin:0 0 14px; color:#1e3a8a; }
+h3 { font-size:1.0rem; margin:2px 0 8px; color:#334155; }
+.sub { color:var(--muted); font-size:.92rem; margin:0 0 20px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+        padding:22px 26px; margin:18px 0; }
+.card.hero { border-color:#c7d2fe; background:linear-gradient(180deg,#fbfcff,#fff); }
+.lead { font-size:1.05rem; margin:0 0 16px; }
+.note { color:var(--muted); font-size:.86rem; margin:8px 0 0; }
 code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:.85em; }
-table.data { border-collapse:collapse; font-size:.82rem; margin:12px 0; width:100%; }
-table.data th, table.data td { border:1px solid #e2e8f0; padding:6px 10px; text-align:center; }
+table.data { border-collapse:collapse; font-size:.85rem; margin:6px 0; width:100%; }
+table.data th, table.data td { border:1px solid var(--line); padding:7px 10px; text-align:center; }
 table.data th { background:#f1f5f9; font-weight:600; }
-table.data td.name { text-align:left; }
-table.data tr.best td { background:#ecfdf5; font-weight:600; }
-table.data tr.zbuf td { background:#eff6ff; }
-.tag { display:inline-block; font-size:.72rem; padding:1px 6px; border-radius:4px; margin-left:4px; vertical-align:1px; }
+table.data td.name { text-align:left; font-weight:600; }
+table.data tr.best td { background:#ecfdf5; }
+td.win { background:#dcfce7 !important; font-weight:700; }
+.dash { color:#cbd5e1; }
+.tag { display:inline-block; font-size:.72rem; padding:1px 7px; border-radius:20px; }
 .tag-ok { background:#dcfce7; color:#166534; }
-.tag-warn { background:#fef3c7; color:#92400e; }
-.tag-info { background:#dbeafe; color:#1e40af; }
-ul.compact li { margin:4px 0; }
-.formula { font-family: ui-monospace, monospace; background:#f8fafc; border:1px solid #e2e8f0;
-           border-radius:6px; padding:8px 12px; margin:8px 0; font-size:.86rem; }
-.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-@media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
-.bar-wrap { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:.82rem; }
-.bar { height:18px; border-radius:4px; min-width:2px; }
-.legend-row { display:flex; flex-wrap:wrap; gap:14px; margin:10px 0; font-size:.85rem; }
-.legend-row span { display:flex; align-items:center; gap:5px; }
-.swatch { width:14px; height:14px; border-radius:3px; display:inline-block; }
+.tag-sram { background:#ede9fe; color:#5b21b6; }
+ul.compact { margin:6px 0; padding-left:20px; }
+ul.compact li { margin:5px 0; }
+.formula { font-family: ui-monospace, monospace; background:#f8fafc; border:1px solid var(--line);
+           border-radius:6px; padding:9px 13px; margin:10px 0; font-size:.85rem; }
+.rank { display:flex; gap:10px; flex-wrap:wrap; margin:4px 0 0; }
+.chip { display:flex; align-items:center; gap:7px; font-size:.9rem; padding:6px 12px;
+        border:1px solid var(--line); border-radius:20px; background:#fff; }
+.dot { width:11px; height:11px; border-radius:50%; }
+.clist { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+.crow { display:grid; grid-template-columns:150px 1fr; gap:14px; align-items:start;
+        padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+.crow .h { display:flex; align-items:center; gap:8px; font-weight:700; }
+.crow .b { font-size:.9rem; color:#334155; }
+.crow .b b { color:#1e3a8a; }
+@media (max-width:640px){ .crow{ grid-template-columns:1fr; } }
 """
 
 
@@ -70,294 +96,219 @@ def esc(s):
     return html.escape(str(s))
 
 
-def row_col_schedule(h, v, ramp_bw, m):
-    S.cfg(MX, 1, h, v)
-    S.init_ring()
-    mk1, _, _, ok1 = S.run_scheme(S.fp_multitree, ramp_bw, flits=m)
-    S.cfg(1, MY, h, v)
-    S.init_ring()
-    mk2, _, _, ok2 = S.run_scheme(S.fp_multitree, ramp_bw, flits=MX * m)
-    assert ok1 and ok2
-    return {
-        "T1": mk1,
-        "T2": mk2,
-        "Ttotal": mk1 + mk2,
-        "sram": (MX - 1) * m,
-    }
-
-
-def load_data():
-    sweep = json.loads(SWEEP_JSON.read_text(encoding="utf-8"))
-    h, v = sweep["h"], sweep["v"]
-    out = {}
-    for rb in RAMP_BWS:
-        out[rb] = {}
-        cell_root = sweep["data"]["6x8"]["bw"][str(rb)]
+def compute():
+    """data[rb][m][scheme] -> record; row_col carries T1/T2/turnaround/sram."""
+    data = {}
+    for rb in RBS:
+        data[rb] = {}
         for m in FLITS:
-            cell = cell_root[str(m)]
-            res = {r["name"]: r for r in cell["results"]}
-            rc = row_col_schedule(h, v, rb, m)
-            out[rb][m] = {
-                "T": cell["T"],
-                "schemes": {nm: res[nm] for nm in SCHEMES},
-                "row_col": rc,
-            }
-    return out, h, v
+            R.setup(H, V)
+            T = R.theory_t(m, rb, H, V)
+            rec = {"T": T, "schemes": {}}
+            for s in SCHEMES:
+                rec["schemes"][s] = R.scheme_makespan(s, rb, m)
+            data[rb][m] = rec
+    return data
 
 
-def buf_cell(link_w, ramp_w, sram=None, router_zero=False):
-    parts = []
-    if router_zero or (link_w == 0 and ramp_w == 0):
-        parts.append('<span class="tag tag-ok">router 0</span>')
-    else:
-        parts.append(f"link {link_w} / ramp {ramp_w}")
-    if sram:
-        parts.append(f'<br><span class="tag tag-info">SRAM {sram} flit</span>')
-    return "".join(parts)
+def fmt(v):
+    return str(v) if v is not None else '<span class="dash">—</span>'
 
 
-def scheme_table(data, rb, scheme_key, extra_cols=None):
-    rows = []
+def master_table(data, rb):
+    """One table per ramp_bw: rows = m, cols = schemes, cells = makespan."""
+    head = "".join(
+        f'<th style="color:{SCHEME_COLOR[s]}">{esc(SCHEME_LABEL[s])}</th>'
+        for s in SCHEMES
+    )
+    body = []
     for m in FLITS:
         d = data[rb][m]
-        if scheme_key == "row_col":
-            rc = d["row_col"]
-            mk = rc["Ttotal"]
-            buf = buf_cell(0, 0, sram=rc["sram"], router_zero=True)
-            extra = f"<td>{rc['T1']}</td><td>{rc['T2']}</td><td>{rc['sram']}</td>"
-        else:
-            r = d["schemes"][scheme_key]
-            mk = r["makespan"]
-            lw, rw = r["max_link_wait"], r["max_ramp_wait"]
-            zbuf = lw == 0 and rw == 0
-            buf = buf_cell(lw, rw, router_zero=zbuf)
-            extra = ""
-        ratio = mk / d["T"] if d["T"] else None
-        cls = ""
-        rows.append(
-            f"<tr class='{cls}'><td>{m}</td><td>{d['T']}</td><td><b>{mk}</b></td>"
-            f"{extra}<td>{buf}</td><td>{ratio:.3f}</td></tr>"
+        mks = {s: d["schemes"][s]["makespan"] for s in SCHEMES}
+        valid = [v for v in mks.values() if v is not None]
+        best = min(valid) if valid else None
+        cells = []
+        for s in SCHEMES:
+            v = mks[s]
+            cls = "win" if (v is not None and v == best) else ""
+            cells.append(f'<td class="{cls}">{fmt(v)}</td>')
+        body.append(
+            f"<tr><td>{m}</td><td>{d['T']}</td>" + "".join(cells) + "</tr>"
         )
-    if scheme_key == "row_col":
-        hdr = (
-            "<table class='data'><thead><tr>"
-            "<th>m (flit)</th><th>理论下界 T</th><th>Ttotal</th>"
-            "<th>T1 行相</th><th>T2 列相</th><th>SRAM/节点</th>"
-            "<th>Buffer 诉求</th><th>mk/T</th></tr></thead><tbody>"
-        )
-    else:
-        hdr = (
-            "<table class='data'><thead><tr>"
-            "<th>m (flit)</th><th>理论下界 T</th><th>makespan</th>"
-            "<th>Buffer 诉求 (link/ramp flit)</th><th>mk/T</th></tr></thead><tbody>"
-        )
-    return hdr + "".join(rows) + "</tbody></table>"
-
-
-def compare_table_m1(data):
-    """Summary table for ramp_bw=2, m=1."""
-    d = data[2][1]
-    entries = [
-        ("multitree", d["schemes"]["multitree"]["makespan"], 0, 0, 0, "刚性 0-buffer"),
-        ("ring_uni", d["schemes"]["ring_uni"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("ring_bi", d["schemes"]["ring_bi"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("hybrid_v_bi_B2", d["schemes"]["hybrid_v_bi_B2"]["makespan"], 0, 0, 0, "事件驱动"),
-        ("row→col", d["row_col"]["Ttotal"], 0, 0, d["row_col"]["sram"], "刚性 0-buffer"),
-    ]
-    best_mk = min(e[1] for e in entries)
-    rows = []
-    for name, mk, lw, rw, sram, src in entries:
-        cls = "best" if mk == best_mk else ""
-        buf = f"router 0" if lw == 0 and rw == 0 else f"link {lw}/ramp {rw}"
-        if sram:
-            buf += f" + SRAM {sram} flit"
-        rows.append(
-            f"<tr class='{cls}'><td class='name'>{esc(name)}</td><td>{mk}</td>"
-            f"<td>{buf}</td><td class='note'>{src}</td></tr>"
-        )
-    hdr = (
+    return (
         "<table class='data'><thead><tr>"
-        "<th>方案</th><th>makespan (cy)</th><th>Buffer</th><th>数据来源</th>"
-        "</tr></thead><tbody>"
+        "<th>m (flit)</th><th>下界 T</th>" + head +
+        "</tr></thead><tbody>" + "".join(body) + "</tbody></table>"
     )
-    return hdr + "".join(rows) + "</tbody></table>"
 
 
-def makespan_bar_svg(data, rb):
-    """Grouped bar chart: makespan vs m for all schemes."""
-    schemes_plot = [
-        ("multitree", "#2563eb"),
-        ("ring_uni", "#94a3b8"),
-        ("ring_bi", "#059669"),
-        ("hybrid_v_bi_B2", "#dc2626"),
-        ("row_col", "#7c3aed"),
-    ]
-    pad_l, pad_t, pad_r, pad_b = 48, 24, 16, 36
-    group_w = 88
-    bar_w = 14
-    gap = 2
-    max_mk = max(
-        data[rb][m]["schemes"]["multitree"]["makespan"]
-        if s != "row_col"
-        else data[rb][m]["row_col"]["Ttotal"]
-        for m in FLITS
-        for s, _ in schemes_plot
-    )
-    plot_h = 220
-    W = pad_l + len(FLITS) * group_w + pad_r
-    H = pad_t + plot_h + pad_b
-    parts = [
-        f'<svg width="{W}" height="{H}" xmlns="http://www.w3.org/2000/svg" '
-        f'style="max-width:100%;height:auto;display:block">',
-        f'<text x="{pad_l + len(FLITS)*group_w/2:.0f}" y="16" text-anchor="middle" '
-        f'font-size="12" font-weight="600" fill="#334155">makespan vs m (ramp_bw={rb})</text>',
-    ]
-    for i, m in enumerate(FLITS):
-        gx = pad_l + i * group_w + group_w / 2
-        parts.append(
-            f'<text x="{gx:.0f}" y="{H - 8}" text-anchor="middle" '
-            f'font-size="11" fill="#475569">m={m}</text>'
+def winner_chips(data):
+    """Fastest scheme at each (rb=2) m."""
+    chips = []
+    for m in FLITS:
+        d = data[2][m]
+        mks = {s: d["schemes"][s]["makespan"] for s in SCHEMES}
+        valid = {s: v for s, v in mks.items() if v is not None}
+        best_s = min(valid, key=valid.get)
+        chips.append(
+            f'<div class="chip"><span class="dot" style="background:{SCHEME_COLOR[best_s]}"></span>'
+            f'm={m} → <b>{esc(SCHEME_LABEL[best_s])}</b> ({valid[best_s]} cy)</div>'
         )
-        for j, (skey, color) in enumerate(schemes_plot):
-            if skey == "row_col":
-                mk = data[rb][m]["row_col"]["Ttotal"]
-            else:
-                mk = data[rb][m]["schemes"][skey]["makespan"]
-            bh = (mk / max_mk) * plot_h
-            bx = pad_l + i * group_w + 8 + j * (bar_w + gap)
-            by = pad_t + plot_h - bh
-            parts.append(
-                f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bar_w}" height="{bh:.1f}" '
-                f'fill="{color}" rx="2" opacity="0.9"/>'
+    return '<div class="rank">' + "".join(chips) + "</div>"
+
+
+def conclusions(data):
+    def mk(s, rb, m):
+        return data[rb][m]["schemes"][s]["makespan"]
+
+    rc1 = data[2][1]["schemes"]["row_col"]
+    bbi1 = data[2][1]["schemes"]["border_bi_Q4"]
+    items = [
+        ("border_bi_Q4",
+         f"<b>rb=2, m=1 全局最快（{bbi1['makespan']} cy）</b>，略优于 row→col（{mk('row_col',2,1)} cy）。"
+         f"即 border (Q=4) 四象限环 + 边界短弧；对每个 m 在 m×m=1 / 分轮 batch 中取最小。"
+         f"rb=1 或无 bidirectional 时无优势。"),
+        ("row_col",
+         f"m≥2 @rb=2 最快（m=2 <b>{mk('row_col',2,2)} cy</b>）。router 全程 0 buffer，"
+         f"但需 <b>{rc1['sram']}m flit/节点 SRAM</b>，且两相之间有 <b>{rc1['turnaround']} cy</b> "
+         f"下ramp→SRAM→上ramp 往返开销。"),
+        ("border_uni_Q4",
+         f"border (Q=4) 单向版（m=1@rb=2 <b>{mk('border_uni_Q4',2,1)} cy</b>），"
+         f"始终慢于 bidirectional 版与 row→col。"),
+        ("hybrid_v_bi_B2",
+         f"纵带环 + 横向 fork（m=1@rb=2 <b>{mk('hybrid_v_bi_B2',2,1)} cy</b>）。"
+         f"每个 m 在全部 rigid pack 策略中取最小。"),
+        ("multitree",
+         f"结构简单、任意 m 均可 0-buffer（m=1@rb=2 <b>{mk('multitree',2,1)} cy</b>）。"
+         f"makespan 居中，随 m 线性上升。"),
+        ("ring_bi",
+         f"rb=1 大 m 可用单轮 TDM（m=3 仅 <b>{mk('ring_bi',1,3)} cy</b>）；"
+         f"m=1@rb=2 <b>{mk('ring_bi',2,1)} cy</b>。对 ramp_bw 不敏感。"),
+        ("ring_uni",
+         f"最慢但最规整（m=1@rb=2 <b>{mk('ring_uni',2,1)} cy</b>）。环长主导，"
+         f"几乎不随 ramp_bw 改善。"),
+    ]
+    rows = []
+    for s, text in items:
+        rows.append(
+            f'<li class="crow"><div class="h">'
+            f'<span class="dot" style="background:{SCHEME_COLOR[s]}"></span>{esc(SCHEME_LABEL[s])}</div>'
+            f'<div class="b">{text}</div></li>'
+        )
+    return '<ul class="clist">' + "".join(rows) + "</ul>"
+
+
+def row_col_table(data):
+    body = []
+    for rb in RBS:
+        for m in FLITS:
+            rc = data[rb][m]["schemes"]["row_col"]
+            body.append(
+                f"<tr><td>{rb}</td><td>{m}</td><td>{rc['T1']}</td>"
+                f"<td>{rc['turnaround']}</td><td>{rc['T2']}</td>"
+                f"<td><b>{rc['makespan']}</b></td><td>{rc['sram']}</td></tr>"
             )
-    parts.append("</svg>")
-    legend = '<div class="legend-row">' + "".join(
-        f'<span><span class="swatch" style="background:{c}"></span>{esc(s.replace("_"," "))}</span>'
-        for s, c in schemes_plot
-    ) + "</div>"
-    return "\n".join(parts) + legend
+    return (
+        "<table class='data'><thead><tr>"
+        "<th>ramp_bw</th><th>m</th><th>T1 行相</th>"
+        "<th>SRAM 往返</th><th>T2 列相</th><th>Ttotal</th><th>SRAM/节点 (flit)</th>"
+        "</tr></thead><tbody>" + "".join(body) + "</tbody></table>"
+    )
 
 
-def build_html(data, h, v):
-    compare_m1 = compare_table_m1(data)
-    bars1 = makespan_bar_svg(data, 1)
-    bars2 = makespan_bar_svg(data, 2)
-
-    scheme_sections = ""
-    for key in ["multitree", "ring_uni", "ring_bi", "hybrid_v_bi_B2"]:
-        scheme_sections += f"""
+def build_html(data):
+    lat_m1 = R.theory_t(1, 1, H, V)
+    scheme_cards = ""
+    for s in [x for x in SCHEMES if x != "row_col"]:
+        scheme_cards += f"""
 <div class="card">
-<h3>{esc(SCHEME_LABEL[key])}</h3>
-<h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, key)}
-<h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, key)}
-</div>
-"""
+<h3><span class="dot" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:{SCHEME_COLOR[s]};margin-right:6px"></span>{esc(SCHEME_LABEL[s])}</h3>
+<p class="note" style="margin-top:0">{esc(SCHEME_DESC[s])}</p>
+</div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>6×8 Mesh Allgather 三方案分析</title>
+<title>6×8 Mesh Allgather（H=7, V=9）</title>
 <style>{CSS}</style>
 </head>
 <body>
-<h1>6×8 2D Mesh Allgather 三方案分析</h1>
-<p class="meta">Mesh {MX}×{MY}（N={N}），H={h} cy，V={v} cy，上/下 ramp 各 1 cy，下环带宽 ramp_bw ∈ {{1, 2}} flit/cy/节点，数据量 m ∈ {{1..5}} flit/节点。</p>
+<h1>6×8 Mesh Allgather 方案对比</h1>
+<p class="sub">Mesh {MX}×{MY}（N={N}）· 横向 link <b>H={H} cy</b> · 纵向 link <b>V={V} cy</b> ·
+上/下 ramp 各 1 cy · 数据量 m∈{{1..5}} flit/节点 · 调度：rigid 0-buffer 打包器（router 零排队）。</p>
+
+<div class="card hero">
+<h2>结论速览</h2>
+<p class="lead">各方案在 6×8、H={H}/V={V} 下的 rigid 0-buffer makespan（越小越好）。
+<b>hybrid_bi_Q4</b>（border Q=4）在 rb=2、m=1 最快；<b>row→col</b> 在 m≥2 领先；
+<b>ring</b> 系列最慢但结构最规整。</p>
+{conclusions(data)}
+<p class="note">每个 m 下的最快方案（ramp_bw=2）：</p>
+{winner_chips(data)}
+</div>
 
 <div class="card">
-<h2>物理模型与 Buffer 定义</h2>
+<h2>总对比表</h2>
+<p class="note" style="margin-top:0">单元格为 makespan（cy），绿色为该 m 行最快。row→col 已含 SRAM 往返开销。</p>
+<h3>ramp_bw = 1</h3>
+{master_table(data, 1)}
+<h3>ramp_bw = 2</h3>
+{master_table(data, 2)}
+</div>
+
+<div class="card">
+<h2>row→col 时序拆解</h2>
+<p class="note" style="margin-top:0">
+Ttotal = T1（行相）+ SRAM 往返 + T2（列相），三段严格串行。
+行相收齐整行数据后须<b>下 ramp 存入 SRAM</b>，列相再<b>上 ramp 送出</b>，
+这一往返固定 <b>{R.SRAM_TURNAROUND} cy</b>；另需每节点 (MX−1)m = 5m flit 的 SRAM 暂存。</p>
+{row_col_table(data)}
+<p class="note"><span class="tag tag-sram">SRAM</span> 是本地存储开销，不是 router buffer；其他方案全程直通转发，无此暂存与往返。</p>
+</div>
+
+<div class="card">
+<h2>七种方案简介</h2>
+<p class="note" style="margin-top:0"><code>hybrid_*_Q4</code> 即 <code>border (Q=4)</code>（<code>fp_border</code>），
+与水平条带 hybrid B=4 不同。</p>
 <ul class="compact">
-<li><b>刚性 0-buffer 打包器</b>（<code>sched_zerobuf_compare.py</code>）：每个源分配唯一注入偏移，使任意时刻每条有向链路 / 上环 / 下环最多被一个源占用——<b>by construction 不需要 router 内部排队</b>。</li>
-<li><b>事件驱动仿真</b>（<code>allgather_fast_sim.py</code>）：允许 router 无限深队列，逐跳按最早可用周期转发；记录的 <code>max_link_wait</code> / <code>max_ramp_wait</code> 表示该热点资源为不丢包所需的最深排队（flit 数）。</li>
-<li><b>节点 SRAM 暂存</b>（方案三独有）：行相结束后节点须本地攒够整行数据包 (MX−1)×m flit，再二次上环做列相——<b>不是 router buffer</b>，但是真实的本地存储与同步开销。</li>
+<li><b>row→col</b>：{esc(SCHEME_DESC['row_col'])}。router 0-buffer，但有 SRAM 暂存 + 往返。</li>
+<li><b>hybrid_bi_Q4</b>：{esc(SCHEME_DESC['border_bi_Q4'])}。</li>
+<li><b>hybrid_uni_Q4</b>：{esc(SCHEME_DESC['border_uni_Q4'])}。</li>
+<li><b>hybrid_v_bi_B2</b>：{esc(SCHEME_DESC['hybrid_v_bi_B2'])}。</li>
+<li><b>multitree</b>：{esc(SCHEME_DESC['multitree'])}。</li>
+<li><b>ring_bi</b>：{esc(SCHEME_DESC['ring_bi'])}。</li>
+<li><b>ring_uni</b>：{esc(SCHEME_DESC['ring_uni'])}。</li>
 </ul>
-<div class="formula">理论下界 T = max(弹出下界, 角节点下界, 延迟下界, 二分带宽下界)；6×8 在 m=1,ramp_bw=1 时 T=64 cy（角节点下界紧）。</div>
 </div>
 
 <div class="card">
-<h2>Executive Summary（ramp_bw=2, m=1）</h2>
-{compare_m1}
-<p class="note">绿色高亮为全场最快。<b>row→col</b> 在 m=1、高下环带宽下 makespan 最优（71 cy），且 router 严格 0 buffer，仅需 5 flit/节点 SRAM 暂存。</p>
-</div>
-
-<div class="card">
-<h2>Makespan 随 m 变化</h2>
-{bars1}
-{bars2}
-</div>
-
-<h2>方案一：Tree（multitree）+ 无阻塞·无冲突·router 无 buffer</h2>
-<div class="card">
-<p>每个源 s 沿本行向左右 fork，再沿每列向上下 fork（X→Y 维序双向树）。用刚性偏移打包使链路/ramp 全程无重叠。</p>
+<h2>物理模型与调度规则</h2>
 <ul class="compact">
-<li><b>m=1</b>：严格 0-buffer 成立（multitree makespan 149@rb=1 / 96@rb=2，max_link_wait=max_ramp_wait=0）。</li>
-<li><b>m≥2</b>：高扇出结构下仅靠"每源一个全局偏移"已无法保证 0 重叠；事件驱动仿真显示下环口排队深度随 m 线性上升（rb=1 时 m=5 需 ramp 113 flit 深）。</li>
-<li><b>结论</b>：tree 的"0 buffer"承诺是 <b>m=1 专属</b>；数据量增大后要么接受 router 排队，要么退回更慢但仍 0-buffer 的刚性调度。</li>
+<li>每条有向链路容量 1 flit/cy；下 ramp 容量 = ramp_bw flit/cy/节点。</li>
+<li><b>rigid 0-buffer</b>：每源分配唯一注入偏移，任意时刻每条链路/ramp 最多 1 个 flit，by construction 无 router 排队。</li>
+<li><b>ring_uni / ring_bi / hybrid_v_bi_B2 / hybrid_*_Q4</b>：link delay 变化后重新 rigid pack；
+对每个 m 枚举单轮 direct、单轮 TDM（ring/hybrid_v）、分轮组合、m×m=1 等全部可行策略，取 makespan 最小值。</li>
+<li><b>hybrid_bi_Q4 @ rb=2</b>：m=1 时 115 cy，全局最快；m≥2 时 row→col 更快。</li>
+<li><b>hybrid_bi_Q4 @ rb=1</b>：无 batch 收益时退化为 m×m=1（如 m=2 → 358 cy）。</li>
+<li><b>ring_bi @ rb=1</b>：m≥3 时单轮 TDM 往往优于分轮 [2,1]（如 m=3 仅 217 cy）。</li>
+<li><b>hybrid_v_bi_B2 @ rb=1</b>：m=2 仍用 2×m=1；m≥3 单轮 TDM 优于分轮。</li>
+<li><b>row→col</b>：两阶段串行 + {R.SRAM_TURNAROUND} cy SRAM 往返。</li>
 </ul>
-<h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, "multitree")}
-<h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, "multitree")}
+<div class="formula">理论下界 T = max(弹出, 角节点, 延迟, 二分割)；m=1, rb=1 时 T = {lat_m1} cy（延迟地板主导）。</div>
 </div>
 
-<h2>方案二：ring_uni / ring_bi / hybrid_v_bi_B2</h2>
-<div class="card">
-<ul class="compact">
-<li><b>ring_uni</b>：48 点 Hamilton 单向环，每跳 1 前驱 1 后继，<b>几乎恒 0 buffer</b>（link≤1, ramp=0），但 makespan 最差且几乎不随 ramp_bw 改善。</li>
-<li><b>ring_bi</b>：双向环，下环口 2 路汇合；link 侧仍近 0，ramp 侧随 m 增大出现排队（rb=1 最高 104 flit）；<b>rb=2 时 ramp 排队被带宽翻倍压回 0</b>。</li>
-<li><b>hybrid_v_bi_B2</b>：2 个 3 列纵带内局部环 + 逐行横向 fork；makespan 全场最优（m=1: 82 cy），但 buffer 诉求也最大（m=5@rb=1: link 56 / ramp 140 flit）。</li>
-</ul>
-<p class="note">规律：扇出/汇聚度越高 → makespan 越短、router 排队越深。buffer 需求 ring_uni &lt; ring_bi &lt; hybrid_v_bi_B2，与 makespan 优劣正好相反。</p>
-</div>
-{scheme_sections}
-
-<h2>方案三：先 Row Allgather，后 Column Allgather</h2>
-<div class="card">
-<h3>算法</h3>
-<ol class="compact">
-<li><b>行相</b>：每行独立 allgather（6 节点），各节点获得整行 6m flit。</li>
-<li><b>列相</b>：每列独立 allgather，转发整行包（6m flit/次注入），完成后每节点持有 48m flit。</li>
-</ol>
-<h3>Buffer 诉求（两层）</h3>
-<ul class="compact">
-<li><b>网络内（router/link）</b>：严格 <span class="tag tag-ok">0 buffer</span>，对任意 m 成立——1D  fork 结构 + 刚性偏移在 6×1 / 1×8 虚拟网格上天然无重叠。</li>
-<li><b>节点 SRAM</b>：<span class="tag tag-info">(MX−1)×m = 5m flit/节点</span>——第二阶段须等整行到齐、本地落地后再二次上环；tree/ring/hybrid 全程直通转发，无此暂存。</li>
-</ul>
-<h3>时序（Ttotal = T1 + T2，两阶段严格串行）</h3>
-<h4>ramp_bw = 1</h4>
-{scheme_table(data, 1, "row_col")}
-<h4>ramp_bw = 2</h4>
-{scheme_table(data, 2, "row_col")}
-<p class="note">rb=2,m=1 时 Ttotal=71 cy 优于全部其他方案；m≥2 因无流水重叠迅速落后（如 rb=1,m=3 时 255 cy vs multitree 146 / hybrid_v_bi_B2 148）。</p>
-</div>
-
-<div class="card">
-<h2>综合结论</h2>
-<table class="data">
-<thead><tr><th>维度</th><th>方案一 tree</th><th>方案二 ring/hybrid</th><th>方案三 row→col</th></tr></thead>
-<tbody>
-<tr><td class="name">m=1 最优 makespan@rb=2</td><td>96 cy</td><td>82 cy (hybrid_v_bi_B2)</td><td><b>71 cy</b></td></tr>
-<tr><td class="name">router 0-buffer 适用范围</td><td>仅 m=1</td><td>ring_uni 几乎全程；hybrid 需深队列</td><td>任意 m</td></tr>
-<tr><td class="name">额外本地暂存</td><td>0</td><td>0</td><td>5m flit/节点</td></tr>
-<tr><td class="name">m 增大趋势</td><td>排队深度线性升</td><td>hybrid 排队最深、makespan 最优</td><td>两阶段串行，大 m 落后</td></tr>
-<tr><td class="name">适用场景</td><td>小 payload + 可接受深 router 队列</td><td>追求低 makespan、可开 router buffer</td><td>小 m + 高下环带宽 + 可开 SRAM</td></tr>
-</tbody>
-</table>
-</div>
-
-<p class="meta">Generated by <code>utils/gen_allgather_6x8_report.py</code> · sweep: <code>results/allgather_scale_sweep.json</code></p>
+<p class="note">Generated by <code>utils/gen_allgather_6x8_report.py</code> · H={H}, V={V} · SRAM 往返 {R.SRAM_TURNAROUND} cy</p>
 </body>
-</html>
-"""
+</html>"""
 
 
 def main():
-    data, h, v = load_data()
+    print(f"Computing 6×8 rigid schedules (H={H}, V={V})...")
+    data = compute()
     HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    HTML_PATH.write_text(build_html(data, h, v), encoding="utf-8")
+    HTML_PATH.write_text(build_html(data), encoding="utf-8")
     print(f"Wrote {HTML_PATH}")
 
 

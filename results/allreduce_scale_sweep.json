@@ -1,0 +1,6206 @@
+{
+  "h": 4,
+  "v": 6,
+  "ramp": 1,
+  "inc_lat": 3,
+  "node_red_lat": 12,
+  "ramp_bw": 1,
+  "sizes": [
+    "4x4",
+    "6x8",
+    "8x8",
+    "12x16",
+    "16x16"
+  ],
+  "flits": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "reduce_modes": [
+    "inc",
+    "node"
+  ],
+  "data": {
+    "4x4": {
+      "mx": 4,
+      "my": 4,
+      "n": 16,
+      "flits": {
+        "1": {
+          "inc": {
+            "lower_bound": 56,
+            "lower_bound_rsag": 60,
+            "bounds": {
+              "M": 1,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 56,
+              "downramp_rsag": 60,
+              "downramp_final": 31,
+              "bisection": 2,
+              "diameter_pair": 50,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 31,
+              "combined": 56,
+              "combined_rsag": 60
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 57,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 34,
+                "phase_bcast_end": 57
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 59,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 33,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_bi_B2",
+                "ag_makespan": 32
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 33,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_bi_B2",
+                "ag_makespan": 32
+              }
+            ],
+            "best": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 33,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_bi_B2",
+              "ag_makespan": 32
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 57,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 34,
+              "phase_bcast_end": 57
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 33,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_bi_B2",
+              "ag_makespan": 32
+            },
+            "efficiency": 0.5892857142857143,
+            "ratio": 0.5892857142857143
+          },
+          "node": {
+            "lower_bound": 92,
+            "lower_bound_rsag": 104,
+            "bounds": {
+              "M": 1,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 92,
+              "downramp_rsag": 60,
+              "downramp_final": 31,
+              "bisection": 2,
+              "diameter_pair": 104,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 58,
+              "combined": 92,
+              "combined_rsag": 104
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 93,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 70,
+                "phase_bcast_end": 93
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 307,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 275,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 242,
+                "ag_scheme": "hybrid_bi_B2",
+                "ag_makespan": 32
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 275,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 242,
+                "ag_scheme": "hybrid_bi_B2",
+                "ag_makespan": 32
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 93,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 70,
+              "phase_bcast_end": 93
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 93,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 70,
+              "phase_bcast_end": 93
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 275,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 242,
+              "ag_scheme": "hybrid_bi_B2",
+              "ag_makespan": 32
+            },
+            "efficiency": 1.0108695652173914,
+            "ratio": 1.0108695652173914
+          },
+          "best_overall": {
+            "name": "ring_bi_rs_optag",
+            "algo": "rs_ag",
+            "reduce_mode": "inc",
+            "makespan": 33,
+            "ok": true,
+            "feasible": true,
+            "ring_len": 16,
+            "is_cycle": true,
+            "phase_rs_end": 0,
+            "ag_scheme": "hybrid_bi_B2",
+            "ag_makespan": 32,
+            "ratio": 0.5892857142857143
+          }
+        },
+        "2": {
+          "inc": {
+            "lower_bound": 58,
+            "lower_bound_rsag": 90,
+            "bounds": {
+              "M": 2,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 58,
+              "downramp_rsag": 90,
+              "downramp_final": 32,
+              "bisection": 4,
+              "diameter_pair": 51,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 31,
+              "combined": 58,
+              "combined_rsag": 90
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 60,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 36,
+                "phase_bcast_end": 60
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 62,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 76,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 75
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 76,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 75
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 60,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 36,
+              "phase_bcast_end": 60
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 60,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 36,
+              "phase_bcast_end": 60
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 76,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 75
+            },
+            "efficiency": 1.0344827586206897,
+            "ratio": 1.0344827586206897
+          },
+          "node": {
+            "lower_bound": 94,
+            "lower_bound_rsag": 105,
+            "bounds": {
+              "M": 2,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 94,
+              "downramp_rsag": 90,
+              "downramp_final": 32,
+              "bisection": 4,
+              "diameter_pair": 105,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 58,
+              "combined": 94,
+              "combined_rsag": 105
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 96,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 72,
+                "phase_bcast_end": 96
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 312,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 319,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 243,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 75
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 319,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 243,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 75
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 96,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 72,
+              "phase_bcast_end": 96
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 96,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 72,
+              "phase_bcast_end": 96
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 319,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 243,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 75
+            },
+            "efficiency": 1.0212765957446808,
+            "ratio": 1.0212765957446808
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 60,
+            "ok": true,
+            "root": 10,
+            "phase_reduce_end": 36,
+            "phase_bcast_end": 60,
+            "ratio": 1.0344827586206897
+          }
+        },
+        "3": {
+          "inc": {
+            "lower_bound": 60,
+            "lower_bound_rsag": 120,
+            "bounds": {
+              "M": 3,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 60,
+              "downramp_rsag": 120,
+              "downramp_final": 33,
+              "bisection": 6,
+              "diameter_pair": 52,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 31,
+              "combined": 60,
+              "combined_rsag": 120
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 63,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 38,
+                "phase_bcast_end": 63
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 65,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 77,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 76
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 77,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 76
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 63,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 38,
+              "phase_bcast_end": 63
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 63,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 38,
+              "phase_bcast_end": 63
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 77,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 76
+            },
+            "efficiency": 1.05,
+            "ratio": 1.05
+          },
+          "node": {
+            "lower_bound": 96,
+            "lower_bound_rsag": 120,
+            "bounds": {
+              "M": 3,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 96,
+              "downramp_rsag": 120,
+              "downramp_final": 33,
+              "bisection": 6,
+              "diameter_pair": 106,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 58,
+              "combined": 96,
+              "combined_rsag": 120
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 99,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 74,
+                "phase_bcast_end": 99
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 317,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 321,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 244,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 76
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 321,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 244,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 76
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 99,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 74,
+              "phase_bcast_end": 99
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 99,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 74,
+              "phase_bcast_end": 99
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 321,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 244,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 76
+            },
+            "efficiency": 1.03125,
+            "ratio": 1.03125
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 63,
+            "ok": true,
+            "root": 10,
+            "phase_reduce_end": 38,
+            "phase_bcast_end": 63,
+            "ratio": 1.05
+          }
+        },
+        "4": {
+          "inc": {
+            "lower_bound": 62,
+            "lower_bound_rsag": 150,
+            "bounds": {
+              "M": 4,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 62,
+              "downramp_rsag": 150,
+              "downramp_final": 34,
+              "bisection": 8,
+              "diameter_pair": 53,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 31,
+              "combined": 62,
+              "combined_rsag": 150
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 66,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 40,
+                "phase_bcast_end": 66
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 68,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 78,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 77
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 78,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 77
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 66,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 40,
+              "phase_bcast_end": 66
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 66,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 40,
+              "phase_bcast_end": 66
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 78,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 77
+            },
+            "efficiency": 1.064516129032258,
+            "ratio": 1.064516129032258
+          },
+          "node": {
+            "lower_bound": 98,
+            "lower_bound_rsag": 150,
+            "bounds": {
+              "M": 4,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 98,
+              "downramp_rsag": 150,
+              "downramp_final": 34,
+              "bisection": 8,
+              "diameter_pair": 107,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 58,
+              "combined": 98,
+              "combined_rsag": 150
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 102,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 76,
+                "phase_bcast_end": 102
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 322,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 323,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 245,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 77
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 323,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 245,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 77
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 102,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 76,
+              "phase_bcast_end": 102
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 102,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 76,
+              "phase_bcast_end": 102
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 323,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 245,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 77
+            },
+            "efficiency": 1.0408163265306123,
+            "ratio": 1.0408163265306123
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 66,
+            "ok": true,
+            "root": 10,
+            "phase_reduce_end": 40,
+            "phase_bcast_end": 66,
+            "ratio": 1.064516129032258
+          }
+        },
+        "5": {
+          "inc": {
+            "lower_bound": 64,
+            "lower_bound_rsag": 180,
+            "bounds": {
+              "M": 5,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 64,
+              "downramp_rsag": 180,
+              "downramp_final": 35,
+              "bisection": 10,
+              "diameter_pair": 54,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 31,
+              "combined": 64,
+              "combined_rsag": 180
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 69,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 42,
+                "phase_bcast_end": 69
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 71,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 81,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 80
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 81,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 80
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 69,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 42,
+              "phase_bcast_end": 69
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 69,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 42,
+              "phase_bcast_end": 69
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 81,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 80
+            },
+            "efficiency": 1.078125,
+            "ratio": 1.078125
+          },
+          "node": {
+            "lower_bound": 100,
+            "lower_bound_rsag": 180,
+            "bounds": {
+              "M": 5,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 100,
+              "downramp_rsag": 180,
+              "downramp_final": 35,
+              "bisection": 10,
+              "diameter_pair": 108,
+              "mesh_diameter": 30,
+              "tree_phase_m1": 58,
+              "combined": 100,
+              "combined_rsag": 180
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 105,
+                "ok": true,
+                "root": 10,
+                "phase_reduce_end": 78,
+                "phase_bcast_end": 105
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 327,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 10
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 327,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 246,
+                "ag_scheme": "multitree",
+                "ag_makespan": 80
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 327,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 16,
+                "is_cycle": true,
+                "phase_rs_end": 246,
+                "ag_scheme": "multitree",
+                "ag_makespan": 80
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 105,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 78,
+              "phase_bcast_end": 105
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 105,
+              "ok": true,
+              "root": 10,
+              "phase_reduce_end": 78,
+              "phase_bcast_end": 105
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 327,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 16,
+              "is_cycle": true,
+              "phase_rs_end": 246,
+              "ag_scheme": "multitree",
+              "ag_makespan": 80
+            },
+            "efficiency": 1.05,
+            "ratio": 1.05
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 69,
+            "ok": true,
+            "root": 10,
+            "phase_reduce_end": 42,
+            "phase_bcast_end": 69,
+            "ratio": 1.078125
+          }
+        }
+      }
+    },
+    "6x8": {
+      "mx": 6,
+      "my": 8,
+      "n": 48,
+      "flits": {
+        "1": {
+          "inc": {
+            "lower_bound": 97,
+            "lower_bound_rsag": 156,
+            "bounds": {
+              "M": 1,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 97,
+              "downramp_rsag": 156,
+              "downramp_final": 63,
+              "bisection": 4,
+              "diameter_pair": 100,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 56,
+              "combined": 97,
+              "combined_rsag": 156
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 98,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 59,
+                "phase_bcast_end": 98
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 100,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 100,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 83,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 82
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 83,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 82
+              }
+            ],
+            "best": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 83,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 82
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 98,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 59,
+              "phase_bcast_end": 98
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 83,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 82
+            },
+            "efficiency": 0.8556701030927835,
+            "ratio": 0.8556701030927835
+          },
+          "node": {
+            "lower_bound": 160,
+            "lower_bound_rsag": 208,
+            "bounds": {
+              "M": 1,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 160,
+              "downramp_rsag": 156,
+              "downramp_final": 63,
+              "bisection": 4,
+              "diameter_pair": 208,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 110,
+              "combined": 160,
+              "combined_rsag": 208
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 161,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 122,
+                "phase_bcast_end": 161
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 935,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 503,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 853,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 770,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 82
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 853,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 770,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 82
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 161,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 122,
+              "phase_bcast_end": 161
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 161,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 122,
+              "phase_bcast_end": 161
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 853,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 770,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 82
+            },
+            "efficiency": 1.00625,
+            "ratio": 1.00625
+          },
+          "best_overall": {
+            "name": "ring_bi_rs_optag",
+            "algo": "rs_ag",
+            "reduce_mode": "inc",
+            "makespan": 83,
+            "ok": true,
+            "feasible": true,
+            "ring_len": 48,
+            "is_cycle": true,
+            "phase_rs_end": 0,
+            "ag_scheme": "hybrid_v_bi_B2",
+            "ag_makespan": 82,
+            "ratio": 0.8556701030927835
+          }
+        },
+        "2": {
+          "inc": {
+            "lower_bound": 99,
+            "lower_bound_rsag": 250,
+            "bounds": {
+              "M": 2,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 99,
+              "downramp_rsag": 250,
+              "downramp_final": 64,
+              "bisection": 8,
+              "diameter_pair": 101,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 56,
+              "combined": 99,
+              "combined_rsag": 250
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 101,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 61,
+                "phase_bcast_end": 101
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 103,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 103,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 220,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 219
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 220,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 219
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 101,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 61,
+              "phase_bcast_end": 101
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 101,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 61,
+              "phase_bcast_end": 101
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 220,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 219
+            },
+            "efficiency": 1.02020202020202,
+            "ratio": 1.02020202020202
+          },
+          "node": {
+            "lower_bound": 162,
+            "lower_bound_rsag": 250,
+            "bounds": {
+              "M": 2,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 162,
+              "downramp_rsag": 250,
+              "downramp_final": 64,
+              "bisection": 8,
+              "diameter_pair": 209,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 110,
+              "combined": 162,
+              "combined_rsag": 250
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 164,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 124,
+                "phase_bcast_end": 164
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 940,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 508,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 991,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 771,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 219
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 991,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 771,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 219
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 164,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 124,
+              "phase_bcast_end": 164
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 164,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 124,
+              "phase_bcast_end": 164
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 991,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 771,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 219
+            },
+            "efficiency": 1.0123456790123457,
+            "ratio": 1.0123456790123457
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 101,
+            "ok": true,
+            "root": 27,
+            "phase_reduce_end": 61,
+            "phase_bcast_end": 101,
+            "ratio": 1.02020202020202
+          }
+        },
+        "3": {
+          "inc": {
+            "lower_bound": 101,
+            "lower_bound_rsag": 344,
+            "bounds": {
+              "M": 3,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 101,
+              "downramp_rsag": 344,
+              "downramp_final": 65,
+              "bisection": 12,
+              "diameter_pair": 102,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 56,
+              "combined": 101,
+              "combined_rsag": 344
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 104,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 63,
+                "phase_bcast_end": 104
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 106,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 106,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 221,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 220
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 221,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 220
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 104,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 63,
+              "phase_bcast_end": 104
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 104,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 63,
+              "phase_bcast_end": 104
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 221,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 220
+            },
+            "efficiency": 1.0297029702970297,
+            "ratio": 1.0297029702970297
+          },
+          "node": {
+            "lower_bound": 164,
+            "lower_bound_rsag": 344,
+            "bounds": {
+              "M": 3,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 164,
+              "downramp_rsag": 344,
+              "downramp_final": 65,
+              "bisection": 12,
+              "diameter_pair": 210,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 110,
+              "combined": 164,
+              "combined_rsag": 344
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 167,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 126,
+                "phase_bcast_end": 167
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 945,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 513,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 993,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 772,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 220
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 993,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 772,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 220
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 167,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 126,
+              "phase_bcast_end": 167
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 167,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 126,
+              "phase_bcast_end": 167
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 993,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 772,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 220
+            },
+            "efficiency": 1.0182926829268293,
+            "ratio": 1.0182926829268293
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 104,
+            "ok": true,
+            "root": 27,
+            "phase_reduce_end": 63,
+            "phase_bcast_end": 104,
+            "ratio": 1.0297029702970297
+          }
+        },
+        "4": {
+          "inc": {
+            "lower_bound": 103,
+            "lower_bound_rsag": 438,
+            "bounds": {
+              "M": 4,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 103,
+              "downramp_rsag": 438,
+              "downramp_final": 66,
+              "bisection": 16,
+              "diameter_pair": 103,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 56,
+              "combined": 103,
+              "combined_rsag": 438
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 107,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 65,
+                "phase_bcast_end": 107
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 109,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 109,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 222,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 221
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 222,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 221
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 107,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 65,
+              "phase_bcast_end": 107
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 107,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 65,
+              "phase_bcast_end": 107
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 222,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 221
+            },
+            "efficiency": 1.0388349514563107,
+            "ratio": 1.0388349514563107
+          },
+          "node": {
+            "lower_bound": 166,
+            "lower_bound_rsag": 438,
+            "bounds": {
+              "M": 4,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 166,
+              "downramp_rsag": 438,
+              "downramp_final": 66,
+              "bisection": 16,
+              "diameter_pair": 211,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 110,
+              "combined": 166,
+              "combined_rsag": 438
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 170,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 128,
+                "phase_bcast_end": 170
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 950,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 518,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 995,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 773,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 221
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 995,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 773,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 221
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 170,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 128,
+              "phase_bcast_end": 170
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 170,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 128,
+              "phase_bcast_end": 170
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 995,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 773,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 221
+            },
+            "efficiency": 1.0240963855421688,
+            "ratio": 1.0240963855421688
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 107,
+            "ok": true,
+            "root": 27,
+            "phase_reduce_end": 65,
+            "phase_bcast_end": 107,
+            "ratio": 1.0388349514563107
+          }
+        },
+        "5": {
+          "inc": {
+            "lower_bound": 105,
+            "lower_bound_rsag": 532,
+            "bounds": {
+              "M": 5,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 105,
+              "downramp_rsag": 532,
+              "downramp_final": 67,
+              "bisection": 20,
+              "diameter_pair": 104,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 56,
+              "combined": 105,
+              "combined_rsag": 532
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 110,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 67,
+                "phase_bcast_end": 110
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 112,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 112,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 241,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 240
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 241,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 240
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 110,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 67,
+              "phase_bcast_end": 110
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 110,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 67,
+              "phase_bcast_end": 110
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 241,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 240
+            },
+            "efficiency": 1.0476190476190477,
+            "ratio": 1.0476190476190477
+          },
+          "node": {
+            "lower_bound": 168,
+            "lower_bound_rsag": 532,
+            "bounds": {
+              "M": 5,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 168,
+              "downramp_rsag": 532,
+              "downramp_final": 67,
+              "bisection": 20,
+              "diameter_pair": 212,
+              "mesh_diameter": 62,
+              "tree_phase_m1": 110,
+              "combined": 168,
+              "combined_rsag": 532
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 173,
+                "ok": true,
+                "root": 27,
+                "phase_reduce_end": 130,
+                "phase_bcast_end": 173
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 955,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 523,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 27
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1015,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 774,
+                "ag_scheme": "multitree",
+                "ag_makespan": 240
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1015,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 48,
+                "is_cycle": true,
+                "phase_rs_end": 774,
+                "ag_scheme": "multitree",
+                "ag_makespan": 240
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 173,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 130,
+              "phase_bcast_end": 173
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 173,
+              "ok": true,
+              "root": 27,
+              "phase_reduce_end": 130,
+              "phase_bcast_end": 173
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1015,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 48,
+              "is_cycle": true,
+              "phase_rs_end": 774,
+              "ag_scheme": "multitree",
+              "ag_makespan": 240
+            },
+            "efficiency": 1.0297619047619047,
+            "ratio": 1.0297619047619047
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 110,
+            "ok": true,
+            "root": 27,
+            "phase_reduce_end": 67,
+            "phase_bcast_end": 110,
+            "ratio": 1.0476190476190477
+          }
+        }
+      }
+    },
+    "8x8": {
+      "mx": 8,
+      "my": 8,
+      "n": 64,
+      "flits": {
+        "1": {
+          "inc": {
+            "lower_bound": 108,
+            "lower_bound_rsag": 196,
+            "bounds": {
+              "M": 1,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 108,
+              "downramp_rsag": 196,
+              "downramp_final": 71,
+              "bisection": 4,
+              "diameter_pair": 114,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 63,
+              "combined": 108,
+              "combined_rsag": 196
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 109,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 66,
+                "phase_bcast_end": 109
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 111,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 111,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 103,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 102
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 103,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 102
+              }
+            ],
+            "best": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 103,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 102
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 109,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 66,
+              "phase_bcast_end": 109
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 103,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 102
+            },
+            "efficiency": 0.9537037037037037,
+            "ratio": 0.9537037037037037
+          },
+          "node": {
+            "lower_bound": 180,
+            "lower_bound_rsag": 240,
+            "bounds": {
+              "M": 1,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 180,
+              "downramp_rsag": 196,
+              "downramp_final": 71,
+              "bisection": 4,
+              "diameter_pair": 240,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 126,
+              "combined": 180,
+              "combined_rsag": 240
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 181,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 138,
+                "phase_bcast_end": 181
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1227,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 651,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1129,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1026,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 102
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1129,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1026,
+                "ag_scheme": "hybrid_v_bi_B2",
+                "ag_makespan": 102
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 181,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 138,
+              "phase_bcast_end": 181
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 181,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 138,
+              "phase_bcast_end": 181
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1129,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 1026,
+              "ag_scheme": "hybrid_v_bi_B2",
+              "ag_makespan": 102
+            },
+            "efficiency": 1.0055555555555555,
+            "ratio": 1.0055555555555555
+          },
+          "best_overall": {
+            "name": "ring_bi_rs_optag",
+            "algo": "rs_ag",
+            "reduce_mode": "inc",
+            "makespan": 103,
+            "ok": true,
+            "feasible": true,
+            "ring_len": 64,
+            "is_cycle": true,
+            "phase_rs_end": 0,
+            "ag_scheme": "hybrid_v_bi_B2",
+            "ag_makespan": 102,
+            "ratio": 0.9537037037037037
+          }
+        },
+        "2": {
+          "inc": {
+            "lower_bound": 110,
+            "lower_bound_rsag": 322,
+            "bounds": {
+              "M": 2,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 110,
+              "downramp_rsag": 322,
+              "downramp_final": 72,
+              "bisection": 8,
+              "diameter_pair": 115,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 63,
+              "combined": 110,
+              "combined_rsag": 322
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 112,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 68,
+                "phase_bcast_end": 112
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 114,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 114,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 284,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 283
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 284,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 283
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 112,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 68,
+              "phase_bcast_end": 112
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 112,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 68,
+              "phase_bcast_end": 112
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 284,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 283
+            },
+            "efficiency": 1.018181818181818,
+            "ratio": 1.018181818181818
+          },
+          "node": {
+            "lower_bound": 182,
+            "lower_bound_rsag": 322,
+            "bounds": {
+              "M": 2,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 182,
+              "downramp_rsag": 322,
+              "downramp_final": 72,
+              "bisection": 8,
+              "diameter_pair": 241,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 126,
+              "combined": 182,
+              "combined_rsag": 322
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 184,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 140,
+                "phase_bcast_end": 184
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1232,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 656,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1311,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1027,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 283
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1311,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1027,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 283
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 184,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 140,
+              "phase_bcast_end": 184
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 184,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 140,
+              "phase_bcast_end": 184
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1311,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 1027,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 283
+            },
+            "efficiency": 1.010989010989011,
+            "ratio": 1.010989010989011
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 112,
+            "ok": true,
+            "root": 36,
+            "phase_reduce_end": 68,
+            "phase_bcast_end": 112,
+            "ratio": 1.018181818181818
+          }
+        },
+        "3": {
+          "inc": {
+            "lower_bound": 112,
+            "lower_bound_rsag": 448,
+            "bounds": {
+              "M": 3,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 112,
+              "downramp_rsag": 448,
+              "downramp_final": 73,
+              "bisection": 12,
+              "diameter_pair": 116,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 63,
+              "combined": 112,
+              "combined_rsag": 448
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 115,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 70,
+                "phase_bcast_end": 115
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 117,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 117,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 285,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 284
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 285,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 284
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 115,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 70,
+              "phase_bcast_end": 115
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 115,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 70,
+              "phase_bcast_end": 115
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 285,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 284
+            },
+            "efficiency": 1.0267857142857142,
+            "ratio": 1.0267857142857142
+          },
+          "node": {
+            "lower_bound": 184,
+            "lower_bound_rsag": 448,
+            "bounds": {
+              "M": 3,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 184,
+              "downramp_rsag": 448,
+              "downramp_final": 73,
+              "bisection": 12,
+              "diameter_pair": 242,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 126,
+              "combined": 184,
+              "combined_rsag": 448
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 187,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 142,
+                "phase_bcast_end": 187
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1237,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 661,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1313,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1028,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 284
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1313,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1028,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 284
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 187,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 142,
+              "phase_bcast_end": 187
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 187,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 142,
+              "phase_bcast_end": 187
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1313,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 1028,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 284
+            },
+            "efficiency": 1.016304347826087,
+            "ratio": 1.016304347826087
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 115,
+            "ok": true,
+            "root": 36,
+            "phase_reduce_end": 70,
+            "phase_bcast_end": 115,
+            "ratio": 1.0267857142857142
+          }
+        },
+        "4": {
+          "inc": {
+            "lower_bound": 114,
+            "lower_bound_rsag": 574,
+            "bounds": {
+              "M": 4,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 114,
+              "downramp_rsag": 574,
+              "downramp_final": 74,
+              "bisection": 16,
+              "diameter_pair": 117,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 63,
+              "combined": 114,
+              "combined_rsag": 574
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 118,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 72,
+                "phase_bcast_end": 118
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 120,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 120,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 286,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 285
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 286,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 285
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 118,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 72,
+              "phase_bcast_end": 118
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 118,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 72,
+              "phase_bcast_end": 118
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 286,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 285
+            },
+            "efficiency": 1.0350877192982457,
+            "ratio": 1.0350877192982457
+          },
+          "node": {
+            "lower_bound": 186,
+            "lower_bound_rsag": 574,
+            "bounds": {
+              "M": 4,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 186,
+              "downramp_rsag": 574,
+              "downramp_final": 74,
+              "bisection": 16,
+              "diameter_pair": 243,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 126,
+              "combined": 186,
+              "combined_rsag": 574
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 190,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 144,
+                "phase_bcast_end": 190
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1242,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 666,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1315,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1029,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 285
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1315,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1029,
+                "ag_scheme": "hybrid_v_uni_B1",
+                "ag_makespan": 285
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 190,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 144,
+              "phase_bcast_end": 190
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 190,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 144,
+              "phase_bcast_end": 190
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1315,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 1029,
+              "ag_scheme": "hybrid_v_uni_B1",
+              "ag_makespan": 285
+            },
+            "efficiency": 1.021505376344086,
+            "ratio": 1.021505376344086
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 118,
+            "ok": true,
+            "root": 36,
+            "phase_reduce_end": 72,
+            "phase_bcast_end": 118,
+            "ratio": 1.0350877192982457
+          }
+        },
+        "5": {
+          "inc": {
+            "lower_bound": 116,
+            "lower_bound_rsag": 700,
+            "bounds": {
+              "M": 5,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 116,
+              "downramp_rsag": 700,
+              "downramp_final": 75,
+              "bisection": 20,
+              "diameter_pair": 118,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 63,
+              "combined": 116,
+              "combined_rsag": 700
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 121,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 74,
+                "phase_bcast_end": 121
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 123,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 123,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 321,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 320
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 321,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 320
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 121,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 74,
+              "phase_bcast_end": 121
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 121,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 74,
+              "phase_bcast_end": 121
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 321,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 320
+            },
+            "efficiency": 1.043103448275862,
+            "ratio": 1.043103448275862
+          },
+          "node": {
+            "lower_bound": 188,
+            "lower_bound_rsag": 700,
+            "bounds": {
+              "M": 5,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 188,
+              "downramp_rsag": 700,
+              "downramp_final": 75,
+              "bisection": 20,
+              "diameter_pair": 244,
+              "mesh_diameter": 70,
+              "tree_phase_m1": 126,
+              "combined": 188,
+              "combined_rsag": 700
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 208,
+                "ok": true,
+                "root": 36,
+                "phase_reduce_end": 161,
+                "phase_bcast_end": 208
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1262,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 686,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 36
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1351,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1030,
+                "ag_scheme": "multitree",
+                "ag_makespan": 320
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 1351,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 64,
+                "is_cycle": true,
+                "phase_rs_end": 1030,
+                "ag_scheme": "multitree",
+                "ag_makespan": 320
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 208,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 161,
+              "phase_bcast_end": 208
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 208,
+              "ok": true,
+              "root": 36,
+              "phase_reduce_end": 161,
+              "phase_bcast_end": 208
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 1351,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 64,
+              "is_cycle": true,
+              "phase_rs_end": 1030,
+              "ag_scheme": "multitree",
+              "ag_makespan": 320
+            },
+            "efficiency": 1.1063829787234043,
+            "ratio": 1.1063829787234043
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 121,
+            "ok": true,
+            "root": 36,
+            "phase_reduce_end": 74,
+            "phase_bcast_end": 121,
+            "ratio": 1.043103448275862
+          }
+        }
+      }
+    },
+    "12x16": {
+      "mx": 12,
+      "my": 16,
+      "n": 192,
+      "flits": {
+        "1": {
+          "inc": {
+            "lower_bound": 190,
+            "lower_bound_rsag": 516,
+            "bounds": {
+              "M": 1,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 190,
+              "downramp_rsag": 516,
+              "downramp_final": 135,
+              "bisection": 8,
+              "diameter_pair": 214,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 113,
+              "combined": 190,
+              "combined_rsag": 516
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 191,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 116,
+                "phase_bcast_end": 191
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 193,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 193,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 193,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 202,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 201
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 202,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 201
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 191,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 116,
+              "phase_bcast_end": 191
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 191,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 116,
+              "phase_bcast_end": 191
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 202,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 201
+            },
+            "efficiency": 1.0052631578947369,
+            "ratio": 1.0052631578947369
+          },
+          "node": {
+            "lower_bound": 316,
+            "lower_bound_rsag": 516,
+            "bounds": {
+              "M": 1,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 316,
+              "downramp_rsag": 516,
+              "downramp_final": 135,
+              "bisection": 8,
+              "diameter_pair": 448,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 230,
+              "combined": 316,
+              "combined_rsag": 516
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 317,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 242,
+                "phase_bcast_end": 317
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 3635,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1907,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1043,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3308,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3106,
+                "ag_scheme": "multitree",
+                "ag_makespan": 201
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3308,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3106,
+                "ag_scheme": "multitree",
+                "ag_makespan": 201
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 317,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 242,
+              "phase_bcast_end": 317
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 317,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 242,
+              "phase_bcast_end": 317
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 3308,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 3106,
+              "ag_scheme": "multitree",
+              "ag_makespan": 201
+            },
+            "efficiency": 1.0031645569620253,
+            "ratio": 1.0031645569620253
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 191,
+            "ok": true,
+            "root": 102,
+            "phase_reduce_end": 116,
+            "phase_bcast_end": 191,
+            "ratio": 1.0052631578947369
+          }
+        },
+        "2": {
+          "inc": {
+            "lower_bound": 192,
+            "lower_bound_rsag": 898,
+            "bounds": {
+              "M": 2,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 192,
+              "downramp_rsag": 898,
+              "downramp_final": 136,
+              "bisection": 16,
+              "diameter_pair": 215,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 113,
+              "combined": 192,
+              "combined_rsag": 898
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 194,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 118,
+                "phase_bcast_end": 194
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 196,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 196,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 196,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 388,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 387
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 388,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 387
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 194,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 118,
+              "phase_bcast_end": 194
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 194,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 118,
+              "phase_bcast_end": 194
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 388,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 387
+            },
+            "efficiency": 1.0104166666666667,
+            "ratio": 1.0104166666666667
+          },
+          "node": {
+            "lower_bound": 318,
+            "lower_bound_rsag": 898,
+            "bounds": {
+              "M": 2,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 318,
+              "downramp_rsag": 898,
+              "downramp_final": 136,
+              "bisection": 16,
+              "diameter_pair": 449,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 230,
+              "combined": 318,
+              "combined_rsag": 898
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 320,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 244,
+                "phase_bcast_end": 320
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 3640,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1912,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1048,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3495,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3107,
+                "ag_scheme": "multitree",
+                "ag_makespan": 387
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3495,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3107,
+                "ag_scheme": "multitree",
+                "ag_makespan": 387
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 320,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 244,
+              "phase_bcast_end": 320
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 320,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 244,
+              "phase_bcast_end": 320
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 3495,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 3107,
+              "ag_scheme": "multitree",
+              "ag_makespan": 387
+            },
+            "efficiency": 1.0062893081761006,
+            "ratio": 1.0062893081761006
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 194,
+            "ok": true,
+            "root": 102,
+            "phase_reduce_end": 118,
+            "phase_bcast_end": 194,
+            "ratio": 1.0104166666666667
+          }
+        },
+        "3": {
+          "inc": {
+            "lower_bound": 194,
+            "lower_bound_rsag": 1280,
+            "bounds": {
+              "M": 3,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 194,
+              "downramp_rsag": 1280,
+              "downramp_final": 137,
+              "bisection": 24,
+              "diameter_pair": 216,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 113,
+              "combined": 194,
+              "combined_rsag": 1280
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 197,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 120,
+                "phase_bcast_end": 197
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 199,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 199,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 199,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 579,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 578
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 579,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 578
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 197,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 120,
+              "phase_bcast_end": 197
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 197,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 120,
+              "phase_bcast_end": 197
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 579,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 578
+            },
+            "efficiency": 1.0154639175257731,
+            "ratio": 1.0154639175257731
+          },
+          "node": {
+            "lower_bound": 320,
+            "lower_bound_rsag": 1280,
+            "bounds": {
+              "M": 3,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 320,
+              "downramp_rsag": 1280,
+              "downramp_final": 137,
+              "bisection": 24,
+              "diameter_pair": 450,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 230,
+              "combined": 320,
+              "combined_rsag": 1280
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 375,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 298,
+                "phase_bcast_end": 375
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 3697,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1969,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1105,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3687,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3108,
+                "ag_scheme": "multitree",
+                "ag_makespan": 578
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3687,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3108,
+                "ag_scheme": "multitree",
+                "ag_makespan": 578
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 375,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 298,
+              "phase_bcast_end": 375
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 375,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 298,
+              "phase_bcast_end": 375
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 3687,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 3108,
+              "ag_scheme": "multitree",
+              "ag_makespan": 578
+            },
+            "efficiency": 1.171875,
+            "ratio": 1.171875
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 197,
+            "ok": true,
+            "root": 102,
+            "phase_reduce_end": 120,
+            "phase_bcast_end": 197,
+            "ratio": 1.0154639175257731
+          }
+        },
+        "4": {
+          "inc": {
+            "lower_bound": 196,
+            "lower_bound_rsag": 1662,
+            "bounds": {
+              "M": 4,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 196,
+              "downramp_rsag": 1662,
+              "downramp_final": 138,
+              "bisection": 32,
+              "diameter_pair": 217,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 113,
+              "combined": 196,
+              "combined_rsag": 1662
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 200,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 122,
+                "phase_bcast_end": 200
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 202,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 202,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 202,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 770,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 769
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 770,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 769
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 200,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 122,
+              "phase_bcast_end": 200
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 200,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 122,
+              "phase_bcast_end": 200
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 770,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 769
+            },
+            "efficiency": 1.0204081632653061,
+            "ratio": 1.0204081632653061
+          },
+          "node": {
+            "lower_bound": 322,
+            "lower_bound_rsag": 1662,
+            "bounds": {
+              "M": 4,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 322,
+              "downramp_rsag": 1662,
+              "downramp_final": 138,
+              "bisection": 32,
+              "diameter_pair": 451,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 230,
+              "combined": 322,
+              "combined_rsag": 1662
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 467,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 389,
+                "phase_bcast_end": 467
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 3791,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2063,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1199,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3879,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3109,
+                "ag_scheme": "multitree",
+                "ag_makespan": 769
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 3879,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3109,
+                "ag_scheme": "multitree",
+                "ag_makespan": 769
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 467,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 389,
+              "phase_bcast_end": 467
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 467,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 389,
+              "phase_bcast_end": 467
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 3879,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 3109,
+              "ag_scheme": "multitree",
+              "ag_makespan": 769
+            },
+            "efficiency": 1.450310559006211,
+            "ratio": 1.450310559006211
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 200,
+            "ok": true,
+            "root": 102,
+            "phase_reduce_end": 122,
+            "phase_bcast_end": 200,
+            "ratio": 1.0204081632653061
+          }
+        },
+        "5": {
+          "inc": {
+            "lower_bound": 198,
+            "lower_bound_rsag": 2044,
+            "bounds": {
+              "M": 5,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 198,
+              "downramp_rsag": 2044,
+              "downramp_final": 139,
+              "bisection": 40,
+              "diameter_pair": 218,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 113,
+              "combined": 198,
+              "combined_rsag": 2044
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 203,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 124,
+                "phase_bcast_end": 203
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 205,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 205,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 205,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 961,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 960
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 961,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 960
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 203,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 124,
+              "phase_bcast_end": 203
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 203,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 124,
+              "phase_bcast_end": 203
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 961,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 960
+            },
+            "efficiency": 1.0252525252525253,
+            "ratio": 1.0252525252525253
+          },
+          "node": {
+            "lower_bound": 324,
+            "lower_bound_rsag": 2044,
+            "bounds": {
+              "M": 5,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 324,
+              "downramp_rsag": 2044,
+              "downramp_final": 139,
+              "bisection": 40,
+              "diameter_pair": 452,
+              "mesh_diameter": 134,
+              "tree_phase_m1": 230,
+              "combined": 324,
+              "combined_rsag": 2044
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 560,
+                "ok": true,
+                "root": 102,
+                "phase_reduce_end": 481,
+                "phase_bcast_end": 560
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 3886,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2158,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1294,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 102
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4071,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3110,
+                "ag_scheme": "multitree",
+                "ag_makespan": 960
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4071,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 192,
+                "is_cycle": true,
+                "phase_rs_end": 3110,
+                "ag_scheme": "multitree",
+                "ag_makespan": 960
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 560,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 481,
+              "phase_bcast_end": 560
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 560,
+              "ok": true,
+              "root": 102,
+              "phase_reduce_end": 481,
+              "phase_bcast_end": 560
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 4071,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 192,
+              "is_cycle": true,
+              "phase_rs_end": 3110,
+              "ag_scheme": "multitree",
+              "ag_makespan": 960
+            },
+            "efficiency": 1.728395061728395,
+            "ratio": 1.728395061728395
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 203,
+            "ok": true,
+            "root": 102,
+            "phase_reduce_end": 124,
+            "phase_bcast_end": 203,
+            "ratio": 1.0252525252525253
+          }
+        }
+      }
+    },
+    "16x16": {
+      "mx": 16,
+      "my": 16,
+      "n": 256,
+      "flits": {
+        "1": {
+          "inc": {
+            "lower_bound": 212,
+            "lower_bound_rsag": 660,
+            "bounds": {
+              "M": 1,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 212,
+              "downramp_rsag": 660,
+              "downramp_final": 151,
+              "bisection": 8,
+              "diameter_pair": 242,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 127,
+              "combined": 212,
+              "combined_rsag": 660
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 213,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 130,
+                "phase_bcast_end": 213
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 215,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 215,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 215,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 266,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 265
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 266,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 265
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 213,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 130,
+              "phase_bcast_end": 213
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 213,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 130,
+              "phase_bcast_end": 213
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 266,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 265
+            },
+            "efficiency": 1.0047169811320755,
+            "ratio": 1.0047169811320755
+          },
+          "node": {
+            "lower_bound": 356,
+            "lower_bound_rsag": 660,
+            "bounds": {
+              "M": 1,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 356,
+              "downramp_rsag": 660,
+              "downramp_final": 151,
+              "bisection": 8,
+              "diameter_pair": 512,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 262,
+              "combined": 356,
+              "combined_rsag": 660
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 357,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 274,
+                "phase_bcast_end": 357
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 4795,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2491,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1339,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4396,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4130,
+                "ag_scheme": "multitree",
+                "ag_makespan": 265
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4396,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4130,
+                "ag_scheme": "multitree",
+                "ag_makespan": 265
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 357,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 274,
+              "phase_bcast_end": 357
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 357,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 274,
+              "phase_bcast_end": 357
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 4396,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 4130,
+              "ag_scheme": "multitree",
+              "ag_makespan": 265
+            },
+            "efficiency": 1.002808988764045,
+            "ratio": 1.002808988764045
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 213,
+            "ok": true,
+            "root": 136,
+            "phase_reduce_end": 130,
+            "phase_bcast_end": 213,
+            "ratio": 1.0047169811320755
+          }
+        },
+        "2": {
+          "inc": {
+            "lower_bound": 214,
+            "lower_bound_rsag": 1170,
+            "bounds": {
+              "M": 2,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 214,
+              "downramp_rsag": 1170,
+              "downramp_final": 152,
+              "bisection": 16,
+              "diameter_pair": 243,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 127,
+              "combined": 214,
+              "combined_rsag": 1170
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 216,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 132,
+                "phase_bcast_end": 216
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 218,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 218,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 218,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 516,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 515
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 516,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 515
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 216,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 132,
+              "phase_bcast_end": 216
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 216,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 132,
+              "phase_bcast_end": 216
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 516,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 515
+            },
+            "efficiency": 1.0093457943925233,
+            "ratio": 1.0093457943925233
+          },
+          "node": {
+            "lower_bound": 358,
+            "lower_bound_rsag": 1170,
+            "bounds": {
+              "M": 2,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 358,
+              "downramp_rsag": 1170,
+              "downramp_final": 152,
+              "bisection": 16,
+              "diameter_pair": 513,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 262,
+              "combined": 358,
+              "combined_rsag": 1170
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 361,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 277,
+                "phase_bcast_end": 361
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 4801,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2497,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1345,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4647,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4131,
+                "ag_scheme": "multitree",
+                "ag_makespan": 515
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4647,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4131,
+                "ag_scheme": "multitree",
+                "ag_makespan": 515
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 361,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 277,
+              "phase_bcast_end": 361
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 361,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 277,
+              "phase_bcast_end": 361
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 4647,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 4131,
+              "ag_scheme": "multitree",
+              "ag_makespan": 515
+            },
+            "efficiency": 1.0083798882681565,
+            "ratio": 1.0083798882681565
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 216,
+            "ok": true,
+            "root": 136,
+            "phase_reduce_end": 132,
+            "phase_bcast_end": 216,
+            "ratio": 1.0093457943925233
+          }
+        },
+        "3": {
+          "inc": {
+            "lower_bound": 216,
+            "lower_bound_rsag": 1680,
+            "bounds": {
+              "M": 3,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 216,
+              "downramp_rsag": 1680,
+              "downramp_final": 153,
+              "bisection": 24,
+              "diameter_pair": 244,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 127,
+              "combined": 216,
+              "combined_rsag": 1680
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 219,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 134,
+                "phase_bcast_end": 219
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 221,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 221,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 221,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 771,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 770
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 771,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 770
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 219,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 134,
+              "phase_bcast_end": 219
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 219,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 134,
+              "phase_bcast_end": 219
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 771,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 770
+            },
+            "efficiency": 1.0138888888888888,
+            "ratio": 1.0138888888888888
+          },
+          "node": {
+            "lower_bound": 360,
+            "lower_bound_rsag": 1680,
+            "bounds": {
+              "M": 3,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 360,
+              "downramp_rsag": 1680,
+              "downramp_final": 153,
+              "bisection": 24,
+              "diameter_pair": 514,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 262,
+              "combined": 360,
+              "combined_rsag": 1680
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 479,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 394,
+                "phase_bcast_end": 479
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 4921,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2617,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1465,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4903,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4132,
+                "ag_scheme": "multitree",
+                "ag_makespan": 770
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 4903,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4132,
+                "ag_scheme": "multitree",
+                "ag_makespan": 770
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 479,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 394,
+              "phase_bcast_end": 479
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 479,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 394,
+              "phase_bcast_end": 479
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 4903,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 4132,
+              "ag_scheme": "multitree",
+              "ag_makespan": 770
+            },
+            "efficiency": 1.3305555555555555,
+            "ratio": 1.3305555555555555
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 219,
+            "ok": true,
+            "root": 136,
+            "phase_reduce_end": 134,
+            "phase_bcast_end": 219,
+            "ratio": 1.0138888888888888
+          }
+        },
+        "4": {
+          "inc": {
+            "lower_bound": 218,
+            "lower_bound_rsag": 2190,
+            "bounds": {
+              "M": 4,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 218,
+              "downramp_rsag": 2190,
+              "downramp_final": 154,
+              "bisection": 32,
+              "diameter_pair": 245,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 127,
+              "combined": 218,
+              "combined_rsag": 2190
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 222,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 136,
+                "phase_bcast_end": 222
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 224,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 224,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 224,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 1026,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1025
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 1026,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1025
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 222,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 136,
+              "phase_bcast_end": 222
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 222,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 136,
+              "phase_bcast_end": 222
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 1026,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 1025
+            },
+            "efficiency": 1.018348623853211,
+            "ratio": 1.018348623853211
+          },
+          "node": {
+            "lower_bound": 362,
+            "lower_bound_rsag": 2190,
+            "bounds": {
+              "M": 4,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 362,
+              "downramp_rsag": 2190,
+              "downramp_final": 154,
+              "bisection": 32,
+              "diameter_pair": 515,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 262,
+              "combined": 362,
+              "combined_rsag": 2190
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 603,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 517,
+                "phase_bcast_end": 603
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 5047,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2743,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1591,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 5159,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4133,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1025
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 5159,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4133,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1025
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 603,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 517,
+              "phase_bcast_end": 603
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 603,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 517,
+              "phase_bcast_end": 603
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 5159,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 4133,
+              "ag_scheme": "multitree",
+              "ag_makespan": 1025
+            },
+            "efficiency": 1.6657458563535912,
+            "ratio": 1.6657458563535912
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 222,
+            "ok": true,
+            "root": 136,
+            "phase_reduce_end": 136,
+            "phase_bcast_end": 222,
+            "ratio": 1.018348623853211
+          }
+        },
+        "5": {
+          "inc": {
+            "lower_bound": 220,
+            "lower_bound_rsag": 2700,
+            "bounds": {
+              "M": 5,
+              "r_lat": 3,
+              "reduce_mode": "inc",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 220,
+              "downramp_rsag": 2700,
+              "downramp_final": 155,
+              "bisection": 40,
+              "diameter_pair": 246,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 127,
+              "combined": 220,
+              "combined_rsag": 2700
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 225,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 138,
+                "phase_bcast_end": 225
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 227,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 227,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "inc",
+                "makespan": 227,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 1281,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1280
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "inc",
+                "makespan": 1281,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 0,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1280
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 225,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 138,
+              "phase_bcast_end": 225
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "inc",
+              "makespan": 225,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 138,
+              "phase_bcast_end": 225
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "inc",
+              "makespan": 1281,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 0,
+              "ag_scheme": "multitree",
+              "ag_makespan": 1280
+            },
+            "efficiency": 1.0227272727272727,
+            "ratio": 1.0227272727272727
+          },
+          "node": {
+            "lower_bound": 364,
+            "lower_bound_rsag": 2700,
+            "bounds": {
+              "M": 5,
+              "r_lat": 12,
+              "reduce_mode": "node",
+              "inc_lat": 3,
+              "node_red_lat": 12,
+              "ramp_bw": 1,
+              "tree_latency": 364,
+              "downramp_rsag": 2700,
+              "downramp_final": 155,
+              "bisection": 40,
+              "diameter_pair": 516,
+              "mesh_diameter": 150,
+              "tree_phase_m1": 262,
+              "combined": 364,
+              "combined_rsag": 2700
+            },
+            "schemes": [
+              {
+                "name": "tree_reduce_bcast",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 728,
+                "ok": true,
+                "root": 136,
+                "phase_reduce_end": 641,
+                "phase_bcast_end": 728
+              },
+              {
+                "name": "hybrid_h2",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 5174,
+                "ok": false,
+                "B": 2,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h4",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 2870,
+                "ok": false,
+                "B": 4,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "hybrid_h8",
+                "algo": "tree_bcast",
+                "reduce_mode": "node",
+                "makespan": 1718,
+                "ok": false,
+                "B": 8,
+                "feasible": true,
+                "root": 136
+              },
+              {
+                "name": "ring_bi_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 5415,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4134,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1280
+              },
+              {
+                "name": "ring_uni_rs_optag",
+                "algo": "rs_ag",
+                "reduce_mode": "node",
+                "makespan": 5415,
+                "ok": true,
+                "feasible": true,
+                "ring_len": 256,
+                "is_cycle": true,
+                "phase_rs_end": 4134,
+                "ag_scheme": "multitree",
+                "ag_makespan": 1280
+              }
+            ],
+            "best": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 728,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 641,
+              "phase_bcast_end": 728
+            },
+            "best_tree_bcast": {
+              "name": "tree_reduce_bcast",
+              "algo": "tree_bcast",
+              "reduce_mode": "node",
+              "makespan": 728,
+              "ok": true,
+              "root": 136,
+              "phase_reduce_end": 641,
+              "phase_bcast_end": 728
+            },
+            "best_rs_ag": {
+              "name": "ring_bi_rs_optag",
+              "algo": "rs_ag",
+              "reduce_mode": "node",
+              "makespan": 5415,
+              "ok": true,
+              "feasible": true,
+              "ring_len": 256,
+              "is_cycle": true,
+              "phase_rs_end": 4134,
+              "ag_scheme": "multitree",
+              "ag_makespan": 1280
+            },
+            "efficiency": 2.0,
+            "ratio": 2.0
+          },
+          "best_overall": {
+            "name": "tree_reduce_bcast",
+            "algo": "tree_bcast",
+            "reduce_mode": "inc",
+            "makespan": 225,
+            "ok": true,
+            "root": 136,
+            "phase_reduce_end": 138,
+            "phase_bcast_end": 225,
+            "ratio": 1.0227272727272727
+          }
+        }
+      }
+    }
+  }
+}

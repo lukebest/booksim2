@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<title>Near-optimal Allreduce 研究报告</title>
+<style>
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; }
+body { font-family: system-ui, -apple-system, sans-serif; margin:0; padding:24px 32px 56px;
+       background:var(--bg); color:var(--text); line-height:1.6; max-width:1120px; }
+h1 { font-size:1.6rem; margin:0 0 6px; }
+h2 { font-size:1.15rem; margin:28px 0 10px; color:#1e3a8a; border-top:1px solid #e2e8f0; padding-top:20px; }
+h3 { font-size:1.0rem; margin:16px 0 8px; color:#334155; }
+.card { background:var(--card); border:1px solid #e2e8f0; border-radius:10px;
+        padding:20px 24px; margin:16px 0; }
+.meta { color:var(--muted); font-size:.9rem; }
+.note { color:var(--muted); font-size:.87rem; }
+code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table.data { border-collapse:collapse; font-size:.82rem; margin:12px 0; width:100%; }
+table.data th, table.data td { border:1px solid #e2e8f0; padding:5px 8px; text-align:center; }
+table.data th { background:#f1f5f9; }
+table.data td.name { text-align:left; }
+.table-wrap { overflow-x:auto; margin:12px 0; }
+.legend { display:flex; align-items:center; gap:8px; margin:10px 0; font-size:.85rem; flex-wrap:wrap; }
+.legend-bar { width:220px; height:14px; border-radius:4px; border:1px solid #cbd5e1; }
+.chip { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+ul.compact li { margin:3px 0; }
+.formula { font-family: ui-monospace, monospace; background:#f8fafc; border:1px solid #e2e8f0;
+           border-radius:6px; padding:8px 12px; margin:6px 0; font-size:.86rem; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:800px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+</head><body>
+<h1>Near-optimal Allreduce 研究报告</h1>
+<p class="meta">2D mesh（非 torus）&middot; H=4 V=6 RAMP=1 ramp_bw=1
+&middot; INC_LAT=3cy &middot; NODE_RED_LAT=12cy
+&middot; 规模 4x4, 6x8, 8x8, 12x16, 16x16 &middot; m=1&ndash;5 flit</p>
+
+<div class="card">
+<h2>1. 物理模型与设计空间</h2>
+<p>每个 mesh 节点通过 router 与 4 邻连接。链路延迟：同行 H=4 cycle，同列 V=6 cycle；
+PE&harr;router ramp 各 1 cycle，链路带宽 1 flit/cycle。</p>
+<p>Allreduce 需在全部 N 个节点完成归约并分发最终结果。本研究探索 <b>2&times;2 设计空间</b>：</p>
+<table class="data">
+<tr><th></th><th>Reduce + Broadcast</th><th>Reduce-Scatter + AllGather</th></tr>
+<tr><td class="name"><b>INC reduce</b><br><span class="note">路由器内 merge，3 cy/flit</span></td>
+ <td>维度树 reduce 到中心 root，再多播树 broadcast</td>
+ <td>Hamilton 环 RS + 库中最优 AG（<code>allgather_scale_sweep.json</code>）</td></tr>
+<tr><td class="name"><b>无 INC</b><br><span class="note">下 ramp&rarr;node 计算&rarr;上 ramp，共 12 cy</span></td>
+ <td>同上，但每跳 merge 需 node 绕行</td>
+ <td>环 RS（高 merge 代价）+ 最优 AG</td></tr>
+</table>
+<p class="note">调度采用刚性零缓冲打包器（<code>sched_zerobuf_compare.py</code>）：每链路每 cycle 至多 1 flit，
+每 ramp 每 cycle 至多 1 flit。RS+AG 中 AG 段 makespan 取自已有 allgather 最优零缓冲结果。</p>
+</div>
+
+<div class="card">
+<h2>2. 理论下界</h2>
+<p>对每种 (规模, m, reduce 模式) 计算四类下界取 max：</p>
+<div class="formula">T = max(tree_latency, downramp_final, bisection)</div>
+<div class="formula">T_rsag = max(downramp_rsag, bisection, diameter_pair)</div>
+<p class="note">tree_latency 含顺序 reduce + broadcast 两阶段；merge 代价按 INC_LAT 或 NODE_RED_LAT 计入关键路径。</p>
+<div class="table-wrap">
+<table class='data'><thead><tr><th>规模</th><th>reduce模式</th><th>m</th><th>树形延迟下界</th><th>下行ramp下界</th><th>二分带宽下界</th><th>RS+AG下界</th><th>T=max</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>INC</td><td>1</td><td>56</td><td>31</td><td>2</td><td>60</td><td><b>56</b></td></tr><tr><td class='name'>4x4</td><td>INC</td><td>2</td><td>58</td><td>32</td><td>4</td><td>90</td><td><b>58</b></td></tr><tr><td class='name'>4x4</td><td>INC</td><td>3</td><td>60</td><td>33</td><td>6</td><td>120</td><td><b>60</b></td></tr><tr><td class='name'>4x4</td><td>INC</td><td>4</td><td>62</td><td>34</td><td>8</td><td>150</td><td><b>62</b></td></tr><tr><td class='name'>4x4</td><td>INC</td><td>5</td><td>64</td><td>35</td><td>10</td><td>180</td><td><b>64</b></td></tr><tr><td class='name'>4x4</td><td>无INC</td><td>1</td><td>92</td><td>31</td><td>2</td><td>60</td><td><b>92</b></td></tr><tr><td class='name'>4x4</td><td>无INC</td><td>2</td><td>94</td><td>32</td><td>4</td><td>90</td><td><b>94</b></td></tr><tr><td class='name'>4x4</td><td>无INC</td><td>3</td><td>96</td><td>33</td><td>6</td><td>120</td><td><b>96</b></td></tr><tr><td class='name'>4x4</td><td>无INC</td><td>4</td><td>98</td><td>34</td><td>8</td><td>150</td><td><b>98</b></td></tr><tr><td class='name'>4x4</td><td>无INC</td><td>5</td><td>100</td><td>35</td><td>10</td><td>180</td><td><b>100</b></td></tr><tr><td class='name'>6x8</td><td>INC</td><td>1</td><td>97</td><td>63</td><td>4</td><td>156</td><td><b>97</b></td></tr><tr><td class='name'>6x8</td><td>INC</td><td>2</td><td>99</td><td>64</td><td>8</td><td>250</td><td><b>99</b></td></tr><tr><td class='name'>6x8</td><td>INC</td><td>3</td><td>101</td><td>65</td><td>12</td><td>344</td><td><b>101</b></td></tr><tr><td class='name'>6x8</td><td>INC</td><td>4</td><td>103</td><td>66</td><td>16</td><td>438</td><td><b>103</b></td></tr><tr><td class='name'>6x8</td><td>INC</td><td>5</td><td>105</td><td>67</td><td>20</td><td>532</td><td><b>105</b></td></tr><tr><td class='name'>6x8</td><td>无INC</td><td>1</td><td>160</td><td>63</td><td>4</td><td>156</td><td><b>160</b></td></tr><tr><td class='name'>6x8</td><td>无INC</td><td>2</td><td>162</td><td>64</td><td>8</td><td>250</td><td><b>162</b></td></tr><tr><td class='name'>6x8</td><td>无INC</td><td>3</td><td>164</td><td>65</td><td>12</td><td>344</td><td><b>164</b></td></tr><tr><td class='name'>6x8</td><td>无INC</td><td>4</td><td>166</td><td>66</td><td>16</td><td>438</td><td><b>166</b></td></tr><tr><td class='name'>6x8</td><td>无INC</td><td>5</td><td>168</td><td>67</td><td>20</td><td>532</td><td><b>168</b></td></tr><tr><td class='name'>8x8</td><td>INC</td><td>1</td><td>108</td><td>71</td><td>4</td><td>196</td><td><b>108</b></td></tr><tr><td class='name'>8x8</td><td>INC</td><td>2</td><td>110</td><td>72</td><td>8</td><td>322</td><td><b>110</b></td></tr><tr><td class='name'>8x8</td><td>INC</td><td>3</td><td>112</td><td>73</td><td>12</td><td>448</td><td><b>112</b></td></tr><tr><td class='name'>8x8</td><td>INC</td><td>4</td><td>114</td><td>74</td><td>16</td><td>574</td><td><b>114</b></td></tr><tr><td class='name'>8x8</td><td>INC</td><td>5</td><td>116</td><td>75</td><td>20</td><td>700</td><td><b>116</b></td></tr><tr><td class='name'>8x8</td><td>无INC</td><td>1</td><td>180</td><td>71</td><td>4</td><td>196</td><td><b>180</b></td></tr><tr><td class='name'>8x8</td><td>无INC</td><td>2</td><td>182</td><td>72</td><td>8</td><td>322</td><td><b>182</b></td></tr><tr><td class='name'>8x8</td><td>无INC</td><td>3</td><td>184</td><td>73</td><td>12</td><td>448</td><td><b>184</b></td></tr><tr><td class='name'>8x8</td><td>无INC</td><td>4</td><td>186</td><td>74</td><td>16</td><td>574</td><td><b>186</b></td></tr><tr><td class='name'>8x8</td><td>无INC</td><td>5</td><td>188</td><td>75</td><td>20</td><td>700</td><td><b>188</b></td></tr><tr><td class='name'>12x16</td><td>INC</td><td>1</td><td>190</td><td>135</td><td>8</td><td>516</td><td><b>190</b></td></tr><tr><td class='name'>12x16</td><td>INC</td><td>2</td><td>192</td><td>136</td><td>16</td><td>898</td><td><b>192</b></td></tr><tr><td class='name'>12x16</td><td>INC</td><td>3</td><td>194</td><td>137</td><td>24</td><td>1280</td><td><b>194</b></td></tr><tr><td class='name'>12x16</td><td>INC</td><td>4</td><td>196</td><td>138</td><td>32</td><td>1662</td><td><b>196</b></td></tr><tr><td class='name'>12x16</td><td>INC</td><td>5</td><td>198</td><td>139</td><td>40</td><td>2044</td><td><b>198</b></td></tr><tr><td class='name'>12x16</td><td>无INC</td><td>1</td><td>316</td><td>135</td><td>8</td><td>516</td><td><b>316</b></td></tr><tr><td class='name'>12x16</td><td>无INC</td><td>2</td><td>318</td><td>136</td><td>16</td><td>898</td><td><b>318</b></td></tr><tr><td class='name'>12x16</td><td>无INC</td><td>3</td><td>320</td><td>137</td><td>24</td><td>1280</td><td><b>320</b></td></tr><tr><td class='name'>12x16</td><td>无INC</td><td>4</td><td>322</td><td>138</td><td>32</td><td>1662</td><td><b>322</b></td></tr><tr><td class='name'>12x16</td><td>无INC</td><td>5</td><td>324</td><td>139</td><td>40</td><td>2044</td><td><b>324</b></td></tr><tr><td class='name'>16x16</td><td>INC</td><td>1</td><td>212</td><td>151</td><td>8</td><td>660</td><td><b>212</b></td></tr><tr><td class='name'>16x16</td><td>INC</td><td>2</td><td>214</td><td>152</td><td>16</td><td>1170</td><td><b>214</b></td></tr><tr><td class='name'>16x16</td><td>INC</td><td>3</td><td>216</td><td>153</td><td>24</td><td>1680</td><td><b>216</b></td></tr><tr><td class='name'>16x16</td><td>INC</td><td>4</td><td>218</td><td>154</td><td>32</td><td>2190</td><td><b>218</b></td></tr><tr><td class='name'>16x16</td><td>INC</td><td>5</td><td>220</td><td>155</td><td>40</td><td>2700</td><td><b>220</b></td></tr><tr><td class='name'>16x16</td><td>无INC</td><td>1</td><td>356</td><td>151</td><td>8</td><td>660</td><td><b>356</b></td></tr><tr><td class='name'>16x16</td><td>无INC</td><td>2</td><td>358</td><td>152</td><td>16</td><td>1170</td><td><b>358</b></td></tr><tr><td class='name'>16x16</td><td>无INC</td><td>3</td><td>360</td><td>153</td><td>24</td><td>1680</td><td><b>360</b></td></tr><tr><td class='name'>16x16</td><td>无INC</td><td>4</td><td>362</td><td>154</td><td>32</td><td>2190</td><td><b>362</b></td></tr><tr><td class='name'>16x16</td><td>无INC</td><td>5</td><td>364</td><td>155</td><td>40</td><td>2700</td><td><b>364</b></td></tr></tbody></table>
+</div>
+</div>
+
+<div class="card">
+<h2>3. 全局最优 makespan / 下界 比值</h2>
+<p>在全部四象限中取 makespan 最小的方案（每格一种）。</p>
+<div class="legend"><span>0.53x</span><div class="legend-bar" style="background:linear-gradient(90deg,hsl(145,72%,60%),hsl(72,72%,52%),hsl(0,72%,45%))"></div><span>1.08x</span><span class="note">(绿 = 贴近理论下界，红 = 偏离较大)</span></div>
+<svg width="600" height="304" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
+<text x="340" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">数据大小 m (flit)</text>
+<text x="18" y="149" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 18,149)">mesh 规模</text>
+<text x="148" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
+<text x="244" y="26" text-anchor="middle" font-size="12" fill="#475569">2</text>
+<text x="340" y="26" text-anchor="middle" font-size="12" fill="#475569">3</text>
+<text x="436" y="26" text-anchor="middle" font-size="12" fill="#475569">4</text>
+<text x="532" y="26" text-anchor="middle" font-size="12" fill="#475569">5</text>
+<text x="90" y="61" text-anchor="end" font-size="12" fill="#475569">4x4</text>
+<rect x="102" y="36" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="148" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.55x</text>
+<text x="148" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">33/60cy</text>
+<rect x="198" y="36" width="92" height="42" rx="6" fill="hsl(11, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="244" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="244" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">60/58cy</text>
+<rect x="294" y="36" width="92" height="42" rx="6" fill="hsl(7, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="340" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
+<text x="340" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">63/60cy</text>
+<rect x="390" y="36" width="92" height="42" rx="6" fill="hsl(4, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="436" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
+<text x="436" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">66/62cy</text>
+<rect x="486" y="36" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="532" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.08x</text>
+<text x="532" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">69/64cy</text>
+<text x="90" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
+<rect x="102" y="82" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.53x</text>
+<text x="148" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">83/156cy</text>
+<rect x="198" y="82" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="244" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">101/99cy</text>
+<rect x="294" y="82" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="340" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">104/101cy</text>
+<rect x="390" y="82" width="92" height="42" rx="6" fill="hsl(10, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="436" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="436" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">107/103cy</text>
+<rect x="486" y="82" width="92" height="42" rx="6" fill="hsl(8, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="532" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
+<text x="532" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">110/105cy</text>
+<text x="90" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
+<rect x="102" y="128" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.53x</text>
+<text x="148" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">103/196cy</text>
+<rect x="198" y="128" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="244" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">112/110cy</text>
+<rect x="294" y="128" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="340" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">115/112cy</text>
+<rect x="390" y="128" width="92" height="42" rx="6" fill="hsl(11, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="436" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="436" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">118/114cy</text>
+<rect x="486" y="128" width="92" height="42" rx="6" fill="hsl(9, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="532" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="532" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">121/116cy</text>
+<text x="90" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
+<rect x="102" y="174" width="92" height="42" rx="6" fill="hsl(19, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="148" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="148" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">191/190cy</text>
+<rect x="198" y="174" width="92" height="42" rx="6" fill="hsl(18, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">194/192cy</text>
+<rect x="294" y="174" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="340" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">197/194cy</text>
+<rect x="390" y="174" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="436" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">200/196cy</text>
+<rect x="486" y="174" width="92" height="42" rx="6" fill="hsl(14, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="532" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="532" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">203/198cy</text>
+<text x="90" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
+<rect x="102" y="220" width="92" height="42" rx="6" fill="hsl(19, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="148" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
+<text x="148" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">213/212cy</text>
+<rect x="198" y="220" width="92" height="42" rx="6" fill="hsl(18, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">216/214cy</text>
+<rect x="294" y="220" width="92" height="42" rx="6" fill="hsl(17, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="340" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">219/216cy</text>
+<rect x="390" y="220" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="436" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">222/218cy</text>
+<rect x="486" y="220" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="532" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="532" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">225/220cy</text>
+</svg>
+</div>
+
+<div class="card">
+<h2>4. 四象限胜者分布</h2>
+<div class="legend"><span style="margin-right:16px"><span class="chip" style="background:#2563eb"></span>inc + tree_bcast</span><span style="margin-right:16px"><span class="chip" style="background:#059669"></span>inc + rs_ag</span><span style="margin-right:16px"><span class="chip" style="background:#d97706"></span>node + tree_bcast</span><span style="margin-right:16px"><span class="chip" style="background:#dc2626"></span>node + rs_ag</span></div>
+<svg width="600" height="304" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
+<text x="340" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">全局最优方案（四象限）</text>
+<text x="18" y="149" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 18,149)">mesh 规模</text>
+<text x="148" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
+<text x="244" y="26" text-anchor="middle" font-size="12" fill="#475569">2</text>
+<text x="340" y="26" text-anchor="middle" font-size="12" fill="#475569">3</text>
+<text x="436" y="26" text-anchor="middle" font-size="12" fill="#475569">4</text>
+<text x="532" y="26" text-anchor="middle" font-size="12" fill="#475569">5</text>
+<text x="90" y="61" text-anchor="end" font-size="12" fill="#475569">4x4</text>
+<rect x="102" y="36" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="148" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RS+AG</text>
+<text x="148" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+rs_ag</text>
+<rect x="198" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="244" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="244" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="294" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="340" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="340" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="390" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="436" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="436" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="486" y="36" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="532" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="532" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<text x="90" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
+<rect x="102" y="82" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="148" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RS+AG</text>
+<text x="148" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+rs_ag</text>
+<rect x="198" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="244" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="244" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="294" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="340" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="340" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="390" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="436" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="436" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="486" y="82" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="532" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="532" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<text x="90" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
+<rect x="102" y="128" width="92" height="42" rx="6" fill="#059669" stroke="#e2e8f0"/>
+<text x="148" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RS+AG</text>
+<text x="148" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+rs_ag</text>
+<rect x="198" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="244" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="244" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="294" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="340" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="340" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="390" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="436" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="436" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="486" y="128" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="532" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="532" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<text x="90" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
+<rect x="102" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="148" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="148" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="198" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="244" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="244" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="294" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="340" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="340" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="390" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="436" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="436" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="486" y="174" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="532" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="532" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<text x="90" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
+<rect x="102" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="148" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="148" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="198" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="244" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="244" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="294" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="340" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="340" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="390" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="436" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="436" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+<rect x="486" y="220" width="92" height="42" rx="6" fill="#2563eb" stroke="#e2e8f0"/>
+<text x="532" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">RB</text>
+<text x="532" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">inc+tree_bcast</text>
+</svg>
+</div>
+
+<div class="card grid2">
+<div>
+<h3>INC reduce — 比值热力图</h3>
+<svg width="600" height="304" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
+<text x="340" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">INC reduce — makespan/下界</text>
+<text x="18" y="149" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 18,149)">mesh 规模</text>
+<text x="148" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
+<text x="244" y="26" text-anchor="middle" font-size="12" fill="#475569">2</text>
+<text x="340" y="26" text-anchor="middle" font-size="12" fill="#475569">3</text>
+<text x="436" y="26" text-anchor="middle" font-size="12" fill="#475569">4</text>
+<text x="532" y="26" text-anchor="middle" font-size="12" fill="#475569">5</text>
+<text x="90" y="61" text-anchor="end" font-size="12" fill="#475569">4x4</text>
+<rect x="102" y="36" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="148" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.55x</text>
+<text x="148" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">33/60cy</text>
+<rect x="198" y="36" width="92" height="42" rx="6" fill="hsl(11, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="244" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="244" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">60/58cy</text>
+<rect x="294" y="36" width="92" height="42" rx="6" fill="hsl(7, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="340" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
+<text x="340" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">63/60cy</text>
+<rect x="390" y="36" width="92" height="42" rx="6" fill="hsl(4, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="436" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.06x</text>
+<text x="436" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">66/62cy</text>
+<rect x="486" y="36" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="532" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.08x</text>
+<text x="532" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">69/64cy</text>
+<text x="90" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
+<rect x="102" y="82" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.53x</text>
+<text x="148" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">83/156cy</text>
+<rect x="198" y="82" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="244" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">101/99cy</text>
+<rect x="294" y="82" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="340" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">104/101cy</text>
+<rect x="390" y="82" width="92" height="42" rx="6" fill="hsl(10, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="436" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="436" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">107/103cy</text>
+<rect x="486" y="82" width="92" height="42" rx="6" fill="hsl(8, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="532" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
+<text x="532" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">110/105cy</text>
+<text x="90" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
+<rect x="102" y="128" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0.53x</text>
+<text x="148" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">103/196cy</text>
+<rect x="198" y="128" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="244" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">112/110cy</text>
+<rect x="294" y="128" width="92" height="42" rx="6" fill="hsl(13, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="340" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">115/112cy</text>
+<rect x="390" y="128" width="92" height="42" rx="6" fill="hsl(11, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="436" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="436" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">118/114cy</text>
+<rect x="486" y="128" width="92" height="42" rx="6" fill="hsl(9, 72%, 43%)" stroke="#e2e8f0"/>
+<text x="532" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="532" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">121/116cy</text>
+<text x="90" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
+<rect x="102" y="174" width="92" height="42" rx="6" fill="hsl(19, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="148" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="148" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">191/190cy</text>
+<rect x="198" y="174" width="92" height="42" rx="6" fill="hsl(18, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">194/192cy</text>
+<rect x="294" y="174" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="340" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">197/194cy</text>
+<rect x="390" y="174" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="436" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">200/196cy</text>
+<rect x="486" y="174" width="92" height="42" rx="6" fill="hsl(14, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="532" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="532" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">203/198cy</text>
+<text x="90" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
+<rect x="102" y="220" width="92" height="42" rx="6" fill="hsl(19, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="148" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
+<text x="148" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">213/212cy</text>
+<rect x="198" y="220" width="92" height="42" rx="6" fill="hsl(18, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="244" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">216/214cy</text>
+<rect x="294" y="220" width="92" height="42" rx="6" fill="hsl(17, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="340" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="340" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">219/216cy</text>
+<rect x="390" y="220" width="92" height="42" rx="6" fill="hsl(16, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="436" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">222/218cy</text>
+<rect x="486" y="220" width="92" height="42" rx="6" fill="hsl(15, 72%, 44%)" stroke="#e2e8f0"/>
+<text x="532" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="532" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">225/220cy</text>
+</svg>
+</div>
+<div>
+<h3>无 INC — 比值热力图</h3>
+<svg width="600" height="304" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;display:block">
+<text x="340" y="20" text-anchor="middle" font-size="12.5" font-weight="600" fill="#334155">无 INC (node reduce) — makespan/下界</text>
+<text x="18" y="149" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 18,149)">mesh 规模</text>
+<text x="148" y="26" text-anchor="middle" font-size="12" fill="#475569">1</text>
+<text x="244" y="26" text-anchor="middle" font-size="12" fill="#475569">2</text>
+<text x="340" y="26" text-anchor="middle" font-size="12" fill="#475569">3</text>
+<text x="436" y="26" text-anchor="middle" font-size="12" fill="#475569">4</text>
+<text x="532" y="26" text-anchor="middle" font-size="12" fill="#475569">5</text>
+<text x="90" y="61" text-anchor="end" font-size="12" fill="#475569">4x4</text>
+<rect x="102" y="36" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="148" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">93/92cy</text>
+<rect x="198" y="36" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="244" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="244" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">96/94cy</text>
+<rect x="294" y="36" width="92" height="42" rx="6" fill="hsl(141, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="340" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="340" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">99/96cy</text>
+<rect x="390" y="36" width="92" height="42" rx="6" fill="hsl(139, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="436" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.04x</text>
+<text x="436" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">102/98cy</text>
+<rect x="486" y="36" width="92" height="42" rx="6" fill="hsl(138, 72%, 59%)" stroke="#e2e8f0"/>
+<text x="532" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.05x</text>
+<text x="532" y="69" text-anchor="middle" font-size="9" fill="#f1f5f9">105/100cy</text>
+<text x="90" y="107" text-anchor="end" font-size="12" fill="#475569">6x8</text>
+<rect x="102" y="82" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="148" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">161/160cy</text>
+<rect x="198" y="82" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="244" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">164/162cy</text>
+<rect x="294" y="82" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="340" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="340" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">167/164cy</text>
+<rect x="390" y="82" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="436" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">170/166cy</text>
+<rect x="486" y="82" width="92" height="42" rx="6" fill="hsl(141, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="532" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.03x</text>
+<text x="532" y="115" text-anchor="middle" font-size="9" fill="#f1f5f9">173/168cy</text>
+<text x="90" y="153" text-anchor="end" font-size="12" fill="#475569">8x8</text>
+<rect x="102" y="128" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="148" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">181/180cy</text>
+<rect x="198" y="128" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="244" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">184/182cy</text>
+<rect x="294" y="128" width="92" height="42" rx="6" fill="hsl(143, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="340" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="340" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">187/184cy</text>
+<rect x="390" y="128" width="92" height="42" rx="6" fill="hsl(142, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="436" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.02x</text>
+<text x="436" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">190/186cy</text>
+<rect x="486" y="128" width="92" height="42" rx="6" fill="hsl(130, 72%, 58%)" stroke="#e2e8f0"/>
+<text x="532" y="146" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.11x</text>
+<text x="532" y="161" text-anchor="middle" font-size="9" fill="#f1f5f9">208/188cy</text>
+<text x="90" y="199" text-anchor="end" font-size="12" fill="#475569">12x16</text>
+<rect x="102" y="174" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
+<text x="148" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">317/316cy</text>
+<rect x="198" y="174" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="244" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">320/318cy</text>
+<rect x="294" y="174" width="92" height="42" rx="6" fill="hsl(120, 72%, 57%)" stroke="#e2e8f0"/>
+<text x="340" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.17x</text>
+<text x="340" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">375/320cy</text>
+<rect x="390" y="174" width="92" height="42" rx="6" fill="hsl(80, 72%, 52%)" stroke="#e2e8f0"/>
+<text x="436" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.45x</text>
+<text x="436" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">467/322cy</text>
+<rect x="486" y="174" width="92" height="42" rx="6" fill="hsl(39, 72%, 47%)" stroke="#e2e8f0"/>
+<text x="532" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.73x</text>
+<text x="532" y="207" text-anchor="middle" font-size="9" fill="#f1f5f9">560/324cy</text>
+<text x="90" y="245" text-anchor="end" font-size="12" fill="#475569">16x16</text>
+<rect x="102" y="220" width="92" height="42" rx="6" fill="hsl(145, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="148" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.00x</text>
+<text x="148" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">357/356cy</text>
+<rect x="198" y="220" width="92" height="42" rx="6" fill="hsl(144, 72%, 60%)" stroke="#e2e8f0"/>
+<text x="244" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.01x</text>
+<text x="244" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">361/358cy</text>
+<rect x="294" y="220" width="92" height="42" rx="6" fill="hsl(97, 72%, 54%)" stroke="#e2e8f0"/>
+<text x="340" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.33x</text>
+<text x="340" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">479/360cy</text>
+<rect x="390" y="220" width="92" height="42" rx="6" fill="hsl(49, 72%, 48%)" stroke="#e2e8f0"/>
+<text x="436" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1.67x</text>
+<text x="436" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">603/362cy</text>
+<rect x="486" y="220" width="92" height="42" rx="6" fill="hsl(0, 72%, 42%)" stroke="#e2e8f0"/>
+<text x="532" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2.00x</text>
+<text x="532" y="253" text-anchor="middle" font-size="9" fill="#f1f5f9">728/364cy</text>
+</svg>
+</div>
+</div>
+
+<div class="card">
+<h2>5. 四象限详细对比（RB vs RS+AG）</h2>
+<div class="table-wrap">
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>reduce模式</th><th>RB makespan</th><th>RB方案</th><th>RS+AG makespan</th><th>RS+AG方案</th><th>胜者</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td>INC</td><td>57</td><td class='name'>tree_reduce_bcast</td><td>33</td><td class='name'>ring_bi_rs_optag</td><td><b>RS+AG</b></td></tr><tr><td class='name'>4x4</td><td>1</td><td>无INC</td><td>93</td><td class='name'>tree_reduce_bcast</td><td>275</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>2</td><td>INC</td><td>60</td><td class='name'>tree_reduce_bcast</td><td>76</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>2</td><td>无INC</td><td>96</td><td class='name'>tree_reduce_bcast</td><td>319</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>3</td><td>INC</td><td>63</td><td class='name'>tree_reduce_bcast</td><td>77</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>3</td><td>无INC</td><td>99</td><td class='name'>tree_reduce_bcast</td><td>321</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>4</td><td>INC</td><td>66</td><td class='name'>tree_reduce_bcast</td><td>78</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>4</td><td>无INC</td><td>102</td><td class='name'>tree_reduce_bcast</td><td>323</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>5</td><td>INC</td><td>69</td><td class='name'>tree_reduce_bcast</td><td>81</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>4x4</td><td>5</td><td>无INC</td><td>105</td><td class='name'>tree_reduce_bcast</td><td>327</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>1</td><td>INC</td><td>98</td><td class='name'>tree_reduce_bcast</td><td>83</td><td class='name'>ring_bi_rs_optag</td><td><b>RS+AG</b></td></tr><tr><td class='name'>6x8</td><td>1</td><td>无INC</td><td>161</td><td class='name'>tree_reduce_bcast</td><td>853</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>2</td><td>INC</td><td>101</td><td class='name'>tree_reduce_bcast</td><td>220</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>2</td><td>无INC</td><td>164</td><td class='name'>tree_reduce_bcast</td><td>991</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>3</td><td>INC</td><td>104</td><td class='name'>tree_reduce_bcast</td><td>221</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>3</td><td>无INC</td><td>167</td><td class='name'>tree_reduce_bcast</td><td>993</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>4</td><td>INC</td><td>107</td><td class='name'>tree_reduce_bcast</td><td>222</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>4</td><td>无INC</td><td>170</td><td class='name'>tree_reduce_bcast</td><td>995</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>5</td><td>INC</td><td>110</td><td class='name'>tree_reduce_bcast</td><td>241</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>6x8</td><td>5</td><td>无INC</td><td>173</td><td class='name'>tree_reduce_bcast</td><td>1015</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>1</td><td>INC</td><td>109</td><td class='name'>tree_reduce_bcast</td><td>103</td><td class='name'>ring_bi_rs_optag</td><td><b>RS+AG</b></td></tr><tr><td class='name'>8x8</td><td>1</td><td>无INC</td><td>181</td><td class='name'>tree_reduce_bcast</td><td>1129</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>2</td><td>INC</td><td>112</td><td class='name'>tree_reduce_bcast</td><td>284</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>2</td><td>无INC</td><td>184</td><td class='name'>tree_reduce_bcast</td><td>1311</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>3</td><td>INC</td><td>115</td><td class='name'>tree_reduce_bcast</td><td>285</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>3</td><td>无INC</td><td>187</td><td class='name'>tree_reduce_bcast</td><td>1313</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>4</td><td>INC</td><td>118</td><td class='name'>tree_reduce_bcast</td><td>286</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>4</td><td>无INC</td><td>190</td><td class='name'>tree_reduce_bcast</td><td>1315</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>5</td><td>INC</td><td>121</td><td class='name'>tree_reduce_bcast</td><td>321</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>8x8</td><td>5</td><td>无INC</td><td>208</td><td class='name'>tree_reduce_bcast</td><td>1351</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>1</td><td>INC</td><td>191</td><td class='name'>tree_reduce_bcast</td><td>202</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>1</td><td>无INC</td><td>317</td><td class='name'>tree_reduce_bcast</td><td>3308</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>2</td><td>INC</td><td>194</td><td class='name'>tree_reduce_bcast</td><td>388</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>2</td><td>无INC</td><td>320</td><td class='name'>tree_reduce_bcast</td><td>3495</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>3</td><td>INC</td><td>197</td><td class='name'>tree_reduce_bcast</td><td>579</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>3</td><td>无INC</td><td>375</td><td class='name'>tree_reduce_bcast</td><td>3687</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>4</td><td>INC</td><td>200</td><td class='name'>tree_reduce_bcast</td><td>770</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>4</td><td>无INC</td><td>467</td><td class='name'>tree_reduce_bcast</td><td>3879</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>5</td><td>INC</td><td>203</td><td class='name'>tree_reduce_bcast</td><td>961</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>12x16</td><td>5</td><td>无INC</td><td>560</td><td class='name'>tree_reduce_bcast</td><td>4071</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>1</td><td>INC</td><td>213</td><td class='name'>tree_reduce_bcast</td><td>266</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>1</td><td>无INC</td><td>357</td><td class='name'>tree_reduce_bcast</td><td>4396</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>2</td><td>INC</td><td>216</td><td class='name'>tree_reduce_bcast</td><td>516</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>2</td><td>无INC</td><td>361</td><td class='name'>tree_reduce_bcast</td><td>4647</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>3</td><td>INC</td><td>219</td><td class='name'>tree_reduce_bcast</td><td>771</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>3</td><td>无INC</td><td>479</td><td class='name'>tree_reduce_bcast</td><td>4903</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>4</td><td>INC</td><td>222</td><td class='name'>tree_reduce_bcast</td><td>1026</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>4</td><td>无INC</td><td>603</td><td class='name'>tree_reduce_bcast</td><td>5159</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>5</td><td>INC</td><td>225</td><td class='name'>tree_reduce_bcast</td><td>1281</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr><tr><td class='name'>16x16</td><td>5</td><td>无INC</td><td>728</td><td class='name'>tree_reduce_bcast</td><td>5415</td><td class='name'>ring_bi_rs_optag</td><td><b>RB</b></td></tr></tbody></table>
+</div>
+</div>
+
+<div class="card">
+<h2>6. 全局最优方案一览</h2>
+<div class="table-wrap">
+<table class='data'><thead><tr><th>规模</th><th>m</th><th>全局最优方案</th><th>makespan</th><th>比值</th><th>下界T</th><th>reduce模式</th><th>算法结构</th><th>INC最优mk</th><th>无INC最优mk</th></tr></thead><tbody><tr><td class='name'>4x4</td><td>1</td><td><b>ring_bi_rs_optag</b></td><td>33</td><td>0.550</td><td>60</td><td>inc</td><td>rs_ag</td><td>33</td><td>93</td></tr><tr><td class='name'>4x4</td><td>2</td><td><b>tree_reduce_bcast</b></td><td>60</td><td>1.034</td><td>58</td><td>inc</td><td>tree_bcast</td><td>60</td><td>96</td></tr><tr><td class='name'>4x4</td><td>3</td><td><b>tree_reduce_bcast</b></td><td>63</td><td>1.050</td><td>60</td><td>inc</td><td>tree_bcast</td><td>63</td><td>99</td></tr><tr><td class='name'>4x4</td><td>4</td><td><b>tree_reduce_bcast</b></td><td>66</td><td>1.065</td><td>62</td><td>inc</td><td>tree_bcast</td><td>66</td><td>102</td></tr><tr><td class='name'>4x4</td><td>5</td><td><b>tree_reduce_bcast</b></td><td>69</td><td>1.078</td><td>64</td><td>inc</td><td>tree_bcast</td><td>69</td><td>105</td></tr><tr><td class='name'>6x8</td><td>1</td><td><b>ring_bi_rs_optag</b></td><td>83</td><td>0.532</td><td>156</td><td>inc</td><td>rs_ag</td><td>83</td><td>161</td></tr><tr><td class='name'>6x8</td><td>2</td><td><b>tree_reduce_bcast</b></td><td>101</td><td>1.020</td><td>99</td><td>inc</td><td>tree_bcast</td><td>101</td><td>164</td></tr><tr><td class='name'>6x8</td><td>3</td><td><b>tree_reduce_bcast</b></td><td>104</td><td>1.030</td><td>101</td><td>inc</td><td>tree_bcast</td><td>104</td><td>167</td></tr><tr><td class='name'>6x8</td><td>4</td><td><b>tree_reduce_bcast</b></td><td>107</td><td>1.039</td><td>103</td><td>inc</td><td>tree_bcast</td><td>107</td><td>170</td></tr><tr><td class='name'>6x8</td><td>5</td><td><b>tree_reduce_bcast</b></td><td>110</td><td>1.048</td><td>105</td><td>inc</td><td>tree_bcast</td><td>110</td><td>173</td></tr><tr><td class='name'>8x8</td><td>1</td><td><b>ring_bi_rs_optag</b></td><td>103</td><td>0.526</td><td>196</td><td>inc</td><td>rs_ag</td><td>103</td><td>181</td></tr><tr><td class='name'>8x8</td><td>2</td><td><b>tree_reduce_bcast</b></td><td>112</td><td>1.018</td><td>110</td><td>inc</td><td>tree_bcast</td><td>112</td><td>184</td></tr><tr><td class='name'>8x8</td><td>3</td><td><b>tree_reduce_bcast</b></td><td>115</td><td>1.027</td><td>112</td><td>inc</td><td>tree_bcast</td><td>115</td><td>187</td></tr><tr><td class='name'>8x8</td><td>4</td><td><b>tree_reduce_bcast</b></td><td>118</td><td>1.035</td><td>114</td><td>inc</td><td>tree_bcast</td><td>118</td><td>190</td></tr><tr><td class='name'>8x8</td><td>5</td><td><b>tree_reduce_bcast</b></td><td>121</td><td>1.043</td><td>116</td><td>inc</td><td>tree_bcast</td><td>121</td><td>208</td></tr><tr><td class='name'>12x16</td><td>1</td><td><b>tree_reduce_bcast</b></td><td>191</td><td>1.005</td><td>190</td><td>inc</td><td>tree_bcast</td><td>191</td><td>317</td></tr><tr><td class='name'>12x16</td><td>2</td><td><b>tree_reduce_bcast</b></td><td>194</td><td>1.010</td><td>192</td><td>inc</td><td>tree_bcast</td><td>194</td><td>320</td></tr><tr><td class='name'>12x16</td><td>3</td><td><b>tree_reduce_bcast</b></td><td>197</td><td>1.015</td><td>194</td><td>inc</td><td>tree_bcast</td><td>197</td><td>375</td></tr><tr><td class='name'>12x16</td><td>4</td><td><b>tree_reduce_bcast</b></td><td>200</td><td>1.020</td><td>196</td><td>inc</td><td>tree_bcast</td><td>200</td><td>467</td></tr><tr><td class='name'>12x16</td><td>5</td><td><b>tree_reduce_bcast</b></td><td>203</td><td>1.025</td><td>198</td><td>inc</td><td>tree_bcast</td><td>203</td><td>560</td></tr><tr><td class='name'>16x16</td><td>1</td><td><b>tree_reduce_bcast</b></td><td>213</td><td>1.005</td><td>212</td><td>inc</td><td>tree_bcast</td><td>213</td><td>357</td></tr><tr><td class='name'>16x16</td><td>2</td><td><b>tree_reduce_bcast</b></td><td>216</td><td>1.009</td><td>214</td><td>inc</td><td>tree_bcast</td><td>216</td><td>361</td></tr><tr><td class='name'>16x16</td><td>3</td><td><b>tree_reduce_bcast</b></td><td>219</td><td>1.014</td><td>216</td><td>inc</td><td>tree_bcast</td><td>219</td><td>479</td></tr><tr><td class='name'>16x16</td><td>4</td><td><b>tree_reduce_bcast</b></td><td>222</td><td>1.018</td><td>218</td><td>inc</td><td>tree_bcast</td><td>222</td><td>603</td></tr><tr><td class='name'>16x16</td><td>5</td><td><b>tree_reduce_bcast</b></td><td>225</td><td>1.023</td><td>220</td><td>inc</td><td>tree_bcast</td><td>225</td><td>728</td></tr></tbody></table>
+</div>
+</div>
+
+<div class="card">
+<h2>7. 分析结论与推荐</h2>
+
+<ul class="compact">
+<li><b>全局最优 reduce 模式</b>：INC 在 25/25 个配置中胜出，无 INC 在 0/25 个配置中胜出。
+    INC 的 per-merge 代价为 3 cycle/flit，无 INC 需 12 cycle 完整 ramp 绕行；当 merge 次数少（小 mesh + 树形 RB）时 INC 优势不明显，
+    但当 RS 阶段需要沿环逐跳 merge（N-1 次）时，INC 可将 RS 阶段从数百 cycle 压到与最优 AG 可拼接的量级。</li>
+<li><b>算法结构选型</b>：Reduce+Broadcast (RB) 在 22/25 格胜出，RS+AG 在 3/25 格胜出。
+    小 mesh（4x4/6x8/8x8）上 RS+AG 在 INC 模式下占 3/15 格；
+    大 mesh（12x16/16x16）上 RB 在 INC 模式下占 10/10 格。</li>
+<li><b>临界点</b>：当 mesh 直径 &gt; ~90 cycle 且 m &le; 5 时，单 Hamilton 环 RS 的 O(N) 步延迟超过树形 RB 的 O(&radic;N) 直径延迟，
+    即使 AG 段采用库中最优方案也无法挽回；此时 tree_reduce_bcast 稳定为 makespan 最优（比值 ~1.00-1.03）。</li>
+<li><b>无 INC 场景</b>：所有规模上 tree_reduce_bcast 均为该模式下的最优方案（RS+AG 的 RS 段因 12cy/merge 代价过高）。
+    大 mesh + 大 m 时 makespan 比值可达 2.0（16x16, m=5），表明无 INC 时 reduce 代价成为主导瓶颈。</li>
+<li><b>推荐配置</b>：
+    <ul>
+    <li>有 INC + 小/中 mesh + 小 m &rarr; <b>ring RS + 最优 AG</b></li>
+    <li>有 INC + 大 mesh + m&le;5 &rarr; <b>tree reduce + broadcast</b></li>
+    <li>无 INC（任意规模）&rarr; <b>tree reduce + broadcast</b>（避免环上多次 12cy 绕行）</li>
+    </ul>
+</li>
+</ul>
+
+<h3>方案族说明</h3>
+<ul class="compact">
+<li><b>tree_reduce_bcast</b>：每源沿维度序路径 reduce 到 mesh 中心 root（3cy/merge 或 12cy 绕行），root 弹出后再沿维序多播树 broadcast 到全部节点。</li>
+<li><b>ring_*_rs_optag</b>：全局 Hamilton 环（蛇形构造）做 reduce-scatter，每节点沿环发送并逐跳 merge；完成后拼接库中该规模的最优 allgather 方案（如 hybrid_v_bi_B2、ring_bi 等）。</li>
+<li><b>hybrid_hB</b>（横带局部环 RS + 全局树 RB）：在本次扫描中均未超越 tree_reduce_bcast，未进入任何最优格。</li>
+</ul>
+</div>
+
+<p class="meta" style="margin-top:32px">数据来源：
+<code>results/allreduce_scale_sweep.json</code>、
+<code>results/allreduce_lb.json</code>、
+<code>results/allgather_scale_sweep.json</code>
+&middot; 生成脚本 <code>utils/gen_allreduce_scale_report.py</code></p>
+</body></html>
