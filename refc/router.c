@@ -176,21 +176,27 @@ void router_step(router_context_t *router, uint32_t cycle,
         }
     }
 
-    if ((cycle % BG_WINDOW_PERIOD) == (BG_WINDOW_PERIOD - 1U) ||
-        !calendar_store_replay(&router->calendar, cycle, &entry)) {
+    /*
+     * Soft priority (Trial 3 / Arch-A3): calendar wins only when a sparse
+     * event matches this cycle. BG may use any non-matching / idle cycle.
+     * Hard 1-in-16 TDM is relaxed; progress remains bounded because sparse
+     * occupancy ≪ 1 (max busy-router entries 49 / makespan ~952).
+     */
+    if (!calendar_store_replay(&router->calendar, cycle, &entry)) {
         for (port_index = 0U; port_index < PORT_COUNT; ++port_index) {
-        port_t output_port;
-        if (fifo_peek(&router->bg_fifo[port_index], &selected_flit)) {
-            output_port = xy_route_next_hop(router->x, router->y, &selected_flit);
-            if (!outputs->valid[(uint32_t)output_port] &&
-                (router->credits.available[(uint32_t)output_port] > 0U)) {
-                outputs->flit[(uint32_t)output_port] = selected_flit;
-                outputs->valid[(uint32_t)output_port] = true;
-                router->credits.available[(uint32_t)output_port]--;
-                fifo_pop(&router->bg_fifo[port_index]);
-                router->bg_forwards++;
+            port_t output_port;
+            if (fifo_peek(&router->bg_fifo[port_index], &selected_flit)) {
+                output_port =
+                    xy_route_next_hop(router->x, router->y, &selected_flit);
+                if (!outputs->valid[(uint32_t)output_port] &&
+                    (router->credits.available[(uint32_t)output_port] > 0U)) {
+                    outputs->flit[(uint32_t)output_port] = selected_flit;
+                    outputs->valid[(uint32_t)output_port] = true;
+                    router->credits.available[(uint32_t)output_port]--;
+                    fifo_pop(&router->bg_fifo[port_index]);
+                    router->bg_forwards++;
+                }
             }
-        }
         }
     }
 }

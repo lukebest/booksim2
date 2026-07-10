@@ -1,10 +1,10 @@
-# ADR-003: DCA Reduction Tier Selection for DSE Trial 2
+# ADR-003: DCA Reduction Tier Selection (Tier A)
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted (Trial 2, USER_CONFIRMED) |
+| **Status** | Accepted (Trial 2; **reaffirmed Trial 3**, USER_CONFIRMED) |
 | **Date** | 2026-07-10 |
-| **Decision source** | `USER_CONFIRMED` — binding Trial 2 feedback: no in-router reduction |
+| **Decision source** | `USER_CONFIRMED` — no in-router reduction; Trial 3 SparseCal does **not** restore combine/DCA |
 | **Related analysis** | [dca-tier-analysis.md](../phase-1-research/dca-tier-analysis.md) |
 | **Prior decisions** | [ADR-001](ADR-001-algorithm-selection.md), [ADR-002](ADR-002-architecture-selection.md) |
 | **Supersedes** | Trial 1 ADR-003 Tier B selection |

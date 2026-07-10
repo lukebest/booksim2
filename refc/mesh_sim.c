@@ -44,8 +44,8 @@ void mesh_sim_init(mesh_sim_t *mesh)
     uint32_t x;
     uint32_t y;
     uint32_t id;
-    uint32_t calendar_bytes = 2U * CALENDAR_SLOTS *
-                              (uint32_t)sizeof(calendar_entry_t);
+    uint32_t calendar_bytes = (uint32_t)CALENDAR_BANKS * CALENDAR_SPARSE_DEPTH *
+                              (uint32_t)sizeof(calendar_sparse_event_t);
 
     if (mesh == NULL) {
         return;

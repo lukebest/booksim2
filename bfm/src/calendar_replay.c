@@ -17,11 +17,17 @@ typedef struct {
 } event_t;
 
 typedef struct {
+    unsigned slot;
     unsigned valid;
     unsigned in_port;
     unsigned out_mask;
     unsigned opcode;
-} slot_t;
+} sparse_entry_t;
+
+typedef struct {
+    sparse_entry_t entry[CALENDAR_SPARSE_DEPTH];
+    unsigned count;
+} sparse_list_t;
 
 static int add_event(event_t *events, unsigned *count, unsigned cycle,
                      unsigned x, unsigned y, unsigned in_port)
@@ -39,7 +45,19 @@ static unsigned node_id(unsigned x, unsigned y)
     return y * MESH_X + x;
 }
 
-static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS],
+static const sparse_entry_t *find_entry(const sparse_list_t *list, unsigned slot)
+{
+    unsigned i;
+
+    for (i = 0U; i < list->count; ++i) {
+        if (list->entry[i].valid && list->entry[i].slot == slot) {
+            return &list->entry[i];
+        }
+    }
+    return NULL;
+}
+
+static int parse_file(const char *path, sparse_list_t lists[MESH_NODES],
                       event_t *injections, unsigned *injection_count,
                       unsigned *expected_count, unsigned *expected_makespan)
 {
@@ -66,16 +84,19 @@ static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS]
     *injection_count = 0U;
     *expected_count = 0U;
     *expected_makespan = 0U;
+    (void)memset(lists, 0, sizeof(sparse_list_t) * MESH_NODES);
 
     router = text;
     while ((router = strstr(router, "\"router\":[")) != NULL) {
         unsigned x, y, slot, in_port, out_mask, opcode;
         char *entry;
+        unsigned nid;
         if (sscanf(router, "\"router\":[%u,%u]", &x, &y) != 2 ||
             x >= MESH_X || y >= MESH_Y) {
             free(text);
             return 0;
         }
+        nid = node_id(x, y);
         end = strstr(router + 1, "\"router\":[");
         if (end == NULL) {
             end = text + length;
@@ -85,14 +106,16 @@ static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS]
             if (sscanf(entry, "{\"slot\":%u,\"valid\":true,\"in_port\":%u,"
                        "\"out_port_mask\":%u,\"opcode\":%u}",
                        &slot, &in_port, &out_mask, &opcode) != 4 ||
-                slot >= CALENDAR_SLOTS || in_port >= PORT_COUNT ||
+                slot >= CALENDAR_SLOT_WRAP || in_port >= PORT_COUNT ||
                 out_mask >= (1U << PORT_COUNT) || opcode > CAL_OP_RESERVED_MAX ||
-                slots[node_id(x, y)][slot].valid) {
+                lists[nid].count >= CALENDAR_SPARSE_DEPTH ||
+                find_entry(&lists[nid], slot) != NULL) {
                 free(text);
                 return 0;
             }
-            slots[node_id(x, y)][slot] =
-                (slot_t){1U, in_port, out_mask, opcode};
+            lists[nid].entry[lists[nid].count] =
+                (sparse_entry_t){slot, 1U, in_port, out_mask, opcode};
+            lists[nid].count++;
             ++entry;
         }
         router = end;
@@ -109,13 +132,6 @@ static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS]
         }
         injections[*injection_count] = (event_t){slot + PE_RAMP_DELAY, x, y, PORT_LOCAL};
         ++*injection_count;
-        ++router;
-    }
-    router = text;
-    while ((router = strstr(router, "[")) != NULL) {
-        if (router > text && router[-1] == ':' && router[1] == '[') {
-            break;
-        }
         ++router;
     }
     router = strstr(text, "\"expected_ejections\":[");
@@ -137,13 +153,13 @@ static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS]
 
 int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
 {
-    slot_t slots[MESH_NODES][CALENDAR_SLOTS] = {{{0U}}};
+    sparse_list_t lists[MESH_NODES];
     event_t events[MAX_EVENTS];
     event_t injections[MAX_INJECTIONS];
     unsigned event_count = 0U, injection_count, expected_count, expected_makespan;
     unsigned ejections = 0U, makespan = 0U, pe_handoffs = 0U, index, cycle;
 
-    if (result == NULL || !parse_file(path, slots, injections, &injection_count,
+    if (result == NULL || !parse_file(path, lists, injections, &injection_count,
                                       &expected_count, &expected_makespan)) {
         return 0;
     }
@@ -153,19 +169,19 @@ int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
             return 0;
         }
     }
-    for (cycle = 0U; cycle < CALENDAR_SLOTS + 128U; ++cycle) {
+    for (cycle = 0U; cycle < CALENDAR_SLOT_WRAP + 128U; ++cycle) {
         for (index = 0U; index < event_count; ++index) {
             event_t event = events[index];
-            slot_t entry;
+            const sparse_entry_t *entry;
             unsigned port;
             if (event.cycle != cycle) {
                 continue;
             }
-            entry = slots[node_id(event.x, event.y)][cycle];
-            if (!entry.valid || entry.in_port != event.in_port) {
+            entry = find_entry(&lists[node_id(event.x, event.y)], cycle);
+            if ((entry == NULL) || (entry->in_port != event.in_port)) {
                 return 0;
             }
-            if (entry.opcode == CAL_OP_PE_HANDOFF) {
+            if (entry->opcode == CAL_OP_PE_HANDOFF) {
                 /*
                  * Tier A: reduce is gather forwarding.  Allreduce adds a
                  * zero-cost PE-local compute stub before its broadcast phase.
@@ -173,7 +189,7 @@ int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
                 ++pe_handoffs;
             }
             for (port = 0U; port < PORT_COUNT; ++port) {
-                if ((entry.out_mask & (1U << port)) == 0U) {
+                if ((entry->out_mask & (1U << port)) == 0U) {
                     continue;
                 }
                 if (port == PORT_LOCAL) {

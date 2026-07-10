@@ -1,5 +1,11 @@
 # Phase 1 Summary — DSE Trial 2 (6×8 Mesh Calendar-Collective Router)
 
+> **Trial 3 note (2026-07-10):** Phase 2/3 Trial 3 selects **SparseCal** for
+> **OPEN-1-001** — sparse ordered event list (`2×128×23` per router) with
+> next-event match, replacing the Trial 2 dense `2×1024×13` slot table. Phase 1
+> iron JSON structure is unchanged; see `domain-analysis.md` §1 update and
+> Trial 3 `architecture-candidates.md`.
+
 - **Date:** 2026-07-10
 - **Trial:** DSE Trial 2 — area-first calendar-collective NoC router
 - **Phase 1 gate:** **PASS** (ambiguity 0.25 ≤ 0.50; research and feasibility reviews PASS)

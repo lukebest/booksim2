@@ -1,39 +1,35 @@
-# DSE Self-Critique — Trial 2
+# DSE Self-Critique — Trial 3 (light pass)
 
-Harsh review of Trial 2 Phase 1→3 package after Tier A / area-first redesign.
+Scope: Arch-A3 SparseCal rewrite from Trial 2 baseline. Harsh but focused.
 
-## HIGH
+## Findings
 
-| ID | Finding | Disposition |
+### HIGH
+None remaining after SparseCal implementation.
+
+| ID | Finding | Resolution |
 |---|---|---|
-| H1 | Trial 1 combine path must not remain in RefC/BFM/μArch | **RESOLVED** — `combine_unit` deleted; builds pass without it |
-| H2 | Area must be < 1.065× | **RESOLVED** — Arch-A2 analytic **1.028×** |
-| H3 | Diagrams must show no combine/DCA | **RESOLVED** — `architecture-diagram.md`, `uarch-diagram.md` |
-| H4 | ADR-003 must be Tier A USER_CONFIRMED | **RESOLVED** |
-| H5 | REQ-A-004 / REQ-U-004 must forbid router arithmetic | **RESOLVED** |
-| H6 | Do not start Phase 4 | **RESOLVED** — pipeline stops at Phase 3 |
+| H1 | Dense 2×1024×13 over-provisions vs ≪1% occupancy | **RESOLVED** — SparseCal 2×128×23 |
+| H2 | Area 1.028× above 0.97–1.00 target band | **RESOLVED** — analytic 1.000× |
+| H3 | Hard 1-in-16 tax unnecessary under sparsity | **RESOLVED** — soft-prio selected; 328 retained as conservative ref |
 
-## MEDIUM
-
-| ID | Finding | Disposition |
+### MEDIUM
+| ID | Finding | Action |
 |---|---|---|
-| M1 | Tier A increases reduce/allreduce latency vs Trial 1 | **ACCEPTED** — area-first trade-off documented |
-| M2 | Calendar depth not reduced despite area pressure | **JUSTIFIED** — max_slot 951; 512 unsafe |
-| M3 | Arch-B lower area temptation | **REJECTED** — P0 deterministic replay |
+| M1 | Shared BG buffer pool could further cut area | **Deferred** — Trial 3b / out of scope |
+| M2 | Soft-prio bound ~160 is occupancy-model dependent | Documented; keep 328 as compliance ceiling |
+| M3 | Phase 1 iron still Trial-2-flavored in places | Light-touch notes added; IDs preserved |
 
-## LOW
-
-| ID | Finding | Disposition |
+### LOW
+| ID | Finding | Action |
 |---|---|---|
-| L1 | Analytic PPA ≠ synthesis | Noted; out of DSE scope |
-| L2 | PE compute latency model is conservative stub | Noted for future SoC integration |
+| L1 | CAM vs sorted-list micro-choice for next-event | Note only; both fit 128 depth |
+| L2 | Chinese summaries cover P2/P3; some EN iron JSON | Acceptable per trial brief |
 
 ## Cross-phase consistency
+- ADR-002 → Arch-A3; ADR-003 Tier A reaffirmed; ADR-004 SparseCal PPA
+- P2/P3 iron area 1.000× / power 0.95× aligned with `ppa_analytic_model.py`
+- RefC/BFM implement sparse match + soft-prio
 
-P1 iron (Tier A, area <1.065) → P2 Arch-A2 → P3 μArch/BFM without combine: **consistent**.
-No ADR-001/002 invalidation beyond intentional Trial 2 override of Tier B → Tier A.
-
-## Verdict
-
-Self-critique closure: all HIGH findings RESOLVED or JUSTIFIED. Ready for trial
-comparison/promotion. **Not** proceeding to Phase 4.
+## Critique closure
+All HIGH findings RESOLVED. MEDIUM deferred or documented. Ready for user comparison/promotion. **No Phase 4.**

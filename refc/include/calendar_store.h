@@ -6,7 +6,18 @@
 
 #include "noc_types.h"
 
-#define CALENDAR_SLOTS 1024U
+/*
+ * SparseCal (Trial 3 / Arch-A3):
+ *   Per-router ordered event list, not a dense 1024-slot SRAM.
+ *   Each entry: (slot, in_port, out_port_mask, opcode).
+ *   Depth 128 covers observed max busy-router occupancy 49 (allreduce m=1)
+ *   with margin. Global cycle/slot counter still wraps at 1024 for matching
+ *   (max_slot ≈ 951).
+ */
+#define CALENDAR_SLOT_WRAP 1024U
+#define CALENDAR_SPARSE_DEPTH 128U
+/* Legacy alias: wrap modulus for cycle→slot matching (not dense SRAM depth). */
+#define CALENDAR_SLOTS CALENDAR_SLOT_WRAP
 
 typedef enum {
     CAL_OP_FORWARD = 0,
@@ -33,20 +44,29 @@ typedef struct {
 } calendar_entry_t;
 
 /*
- * Physical calendar SRAM stores the 13-bit value:
- * {valid[12], in_port[11:9], out_port_mask[8:4], opcode[3:0]}.
- * The unpacked struct is retained only as a convenient model interface.
+ * Hardware sparse event word (23 bits modeled):
+ *   {slot[9:0], valid[0], in_port[2:0], out_port_mask[4:0], opcode[3:0]}
+ * RefC stores events as (slot, packed13) for clarity; dual-bank hot-swap retained.
  */
 #define CALENDAR_ENTRY_PACKED_BITS 13U
 #define CALENDAR_ENTRY_PACKED_MASK UINT16_C(0x1FFF)
+#define CALENDAR_SPARSE_EVENT_BITS 23U
+#define CALENDAR_BANKS 2U
 
 uint16_t calendar_entry_encode(const calendar_entry_t *entry);
 bool calendar_entry_decode(uint16_t packed, calendar_entry_t *entry);
 
 typedef struct {
-    uint32_t bank_base[2];
+    uint16_t slot;   /* absolute send cycle mod CALENDAR_SLOT_WRAP */
+    uint16_t packed; /* 13-bit {valid,in_port,out_port_mask,opcode} */
+} calendar_sparse_event_t;
+
+typedef struct {
+    uint32_t bank_base[CALENDAR_BANKS];
     uint16_t active_bank;
-    uint16_t slot_count;
+    uint16_t depth;                          /* max events per bank (128) */
+    uint16_t count[CALENDAR_BANKS];          /* occupied events per bank */
+    uint16_t slot_wrap;                      /* 1024 */
 } calendar_store_t;
 
 void calendar_store_init(calendar_store_t *store, uint32_t external_base);

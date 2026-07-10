@@ -2,8 +2,8 @@
   "phase": 3,
   "sub_phase": "complete_awaiting_comparison",
   "pipeline_scope": "dse-phase-1-to-3",
-  "trial": 2,
-  "input_mode": "create",
+  "trial": 3,
+  "input_mode": "transform",
   "started": "2026-07-10",
   "completed_phases": [
     "phase-1",
@@ -13,42 +13,31 @@
     "critique-rerun"
   ],
   "user_feedback_binding": {
+    "architecture": "Arch-A3 SparseCal-Hybrid-ZB-NoCombine",
+    "sparse_calendar": true,
+    "sparse_depth_default": 128,
     "area_first": true,
-    "target_area_rel_lt": 1.065,
+    "target_area_rel": [0.97, 1.0],
     "dca_tier": "A",
     "no_in_router_combine": true,
+    "soft_priority_preferred": true,
+    "soft_priority_selected": true,
     "require_diagrams": true,
-    "no_phase_4": true
+    "no_phase_4": true,
+    "reuse_trial2_as_base": true
   },
   "phase1_gate": {
     "verdict": "PASS",
-    "ambiguity_score": 0.25
+    "ambiguity_score": 0.25,
+    "note": "Trial 3 light-touch: SparseCal selected for OPEN-1-001; Tier A retained"
   },
   "phase2_gate": {
     "verdict": "PASS",
-    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine"
+    "architecture": "Arch-A3 SparseCal-Hybrid-ZB-NoCombine"
   },
   "phase3_gate": {
     "verdict": "PASS",
-    "bfm_refc_match": true
-  },
-  "critique": {
-    "file": "reviews/dse-self-critique.md",
-    "high": 6,
-    "medium": 3,
-    "low": 2,
-    "adr_invalidated": false,
-    "closure": "reviews/dse-critique-closure.md"
-  },
-  "metrics": {
-    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
-    "area_rel": 1.028,
-    "power_rel": 0.96,
-    "area_vs_trial1": -0.037,
-    "power_vs_trial1": -0.02,
-    "bg_bound_cycles": 328,
-    "dca_tier": "A",
-    "combine_present": false,
+    "bfm_refc_match": true,
     "calendar_replay_m1": {
       "bcast": 100,
       "gather": 852,
@@ -56,6 +45,32 @@
       "allreduce": 952,
       "allgather": 700
     }
+  },
+  "critique": {
+    "file": "reviews/dse-self-critique.md",
+    "high": 0,
+    "medium": 3,
+    "low": 2,
+    "adr_invalidated": false,
+    "closure": "reviews/dse-critique-closure.md"
+  },
+  "metrics": {
+    "architecture": "Arch-A3 SparseCal-Hybrid-ZB-NoCombine",
+    "area_rel": 1.0,
+    "power_rel": 0.95,
+    "area_vs_trial2": -0.028,
+    "power_vs_trial2": -0.01,
+    "area_vs_iq_xy": 0.0,
+    "calendar_bits": 5888,
+    "calendar_depth": 128,
+    "calendar_event_bits": 23,
+    "busy_router_max_entries": 49,
+    "max_slot": 951,
+    "bg_policy": "soft_priority",
+    "bg_bound_cycles_hard_ref": 328,
+    "bg_bound_cycles_soft": 160,
+    "dca_tier": "A",
+    "combine_present": false
   },
   "diagrams": {
     "architecture": [
@@ -67,10 +82,15 @@
       "docs/phase-3-uarch/uarch-diagram.md"
     ]
   },
+  "reports": {
+    "zh": ".rat/scratch/trial3-report-zh.md",
+    "phase2_summary_zh": "docs/phase-2-architecture/phase-2-summary.md",
+    "phase3_summary_zh": "docs/phase-3-uarch/phase-3-summary.md"
+  },
   "worktree": {
-    "path": "/home/luke/workspace/booksim2-dse-trial2",
-    "branch": "dse-trial2"
+    "path": "/home/luke/workspace/booksim2-dse-trial3",
+    "branch": "dse-trial3"
   },
   "satisfaction": "ready_for_comparison",
-  "notes": "Trial 2 complete. Tier A + Arch-A2. No Phase 4. Ready for comparison/promotion vs Trial 1."
+  "notes": "Trial 3 complete. Arch-A3 SparseCal depth 128, soft-prio, Tier A. Area 1.000× / power 0.95×. No Phase 4. Ready for comparison/promotion vs Trial 1/2."
 }

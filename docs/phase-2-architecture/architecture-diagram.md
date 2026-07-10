@@ -1,9 +1,9 @@
-# Arch-A2 Architecture Diagrams (DSE Trial 2)
+# Arch-A3 Architecture Diagrams (DSE Trial 3)
 
-**Architecture:** Arch-A2 CalSlot-Hybrid-ZB-NoCombine  
-**Decision:** USER_CONFIRMED — area-first + DCA Tier A (no in-router combine/DCA)
+**Architecture:** Arch-A3 SparseCal-Hybrid-ZB-NoCombine  
+**Decision:** USER_CONFIRMED — sparse calendar + soft-prio + DCA Tier A (no in-router combine/DCA)
 
-These diagrams are the dedicated Trial 2 architecture deliverable. The same Mermaid
+These diagrams are the dedicated Trial 3 architecture deliverable. The same Mermaid
 sources are embedded in [`architecture.md`](architecture.md).
 
 ---
@@ -24,9 +24,11 @@ flowchart TB
   mesh --- note
 ```
 
+> 中文：6×8 网格，单条 512b 物理 NoC，每 tile 一个路由器，五向端口。
+
 ---
 
-## 2. Router block diagram — calendar vs BG, no combine/DCA
+## 2. Router block diagram — sparse calendar vs BG, no combine/DCA
 
 ```mermaid
 flowchart LR
@@ -35,15 +37,17 @@ flowchart LR
     pe_ni["pe_ni local inject/eject"]
   end
 
-  calendar_store[("calendar_store<br/>2 × 1024 × 13-bit SRAM")]
-  calendar_replay["calendar_replay<br/>slot → port/mask/opcode"]
-  calendar_store --> calendar_replay
+  slot_ctr["global slot counter<br/>wrap 1024"]
+  calendar_store[("calendar_store<br/>2 × 128 × 23-bit<br/>sparse event list / CAM")]
+  next_match["next_event_match<br/>entry.slot == counter?"]
+  calendar_store --> next_match
+  slot_ctr --> next_match
 
-  mesh_in --> classify{"calendar slot<br/>or BG/escape?"}
+  mesh_in --> classify{"matching calendar<br/>event or BG/escape?"}
   pe_ni --> classify
-  calendar_replay --> classify
+  next_match --> classify
 
-  classify -->|"legal calendar<br/>zero-buffer path"| multicast_fork["multicast_fork<br/>atomic 5-bit fork"]
+  classify -->|"matching event<br/>zero-buffer path"| multicast_fork["multicast_fork<br/>atomic 5-bit fork"]
   multicast_fork --> switch_alloc["switch_alloc"]
 
   classify -->|"BG or demoted<br/>credited XY VC"| vc_buffers["vc_buffers<br/>BG + escape FIFOs"]
@@ -58,46 +62,67 @@ flowchart LR
   credit_fc["credit_fc<br/>per-egress BG/escape credits"] <--> vc_buffers
   credit_fc --> switch_alloc
 
-  absent["ABSENT in Trial 2:<br/>combine_unit = none<br/>DCA datapath = none<br/>Reduce = gather → PE → (bcast)"]
+  absent["ABSENT in Trial 3:<br/>combine_unit = none<br/>DCA datapath = none<br/>Reduce = gather → PE → (bcast)"]
   multicast_fork -.->|"no arithmetic path"| absent
   pe_ni -.->|"Tier-A PE compute only<br/>outside router datapath"| absent
 ```
 
+> 中文：稀疏事件表（2×128×23b）替代稠密 2×1024×13b SRAM；`next_event_match` 在全局 slot 计数器匹配时触发日历路径。
+
 ---
 
-## 3. VC / TDM isolation
+## 3. Soft priority vs hard TDM (selected: soft-prio)
 
 ```mermaid
 flowchart TB
-  subgraph slots["Hybrid TDM on each egress (period = 16)"]
-    direction LR
-    S0["slots 0..14<br/>calendar-owned if valid"]
-    S15["slot 15<br/>non-borrowable BG window"]
+  subgraph cycle["Each noc_clk cycle"]
+    CTR["slot counter advances"]
+    MATCH{"sparse head<br/>slot == counter?"}
+    CAL["Calendar owns cycle<br/>zero-buffer fork"]
+    BG["BG / escape eligible<br/>credited XY VC"]
   end
-  subgraph classes["Traffic classes"]
-    CAL["Calendar class<br/>zero payload VC / slot-owned"]
-    BG["BG + escape class<br/>one credited XY-DOR VC"]
-  end
-  S0 --> CAL
-  S15 --> BG
-  CAL -->|"never waits on BG FIFOs"| XBAR["crossbar grant"]
-  BG -->|"credit > 0 and eligible"| XBAR
-  note2["BG may also use calendar-idle slots;<br/>never displaces a valid calendar transfer.<br/>12-hop bound = 328 cycles"]
+  CTR --> MATCH
+  MATCH -->|yes + valid flit| CAL
+  MATCH -->|no match| BG
+  CAL --> XBAR["crossbar grant"]
+  BG -->|"credit > 0"| XBAR
+  note2["Soft-prio: BG uses idle/non-matching slots.<br/>Calendar never displaced by BG.<br/>Conservative hard 1-in-16 bound = 328 cy;<br/>occupancy-aware soft bound ≈ 160 cy."]
   BG --- note2
 ```
 
+> 中文：**软优先级**已选定——有匹配稀疏事件时日历优先；无匹配时 BG 可用。硬 1-in-16 TDM 仅作保守上界参考。
+
 ---
 
-## 4. Multicast fork + watchdog demote
+## 4. Sparse event list structure
+
+```mermaid
+flowchart LR
+  subgraph bank["One calendar bank (depth 128)"]
+    E0["entry[0]: slot=17, in, mask, opcode"]
+    E1["entry[1]: slot=42, ..."]
+    E2["..."]
+    E127["entry[≤127]: slot=951, ..."]
+  end
+  LOAD["offline loader<br/>sort by slot"] --> bank
+  bank --> READ["registered read + compare"]
+  READ --> FIRE["fire when slot == counter"]
+```
+
+> 中文：每路由器每 bank 最多 128 条有序事件；allreduce 实测单 router 最大 49 条，max_slot≈951。
+
+---
+
+## 5. Multicast fork + watchdog demote
 
 ```mermaid
 sequenceDiagram
-  participant CR as calendar_replay
+  participant NE as next_event_match
   participant MF as multicast_fork
   participant WD as watchdog_demote
   participant VC as vc_buffers (escape)
   participant XB as crossbar
-  CR->>MF: legal mask + flit
+  NE->>MF: legal mask + flit (slot match)
   alt all selected egress available
     MF->>XB: atomic multi-port grant
   else mismatch / timeout / blocked
@@ -109,11 +134,13 @@ sequenceDiagram
 
 ---
 
-## 5. Explicit non-goals (Trial 2)
+## 6. Explicit non-goals (Trial 3)
 
-| Block | Trial 1 | Trial 2 Arch-A2 |
+| Block | Trial 2 Arch-A2 | Trial 3 Arch-A3 |
 |---|---|---|
-| `combine_unit` | Tier-B 2-input lane combine | **Absent** |
-| DCA interface | Disabled stub | **Absent** (no stub datapath) |
-| Reduce semantic | In-router merge | Gather → PE-local compute |
-| Allreduce semantic | Reduce + bcast (in-net) | Gather → PE → scheduled broadcast |
+| Calendar store | Dense 2×1024×13 SRAM | **Sparse 2×128×23 event list** |
+| Dispatch | Slot-indexed table read | **Next-event match on counter** |
+| BG arbitration | Hard 1-in-16 primary | **Soft priority** (hard bound retained) |
+| `combine_unit` | Absent | **Absent** |
+| DCA interface | Absent | **Absent** |
+| Shared BG buffer pool | — | **Out of scope** (Trial 3b future) |

@@ -1,19 +1,15 @@
-# Phase 2 Feature Coverage — Trial 2
+# Phase 2 Feature Coverage — Trial 3 Arch-A3
 
-| REQ | Blocks | Status |
+| REQ | Architecture block / policy | Status |
 |---|---|---|
-| REQ-F-001 | calendar_store, calendar_replay | Covered |
-| REQ-F-002 | xy_route, vc_buffers, switch_alloc | Covered |
-| REQ-F-003 | calendar_replay, pe_ni (Tier A) | Covered |
-| REQ-F-004 | Tier A; combine/DCA ABSENT | Covered |
-| REQ-F-005 | switch_alloc BG window | Covered |
-| REQ-F-006 | multicast_fork | Covered |
-| REQ-F-007 | VC/TDM isolation | Covered |
-| REQ-F-008 | credit_fc, vc_buffers | Covered |
-| REQ-F-009 | watchdog_demote | Covered |
-| REQ-F-010 | Tier A selected | Covered |
-| REQ-F-011 | DCA ABSENT | Covered |
-| REQ-P-001..005 | timing + PPA 1.028 | Covered |
-| REQ-A-001..006 | Arch-A2 frozen decisions | Covered |
+| REQ-F-001 | calendar_store sparse list + next_event_match | Covered |
+| REQ-F-002..F-004 | Tier-A gather/PE/bcast calendars | Covered |
+| REQ-F-005 / F-007 | soft-prio BG XY-DOR on non-match cycles | Covered |
+| REQ-F-006 | multicast_fork atomic mask | Covered |
+| REQ-F-008 | zero-buffer calendar path | Covered |
+| REQ-F-009 | watchdog_demote → escape | Covered |
+| REQ-P-001..P-003 | 2 GHz, H=7 V=9, soft-prio bound | Covered |
+| REQ-P-004 | analytic PPA 1.000× | Covered |
+| REQ-A-001..A-006 | SparseCal 128, soft-prio, Tier A, area | Covered |
 
-**Coverage: 100%.** `combine_unit` mapped ABSENT.
+**Coverage: 100%**

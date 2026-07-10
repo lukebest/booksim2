@@ -4,6 +4,13 @@
 
 #include "ext_mem.h"
 
+static uint32_t event_addr(const calendar_store_t *store, uint16_t bank,
+                           uint16_t index)
+{
+    return store->bank_base[bank] +
+           ((uint32_t)index * (uint32_t)sizeof(calendar_sparse_event_t));
+}
+
 uint16_t calendar_entry_encode(const calendar_entry_t *entry)
 {
     uint16_t packed;
@@ -34,53 +41,77 @@ bool calendar_entry_decode(uint16_t packed, calendar_entry_t *entry)
 
 void calendar_store_init(calendar_store_t *store, uint32_t external_base)
 {
+    uint32_t bank_bytes;
+
     if (store != NULL) {
+        bank_bytes = CALENDAR_SPARSE_DEPTH *
+                     (uint32_t)sizeof(calendar_sparse_event_t);
         store->bank_base[0] = external_base;
-        store->bank_base[1] = external_base +
-                              (CALENDAR_SLOTS * (uint32_t)sizeof(uint16_t));
+        store->bank_base[1] = external_base + bank_bytes;
         store->active_bank = 0U;
-        store->slot_count = CALENDAR_SLOTS;
+        store->depth = (uint16_t)CALENDAR_SPARSE_DEPTH;
+        store->count[0] = 0U;
+        store->count[1] = 0U;
+        store->slot_wrap = (uint16_t)CALENDAR_SLOT_WRAP;
     }
 }
 
 void calendar_store_load(calendar_store_t *store, uint16_t bank, uint16_t slot,
                          const calendar_entry_t *entry)
 {
-    uint32_t addr;
+    calendar_sparse_event_t event;
+    uint16_t index;
     uint16_t packed;
 
-    if ((store == NULL) || (entry == NULL) || (bank > 1U) ||
-        (slot >= store->slot_count)) {
+    if ((store == NULL) || (entry == NULL) || (bank >= CALENDAR_BANKS) ||
+        (slot >= store->slot_wrap) || (store->count[bank] >= store->depth)) {
         return;
     }
     packed = calendar_entry_encode(entry);
     if ((entry->valid != 0U) && (packed == 0U)) {
         return;
     }
-    addr = store->bank_base[bank] + ((uint32_t)slot * (uint32_t)sizeof(packed));
-    ext_mem_write(addr, &packed, (uint32_t)sizeof(packed));
+    /* Reject duplicate slot in the same bank (ordered unique list). */
+    for (index = 0U; index < store->count[bank]; ++index) {
+        ext_mem_read(event_addr(store, bank, index), &event, (uint32_t)sizeof(event));
+        if (event.slot == slot) {
+            return;
+        }
+    }
+    event.slot = slot;
+    event.packed = packed;
+    index = store->count[bank];
+    ext_mem_write(event_addr(store, bank, index), &event, (uint32_t)sizeof(event));
+    store->count[bank] = (uint16_t)(index + 1U);
 }
 
 bool calendar_store_replay(const calendar_store_t *store, uint32_t cycle,
                            calendar_entry_t *entry)
 {
+    calendar_sparse_event_t event;
     uint16_t slot;
-    uint32_t addr;
-    uint16_t packed;
+    uint16_t index;
+    uint16_t bank;
 
-    if ((store == NULL) || (entry == NULL) || (store->slot_count == 0U)) {
+    if ((store == NULL) || (entry == NULL) || (store->slot_wrap == 0U)) {
         return false;
     }
-    slot = (uint16_t)(cycle % (uint32_t)store->slot_count);
-    addr = store->bank_base[store->active_bank] +
-           ((uint32_t)slot * (uint32_t)sizeof(packed));
-    ext_mem_read(addr, &packed, (uint32_t)sizeof(packed));
-    return calendar_entry_decode(packed, entry) && (entry->valid != 0U);
+    slot = (uint16_t)(cycle % (uint32_t)store->slot_wrap);
+    bank = store->active_bank;
+    for (index = 0U; index < store->count[bank]; ++index) {
+        ext_mem_read(event_addr(store, bank, index), &event, (uint32_t)sizeof(event));
+        if (event.slot == slot) {
+            return calendar_entry_decode(event.packed, entry) &&
+                   (entry->valid != 0U);
+        }
+    }
+    (void)memset(entry, 0, sizeof(*entry));
+    return false;
 }
 
 void calendar_store_select_bank(calendar_store_t *store, uint16_t bank)
 {
-    if ((store != NULL) && (bank < 2U)) {
+    if ((store != NULL) && (bank < CALENDAR_BANKS)) {
         store->active_bank = bank;
     }
 }

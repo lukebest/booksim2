@@ -1,16 +1,17 @@
 {
   "phase": "phase-3-uarch",
-  "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
-  "trial": 2,
+  "architecture": "Arch-A3 SparseCal-Hybrid-ZB-NoCombine",
+  "trial": 3,
   "requirements": [
     {
       "id": "REQ-U-001",
       "resolved_from": ["REQ-A-001", "REQ-F-001"],
-      "statement": "calendar_store/replay shall implement dual-bank 1024×13-bit slot tables with S0 registered SRAM read and S1 qualification in noc_clk; activation only at slot 0 after old-epoch retirement.",
+      "statement": "calendar_store/next_event_match shall implement dual-bank 128×23-bit sparse event lists with S0 registered SRAM read, S1 slot==counter qualification in noc_clk; entries sorted by slot; activation only at slot 0 after old-epoch retirement.",
       "acceptance_criteria": [
-        "BFM active-bank read matches loaded inactive-bank contents after handoff.",
+        "BFM active-bank read fires at entry.slot with loaded inactive-bank contents after handoff.",
         "No active-bank write occurs during replay.",
-        "Storage is exactly 26,624 payload bits per router."
+        "Storage is exactly 5,888 payload bits per router (2×128×23).",
+        "Loader rejects lists exceeding 128 entries per bank."
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1
@@ -18,10 +19,11 @@
     {
       "id": "REQ-U-002",
       "resolved_from": ["REQ-A-002", "REQ-A-003", "REQ-F-005", "REQ-F-007", "REQ-F-008"],
-      "statement": "BG/escape shall use credited XY-DOR vc_buffers with RC→SA→ST pipeline, 1-in-16 non-borrowable BG window, H/V credits 16/20, and 328-cycle 12-hop delivery bound under eligibility premises.",
+      "statement": "BG/escape shall use credited XY-DOR vc_buffers with RC→SA→ST pipeline and soft-priority service on non-matching cycles. Conservative hard 1-in-16 bound 328 cycles; soft-prio occupancy-aware bound ~160 cycles on 12-hop worst case. H/V credits 16/20.",
       "acceptance_criteria": [
-        "test_bg_window and test_bg_bound PASS.",
-        "Measured 12-hop eligible latency ≤ 328 cycles.",
+        "test_bg_window and test_bg_bound PASS (conservative bound).",
+        "BG never grants over a firing calendar event.",
+        "Measured soft-prio 12-hop eligible latency ≤ 160 cycles under max-occupancy premise.",
         "Calendar path never enqueues payload into vc_buffers."
       ],
       "violation_policy": "user_escalation",
@@ -54,11 +56,11 @@
     {
       "id": "REQ-U-005",
       "resolved_from": ["REQ-A-006", "REQ-P-004"],
-      "statement": "Analytic PPA for the μArch shall report relative area 1.028× (or lower) and power 0.96× vs IQ-XY, below Trial 1's 1.065×/0.98×.",
+      "statement": "Analytic PPA for the μArch shall report relative area 1.000× (or lower) and power 0.95× vs IQ-XY, below Trial 2's 1.028×/0.96×, with sparse calendar 0.009 and control 0.188.",
       "acceptance_criteria": [
-        "ppa-analytic.md and ppa_analytic_model.py report 1.028 area.",
-        "combine component is 0.000.",
-        "Documented area delta vs Trial 1 is negative."
+        "ppa-analytic.md and ppa_analytic_model.py report 1.000 area.",
+        "combine component is 0.000; calendar component is 0.009.",
+        "Documented area delta vs Trial 2 is −0.028."
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1
@@ -66,7 +68,7 @@
     {
       "id": "REQ-U-006",
       "resolved_from": ["REQ-P-001", "REQ-P-002"],
-      "statement": "Single noc_clk domain at 2 GHz; one 512-bit flit per granted direction per cycle; H=7 V=9 ramp=1 modeled as link/PE latency, not a second clock.",
+      "statement": "Single noc_clk domain at 2 GHz; one 512-bit flit per granted direction per cycle; H=7 V=9 ramp=1 modeled as link/PE latency, not a second clock. Global slot counter wraps at 1024.",
       "acceptance_criteria": [
         "clock-domain-map.md lists only noc_clk.",
         "BFM/mesh timing uses H=7 V=9 ramp=1.",

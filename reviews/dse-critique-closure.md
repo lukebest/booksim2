@@ -1,12 +1,11 @@
-# DSE Critique Closure — Trial 2
+# Critique Closure — Trial 3
 
-All HIGH findings from `reviews/dse-self-critique.md` are RESOLVED:
+| Finding | Severity | Status |
+|---|---|---|
+| Dense calendar over-provision | HIGH | RESOLVED (SparseCal 128) |
+| Area above 1.00 band | HIGH | RESOLVED (1.000×) |
+| Hard TDM tax under sparsity | HIGH | RESOLVED (soft-prio) |
+| Shared BG pool | MEDIUM | JUSTIFIED defer (Trial 3b) |
+| Soft-prio bound model | MEDIUM | JUSTIFIED (328 ceiling retained) |
 
-1. Combine removed from RefC/BFM/μArch
-2. Area 1.028 < 1.065
-3. Diagrams delivered
-4. ADR-003 Tier A USER_CONFIRMED
-5. Iron REQs updated
-6. No Phase 4
-
-MEDIUM items accepted/justified. Trial 2 ready for comparison against Trial 1.
+**Gate:** All HIGH RESOLVED or JUSTIFIED. Present to user for comparison — no Phase 4.

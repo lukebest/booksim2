@@ -1,24 +1,23 @@
-# Phase 2 Architecture Review — Trial 2
+# Phase 2 Architecture Review — DSE Trial 3 (Arch-A3 SparseCal)
 
-| Field | Value |
-|---|---|
-| Architecture | Arch-A2 CalSlot-Hybrid-ZB-NoCombine |
-| Verdict | **PASS** |
-| Date | 2026-07-10 |
+**Verdict: PASS**
 
-## Checks
+## Artifact gate
+- [x] architecture.md (Arch-A3 SparseCal-Hybrid-ZB-NoCombine)
+- [x] architecture-diagram.md (sparse list + next-event match + soft-prio)
+- [x] architecture-candidates.md (A3 selected; A2/B/C compared)
+- [x] iron-requirements.json (REQ-A-*, trial=3)
+- [x] ppa-analytic.md / ppa-workbook.md (area 1.000×, power 0.95×)
+- [x] ADR-002 updated for Arch-A3; ADR-003 Tier A reaffirmed; ADR-004 SparseCal PPA
+- [x] RefC sparse calendar_store + soft-prio router; tests PASS
+- [x] BFM sparse replay; all `*_m1.json` PASS
 
-| Item | Result |
-|---|---|
-| ≥3 candidates with quantitative matrix | Pass |
-| Area < Trial 1 1.065× | Pass (1.028) |
-| Tier A / no combine | Pass |
-| Diagrams present | Pass (`architecture.md`, `architecture-diagram.md`) |
-| BG bound 328 cycles retained | Pass |
-| Calendar depth evidence (max_slot≤1023) | Pass |
-| RefC without combine_unit | Pass |
-| ADR-002 / ADR-003 USER_CONFIRMED | Pass |
+## Quality gate
+- Feature coverage: calendar/BG/multicast/watchdog/Tier-A/PPA mapped
+- OPEN-1-001 resolved as SparseCal depth 128 dual-bank
+- Compliance vs P1 iron: PASS (Tier A, ZB calendar, single network, BG progress)
+- Area target 0.97–1.00× met at **1.000×**
+- No Phase 4 / no combine restore
 
 ## Findings
-
-None blocking. Arch-B lower area rejected for P0 calendar fidelity.
+None blocking. Future Trial 3b may explore shared BG buffer pool (out of scope).

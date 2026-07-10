@@ -1,30 +1,37 @@
-# Phase 3 Summary — DSE Trial 2
+# Phase 3 摘要 — DSE Trial 3
 
-**Architecture:** Arch-A2 CalSlot-Hybrid-ZB-NoCombine  
-**Tier:** DCA Tier A (no in-router combine/DCA)  
-**PPA:** area **1.028×**, power **0.96×** vs IQ-XY (−3.5% / −2% vs Trial 1)
+**架构：** Arch-A3 SparseCal-Hybrid-ZB-NoCombine  
+**层级：** DCA Tier A（无路由器内 combine/DCA）  
+**PPA：** 面积 **1.000×**、功耗 **0.95×**（相对 IQ-XY）；相对 Trial 2 **−0.028 面积 / −0.01 功耗**
 
-## Deliverables
+## 交付物
 
-| Artifact | Path |
+| 工件 | 路径 |
 |---|---|
-| μArch spec | `docs/phase-3-uarch/uarch.md` |
-| μArch diagrams | `docs/phase-3-uarch/uarch-diagram.md` |
-| Iron (REQ-U-*) | `docs/phase-3-uarch/iron-requirements.json` (6 REQs) |
-| Traceability | `docs/phase-3-uarch/req-uarch-traceability.md` (100%) |
-| BFM | `bfm/` — compiles; matches RefC; calendars PASS |
-| RefC | `refc/` — no `combine_unit` |
+| μArch 规格 | `docs/phase-3-uarch/uarch.md` |
+| μArch 图 | `docs/phase-3-uarch/uarch-diagram.md` |
+| Iron（REQ-U-*） | `docs/phase-3-uarch/iron-requirements.json`（6 条） |
+| 可追溯性 | `docs/phase-3-uarch/req-uarch-traceability.md`（100%） |
+| 日历导出模式 | `docs/phase-3-uarch/calendar-export-schema.md`（深度 128 对齐） |
+| BFM | `bfm/` — 编译通过；匹配 RefC；日历 PASS |
+| RefC | `refc/` — 无 `combine_unit` |
 
-## μArch highlights
+## μArch 要点
 
-- Calendar S0/S1 zero-buffer path; BG RC→SA→ST credited XY path
-- Hybrid TDM 1-in-16; watchdog demote → escape VC
-- Multicast atomic fork
-- **combine_unit / DCA explicitly absent**; PE-local Tier-A compute
+- **稀疏日历** S0/S1 next-event 匹配路径（2×128×23b）；替代稠密 slot 表
+- **软优先级** BG：无匹配周期可用；保守硬上界 328 周期，软上界约 160 周期
+- BG RC→SA→ST 信用 XY 路径；watchdog demote → escape VC
+- 原子多播 fork
+- **combine_unit / DCA 明确缺席**；PE 本地 Tier-A 计算
 
-## Gate
+## 稀疏度验证
 
-- uarch-review: PASS
-- BFM ↔ RefC: PASS
-- Compliance P1+P2→P3: PASS (see `.rat/state/`)
-- Phase 4 RTL: **not started** (DSE stop)
+`results/calendars/allreduce_m1.json`：单路由器最大 **49** 条，max_slot **951**；
+硬件深度 **128**/bank，余量 >2×。
+
+## 门禁
+
+- uarch-review：PASS
+- BFM ↔ RefC：PASS
+- 合规 P1+P2→P3：见 `.rat/state/`
+- Phase 4 RTL：**未启动**（DSE 止步）

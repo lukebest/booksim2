@@ -1,5 +1,9 @@
 # DSE Trial 2: Domain Analysis — 6×8 Calendar-Collective NoC
 
+> **Trial 3 update:** OPEN-1-001 resolved with **SparseCal** (sparse ordered event
+> list, depth 128, 23 bits/entry). See Trial 3 architecture docs for binding
+> decision and sparsity evidence from `results/calendars/*_m1.json`.
+
 ## Scope and analytic basis
 
 This analysis applies only to the specified 6×8, single-512-bit-link mesh.  A flit is
@@ -41,15 +45,20 @@ reduction +2.7%, and wide reduction plus DCA is +16.9%.
 
 | Candidate | Storage / router | Lookup latency | Flexibility | Makespan fidelity | Relative area order | Assessment |
 |---|---:|---|---|---|---|---|
-| A. Slot table: `slot → {in, out_mask, opcode}` | 26,624 bits, double-bank | 1 registered SRAM read | New schedule at epoch boundary; arbitrary tree/fork pattern | Exact: no route/arbitration decision in replay | low–medium; SRAM dominates control | **Preferred** |
+| A. Dense slot table: `slot → {in, out_mask, opcode}` | 26,624 bits, double-bank | 1 registered SRAM read | New schedule at epoch boundary; arbitrary tree/fork pattern | Exact: no route/arbitration decision in replay | low–medium; SRAM dominates control | Trial 2 selected; **superseded by A′ in Trial 3** |
+| **A′. Sparse event list: `{slot, in, out_mask, opcode}`** | **5,888 bits (2×128×23), double-bank** | 1 SRAM read + slot compare | Same epoch handoff; JSON export natural | Exact: next-event match on counter | **lowest calendar area (0.009 class)** | **Trial 3 preferred** |
 | B. Per-flow tag match | about 1,344 bits for 48 resident flow records; substantially more if per-flow timing sequences are retained | 1–2 cycles CAM/compare + arbitration | Good for dynamic flow membership | Weak unless it grows into a timetable; concurrent matches require an arbiter | medium; comparators and match fanout | Useful only for a future dynamic-control plane |
 | C. Source-routed fork/turn header | 0 calendar SRAM; about 28–40 route/fork bits carried per flit for a 12-hop path | 0–1 cycle header decode per hop | Path changes per packet; source must construct every branch program | Moderate: header can express a path, but cannot reserve conflicting link slots | low router storage, higher link/header energy and NI complexity | Poor fit for offline rigid schedules |
 
-**Recommendation: A — double-buffered per-router slot table.**  The schedule already
-exists offline and includes collision avoidance.  A 3.25 KiB/router control SRAM is
-small beside even the background payload buffering below, while preserving the
-zero-buffer makespan model exactly.  Store a calendar epoch/CRC in the bank header;
-switch banks only after all old-epoch calendar flits retire.
+**Trial 2 recommendation: A — dense double-buffered slot table.**
+
+**Trial 3 update (USER_CONFIRMED): A′ — sparse ordered event list.**  Measured
+density from `results/calendars/*_m1.json` is ≪1% of `48×1024` (allreduce max
+49 entries/router, max_slot 951).  Depth 128 per bank provides >2× margin while
+reducing calendar SRAM from 26,624 to 5,888 bits (−78%).  Dispatch uses
+next-event match: global slot counter compared against sorted sparse entries.
+Store a calendar epoch/CRC in the bank header; switch banks only after all
+old-epoch calendar flits retire (dual-bank hot-swap unchanged).
 
 ## 2. Calendar/background isolation
 
@@ -57,15 +66,18 @@ switch banks only after all old-epoch calendar flits retire.
 |---|---|---|---|---|---|
 | A. Dedicated calendar VC + strict priority | Separate resource class prevents calendar/BG buffer dependency; BG XY escape VC remains acyclic | Not bounded: a dense calendar can starve BG indefinitely | 0 when calendar wins | VC state, buffers, priority arbiters; calendar can toggle every slot | Fails REQ-BG's permanent-starvation prohibition |
 | B. Hard TDM reservation | Slot ownership removes cross-class waits; BG uses XY only in its slots | Deterministic service if slots reserved | Calendar expands whenever an unused slot is reserved for BG | Small control, but idle reserved slots waste dynamic energy and bandwidth | Safe but too rigid for P2 |
-| C. Hybrid: calendar windows + BG VC | Calendar never requests a BG-reserved slot; BG remains in an XY-DOR credit VC whose channel dependency graph is acyclic | Guaranteed at least one BG service opportunity per configured window, even under continuous calendar epochs | Bounded by reserved windows; `ceil(T/K)` lost slots for one BG slot every `K` cycles | Slot-class bit/counter plus one BG VC; no calendar payload queue | **Preferred** |
+| C. Hybrid: calendar windows + BG VC | Calendar never requests a BG-reserved slot; BG remains in an XY-DOR credit VC whose channel dependency graph is acyclic | Guaranteed at least one BG service opportunity per configured window, even under continuous calendar epochs | Bounded by reserved windows; `ceil(T/K)` lost slots for one BG slot every `K` cycles | Slot-class bit/counter plus one BG VC; no calendar payload queue | Trial 1/2 preferred |
+| **C′. Soft-prio: calendar-on-match + BG on idle** | Same XY escape VC acyclicity; calendar owns only matching sparse events | Occupancy-aware: with max 49/952 busy, BG sees ≫1/16 opportunities | Near-zero calendar tax (no forced idle windows) | Same BG VC; drop hard window counter | **Trial 3 preferred** |
 
-**Recommendation: C — hybrid isolation.**  Compile calendar transmissions only into
-calendar windows, reserving a periodic BG window (initial Trial-1 setting: one of every
-16 slots, 6.25%).  An idle BG window may be borrowed by calendar only if it remains
-preemptible until the slot boundary; it is not counted in the guaranteed schedule.
-Thus BG receives a finite service bound and calendar overhead is at most 6.25% before
-offline recompaction.  Verify the actual calendar after inserting windows; do not claim
-the old zero-buffer makespan unchanged.
+**Trial 1/2 recommendation: C — hybrid isolation** (one BG slot every 16).
+
+**Trial 3 update (USER_CONFIRMED): C′ — soft priority.**  Calendar wins only when a
+sparse event matches the global slot counter; BG uses all non-matching cycles and
+never displaces a firing calendar event.  Hard 1-in-16 is relaxed as the primary
+policy but retained as a conservative 328-cycle 12-hop reference bound; soft-prio
+occupancy-aware bound is ~160 cycles given max busy-router occupancy 49/952.
+Compile calendars without forced BG holes; verify BG progress under measured
+sparsity rather than a dense-slot tax.
 
 ## 3. Buffering strategy
 
