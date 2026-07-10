@@ -31,12 +31,12 @@
     },
     {
       "id": "OPEN-1-004",
-      "topic": "Reduction implementation tier",
-      "context": "Reduce and allreduce must compare no in-network arithmetic, router-local combine, and optional DCA for m=1..5 under the stated 6x8 timing model.",
+      "topic": "Reduction implementation tier (resolved for Trial 2)",
+      "context": "Reduce and allreduce retain comparison of no in-network arithmetic, router-local combine, and optional DCA for m=1..5 under the stated 6x8 timing model. USER_CONFIRMED Tier A is selected for Trial 2: gather + PE-local compute (+ broadcast for allreduce); router combine and DCA are excluded.",
       "candidates": ["tier A: gather plus local PE compute", "tier B: router-local two-input integer/bitwise combine", "tier C: DCA tile-FPU offload"],
       "evaluation_criteria": ["reduce/allreduce makespan", "router area and power", "tile area impact", "operation coverage", "FPU contention", "backpressure and ordering behavior"],
       "related_iron": ["REQ-F-004", "REQ-F-010", "REQ-F-011", "REQ-P-005"],
-      "resolution_expected": "Architecture selection finalized in iron-requirements.json"
+      "resolution_expected": "Resolved toward Tier A for Trial 2 in iron-requirements.json and ADR-001; Phase 2 records only PE-compute handoff semantics and preserves B/C as comparison evidence."
     },
     {
       "id": "OPEN-1-005",

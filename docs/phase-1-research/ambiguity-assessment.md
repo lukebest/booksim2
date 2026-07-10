@@ -1,9 +1,9 @@
-# Phase 1 Ambiguity Assessment — DSE Trial 1
+# Phase 1 Ambiguity Assessment — DSE Trial 2
 
 - Date: 2026-07-10
 - Scope: 6×8 calendar-collective NoC router
 - Gate criterion: weighted ambiguity score must be <= 0.50 for Phase 1 -> 2 passage
-- Result: **PASS — 0.30**
+- Result: **PASS — 0.25**
 
 ## Method
 
@@ -15,10 +15,10 @@ parameter.
 
 | Axis | Score | Weight | Evidence |
 |---|---:|---:|---|
-| Goal clarity | 0.18 | 40% | Topology, collective set, 512-bit links, and single-network scope are explicit in the input spec. |
-| Constraint clarity | 0.42 | 30% | Link/ramp timing and bandwidth are explicit; header layout, VC count, buffers, watchdog, and reduction formats remain Phase 2 work. |
-| Acceptance-criteria clarity | 0.34 | 30% | All iron entries now have measurable criteria; selected-architecture documentation is required where the source omits a numeric/protocol choice. |
-| **Overall** | **0.30** | **100%** | `0.40*0.18 + 0.30*0.42 + 0.30*0.34 = 0.30` |
+| Goal clarity | 0.14 | 40% | Topology, collective set, 512-bit links, single-network scope, Tier A, and the area-first direction are explicit. |
+| Constraint clarity | 0.36 | 30% | Link/ramp timing, bandwidth, Tier A exclusion of router combine/DCA, and the 1.065× area target are explicit; header layout, VC count, buffers, watchdog, and PE handoff remain Phase 2 work. |
+| Acceptance-criteria clarity | 0.30 | 30% | Iron entries measure Tier A gather/PE-compute/broadcast behavior and the area target; selected-protocol details remain explicit Phase 2 closures. |
+| **Overall** | **0.25** | **100%** | `0.40*0.14 + 0.30*0.36 + 0.30*0.30 = 0.254`, rounded to 0.25 |
 
 ## Per-requirement assessment
 
@@ -26,15 +26,15 @@ parameter.
 |---|---:|---|
 | REQ-F-001 | 0.42 | Calendar content is defined; storage/loading/epoch format stays in OPEN-1-001. |
 | REQ-F-002 | 0.24 | Legal-schedule fork delivery and output exclusivity are observable. |
-| REQ-F-003 | 0.31 | Gather delivery is measurable; combine behavior is conditional on the selected tier. |
-| REQ-F-004 | 0.47 | Reduction semantics are deliberately deferred, but a selected architecture must define them before RTL acceptance. |
+| REQ-F-003 | 0.20 | Gather delivery and the no-router-combine boundary are measurable. |
+| REQ-F-004 | 0.34 | Tier A sequencing is binding; PE-local operation semantics and handoff remain Phase 2 work. |
 | REQ-F-005 | 0.44 | XY order is explicit; Phase 2 must select a numeric background-service bound. |
 | REQ-F-006 | 0.36 | Atomic replication is testable; mask encoding remains OPEN-1-001. |
 | REQ-F-007 | 0.43 | Deadlock proof and stress completion are measurable; isolation implementation remains OPEN-1-002. |
 | REQ-F-008 | 0.35 | No-loss/occupancy behavior is measurable; credit versus ready/valid stays open. |
 | REQ-F-009 | 0.48 | Recovery behavior is defined; Phase 2 must select numeric watchdog and recovery bounds. |
-| REQ-F-010 | 0.25 | Required A/B/C comparison scope and reporting fields are explicit. |
-| REQ-F-011 | 0.46 | Conditional DCA interface remains optional and protocol widths are not frozen. |
+| REQ-F-010 | 0.16 | Required A/B/C comparison scope is explicit and Tier A is selected. |
+| REQ-F-011 | 0.12 | Trial 2 explicitly excludes a DCA interface. |
 | REQ-F-012 | 0.33 | BFM outcome is measurable; concrete API/file encoding is Phase 3 work. |
 | REQ-P-001 | 0.12 | 512-bit, 1 flit/cycle, 2 GHz, and 128 GB/s are explicit. |
 | REQ-P-002 | 0.19 | Clock and analytic link/ramp values are explicit; independent router latency is intentionally not asserted. |
@@ -46,7 +46,7 @@ parameter.
 
 The following remain architecture choices, not Phase 1 blockers: calendar encoding (OPEN-1-001),
 mixed-traffic isolation (OPEN-1-002), buffering/flow-control parameters (OPEN-1-003),
-reduction tier/semantics (OPEN-1-004), and watchdog recovery details (OPEN-1-005).
+Tier-A PE handoff/operation semantics (OPEN-1-004, selection resolved), and watchdog recovery details (OPEN-1-005).
 Before a Phase 2 architecture is frozen, it must turn each relevant selection into exact interface
 widths, numeric bounds, and testable Phase 3 criteria.
 

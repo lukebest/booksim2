@@ -12,7 +12,7 @@ void bfm_write_module_logs(uint32_t cycles, bool pass)
 {
     static const char *const module_names[] = {
         "calendar_store", "calendar_replay", "xy_route", "multicast_fork",
-        "combine_unit", "vc_buffers", "switch_alloc", "crossbar",
+        "pe_handoff", "vc_buffers", "switch_alloc", "crossbar",
         "credit_fc", "watchdog_demote", "pe_ni"
     };
     size_t index;

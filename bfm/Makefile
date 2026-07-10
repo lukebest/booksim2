@@ -2,7 +2,7 @@ CC := gcc
 CFLAGS := -std=c11 -Wall -Wextra -Werror -O2 -Iinclude -I../refc/include
 BUILD := build
 REFC_SOURCES := ../refc/ext_mem.c ../refc/calendar_store.c ../refc/xy_route.c \
-	../refc/multicast_fork.c ../refc/combine_unit.c ../refc/watchdog_demote.c \
+	../refc/multicast_fork.c ../refc/watchdog_demote.c \
 	../refc/router.c ../refc/mesh_sim.c
 SOURCES := src/router_bfm.c src/mesh_bfm.c src/dpi_bridge.c src/main_smoke.c
 SMOKE := $(BUILD)/mesh_bfm_smoke

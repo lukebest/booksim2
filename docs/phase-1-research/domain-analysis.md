@@ -1,4 +1,4 @@
-# DSE Trial 1: Domain Analysis — 6×8 Calendar-Collective NoC
+# DSE Trial 2: Domain Analysis — 6×8 Calendar-Collective NoC
 
 ## Scope and analytic basis
 
@@ -97,20 +97,19 @@ calendars.
 ## 5. Reduction and DCA
 
 The detailed A/B/C numbers and assumptions are in
-[`dca-tier-analysis.md`](dca-tier-analysis.md).  In summary:
+[`dca-tier-analysis.md`](dca-tier-analysis.md). Trial 2 is **area-first** with a binding
+relative-router-area target below 1.065× baseline; Tier A is USER_CONFIRMED. In summary:
 
 | Candidate | Router area class | Supported operation | 6×8 allreduce estimate, m=1..5 (cycles) | Recommendation |
 |---|---:|---|---|---|
-| A. Gather + PE compute | +0% | Any operation supported by the PE | 229, 290, 385, 480, 575 | Correct fallback only |
-| B. Router-local 2-input combine | about +2.7% | Integer add/min/max and bitwise operations; no IEEE FP | 101, 107, 151, 197, 228 | **Preferred base feature** |
+| A. Gather + PE compute | +0% arithmetic | Any operation supported by the PE | 229, 290, 385, 480, 575 | **Selected for Trial 2** |
+| B. Router-local 2-input combine | about +2.7% | Integer add/min/max and bitwise operations; no IEEE FP | 101, 107, 151, 197, 228 | Trial 1 selection; comparison-only in Trial 2 |
 | C. DCA to tile FPU | +16.9% collective-wide class; tile <1% | Wide FP/vector arithmetic when an idle compatible FPU is exposed | 315, 318, 321, 324, 327 | Optional, not selected for this trial |
 
-**Recommendation: B, restricted to associative integer/bitwise opcodes.**  It achieves
-the required reduce semantics without duplicating a wide FP datapath.  Do not silently
-apply it to floating point: IEEE addition is non-associative and requires an explicitly
-specified ordering and rounding contract.  DCA is retained as an optional interface
-point only; Trial-1's 1–5-flit messages do not amortize its 12-cycle offload/return
-model and P1 dominates.
+**Recommendation: Tier A.** Reduce gathers operands to the PE for local computation;
+allreduce then broadcasts the PE result. The Trial 2 router has no in-router combine or
+DCA interface. Tier B is retained as the Trial 1 comparison and Tier C as a future
+comparison only; neither may add router datapath or ports in Trial 2.
 
 ## 6. Violation and robustness handling
 
@@ -130,7 +129,7 @@ are never duplicated.  Demotion is rate-limited and logged, but never drops data
 ```mermaid
 flowchart TD
   A[Calendar flit observed] --> B{Expected slot, input, and credits?}
-  B -->|yes| C[Atomic masked fork / combine / forward]
+  B -->|yes| C[Atomic masked fork / forward]
   B -->|no or watchdog expiry| D[Freeze calendar ownership]
   D --> E[Record remaining destinations and epoch]
   E --> F[Transfer flit into credited BG escape VC]
@@ -146,7 +145,7 @@ flowchart TD
 | Calendar/BG isolation | Hybrid windows plus buffered XY BG VC | Proves finite BG service while limiting calendar loss to configured windows |
 | Buffers | Zero-buffer calendar; RTT-sized BG VC | Preserves schedule fidelity and avoids full IQ buffering |
 | Multicast | Calendar output-port-mask atomic fork | Uses the schedule directly and retains multicast’s +5.8% area class |
-| Reduction | Router-local 2-input integer/bitwise combine | +2.7% class and lowest tested allreduce cycles; FP DCA remains optional |
+| Reduction | Tier A gather + PE-local compute + broadcast | No router arithmetic area; selected USER_CONFIRMED for Trial 2 area-first target |
 | Robustness | Watchdog demotion to BG XY escape VC | Finite recovery and zero packet loss |
 
 The resulting router is deliberately not a general dynamic collective router.  Its

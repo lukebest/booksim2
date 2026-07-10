@@ -1,10 +1,10 @@
-# ADR-001: Algorithm Selection for DSE Trial 1
+# ADR-001: Algorithm Selection for DSE Trial 2
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted (Trial-1 default; pending user confirmation) |
+| **Status** | Accepted (Trial 2, USER_CONFIRMED) |
 | **Date** | 2026-07-10 |
-| **Decision source** | `AGENT_ASSUMED` — recorded per DSE policy when AskUserQuestion is unavailable; subject to user confirmation at Trial satisfaction check |
+| **Decision source** | `USER_CONFIRMED` — Tier A and area-first direction are binding for Trial 2 |
 | **Related analysis** | [domain-analysis.md](../phase-1-research/domain-analysis.md), [dca-tier-analysis.md](../phase-1-research/dca-tier-analysis.md) |
 | **Input spec** | [dse-input-spec.md](../dse-input-spec.md) |
 
@@ -12,7 +12,7 @@
 
 ## Context
 
-DSE Trial 1 targets a power/area-optimal calendar-collective router for a 6×8 mesh (48 tiles, single 512-bit link, 64 B/flit, H=7 / V=9 wire delays, `ramp_bw=1`). The router must replay offline zero-buffer collective schedules while sharing the physical network with XY background unicast traffic.
+DSE Trial 2 targets an area-first calendar-collective router for a 6×8 mesh (48 tiles, single 512-bit link, 64 B/flit, H=7 / V=9 wire delays, `ramp_bw=1`). The router must replay offline zero-buffer collective schedules while sharing the physical network with XY background unicast traffic. The selected design must target relative router area below 1.065× the baseline five-port XY router.
 
 Binding optimization priorities (from `dse-input-spec.md`):
 
@@ -22,13 +22,13 @@ Binding optimization priorities (from `dse-input-spec.md`):
 | **P1** | Minimize router power and area (analytic model; FlooNoC calibration anchors: multicast ~+5.8%, parallel reduce ~+2.7%, wide+DCA ~+16.9%) |
 | **P2** | Minimize makespan overhead vs existing zero-buffer schedule baselines (`results/superpose_6x8.json`) |
 
-Phase 1 domain analysis evaluated candidates across six functional dimensions (calendar storage, calendar/BG isolation, buffering, multicast fork, reduction tier, violation handling). Quantitative comparison matrices and area/makespan estimates are documented in the linked analysis files. This ADR ratifies the recommended stack as the Trial-1 default selection pending explicit user confirmation.
+Phase 1 domain analysis evaluated candidates across six functional dimensions (calendar storage, calendar/BG isolation, buffering, multicast fork, reduction tier, violation handling). Quantitative comparison matrices and area/makespan estimates are documented in the linked analysis files. This ADR records the USER_CONFIRMED Trial 2 stack; required diagrams are delivered by the architecture team. No Phase 4 work is authorized.
 
 ---
 
 ## Decision
 
-Adopt the following algorithm stack for DSE Trial 1 microarchitecture and BFM development:
+Adopt the following algorithm stack for DSE Trial 2 architecture and Phase 3 BFM development:
 
 ### 1. Calendar: double-buffered per-router timeslot table
 
@@ -50,15 +50,15 @@ Adopt the following algorithm stack for DSE Trial 1 microarchitecture and BFM de
 - **Mechanism:** In a calendar slot, copy one accepted input flit to every credited output selected by `out_port_mask` (5-bit port mask, 3-bit `in_port`). Slot fires only when every selected output can accept; partial fork emission is forbidden.
 - **Rationale:** Schedule already identifies legal branches. Retains multicast's +5.8% area class with zero added replay cycles vs broadcast/allgather baselines (91–95 cycle bcast, 170–653 cycle AG). Offline compiler must avoid selecting unavailable ports.
 
-### 5. Reduction: Tier B router-local 2-input integer/bitwise combine; FP via gather+PE (Tier A); DCA (Tier C) deferred
+### 5. Reduction: Tier A gather + PE-local compute; no router combine or DCA
 
-| Tier | Role in Trial 1 | Mechanism |
+| Tier | Role in Trial 2 | Mechanism |
 |---|---|---|
-| **B (selected)** | Primary in-network reduction | Two-input, lane-wise associative integer/bitwise combine (AND/OR/XOR, add with specified width, min/max); 3-cycle merge latency; ~+2.7% router area class |
-| **A (fallback)** | Unsupported operations including IEEE FP | Gather to PE → local compute → broadcast for allreduce; +0% router arithmetic area; highest latency |
-| **C (deferred)** | Optional future capability | DCA to tile FPU; +16.9% collective-wide area class; 12-cycle offload/return model; not instantiated for Trial 1 |
+| **A (selected)** | All supported reductions | Gather to PE → local compute → broadcast for allreduce; +0% router arithmetic area |
+| **B (rejected)** | Trial 1 history / comparison only | Router-local two-input integer/bitwise combine; removed from the Trial 2 router |
+| **C (rejected)** | Comparison only | DCA to tile FPU; no Trial 2 interface or datapath |
 
-- **Rationale:** Tier B achieves lowest tested allreduce cycles for m=1..5 (101–228) without duplicating a wide FP datapath. IEEE FP addition is non-associative and requires an explicit ordering/rounding contract — route through Tier A. Trial-1 messages (1–5 flits) cannot amortize DCA's 12-cycle visible merge; P1 dominates. Opcode space and tags remain wide enough for future Tier C addition.
+- **Rationale:** Trial 1 selected Tier B for its lower tested allreduce cycles (101–228). Trial 2 instead prioritizes router area below 1.065× baseline. Tier A removes all router arithmetic, operand-holding, reduction opcode/tag, and DCA request/response hardware. It retains PE-supported operation coverage, including operations that require explicit numerical contracts.
 
 ### 6. Violations: watchdog demotion to buffered XY escape VC, never drop
 
@@ -79,7 +79,7 @@ Adopt the following algorithm stack for DSE Trial 1 microarchitecture and BFM de
 | Buffering | C. Full input-queued VC buffers (~12.5 KiB) | General-purpose but unjustified SRAM/allocator/leakage cost for static calendar |
 | Multicast | B. XY address-mask fork | 6×8 is not a single power-of-two region; no dynamic region requirement; adds decode latency |
 | Multicast | C. Software multi-unicast | Cannot approach 91-cycle tree baseline under `ramp_bw=1`; rejects P2 |
-| Reduction | A. Gather + PE only | P0-correct but highest makespan and PE energy; retained as fallback |
+| Reduction | B. Router-local 2-input combine | Trial 1 selection (~+2.7% class); removed to satisfy Trial 2 area-first direction |
 | Reduction | C. DCA to tile FPU | Fails P1 (+16.9% area class) and loses P2 for m=1..5; latency-bound, not bandwidth-bound |
 | Violations | B. NACK/retry at source | Unnecessary protocol expansion; congestion amplification risk |
 | Violations | C. Stall for calendar resync | No finite progress bound; violates REQ-ROB hang freedom |
@@ -91,24 +91,24 @@ Adopt the following algorithm stack for DSE Trial 1 microarchitecture and BFM de
 ### Positive
 
 - **P0 satisfied by construction:** Conflict-free calendar replay, finite BG service, acyclic XY-DOR escape VC, watchdog demotion with zero drop policy.
-- **P1 optimized:** Selected stack adds ~+5.8% (multicast) + ~+2.7% (reduction) area classes over baseline five-port XY router; avoids +16.9% DCA class. Calendar control SRAM (3.25 KiB) is small relative to BG payload buffering (≤4.6 KiB interior).
+- **P1 optimized:** Tier A removes Trial 1's ~+2.7% router-reduction class and avoids the +16.9% DCA class. The selected design must analytically demonstrate area below 1.065× baseline; calendar control SRAM (3.25 KiB) and BG payload buffering (≤4.6 KiB interior) remain material contributors.
 - **P2 preserved for calendar path:** Zero-buffer calendar replay retains reference makespan fidelity. Hybrid isolation may add up to 6.25% overhead before offline recompaction — must be verified against actual post-window schedules, not claimed unchanged from pre-window baselines.
 - **Deterministic datapath:** Router is deliberately not a general dynamic collective router; static calendar path is small and predictable; BG escape VC is the correctness backstop.
 
 ### Negative / trade-offs
 
 - **Not general-purpose:** Per-flow tag match and source-routed headers deferred; router cannot adapt schedules at runtime.
-- **Integer/bitwise reduction only in-network:** FP and non-associative operations require Tier A gather+PE path with higher latency.
-- **DCA deferred:** Wide FP/vector reduction throughput benefit unavailable until a future trial demonstrates amortization at larger message sizes.
+- **PE-local reduction latency:** All reductions use the gather+PE path, so Trial 1's in-router makespan advantage is intentionally relinquished.
+- **No DCA capability:** Wide FP/vector reduction acceleration is unavailable in Trial 2.
 - **BG bandwidth tax:** 6.25% reserved windows reduce peak calendar throughput; actual overhead depends on schedule recompaction after window insertion.
-- **Pending confirmation:** Decision source is `AGENT_ASSUMED`; user must ratify or override at Trial satisfaction check before treating this as a binding project commitment.
+- **Area check required:** The <1.065× target is analytic and must be reported using the documented assumptions.
 
 ### Phase 2 / Phase 3 follow-ups
 
-- Resolve open architecture items (calendar load protocol, header bit widths, watchdog timeout numerics, demotion FSM details) per `open-requirements.json`.
+- Resolve open architecture items (calendar load protocol, header bit widths, PE-compute handoff, watchdog timeout numerics, demotion FSM details) per `open-requirements.json`.
 - Record numeric BG progress bound and watchdog parameters before BFM acceptance.
-- Instantiate μArch pipeline, credit flow control, calendar table organization, fork/combine datapath, and violation-demotion FSM per selected stack.
-- Keep Tier A fallback and Tier C opcode/tag reservation in interface definitions without instantiating DCA hardware.
+- Produce architecture diagrams and Phase 3 BFM work for the selected calendar, credit flow, fork, PE-handoff, and violation-demotion behavior.
+- Do not instantiate a router combine datapath, DCA interface, or Phase 4 RTL.
 
 ---
 

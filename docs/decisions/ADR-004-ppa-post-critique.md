@@ -1,53 +1,37 @@
-# ADR-004: PPA Recalibration After Self-Critique Buffer Fix
+# ADR-004: PPA Post-Critique / Trial 2 Area Reduction
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted (Trial-1 default; pending user confirmation) |
+| **Status** | Accepted (Trial 2) |
 | **Date** | 2026-07-10 |
-| **Decision source** | `AGENT_ASSUMED` — critique-driven correction; subject to user confirmation |
-| **Related analysis** | [ppa-workbook.md](../phase-2-architecture/ppa-workbook.md), `utils/ppa_analytic_model.py` |
-| **Prior decision** | [ADR-002](ADR-002-architecture-selection.md) |
+| **Decision source** | `USER_CONFIRMED` area-first + `SPEC_DERIVED` analytic model |
+| **Related** | [ppa-analytic.md](../phase-2-architecture/ppa-analytic.md), ADR-002, ADR-003 |
 
 ---
 
 ## Context
 
-Self-critique finding **MEDIUM-02** identified inconsistent buffer accounting:
-documentation alternated between 74-flit interior bounds and a 100-flit
-five-FIFO implementation (5 × 20 flits = 51,200 bits per interior router).
-The PPA model used the lower figure while μArch specified the higher
-implementation depth.
+Trial 1 critique locked the audited Arch-A area at **1.065×** (100-flit BG model +
+combine). Trial 2 must beat that number without breaking P0.
 
 ---
 
-## Change
+## Decision
 
-| Metric | Pre-critique (ADR-002 gate) | Post-critique (Trial 1 final) |
-|---|---:|---:|
-| **area_rel** | 0.970 | **1.065** |
-| **power_rel** | — | **0.98** (unchanged ranking driver) |
-| Buffer model | 74-flit interior bound | 5 × 20-flit per-input FIFOs (100 flits) |
-| BG bound | 212 cycles (under-counted) | **328 cycles** (eligible 12-hop formula) |
+1. Use Trial 1 audited **1.065×** as the comparison baseline (not the older 0.970 figure).
+2. Arch-A2 area = `0.380 + 0.365 + 0.040 + 0.058 + 0.000 + 0.185 = 1.028`.
+3. Do **not** cut calendar depth/banks or BG FIFO RTT depth without new evidence.
+4. Power estimate **0.96×** (remove combine switching; slight control lean).
 
-The area delta (+9.8% relative to the pre-fix estimate, +6.5% vs baseline 1.00)
-comes from reconciling buffer bitcell contribution with the implementation
-described in `docs/phase-3-uarch/uarch.md` and `docs/phase-2-architecture/iron-requirements.json` REQ-A-003.
-
----
-
-## Recommendation
-
-**Arch-A CalSlot-Hybrid-ZB remains the recommended Trial-1 architecture.**
-
-The buffer-consistency fix moves area from 0.970 to 1.065 but does not change
-the P0–P2 ranking: Arch-A still leads on combined makespan, robustness, and
-power/area among P0-capable candidates. Tier-B selection and the 328-cycle BG
-service bound are unchanged in substance.
+| Delta vs Trial 1 | Value |
+|---|---|
+| Remove combine | −0.027 |
+| Lean control | −0.010 |
+| **Net area** | **−0.037 (−3.5%)** → **1.028×** |
 
 ---
 
-## User action
+## Consequences
 
-Confirm or override the recalibrated PPA figures at the Trial-1 satisfaction
-check. If absolute area budget is binding below 1.065× baseline, revisit buffer
-depth policy (REQ-A-003) before RTL freeze.
+PPA workbook and `utils/ppa_analytic_model.py` must print Arch-A2 defaults
+(`combine_delta=0`, `control=0.185`). Synthesis remains out of scope for this DSE trial.

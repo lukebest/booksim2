@@ -11,7 +11,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.1",
-        "line": 48
+        "line": 58
       },
       "acceptance_criteria": [
         "A BFM replaying every slot of a supplied calendar produces the entry's specified port selection, output mask, and opcode.",
@@ -34,7 +34,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.1",
-        "line": 42
+        "line": 52
       },
       "acceptance_criteria": [
         "For every legal 6x8 broadcast/allgather schedule supplied to the BFM, each scheduled destination receives exactly one copy of each intended flit.",
@@ -54,15 +54,15 @@
       "type": "functional",
       "priority": "must",
       "complexity": "medium",
-      "statement": "The router shall support calendar-scheduled gather using tree convergence, with intermediate combination optional pending the selected reduction tier.",
+      "statement": "The router shall support calendar-scheduled gather using tree convergence without intermediate router arithmetic or operand combination.",
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.1",
-        "line": 44
+        "line": 54
       },
       "acceptance_criteria": [
         "For every legal 6x8 gather calendar supplied to the BFM, every source's intended flit reaches the scheduled root exactly once.",
-        "The selected tier determines whether an intermediate router combines operands; no combine is required for tier A."
+        "For a supplied legal gather calendar, no router datapath combines, transforms, or suppresses gathered operands."
       ],
       "violation_policy": "user_escalation",
       "dependencies": [
@@ -71,22 +71,23 @@
       ],
       "ambiguities": [],
       "conflicts": [],
-      "description": "The router shall support calendar-scheduled gather using tree convergence, with intermediate combination optional pending the selected reduction tier."
+      "description": "The router shall support calendar-scheduled gather using tree convergence without intermediate router arithmetic or operand combination."
     },
     {
       "id": "REQ-F-004",
       "type": "functional",
       "priority": "must",
       "complexity": "high",
-      "statement": "The router subsystem shall support calendar-scheduled reduce and allreduce using a selected tier A, B, or C reduction implementation; allreduce shall complete a reduction followed by broadcast or an approved fused/ring/hybrid schedule.",
+      "statement": "The router subsystem shall implement Trial 2 Tier A reduction: reduce is calendar-scheduled gather followed by PE-local compute, and allreduce is gather followed by PE-local compute and calendar-scheduled broadcast.",
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.1 and 4",
-        "line": 45
+        "line": 55
       },
       "acceptance_criteria": [
-        "Phase 2 evaluates tiers A, B, and C for reduce and allreduce at m=1..5 flits and records makespan and relative area/power estimates.",
-        "Before any reduction RTL is accepted, the selected architecture document defines the supported reduction opcodes, operand format, identity value, ordering rule, and result-accuracy rule; BFM tests then produce that defined result for every supported opcode."
+        "The Trial 2 architecture and BFM model reduce by delivering every gathered source operand exactly once to the designated PE compute endpoint; no router combine transaction occurs.",
+        "The Trial 2 architecture and BFM model allreduce by completing gather, PE-local computation, and a calendar-scheduled broadcast of the computed result to every intended destination exactly once.",
+        "The Phase 2 comparison retains tiers A, B, and C at m=1..5 flits with makespan and relative area/power estimates, but Tier A is recorded as the USER_CONFIRMED Trial 2 selection."
       ],
       "violation_policy": "user_escalation",
       "dependencies": [
@@ -98,7 +99,7 @@
         "[AMBIGUITY: REQ-F-004] Reduction operations, operand element format, identity value, ordering/associativity rules, and numerical accuracy requirements are not specified."
       ],
       "conflicts": [],
-      "description": "The router subsystem shall support calendar-scheduled reduce and allreduce using a selected tier A, B, or C reduction implementation; allreduce shall complete a reduction followed by broadcast or an approved fused/ring/hybrid schedule."
+      "description": "The router subsystem shall implement Trial 2 Tier A reduction: reduce is calendar-scheduled gather followed by PE-local compute, and allreduce is gather followed by PE-local compute and calendar-scheduled broadcast."
     },
     {
       "id": "REQ-F-005",
@@ -109,7 +110,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.2",
-        "line": 52
+        "line": 62
       },
       "acceptance_criteria": [
         "For every source/destination pair in the 6x8 mesh, a background packet follows X dimension hops before Y dimension hops.",
@@ -134,7 +135,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.3",
-        "line": 58
+        "line": 68
       },
       "acceptance_criteria": [
         "For every legal 6x8 broadcast/allgather schedule, each bit asserted in the selected output-port mask generates one output copy and each deasserted bit generates none.",
@@ -160,7 +161,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.4",
-        "line": 65
+        "line": 75
       },
       "acceptance_criteria": [
         "Phase 2 supplies a channel-dependency or equivalent argument showing no cyclic resource dependency for the selected mixed-traffic design.",
@@ -186,7 +187,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.4",
-        "line": 66
+        "line": 76
       },
       "acceptance_criteria": [
         "For all legal traffic in BFM tests, every accepted flit is delivered exactly once unless it is intentionally replicated by REQ-F-006.",
@@ -209,7 +210,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.4",
-        "line": 68
+        "line": 78
       },
       "acceptance_criteria": [
         "A BFM injects each of late, early, and wrong-port collective cases and observes eventual delivery without packet loss.",
@@ -231,15 +232,16 @@
       "type": "functional",
       "priority": "must",
       "complexity": "high",
-      "statement": "Phase 2 shall compare reduction tiers A (PE-local compute), B (router-local two-input integer/bitwise combine), and C (DCA tile-FPU offload) for reduce and allreduce.",
+      "statement": "Phase 2 shall retain a comparison of reduction tiers A (PE-local compute), B (router-local two-input integer/bitwise combine), and C (DCA tile-FPU offload) for reduce and allreduce; Tier A is selected for Trial 2.",
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "4",
-        "line": 91
+        "line": 101
       },
       "acceptance_criteria": [
         "The comparison covers the 6x8 mesh, H=7, V=9, ramp_bw=1, and m=1..5 flits where applicable.",
-        "Each tier records makespan estimate, relative router area/power, robustness argument, and a recommendation."
+        "Each tier records makespan estimate, relative router area/power, robustness argument, and its relationship to the Trial 2 Tier A selection.",
+        "Trial 2 architecture documents contain no in-router combine datapath or DCA request/response interface."
       ],
       "violation_policy": "user_escalation",
       "dependencies": [],
@@ -247,22 +249,22 @@
         "[AMBIGUITY: REQ-F-010] SoC FPU availability, DCA latency/throughput, and concurrent core/DCA arbitration policy are not specified."
       ],
       "conflicts": [],
-      "description": "Phase 2 shall compare reduction tiers A (PE-local compute), B (router-local two-input integer/bitwise combine), and C (DCA tile-FPU offload) for reduce and allreduce."
+      "description": "Phase 2 shall retain a comparison of reduction tiers A (PE-local compute), B (router-local two-input integer/bitwise combine), and C (DCA tile-FPU offload) for reduce and allreduce; Tier A is selected for Trial 2."
     },
     {
       "id": "REQ-F-011",
       "type": "functional",
       "priority": "should",
       "complexity": "high",
-      "statement": "If tier C is selected, the router shall expose an optional DCA interface that sends two 512-bit operands plus an opcode and receives one 512-bit result using backpressure.",
+      "statement": "Trial 2 shall not instantiate or require a router DCA request/response interface; Tier C remains comparison-only evidence.",
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "2.5 and 4",
-        "line": 72
+        "line": 82
       },
       "acceptance_criteria": [
-        "With DCA enabled, a BFM can issue a two-operand reduction request and receive one correctly tagged result.",
-        "With DCA disabled, the base five-port router remains functional without DCA transactions."
+        "The Trial 2 architecture and interface definition contain no DCA operand, opcode, tag, request, response, or backpressure port.",
+        "The base five-port router remains functional for all Trial 2 collectives without DCA transactions."
       ],
       "violation_policy": "user_escalation",
       "dependencies": [
@@ -270,10 +272,10 @@
         "REQ-F-010"
       ],
       "ambiguities": [
-        "[AMBIGUITY: REQ-F-011] DCA request/response protocol, tag width, opcode width, FPU pipeline latency, and optional-interface configuration mechanism are not specified."
+        "[AMBIGUITY: REQ-F-011] A future DCA request/response protocol, tag width, opcode width, FPU latency, and configuration mechanism remain unspecified and are outside Trial 2."
       ],
       "conflicts": [],
-      "description": "If tier C is selected, the router shall expose an optional DCA interface that sends two 512-bit operands plus an opcode and receives one 512-bit result using backpressure."
+      "description": "Trial 2 shall not instantiate or require a router DCA request/response interface; Tier C remains comparison-only evidence."
     },
     {
       "id": "REQ-F-012",
@@ -284,7 +286,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "6",
-        "line": 120
+        "line": 130
       },
       "acceptance_criteria": [
         "The BFM replays at least one calendar for each supported collective semantic selected by Phase 2.",
@@ -309,7 +311,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "1",
-        "line": 15
+        "line": 25
       },
       "acceptance_criteria": [
         "At 2 GHz, a continuously granted direction accepts and emits 1 flit/cycle (64 B/cycle, 128 GB/s decimal per direction).",
@@ -332,7 +334,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "1",
-        "line": 17
+        "line": 27
       },
       "acceptance_criteria": [
         "All Phase 2 makespan estimates use a 0.5 ns cycle period and the stated H, V, and ramp parameters.",
@@ -355,7 +357,7 @@
       "source": {
         "document": "docs/dse-input-spec.md and results/superpose_6x8.json",
         "section": "3 and baseline profiles",
-        "line": 82
+        "line": 92
       },
       "acceptance_criteria": [
         "The report includes all 10 ag_bcast/ag_gather makespans: ag_bcast=[167,267,310,524,708] cycles and ag_gather=[170,310,368,628,898] cycles for m=1..5.",
@@ -377,15 +379,15 @@
       "type": "performance",
       "priority": "should",
       "complexity": "medium",
-      "statement": "The DSE shall rank candidate designs using an analytic power/area model that explicitly states SRAM bitcell, crossbar mux, VC-buffer-flit, and calendar-table-depth assumptions.",
+      "statement": "The DSE shall use an analytic power/area model that explicitly states SRAM bitcell, crossbar mux, VC-buffer-flit, and calendar-table-depth assumptions and targets relative router area below 1.065× the baseline five-port XY router.",
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "3",
-        "line": 85
+        "line": 95
       },
       "acceptance_criteria": [
-        "Every Phase 2 candidate report enumerates the four specified model assumptions and its resulting relative area/power estimate.",
-        "The report calibrates multicast, parallel-reduce, and wide+DCA estimates against the cited approximately +5.8%, +2.7%, and +16.9% FlooNoC router deltas, respectively."
+        "The Trial 2 selected design report enumerates the four specified model assumptions and reports a relative router area below 1.065× baseline.",
+        "The report calibrates multicast against the cited approximately +5.8% FlooNoC router delta; the +2.7% parallel-reduce and +16.9% DCA figures are comparison-only anchors for rejected tiers."
       ],
       "violation_policy": "user_escalation",
       "dependencies": [],
@@ -393,7 +395,7 @@
         "[AMBIGUITY: REQ-P-004] Process node, absolute power/area target, and a required calibration error bound are not specified."
       ],
       "conflicts": [],
-      "description": "The DSE shall rank candidate designs using an analytic power/area model that explicitly states SRAM bitcell, crossbar mux, VC-buffer-flit, and calendar-table-depth assumptions."
+      "description": "The DSE shall use an analytic power/area model that explicitly states SRAM bitcell, crossbar mux, VC-buffer-flit, and calendar-table-depth assumptions and targets relative router area below 1.065× the baseline five-port XY router."
     },
     {
       "id": "REQ-P-005",
@@ -404,7 +406,7 @@
       "source": {
         "document": "docs/dse-input-spec.md",
         "section": "3 and 4",
-        "line": 83
+        "line": 93
       },
       "acceptance_criteria": [
         "The DCA candidate report separately states estimated router and tile area deltas.",

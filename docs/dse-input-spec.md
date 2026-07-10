@@ -7,6 +7,16 @@
 
 ---
 
+## Trial 2 Binding Decision Note
+
+- **Trial:** DSE Trial 2 (new trial; Trial 1 artifacts are retained only as comparison history).
+- **Priority:** Area-first. The selected architecture must target relative router area **below 1.065×** the baseline five-port XY router, the Trial 1 reported area.
+- **Reduction direction:** **Tier A is selected.** Reduce is calendar-scheduled gather followed by PE-local compute; allreduce is gather + PE-local compute + calendar-scheduled broadcast. No in-router arithmetic/combine datapath and no DCA interface are in scope for Trial 2.
+- **Retained stack:** Calendar replay, XY background routing, multicast fork, and watchdog recovery remain in scope. Architecture diagrams are a Phase 2 deliverable.
+- **Boundary:** This trial ends at Phase 3; no Phase 4 RTL work is authorized.
+
+---
+
 ## 1. System Context
 
 | Parameter | Value | Notes |
@@ -41,9 +51,9 @@ Router must load/replay per-collective calendars that minimize makespan for:
 |----------|----------------------------|
 | **Broadcast** | Multicast fork (XY mask / calendar fork ports) |
 | **Allgather** | Multicast fork + multi-source inject schedule |
-| **Gather** | Tree converge + optional combine at intermediate hops |
-| **Reduce** | Tree converge + arithmetic/bitwise combine (see §4 DCA) |
-| **Allreduce** | Reduce tree + broadcast (or fused ring/hybrid schedule) |
+| **Gather** | Tree converge; no intermediate combine |
+| **Reduce** | Gather tree + PE-local compute (see §4 Tier A) |
+| **Allreduce** | Gather + PE-local compute + broadcast |
 
 Different semantics use **different calendars**. Calendar content is produced offline (existing Python packers); hardware stores/replays slot → (in_port, out_port_mask, opcode) mappings.
 
@@ -67,9 +77,9 @@ Different semantics use **different calendars**. Calendar content is produced of
 | No packet loss | Credit-based (or equivalent) flow control; buffers never overwrite live flits |
 | Spec violation | If collective traffic arrives off-calendar (late/early/wrong port), system **still completes** delivery (graceful degradation: e.g. timeout → demote to XY unicast / buffered path; never drop) |
 
-### 2.5 Optional DCA (REQ-DCA-OPT)
+### 2.5 DCA boundary (REQ-DCA-OPT)
 
-Direct Compute Access (borrow tile FPU/ALU for wide reduction) is **optional**. DSE must analyze impact of **with vs without** DCA on reduce/allreduce (see §4).
+Direct Compute Access and router-local arithmetic are **not selected for Trial 2**. The DSE retains the Tier A/B/C comparison evidence, but Trial 2 implements reduce/allreduce as Tier A only (see §4).
 
 ---
 
@@ -78,7 +88,7 @@ Direct Compute Access (borrow tile FPU/ALU for wide reduction) is **optional**. 
 | Priority | Goal |
 |----------|------|
 | P0 | Satisfy REQ-CAL, REQ-BG, REQ-MC, REQ-ROB |
-| P1 | **Minimize router power and area** (analytic gate/bitwidth/port model; calibrate to FlooNoC collective deltas: multicast ~+5.8%, parallel reduce ~+2.7%, wide+DCA path ~+16.9% router) |
+| P1 | **Area-first:** target relative router area **<1.065×** baseline using the analytic gate/bitwidth/port model; calibrate multicast against the FlooNoC ~+5.8% anchor and report B/C reduction deltas only as comparison evidence |
 | P2 | Minimize makespan overhead vs existing zero-buffer schedule theory (superpose / allgather 6×8 baselines) |
 | P3 | Prefer designs that keep tile area impact small if DCA is chosen (FlooNoC claim: full tile <1%) |
 
@@ -96,7 +106,7 @@ Compare for **Reduce** and **Allreduce** on 6×8 (H=7, V=9, ramp_bw=1, message s
 | **B. Router-local 2-input combine** | Lightweight combine in router (integer/bitwise; FP only if justified) | Medium | Mid; 2-input/hop limits fan-in like FlooNoC |
 | **C. DCA** | Router sync + offload to tile FPU (FlooNoC-style); router stays control-light | Router +~17% class; tile <1% | Best arithmetic reduce throughput if FPU available |
 
-Deliverable: quantitative comparison table (makespan estimate + relative area/power) and recommendation for this SoC assumption set.
+Deliverable: quantitative comparison table (makespan estimate + relative area/power) and recommendation. **Trial 2 selection is Tier A, USER_CONFIRMED, because area is prioritized over Trial 1's Tier B makespan result.**
 
 ---
 
@@ -107,7 +117,7 @@ Must evaluate at least:
 1. **Calendar storage**: per-router timeslot table vs per-flow tag match vs source-routed flit (fork/turn opcodes in header)
 2. **Isolation of calendar vs background**: dedicated VC + priority vs hard TDM slot reservation vs hybrid
 3. **Buffering**: zero-buffer for calendar (schedule guarantees no conflict) + buffered VC for background vs shallow shared buffers for all
-4. **Reduction**: tiers A/B/C above
+4. **Reduction**: retain A/B/C comparison; implement Tier A only
 5. **Violation handling**: watchdog timeout + demote-to-XY path; credit reclaim; no drop
 
 Each candidate: analytic power/area + makespan impact + robustness argument.
@@ -116,9 +126,9 @@ Each candidate: analytic power/area + makespan impact + robustness argument.
 
 ## 6. Phase 3 Expectations
 
-- Selected μArch: pipeline stages, arbitration, credit flow control, calendar table organization, multicast fork, combine/DCA interface, violation-demotion FSM
+- Selected μArch: pipeline stages, arbitration, credit flow control, calendar table organization, multicast fork, PE-local reduction handoff, violation-demotion FSM, and required architecture diagrams
 - SystemC BFM under `bfm/` that can replay 6×8 calendars derived from `results/superpose_6x8.json` (or equivalent) and report makespan
-- Iron requirements + traceability for Phase 4 readiness
+- Iron requirements + traceability through Phase 3
 
 ---
 
@@ -137,4 +147,4 @@ Each candidate: analytic power/area + makespan impact + robustness argument.
 2. ≥3 architecture candidates compared on power/area/makespan/robustness  
 3. Explicit DCA tier A/B/C analysis for reduce/allreduce  
 4. One recommended μArch + BFM skeleton  
-5. Self-critique loop completed (rat-dse Trial 1)
+5. Trial 2 review records Tier A selection, relative-area target, and Phase 3-only boundary

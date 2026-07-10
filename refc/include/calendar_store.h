@@ -10,12 +10,19 @@
 
 typedef enum {
     CAL_OP_FORWARD = 0,
-    CAL_OP_COMBINE_ADD = 1,
-    CAL_OP_COMBINE_AND = 2,
-    CAL_OP_COMBINE_OR = 3,
-    CAL_OP_COMBINE_XOR = 4,
-    CAL_OP_COMBINE_MIN = 5,
-    CAL_OP_COMBINE_MAX = 6
+    /*
+     * Opcode 1 is retained for existing reduce/allreduce calendars.  It marks
+     * a PE-side handoff: the router forwards the flit unchanged, and any
+     * reduction is performed by the PE outside the router datapath.
+     */
+    CAL_OP_PE_HANDOFF = 1,
+    /* Legacy combine encodings are reserved and have no router arithmetic. */
+    CAL_OP_RESERVED_COMBINE_AND = 2,
+    CAL_OP_RESERVED_COMBINE_OR = 3,
+    CAL_OP_RESERVED_COMBINE_XOR = 4,
+    CAL_OP_RESERVED_COMBINE_MIN = 5,
+    CAL_OP_RESERVED_COMBINE_MAX = 6,
+    CAL_OP_RESERVED_MAX = CAL_OP_RESERVED_COMBINE_MAX
 } calendar_opcode_t;
 
 typedef struct {

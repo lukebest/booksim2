@@ -1,27 +1,25 @@
 {
-  "trial": 1,
-  "gate": "dse-phase-1-to-3-post-critique",
-  "verdict": "PASS_WITH_RESIDUALS",
+  "trial": 2,
+  "verdict": "PASS",
+  "checked_at": "2026-07-10",
+  "upstream_iron": [
+    "docs/phase-1-research/iron-requirements.json",
+    "docs/phase-2-architecture/iron-requirements.json"
+  ],
+  "target_artifacts": [
+    "docs/phase-3-uarch/iron-requirements.json",
+    "docs/phase-3-uarch/req-uarch-traceability.md",
+    "docs/phase-3-uarch/clock-domain-map.md",
+    "docs/phase-3-uarch/protocol-assignments.md"
+  ],
   "summary": {
-    "artifact_gate": "PASS",
-    "quality_gate": "PASS",
-    "critique_high_closed": true,
-    "full_verification": "PARTIAL",
-    "residuals": [
-      "Mixed calendar/BG deadlock stress at scale (Phase 4/5)",
-      "Import research zero-buffer schedules into slot tables (vs synthetic exporters)",
-      "Superpose ag_bcast/ag_gather m=1..5 overhead report vs HW replay",
-      "Full Tier-B lane scoreboard vs schedule oracle (HIGH-06 PARTIAL)",
-      "SystemC wrapper optional; portable C BFM accepted for Trial 1"
-    ]
+    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
+    "dca_tier": "A",
+    "area_rel": 1.028,
+    "power_rel": 0.96,
+    "combine_present": false,
+    "traceability_coverage": "100%",
+    "violations": []
   },
-  "executed_tests": {
-    "refc": "PASS (smoke, demote_noloss, combine_ops, bg_window, blocked_fork, bg_bound)",
-    "bfm": "PASS (smoke + test_calendars for 5 semantics m=1)"
-  },
-  "architecture": "Arch-A CalSlot-Hybrid-ZB",
-  "area_rel": 1.065,
-  "power_rel": 0.98,
-  "bg_bound_cycles": 328,
-  "dca_tier": "B"
+  "notes": "Trial 2 compliance PASS. Tier A / no combine consistent across P1–P3. Area below Trial 1 1.065."
 }

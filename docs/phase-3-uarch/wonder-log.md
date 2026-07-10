@@ -1,7 +1,8 @@
-# Wonder Log
+# Wonder Log — Trial 2
 
-| Round | Assumption | Domain | Risk(H/M/L) | Resolution |
-|---|---|---|---|---|
-| 1 | A portable C BFM is acceptable when SystemC is unavailable. | verification | M | Resolved: BFM links RefC types/logic and documents future DPI bridge. |
-| 1 | A two-stage calendar path fits the compiled timing model. | timing | M | Resolved: S0 SRAM read and S1 qualification are explicit. |
-| 2 | RefC smoke is a shared behavioral vector for the BFM. | model consistency | L | Resolved: both binaries produce the same PASS result and cycle count. |
+| ID | Wonder | Resolution |
+|---|---|---|
+| W1 | Can calendar depth drop to 512 for area? | No — max_slot 951 in m=1 exports |
+| W2 | Should Arch-B win on area (~1.008)? | No — breaks deterministic ZB replay |
+| W3 | Is PE handoff latency modeled in BFM? | Tagged (`pe_handoffs`); PE compute outside router is stub/zero-cost in replay |
+| W4 | Retain DCA stub? | No — Trial 2 removes stub datapath entirely |

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Reproducible analytic PPA model for Arch-A CalSlot-Hybrid-ZB (DSE Trial 1).
+"""Reproducible analytic PPA model for Arch-A2 CalSlot-Hybrid-ZB-NoCombine (DSE Trial 2).
 
-Derives the 0.970 relative area from explicit baseline splits, buffer reduction,
-calendar SRAM bit accounting, and FlooNoC calibration anchors.
+Trial 1 audited Arch-A total was 1.065 (with combine 0.027 and control 0.195).
+Trial 2 removes combine and leans control to 0.185 → 1.028.
 
 Usage:
     python3 utils/ppa_analytic_model.py
@@ -20,24 +20,22 @@ BASELINE_BUFFERS = 0.450
 BASELINE_CONTROL = 0.170
 BASELINE_TOTAL = BASELINE_CROSSBAR + BASELINE_BUFFERS + BASELINE_CONTROL
 
-# Baseline IQ interior payload reference (conservative aggregate, 5-port mesh).
-BASELINE_INTERIOR_FLITS = 123
-BASELINE_INTERIOR_BITS = BASELINE_INTERIOR_FLITS * FLIT_BITS
-
-# Arch-A BG/escape only (REQ-A-003 interior aggregate).
-ARCH_A_INTERIOR_FLITS = 74
-ARCH_A_INTERIOR_BITS = ARCH_A_INTERIOR_FLITS * FLIT_BITS
+# Audited Trial-1/2 interior BG/escape provision (5×20 flits).
+ARCH_A2_INTERIOR_FLITS = 100
+ARCH_A2_BUFFERS = 0.365
+ARCH_A2_CONTROL = 0.185
 
 CAL_SLOTS_DEFAULT = 1024
 CAL_BANKS = 2
 CAL_ENTRY_BITS = 13
 
 FLOONOC_MC_DELTA = 0.058
-FLOONOC_COMBINE_DELTA = 0.027
+FLOONOC_COMBINE_DELTA = 0.027  # comparison-only; Arch-A2 default uses 0
 CALIBRATION_UNCERTAINTY = 0.30
 
-ARCH_A_BUFFERS = 0.270  # rounded analytic entry; 0.450×74/123 = 0.2707
-ARCH_A_CONTROL = 0.195
+TRIAL1_AREA = 1.065
+TRIAL1_POWER = 0.98
+ARCH_A2_POWER = 0.96
 
 
 @dataclass(frozen=True)
@@ -61,36 +59,37 @@ class AreaBreakdown:
         )
 
 
-def buffer_area(interior_flits: int = ARCH_A_INTERIOR_FLITS) -> float:
-    """Scale baseline buffer area by stored payload bit fraction."""
-    if interior_flits == ARCH_A_INTERIOR_FLITS:
-        return ARCH_A_BUFFERS
-    raw = BASELINE_BUFFERS * (interior_flits * FLIT_BITS / BASELINE_INTERIOR_BITS)
-    return round(raw, 3)
-
-
 def calendar_area(slots: int = CAL_SLOTS_DEFAULT, banks: int = CAL_BANKS) -> float:
-    """Control SRAM area from 13-bit entry width and reference density."""
     bits = banks * slots * CAL_ENTRY_BITS
-    # Match Trial-1 table: 26,624 bits -> 0.040 relative area.
     k_ctrl = 0.040 / (CAL_BANKS * CAL_SLOTS_DEFAULT * CAL_ENTRY_BITS)
     return bits * k_ctrl
 
 
-def arch_a_area(
+def arch_a2_area(
     cal_slots: int = CAL_SLOTS_DEFAULT,
-    interior_flits: int = ARCH_A_INTERIOR_FLITS,
     mc_delta: float = FLOONOC_MC_DELTA,
-    combine_delta: float = FLOONOC_COMBINE_DELTA,
-    control: float = ARCH_A_CONTROL,
+    combine_delta: float = 0.0,
+    control: float = ARCH_A2_CONTROL,
+    buffers: float = ARCH_A2_BUFFERS,
 ) -> AreaBreakdown:
     return AreaBreakdown(
         crossbar=BASELINE_CROSSBAR,
-        buffers=buffer_area(interior_flits),
+        buffers=buffers,
         calendar=calendar_area(cal_slots),
         multicast=mc_delta,
         combine=combine_delta,
         control=control,
+    )
+
+
+def trial1_area() -> AreaBreakdown:
+    return AreaBreakdown(
+        crossbar=BASELINE_CROSSBAR,
+        buffers=ARCH_A2_BUFFERS,
+        calendar=calendar_area(),
+        multicast=FLOONOC_MC_DELTA,
+        combine=FLOONOC_COMBINE_DELTA,
+        control=0.195,
     )
 
 
@@ -103,81 +102,62 @@ def bg_delivery_bound(
     h_link: int = 7,
     v_link: int = 9,
     ramp: int = 1,
-    credit_margin: int = 20,
 ) -> int:
-    """Conservative enqueue-to-eject bound including link and router latency."""
     hop_h = bg_window + t_router + h_link
     hop_v = bg_window + t_router + v_link
-    return 2 * ramp + dx * hop_h + dy * hop_v + credit_margin
+    return 2 * ramp + dx * hop_h + dy * hop_v
 
 
 def sensitivity_table() -> None:
     print("=== Calendar depth sensitivity (1024 default) ===")
-    print(f"{'depth':>6} {'calendar':>10} {'total_area':>12} {'delta_vs_base':>14}")
+    print(f"{'depth':>6} {'calendar':>10} {'total_area':>12}")
     for depth in (512, 1024, 2048):
-        br = arch_a_area(cal_slots=depth)
-        delta = (br.total - 1.0) * 100.0
-        print(f"{depth:6d} {br.calendar:10.3f} {br.total:12.3f} {delta:+13.1f}%")
+        br = arch_a2_area(cal_slots=depth)
+        print(f"{depth:6d} {br.calendar:10.3f} {br.total:12.3f}")
 
-    print("\n=== BG window sensitivity (performance bound, 12-hop 5H+7V) ===")
-    print(f"{'BG_period':>10} {'control_est':>12} {'328_ref_bound':>14} {'bound_cyc':>10}")
-    for period in (8, 16, 32):
-        ctrl_adj = ARCH_A_CONTROL + (16 - period) * 0.000625
-        bound = bg_delivery_bound(5, 7, bg_window=period)
-        print(f"{period:10d} {ctrl_adj:12.3f} {'328 (16-slot)':>14} {bound:10d}")
-
-    print("\n=== FlooNoC calibration uncertainty (±30% on delta) ===")
-    lo_mc = FLOONOC_MC_DELTA * (1.0 - CALIBRATION_UNCERTAINTY)
-    hi_mc = FLOONOC_MC_DELTA * (1.0 + CALIBRATION_UNCERTAINTY)
-    lo_cb = FLOONOC_COMBINE_DELTA * (1.0 - CALIBRATION_UNCERTAINTY)
-    hi_cb = FLOONOC_COMBINE_DELTA * (1.0 + CALIBRATION_UNCERTAINTY)
-    base = arch_a_area()
-    low = arch_a_area(mc_delta=lo_mc, combine_delta=lo_cb)
-    high = arch_a_area(mc_delta=hi_mc, combine_delta=hi_cb)
-    print(f"  multicast delta: {FLOONOC_MC_DELTA:.3f}  range [{lo_mc:.3f}, {hi_mc:.3f}]")
-    print(f"  combine delta:   {FLOONOC_COMBINE_DELTA:.3f}  range [{lo_cb:.3f}, {hi_cb:.3f}]")
-    print(f"  Arch-A total:    {base.total:.3f}  range [{low.total:.3f}, {high.total:.3f}]")
+    print("\n=== Combine on/off (Trial1 vs Trial2) ===")
+    t1 = trial1_area()
+    t2 = arch_a2_area()
+    print(f"  Trial1 Arch-A:  {t1.total:.3f} (combine={t1.combine:.3f}, ctrl={t1.control:.3f})")
+    print(f"  Trial2 Arch-A2: {t2.total:.3f} (combine={t2.combine:.3f}, ctrl={t2.control:.3f})")
+    print(f"  delta area:     {t2.total - t1.total:+.3f}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--sensitivity",
-        action="store_true",
-        help="Print calendar depth and BG period sensitivity tables.",
-    )
+    parser.add_argument("--sensitivity", action="store_true")
     args = parser.parse_args()
 
-    br = arch_a_area()
+    br = arch_a2_area()
+    t1 = trial1_area()
     bound_12hop = bg_delivery_bound(5, 7)
 
     print("=== Baseline IQ XY (normalized) ===")
-    print(f"  crossbar  {BASELINE_CROSSBAR:.3f}")
-    print(f"  buffers   {BASELINE_BUFFERS:.3f}  ({BASELINE_INTERIOR_FLITS} flits reference)")
-    print(f"  control   {BASELINE_CONTROL:.3f}")
     print(f"  total     {BASELINE_TOTAL:.3f}")
 
-    print("\n=== Arch-A area derivation ===")
-    print(f"  crossbar   {br.crossbar:.3f}  (unchanged five-port 512b switch)")
-    print(
-        f"  buffers    {br.buffers:.3f}  "
-        f"({ARCH_A_INTERIOR_FLITS} flits / {BASELINE_INTERIOR_FLITS} flits × {BASELINE_BUFFERS:.3f})"
-    )
+    print("\n=== Arch-A2 area derivation (Trial 2) ===")
+    print(f"  crossbar   {br.crossbar:.3f}")
+    print(f"  buffers    {br.buffers:.3f}  ({ARCH_A2_INTERIOR_FLITS} flits audited)")
     print(
         f"  calendar   {br.calendar:.3f}  "
-        f"({CAL_BANKS}×{CAL_SLOTS_DEFAULT}×{CAL_ENTRY_BITS} = {CAL_BANKS * CAL_SLOTS_DEFAULT * CAL_ENTRY_BITS} bits)"
+        f"({CAL_BANKS}×{CAL_SLOTS_DEFAULT}×{CAL_ENTRY_BITS} = "
+        f"{CAL_BANKS * CAL_SLOTS_DEFAULT * CAL_ENTRY_BITS} bits)"
     )
-    print(f"  multicast  {br.multicast:.3f}  (FlooNoC +5.8% additive)")
-    print(f"  combine    {br.combine:.3f}  (FlooNoC +2.7% additive)")
-    print(f"  control    {br.control:.3f}  (baseline {BASELINE_CONTROL:.3f} + BG/watchdog/credit)")
-    print(f"  total      {br.total:.3f}  ({(br.total - 1.0) * 100:+.1f}% vs baseline)")
+    print(f"  multicast  {br.multicast:.3f}")
+    print(f"  combine    {br.combine:.3f}  (Tier A — removed)")
+    print(f"  control    {br.control:.3f}")
+    print(f"  total      {br.total:.3f}  ({(br.total - 1.0) * 100:+.1f}% vs IQ-XY)")
+    print(f"  power      {ARCH_A2_POWER:.2f}×")
 
-    print("\n=== BG delivery bound (REQ-A-002, 6×8 longest route) ===")
-    print(f"  |dx|=5, |dy|=7, hops=12: {bound_12hop} cycles")
+    print("\n=== vs Trial 1 Arch-A ===")
+    print(f"  Trial1 area/power: {t1.total:.3f} / {TRIAL1_POWER:.2f}×")
     print(
-        "  formula: 2×RAMP + |dx|×(BG_WINDOW+T_router+H_LINK)"
-        " + |dy|×(BG_WINDOW+T_router+V_LINK) + T_credit"
+        f"  delta area/power:  {br.total - t1.total:+.3f} "
+        f"/ {ARCH_A2_POWER - TRIAL1_POWER:+.2f}×"
     )
+
+    print("\n=== BG delivery bound (12-hop) ===")
+    print(f"  |dx|=5, |dy|=7: {bound_12hop} cycles")
 
     if args.sensitivity:
         print()

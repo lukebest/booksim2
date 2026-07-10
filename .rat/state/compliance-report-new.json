@@ -1,0 +1,216 @@
+{
+  "phase": "phase-3-uarch",
+  "checked_against": ["phase-1-research", "phase-2-architecture"],
+  "timestamp": "2026-07-10T08:47:00Z",
+  "summary": {
+    "verdict": "FAIL",
+    "total": 23,
+    "pass": 20,
+    "violation": 3,
+    "uncertain": 0,
+    "untested": 0,
+    "not_verifiable": 0,
+    "max_violation_authority": 1,
+    "infeasibility_detected": false
+  },
+  "decomposition_gaps": [
+    "REQ-F-002 (must) has no REQ-U-* decomposition",
+    "REQ-F-012 (should/high) has no REQ-U-* decomposition",
+    "REQ-P-003 (should/high) has no REQ-U-* decomposition"
+  ],
+  "results": [
+    {
+      "req_id": "REQ-F-001",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-001 (dual-bank 1024×13, 26,624 bits, slot-0 activation); docs/phase-3-uarch/protocol-assignments.md calendar entry[12:0]; docs/phase-3-uarch/req-uarch-traceability.md REQ-F-001 → calendar_store/replay"
+    },
+    {
+      "req_id": "REQ-F-002",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "VIOLATION",
+      "evidence": null,
+      "failed_criteria": "Calendar-scheduled broadcast/allgather with per-destination delivery and single-flit-per-output constraints; must have REQ-U-* decomposition",
+      "finding": "No REQ-U-* lists REQ-F-002 in resolved_from. req-uarch-traceability.md maps REQ-F-002 to xy_route/vc_buffers/switch_alloc with note 'BG XY always available' (REQ-F-005 concern), not broadcast/allgather. P3 iron mentions reduce/allreduce (REQ-U-004) and multicast_fork (REQ-U-003) but never broadcast/allgather schedule semantics.",
+      "suggested_action": "Add REQ-U covering broadcast/allgather calendar replay (or extend REQ-U-001/U-003 resolved_from + ACs); fix traceability row for REQ-F-002 to multicast_fork/calendar_replay"
+    },
+    {
+      "req_id": "REQ-F-003",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-004 (Tier-A PE handoff, no combine); docs/phase-3-uarch/protocol-assignments.md combine/DCA ABSENT; req-uarch-traceability.md REQ-F-003 → calendar_replay/pe_ni"
+    },
+    {
+      "req_id": "REQ-F-004",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-004 (reduce/allreduce Tier-A, no combine_unit/DCA); protocol-assignments.md PE NI Tier-A handoff, combine/DCA ABSENT"
+    },
+    {
+      "req_id": "REQ-F-005",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-002 (credited XY-DOR, 1-in-16 BG window, 328-cycle bound); protocol-assignments.md BG/escape + credit; req-uarch-traceability.md REQ-F-005 → switch_alloc BG window"
+    },
+    {
+      "req_id": "REQ-F-006",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-003 (multicast_fork atomic on out_port_mask); protocol-assignments.md calendar fork egress atomic 5-bit mask"
+    },
+    {
+      "req_id": "REQ-F-007",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-002 (calendar path never enqueues into vc_buffers; BG credited XY-DOR); protocol-assignments.md calendar ZB vs BG credited class; req-uarch-traceability.md VC/TDM isolation"
+    },
+    {
+      "req_id": "REQ-F-008",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-002 (credited vc_buffers, H/V 16/20); protocol-assignments.md ready/valid admission + credit-based egress"
+    },
+    {
+      "req_id": "REQ-F-009",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-003 (watchdog_demote, one reservation release, lossless XY escape within 2 cycles); req-uarch-traceability.md 32-cycle / no-loss; protocol-assignments.md escape releases calendar ownership"
+    },
+    {
+      "req_id": "REQ-F-010",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-004 (Tier A selected, combine/DCA absent); req-uarch-traceability.md Tier A selected, B/C comparison-only; clock-domain-map.md No DCA clock/domain"
+    },
+    {
+      "req_id": "REQ-F-011",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-004; protocol-assignments.md combine/DCA ABSENT; clock-domain-map.md No DCA clock/domain"
+    },
+    {
+      "req_id": "REQ-F-012",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "VIOLATION",
+      "evidence": null,
+      "failed_criteria": "Phase 3 SystemC BFM replays 6x8 calendars and reports makespan; BFM covers each supported collective and identifies baseline profile",
+      "finding": "No REQ-U-* resolves_from REQ-F-012. Target artifacts mention BFM test names in REQ-U-001/U-002 ACs but do not state SystemC BFM delivery, per-collective calendar replay, makespan emission, or baseline profile identification.",
+      "suggested_action": "Add REQ-U (or extend existing) with SystemC BFM + makespan/baseline ACs tracing to REQ-F-012; document BFM scope in phase-3 artifacts included in the compliance set"
+    },
+    {
+      "req_id": "REQ-P-001",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-006 (one 512-bit flit per granted direction per cycle at 2 GHz); protocol-assignments.md flit[511:0]; clock-domain-map.md noc_clk 2 GHz"
+    },
+    {
+      "req_id": "REQ-P-002",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/clock-domain-map.md noc_clk 2 GHz, H_LINK=7 V_LINK=9 RAMP=1; iron-requirements.json REQ-U-006"
+    },
+    {
+      "req_id": "REQ-P-003",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "VIOLATION",
+      "evidence": null,
+      "failed_criteria": "Report includes ag_bcast/ag_gather baseline makespans for m=1..5 and overhead (estimated-baseline)/baseline per design",
+      "finding": "No REQ-U-* resolves_from REQ-P-003. req-uarch-traceability.md marks Covered with 'Makespan vs baselines' but none of the four target artifacts contain the required baseline arrays or overhead formula/results.",
+      "suggested_action": "Add REQ-U for makespan-vs-baseline evaluation tracing to REQ-P-003, or include the makespan/overhead artifact in the compliance target set with explicit numbers"
+    },
+    {
+      "req_id": "REQ-P-004",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-005 (relative area 1.028× or lower, combine 0.000, negative delta vs Trial 1 1.065×); req-uarch-traceability.md Area 1.028× < 1.065×"
+    },
+    {
+      "req_id": "REQ-P-005",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "Conditional on Tier C selection; Trial 2 selects Tier A — docs/phase-3-uarch/iron-requirements.json REQ-U-004; protocol-assignments.md DCA ABSENT; req-uarch-traceability.md Tile impact N/A"
+    },
+    {
+      "req_id": "REQ-A-001",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-001 (dual-bank 1024×13, no active-bank write, exactly 26,624 bits, slot-0 activation); protocol-assignments.md entry[12:0]"
+    },
+    {
+      "req_id": "REQ-A-002",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-002 (1-in-16 BG window, 328-cycle 12-hop bound, credited XY-DOR); protocol-assignments.md BG non-borrowable one-in-16"
+    },
+    {
+      "req_id": "REQ-A-003",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-002 (H/V credits 16/20, calendar never enqueues payload); clock-domain-map.md allocations 16 H / 20 V; req-uarch-traceability.md vc_buffers 100 flits interior; protocol-assignments.md credit counters H 0..16 V 0..20"
+    },
+    {
+      "req_id": "REQ-A-004",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-004 (no combine_unit/DCA, CAL_OP_PE_HANDOFF tag-only); protocol-assignments.md combine/DCA ABSENT"
+    },
+    {
+      "req_id": "REQ-A-005",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-003 (one reservation release, lossless escape, ≤2 cycles); req-uarch-traceability.md watchdog_demote 32-cycle / no-loss"
+    },
+    {
+      "req_id": "REQ-A-006",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 2,
+      "verdict": "PASS",
+      "evidence": "docs/phase-3-uarch/iron-requirements.json REQ-U-005 (1.028× area, combine 0.000, negative area delta vs Trial 1); req-uarch-traceability.md analytic PPA 1.028×"
+    }
+  ]
+}

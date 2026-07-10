@@ -6,7 +6,7 @@ typedef struct {
     unsigned ejections;
     unsigned expected_makespan;
     unsigned makespan;
-    unsigned combine_ops;
+    unsigned pe_handoffs;
 } bfm_calendar_result_t;
 
 int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result);

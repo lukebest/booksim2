@@ -53,9 +53,9 @@ The replayer applies explicit H=7 horizontal, V=9 vertical, and one-cycle PE
 ramp delays. `baseline` contains any comparable value from the makespan-only
 research JSON and always labels its comparison as non-equivalent.
 
-## Trial-1 scope
+## Trial-2 scope
 
-Reduce and allreduce vectors place `COMBINE_ADD` opcodes on their generated
-converge paths, exercising the Tier-B replay opcode and its three-cycle
-replayer delay. They are structural schedule tests, not a proof of full
-48-operand numerical reduction; that remains a separate HIGH-06 closure item.
+Reduce and allreduce vectors use gather/forward schedules with
+`CAL_OP_PE_HANDOFF` tags where applicable. The replayer counts PE handoffs for
+observability; it does **not** perform in-router arithmetic (Tier A). Full
+48-operand PE numerical reduction remains outside the router BFM.

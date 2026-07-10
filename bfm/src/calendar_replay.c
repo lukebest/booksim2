@@ -86,7 +86,7 @@ static int parse_file(const char *path, slot_t slots[MESH_NODES][CALENDAR_SLOTS]
                        "\"out_port_mask\":%u,\"opcode\":%u}",
                        &slot, &in_port, &out_mask, &opcode) != 4 ||
                 slot >= CALENDAR_SLOTS || in_port >= PORT_COUNT ||
-                out_mask >= (1U << PORT_COUNT) || opcode > CAL_OP_COMBINE_MAX ||
+                out_mask >= (1U << PORT_COUNT) || opcode > CAL_OP_RESERVED_MAX ||
                 slots[node_id(x, y)][slot].valid) {
                 free(text);
                 return 0;
@@ -141,7 +141,7 @@ int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
     event_t events[MAX_EVENTS];
     event_t injections[MAX_INJECTIONS];
     unsigned event_count = 0U, injection_count, expected_count, expected_makespan;
-    unsigned ejections = 0U, makespan = 0U, combine_ops = 0U, index, cycle;
+    unsigned ejections = 0U, makespan = 0U, pe_handoffs = 0U, index, cycle;
 
     if (result == NULL || !parse_file(path, slots, injections, &injection_count,
                                       &expected_count, &expected_makespan)) {
@@ -165,8 +165,12 @@ int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
             if (!entry.valid || entry.in_port != event.in_port) {
                 return 0;
             }
-            if (entry.opcode != CAL_OP_FORWARD) {
-                ++combine_ops;
+            if (entry.opcode == CAL_OP_PE_HANDOFF) {
+                /*
+                 * Tier A: reduce is gather forwarding.  Allreduce adds a
+                 * zero-cost PE-local compute stub before its broadcast phase.
+                 */
+                ++pe_handoffs;
             }
             for (port = 0U; port < PORT_COUNT; ++port) {
                 if ((entry.out_mask & (1U << port)) == 0U) {
@@ -194,6 +198,6 @@ int bfm_replay_calendar(const char *path, bfm_calendar_result_t *result)
     result->ejections = ejections;
     result->expected_makespan = expected_makespan;
     result->makespan = makespan;
-    result->combine_ops = combine_ops;
+    result->pe_handoffs = pe_handoffs;
     return (ejections == expected_count) && (makespan == expected_makespan);
 }

@@ -2,11 +2,12 @@
 
 ## Decision being made
 
-This document compares three implementation tiers for 48-tile reduction.  It does
+This document compares three implementation tiers for 48-tile reduction. It does
 not assume that a fast floating-point result can be obtained by reusing an integer
 router combine unit: floating-point addition needs an explicit ordering, rounding, and
-exception contract.  The selected Trial-1 hardware supports integer/bitwise reduction;
-FP DCA is an optional future capability.
+exception contract. **Trial 2 selects Tier A, USER_CONFIRMED, under an area-first
+objective; router-local combine and DCA are comparison-only and are not part of the
+Trial 2 router.** Trial 1 selected Tier B.
 
 ## Method and assumptions
 
@@ -70,8 +71,8 @@ bandwidth, is binding.
 
 | Tier | Router datapath and storage | Relative router area / power | Tile impact | Operation coverage | P0/P1/P2 conclusion |
 |---|---|---|---|---|---|
-| A | No arithmetic; ordinary gather/broadcast only | +0% arithmetic area; highest network and PE active time | No new hardware, but PE must wake/execute | Any PE-supported operation, including FP | P0-correct fallback; loses P2 and consumes PE energy |
-| B | Two input holding registers, opcode/tag, 512-bit lane-wise integer/bitwise combiners, result mux | **~+2.7% class** calibrated to FlooNoC parallel reduction; low dynamic cost versus DCA | None | Associative integer/bitwise only: AND/OR/XOR, add with specified width, min/max | Best P0/P1/P2 balance for Trial 1 |
+| A | No arithmetic; ordinary gather/broadcast only | +0% arithmetic area; highest network and PE active time | No new hardware, but PE must wake/execute | Any PE-supported operation, including FP | **Selected for Trial 2**: meets P0 while maximizing area headroom |
+| B | Two input holding registers, opcode/tag, 512-bit lane-wise integer/bitwise combiners, result mux | **~+2.7% class** calibrated to FlooNoC parallel reduction; low dynamic cost versus DCA | None | Associative integer/bitwise only: AND/OR/XOR, add with specified width, min/max | Trial 1 selection; rejected for Trial 2 to remove router arithmetic area |
 | C | Two-input sync, header/tag buffer, DCA request/result queues, FPU backpressure and ordering | **up to +16.9% collective-wide class**; higher control toggle and queue cost | <1% only if an already-present FPU exposes DCA safely | FP/vector arithmetic plus any supported FPU operation | Architecturally valuable, but fails P1 and loses P2 for m=1..5 under this timing model |
 
 The +16.9% anchor is an aggregate FlooNoC wide-reduction/DCA-class extension, not a
@@ -98,13 +99,13 @@ DCA should not be modeled as a free FPU call.  A viable later implementation nee
 
 ## Recommendation
 
-Adopt **Tier B** as the implementation target: two-input, lane-wise, associative
-integer/bitwise combine driven by calendar opcodes.  Keep the opcode space and tags
-wide enough to add Tier C later, but do not instantiate a DCA block for this Trial-1
-router.
+Adopt **Tier A for Trial 2 (USER_CONFIRMED, area-first)**: reduce is calendar-scheduled
+gather to a PE followed by local compute; allreduce adds a calendar-scheduled broadcast
+of that PE result. The router contains no arithmetic/combine datapath, operand holding
+registers, reduction opcode/tag path, or DCA interface.
 
-Tier A remains the mandatory functional fallback for unsupported operations: gather to
-a PE, compute locally, then broadcast if an allreduce result is required.  It preserves
-correctness without packet loss.  A future FP DCA proposal must replace these analytic
-estimates with a calendar plus FPU-arbitration simulation and show a message-size or
-throughput regime that repays the router-area class increase.
+Trial 1 selected Tier B for its lower modeled allreduce makespan. Trial 2 explicitly
+trades that makespan advantage for lower router area and the binding relative-area target
+below 1.065×. Tier B and C remain in this document solely as quantitative comparison
+evidence. A future proposal may revisit them only with a new user decision and a revised
+area/makespan analysis.

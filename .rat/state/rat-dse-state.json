@@ -1,8 +1,8 @@
 {
   "phase": 3,
-  "sub_phase": "complete_awaiting_user_review",
+  "sub_phase": "complete_awaiting_comparison",
   "pipeline_scope": "dse-phase-1-to-3",
-  "trial": 1,
+  "trial": 2,
   "input_mode": "create",
   "started": "2026-07-10",
   "completed_phases": [
@@ -12,13 +12,21 @@
     "self-critique",
     "critique-rerun"
   ],
+  "user_feedback_binding": {
+    "area_first": true,
+    "target_area_rel_lt": 1.065,
+    "dca_tier": "A",
+    "no_in_router_combine": true,
+    "require_diagrams": true,
+    "no_phase_4": true
+  },
   "phase1_gate": {
     "verdict": "PASS",
-    "ambiguity_score": 0.3
+    "ambiguity_score": 0.25
   },
   "phase2_gate": {
     "verdict": "PASS",
-    "architecture": "Arch-A CalSlot-Hybrid-ZB"
+    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine"
   },
   "phase3_gate": {
     "verdict": "PASS",
@@ -27,17 +35,20 @@
   "critique": {
     "file": "reviews/dse-self-critique.md",
     "high": 6,
-    "medium": 6,
+    "medium": 3,
     "low": 2,
     "adr_invalidated": false,
     "closure": "reviews/dse-critique-closure.md"
   },
   "metrics": {
-    "architecture": "Arch-A CalSlot-Hybrid-ZB",
-    "area_rel": 1.065,
-    "power_rel": 0.98,
+    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
+    "area_rel": 1.028,
+    "power_rel": 0.96,
+    "area_vs_trial1": -0.037,
+    "power_vs_trial1": -0.02,
     "bg_bound_cycles": 328,
-    "dca_tier": "B",
+    "dca_tier": "A",
+    "combine_present": false,
     "calendar_replay_m1": {
       "bcast": 100,
       "gather": 852,
@@ -46,7 +57,20 @@
       "allgather": 700
     }
   },
-  "ask_user_question": "unavailable",
-  "satisfaction": "awaiting_user_review",
-  "notes": "Trial 1 complete with critique re-run. AskUserQuestion unavailable; ADRs AGENT_ASSUMED pending user confirmation."
+  "diagrams": {
+    "architecture": [
+      "docs/phase-2-architecture/architecture.md",
+      "docs/phase-2-architecture/architecture-diagram.md"
+    ],
+    "uarch": [
+      "docs/phase-3-uarch/uarch.md",
+      "docs/phase-3-uarch/uarch-diagram.md"
+    ]
+  },
+  "worktree": {
+    "path": "/home/luke/workspace/booksim2-dse-trial2",
+    "branch": "dse-trial2"
+  },
+  "satisfaction": "ready_for_comparison",
+  "notes": "Trial 2 complete. Tier A + Arch-A2. No Phase 4. Ready for comparison/promotion vs Trial 1."
 }

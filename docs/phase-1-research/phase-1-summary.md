@@ -1,8 +1,8 @@
-# Phase 1 Summary — DSE Trial 1 (6×8 Mesh Calendar-Collective Router)
+# Phase 1 Summary — DSE Trial 2 (6×8 Mesh Calendar-Collective Router)
 
 - **Date:** 2026-07-10
-- **Trial:** DSE Trial 1 — power/area-optimal calendar-collective NoC router
-- **Phase 1 gate:** **PASS** (ambiguity 0.30 ≤ 0.50; research and feasibility reviews PASS)
+- **Trial:** DSE Trial 2 — area-first calendar-collective NoC router
+- **Phase 1 gate:** **PASS** (ambiguity 0.25 ≤ 0.50; research and feasibility reviews PASS)
 - **Artifacts:** `iron-requirements.json`, `open-requirements.json`, `domain-analysis.md`, `dca-tier-analysis.md`, `ADR-001-algorithm-selection.md`, `reviews/phase-1-research/`
 
 ---
@@ -11,7 +11,7 @@
 
 Design a **calendar-collective router** for a **6×8 mesh (48 tiles)** that replays **offline, conflict-free, zero-buffer collective schedules** while sharing a **single 512-bit physical network** with **XY dimension-order background unicast**. The router must support broadcast, allgather, gather, reduce, and allreduce via per-collective calendars; preserve **deadlock/hang freedom and zero packet loss** under mixed traffic; and degrade gracefully when collective traffic violates its schedule (late/early/wrong port).
 
-Optimization priorities: **P0** correctness and robustness (REQ-CAL, REQ-BG, REQ-MC, REQ-ROB); **P1** minimize router power/area (analytic model, FlooNoC calibration anchors); **P2** minimize makespan overhead vs published 6×8 schedule baselines. PPA is **analytic only** — no RTL synthesis in this trial.
+Optimization priorities: **P0** correctness and robustness (REQ-CAL, REQ-BG, REQ-MC, REQ-ROB); **P1** area-first, with selected relative router area **<1.065×** baseline; **P2** minimize makespan overhead vs published 6×8 schedule baselines. PPA is **analytic only** — no RTL synthesis in this trial. The trial ends at Phase 3; no Phase 4 RTL work is authorized.
 
 ---
 
@@ -55,7 +55,7 @@ Should/may items (F-011 DCA interface, F-012 SystemC BFM, P-003 baseline overhea
 
 ## Algorithm Selection — ADR-001 Stack
 
-**Status:** Accepted as Trial-1 default (`AGENT_ASSUMED`; pending user confirmation at trial satisfaction check).
+**Status:** Accepted for Trial 2 (`USER_CONFIRMED`).
 
 | Dimension | Selection | Trial-1 parameters |
 |-----------|-----------|-------------------|
@@ -63,10 +63,10 @@ Should/may items (F-011 DCA interface, F-012 SystemC BFM, P-003 baseline overhea
 | **Isolation** | Hybrid TDM windows + buffered XY BG VC | 1 BG slot / 16 calendar slots (6.25%); acyclic XY escape VC |
 | **Buffering** | Zero-buffer calendar + RTT-sized BG buffers | Calendar cut-through; BG VC up to 74 flits (≈4.6 KiB interior) |
 | **Multicast** | Calendar `out_port_mask` atomic fork | 5-bit mask, 3-bit `in_port`; all-or-nothing per slot |
-| **Reduction** | **Tier B** primary; Tier A fallback; **Tier C deferred** | 3-cycle 2-input integer/bitwise combine (~+2.7% area class) |
+| **Reduction** | **Tier A** | Gather + PE-local compute; allreduce adds broadcast; no router combine or DCA |
 | **Violations** | Watchdog → demote to buffered XY escape VC | Never drop; multicast leaf expansion on demotion |
 
-Rejected alternatives (tag-match calendar, strict calendar priority, shallow shared buffers, DCA for m=1..5, NACK/retry) are documented in `ADR-001-algorithm-selection.md` with P0/P1/P2 rationale.
+Trial 1's Tier B router-local combine and Tier C DCA are comparison-only alternatives. Architecture diagrams are required from the architecture team; this requirements package does not prescribe RTL.
 
 ---
 
@@ -74,11 +74,11 @@ Rejected alternatives (tag-match calendar, strict calendar priority, shallow sha
 
 | Tier | Mechanism | Allreduce m=1..5 (cycles) | Router area class | Trial-1 role |
 |------|-----------|----------------------------:|-------------------|--------------|
-| **A** | Gather + PE local compute + broadcast | 229–575 | +0% arithmetic | Mandatory fallback (FP, non-associative ops) |
-| **B** | Router 2-input int/bitwise merge | **101–228** | **~+2.7%** | **Selected** — best P0/P1/P2 balance |
-| **C** | DCA tile-FPU offload (12-cycle model) | 315–327 | ~+16.9% collective-wide | **Deferred** — latency-bound at m≤5 |
+| **A** | Gather + PE local compute + broadcast | 229–575 | +0% arithmetic | **Selected** — USER_CONFIRMED, area-first |
+| **B** | Router 2-input int/bitwise merge | **101–228** | **~+2.7%** | Trial 1 selection; removed from Trial 2 router |
+| **C** | DCA tile-FPU offload (12-cycle model) | 315–327 | ~+16.9% collective-wide | Comparison-only; no Trial 2 interface |
 
-**Recommendation:** Implement Tier B in-network; route IEEE FP and unsupported opcodes through Tier A; reserve opcode/tag space for future Tier C without instantiating DCA hardware.
+**Recommendation:** Implement Tier A only: gather operands to PE-local compute and broadcast the PE result for allreduce. Do not instantiate router combine, reduction tags/opcodes, or DCA hardware.
 
 ---
 
@@ -91,10 +91,10 @@ Five architecture decisions remain open (`open-requirements.json`); Phase 2 must
 | OPEN-1-001 | Calendar storage/dispatch encoding | Slot table vs tag match vs source-routed header |
 | OPEN-1-002 | Calendar/BG isolation | Dedicated VC vs hard TDM vs **hybrid (ADR-001 default)** |
 | OPEN-1-003 | Buffering / flow control | Zero-cal + BG VC vs shallow shared vs full input-queued |
-| OPEN-1-004 | Reduction tier / semantics | Tier A vs **B (ADR-001 default)** vs C; opcode/format/order |
+| OPEN-1-004 | Reduction tier / semantics | **Resolved toward Tier A**; close PE handoff/operation semantics only |
 | OPEN-1-005 | Violation detection / recovery | Watchdog demotion vs slot validity vs retry-then-demote |
 
-Additional Phase 2 closures from iron ambiguities: calendar load protocol and epoch handoff, credit/ready widths and buffer depths, numeric BG progress bound, watchdog timeout and recovery latency, Tier-B opcode/lane/overflow contract. `io_definition.json` retains null widths — not an RTL port contract until Phase 2.
+Additional Phase 2 closures from iron ambiguities: calendar load protocol and epoch handoff, credit/ready widths and buffer depths, numeric BG progress bound, watchdog timeout and recovery latency, and PE-compute handoff semantics. `io_definition.json` retains null widths — not an RTL port contract until Phase 2.
 
 ---
 
@@ -102,19 +102,19 @@ Additional Phase 2 closures from iron ambiguities: calendar load protocol and ep
 
 | Axis | Score | Weight |
 |------|------:|-------:|
-| Goal clarity | 0.18 | 40% |
-| Constraint clarity | 0.42 | 30% |
-| Acceptance-criteria clarity | 0.34 | 30% |
-| **Weighted total** | **0.30** | (threshold **≤ 0.50**) |
+| Goal clarity | 0.14 | 40% |
+| Constraint clarity | 0.36 | 30% |
+| Acceptance-criteria clarity | 0.30 | 30% |
+| **Weighted total** | **0.25** | (threshold **≤ 0.50**) |
 
 **Gate: PASS.** Unresolved implementation choices are explicitly isolated in open items rather than silently assumed in the iron contract.
 
 | Review | Verdict |
 |--------|---------|
-| `reviews/phase-1-research/research-review.md` | **PASS** — 17/17 iron entries, 12/12 feature groups, 5 open items correctly classified |
-| `reviews/phase-1-research/feasibility-review.md` | **PASS (analytic)** — selected stack implementable; conditional on Phase 2 numeric/protocol closure and post-synthesis timing |
+| `reviews/phase-1-research/research-review.md` | **PASS** — Trial 2 Tier A direction, 17/17 iron entries, and 5 open items correctly classified |
+| `reviews/phase-1-research/feasibility-review.md` | **PASS (analytic)** — Tier A removes router reduction hardware; conditional on Phase 2 protocol closure and analytic area check |
 
-**Phase 2 authorization:** Proceed to architecture design. Ratify ADR-001 (or override) and close OPEN-1-001..005 before Phase 3 μArch/RTL freeze.
+**Phase 2 authorization:** Proceed to architecture design, including required diagrams. ADR-001 is ratified for Trial 2; close the remaining protocol details before Phase 3 μArch/BFM work. No Phase 4 authorization is implied.
 
 ---
 

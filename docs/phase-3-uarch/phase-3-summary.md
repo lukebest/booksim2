@@ -1,21 +1,30 @@
-# Phase 3 Summary — DSE Trial 1
+# Phase 3 Summary — DSE Trial 2
 
-Arch-A CalSlot-Hybrid-ZB is refined into a single-`noc_clk` microarchitecture:
-two-stage calendar replay, credited BG/escape `RC→SA→ST`, atomic multicast,
-three-cycle Tier-B combine, and 32-cycle lossless watchdog demotion. The BFM
-instantiates the full 6×8 (48-router) RefC-compatible mesh and logs all 11
-specified module boundaries.
+**Architecture:** Arch-A2 CalSlot-Hybrid-ZB-NoCombine  
+**Tier:** DCA Tier A (no in-router combine/DCA)  
+**PPA:** area **1.028×**, power **0.96×** vs IQ-XY (−3.5% / −2% vs Trial 1)
 
-The portable C implementation is the Trial-1 approved substitute when SystemC
-is unavailable; its scope and remaining SystemC/Tier-B limitations are stated
-in `bfm-portability.md`. The independent calendar replayer loads
-`calendar-export/v1` JSON schedules, applies the H=7/V=9 link and one-cycle
-PE-ramp timing model, scores ejections, and reports makespan.
+## Deliverables
 
-Gate inputs: 22/22 upstream requirements mapped; five REQ-U requirements have
-measurable acceptance criteria; Phase-2 supplied no open items; no Phase-3
-open file exists. `make -C bfm test_calendars` generates and replays m=1
-broadcast, gather, reduce, allreduce, and simplified multi-source allgather
-vectors. Their schema and synthetic-versus-research baseline distinction are
-documented in `calendar-export-schema.md`; the existing smoke remains in
-`bfm/logs/smoke_summary.log`.
+| Artifact | Path |
+|---|---|
+| μArch spec | `docs/phase-3-uarch/uarch.md` |
+| μArch diagrams | `docs/phase-3-uarch/uarch-diagram.md` |
+| Iron (REQ-U-*) | `docs/phase-3-uarch/iron-requirements.json` (6 REQs) |
+| Traceability | `docs/phase-3-uarch/req-uarch-traceability.md` (100%) |
+| BFM | `bfm/` — compiles; matches RefC; calendars PASS |
+| RefC | `refc/` — no `combine_unit` |
+
+## μArch highlights
+
+- Calendar S0/S1 zero-buffer path; BG RC→SA→ST credited XY path
+- Hybrid TDM 1-in-16; watchdog demote → escape VC
+- Multicast atomic fork
+- **combine_unit / DCA explicitly absent**; PE-local Tier-A compute
+
+## Gate
+
+- uarch-review: PASS
+- BFM ↔ RefC: PASS
+- Compliance P1+P2→P3: PASS (see `.rat/state/`)
+- Phase 4 RTL: **not started** (DSE stop)

@@ -1,8 +1,8 @@
-# Algorithm Selection — DSE Trial 1
+# Algorithm Selection — DSE Trial 2
 
 **Date:** 2026-07-10  
-**Status:** Trial-1 default (pending user confirmation)  
-**Decision source:** `AGENT_ASSUMED`  
+**Status:** Accepted for Trial 2
+**Decision source:** `USER_CONFIRMED`
 **Formal record:** [ADR-001-algorithm-selection.md](../decisions/ADR-001-algorithm-selection.md)
 
 ---
@@ -12,7 +12,7 @@
 | Priority | Goal |
 |---|---|
 | P0 | Functional correctness and robustness (REQ-CAL, REQ-BG, REQ-MC, REQ-ROB) |
-| P1 | Minimize router power and area |
+| P1 | Area-first: relative router area below 1.065× baseline |
 | P2 | Minimize makespan overhead vs zero-buffer schedule baselines |
 
 ---
@@ -25,14 +25,14 @@
 | **Isolation** | Hybrid TDM windows + buffered XY BG VC (1 BG slot per 16 cycles, 6.25%) |
 | **Buffering** | Zero-buffer calendar + RTT-sized BG buffers (≤4.6 KiB interior) |
 | **Multicast** | Calendar `out_port_mask` atomic fork (+5.8% area class) |
-| **Reduction** | Tier B: router-local 2-input integer/bitwise combine (+2.7%); Tier A fallback for FP/unsupported ops; Tier C DCA deferred |
+| **Reduction** | Tier A: gather + PE-local compute (+ broadcast for allreduce); no router combine or DCA |
 | **Violations** | Watchdog demotion to buffered XY escape VC; never drop |
 
 ---
 
 ## Rationale summary
 
-Selections follow [domain-analysis.md](domain-analysis.md) recommendations evaluated under P0 → P1 → P2. The stack preserves exact zero-buffer calendar replay, guarantees finite BG progress, minimizes router area vs full DCA (+16.9%), and retains lowest tested allreduce makespan for m=1..5 via Tier B reduction. DCA analysis in [dca-tier-analysis.md](dca-tier-analysis.md) confirms Tier C is architecturally valuable but not justified for Trial-1 message sizes.
+Selections follow [domain-analysis.md](domain-analysis.md) recommendations evaluated under P0 → P1 → P2. The stack preserves exact zero-buffer calendar replay, guarantees finite BG progress, and removes Trial 1's Tier B arithmetic datapath so the selected router targets area below 1.065× baseline. The A/B/C comparison remains in [dca-tier-analysis.md](dca-tier-analysis.md); Tier A is USER_CONFIRMED for Trial 2 despite its higher modeled allreduce makespan.
 
 ---
 
@@ -42,11 +42,11 @@ Selections follow [domain-analysis.md](domain-analysis.md) recommendations evalu
 - Strict calendar priority and hard TDM (isolation)
 - Shallow shared and full input-queued buffers (buffering)
 - XY address-mask fork and software multi-unicast (multicast)
-- DCA as primary reduction path (reduction)
+- Trial 1's Tier B router-local combine and Tier C DCA (reduction)
 - NACK/retry and indefinite calendar stall (violations)
 
 ---
 
 ## Quality-gate note
 
-This document mirrors ADR-001 for Phase 1→2 traceability. User confirmation at Trial satisfaction check is required to elevate `AGENT_ASSUMED` to a binding project decision.
+This document mirrors ADR-001 for Phase 1→2 traceability. Tier A and the area-first direction are binding Trial 2 decisions; architecture diagrams remain a Phase 2 responsibility. No Phase 4 work is authorized.

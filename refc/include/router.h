@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #include "calendar_store.h"
-#include "combine_unit.h"
 #include "watchdog_demote.h"
 
 typedef struct {
@@ -28,7 +27,6 @@ typedef struct {
     calendar_store_t calendar;
     bg_vc_fifo_t bg_fifo[PORT_COUNT];
     credits_t credits;
-    combine_unit_t combine;
     watchdog_demote_t watchdog;
     uint64_t calendar_forwards;
     uint64_t bg_forwards;

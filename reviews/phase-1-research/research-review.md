@@ -1,9 +1,9 @@
-# Phase 1 Review: Spec Analysis Self-Validation
+# Phase 1 Review: Spec Analysis Self-Validation — DSE Trial 2
 
 - Date: 2026-07-10
 - Reviewer: Phase 1 -> 2 quality gate
 - Source Spec: `docs/dse-input-spec.md`
-- Verdict: **PASS**
+- Verdict: **PASS — Trial 2 Tier A direction**
 
 ## Review scope
 
@@ -39,10 +39,10 @@ review time, so the recommended stack in `domain-analysis.md` was used as the se
   },
   {
     "id": "FINDING-004",
-    "severity": "advisory",
-    "area": "baseline naming",
-    "finding": "domain-analysis single-collective broadcast/gather endpoints and REQ-P-003 ag_bcast/ag_gather profiles are different schedule baselines.",
-    "action": "Keep both profile names in Phase 2 reports; do not compare their cycle counts as though they were one baseline."
+    "severity": "resolved",
+    "area": "Trial 2 reduction selection",
+    "finding": "Trial 1 selected Tier B router-local combine, which conflicts with the USER_CONFIRMED Trial 2 area-first Tier A direction.",
+    "action": "REQ-F-003, REQ-F-004, REQ-F-010, REQ-F-011, REQ-P-004, OPEN-1-004, ADR-001, and analysis documents now require Tier A gather + PE-local compute (+ broadcast for allreduce); no router combine or DCA interface."
   }
 ]
 ```
@@ -67,16 +67,16 @@ Quantitative comparison matrices and selection rationale exist:
   area-class anchors, and recommended mechanisms.
 - Reduction tiers A/B/C: `dca-tier-analysis.md` includes reduce/allreduce cycle vectors for
   m=1..5 plus router/tile area-power classes, operation coverage, and rationale.
-- Recommended fallback stack: double-buffered slot table, hybrid calendar/BG windows,
-  zero-buffer calendar plus RTT-sized BG VC, atomic output-mask fork, Tier B integer/bitwise
-  combine, and watchdog-to-XY escape. This is the required fallback because ADR-001 is absent.
+- Selected Trial 2 stack: double-buffered slot table, hybrid calendar/BG windows,
+  zero-buffer calendar plus RTT-sized BG VC, atomic output-mask fork, Tier A PE-local
+  reduction, and watchdog-to-XY escape. ADR-001 is present and USER_CONFIRMED.
 
 ## Consistency checks
 
 - The 6×8 mesh, 512-bit flit, 2 GHz clock, H=7, V=9, and ramp=1 values agree across the
   requirement, timing, assumptions, and analysis artifacts.
-- The optional DCA boundary is consistent: Tier C is evaluated but not selected by the
-  recommended stack.
+- The DCA boundary is consistent: Tier C and Trial 1 Tier B are comparison-only; Trial 2
+  contains neither a router combine datapath nor a DCA interface.
 - `timing_constraints.json` intentionally avoids inventing internal router-latency,
   watchdog, or independent max-latency figures. Those omissions are traceable to iron/open
   ambiguity records.
@@ -96,18 +96,19 @@ See `docs/phase-1-research/ambiguity-assessment.md`.
 
 | Axis | Score |
 |---|---:|
-| Goal clarity (40%) | 0.18 |
-| Constraint clarity (30%) | 0.42 |
-| Acceptance-criteria clarity (30%) | 0.34 |
-| **Weighted ambiguity score** | **0.30** |
+| Goal clarity (40%) | 0.14 |
+| Constraint clarity (30%) | 0.36 |
+| Acceptance-criteria clarity (30%) | 0.30 |
+| **Weighted ambiguity score** | **0.25** |
 
 The score is below the 0.50 gate threshold.
 
 ## Verdict
 
-**PASS.** Phase 1 is sufficient for Phase 2 architecture work. This is not authorization to
-freeze RTL interfaces: Phase 2 must close the listed OPEN items and ratify the recommended stack
-in ADR-001 (or an equivalent decision record) before Phase 3.
+**PASS.** Phase 1 is sufficient for Phase 2 architecture work, including required diagrams.
+Tier A and the area-first direction are ratified in ADR-001. This is not authorization to
+freeze RTL interfaces; Phase 2 must close the remaining protocol details before Phase 3.
+No Phase 4 work is authorized.
 
 ```mermaid
 pie title Iron Requirements by Complexity

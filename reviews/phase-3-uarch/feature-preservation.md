@@ -1,13 +1,13 @@
-# Phase 3 Review: Feature Preservation
-- Reviewer: Phase 3 coordinator
-- Upper Spec: `docs/phase-2-architecture/architecture.md`
-- Verdict: PASS
+# Phase 3 Feature Preservation — Trial 2
 
-| Feature | Architecture Block | μArch / BFM Evidence | Status |
+| Feature | Mapping | Evidence | Status |
 |---|---|---|---|
-| Double-buffer calendar | calendar_store/replay | S0/S1 and REQ-U-001 | PASS |
-| BG XY escape | vc_buffers/xy_route | RC→SA→ST smoke | PASS |
-| Atomic multicast | multicast_fork | two-leaf forward smoke | PASS |
-| Tier-B combine | combine_unit | ADD 7+9=16 smoke | PASS |
-| Lossless demotion | watchdog_demote | 32-cycle demotion smoke | PASS |
-| DCA disabled | pe_ni | tied-inactive stub | PASS |
+| Calendar replay | calendar_store/replay | calendar_replay PASS | PASS |
+| BG XY | vc_buffers, xy_route | test_bg_* PASS | PASS |
+| Multicast fork | multicast_fork | smoke + blocked_fork | PASS |
+| Watchdog demote | watchdog_demote | test_demote_noloss PASS | PASS |
+| Tier-A PE handoff | pe_ni / CAL_OP_PE_HANDOFF | reduce/allreduce pe_handoffs | PASS |
+| Combine unit | **ABSENT** | no combine_unit in build | PASS |
+| DCA | **ABSENT** | no interface datapath | PASS |
+
+**Verdict: PASS** — Trial 1 combine path intentionally not preserved.

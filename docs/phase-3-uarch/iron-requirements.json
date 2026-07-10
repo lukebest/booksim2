@@ -1,79 +1,79 @@
 {
   "phase": "phase-3-uarch",
-  "authority": 3,
-  "zero_open_items": true,
+  "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
+  "trial": 2,
   "requirements": [
     {
       "id": "REQ-U-001",
-      "resolved_from": ["REQ-F-001", "REQ-F-002", "REQ-F-003", "REQ-A-001"],
-      "traces_to": ["REQ-F-001", "REQ-F-002", "REQ-F-003", "REQ-A-001"],
-      "statement": "calendar_store and calendar_replay shall provide double-buffered 1024x13-bit replay with a registered two-stage calendar path and atomic slot-zero activation.",
-      "resolution_rationale": "Separates inactive loading from active replay while preserving compiled slot ownership.",
-      "rejected_alternatives": [{"candidate": "single writable table", "reason": "permits mixed-epoch replay"}],
-      "upstream_compliance": "Implements the Arch-A calendar contract without changing entry fields or capacity.",
-      "violation_policy": "agent_retry",
-      "ambiguity_score": 0.1,
+      "resolved_from": ["REQ-A-001", "REQ-F-001"],
+      "statement": "calendar_store/replay shall implement dual-bank 1024×13-bit slot tables with S0 registered SRAM read and S1 qualification in noc_clk; activation only at slot 0 after old-epoch retirement.",
       "acceptance_criteria": [
-        {"ac_id": "REQ-U-001.AC-1", "description": "`make -C bfm test_calendars` loads calendar-export/v1 broadcast and gather vectors and scores every encoded ingress/mask terminal delivery.", "test_method": "portable_c_bfm", "verifiable": true},
-        {"ac_id": "REQ-U-001.AC-2", "description": "The loader rejects duplicate router/slot entries and out-of-range slot, port, mask, or opcode fields.", "test_method": "portable_c_bfm_negative", "verifiable": true}
-      ]
+        "BFM active-bank read matches loaded inactive-bank contents after handoff.",
+        "No active-bank write occurs during replay.",
+        "Storage is exactly 26,624 payload bits per router."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.1
     },
     {
       "id": "REQ-U-002",
-      "resolved_from": ["REQ-F-005", "REQ-F-007", "REQ-P-001", "REQ-A-002", "REQ-A-003"],
-      "traces_to": ["REQ-F-005", "REQ-F-007", "REQ-F-008", "REQ-P-001", "REQ-A-002", "REQ-A-003"],
-      "statement": "vc_buffers, xy_route, switch_alloc, crossbar, and credit_fc shall implement a credited X-then-Y BG/escape RC-to-SA-to-ST pipeline with a protected one-in-16 BG slot and bounded queues.",
-      "resolution_rationale": "Keeps calendar traffic zero-buffered while providing finite progress and full-rate granted links.",
-      "rejected_alternatives": [{"candidate": "shared calendar/BG queue", "reason": "violates traffic isolation"}],
-      "upstream_compliance": "Uses the selected XY-DOR credited class and 16/20-flit provisions.",
-      "violation_policy": "agent_retry",
-      "ambiguity_score": 0.2,
+      "resolved_from": ["REQ-A-002", "REQ-A-003", "REQ-F-005", "REQ-F-007", "REQ-F-008"],
+      "statement": "BG/escape shall use credited XY-DOR vc_buffers with RC→SA→ST pipeline, 1-in-16 non-borrowable BG window, H/V credits 16/20, and 328-cycle 12-hop delivery bound under eligibility premises.",
       "acceptance_criteria": [
-        {"ac_id": "REQ-U-002.AC-1", "description": "`make -C bfm test` sends a BG flit from (0,0) to (2,0) east then ejects it exactly once.", "test_method": "portable_c_bfm", "verifiable": true},
-        {"ac_id": "REQ-U-002.AC-2", "description": "`make -C bfm test_calendars` confirms calendar ejections use explicit H=7/V=9 link propagation and one-cycle PE ramps, with the measured makespan matching each exported vector.", "test_method": "portable_c_bfm", "verifiable": true}
-      ]
+        "test_bg_window and test_bg_bound PASS.",
+        "Measured 12-hop eligible latency ≤ 328 cycles.",
+        "Calendar path never enqueues payload into vc_buffers."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.15
     },
     {
       "id": "REQ-U-003",
-      "resolved_from": ["REQ-F-006", "REQ-A-005"],
-      "traces_to": ["REQ-F-002", "REQ-F-006", "REQ-F-008", "REQ-A-005"],
-      "statement": "multicast_fork shall atomically commit all selected five-port mask copies or retain the flit and leaf mask until availability; accepted leaves are not replayed.",
-      "resolution_rationale": "A commit register makes fault recovery lossless without a multicast dependency cycle.",
-      "rejected_alternatives": [{"candidate": "independent branch sends", "reason": "can duplicate accepted leaves on recovery"}],
-      "upstream_compliance": "Preserves exact selected-copy semantics.",
-      "violation_policy": "agent_retry",
-      "ambiguity_score": 0.2,
-      "acceptance_criteria": [{"ac_id": "REQ-U-003.AC-1", "description": "The broadcast and allgather calendar replay tests score exactly all selected multicast leaves, including local plus multiple directional fork outputs.", "test_method": "portable_c_bfm", "verifiable": true}]
+      "resolved_from": ["REQ-A-005", "REQ-F-006", "REQ-F-009"],
+      "statement": "multicast_fork shall be atomic on out_port_mask; watchdog_demote shall release once and emit lossless XY escape packets for remaining leaves within 2 cycles of available queue capacity.",
+      "acceptance_criteria": [
+        "test_blocked_fork and test_demote_noloss PASS.",
+        "Exactly one reservation release per violation.",
+        "No drop of preserved flit/context under backpressure."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.15
     },
     {
       "id": "REQ-U-004",
-      "resolved_from": ["REQ-F-004", "REQ-F-010", "REQ-F-011", "REQ-A-004"],
-      "traces_to": ["REQ-F-004", "REQ-F-010", "REQ-F-011", "REQ-P-005", "REQ-A-004"],
-      "statement": "combine_unit shall perform Tier-B lane-wise integer/bitwise operations over eight 64-bit lanes with exactly three calendar-reserved cycles; unsupported operations use PE Tier-A and DCA remains disabled.",
-      "resolution_rationale": "The selected Tier-B implementation meets the frozen numeric contract without an FPU/DCA dependency.",
-      "rejected_alternatives": [{"candidate": "DCA execution", "reason": "disabled by the selected Trial-1 architecture"}],
-      "upstream_compliance": "Matches the selected opcode, precision, identity, and latency contract.",
-      "violation_policy": "agent_retry",
-      "ambiguity_score": 0.2,
+      "resolved_from": ["REQ-A-004", "REQ-F-003", "REQ-F-004", "REQ-F-010", "REQ-F-011"],
+      "statement": "μArch shall not instantiate combine_unit or DCA. Reduce/allreduce use Tier-A PE handoff; CAL_OP_PE_HANDOFF is forward/tag only with no router arithmetic.",
       "acceptance_criteria": [
-        {"ac_id": "REQ-U-004.AC-1", "description": "`make -C bfm test_calendars` replays reduce and allreduce calendars containing Tier-B COMBINE_ADD opcodes on converge paths and reports their opcode count and makespan.", "test_method": "portable_c_bfm", "verifiable": true},
-        {"ac_id": "REQ-U-004.AC-2", "description": "Lane-wise numerical correctness, operand tags, and the three-cycle reservation pipeline are separately required Phase-4/5 tests; the Trial-1 calendar replay does not claim closure.", "test_method": "phase4_phase5", "verifiable": true}
-      ]
+        "Router context and BFM builds contain no combine_unit.",
+        "Calendar replay for reduce/allreduce completes without router combine results.",
+        "uarch.md documents combine/DCA as ABSENT."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.1
     },
     {
       "id": "REQ-U-005",
-      "resolved_from": ["REQ-F-009", "REQ-F-012", "REQ-P-002", "REQ-P-003", "REQ-A-005"],
-      "traces_to": ["REQ-F-009", "REQ-F-012", "REQ-P-002", "REQ-P-003", "REQ-A-005"],
-      "statement": "watchdog_demote and the C BFM shall model a 32-cycle release-once demotion to escape XY, preserve the flit, instantiate all 48 routers, and report smoke makespan against the supplied 6x8 baseline profile.",
-      "resolution_rationale": "A cycle-driven portable BFM reuses the RefC behavior and provides deterministic Phase-4 comparison logs.",
-      "rejected_alternatives": [{"candidate": "SystemC-only BFM", "reason": "SystemC availability is not assumed for Trial 1"}],
-      "upstream_compliance": "Retains all fixed mesh and watchdog timing parameters.",
-      "violation_policy": "agent_retry",
-      "ambiguity_score": 0.3,
+      "resolved_from": ["REQ-A-006", "REQ-P-004"],
+      "statement": "Analytic PPA for the μArch shall report relative area 1.028× (or lower) and power 0.96× vs IQ-XY, below Trial 1's 1.065×/0.98×.",
       "acceptance_criteria": [
-        {"ac_id": "REQ-U-005.AC-1", "description": "`make -C bfm test` preserves the watchdog-demotion smoke behavior.", "test_method": "portable_c_bfm", "verifiable": true},
-        {"ac_id": "REQ-U-005.AC-2", "description": "`make -C bfm test_calendars` replays all five collective tags with H=7/V=9 link timing and compares measured to vector makespan.", "test_method": "portable_c_bfm", "verifiable": true}
-      ]
+        "ppa-analytic.md and ppa_analytic_model.py report 1.028 area.",
+        "combine component is 0.000.",
+        "Documented area delta vs Trial 1 is negative."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.1
+    },
+    {
+      "id": "REQ-U-006",
+      "resolved_from": ["REQ-P-001", "REQ-P-002"],
+      "statement": "Single noc_clk domain at 2 GHz; one 512-bit flit per granted direction per cycle; H=7 V=9 ramp=1 modeled as link/PE latency, not a second clock.",
+      "acceptance_criteria": [
+        "clock-domain-map.md lists only noc_clk.",
+        "BFM/mesh timing uses H=7 V=9 ramp=1.",
+        "No CDC synchronizer is required in the μArch."
+      ],
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.1
     }
   ]
 }

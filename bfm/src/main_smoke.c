@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include "bfm_model.h"
-#include "combine_unit.h"
 
 static flit_t make_flit(uint8_t flit_class, uint8_t dst_x, uint8_t dst_y,
                         uint64_t lane_zero)
@@ -22,12 +21,13 @@ int main(void)
 {
     mesh_sim_t mesh;
     calendar_entry_t entry;
-    combine_unit_t combine;
     flit_t flit;
     flit_t ejected;
-    flit_t combined;
     uint32_t step;
-    bool pass = bfm_router_model_is_refc_compatible();
+    bool calendar_pass = bfm_router_model_is_refc_compatible();
+    bool background_pass = true;
+    bool demote_pass = true;
+    bool pass;
 
     bfm_mesh_reset(&mesh);
     (void)memset(&entry, 0, sizeof(entry));
@@ -38,46 +38,49 @@ int main(void)
     mesh_sim_load_calendar(&mesh, 0U, 0U, 0U, &entry);
     entry.in_port = PORT_WEST;
     entry.out_port_mask = PORT_MASK(PORT_LOCAL);
-    mesh_sim_load_calendar(&mesh, 1U, 0U, 1U, &entry);
+    mesh_sim_load_calendar(&mesh, 1U, 0U, HORIZONTAL_LINK_DELAY, &entry);
     entry.in_port = PORT_NORTH;
-    mesh_sim_load_calendar(&mesh, 0U, 1U, 1U, &entry);
+    mesh_sim_load_calendar(&mesh, 0U, 1U, VERTICAL_LINK_DELAY, &entry);
 
     flit = make_flit(FLIT_CLASS_CALENDAR, 0U, 0U, UINT64_C(0xCA1E));
-    pass = pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
-    mesh_sim_advance(&mesh);
-    mesh_sim_advance(&mesh);
-    pass = pass && mesh_sim_take_ejected(&mesh, 1U, 0U, &ejected);
-    pass = pass && (ejected.lane[0] == UINT64_C(0xCA1E));
-    pass = pass && mesh_sim_take_ejected(&mesh, 0U, 1U, &ejected);
+    calendar_pass = calendar_pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
+    for (step = 0U; step < VERTICAL_LINK_DELAY + PE_RAMP_DELAY + 1U; ++step) {
+        mesh_sim_advance(&mesh);
+    }
+    calendar_pass = calendar_pass && mesh_sim_take_ejected(&mesh, 1U, 0U, &ejected);
+    calendar_pass = calendar_pass && (ejected.lane[0] == UINT64_C(0xCA1E));
+    calendar_pass = calendar_pass && mesh_sim_take_ejected(&mesh, 0U, 1U, &ejected);
 
     flit = make_flit(FLIT_CLASS_BACKGROUND, 2U, 0U, UINT64_C(0xB6));
-    pass = pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
-    for (step = 0U; step < 3U; ++step) {
+    background_pass = background_pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
+    for (step = 0U; step < (2U * HORIZONTAL_LINK_DELAY) + PE_RAMP_DELAY + 1U;
+         ++step) {
         mesh_sim_advance(&mesh);
     }
-    pass = pass && mesh_sim_take_ejected(&mesh, 2U, 0U, &ejected);
-    pass = pass && (ejected.lane[0] == UINT64_C(0xB6));
+    background_pass = background_pass && mesh_sim_take_ejected(&mesh, 2U, 0U, &ejected);
+    background_pass = background_pass && (ejected.lane[0] == UINT64_C(0xB6));
 
     flit = make_flit(FLIT_CLASS_CALENDAR, 5U, 0U, UINT64_C(0xDEAD));
-    pass = pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
-    for (step = 0U; step < 40U; ++step) {
+    demote_pass = demote_pass && mesh_sim_inject(&mesh, 0U, 0U, &flit);
+    for (step = 0U; step < 100U; ++step) {
         mesh_sim_advance(&mesh);
     }
-    pass = pass && mesh_sim_take_ejected(&mesh, 5U, 0U, &ejected);
-    pass = pass && (ejected.flit_class == FLIT_CLASS_DEMOTED);
+    demote_pass = demote_pass && mesh_sim_take_ejected(&mesh, 5U, 0U, &ejected);
+    demote_pass = demote_pass && (ejected.flit_class == FLIT_CLASS_DEMOTED);
 
-    combine_unit_init(&combine);
-    flit = make_flit(FLIT_CLASS_CALENDAR, 0U, 0U, UINT64_C(7));
-    (void)combine_unit_accept(&combine, CAL_OP_COMBINE_ADD, &flit, &combined);
-    flit.lane[0] = UINT64_C(9);
-    pass = pass && combine_unit_accept(&combine, CAL_OP_COMBINE_ADD, &flit,
-                                        &combined);
-    pass = pass && (combined.lane[0] == UINT64_C(16));
+    /*
+     * Tier A reduce/allreduce uses gather forwarding plus PE-local compute.
+     * The router BFM never combines flit payloads.
+     */
+    pass = calendar_pass && background_pass && demote_pass;
 
     bfm_write_module_logs(mesh.cycle, pass);
-    (void)printf("%s cycles=%" PRIu32 " calendar=%" PRIu64
+    (void)printf("%s calendar_pass=%u background_pass=%u demote_pass=%u "
+                 "cycles=%" PRIu32 " calendar=%" PRIu64
                  " bg=%" PRIu64 " demotions=%" PRIu64 "\n",
-                 pass ? "PASS" : "FAIL", mesh.cycle,
+                 pass ? "PASS" : "FAIL", calendar_pass ? 1U : 0U,
+                 background_pass ? 1U : 0U, demote_pass ? 1U : 0U,
+                 mesh.cycle,
                  mesh.router[0].calendar_forwards,
                  mesh.router[0].bg_forwards, mesh.router[0].demotions);
     return pass ? 0 : 1;
