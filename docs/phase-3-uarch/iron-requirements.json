@@ -1,7 +1,7 @@
 {
   "phase": "phase-3-uarch",
-  "architecture": "Arch-A3 SparseCal-Hybrid-ZB-NoCombine",
-  "trial": 3,
+  "architecture": "Arch-A4 SparseCal-SharedPool-ZB-NoCombine",
+  "trial": 4,
   "requirements": [
     {
       "id": "REQ-U-001",
@@ -19,12 +19,12 @@
     {
       "id": "REQ-U-002",
       "resolved_from": ["REQ-A-002", "REQ-A-003", "REQ-F-005", "REQ-F-007", "REQ-F-008"],
-      "statement": "BG/escape shall use credited XY-DOR vc_buffers with RC→SA→ST pipeline and soft-priority service on non-matching cycles. Conservative hard 1-in-16 bound 328 cycles; soft-prio occupancy-aware bound ~160 cycles on 12-hop worst case. H/V credits 16/20.",
+      "statement": "BG/escape shall use SharedPool-BG vc_buffers (shared pool 40 + per-port reserve 2) with RC→SA→ST pipeline and soft-priority service on non-matching cycles. Calendar never enqueues into the pool. Conservative hard bound 328 cycles; soft reserve-covered ~160; soft+pool contention ~200. H/V credits 16/20.",
       "acceptance_criteria": [
-        "test_bg_window and test_bg_bound PASS (conservative bound).",
+        "test_bg_window, test_bg_bound, and test_shared_pool PASS.",
         "BG never grants over a firing calendar event.",
-        "Measured soft-prio 12-hop eligible latency ≤ 160 cycles under max-occupancy premise.",
-        "Calendar path never enqueues payload into vc_buffers."
+        "Calendar path never enqueues payload into vc_buffers.",
+        "When shared pool is exhausted, each port still accepts up to reserve=2 flits."
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.15
@@ -32,11 +32,11 @@
     {
       "id": "REQ-U-003",
       "resolved_from": ["REQ-A-005", "REQ-F-006", "REQ-F-009"],
-      "statement": "multicast_fork shall be atomic on out_port_mask; watchdog_demote shall release once and emit lossless XY escape packets for remaining leaves within 2 cycles of available queue capacity.",
+      "statement": "multicast_fork shall be atomic on out_port_mask; watchdog_demote shall release once and emit lossless XY escape packets for remaining leaves into pool/reserves within 2 cycles of available capacity.",
       "acceptance_criteria": [
         "test_blocked_fork and test_demote_noloss PASS.",
         "Exactly one reservation release per violation.",
-        "No drop of preserved flit/context under backpressure."
+        "No drop of preserved flit/context under backpressure when capacity exists."
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.15
@@ -44,10 +44,9 @@
     {
       "id": "REQ-U-004",
       "resolved_from": ["REQ-A-004", "REQ-F-003", "REQ-F-004", "REQ-F-010", "REQ-F-011"],
-      "statement": "μArch shall not instantiate combine_unit or DCA. Reduce/allreduce use Tier-A PE handoff; CAL_OP_PE_HANDOFF is forward/tag only with no router arithmetic.",
+      "statement": "μArch shall not instantiate combine_unit or DCA. Reduce/allreduce use Tier-A PE handoff; CAL_OP_PE_HANDOFF is forward/tag only.",
       "acceptance_criteria": [
         "Router context and BFM builds contain no combine_unit.",
-        "Calendar replay for reduce/allreduce completes without router combine results.",
         "uarch.md documents combine/DCA as ABSENT."
       ],
       "violation_policy": "user_escalation",
@@ -56,11 +55,11 @@
     {
       "id": "REQ-U-005",
       "resolved_from": ["REQ-A-006", "REQ-P-004"],
-      "statement": "Analytic PPA for the μArch shall report relative area 1.000× (or lower) and power 0.95× vs IQ-XY, below Trial 2's 1.028×/0.96×, with sparse calendar 0.009 and control 0.188.",
+      "statement": "Analytic PPA for the μArch shall report relative area ≤0.92× (Arch-A4 default 0.822×) and power 0.92× vs IQ-XY, below Trial 3's 1.000×/0.95×, with buffers 0.182 and control 0.193.",
       "acceptance_criteria": [
-        "ppa-analytic.md and ppa_analytic_model.py report 1.000 area.",
-        "combine component is 0.000; calendar component is 0.009.",
-        "Documented area delta vs Trial 2 is −0.028."
+        "ppa-analytic.md and ppa_analytic_model.py report Arch-A4 area ≤0.92.",
+        "combine component is 0.000; calendar component is 0.009; buffers in [0.15,0.22].",
+        "Documented area delta vs Trial 3 is negative."
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1

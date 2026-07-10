@@ -1,6 +1,6 @@
 {
   "phase": "phase-2-architecture",
-  "trial": 2,
+  "trial": 4,
   "open_requirements": [],
-  "notes": "All OPEN-1-* resolved in Trial 2 iron (REQ-A-*). Tier A USER_CONFIRMED; Arch-A2 selected. No remaining Phase-2 open items."
+  "notes": "All OPEN-1-* remain resolved. Trial 4 resolves SharedPool-BG (formerly deferred Trial 3b) as REQ-A-003. Tier A USER_CONFIRMED; Arch-A4 selected. No remaining Phase-2 open items."
 }

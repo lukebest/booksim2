@@ -1,8 +1,47 @@
-# DSE Trial 3 Architecture Candidates: 6×8 Mesh Calendar-Collective Router
+# DSE Trial 4 Architecture Candidates: SharedPool-BG on SparseCal
 
 ## Scope and evaluation method
 
-Trial 3 re-evaluates ≥3 P0-capable candidates under **USER_CONFIRMED** constraints:
+Trial 4 evaluates SharedPool-BG variants on the **Arch-A3 SparseCal** base under
+**USER_CONFIRMED** constraints:
+
+1. **Area-first:** total area target **~0.85–0.92×** vs IQ-XY; buffer **0.15–0.22**.
+2. Keep SparseCal `2×128×23`, soft-prio, Tier A, zero-buffer calendar, demote→XY.
+3. Replace dedicated 5×20=100 BG FIFOs with shared pool + per-port reserve.
+4. Physical params unchanged: 6×8, 512b @ 2 GHz, H=7, V=9, `ramp_bw=1`.
+
+## Comparison matrix
+
+| Candidate | Area | Power | BG buffers | Calendar | Verdict |
+|---|---:|---:|---|---|---|
+| **Arch-A4 SparseCal-SharedPool-ZB-NoCombine (40+2)** | **0.822** | **0.92** | Shared 40 + res 5×2=50 | Sparse ZB | **Selected** |
+| Arch-A4b SharedPool 48+2 | ~0.852 | ~0.93 | Shared 48 + res 10=58 | Sparse ZB | Alt if progress needs more pool |
+| Arch-A3 (Trial 3) | 1.000 | 0.95 | Dedicated 100 | Sparse ZB | Superseded (buffers) |
+| Arch-A2 (Trial 2) | 1.028 | 0.96 | Dedicated 100 | Dense | Superseded |
+| Zero-reserve shared pool | <0.82 | — | Shared only | Sparse ZB | Rejected (starvation/deadlock risk) |
+
+### Arch-A4 area breakdown
+
+| Component | Rel. area | Notes |
+|---|---:|---|
+| Crossbar | 0.380 | Unchanged |
+| VC buffers | **0.182** | **50 flits SharedPool** |
+| Calendar SRAM | 0.009 | Sparse 2×128×23 |
+| Multicast fork | 0.058 | Unchanged |
+| Combine / DCA | 0.000 | Tier A |
+| Control | **0.193** | +0.005 pool accounting |
+| **Total** | **0.822** | **−0.178 vs Trial 3** |
+
+## Deadlock / progress (selected 40+2)
+
+- XY-DOR acyclic; per-port reserve=2; calendar never takes pool credits.
+- Soft ~160 (reserve-covered); soft+pool ~200; hard 328.
+
+---
+
+# Appendix: Trial 3 candidates (historical)
+
+Trial 3 re-evaluated ≥3 P0-capable candidates under **USER_CONFIRMED** constraints:
 
 1. **Area-first (P1):** relative area **at or below IQ-XY baseline (1.000×)**.
 2. **DCA Tier A only:** no in-router combine; no DCA datapath (carried from Trial 2).
@@ -20,33 +59,17 @@ Common assumptions:
   max_slot 951; depth 128 per bank is P0-safe.
 - Multicast calibration +5.8%; Tier-B combine +2.7% (comparison only); Tier-C DCA +16.9%
   (rejected).
-- BG credit RTT: 16 H / 20 V; interior BG/escape provision 100 flits (5×20).
+- BG credit RTT: 16 H / 20 V; interior BG/escape provision 100 flits (5×20) in Trial 3.
 
-## Comparison matrix
+## Comparison matrix (Trial 3)
 
 | Candidate | Area | Power | Combine/DCA | Calendar fidelity | BG bound | Verdict |
 |---|---:|---:|---|---|---|---|
-| **Arch-A3 SparseCal-Hybrid-ZB-NoCombine** | **1.000** | **0.95** | None (Tier A) | Deterministic ZB replay | soft ~160 / hard 328 cy | **Selected** |
+| **Arch-A3 SparseCal-Hybrid-ZB-NoCombine** | **1.000** | **0.95** | None (Tier A) | Deterministic ZB replay | soft ~160 / hard 328 cy | Selected in T3; buffers superseded in T4 |
 | Arch-A2 (Trial 2) | 1.028 | 0.96 | None (Tier A) | Dense slot table | hard 328 cy | Superseded |
 | Arch-A (Trial 1) | 1.065 | 0.98 | Tier B +2.7% | Dense slot table | 328 cy | Superseded |
 | Arch-B SrcRoute-VCPrio-Shared | ~1.008 | ~1.08 | None | Weak (shared IQ arb) | Soft | Rejected (P0 replay) |
 | Arch-C CalSlot-HardTDM-DCA | ~1.237 | ~1.23 | Tier C | High | Hard TDM | Rejected (area + Tier C) |
-
-### Arch-A3 area breakdown
-
-| Component | Rel. area | Notes |
-|---|---:|---|
-| Crossbar | 0.380 | Unchanged 5-port 512b |
-| VC buffers | 0.365 | 100-flit BG/escape (same as Trial 2) |
-| Calendar SRAM | **0.009** | **Sparse 2×128×23** (−0.031 vs Trial 2 dense 0.040) |
-| Multicast fork | 0.058 | FlooNoC +5.8% |
-| Combine / DCA | **0.000** | Tier A (unchanged from Trial 2) |
-| Credit / isolation / watchdog | **0.188** | +0.003 next-event match vs Trial 2 0.185 |
-| **Total** | **1.000** | **−0.028 vs Trial 2; parity with IQ-XY** |
-
-Sparse calendar rationale: measured density ≪1% of dense `48×1024`; max busy router
-49 entries (allreduce m=1). Depth 128 provides >2× margin. JSON export format is
-naturally sparse — no dense slot padding.
 
 ### Sparsity evidence (`results/calendars/*_m1.json`)
 

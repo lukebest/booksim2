@@ -10,7 +10,21 @@
 #define MESH_NODES (MESH_X * MESH_Y)
 #define FLIT_LANES 8U
 #define PORT_COUNT 5U
-#define BG_FIFO_DEPTH 20U
+
+/*
+ * Trial 4 SharedPool-BG (Arch-A4):
+ *   shared free pool 40 + per-port reserve 2 → 50 flits total (was 5×20=100).
+ * Calendar path never consumes these slots.
+ */
+#define BG_SHARED_POOL_SIZE 40U
+#define BG_PER_PORT_RESERVE 2U
+#define BG_TOTAL_FLITS \
+    (BG_SHARED_POOL_SIZE + (PORT_COUNT * BG_PER_PORT_RESERVE))
+#define BG_PORT_QUEUE_MAX (BG_PER_PORT_RESERVE + BG_SHARED_POOL_SIZE)
+
+/* Legacy alias: max depth of one port queue under full shared capture. */
+#define BG_FIFO_DEPTH BG_PORT_QUEUE_MAX
+
 #define BG_WINDOW_PERIOD 16U
 #define HORIZONTAL_CREDIT_DEPTH 16U
 #define VERTICAL_CREDIT_DEPTH 20U

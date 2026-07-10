@@ -8,11 +8,21 @@
 #include "watchdog_demote.h"
 
 typedef struct {
-    flit_t entry[BG_FIFO_DEPTH];
+    flit_t entry[BG_PORT_QUEUE_MAX];
     uint8_t head;
     uint8_t tail;
     uint8_t count;
-} bg_vc_fifo_t;
+} bg_port_queue_t;
+
+/*
+ * Shared BG/escape buffer pool with per-port reserves.
+ * shared_used = sum_p max(0, port_q[p].count - BG_PER_PORT_RESERVE).
+ * Enqueue allowed iff port still has unused reserve OR shared_used < pool.
+ */
+typedef struct {
+    bg_port_queue_t port_q[PORT_COUNT];
+    uint8_t shared_used;
+} bg_shared_pool_t;
 
 typedef struct {
     bool valid[PORT_COUNT];
@@ -25,7 +35,7 @@ typedef struct {
     uint8_t x;
     uint8_t y;
     calendar_store_t calendar;
-    bg_vc_fifo_t bg_fifo[PORT_COUNT];
+    bg_shared_pool_t bg_pool;
     credits_t credits;
     watchdog_demote_t watchdog;
     uint64_t calendar_forwards;

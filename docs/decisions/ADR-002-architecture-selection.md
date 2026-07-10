@@ -1,54 +1,55 @@
-# ADR-002: Architecture Selection for DSE Trial 3
+# ADR-002: Architecture Selection for DSE Trial 4
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted (Trial 3, USER_CONFIRMED) |
+| **Status** | Accepted (Trial 4, USER_CONFIRMED) |
 | **Date** | 2026-07-10 |
-| **Decision source** | `USER_CONFIRMED` — SparseCal + soft-prio + Tier A binding feedback |
+| **Decision source** | `USER_CONFIRMED` — SharedPool-BG area reduction on Arch-A3 base |
 | **Related analysis** | [architecture-candidates.md](../phase-2-architecture/architecture-candidates.md), [ppa-analytic.md](../phase-2-architecture/ppa-analytic.md) |
-| **Prior decisions** | [ADR-001](ADR-001-algorithm-selection.md), [ADR-003](ADR-003-dca-tier.md), Trial 2 ADR-002 (superseded) |
+| **Prior decisions** | [ADR-001](ADR-001-algorithm-selection.md), [ADR-003](ADR-003-dca-tier.md), Trial 3 ADR-002 (superseded for buffer organization) |
 | **Input spec** | [dse-input-spec.md](../dse-input-spec.md) |
 
 ---
 
 ## Context
 
-Trial 2 selected Arch-A2 CalSlot-Hybrid-ZB-NoCombine at analytic **1.028×** area with
-dense `2×1024×13` calendar SRAM and hard 1-in-16 BG TDM. Sparsity evidence from
-`results/calendars/*_m1.json` shows calendar occupancy ≪1% of dense address space
-(allreduce max 49 entries/router, max_slot 951). Trial 3 binding feedback requires
-(1) exploit sparsity for IQ-XY area parity, (2) soft-priority BG, (3) retain Tier A.
+Trial 3 selected Arch-A3 SparseCal-Hybrid-ZB-NoCombine at analytic **1.000×** area
+with dedicated BG FIFOs (5×20=100 flits, buffer class 0.365). Shared BG buffer pool
+was explicitly deferred as “Trial 3b”. Trial 4 binding feedback requires continuing
+area reduction via SharedPool-BG while keeping SparseCal, soft-prio, Tier A, and
+zero-buffer calendar.
 
 ---
 
 ## Decision
 
-Select **Arch-A3: SparseCal-Hybrid-ZB-NoCombine**.
+Select **Arch-A4: SparseCal-SharedPool-ZB-NoCombine**.
 
-| Metric | Trial 3 Arch-A3 | Trial 2 Arch-A2 | Trial 1 Arch-A | IQ-XY |
-|---|---:|---:|---:|---:|
-| Relative area | **1.000** | 1.028 | 1.065 | 1.000 |
-| Relative power | **0.95** | 0.96 | 0.98 | 1.00 |
-| Calendar store | **Sparse 2×128×23** | Dense 2×1024×13 | Dense 2×1024×13 | — |
-| BG policy | **Soft priority** | Hard 1-in-16 | Hard 1-in-16 | — |
-| Combine / DCA | **Absent** | Absent | Tier B | — |
+| Metric | Trial 4 Arch-A4 | Trial 3 Arch-A3 | IQ-XY |
+|---|---:|---:|---:|
+| Relative area | **0.822** | 1.000 | 1.000 |
+| Relative power | **0.92** | 0.95 | 1.00 |
+| Calendar store | Sparse 2×128×23 | Sparse 2×128×23 | — |
+| BG buffers | **Shared 40 + reserve 5×2 = 50** | Dedicated 5×20 = 100 | — |
+| BG policy | Soft priority | Soft priority | — |
+| Combine / DCA | Absent | Absent | — |
 
-Rejected: Arch-B (area ~1.008 but breaks deterministic ZB calendar replay); Arch-C
-(DCA + area). Trial 2 Arch-A2 superseded as immediate prior.
+### Key deltas from Trial 3
 
-### Key deltas from Trial 2
+1. Replace dedicated per-ingress FIFOs with **shared pool 40** + **per-port reserve 2**.
+2. Prove deadlock freedom (XY-DOR + reserves + calendar isolation).
+3. Update BG progress bounds: soft ~160 (reserve-covered); soft+pool ~200; hard 328.
+4. Calendar path remains zero-buffer and never consumes the pool.
+5. Demote→XY remains lossless via pool/reserves.
 
-1. Replace dense per-router SRAM with **sparse ordered event list** (`slot` explicit in 23-bit entry).
-2. Depth **128** per bank (covers max 49 observed with >2× margin).
-3. **next-event match** dispatch on global slot counter (wrap 1024).
-4. **Soft priority:** calendar on match; BG on idle cycles; conservative hard bound 328 cy retained; soft bound ~160 cy.
+Rejected for this trial: restoring combine/DCA; dual physical networks; cutting
+reserves to zero (deadlock/progress risk).
 
 ---
 
 ## Consequences
 
-- `calendar_store` μArch changes from slot-indexed dense read to sparse next-event match.
-- Diagrams in `architecture-diagram.md` / `uarch-diagram.md` updated for Trial 3.
-- `iron-requirements.json` REQ-A/U updated; trial field = 3.
-- Phase 3 μArch mirrors Arch-A3; no Phase 4 in this trial.
-- Shared BG buffer pool deferred to Trial 3b (out of scope).
+- `vc_buffers` μArch becomes SharedPool-BG; RefC/BFM allocate from pool+reserves.
+- ADR-004 updated for PPA 0.822×; ADR-003 Tier A unchanged in substance.
+- Diagrams and iron REQ-A-003 / REQ-U-002 updated; trial field = 4.
+- No Phase 4 in this trial.

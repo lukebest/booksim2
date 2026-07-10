@@ -1,5 +1,10 @@
 # Phase 1 Summary — DSE Trial 2 (6×8 Mesh Calendar-Collective Router)
 
+> **Trial 4 note (2026-07-10):** Phase 2/3 Trial 4 selects **Arch-A4 SharedPool-BG**
+> on the Trial 3 SparseCal base (pool 40 + reserve 5×2). Phase 1 algorithm/Tier A
+> decisions are unchanged; see Trial 4 `architecture-candidates.md` and
+> `.rat/scratch/trial4-report-zh.md`.
+
 > **Trial 3 note (2026-07-10):** Phase 2/3 Trial 3 selects **SparseCal** for
 > **OPEN-1-001** — sparse ordered event list (`2×128×23` per router) with
 > next-event match, replacing the Trial 2 dense `2×1024×13` slot table. Phase 1

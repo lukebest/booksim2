@@ -1,10 +1,9 @@
-# Arch-A3 Architecture Diagrams (DSE Trial 3)
+# Arch-A4 Architecture Diagrams (DSE Trial 4)
 
-**Architecture:** Arch-A3 SparseCal-Hybrid-ZB-NoCombine  
-**Decision:** USER_CONFIRMED — sparse calendar + soft-prio + DCA Tier A (no in-router combine/DCA)
+**Architecture:** Arch-A4 SparseCal-SharedPool-ZB-NoCombine  
+**Decision:** USER_CONFIRMED — SharedPool-BG on Arch-A3 SparseCal base (Tier A)
 
-These diagrams are the dedicated Trial 3 architecture deliverable. The same Mermaid
-sources are embedded in [`architecture.md`](architecture.md).
+Companion: [`architecture.md`](architecture.md).
 
 ---
 
@@ -24,11 +23,11 @@ flowchart TB
   mesh --- note
 ```
 
-> 中文：6×8 网格，单条 512b 物理 NoC，每 tile 一个路由器，五向端口。
+> 中文：6×8 网格，单条 512b 物理 NoC（与 Trial 3 相同）。
 
 ---
 
-## 2. Router block diagram — sparse calendar vs BG, no combine/DCA
+## 2. Router block diagram — SparseCal + SharedPool-BG
 
 ```mermaid
 flowchart LR
@@ -38,7 +37,7 @@ flowchart LR
   end
 
   slot_ctr["global slot counter<br/>wrap 1024"]
-  calendar_store[("calendar_store<br/>2 × 128 × 23-bit<br/>sparse event list / CAM")]
+  calendar_store[("calendar_store<br/>2 × 128 × 23-bit<br/>sparse event list")]
   next_match["next_event_match<br/>entry.slot == counter?"]
   calendar_store --> next_match
   slot_ctr --> next_match
@@ -50,97 +49,82 @@ flowchart LR
   classify -->|"matching event<br/>zero-buffer path"| multicast_fork["multicast_fork<br/>atomic 5-bit fork"]
   multicast_fork --> switch_alloc["switch_alloc"]
 
-  classify -->|"BG or demoted<br/>credited XY VC"| vc_buffers["vc_buffers<br/>BG + escape FIFOs"]
+  classify -->|"BG or demoted"| vc_buffers["vc_buffers SharedPool<br/>pool 40 + reserve 5×2 = 50"]
   vc_buffers --> xy_route["xy_route X-then-Y"]
   xy_route --> switch_alloc
 
   classify -->|"mismatch / timeout"| watchdog_demote["watchdog_demote FSM"]
-  watchdog_demote --> vc_buffers
+  watchdog_demote -->|"escape via pool/reserves"| vc_buffers
 
   switch_alloc --> crossbar["5×5 × 512-bit crossbar"]
   crossbar --> mesh_out["Five 512-bit egress ports"]
   credit_fc["credit_fc<br/>per-egress BG/escape credits"] <--> vc_buffers
   credit_fc --> switch_alloc
 
-  absent["ABSENT in Trial 3:<br/>combine_unit = none<br/>DCA datapath = none<br/>Reduce = gather → PE → (bcast)"]
-  multicast_fork -.->|"no arithmetic path"| absent
-  pe_ni -.->|"Tier-A PE compute only<br/>outside router datapath"| absent
+  absent["ABSENT: combine_unit / DCA<br/>Calendar NEVER uses shared pool"]
+  multicast_fork -.-> absent
 ```
 
-> 中文：稀疏事件表（2×128×23b）替代稠密 2×1024×13b SRAM；`next_event_match` 在全局 slot 计数器匹配时触发日历路径。
+> 中文：保留稀疏日历零缓冲路径；BG/escape 改为共享池 40 + 每端口预留 2。
 
 ---
 
-## 3. Soft priority vs hard TDM (selected: soft-prio)
+## 3. Shared pool + per-port reserve
 
 ```mermaid
 flowchart TB
-  subgraph cycle["Each noc_clk cycle"]
-    CTR["slot counter advances"]
-    MATCH{"sparse head<br/>slot == counter?"}
-    CAL["Calendar owns cycle<br/>zero-buffer fork"]
-    BG["BG / escape eligible<br/>credited XY VC"]
+  subgraph pool["vc_buffers — SharedPool-BG"]
+    RES["Per-port reserve<br/>5 × 2 = 10 flits"]
+    SHR["Shared free pool<br/>40 flits"]
+    ACC{"enqueue(port)"}
   end
-  CTR --> MATCH
-  MATCH -->|yes + valid flit| CAL
-  MATCH -->|no match| BG
-  CAL --> XBAR["crossbar grant"]
-  BG -->|"credit > 0"| XBAR
-  note2["Soft-prio: BG uses idle/non-matching slots.<br/>Calendar never displaced by BG.<br/>Conservative hard 1-in-16 bound = 328 cy;<br/>occupancy-aware soft bound ≈ 160 cy."]
-  BG --- note2
+  ACC -->|"count < 2"| RES
+  ACC -->|"count ≥ 2 and shared_used < 40"| SHR
+  ACC -->|"else"| BP["backpressure"]
+  CAL["Calendar path"] -.->|"never"| pool
+  DEM["watchdog demote escape"] --> ACC
 ```
 
-> 中文：**软优先级**已选定——有匹配稀疏事件时日历优先；无匹配时 BG 可用。硬 1-in-16 TDM 仅作保守上界参考。
+> 中文：预留保证各端口在共享池耗尽时仍可前进；日历路径不占用池。
 
 ---
 
-## 4. Sparse event list structure
+## 4. Soft priority (unchanged) + new BG bounds
+
+```mermaid
+flowchart TB
+  CTR["slot counter"] --> MATCH{"sparse head<br/>slot == counter?"}
+  MATCH -->|yes| CAL["Calendar owns cycle (ZB)"]
+  MATCH -->|no| BG["BG / escape eligible"]
+  CAL --> XBAR["crossbar"]
+  BG --> XBAR
+  note["Hard TDM bound 328 cy<br/>Soft reserve-covered ~160 cy<br/>Soft+pool contention ~200 cy"]
+  BG --- note
+```
+
+---
+
+## 5. Deadlock freedom sketch
 
 ```mermaid
 flowchart LR
-  subgraph bank["One calendar bank (depth 128)"]
-    E0["entry[0]: slot=17, in, mask, opcode"]
-    E1["entry[1]: slot=42, ..."]
-    E2["..."]
-    E127["entry[≤127]: slot=951, ..."]
-  end
-  LOAD["offline loader<br/>sort by slot"] --> bank
-  bank --> READ["registered read + compare"]
-  READ --> FIRE["fire when slot == counter"]
-```
-
-> 中文：每路由器每 bank 最多 128 条有序事件；allreduce 实测单 router 最大 49 条，max_slot≈951。
-
----
-
-## 5. Multicast fork + watchdog demote
-
-```mermaid
-sequenceDiagram
-  participant NE as next_event_match
-  participant MF as multicast_fork
-  participant WD as watchdog_demote
-  participant VC as vc_buffers (escape)
-  participant XB as crossbar
-  NE->>MF: legal mask + flit (slot match)
-  alt all selected egress available
-    MF->>XB: atomic multi-port grant
-  else mismatch / timeout / blocked
-    MF->>WD: preserve flit + remaining_leaf_mask
-    WD->>VC: one XY escape per remaining leaf (no drop)
-    VC->>XB: credited BG/escape grant
-  end
+  DOR["XY-DOR acyclic"] --> OK["no routing cycle"]
+  RES2["per-port reserve ≥ 1"] --> PROG["no permanent pool starve"]
+  ZB["calendar zero-buffer"] --> ISO["no cal↔pool credit cycle"]
+  OK --> DF["deadlock-free"]
+  PROG --> DF
+  ISO --> DF
 ```
 
 ---
 
-## 6. Explicit non-goals (Trial 3)
+## 6. Trial 3 → Trial 4 deltas
 
-| Block | Trial 2 Arch-A2 | Trial 3 Arch-A3 |
+| Block | Trial 3 Arch-A3 | Trial 4 Arch-A4 |
 |---|---|---|
-| Calendar store | Dense 2×1024×13 SRAM | **Sparse 2×128×23 event list** |
-| Dispatch | Slot-indexed table read | **Next-event match on counter** |
-| BG arbitration | Hard 1-in-16 primary | **Soft priority** (hard bound retained) |
-| `combine_unit` | Absent | **Absent** |
-| DCA interface | Absent | **Absent** |
-| Shared BG buffer pool | — | **Out of scope** (Trial 3b future) |
+| Calendar | Sparse 2×128×23 | **Same** |
+| BG buffers | Dedicated 5×20=100 | **Shared 40 + reserve 5×2=50** |
+| Area | 1.000× | **0.822×** |
+| Power | 0.95× | **0.92×** |
+| combine/DCA | Absent | **Absent** |
+| Shared pool | Out of scope | **In scope (this trial)** |

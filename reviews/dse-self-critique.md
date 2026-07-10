@@ -1,35 +1,59 @@
-# DSE Self-Critique — Trial 3 (light pass)
+# DSE Self-Critique — Trial 4 (Arch-A4 SharedPool)
 
-Scope: Arch-A3 SparseCal rewrite from Trial 2 baseline. Harsh but focused.
+Date: 2026-07-10  
+Scope: Phase 1→3 artifacts after SharedPool-BG integration.
 
 ## Findings
 
 ### HIGH
-None remaining after SparseCal implementation.
-
-| ID | Finding | Resolution |
-|---|---|---|
-| H1 | Dense 2×1024×13 over-provisions vs ≪1% occupancy | **RESOLVED** — SparseCal 2×128×23 |
-| H2 | Area 1.028× above 0.97–1.00 target band | **RESOLVED** — analytic 1.000× |
-| H3 | Hard 1-in-16 tax unnecessary under sparsity | **RESOLVED** — soft-prio selected; 328 retained as conservative ref |
+_None._ User decisions (SparseCal, soft-prio, Tier A, SharedPool 40+2) are consistent
+with iron requirements and PPA targets. No ADR invalidation.
 
 ### MEDIUM
-| ID | Finding | Action |
-|---|---|---|
-| M1 | Shared BG buffer pool could further cut area | **Deferred** — Trial 3b / out of scope |
-| M2 | Soft-prio bound ~160 is occupancy-model dependent | Documented; keep 328 as compliance ceiling |
-| M3 | Phase 1 iron still Trial-2-flavored in places | Light-touch notes added; IDs preserved |
+
+1. **M1 — Downstream credit vs local pool depth**  
+   Vertical credit depth remains 20 while per-router total BG storage is 50 shared
+   across ports. Full-rate multi-port bursts may backpressure earlier than Trial 3.
+   **Mitigation:** reserves + soft-prio bounds documented; `test_shared_pool` covers
+   exhaustion/reserve. Acceptable for analytic DSE; revisit in Phase 4 RTL sizing.
+
+2. **M2 — Soft+pool bound (~200) is conservative, not measured**  
+   The +40 pool-turnover addend is an adversarial analytic assumption, not a mesh
+   measurement under calendar load.  
+   **Mitigation:** hard 328 retained; reserve-covered ~160 unchanged for typical
+   single-flit BG; document assumptions in architecture.md / ppa-workbook.
+
+3. **M3 — Allocator μArch is behavioral (count-based), not free-list RTL**  
+   RefC uses per-port queues + `shared_used` accounting equivalent to DAMQ reserves.
+   RTL may prefer linked-list SRAM.  
+   **Mitigation:** DPI/BFM semantics match iron; Phase 4 may refine structure without
+   changing 40+2 capacity contract.
 
 ### LOW
-| ID | Finding | Action |
-|---|---|---|
-| L1 | CAM vs sorted-list micro-choice for next-event | Note only; both fit 128 depth |
-| L2 | Chinese summaries cover P2/P3; some EN iron JSON | Acceptable per trial brief |
+
+1. **L1 — Area 0.822 is below the stated 0.85–0.92 band** (better). Call out in
+   comparison tables so reviewers do not treat the band as a floor.
+2. **L2 — Phase 1 docs still say Trial 3 in places**; light-touch inheritance is OK
+   but a one-line Trial 4 banner would reduce confusion.
 
 ## Cross-phase consistency
-- ADR-002 → Arch-A3; ADR-003 Tier A reaffirmed; ADR-004 SparseCal PPA
-- P2/P3 iron area 1.000× / power 0.95× aligned with `ppa_analytic_model.py`
-- RefC/BFM implement sparse match + soft-prio
 
-## Critique closure
-All HIGH findings RESOLVED. MEDIUM deferred or documented. Ready for user comparison/promotion. **No Phase 4.**
+| Check | Result |
+|---|---|
+| ADR-001 algorithm | Preserved |
+| ADR-002 → Arch-A4 | Updated |
+| ADR-003 Tier A | Reaffirmed |
+| Calendar never uses pool | Enforced in router_step |
+| PPA model vs docs | 0.822 / 0.92 aligned |
+| REQ coverage | 100% in req-uarch-traceability.md |
+
+## Critique closure actions
+
+| ID | Action | Status |
+|---|---|---|
+| M1 | Documented in architecture.md + report | RESOLVED (doc) |
+| M2 | Bounds table + assumptions | RESOLVED (doc) |
+| M3 | Noted for Phase 4; BFM/RefC PASS | JUSTIFIED |
+| L1/L2 | Noted | NOTE ONLY |
+
+**Verdict:** Ready to present. No Phase 4. No HIGH carry-forward.

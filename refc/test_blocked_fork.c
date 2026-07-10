@@ -34,10 +34,10 @@ int main(void)
     (void)memset(&inputs, 0, sizeof(inputs));
     router_step(&router, WATCHDOG_TIMEOUT_CYCLES, &inputs, &outputs);
     router_step(&router, WATCHDOG_TIMEOUT_CYCLES + 1U, &inputs, &outputs);
-    pass = pass && (router.bg_fifo[PORT_LOCAL].count == 2U);
-    pass = pass && (router.bg_fifo[PORT_LOCAL].entry[0].remaining_mask ==
+    pass = pass && (router.bg_pool.port_q[PORT_LOCAL].count == 2U);
+    pass = pass && (router.bg_pool.port_q[PORT_LOCAL].entry[0].remaining_mask ==
                     PORT_MASK(PORT_EAST));
-    pass = pass && (router.bg_fifo[PORT_LOCAL].entry[1].remaining_mask ==
+    pass = pass && (router.bg_pool.port_q[PORT_LOCAL].entry[1].remaining_mask ==
                     PORT_MASK(PORT_SOUTH));
     (void)printf("test_blocked_fork %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;

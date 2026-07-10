@@ -1,20 +1,19 @@
-# ADR-004: PPA Post-Critique / Trial 3 SparseCal Area Reduction
+# ADR-004: PPA Post-Critique / Trial 4 SharedPool Area Reduction
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted (Trial 3) |
+| **Status** | Accepted (Trial 4) |
 | **Date** | 2026-07-10 |
-| **Decision source** | `USER_CONFIRMED` SparseCal + `SPEC_DERIVED` analytic model |
+| **Decision source** | `USER_CONFIRMED` SharedPool-BG + `SPEC_DERIVED` analytic model |
 | **Related** | [ppa-analytic.md](../phase-2-architecture/ppa-analytic.md), ADR-002, ADR-003 |
 
 ---
 
 ## Context
 
-Trial 2 locked Arch-A2 at **1.028×** with dense calendar SRAM (0.040 area class).
-Sparsity measurements from `results/calendars/*_m1.json` justify replacing dense
-`2×1024×13` storage with sparse `2×128×23` event lists without sacrificing P0 replay
-fidelity. Trial 3 targets **IQ-XY parity (1.000×)**.
+Trial 3 locked Arch-A3 at **1.000×** with SparseCal calendar 0.009 and dedicated
+BG buffers 0.365. The remaining area lever identified in Trial 3 was SharedPool-BG
+(deferred as Trial 3b). Trial 4 executes that lever.
 
 ADR-003 (Tier A) substance is **unchanged** — no combine, no DCA.
 
@@ -22,36 +21,32 @@ ADR-003 (Tier A) substance is **unchanged** — no combine, no DCA.
 
 ## Decision
 
-1. Use Trial 2 **1.028×** as the immediate comparison baseline.
-2. Arch-A3 area = `0.380 + 0.365 + 0.009 + 0.058 + 0.000 + 0.188 = 1.000`.
-3. Sparse calendar area derived via calibrated `K_ctrl` from dense anchor:
-   `K_ctrl = 0.040 / (2×1024×13)`; sparse = `K_ctrl × 2×128×23 = 0.009`.
-4. Control increases **+0.003** for next-event match logic (net −0.028 vs Trial 2).
-5. Power estimate **0.95×** (sparse SRAM leakage reduction + no combine switching).
-6. Do **not** cut BG FIFO RTT depth without new evidence.
+1. Use Trial 3 **1.000×** as the immediate comparison baseline.
+2. Arch-A4 area = `0.380 + 0.182 + 0.009 + 0.058 + 0.000 + 0.193 = 0.822`.
+3. Buffer flits: **40 shared + 5×2 reserve = 50**; area =
+   `0.365 × (50/100) = 0.182` (rounded).
+4. Control **+0.005** for shared-pool free-list / reserve accounting
+   (0.188 → 0.193).
+5. Power estimate **0.92×** (fewer buffer bits switching).
+6. Alternative 48+2 (~58 flits, ~0.852 total) documented but not selected.
 
-| Delta vs Trial 2 | Value |
+| Delta vs Trial 3 | Value |
 |---|---|
-| Dense → sparse calendar | −0.031 |
-| Next-event match control | +0.003 |
-| **Net area** | **−0.028** → **1.000×** |
-| **Net power** | **−0.01** → **0.95×** |
+| Dedicated 100 → shared 50 flits | −0.183 |
+| Shared-pool control | +0.005 |
+| **Net area** | **−0.178** → **0.822×** |
+| **Net power** | **−0.03** → **0.92×** |
 
-### Sparsity evidence (binding)
+### Target check
 
-| Collective | Total entries | Max/router | Max slot |
-|---|---:|---:|---:|
-| allreduce m=1 | 384 | **49** | **951** |
-| gather/reduce m=1 | 336 | 48 | 851 |
-| allgather m=1 | 192 | 4 | 699 |
-| broadcast m=1 | 48 | 1 | 99 |
-
-Depth 128 selected: >2× margin over max 49; counter wrap 1024 still safe.
+| Metric | Target | Achieved |
+|---|---|---|
+| Buffer area | 0.15–0.22 | **0.182** |
+| Total area vs IQ-XY | ~0.85–0.92 | **0.822** (better) |
 
 ---
 
 ## Consequences
 
-PPA workbook and `utils/ppa_analytic_model.py` print Arch-A3 defaults
-(`sparse 2×128×23`, `calendar=0.009`, `control=0.188`, `combine_delta=0`).
-Synthesis remains out of scope for this DSE trial.
+`utils/ppa_analytic_model.py` prints Arch-A4 defaults (SharedPool 40+2,
+buffers=0.182, control=0.193, power=0.92). Synthesis remains out of scope.

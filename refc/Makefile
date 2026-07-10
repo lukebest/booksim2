@@ -9,12 +9,13 @@ DEMOTE_TEST := $(BUILD)/test_demote_noloss
 BG_WINDOW_TEST := $(BUILD)/test_bg_window
 BLOCKED_FORK_TEST := $(BUILD)/test_blocked_fork
 BG_BOUND_TEST := $(BUILD)/test_bg_bound
+SHARED_POOL_TEST := $(BUILD)/test_shared_pool
 
-.PHONY: all build test test_demote_noloss test_bg_window test_blocked_fork test_bg_bound clean
+.PHONY: all build test test_demote_noloss test_bg_window test_blocked_fork test_bg_bound test_shared_pool clean
 
 all: build
 
-build: $(SMOKE) $(DEMOTE_TEST) $(BG_WINDOW_TEST) $(BLOCKED_FORK_TEST) $(BG_BOUND_TEST)
+build: $(SMOKE) $(DEMOTE_TEST) $(BG_WINDOW_TEST) $(BLOCKED_FORK_TEST) $(BG_BOUND_TEST) $(SHARED_POOL_TEST)
 
 $(SMOKE): $(SOURCES) include/noc_types.h include/ext_mem.h \
 	include/calendar_store.h include/xy_route.h include/multicast_fork.h \
@@ -39,12 +40,17 @@ $(BG_BOUND_TEST): $(CORE_SOURCES) test_bg_bound.c
 	mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@
 
+$(SHARED_POOL_TEST): $(CORE_SOURCES) test_shared_pool.c
+	mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
 test: build
 	./$(SMOKE)
 	./$(DEMOTE_TEST)
 	./$(BG_WINDOW_TEST)
 	./$(BLOCKED_FORK_TEST)
 	./$(BG_BOUND_TEST)
+	./$(SHARED_POOL_TEST)
 
 test_demote_noloss: $(DEMOTE_TEST)
 	./$(DEMOTE_TEST)
