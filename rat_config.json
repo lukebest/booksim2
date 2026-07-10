@@ -1,0 +1,8 @@
+{
+  "project": "booksim2-calendar-collective-router",
+  "topology": "6x8_mesh",
+  "flit_bytes": 64,
+  "clock_ghz": 2.0,
+  "ppa_method": "analytic",
+  "trial": 1
+}

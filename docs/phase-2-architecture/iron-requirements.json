@@ -1,0 +1,96 @@
+{
+  "phase": "phase-2-architecture",
+  "architecture": "Arch-A CalSlot-Hybrid-ZB",
+  "requirements": [
+    {
+      "id": "REQ-A-001",
+      "resolved_from": ["OPEN-1-001", "REQ-F-001"],
+      "statement": "Each router shall replay the active double-buffered calendar bank as 1,024 entries of {valid[0], in_port[2:0], out_port_mask[4:0], opcode[3:0]}. Calendar ID is 2 bits and an epoch bit selects the bank; only the inactive bank is writable and activation occurs atomically at slot 0 after old-epoch retirement.",
+      "resolution_rationale": "A per-router table preserves offline conflict-free slot ownership and avoids per-hop route/header arbitration. Two 13-bit banks require only 26,624 bits per router.",
+      "rejected_alternatives": [
+        {"candidate": "per-flow tag match table", "reason": "Adds lookup/compare risk and cannot preserve explicit slot ownership without growing into a timetable."},
+        {"candidate": "source-routed flit opcodes", "reason": "Moves decisions into every flit, cannot reserve conflicting link slots, and increases header switching."}
+      ],
+      "upstream_compliance": "Implements REQ-F-001 replay semantics and retains the REQ-P-004 analytic table-depth assumption.",
+      "violation_policy": "agent_retry",
+      "ambiguity_score": 0.1,
+      "acceptance_criteria": [
+        "A BFM replaying all valid entries selects exactly the encoded ingress, mask, and opcode.",
+        "The active bank is never written and no replay mixes entries from two epochs.",
+        "Total calendar storage per router is exactly 2 x 1,024 x 13 = 26,624 bits."
+      ]
+    },
+    {
+      "id": "REQ-A-002",
+      "resolved_from": ["OPEN-1-002", "REQ-F-005", "REQ-F-007", "REQ-P-003"],
+      "statement": "Calendar replay shall use slot-owned zero-buffer forwarding, while BG and escape traffic use a dedicated credited XY-DOR class with one non-borrowable BG opportunity in every 16 slots. BG/demoted traffic may additionally use a calendar-idle output slot but never displaces a valid calendar transfer. An eligible one-flit request shall receive a per-hop grant within 16 slots and a longest-route delivery bound of 328 cycles after enqueue when downstream credit is available. The bound is T ≤ 2×RAMP + |dx|×(BG_WINDOW + T_router + H_LINK) + |dy|×(BG_WINDOW + T_router + V_LINK) with RAMP=1, BG_WINDOW=16, T_router=3, H_LINK=7, V_LINK=9; the credit return delays determine FIFO depth but are excluded by the downstream-credit eligibility premise. For the 12-hop 6×8 worst case (|dx|=5, |dy|=7) this equals 328 cycles.",
+      "resolution_rationale": "Hybrid slots retain deterministic calendar replay while a periodic protected opportunity gives a finite BG service bound. X-before-Y ordering and release-before-demote prevent a cyclic cross-class dependency.",
+      "rejected_alternatives": [
+        {"candidate": "dedicated calendar VC with strict priority", "reason": "Dense calendar traffic can starve BG indefinitely."},
+        {"candidate": "hard TDM calendar reservation", "reason": "Safe but leaves sparse calendar capacity unavailable and has worse flexibility/energy."}
+      ],
+      "upstream_compliance": "Provides the required mixed-traffic deadlock argument and concrete REQ-F-005 progress bound without changing the single 512-bit network.",
+      "violation_policy": "agent_retry",
+      "ambiguity_score": 0.2,
+      "acceptance_criteria": [
+        "A mixed legal-calendar/BG BFM observes no cyclic wait and routes each BG packet X before Y.",
+        "Under continuous eligible demand and available downstream credit, each hop grants within 16 slots.",
+        "On a 12-hop route (|dx|=5, |dy|=7), a one-flit request completes within 328 cycles after enqueue using the stated link/router/ramp terms."
+      ]
+    },
+    {
+      "id": "REQ-A-003",
+      "resolved_from": ["OPEN-1-003", "REQ-F-008", "REQ-P-001"],
+      "statement": "Calendar payloads shall have no queued VC storage. BG/escape payload buffering shall use five per-input FIFOs of 20 flits each (100 flits, 51,200 bits per interior router), while per-egress credit counters enforce 16 flits for horizontal and 20 flits for vertical credit round trips; an egress transfer occurs only with available downstream credit.",
+      "resolution_rationale": "Static calendar schedules do not need payload queues, while RTT-sized BG storage sustains a granted one-flit-per-cycle direction under H=7/V=9 delays.",
+      "rejected_alternatives": [
+        {"candidate": "shallow shared calendar/BG buffers", "reason": "Depth below the vertical 20-cycle return time creates avoidable full-rate bubbles and mixes traffic classes."},
+        {"candidate": "full input-queued multi-VC buffering", "reason": "Adds allocator/storage area not needed for static calendar replay."}
+      ],
+      "upstream_compliance": "Meets REQ-F-008 no-overwrite behavior and REQ-P-001 rate under the stated analytic link timings.",
+      "violation_policy": "agent_retry",
+      "ambiguity_score": 0.2,
+      "acceptance_criteria": [
+        "Credit counters never allow occupancy beyond allocated capacity.",
+        "A continuously granted H or V direction sustains one 512-bit flit per cycle after fill.",
+        "No legal backpressure test loses or duplicates a non-multicast flit."
+      ]
+    },
+    {
+      "id": "REQ-A-004",
+      "resolved_from": ["OPEN-1-004", "REQ-F-004", "REQ-F-010", "REQ-F-011", "REQ-P-005"],
+      "statement": "Trial 1 shall implement Tier-B two-input lane-wise combine for AND, OR, XOR, modulo-2^64 ADD, unsigned MIN, and unsigned MAX over eight 64-bit lanes with a calendar-reserved 3-cycle merge. IEEE floating point and unsupported operations shall use Tier-A PE compute. Tier-C DCA is disabled and only a future optional stub is retained.",
+      "resolution_rationale": "Tier B has the selected +2.7% area class and the lowest evaluated allreduce cycles for m=1..5; DCA's 12-cycle visible latency and +16.9% class are not amortized.",
+      "rejected_alternatives": [
+        {"candidate": "Tier A only", "reason": "Correct but has higher reduce/allreduce latency and PE energy; retained as fallback."},
+        {"candidate": "Tier C DCA FPU offload", "reason": "Requires unresolved FPU arbitration/format contracts and loses P1/P2 for 1–5 flit messages."}
+      ],
+      "upstream_compliance": "Satisfies the mandatory A/B/C comparison and preserves the optional nature of REQ-F-011.",
+      "violation_policy": "agent_retry",
+      "ambiguity_score": 0.2,
+      "acceptance_criteria": [
+        "For each supported opcode, BFM output equals the defined lane-wise result and compiler-specified operand order.",
+        "Tier-B merge appears exactly three cycles after its reserved operand pair.",
+        "No DCA transaction is accepted when the Trial-1 configuration is selected."
+      ]
+    },
+    {
+      "id": "REQ-A-005",
+      "resolved_from": ["OPEN-1-005", "REQ-F-006", "REQ-F-009"],
+      "statement": "The router shall use a 32-cycle calendar watchdog after expected arrival and immediate early/wrong-port detection. A violation releases its calendar reservation exactly once, preserves the flit plus remaining 5-bit leaf mask, and emits one credited XY escape packet per unserved destination; recovery starts within two cycles when queue capacity is available.",
+      "resolution_rationale": "Watchdog demotion provides bounded, observable lossless recovery without adding NACK/retry traffic or unbounded calendar resynchronization.",
+      "rejected_alternatives": [
+        {"candidate": "per-slot validity/sequence check with immediate-only demotion", "reason": "Does not bound a missing/blocked arrival."},
+        {"candidate": "watchdog plus retry before demotion", "reason": "Adds protocol state and can amplify congestion without improving the no-drop guarantee."}
+      ],
+      "upstream_compliance": "Meets REQ-F-006 atomic-fork accounting and REQ-F-009 graceful no-loss delivery for early, late, and wrong-port cases.",
+      "violation_policy": "agent_retry",
+      "ambiguity_score": 0.3,
+      "acceptance_criteria": [
+        "BFM tests each early, late, and wrong-port case and observes eventual exactly-once delivery of every intended leaf.",
+        "A watchdog event produces one reservation release and one recovery action per unserved destination.",
+        "No accepted multicast branch is replayed and no unserved branch is dropped."
+      ]
+    }
+  ]
+}

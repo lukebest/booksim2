@@ -1,0 +1,52 @@
+{
+  "phase": 3,
+  "sub_phase": "complete_awaiting_user_review",
+  "pipeline_scope": "dse-phase-1-to-3",
+  "trial": 1,
+  "input_mode": "create",
+  "started": "2026-07-10",
+  "completed_phases": [
+    "phase-1",
+    "phase-2",
+    "phase-3",
+    "self-critique",
+    "critique-rerun"
+  ],
+  "phase1_gate": {
+    "verdict": "PASS",
+    "ambiguity_score": 0.3
+  },
+  "phase2_gate": {
+    "verdict": "PASS",
+    "architecture": "Arch-A CalSlot-Hybrid-ZB"
+  },
+  "phase3_gate": {
+    "verdict": "PASS",
+    "bfm_refc_match": true
+  },
+  "critique": {
+    "file": "reviews/dse-self-critique.md",
+    "high": 6,
+    "medium": 6,
+    "low": 2,
+    "adr_invalidated": false,
+    "closure": "reviews/dse-critique-closure.md"
+  },
+  "metrics": {
+    "architecture": "Arch-A CalSlot-Hybrid-ZB",
+    "area_rel": 1.065,
+    "power_rel": 0.98,
+    "bg_bound_cycles": 328,
+    "dca_tier": "B",
+    "calendar_replay_m1": {
+      "bcast": 100,
+      "gather": 852,
+      "reduce": 852,
+      "allreduce": 952,
+      "allgather": 700
+    }
+  },
+  "ask_user_question": "unavailable",
+  "satisfaction": "awaiting_user_review",
+  "notes": "Trial 1 complete with critique re-run. AskUserQuestion unavailable; ADRs AGENT_ASSUMED pending user confirmation."
+}

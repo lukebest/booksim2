@@ -1,0 +1,117 @@
+{
+  "version": "1.0",
+  "clock_domains": [
+    {
+      "name": "noc_clk",
+      "frequency_mhz": 2000,
+      "period_ns": 0.5,
+      "source": "external",
+      "reset_polarity": "active_low",
+      "gating": "none",
+      "note": "Analytic DSE clock domain; reset timing and clock source implementation are unspecified."
+    }
+  ],
+  "cdc_crossings": [],
+  "link_pipeline_constraints": [
+    {
+      "path": "horizontal mesh link (X)",
+      "cycles": 7,
+      "ns": 3.5,
+      "related_req": "REQ-P-002"
+    },
+    {
+      "path": "vertical mesh link (Y)",
+      "cycles": 9,
+      "ns": 4.5,
+      "related_req": "REQ-P-002"
+    },
+    {
+      "path": "PE-to-router ramp",
+      "cycles": 1,
+      "ns": 0.5,
+      "related_req": "REQ-P-002"
+    }
+  ],
+  "latency_constraints": [
+    {
+      "path": "calendar ag_bcast m=1",
+      "baseline_cycles": 167,
+      "baseline_ns": 83.5,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_bcast m=2",
+      "baseline_cycles": 267,
+      "baseline_ns": 133.5,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_bcast m=3",
+      "baseline_cycles": 310,
+      "baseline_ns": 155.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_bcast m=4",
+      "baseline_cycles": 524,
+      "baseline_ns": 262.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_bcast m=5",
+      "baseline_cycles": 708,
+      "baseline_ns": 354.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_gather m=1",
+      "baseline_cycles": 170,
+      "baseline_ns": 85.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_gather m=2",
+      "baseline_cycles": 310,
+      "baseline_ns": 155.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_gather m=3",
+      "baseline_cycles": 368,
+      "baseline_ns": 184.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_gather m=4",
+      "baseline_cycles": 628,
+      "baseline_ns": 314.0,
+      "related_req": "REQ-P-003"
+    },
+    {
+      "path": "calendar ag_gather m=5",
+      "baseline_cycles": 898,
+      "baseline_ns": 449.0,
+      "related_req": "REQ-P-003"
+    }
+  ],
+  "throughput_constraints": [
+    {
+      "path": "each granted physical mesh direction",
+      "flits_per_cycle": 1,
+      "bytes_per_cycle": 64,
+      "bits_per_cycle": 512,
+      "gb_per_s_decimal_at_2ghz": 128,
+      "related_req": "REQ-P-001"
+    },
+    {
+      "path": "PE-router ramp",
+      "flits_per_cycle": 1,
+      "related_req": "REQ-P-002"
+    }
+  ],
+  "ambiguities": [
+    "[AMBIGUITY: REQ-P-002] Router internal pipeline latency is not specified, so no independent router-cycle budget is asserted.",
+    "[AMBIGUITY: REQ-P-003] Baselines are comparison references; no allowed makespan-overhead percentage is specified.",
+    "[AMBIGUITY: REQ-F-009] No watchdog timeout or recovery-latency bound is specified."
+  ]
+}

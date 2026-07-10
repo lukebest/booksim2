@@ -1,0 +1,6 @@
+{
+  "phase": "phase-2-architecture",
+  "target_phase": "phase-3-microarchitecture",
+  "open_items": [],
+  "note": "All OPEN-1 items are resolved by REQ-A-001 through REQ-A-005. Per-port FIFO banking and exact RTL pipeline/register placement remain implementation choices constrained by the Phase-2 acceptance criteria; they are not unresolved architecture requirements."
+}

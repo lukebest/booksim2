@@ -1,0 +1,257 @@
+{
+  "phase": "phase-2-architecture",
+  "checked_against": ["phase-1-research"],
+  "timestamp": "2026-07-10T16:06:00+08:00",
+  "summary": {
+    "verdict": "PASS",
+    "total": 27,
+    "pass": 27,
+    "violation": 0,
+    "uncertain": 0,
+    "untested": 0,
+    "not_verifiable": 0,
+    "max_violation_authority": null,
+    "infeasibility_detected": false
+  },
+  "gate_checks": {
+    "p1_req_addressed": "PASS",
+    "open_1_resolved": "PASS",
+    "feature_coverage_100pct": "PASS",
+    "architecture_review_pass": "PASS",
+    "candidates_ge_3": "PASS",
+    "adrs_recorded": "PASS",
+    "refc_smoke_build": "PASS"
+  },
+  "results": [
+    {
+      "req_id": "REQ-F-001",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-001 in docs/phase-2-architecture/iron-requirements.json; calendar_store/calendar_replay in architecture.md; feature-coverage.md row REQ-F-001"
+    },
+    {
+      "req_id": "REQ-F-002",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "multicast_fork + calendar_replay in architecture.md; feature-coverage.md row REQ-F-002; REQ-A-001/005 upstream_compliance"
+    },
+    {
+      "req_id": "REQ-F-003",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "combine_unit + pe_ni Tier-A/B paths in architecture.md; REQ-A-004; feature-coverage.md row REQ-F-003"
+    },
+    {
+      "req_id": "REQ-F-004",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-004; tier A/B/C table in architecture-candidates.md; Tier-B opcode/identity contract in architecture.md frozen decisions"
+    },
+    {
+      "req_id": "REQ-F-005",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-002: 1/16 BG window and 212-cycle longest-route bound; xy_route/vc_buffers in architecture.md"
+    },
+    {
+      "req_id": "REQ-F-006",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-005 + multicast_fork atomic fork in architecture.md; feature-coverage.md row REQ-F-006"
+    },
+    {
+      "req_id": "REQ-F-007",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-002 deadlock argument in architecture.md VC/credit section; architecture-review.md checklist Deadlock freedom Pass"
+    },
+    {
+      "req_id": "REQ-F-008",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-003 RTT credit minima; credit_fc/vc_buffers in architecture.md"
+    },
+    {
+      "req_id": "REQ-F-009",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-005: 32-cycle watchdog, 2-cycle recovery start; watchdog_demote in architecture.md"
+    },
+    {
+      "req_id": "REQ-F-010",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "DCA tier comparison table in architecture-candidates.md; REQ-A-004; ppa-analytic.md calibration rows"
+    },
+    {
+      "req_id": "REQ-F-011",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-004 Tier-C disabled; dca_stub optional boundary in architecture.md; feature-coverage.md row REQ-F-011"
+    },
+    {
+      "req_id": "REQ-F-012",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "Phase-3 BFM replay boundary in feature-coverage.md; calendar_store/calendar_replay/pe_ni blocks; architecture-review residual obligations defer BFM to Phase 3"
+    },
+    {
+      "req_id": "REQ-P-001",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-003; 512-bit 1-flit/cycle granted-path contract in architecture.md scope and switch_alloc/crossbar"
+    },
+    {
+      "req_id": "REQ-P-002",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "2 GHz, H=7, V=9, ramp=1 stated in architecture.md, architecture-candidates.md, ppa-analytic.md"
+    },
+    {
+      "req_id": "REQ-P-003",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "All 10 baselines and per-m overhead table in ppa-analytic.md Makespan baselines section; REQ-A-002 resolved_from"
+    },
+    {
+      "req_id": "REQ-P-004",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "Four model assumptions table in ppa-analytic.md; +5.8%/+2.7%/+16.9% calibration in architecture-candidates.md and ppa-analytic.md"
+    },
+    {
+      "req_id": "REQ-P-005",
+      "ac_id": null,
+      "criterion_description": null,
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "Tier-C comparison retained while disabled in REQ-A-004 and ppa-analytic.md; tile <1% explicitly not claimed"
+    },
+    {
+      "req_id": "OPEN-1-001",
+      "ac_id": null,
+      "criterion_description": "Calendar storage and dispatch encoding resolved",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-001 resolved_from OPEN-1-001; docs/phase-2-architecture/open-requirements.json open_items=[]"
+    },
+    {
+      "req_id": "OPEN-1-002",
+      "ac_id": null,
+      "criterion_description": "Calendar and background isolation resolved",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-002 resolved_from OPEN-1-002; hybrid TDM + BG VC in ADR-001 and architecture.md"
+    },
+    {
+      "req_id": "OPEN-1-003",
+      "ac_id": null,
+      "criterion_description": "Router buffering strategy resolved",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-003 resolved_from OPEN-1-003; zero-buffer calendar + RTT BG buffers in architecture.md"
+    },
+    {
+      "req_id": "OPEN-1-004",
+      "ac_id": null,
+      "criterion_description": "Reduction implementation tier resolved",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-004 resolved_from OPEN-1-004; Tier B selected, A fallback, C deferred in ADR-001/ADR-002"
+    },
+    {
+      "req_id": "OPEN-1-005",
+      "ac_id": null,
+      "criterion_description": "Calendar violation detection and recovery resolved",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "REQ-A-005 resolved_from OPEN-1-005; watchdog_demote FSM in architecture.md and refc/watchdog_demote.c"
+    },
+    {
+      "req_id": "GATE-FC",
+      "ac_id": null,
+      "criterion_description": "Feature coverage 100%",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "reviews/phase-2-architecture/feature-coverage.md: 22/22 requirements Covered (100%)"
+    },
+    {
+      "req_id": "GATE-AR",
+      "ac_id": null,
+      "criterion_description": "Architecture review verdict PASS",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "reviews/phase-2-architecture/architecture-review.md Verdict: PASS"
+    },
+    {
+      "req_id": "GATE-CAND",
+      "ac_id": null,
+      "criterion_description": "architecture-candidates.md with >=3 candidates",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/phase-2-architecture/architecture-candidates.md: Arch-A, Arch-B, Arch-C"
+    },
+    {
+      "req_id": "GATE-ADR",
+      "ac_id": null,
+      "criterion_description": "ADRs recorded",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "docs/decisions/ADR-001-algorithm-selection.md and ADR-002-architecture-selection.md status Accepted"
+    },
+    {
+      "req_id": "GATE-REFC",
+      "ac_id": null,
+      "criterion_description": "refc smoke build PASS",
+      "authority": 1,
+      "verdict": "PASS",
+      "evidence": "make -C refc test: PASS cycles=45 calendar=1 bg=2 demotions=1"
+    }
+  ],
+  "fixes_applied": [
+    {
+      "file": "docs/phase-2-architecture/ppa-analytic.md",
+      "reason": "Added REQ-P-003 per-m baseline and overhead table"
+    },
+    {
+      "file": "docs/phase-2-architecture/architecture.md",
+      "reason": "Explicit Tier-B identity and ordering values for REQ-F-004 AC"
+    },
+    {
+      "file": "docs/phase-2-architecture/architecture-candidates.md",
+      "reason": "Removed stale open-item language contradicting OPEN-1 resolution"
+    }
+  ]
+}

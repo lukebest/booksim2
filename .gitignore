@@ -6,3 +6,9 @@
 utils/test_calendar_smoke
 *.pyc*
 .venv-ilp/
+
+# DSE / RAT build artifacts
+bfm/build/
+refc/build/
+*.o
+bfm/logs/
