@@ -1,5 +1,10 @@
 #include "multicast_fork.h"
 
+/*
+ * CalFork leaf: pure mask→port list expansion for calendar events.
+ * Hardware equivalent is wire OR of out_port_mask bits into SA grants
+ * with a single all-or-nothing credit AND — not a stream_fork pipeline.
+ */
 uint8_t multicast_expand(uint8_t out_port_mask, port_t ports[PORT_COUNT])
 {
     uint8_t count = 0U;

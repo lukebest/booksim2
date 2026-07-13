@@ -1,13 +1,13 @@
 {
   "phase": "phase-2-architecture",
-  "architecture": "Arch-A4 SparseCal-SharedPool-ZB-NoCombine",
-  "trial": 4,
+  "architecture": "Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine",
+  "trial": 5,
   "requirements": [
     {
       "id": "REQ-A-001",
       "resolved_from": ["OPEN-1-001", "REQ-F-001"],
       "statement": "Each router shall replay the active double-buffered calendar bank as a sparse ordered event list of up to 128 entries per bank. Each entry is {slot[9:0], valid[0], in_port[2:0], out_port_mask[4:0], opcode[3:0]} packed to 23 bits, sorted by slot. Calendar ID is 2 bits and an epoch bit selects the bank; only the inactive bank is writable and activation occurs atomically at slot 0 after old-epoch retirement. Dispatch uses next-event match: when global slot counter equals entry.slot, the calendar path fires.",
-      "resolution_rationale": "Unchanged from Trial 3 SparseCal. Measured allreduce m=1 max 49 entries/router; depth 128 provides >2× margin. Storage 2×128×23=5,888 bits.",
+      "resolution_rationale": "Unchanged from Trial 3/4 SparseCal. Measured allreduce m=1 max 49 entries/router; depth 128 provides >2× margin. Storage 2×128×23=5,888 bits.",
       "rejected_alternatives": [
         {"candidate": "Dense 1024-slot calendar", "reason": "Superseded by Trial 3 SparseCal."},
         {"candidate": "64-entry sparse depth", "reason": "Insufficient margin over max 49."}
@@ -25,8 +25,8 @@
     {
       "id": "REQ-A-002",
       "resolved_from": ["OPEN-1-002", "REQ-F-005", "REQ-F-007", "REQ-P-003"],
-      "statement": "Calendar replay shall use event-owned zero-buffer forwarding on slot match, while BG and escape traffic use a credited XY-DOR class on non-matching cycles (soft priority). Calendar wins when a matching sparse event fires; BG never displaces a firing calendar event. Conservative hard 1-in-16 bound remains 328 cycles on 12-hop worst case; soft-priority reserve-covered bound is approximately 160 cycles; soft + shared-pool contention bound is approximately 200 cycles.",
-      "resolution_rationale": "Soft priority retained from Trial 3; SharedPool-BG adds a documented pool-contention bound without weakening calendar isolation.",
+      "statement": "Calendar replay shall use event-owned zero-buffer forwarding on slot match via CalFork, while BG and escape traffic use a credited XY-DOR class on non-matching cycles (soft priority). Calendar wins when a matching sparse event fires; BG never displaces a firing calendar event. Conservative hard 1-in-16 bound remains 328 cycles on 12-hop worst case; soft-priority reserve-covered bound is approximately 160 cycles; soft + shared-pool contention bound is approximately 188 cycles.",
+      "resolution_rationale": "Soft priority retained; SharedPool size 28 updates pool-contention bound to ~188 without weakening calendar isolation.",
       "rejected_alternatives": [
         {"candidate": "Hard 1-in-16 as primary", "reason": "Over-reserves BG under sparse occupancy."},
         {"candidate": "Strict calendar priority starving BG", "reason": "Violates BG progress."}
@@ -39,18 +39,18 @@
         "BG never grants over a firing calendar event at the same cycle.",
         "Conservative 12-hop bound (|dx|=5, |dy|=7) ≤ 328 cycles under hard-TDM premises.",
         "Soft-prio reserve-covered 12-hop bound ≤ 160 cycles under max-occupancy-49 premise.",
-        "Soft+pool contention bound ≤ 200 cycles under documented adversarial assumptions."
+        "Soft+pool contention bound ≤ 188 cycles under documented adversarial assumptions."
       ]
     },
     {
       "id": "REQ-A-003",
       "resolved_from": ["OPEN-1-003", "REQ-F-008", "REQ-P-001"],
-      "statement": "Calendar payloads shall have no queued VC storage and shall never consume the shared BG pool. BG/escape payload buffering shall use a shared buffer pool of 40 flits plus per-port reserve of 2 flits (5×2=10), totaling 50 flits (25,600 bits) per interior router. Enqueue is allowed if the port still has unused reserve or shared_used < 40. Per-egress credit counters enforce 16 flits horizontal and 20 flits vertical. Demote/escape traffic uses pool/reserves losslessly.",
-      "resolution_rationale": "Trial 4 SharedPool-BG halves flit storage vs dedicated 100 while per-port reserve=2 plus XY-DOR prevents deadlock and permanent starvation. Calendar isolation preserved.",
+      "statement": "Calendar payloads shall have no queued VC storage and shall never consume the shared BG pool. BG/escape payload buffering shall use a shared buffer pool of 28 flits plus per-port reserve of 2 flits (5×2=10), totaling 38 flits (19,456 bits) per interior router. Enqueue is allowed if the port still has unused reserve or shared_used < 28. Per-egress credit counters enforce 16 flits horizontal and 20 flits vertical. Demote/escape traffic uses pool/reserves losslessly.",
+      "resolution_rationale": "Trial 5 aggressive SharedPool: 28+2=38 still satisfies deadlock freedom (reserve=2 + XY-DOR) and RefC progress tests; pool 24+2 documented as sensitivity.",
       "rejected_alternatives": [
-        {"candidate": "Dedicated 5×20=100 FIFOs (Trial 3)", "reason": "Fails Trial 4 area-reduction goal."},
-        {"candidate": "Shared pool with zero reserve", "reason": "Risk of port starvation / progress failure under adversarial sharing."},
-        {"candidate": "Pool 48 + reserve 2 (~58 flits)", "reason": "Larger area; not required given reserve+DOR deadlock argument."}
+        {"candidate": "Shared pool 40 + reserve 2 (Trial 4)", "reason": "Larger area; Trial 5 area goal requires further cut."},
+        {"candidate": "Shared pool with zero reserve", "reason": "Risk of port starvation / progress failure."},
+        {"candidate": "Pool 24 + reserve 2 as default", "reason": "RefC PASS but less burst margin; kept as sensitivity only."}
       ],
       "upstream_compliance": "REQ-F-008 no-overwrite; REQ-P-001 rate; deadlock freedom documented in architecture.md.",
       "violation_policy": "user_escalation",
@@ -60,14 +60,15 @@
         "test_shared_pool PASS: one port may take reserve+shared; other ports retain reserve when shared exhausted.",
         "Calendar path never enqueues into the shared pool.",
         "Demote escape enqueues into pool/reserves without drop when capacity exists.",
-        "No circular wait on pool credits under XY-DOR + per-port reserve."
+        "No circular wait on pool credits under XY-DOR + per-port reserve.",
+        "BG_SHARED_POOL_SIZE==28 and BG_TOTAL_FLITS==38 in RefC."
       ]
     },
     {
       "id": "REQ-A-004",
       "resolved_from": ["OPEN-1-004", "REQ-F-004", "REQ-F-010", "REQ-F-011", "REQ-P-005"],
-      "statement": "Trial 4 shall implement DCA Tier A only: reduce = calendar gather + PE-local compute; allreduce = gather + PE-local compute + calendar broadcast. The router shall not instantiate combine_unit or any DCA datapath/interface.",
-      "resolution_rationale": "USER_CONFIRMED; reaffirmed from Trial 2/3. SharedPool does not restore combine.",
+      "statement": "Trial 5 shall implement DCA Tier A only: reduce = calendar gather + PE-local compute; allreduce = gather + PE-local compute + calendar broadcast. The router shall not instantiate combine_unit or any DCA datapath/interface.",
+      "resolution_rationale": "USER_CONFIRMED; reaffirmed from Trial 2/3/4. CalFork and SharedPool do not restore combine.",
       "rejected_alternatives": [
         {"candidate": "Tier B router-local combine", "reason": "Rejected by binding feedback."},
         {"candidate": "Tier C DCA", "reason": "Out of scope."}
@@ -102,19 +103,37 @@
     {
       "id": "REQ-A-006",
       "resolved_from": ["REQ-P-004"],
-      "statement": "Analytic relative router area for Arch-A4 shall be at or below 0.92× versus IQ-XY baseline and strictly below Trial 3's 1.000×, using the audited component model in ppa-analytic.md with buffers 0.182 (50 flits), sparse calendar 0.009, and control 0.193.",
-      "resolution_rationale": "Trial 4 SharedPool area target: buffer 0.15–0.22 and total ~0.85–0.92; achieved 0.182 / 0.822.",
+      "statement": "Analytic relative router area for Arch-A5 shall be strictly below Trial 4's 0.822× and inside or better than the 0.75–0.79× target band versus IQ-XY, using the audited component model in ppa-analytic.md with buffers 0.139 (38 flits), CalFork multicast 0.025, sparse calendar 0.009, and control 0.193.",
+      "resolution_rationale": "Trial 5 dual levers: CalFork −0.033 and SharedPool −0.043 → 0.746×.",
       "rejected_alternatives": [
-        {"candidate": "Retain Trial 3 dedicated 1.000×", "reason": "Fails SharedPool area goal."},
-        {"candidate": "Zero-reserve shared pool", "reason": "Deadlock/progress risk."}
+        {"candidate": "Retain Trial 4 0.822×", "reason": "Fails Trial 5 area-cut goal."},
+        {"candidate": "Restore FlooNoC MC 0.058", "reason": "Leaves primary lever unused."}
       ],
       "upstream_compliance": "REQ-P-004 area-first.",
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1,
       "acceptance_criteria": [
-        "ppa-analytic.md and ppa_analytic_model.py report Arch-A4 total area ≤ 0.92.",
-        "Buffer component is in [0.15, 0.22].",
-        "Documented delta versus Trial 3 area is negative (SharedPool reduction)."
+        "ppa-analytic.md and ppa_analytic_model.py report Arch-A5 total area ≤ 0.79 and < 0.822.",
+        "Multicast component equals CalFork 0.025 (±0.005 band).",
+        "Buffer component reflects 38 flits (28+2).",
+        "Documented delta versus Trial 4 area is negative."
+      ]
+    },
+    {
+      "id": "REQ-A-007",
+      "resolved_from": ["REQ-F-001", "REQ-P-004"],
+      "statement": "Calendar multicast shall use CalFork: atomic expansion of the sparse-event out_port_mask[4:0] into all-or-nothing egress grants. The router shall not instantiate a general FlooNoC-class stream_fork engine or independent multi-stream fork FSMs for calendar traffic.",
+      "resolution_rationale": "ADR-005: calendar already carries the mask; lean fork removes stream_fork area while preserving atomic multicast semantics.",
+      "rejected_alternatives": [
+        {"candidate": "FlooNoC stream_fork datapath", "reason": "Overheads (+0.058) unnecessary for calendar-native masks."}
+      ],
+      "upstream_compliance": "Calendar mask fork; ADR-005.",
+      "violation_policy": "user_escalation",
+      "ambiguity_score": 0.15,
+      "acceptance_criteria": [
+        "RefC calendar path uses cal_fork_expand / multicast_expand on out_port_mask only.",
+        "test_blocked_fork and calendar smoke PASS with atomic all-or-nothing semantics.",
+        "Analytic MC area modeled as CalFork 0.025, not FlooNoC 0.058."
       ]
     }
   ]

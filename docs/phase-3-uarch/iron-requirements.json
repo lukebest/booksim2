@@ -1,77 +1,163 @@
 {
   "phase": "phase-3-uarch",
-  "architecture": "Arch-A4 SparseCal-SharedPool-ZB-NoCombine",
-  "trial": 4,
+  "architecture": "Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine",
+  "trial": 5,
   "requirements": [
     {
       "id": "REQ-U-001",
-      "resolved_from": ["REQ-A-001", "REQ-F-001"],
-      "statement": "calendar_store/next_event_match shall implement dual-bank 128×23-bit sparse event lists with S0 registered SRAM read, S1 slot==counter qualification in noc_clk; entries sorted by slot; activation only at slot 0 after old-epoch retirement.",
+      "traces_to": [
+        "REQ-A-001",
+        "REQ-F-001"
+      ],
+      "statement": "calendar_store/next_event_match shall implement dual-bank 128\u00d723-bit sparse event lists with S0 registered SRAM read, S1 slot==counter qualification in noc_clk; entries sorted by slot; activation only at slot 0 after old-epoch retirement.",
       "acceptance_criteria": [
-        "BFM active-bank read fires at entry.slot with loaded inactive-bank contents after handoff.",
-        "No active-bank write occurs during replay.",
-        "Storage is exactly 5,888 payload bits per router (2×128×23).",
-        "Loader rejects lists exceeding 128 entries per bank."
+        {
+          "ac_id": "REQ-U-001.AC-1",
+          "description": "The BFM fires each active-bank entry exactly at entry.slot after inactive-bank handoff.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        },
+        {
+          "ac_id": "REQ-U-001.AC-2",
+          "description": "Calendar storage is exactly 2\u00d7128\u00d723 = 5,888 payload bits per router.",
+          "test_method": "inspection",
+          "verifiable": false
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1
     },
     {
       "id": "REQ-U-002",
-      "resolved_from": ["REQ-A-002", "REQ-A-003", "REQ-F-005", "REQ-F-007", "REQ-F-008"],
-      "statement": "BG/escape shall use SharedPool-BG vc_buffers (shared pool 40 + per-port reserve 2) with RC→SA→ST pipeline and soft-priority service on non-matching cycles. Calendar never enqueues into the pool. Conservative hard bound 328 cycles; soft reserve-covered ~160; soft+pool contention ~200. H/V credits 16/20.",
+      "traces_to": [
+        "REQ-A-002",
+        "REQ-A-003",
+        "REQ-F-005",
+        "REQ-F-007",
+        "REQ-F-008"
+      ],
+      "statement": "BG/escape shall use SharedPool-BG vc_buffers with 28 shared flits plus five per-port reserves of 2 (38 total) using the RC\u2192SA\u2192ST pipeline and soft-priority service on non-matching cycles. Calendar never enqueues into the pool. Conservative hard bound is 328 cycles; soft reserve-covered bound is ~160 cycles; soft+pool contention bound is ~188 cycles. H/V credits are 16/20.",
       "acceptance_criteria": [
-        "test_bg_window, test_bg_bound, and test_shared_pool PASS.",
-        "BG never grants over a firing calendar event.",
-        "Calendar path never enqueues payload into vc_buffers.",
-        "When shared pool is exhausted, each port still accepts up to reserve=2 flits."
+        {
+          "ac_id": "REQ-U-002.AC-1",
+          "description": "test_bg_window, test_bg_bound, and test_shared_pool pass with BG_SHARED_POOL_SIZE=28 and BG_PER_PORT_RESERVE=2.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        },
+        {
+          "ac_id": "REQ-U-002.AC-2",
+          "description": "A firing calendar event is never displaced by BG, and calendar payloads never enter vc_buffers.",
+          "test_method": "assertion",
+          "verifiable": true
+        },
+        {
+          "ac_id": "REQ-U-002.AC-3",
+          "description": "When the 28 shared slots are exhausted, every port still accepts its two reserve flits.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.15
     },
     {
       "id": "REQ-U-003",
-      "resolved_from": ["REQ-A-005", "REQ-F-006", "REQ-F-009"],
-      "statement": "multicast_fork shall be atomic on out_port_mask; watchdog_demote shall release once and emit lossless XY escape packets for remaining leaves into pool/reserves within 2 cycles of available capacity.",
+      "traces_to": [
+        "REQ-A-005",
+        "REQ-F-002",
+        "REQ-F-006",
+        "REQ-F-009"
+      ],
+      "statement": "CalFork shall atomically expand the calendar-native out_port_mask through cal_fork_expand(); it is not a general FlooNoC stream_fork. watchdog_demote shall release once and emit lossless XY escape packets for remaining leaves into pool/reserves within 2 cycles of available capacity.",
       "acceptance_criteria": [
-        "test_blocked_fork and test_demote_noloss PASS.",
-        "Exactly one reservation release per violation.",
-        "No drop of preserved flit/context under backpressure when capacity exists."
+        {
+          "ac_id": "REQ-U-003.AC-1",
+          "description": "test_blocked_fork and test_demote_noloss pass using the calendar-native CalFork path.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        },
+        {
+          "ac_id": "REQ-U-003.AC-2",
+          "description": "Each violation releases exactly one reservation and preserves every remaining leaf when capacity exists.",
+          "test_method": "assertion",
+          "verifiable": true
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.15
     },
     {
       "id": "REQ-U-004",
-      "resolved_from": ["REQ-A-004", "REQ-F-003", "REQ-F-004", "REQ-F-010", "REQ-F-011"],
-      "statement": "μArch shall not instantiate combine_unit or DCA. Reduce/allreduce use Tier-A PE handoff; CAL_OP_PE_HANDOFF is forward/tag only.",
+      "traces_to": [
+        "REQ-A-004",
+        "REQ-F-003",
+        "REQ-F-004",
+        "REQ-F-010",
+        "REQ-F-011"
+      ],
+      "statement": "\u03bcArch shall not instantiate combine_unit or DCA. Reduce/allreduce use Tier-A PE handoff; CAL_OP_PE_HANDOFF is forward/tag only.",
       "acceptance_criteria": [
-        "Router context and BFM builds contain no combine_unit.",
-        "uarch.md documents combine/DCA as ABSENT."
+        {
+          "ac_id": "REQ-U-004.AC-1",
+          "description": "Router context and BFM builds contain no combine_unit or DCA interface.",
+          "test_method": "inspection",
+          "verifiable": false
+        },
+        {
+          "ac_id": "REQ-U-004.AC-2",
+          "description": "uarch.md documents combine and DCA as absent.",
+          "test_method": "inspection",
+          "verifiable": false
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1
     },
     {
       "id": "REQ-U-005",
-      "resolved_from": ["REQ-A-006", "REQ-P-004"],
-      "statement": "Analytic PPA for the μArch shall report relative area ≤0.92× (Arch-A4 default 0.822×) and power 0.92× vs IQ-XY, below Trial 3's 1.000×/0.95×, with buffers 0.182 and control 0.193.",
+      "traces_to": [
+        "REQ-A-006",
+        "REQ-P-004"
+      ],
+      "statement": "Analytic PPA for the \u03bcArch shall report crossbar 0.380, buffers 0.139, SparseCal 0.009, CalFork multicast 0.025, control 0.193, and total area ~0.746\u00d7 with power 0.90\u00d7 versus IQ-XY. This improves on Arch-A4's 0.822\u00d7/0.92\u00d7.",
       "acceptance_criteria": [
-        "ppa-analytic.md and ppa_analytic_model.py report Arch-A4 area ≤0.92.",
-        "combine component is 0.000; calendar component is 0.009; buffers in [0.15,0.22].",
-        "Documented area delta vs Trial 3 is negative."
+        {
+          "ac_id": "REQ-U-005.AC-1",
+          "description": "ppa_analytic_model.py reports total area 0.746\u00d7 and power 0.90\u00d7 for the 28+2 CalFork configuration.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        },
+        {
+          "ac_id": "REQ-U-005.AC-2",
+          "description": "The area breakdown is XB=0.380, Buf=0.139, Cal=0.009, MC=0.025, Ctrl=0.193, with no combine component.",
+          "test_method": "inspection",
+          "verifiable": false
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1
     },
     {
       "id": "REQ-U-006",
-      "resolved_from": ["REQ-P-001", "REQ-P-002"],
+      "traces_to": [
+        "REQ-P-001",
+        "REQ-P-002",
+        "REQ-F-012"
+      ],
       "statement": "Single noc_clk domain at 2 GHz; one 512-bit flit per granted direction per cycle; H=7 V=9 ramp=1 modeled as link/PE latency, not a second clock. Global slot counter wraps at 1024.",
       "acceptance_criteria": [
-        "clock-domain-map.md lists only noc_clk.",
-        "BFM/mesh timing uses H=7 V=9 ramp=1.",
-        "No CDC synchronizer is required in the μArch."
+        {
+          "ac_id": "REQ-U-006.AC-1",
+          "description": "clock-domain-map.md lists noc_clk as the sole clock domain and the BFM uses H=7, V=9, and ramp=1.",
+          "test_method": "inspection",
+          "verifiable": false
+        },
+        {
+          "ac_id": "REQ-U-006.AC-2",
+          "description": "The BFM replays calendars and reports makespan without a CDC synchronizer.",
+          "test_method": "refc_bfm",
+          "verifiable": true
+        }
       ],
       "violation_policy": "user_escalation",
       "ambiguity_score": 0.1

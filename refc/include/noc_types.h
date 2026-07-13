@@ -12,11 +12,13 @@
 #define PORT_COUNT 5U
 
 /*
- * Trial 4 SharedPool-BG (Arch-A4):
- *   shared free pool 40 + per-port reserve 2 → 50 flits total (was 5×20=100).
+ * Trial 5 SharedPool-BG (Arch-A5):
+ *   shared free pool 28 + per-port reserve 2 → 38 flits total
+ *   (Trial 4 was 40+2=50; Trial 3 dedicated 5×20=100).
  * Calendar path never consumes these slots.
+ * Sensitivity: 24+2=34 also RefC-PASS; default 28 for progress margin.
  */
-#define BG_SHARED_POOL_SIZE 40U
+#define BG_SHARED_POOL_SIZE 28U
 #define BG_PER_PORT_RESERVE 2U
 #define BG_TOTAL_FLITS \
     (BG_SHARED_POOL_SIZE + (PORT_COUNT * BG_PER_PORT_RESERVE))

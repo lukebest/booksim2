@@ -1,29 +1,42 @@
-# Phase 2 摘要 — DSE Trial 4（Arch-A4）
+# Phase 2 摘要 — DSE Trial 5（Arch-A5）
 
-- **架构：** Arch-A4 SparseCal-SharedPool-ZB-NoCombine
-- **决策：** USER_CONFIRMED（在 Arch-A3 SparseCal 上继续面积削减：SharedPool-BG）
-- **无 Phase 4**
+- **架构：** Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine
+- **决策：** USER_CONFIRMED（在 Arch-A4 上继续面积优化）
+- **无 Phase 4 / 无 combine / 无 DCA**
 
-## 相对 Trial 3 的变化
+## 相对 Trial 4 的两项杠杆
 
-| 项 | Trial 3 | Trial 4 |
-|---|---|---|
-| 日历 | 稀疏 2×128×23 | 不变 |
-| BG 缓冲 | 专用 5×20=100 | **共享池 40 + 预留 5×2=50** |
-| 面积 vs IQ-XY | 1.000× | **0.822×** |
-| 功耗 vs IQ-XY | 0.95× | **0.92×** |
-| Tier A | 无 combine/DCA | 不变 |
+| 杠杆 | Trial 4 | Trial 5 | 面积 Δ |
+|---|---|---|---:|
+| 多播 | FlooNoC-class MC 0.058 | **CalFork 0.025** | **−0.033** |
+| BG 缓冲 | 共享池 40 + 预留 2 = 50 | **共享池 28 + 预留 2 = 38** | **−0.043** |
+| **合计** | **0.822×** | **0.746×** | **−0.076** |
 
-## 关键证明点
+## PPA 分解
 
-1. **死锁自由：** XY-DOR 无环 + 每端口预留 2 + 日历零缓冲隔离（不参与池信用环）。
-2. **BG 上界：** 硬 328；软（预留覆盖）~160；软+池争用 ~200。
-3. **日历不受影响：** 零缓冲；永不占用共享池。
-4. **Demote→XY 无损：** escape 进入池/预留。
+| 组件 | 相对面积 |
+|---|---:|
+| Crossbar | 0.380 |
+| VC buffers（38 flit） | 0.139 |
+| SparseCal | 0.009 |
+| CalFork MC | 0.025 |
+| Control | 0.193 |
+| **总计 / 功耗** | **0.746× / 0.90×** |
+
+## P0 保持
+
+- 稀疏日历零缓冲回放；软优先级 BG；XY-DOR demote 无损
+- Tier A；日历永不占用共享池
+- 死锁论证：XY-DOR + 预留=2 + 日历隔离
+- BG 上界：硬 328 / 软 ~160 / 软+池 ~188
+
+## 灵敏度
+
+- 池 **24+2=34**：RefC PASS，面积 ~0.731（未作默认，保留余量）
+- 仅 CalFork（池仍 40）：~0.789
 
 ## 关键工件
 
-- `architecture.md` / `architecture-diagram.md`
+- `architecture.md` / `architecture-diagram.md` / `architecture-candidates.md`
 - `ppa-analytic.md` / `utils/ppa_analytic_model.py`
-- ADR-002 / ADR-004（ADR-003 Tier A 再确认）
-- `iron-requirements.json`（REQ-A-001..006，trial=4）
+- ADR-002 / ADR-004 / ADR-005

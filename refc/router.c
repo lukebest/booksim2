@@ -190,10 +190,10 @@ void router_step(router_context_t *router, uint32_t cycle,
         selected_flit = inputs->flit[entry.in_port];
         output_mask = calendar_output_mask(&entry);
         /*
-         * Calendar opcodes describe routing only.  Legacy reduce opcode
-         * encodings are PE-handoff tags; their payload is forwarded unchanged.
+         * CalFork (Arch-A5): calendar-native atomic out_port_mask fork.
+         * Legacy reduce opcodes are PE-handoff tags; payload forwarded unchanged.
          */
-        fork_count = multicast_expand(output_mask, fork_ports);
+        fork_count = cal_fork_expand(output_mask, fork_ports);
         for (port_index = 0U; port_index < fork_count; ++port_index) {
             outputs->flit[(uint32_t)fork_ports[port_index]] = selected_flit;
             outputs->valid[(uint32_t)fork_ports[port_index]] = true;
@@ -234,9 +234,9 @@ void router_step(router_context_t *router, uint32_t cycle,
     }
 
     /*
-     * Soft priority (Arch-A4): calendar wins only when a sparse event matches.
+     * Soft priority (Arch-A5): calendar wins only when a sparse event matches.
      * BG may use any non-matching / idle cycle. Shared pool does not affect
-     * calendar path (zero-buffer).
+     * calendar path (zero-buffer). CalFork never consumes pool slots.
      */
     if (!calendar_store_replay(&router->calendar, cycle, &entry)) {
         for (port_index = 0U; port_index < PORT_COUNT; ++port_index) {

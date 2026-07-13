@@ -1,7 +1,7 @@
-# Arch-A4 Architecture Diagrams (DSE Trial 4)
+# Arch-A5 Architecture Diagrams (DSE Trial 5)
 
-**Architecture:** Arch-A4 SparseCal-SharedPool-ZB-NoCombine  
-**Decision:** USER_CONFIRMED — SharedPool-BG on Arch-A3 SparseCal base (Tier A)
+**Architecture:** Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine  
+**Decision:** USER_CONFIRMED — CalFork + aggressive SharedPool on Arch-A4 base (Tier A)
 
 Companion: [`architecture.md`](architecture.md).
 
@@ -23,11 +23,11 @@ flowchart TB
   mesh --- note
 ```
 
-> 中文：6×8 网格，单条 512b 物理 NoC（与 Trial 3 相同）。
+> 中文：6×8 网格，单条 512b 物理 NoC（与 Trial 4 相同）。
 
 ---
 
-## 2. Router block diagram — SparseCal + SharedPool-BG
+## 2. Router block diagram — SparseCal + CalFork + SharedPool
 
 ```mermaid
 flowchart LR
@@ -46,10 +46,10 @@ flowchart LR
   pe_ni --> classify
   next_match --> classify
 
-  classify -->|"matching event<br/>zero-buffer path"| multicast_fork["multicast_fork<br/>atomic 5-bit fork"]
-  multicast_fork --> switch_alloc["switch_alloc"]
+  classify -->|"matching event<br/>zero-buffer path"| cal_fork["CalFork<br/>lean out_port_mask fork"]
+  cal_fork --> switch_alloc["switch_alloc"]
 
-  classify -->|"BG or demoted"| vc_buffers["vc_buffers SharedPool<br/>pool 40 + reserve 5×2 = 50"]
+  classify -->|"BG or demoted"| vc_buffers["vc_buffers SharedPool<br/>pool 28 + reserve 5×2 = 38"]
   vc_buffers --> xy_route["xy_route X-then-Y"]
   xy_route --> switch_alloc
 
@@ -61,11 +61,11 @@ flowchart LR
   credit_fc["credit_fc<br/>per-egress BG/escape credits"] <--> vc_buffers
   credit_fc --> switch_alloc
 
-  absent["ABSENT: combine_unit / DCA<br/>Calendar NEVER uses shared pool"]
-  multicast_fork -.-> absent
+  absent["ABSENT: combine_unit / DCA / FlooNoC stream_fork<br/>Calendar NEVER uses shared pool"]
+  cal_fork -.-> absent
 ```
 
-> 中文：保留稀疏日历零缓冲路径；BG/escape 改为共享池 40 + 每端口预留 2。
+> 中文：日历经 CalFork 零缓冲分叉；BG/escape 走共享池 28 + 预留 2。
 
 ---
 
@@ -75,11 +75,11 @@ flowchart LR
 flowchart TB
   subgraph pool["vc_buffers — SharedPool-BG"]
     RES["Per-port reserve<br/>5 × 2 = 10 flits"]
-    SHR["Shared free pool<br/>40 flits"]
+    SHR["Shared free pool<br/>28 flits"]
     ACC{"enqueue(port)"}
   end
   ACC -->|"count < 2"| RES
-  ACC -->|"count ≥ 2 and shared_used < 40"| SHR
+  ACC -->|"count ≥ 2 and shared_used < 28"| SHR
   ACC -->|"else"| BP["backpressure"]
   CAL["Calendar path"] -.->|"never"| pool
   DEM["watchdog demote escape"] --> ACC
@@ -89,16 +89,16 @@ flowchart TB
 
 ---
 
-## 4. Soft priority (unchanged) + new BG bounds
+## 4. Soft priority + BG bounds
 
 ```mermaid
 flowchart TB
   CTR["slot counter"] --> MATCH{"sparse head<br/>slot == counter?"}
-  MATCH -->|yes| CAL["Calendar owns cycle (ZB)"]
+  MATCH -->|yes| CAL["Calendar owns cycle (ZB + CalFork)"]
   MATCH -->|no| BG["BG / escape eligible"]
   CAL --> XBAR["crossbar"]
   BG --> XBAR
-  note["Hard TDM bound 328 cy<br/>Soft reserve-covered ~160 cy<br/>Soft+pool contention ~200 cy"]
+  note["Hard TDM bound 328 cy<br/>Soft reserve-covered ~160 cy<br/>Soft+pool contention ~188 cy"]
   BG --- note
 ```
 
@@ -118,13 +118,13 @@ flowchart LR
 
 ---
 
-## 6. Trial 3 → Trial 4 deltas
+## 6. Trial 4 → Trial 5 deltas
 
-| Block | Trial 3 Arch-A3 | Trial 4 Arch-A4 |
+| Block | Trial 4 Arch-A4 | Trial 5 Arch-A5 |
 |---|---|---|
 | Calendar | Sparse 2×128×23 | **Same** |
-| BG buffers | Dedicated 5×20=100 | **Shared 40 + reserve 5×2=50** |
-| Area | 1.000× | **0.822×** |
-| Power | 0.95× | **0.92×** |
+| Multicast | FlooNoC-class MC 0.058 | **CalFork MC 0.025** |
+| BG buffers | Shared 40 + reserve 5×2=50 | **Shared 28 + reserve 5×2=38** |
+| Area | 0.822× | **0.746×** |
+| Power | 0.92× | **0.90×** |
 | combine/DCA | Absent | **Absent** |
-| Shared pool | Out of scope | **In scope (this trial)** |

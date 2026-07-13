@@ -1,25 +1,18 @@
 {
-  "trial": 2,
+  "trial": 5,
+  "architecture": "Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine",
   "verdict": "PASS",
-  "checked_at": "2026-07-10",
-  "upstream_iron": [
-    "docs/phase-1-research/iron-requirements.json",
-    "docs/phase-2-architecture/iron-requirements.json"
-  ],
-  "target_artifacts": [
-    "docs/phase-3-uarch/iron-requirements.json",
-    "docs/phase-3-uarch/req-uarch-traceability.md",
-    "docs/phase-3-uarch/clock-domain-map.md",
-    "docs/phase-3-uarch/protocol-assignments.md"
-  ],
-  "summary": {
-    "architecture": "Arch-A2 CalSlot-Hybrid-ZB-NoCombine",
-    "dca_tier": "A",
-    "area_rel": 1.028,
-    "power_rel": 0.96,
-    "combine_present": false,
-    "traceability_coverage": "100%",
-    "violations": []
+  "violations": [],
+  "checks": {
+    "calfork_mc": 0.025,
+    "shared_pool": "28+2=38",
+    "tier_A": true,
+    "soft_pool_bound": 188,
+    "area": 0.746,
+    "power": 0.9,
+    "tests_refc_bfm": "PASS",
+    "clock_domain_map": "Arch-A5",
+    "protocol_assignments": "Arch-A5"
   },
-  "notes": "Trial 2 compliance PASS. Tier A / no combine consistent across P1–P3. Area below Trial 1 1.065."
+  "notes": "Re-check after fixing stale Trial-2 headers and ~200\u2192~188 bound."
 }

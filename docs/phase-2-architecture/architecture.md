@@ -1,17 +1,20 @@
-# Arch-A4 SparseCal-SharedPool-ZB-NoCombine Architecture
+# Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine Architecture
 
 ## Scope and fixed context
 
-This Trial-4 architecture implements one router at each of 48 nodes in a 6×8 mesh.
+This Trial-5 architecture implements one router at each of 48 nodes in a 6×8 mesh.
 Each router has north, east, south, west, and local ports on one 512-bit physical
 NoC, in the single 2 GHz `noc_clk` domain. A granted direction transfers one flit
 per cycle. Analytic inter-router delays are H=7, V=9; PE-router ramp is one cycle
 with `ramp_bw=1`. There are no CDCs and no second physical network.
 
-Arch-A4 keeps Trial-3 **Arch-A3 SparseCal** (sparse `2×128×23` event lists,
-next-event match, soft-prio BG, Tier A, zero-buffer calendar, atomic multicast,
-watchdog demote→XY) and replaces dedicated per-ingress BG FIFOs (5×20=100 flits)
-with a **shared BG buffer pool** plus per-port reserves.
+Arch-A5 keeps Trial-4 **Arch-A4** SparseCal + SharedPool + Tier A + soft-prio +
+zero-buffer calendar + demote→XY, and applies two area levers:
+
+1. **CalFork / LeanMulticast (primary):** calendar-native atomic `out_port_mask`
+   fork — **not** a general FlooNoC-class stream_fork engine.
+2. **Aggressive SharedPool (secondary):** shared pool **28** + reserve **5×2** =
+   **38** flits (was 40+2=50).
 
 Dedicated diagrams: [`architecture-diagram.md`](architecture-diagram.md).
 
@@ -26,9 +29,9 @@ flowchart LR
   calendar_store --> next_match[next_event_match<br/>slot == counter?]
   slot_ctr --> next_match
   next_match --> classify
-  classify -->|matching calendar event| multicast_fork[multicast_fork<br/>atomic 5-bit fork]
-  multicast_fork --> switch_alloc[switch_alloc]
-  classify -->|BG or demoted| vc_buffers[vc_buffers<br/>shared pool 40 + reserve 5×2]
+  classify -->|matching calendar event| cal_fork[CalFork<br/>lean mask fork]
+  cal_fork --> switch_alloc[switch_alloc]
+  classify -->|BG or demoted| vc_buffers[vc_buffers<br/>shared pool 28 + reserve 5×2]
   vc_buffers --> xy_route[xy_route<br/>X then Y]
   xy_route --> switch_alloc
   classify -->|mismatch / timeout| watchdog_demote[watchdog_demote FSM]
@@ -37,8 +40,8 @@ flowchart LR
   crossbar --> mesh_out[Five 512-bit egress ports]
   credit_fc[credit_fc<br/>per-egress BG/escape credits] <--> vc_buffers
   credit_fc --> switch_alloc
-  absent[ABSENT: combine_unit / DCA]
-  multicast_fork -.-> absent
+  absent[ABSENT: combine_unit / DCA / stream_fork]
+  cal_fork -.-> absent
   pe_ni -.->|Tier-A PE compute outside router| absent
 ```
 
@@ -46,12 +49,12 @@ flowchart LR
 
 | Block | Boundary and responsibility | Storage / clock-domain classification |
 |---|---|---|
-| `calendar_store` | Inactive-bank writes / active-bank event reads. Entry `{slot[9:0], valid, in_port[2:0], out_port_mask[4:0], opcode[3:0]}` = 23 bits, slot-sorted. Dual-bank hot-swap at slot 0. | Local SRAM; **2 × 128 × 23** = 5,888 bits. Unchanged from Trial 3. |
+| `calendar_store` | Inactive-bank writes / active-bank event reads. Entry `{slot[9:0], valid, in_port[2:0], out_port_mask[4:0], opcode[3:0]}` = 23 bits, slot-sorted. Dual-bank hot-swap at slot 0. | Local SRAM; **2 × 128 × 23** = 5,888 bits. Unchanged. |
 | `next_event_match` | `slot == counter` qualify; non-match → BG-eligible (soft priority). | Registers + match control (+0.003). |
 | `xy_route` | BG/demoted unicast: X then Y then local. | Combinational + registered metadata. |
-| `multicast_fork` | Atomic mask fork; all-or-nothing commit. | Register-only leaf context. |
+| **`cal_fork` (CalFork)** | Expand calendar `out_port_mask[4:0]` into atomic all-or-nothing SA grants. Wire-level fanout + credit AND — **no** multi-stream FSM / stream_fork pipeline. | Register-only leaf context. Area **0.025** (was FlooNoC 0.058). |
 | ~~`combine_unit`~~ | **Absent (Tier A).** | — |
-| `vc_buffers` | **SharedPool-BG:** shared free pool **40** flits + per-port reserve **2** (5×2=10) → **50 flits total** (25,600 bits / 3.125 KiB). Calendar never consumes pool slots. Demote/escape uses pool/reserves. | Same-domain SRAM/regs + free-list / reserve accounting (+0.005 control). |
+| `vc_buffers` | **SharedPool-BG:** shared free pool **28** flits + per-port reserve **2** (5×2=10) → **38 flits total**. Calendar never consumes pool slots. | Same-domain SRAM/regs + free-list / reserve accounting (+0.005 control). |
 | `switch_alloc` / `crossbar` | Soft priority: calendar on match; BG on idle. | Register control + 5×5 crossbar. |
 | `credit_fc` | Downstream BG/escape credits; calendar uses no payload credits. | H 0–16, V 0–20. |
 | `watchdog_demote` | Early/late/wrong-port/missing/blocked → release once → lossless escape into pool. | Register FSM. |
@@ -60,62 +63,45 @@ flowchart LR
 Flit header (16-bit control in 512-bit flit): `class[1:0]`, `dst_x[2:0]`, `dst_y[2:0]`,
 `calendar_id[1:0]`, `opcode[3:0]`, `flags[1:0]`; remaining 496 bits payload.
 
+## CalFork vs FlooNoC stream_fork
+
+| Aspect | FlooNoC-class stream_fork (T1–T4 model) | **CalFork (T5)** |
+|---|---|---|
+| Trigger | Independent multi-stream engine | Sparse calendar event `out_port_mask` |
+| State | Per-stream FSMs / outstanding forks | Single mask + leaf demote context |
+| Area charge | **0.058** | **0.025** (−0.033) |
+| Semantics | General stream duplication | Calendar-native atomic fork only |
+
 ## SharedPool-BG allocation policy
 
 ```
 can_enqueue(port):
   if port_count[port] < RESERVE(2): accept   # guaranteed progress
-  else if shared_used < POOL(40): accept
+  else if shared_used < POOL(28): accept
   else: backpressure
 
 shared_used = Σ_p max(0, port_count[p] − RESERVE)
 ```
 
-**Rationale for 40+2 (not 48+2):** analytic buffer area 0.182 lands in the
-0.15–0.22 target band; total area **0.822×** meets/exceeds the 0.85–0.92 goal
-(lower is better). Alternative 48+2≈58 flits → ~0.212 buffer / ~0.852 total if
-deadlock/progress evidence required more shared depth — not needed with
-reserve=2 + XY-DOR escape.
+**Rationale for 28+2 (not 40+2):** buffer area 0.139; with CalFork total **0.746×**.
+Sensitivity: **24+2=34** also RefC PASS → total ~0.731; default **28** keeps
+extra shared depth for adversarial BG bursts. Zero-reserve rejected (starvation).
 
 ## Deadlock freedom (shared pool + XY-DOR)
 
-1. **XY-DOR** on a mesh is acyclic (classic Dally/Seitz) → no routing-induced
-   circular wait among routers.
-2. **Calendar path is zero-buffer** and never takes pool credits → calendar
-   cannot participate in a buffer-credit cycle with BG.
-3. **Per-port reserve = 2** guarantees each ingress can always hold at least one
-   (typically two) escape/BG flit(s) even when the shared pool is exhausted →
-   no port is permanently blocked from making forward progress by pool hogging.
-4. **Shared pool free-list** does not create circular wait: a slot is released
-   when its flit departs on the DOR next hop; downstream credit_fc bounds
-   occupancy independently of the local pool.
-5. **Demote→XY** enqueues into pool/reserves (lossless); escape traffic follows
-   the same deadlock-free XY class.
+1. **XY-DOR** on a mesh is acyclic → no routing-induced circular wait.
+2. **Calendar path is zero-buffer** and never takes pool credits.
+3. **Per-port reserve = 2** guarantees ingress progress when shared is exhausted.
+4. Pool slots release on DOR departure; `credit_fc` bounds downstream occupancy.
+5. **Demote→XY** enqueues into pool/reserves (lossless); same XY class.
 
-Therefore there is no circular wait on pool credits under legal traffic.
+⇒ No circular wait on pool credits under legal traffic.
 
 ## Calendar path unaffected
 
-- Matching sparse events use event-owned zero-buffer forwarding.
+- Matching sparse events use event-owned zero-buffer forwarding via **CalFork**.
 - Calendar flits are **never** enqueued into `vc_buffers` / shared pool.
 - Soft priority: BG never displaces a firing calendar event.
-
-## Data and control flow
-
-### Calendar event (sparse replay)
-
-Unchanged from Arch-A3: next-event match on wrap-1024 counter; atomic multicast
-fork; density evidence max 49 entries/router, depth 128.
-
-### BG XY flit (soft priority + shared pool)
-
-Classified as BG → shared-pool enqueue (reserve or shared) → `xy_route` →
-`switch_alloc` on non-matching cycles.
-
-### Demotion
-
-Watchdog release once; emit one escape XY packet per remaining leaf into
-**pool/reserves** without drop.
 
 ## VC, credit, and progress policy
 
@@ -125,22 +111,23 @@ Watchdog release once; emit one escape XY packet per remaining leaf into
 
   | Policy | Bound | Notes |
   |---|---:|---|
-  | Conservative hard 1-in-16 | **328** | SA upper bound (unchanged) |
-  | Soft-prio reserve-covered | **~160** | Single-flit / ≤2 deep uses reserve; occupancy-aware |
-  | Soft + shared-pool contention | **~200** | Soft 160 + ≤40 pool-turnover cycles (adversarial deep bursts) |
+  | Conservative hard 1-in-16 | **328** | SA upper bound |
+  | Soft-prio reserve-covered | **~160** | Single-flit / ≤2 deep uses reserve |
+  | Soft + shared-pool contention | **~188** | Soft 160 + ≤28 pool-turnover |
 
-## Frozen architecture decisions (Trial 4)
+## Frozen architecture decisions (Trial 5)
 
-| Decision | Trial-4 value |
+| Decision | Trial-5 value |
 |---|---|
-| Architecture name | **Arch-A4 SparseCal-SharedPool-ZB-NoCombine** |
+| Architecture name | **Arch-A5 SparseCal-SharedPool-CalFork-ZB-NoCombine** |
 | Calendar | Sparse **2 × 128 × 23**; next-event match; dual-bank |
-| BG buffers | **Shared pool 40 + reserve 5×2 = 50 flits** |
-| BG service | Soft priority; hard bound 328; soft ~160; pool-stress ~200 |
+| Multicast | **CalFork** lean mask fork (MC **0.025**) |
+| BG buffers | **Shared pool 28 + reserve 5×2 = 38 flits** |
+| BG service | Soft priority; hard 328; soft ~160; pool-stress ~188 |
 | Watchdog | 32 cycles; lossless demote→XY via pool/reserves |
 | Reduction | **Tier A only** — no combine, no DCA |
-| Analytic area | **0.822×** IQ-XY (vs Trial 3 **1.000×**) |
-| Analytic power | **0.92×** IQ-XY (vs Trial 3 **0.95×**) |
+| Analytic area | **0.746×** IQ-XY (vs A4 **0.822×**) |
+| Analytic power | **0.90×** IQ-XY (vs A4 **0.92×**) |
 
 ## Analytic constraints
 

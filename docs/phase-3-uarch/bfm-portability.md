@@ -1,18 +1,16 @@
-# Trial-2 BFM portability decision
+# BFM Portability — Trial 5 Arch-A5
 
-Trial 2 approves the portable C cycle BFM as the SystemC substitute because a
-SystemC runtime is not available in this workspace. This is an
-`AGENT_ASSUMED` portability decision, not a claim that C is SystemC.
+Trial 5 continues the portable C cycle BFM (links RefC) as the SystemC substitute.
+BFM Makefile compiles `../refc/*.c` with `-I../refc/include`, so it automatically
+consumes:
 
-The substitute loads versioned JSON vectors, instantiates the complete 6×8
-topology, applies H=7/V=9 link and one-cycle PE-ramp delays, scores terminal
-ejections, and reports measured makespan. Run:
+- `BG_SHARED_POOL_SIZE=28`, `BG_PER_PORT_RESERVE=2`, `BG_TOTAL_FLITS=38`
+- `cal_fork_expand()` / CalFork calendar path
+- Tier A (no combine/DCA)
 
-```sh
-make -C bfm test_calendars
-```
+Evidence:
+- `make -C refc test` — all PASS including `test_shared_pool pool=28`
+- `make -C bfm test` — mesh_bfm_smoke PASS
+- `python3 utils/ppa_analytic_model.py` — area 0.746× / power 0.90×
 
-**Tier A:** reduce/allreduce vectors exercise gather/forward and
-`CAL_OP_PE_HANDOFF` tags. The router performs **no** arithmetic; PE-local
-compute is outside the BFM datapath (handoff counter only). There is no
-three-cycle combine pipeline to prove.
+No SystemVerilog RTL in DSE. DPI bridge template retained for future Phase 4.

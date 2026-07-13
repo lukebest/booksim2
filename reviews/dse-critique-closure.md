@@ -1,14 +1,10 @@
-# DSE Critique Closure — Trial 4
+# DSE Critique Closure — Trial 5
 
-All HIGH findings: **none**.  
-MEDIUM findings M1–M3: documented or justified (see `dse-self-critique.md`).  
-User decisions ADR-001/002/003 **not** invalidated.
+| Finding | Severity | Status | Evidence |
+|---|---|---|---|
+| CalFork area mid-band | MEDIUM | JUSTIFIED | ADR-005 + ppa sensitivity 0.020–0.030 |
+| Pool 28 burst margin | MEDIUM | JUSTIFIED | test_shared_pool PASS; bound ~188; 24 sensitivity |
+| Crossbar dominates | MEDIUM | JUSTIFIED / carried | Convergence: stop or XB next lever |
+| HIGH findings | — | N/A | None |
 
-Re-run scope: documentation + SharedPool implementation already incorporates the
-binding Trial 4 change; no second full P1 algorithm re-selection required.
-
-Gate summary:
-- Phase 1: inherited PASS (SparseCal / Tier A)
-- Phase 2: Arch-A4 docs + PPA + iron updated
-- Phase 3: μArch + RefC/BFM SharedPool + tests PASS
-- Self-critique: no HIGH open items
+**Closure:** PASS — present Arch-A5 package to user.
