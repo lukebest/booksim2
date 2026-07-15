@@ -34,9 +34,11 @@
             "corner_lb": 8,
             "latency_lb": 50,
             "bisect_lb": 2,
+            "release_lb": 50,
             "T": 50,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -44,9 +46,11 @@
             "corner_lb": 15,
             "latency_lb": 51,
             "bisect_lb": 4,
+            "release_lb": 51,
             "T": 51,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "3": {
@@ -54,9 +58,10 @@
             "corner_lb": 23,
             "latency_lb": 52,
             "bisect_lb": 6,
-            "T": 52,
+            "release_lb": 54,
+            "T": 54,
             "binding": [
-              "latency"
+              "release"
             ]
           },
           "4": {
@@ -64,9 +69,10 @@
             "corner_lb": 30,
             "latency_lb": 53,
             "bisect_lb": 8,
-            "T": 60,
+            "release_lb": 68,
+            "T": 68,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -74,9 +80,10 @@
             "corner_lb": 38,
             "latency_lb": 54,
             "bisect_lb": 10,
-            "T": 75,
+            "release_lb": 83,
+            "T": 83,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -86,9 +93,11 @@
             "corner_lb": 8,
             "latency_lb": 50,
             "bisect_lb": 2,
+            "release_lb": 50,
             "T": 50,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -96,9 +105,11 @@
             "corner_lb": 15,
             "latency_lb": 51,
             "bisect_lb": 4,
+            "release_lb": 51,
             "T": 51,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "3": {
@@ -106,9 +117,11 @@
             "corner_lb": 23,
             "latency_lb": 52,
             "bisect_lb": 6,
+            "release_lb": 52,
             "T": 52,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "4": {
@@ -116,9 +129,11 @@
             "corner_lb": 30,
             "latency_lb": 53,
             "bisect_lb": 8,
+            "release_lb": 53,
             "T": 53,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "5": {
@@ -126,9 +141,11 @@
             "corner_lb": 38,
             "latency_lb": 54,
             "bisect_lb": 10,
+            "release_lb": 54,
             "T": 54,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           }
         }
@@ -145,9 +162,11 @@
             "corner_lb": 24,
             "latency_lb": 100,
             "bisect_lb": 4,
+            "release_lb": 100,
             "T": 100,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -155,9 +174,10 @@
             "corner_lb": 47,
             "latency_lb": 101,
             "bisect_lb": 8,
-            "T": 101,
+            "release_lb": 106,
+            "T": 106,
             "binding": [
-              "latency"
+              "release"
             ]
           },
           "3": {
@@ -165,9 +185,10 @@
             "corner_lb": 71,
             "latency_lb": 102,
             "bisect_lb": 12,
-            "T": 141,
+            "release_lb": 150,
+            "T": 150,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -175,9 +196,10 @@
             "corner_lb": 94,
             "latency_lb": 103,
             "bisect_lb": 16,
-            "T": 188,
+            "release_lb": 196,
+            "T": 196,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -185,9 +207,10 @@
             "corner_lb": 118,
             "latency_lb": 104,
             "bisect_lb": 20,
-            "T": 235,
+            "release_lb": 243,
+            "T": 243,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -197,9 +220,11 @@
             "corner_lb": 24,
             "latency_lb": 100,
             "bisect_lb": 4,
+            "release_lb": 100,
             "T": 100,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -207,9 +232,11 @@
             "corner_lb": 47,
             "latency_lb": 101,
             "bisect_lb": 8,
+            "release_lb": 101,
             "T": 101,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "3": {
@@ -217,9 +244,11 @@
             "corner_lb": 71,
             "latency_lb": 102,
             "bisect_lb": 12,
+            "release_lb": 102,
             "T": 102,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "4": {
@@ -227,9 +256,10 @@
             "corner_lb": 94,
             "latency_lb": 103,
             "bisect_lb": 16,
-            "T": 103,
+            "release_lb": 107,
+            "T": 107,
             "binding": [
-              "latency"
+              "release"
             ]
           },
           "5": {
@@ -237,10 +267,10 @@
             "corner_lb": 118,
             "latency_lb": 104,
             "bisect_lb": 20,
-            "T": 118,
+            "release_lb": 129,
+            "T": 129,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }
@@ -257,9 +287,11 @@
             "corner_lb": 32,
             "latency_lb": 114,
             "bisect_lb": 4,
+            "release_lb": 114,
             "T": 114,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -267,9 +299,10 @@
             "corner_lb": 63,
             "latency_lb": 115,
             "bisect_lb": 8,
-            "T": 126,
+            "release_lb": 138,
+            "T": 138,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "3": {
@@ -277,9 +310,10 @@
             "corner_lb": 95,
             "latency_lb": 116,
             "bisect_lb": 12,
-            "T": 189,
+            "release_lb": 198,
+            "T": 198,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -287,9 +321,10 @@
             "corner_lb": 126,
             "latency_lb": 117,
             "bisect_lb": 16,
-            "T": 252,
+            "release_lb": 260,
+            "T": 260,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -297,9 +332,10 @@
             "corner_lb": 158,
             "latency_lb": 118,
             "bisect_lb": 20,
-            "T": 315,
+            "release_lb": 323,
+            "T": 323,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -309,9 +345,11 @@
             "corner_lb": 32,
             "latency_lb": 114,
             "bisect_lb": 4,
+            "release_lb": 114,
             "T": 114,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -319,9 +357,11 @@
             "corner_lb": 63,
             "latency_lb": 115,
             "bisect_lb": 8,
+            "release_lb": 115,
             "T": 115,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "3": {
@@ -329,9 +369,11 @@
             "corner_lb": 95,
             "latency_lb": 116,
             "bisect_lb": 12,
+            "release_lb": 116,
             "T": 116,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "4": {
@@ -339,10 +381,10 @@
             "corner_lb": 126,
             "latency_lb": 117,
             "bisect_lb": 16,
-            "T": 126,
+            "release_lb": 139,
+            "T": 139,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "5": {
@@ -350,10 +392,10 @@
             "corner_lb": 158,
             "latency_lb": 118,
             "bisect_lb": 20,
-            "T": 158,
+            "release_lb": 169,
+            "T": 169,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }
@@ -370,9 +412,10 @@
             "corner_lb": 96,
             "latency_lb": 214,
             "bisect_lb": 8,
-            "T": 214,
+            "release_lb": 217,
+            "T": 217,
             "binding": [
-              "latency"
+              "release"
             ]
           },
           "2": {
@@ -380,9 +423,10 @@
             "corner_lb": 191,
             "latency_lb": 215,
             "bisect_lb": 16,
-            "T": 382,
+            "release_lb": 394,
+            "T": 394,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "3": {
@@ -390,9 +434,10 @@
             "corner_lb": 287,
             "latency_lb": 216,
             "bisect_lb": 24,
-            "T": 573,
+            "release_lb": 582,
+            "T": 582,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -400,9 +445,10 @@
             "corner_lb": 382,
             "latency_lb": 217,
             "bisect_lb": 32,
-            "T": 764,
+            "release_lb": 772,
+            "T": 772,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -410,9 +456,10 @@
             "corner_lb": 478,
             "latency_lb": 218,
             "bisect_lb": 40,
-            "T": 955,
+            "release_lb": 963,
+            "T": 963,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -422,9 +469,11 @@
             "corner_lb": 96,
             "latency_lb": 214,
             "bisect_lb": 8,
+            "release_lb": 214,
             "T": 214,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -432,9 +481,10 @@
             "corner_lb": 191,
             "latency_lb": 215,
             "bisect_lb": 16,
-            "T": 215,
+            "release_lb": 218,
+            "T": 218,
             "binding": [
-              "latency"
+              "release"
             ]
           },
           "3": {
@@ -442,10 +492,10 @@
             "corner_lb": 287,
             "latency_lb": 216,
             "bisect_lb": 24,
-            "T": 287,
+            "release_lb": 304,
+            "T": 304,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "4": {
@@ -453,10 +503,10 @@
             "corner_lb": 382,
             "latency_lb": 217,
             "bisect_lb": 32,
-            "T": 382,
+            "release_lb": 395,
+            "T": 395,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "5": {
@@ -464,10 +514,10 @@
             "corner_lb": 478,
             "latency_lb": 218,
             "bisect_lb": 40,
-            "T": 478,
+            "release_lb": 489,
+            "T": 489,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }
@@ -484,9 +534,10 @@
             "corner_lb": 128,
             "latency_lb": 242,
             "bisect_lb": 8,
-            "T": 255,
+            "release_lb": 281,
+            "T": 281,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "2": {
@@ -494,9 +545,10 @@
             "corner_lb": 255,
             "latency_lb": 243,
             "bisect_lb": 16,
-            "T": 510,
+            "release_lb": 522,
+            "T": 522,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "3": {
@@ -504,9 +556,10 @@
             "corner_lb": 383,
             "latency_lb": 244,
             "bisect_lb": 24,
-            "T": 765,
+            "release_lb": 774,
+            "T": 774,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -514,9 +567,10 @@
             "corner_lb": 510,
             "latency_lb": 245,
             "bisect_lb": 32,
-            "T": 1020,
+            "release_lb": 1028,
+            "T": 1028,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -524,9 +578,10 @@
             "corner_lb": 638,
             "latency_lb": 246,
             "bisect_lb": 40,
-            "T": 1275,
+            "release_lb": 1283,
+            "T": 1283,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -536,9 +591,11 @@
             "corner_lb": 128,
             "latency_lb": 242,
             "bisect_lb": 8,
+            "release_lb": 242,
             "T": 242,
             "binding": [
-              "latency"
+              "latency",
+              "release"
             ]
           },
           "2": {
@@ -546,10 +603,10 @@
             "corner_lb": 255,
             "latency_lb": 243,
             "bisect_lb": 16,
-            "T": 255,
+            "release_lb": 282,
+            "T": 282,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "3": {
@@ -557,10 +614,10 @@
             "corner_lb": 383,
             "latency_lb": 244,
             "bisect_lb": 24,
-            "T": 383,
+            "release_lb": 400,
+            "T": 400,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "4": {
@@ -568,10 +625,10 @@
             "corner_lb": 510,
             "latency_lb": 245,
             "bisect_lb": 32,
-            "T": 510,
+            "release_lb": 523,
+            "T": 523,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "5": {
@@ -579,10 +636,10 @@
             "corner_lb": 638,
             "latency_lb": 246,
             "bisect_lb": 40,
-            "T": 638,
+            "release_lb": 649,
+            "T": 649,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }
@@ -599,9 +656,10 @@
             "corner_lb": 512,
             "latency_lb": 498,
             "bisect_lb": 16,
-            "T": 1023,
+            "release_lb": 1049,
+            "T": 1049,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "2": {
@@ -609,9 +667,10 @@
             "corner_lb": 1023,
             "latency_lb": 499,
             "bisect_lb": 32,
-            "T": 2046,
+            "release_lb": 2058,
+            "T": 2058,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "3": {
@@ -619,9 +678,10 @@
             "corner_lb": 1535,
             "latency_lb": 500,
             "bisect_lb": 48,
-            "T": 3069,
+            "release_lb": 3078,
+            "T": 3078,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -629,9 +689,10 @@
             "corner_lb": 2046,
             "latency_lb": 501,
             "bisect_lb": 64,
-            "T": 4092,
+            "release_lb": 4100,
+            "T": 4100,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -639,9 +700,10 @@
             "corner_lb": 2558,
             "latency_lb": 502,
             "bisect_lb": 80,
-            "T": 5115,
+            "release_lb": 5123,
+            "T": 5123,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -651,10 +713,10 @@
             "corner_lb": 512,
             "latency_lb": 498,
             "bisect_lb": 16,
-            "T": 512,
+            "release_lb": 569,
+            "T": 569,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "2": {
@@ -662,10 +724,10 @@
             "corner_lb": 1023,
             "latency_lb": 499,
             "bisect_lb": 32,
-            "T": 1023,
+            "release_lb": 1050,
+            "T": 1050,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "3": {
@@ -673,10 +735,10 @@
             "corner_lb": 1535,
             "latency_lb": 500,
             "bisect_lb": 48,
-            "T": 1535,
+            "release_lb": 1552,
+            "T": 1552,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "4": {
@@ -684,10 +746,10 @@
             "corner_lb": 2046,
             "latency_lb": 501,
             "bisect_lb": 64,
-            "T": 2046,
+            "release_lb": 2059,
+            "T": 2059,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "5": {
@@ -695,10 +757,10 @@
             "corner_lb": 2558,
             "latency_lb": 502,
             "bisect_lb": 80,
-            "T": 2558,
+            "release_lb": 2569,
+            "T": 2569,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }
@@ -715,9 +777,10 @@
             "corner_lb": 2048,
             "latency_lb": 1010,
             "bisect_lb": 32,
-            "T": 4095,
+            "release_lb": 4121,
+            "T": 4121,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "2": {
@@ -725,9 +788,10 @@
             "corner_lb": 4095,
             "latency_lb": 1011,
             "bisect_lb": 64,
-            "T": 8190,
+            "release_lb": 8202,
+            "T": 8202,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "3": {
@@ -735,9 +799,10 @@
             "corner_lb": 6143,
             "latency_lb": 1012,
             "bisect_lb": 96,
-            "T": 12285,
+            "release_lb": 12294,
+            "T": 12294,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "4": {
@@ -745,9 +810,10 @@
             "corner_lb": 8190,
             "latency_lb": 1013,
             "bisect_lb": 128,
-            "T": 16380,
+            "release_lb": 16388,
+            "T": 16388,
             "binding": [
-              "eject"
+              "release"
             ]
           },
           "5": {
@@ -755,9 +821,10 @@
             "corner_lb": 10238,
             "latency_lb": 1014,
             "bisect_lb": 160,
-            "T": 20475,
+            "release_lb": 20483,
+            "T": 20483,
             "binding": [
-              "eject"
+              "release"
             ]
           }
         },
@@ -767,10 +834,10 @@
             "corner_lb": 2048,
             "latency_lb": 1010,
             "bisect_lb": 32,
-            "T": 2048,
+            "release_lb": 2105,
+            "T": 2105,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "2": {
@@ -778,10 +845,10 @@
             "corner_lb": 4095,
             "latency_lb": 1011,
             "bisect_lb": 64,
-            "T": 4095,
+            "release_lb": 4122,
+            "T": 4122,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "3": {
@@ -789,10 +856,10 @@
             "corner_lb": 6143,
             "latency_lb": 1012,
             "bisect_lb": 96,
-            "T": 6143,
+            "release_lb": 6160,
+            "T": 6160,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "4": {
@@ -800,10 +867,10 @@
             "corner_lb": 8190,
             "latency_lb": 1013,
             "bisect_lb": 128,
-            "T": 8190,
+            "release_lb": 8203,
+            "T": 8203,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           },
           "5": {
@@ -811,10 +878,10 @@
             "corner_lb": 10238,
             "latency_lb": 1014,
             "bisect_lb": 160,
-            "T": 10238,
+            "release_lb": 10249,
+            "T": 10249,
             "binding": [
-              "eject",
-              "corner"
+              "release"
             ]
           }
         }

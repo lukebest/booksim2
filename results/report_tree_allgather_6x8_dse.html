@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>6×8 树形 Allgather：形式化下界与 Router DSE</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#cbd5e1;--accent:#1d4ed8;--win:#dcfce7;}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);
+margin:0;padding:28px 32px 64px;line-height:1.55;max-width:1240px}
+h1{font-size:1.55rem;margin:0 0 4px} h2{font-size:1.18rem;color:#1e3a8a;margin:0 0 12px}
+h3{font-size:.98rem;margin:8px 0} .sub,.note{color:var(--muted);font-size:.86rem}
+.card{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:18px 22px;margin:16px 0}
+.hero{border-color:#93c5fd} .lead{font-size:1.02rem} .formula{font-family:ui-monospace,monospace;
+background:#f1f5f9;border-radius:6px;padding:9px 12px;margin:7px 0}
+table{border-collapse:collapse;width:100%;font-size:.8rem} th,td{border:1px solid var(--line);
+padding:5px 7px;text-align:center;white-space:nowrap} th{background:#e2e8f0} td.l{text-align:left}
+td.win{background:var(--win);font-weight:700} .wide{overflow-x:auto}
+.pareto-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}
+.pareto{border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}
+ul{margin:6px 0;padding-left:21px} li{margin:5px 0}
+code{background:#f1f5f9;padding:1px 4px;border-radius:4px}
+</style></head><body>
+<h1>6×8 Mesh 树形 Allgather：形式化下界、Router 面积与 Makespan DSE</h1>
+<p class="sub">rb=2 · H=7 · V=9 · ramp=1 · m=1..5 · 生成 2026-07-15T03:25:30.972927+00:00</p>
+
+<div class="card hero">
+<h2>结论</h2>
+<ul>
+<li><b>形式化下界</b>为 m=1..5：<b>100 / 101 / 102 / 107 / 129 cy</b>。
+m=4、5 的 receiver-release 下界比旧的 max(diameter,eject,cut) 更强。</li>
+<li><b>短消息树 Pareto</b>：NEC-3 取得 114/174 cy（m=1/2）；NEC-2 把 mesh fanout
+压到 2，但在已接受的固定面积 CalFork 模型下不节省面积，因此是时序备选而非面积 Pareto 点。</li>
+<li><b>m≥3</b>：Hamilton bi-tree 的深流水 214/215/216 cy 进入并最终主导性能 Pareto；
+代价是 m=1 很慢（212 cy）。</li>
+<li><b>axis+CCW 被 NEC-3 严格支配</b>：两者均需 2-way calendar issue，
+且固定 CalFork 面积相同；但 NEC-3 fanout 3、Pmax 3，所有 m 的严格 makespan也更低。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>1. 形式化问题与下界</h2>
+<div class="formula">T* ≥ max(T_diameter, T_receiver-release, T_eject-duration,
+T_corner-cut, T_bisection, T_injection)</div>
+<ul>
+<li><b>Diameter</b>：任意合法方案必须把对角源的第 m 个 flit 送过
+5×7+7×9=98 cy 的最短距离，再加上下 ramp。</li>
+<li><b>Receiver release</b>：对每个接收点，把每个 (source,flit) 当作 release time =
+1+Manhattan(s,d)+flit_index 的单位任务；在两条 down-ramp lane 上做最早可行排程。
+这是删除所有网络耦合后的松弛问题，因此其最优值仍是原问题下界。</li>
+<li><b>Cut bounds</b>：任意 cut 外的每个源至少有一份 flit 穿入 cut；corner cut 容量为 2，
+直线二分 cut 分别有 8 或 6 条有向链路。</li>
+</ul>
+<table><thead><tr><th>m</th><th>形式化 T<sub>LB</sub></th><th>直径+串行</th><th>receiver release</th><th>eject duration</th><th>corner cut</th><th>bisection</th><th>binding</th></tr></thead><tbody><tr><td>1</td><td><b>100</b></td><td>100</td><td>100</td><td>24</td><td>24</td><td>4</td><td class='l'>diameter_serialization, receiver_release</td></tr><tr><td>2</td><td><b>101</b></td><td>101</td><td>101</td><td>47</td><td>47</td><td>8</td><td class='l'>diameter_serialization, receiver_release</td></tr><tr><td>3</td><td><b>102</b></td><td>102</td><td>102</td><td>71</td><td>71</td><td>12</td><td class='l'>diameter_serialization, receiver_release</td></tr><tr><td>4</td><td><b>107</b></td><td>103</td><td>107</td><td>94</td><td>94</td><td>16</td><td class='l'>receiver_release</td></tr><tr><td>5</td><td><b>129</b></td><td>104</td><td>129</td><td>118</td><td>118</td><td>20</td><td class='l'>receiver_release</td></tr></tbody></table>
+<p class="note">这些是必要条件，不宣称可同时达到。最坏 receiver 始终为四个角。</p>
+</div>
+
+<div class="card">
+<h2>2. 已验证树排图的可行 Makespan 上界</h2>
+<div class='wide'><table><thead><tr><th>m</th><th>T<sub>LB</sub></th><th>dim-XY</th><th>dim-YX</th><th>axis+CCW</th><th>NEC-3</th><th>NEC-2</th><th>fixed-west comb</th><th>Hamilton bi-tree</th><th>Hamilton uni-tree</th></tr></thead><tbody><tr><td>1</td><td>100</td><td class=''>124</td><td class=''>126</td><td class=''>120</td><td class='win'>114</td><td class=''>135</td><td class=''>154</td><td class=''>212</td><td class=''>407</td></tr><tr><td>2</td><td>101</td><td class=''>219</td><td class=''>220</td><td class=''>180</td><td class='win'>174</td><td class=''>183</td><td class=''>236</td><td class=''>213</td><td class=''>408</td></tr><tr><td>3</td><td>102</td><td class=''>283</td><td class=''>283</td><td class=''>252</td><td class=''>215</td><td class=''>235</td><td class=''>339</td><td class='win'>214</td><td class=''>409</td></tr><tr><td>4</td><td>107</td><td class=''>344</td><td class=''>330</td><td class=''>318</td><td class=''>294</td><td class=''>321</td><td class=''>427</td><td class='win'>215</td><td class=''>410</td></tr><tr><td>5</td><td>129</td><td class=''>383</td><td class=''>405</td><td class=''>400</td><td class=''>377</td><td class=''>395</td><td class=''>501</td><td class='win'>216</td><td class=''>411</td></tr></tbody></table></div>
+<p class="note">每棵树均检查 N−1 条相邻边、root indegree=0、其余节点 indegree=1、
+全节点可达；排图检查每条有向链路≤1、up/down ramp≤2、每节点收到 47m flit。
+Rigid pack 只搜索仓库现有 source-order 集合，因此这些是可行上界，不是全局最优值。</p>
+</div>
+
+<div class="card">
+<h2>3. Router 微架构诉求与解析面积</h2>
+<div class='wide'><table><thead><tr><th>方案</th><th>单输入 mesh fanout</th><th>calendar issue width</th><th>crossbar 输出峰值</th><th>Pmax</th><th>down 峰值</th><th>Sparse direct 面积</th><th>Sparse replay 面积</th><th>Template 面积</th></tr></thead><tbody><tr><td class='l'><b>dim-XY</b></td><td>4</td><td>2</td><td>4</td><td>5</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>dim-YX</b></td><td>4</td><td>2</td><td>4</td><td>5</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>axis+CCW</b></td><td>4</td><td>2</td><td>6</td><td>15</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>NEC-3</b></td><td>3</td><td>2</td><td>4</td><td>3</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>NEC-2</b></td><td>2</td><td>2</td><td>4</td><td>3</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>fixed-west comb</b></td><td>3</td><td>2</td><td>4</td><td>3</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>Hamilton bi-tree</b></td><td>2</td><td>2</td><td>4</td><td>3</td><td>2</td><td>0.772</td><td>0.746</td><td>0.741</td></tr><tr><td class='l'><b>Hamilton uni-tree</b></td><td>1</td><td>1</td><td>2</td><td>1</td><td>1</td><td>0.755</td><td>0.741</td><td>0.741</td></tr></tbody></table></div>
+<ul>
+<li>面积归一化到 IQ-XY=1.0；公共部分采用 Arch-A5：
+crossbar 0.380 + BG buffer 0.139 + control 0.193。</li>
+<li>Sparse direct 为支持 m≤5，calendar 需要 48m=240 actions/router，向上取 depth=256；
+每周期最多 2 个输入动作，因此 calendar 宽度乘 2。</li>
+<li>CalFork 严格遵循 ADR-005：凡单输入可能选择多个输出，统一计 0.025；
+现有证据不支持按 fanout popcount 缩放面积。增量项按 ±30% 做敏感性，不是综合 PPA。</li>
+<li><b>实现缺口：</b>当前 Arch-A5 schema 每个 (router,slot) 只允许一个事件；
+除 Hamilton uni-tree 外，本次高性能 witness 的 issue width 都为 2，必须双 issue、
+加宽事件格式，或重新排图成单 issue。</li>
+<li>Template direct 用坐标规则计算 fork，只保留 depth=8 的注入控制，并加入 0.003
+route decoder 代理面积。它是研究候选，不替代已接受的 SparseCal ADR。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>4. SparseCal 约束下的 Pareto front</h2>
+<div class='pareto-grid'><div class='pareto'><h3>m=1</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_replay_m1</td><td>0.741</td><td>407</td><td>4.07×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_replay_m1</td><td>0.746</td><td>114</td><td>1.14×</td></tr></tbody></table></div><div class='pareto'><h3>m=2</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_replay_m1</td><td>0.741</td><td>814</td><td>8.06×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_replay_m1</td><td>0.746</td><td>228</td><td>2.26×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_direct</td><td>0.772</td><td>174</td><td>1.72×</td></tr></tbody></table></div><div class='pareto'><h3>m=3</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_replay_m1</td><td>0.741</td><td>1221</td><td>11.97×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_replay_m1</td><td>0.746</td><td>342</td><td>3.35×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>sparse_direct</td><td>0.772</td><td>214</td><td>2.10×</td></tr></tbody></table></div><div class='pareto'><h3>m=4</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_replay_m1</td><td>0.741</td><td>1628</td><td>15.21×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_replay_m1</td><td>0.746</td><td>456</td><td>4.26×</td></tr><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_direct</td><td>0.755</td><td>410</td><td>3.83×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>sparse_direct</td><td>0.772</td><td>215</td><td>2.01×</td></tr></tbody></table></div><div class='pareto'><h3>m=5</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_replay_m1</td><td>0.741</td><td>2035</td><td>15.78×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>sparse_replay_m1</td><td>0.746</td><td>570</td><td>4.42×</td></tr><tr><td class='l'>Hamilton uni-tree</td><td class='l'>sparse_direct</td><td>0.755</td><td>411</td><td>3.19×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>sparse_direct</td><td>0.772</td><td>216</td><td>1.67×</td></tr></tbody></table></div></div>
+<p class="note">Sparse replay-m1 仅保存 m=1 calendar 并重复 m 次；面积较低，但长消息性能可能显著下降。</p>
+</div>
+
+<div class="card">
+<h2>5. 加入坐标模板解码后的扩展 Pareto</h2>
+<div class='pareto-grid'><div class='pareto'><h3>m=1</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>template_direct</td><td>0.741</td><td>407</td><td>4.07×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>template_direct</td><td>0.741</td><td>114</td><td>1.14×</td></tr></tbody></table></div><div class='pareto'><h3>m=2</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>template_direct</td><td>0.741</td><td>408</td><td>4.04×</td></tr><tr><td class='l'>NEC-3</td><td class='l'>template_direct</td><td>0.741</td><td>174</td><td>1.72×</td></tr></tbody></table></div><div class='pareto'><h3>m=3</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>template_direct</td><td>0.741</td><td>409</td><td>4.01×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>template_direct</td><td>0.741</td><td>214</td><td>2.10×</td></tr></tbody></table></div><div class='pareto'><h3>m=4</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>template_direct</td><td>0.741</td><td>410</td><td>3.83×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>template_direct</td><td>0.741</td><td>215</td><td>2.01×</td></tr></tbody></table></div><div class='pareto'><h3>m=5</h3><table><thead><tr><th>方案</th><th>实现</th><th>归一化面积</th><th>makespan</th><th>/ TLB</th></tr></thead><tbody><tr><td class='l'>Hamilton uni-tree</td><td class='l'>template_direct</td><td>0.741</td><td>411</td><td>3.19×</td></tr><tr><td class='l'>Hamilton bi-tree</td><td class='l'>template_direct</td><td>0.741</td><td>216</td><td>1.67×</td></tr></tbody></table></div></div>
+<p class="note">Template 面积优势依赖 route decoder 代理模型。RTL 综合前，不能把约 0.005×
+的差异视为显著；NEC-3 与 Hamilton 两个性能结构拐点不依赖该小差异。</p>
+</div>
+
+<div class="card">
+<h2>6. 决策建议</h2>
+<ul>
+<li>若工作负载以 <b>m≤2</b> 为主：选 NEC-3；若时序要求禁止 fanout 3，选 NEC-2。</li>
+<li>若工作负载以 <b>m≥3</b> 为主：选 Hamilton bi-tree，或在编译器中按 m 切换
+NEC-3 / Hamilton bi-tree。</li>
+<li>下一阶段应综合三个 CalFork 版本（fanout 2、fanout 3、full mask）并验证双 issue
+calendar 读口；这是当前 Pareto 面积排序的最大不确定性。</li>
+</ul>
+</div>
+</body></html>

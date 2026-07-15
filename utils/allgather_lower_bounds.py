@@ -9,8 +9,8 @@ Physical model (matches sched_zerobuf_compare.py):
   * message size m flit/node; every node must receive m flits from every
     other node -> (N-1)*m flits ejected per node over the run.
 
-Four independent lower bounds on the makespan T; the true optimum is
->= max of all four (a *necessary* condition, not always achievable):
+Five independent lower bounds on the makespan T; the true optimum is
+>= max of all five (a *necessary* condition, not always achievable):
 
   1. eject_lb    : down-ramp throughput.  ceil((N-1)*m / ramp_bw)
   2. corner_lb   : a mesh corner has only 2 incoming physical links (1 H + 1 V)
@@ -29,10 +29,17 @@ Four independent lower bounds on the makespan T; the true optimum is
                    multicast) -> ceil((N/2)*m / #cut-links). Evaluated for
                    both the vertical cut (#links = MY) and horizontal cut
                    (#links = MX); we report the max of the two.
+  5. release_lb  : relax the network to independent earliest-arrival jobs at
+                   one corner receiver.  Job (source, flit i) is released at
+                   RAMP + Manhattan(source, corner) + i; greedily packing the
+                   sorted unit jobs onto ramp_bw identical eject lanes is the
+                   exact optimum of this relaxed receiver problem.  Adding the
+                   final RAMP gives a sound lower bound.  It strengthens m=4/5
+                   on the 6x8 H=7/V=9, ramp_bw=2 target.
 
-T = max(eject_lb, corner_lb, latency_lb, bisect_lb).
+T = max(eject_lb, corner_lb, latency_lb, bisect_lb, release_lb).
 
-Outputs results/allgather_lb.json: per (mesh, ramp_bw, m) all four bounds + T.
+Outputs results/allgather_lb.json: per (mesh, ramp_bw, m) all five bounds + T.
 """
 
 import argparse
@@ -72,21 +79,45 @@ def bisect_lb(mx, my, m):
     return max(vcut, hcut)
 
 
+def receiver_release_lb(mx, my, h, v, m, ramp_bw):
+    """Earliest possible completion at a corner after relaxing all links.
+
+    A corner is sufficient for a sound bound on every mesh size and is the
+    worst receiver for the 6x8 target.  Sorted unit-release jobs scheduled on
+    the earliest-free one of ``ramp_bw`` identical lanes minimize Cmax.
+    """
+    releases = []
+    for sx in range(mx):
+        for sy in range(my):
+            if sx == 0 and sy == 0:
+                continue
+            dist = sx * h + sy * v
+            releases.extend(RAMP + dist + i for i in range(m))
+    lanes = [-10**18] * ramp_bw
+    for release in sorted(releases):
+        lane = min(range(ramp_bw), key=lambda j: lanes[j])
+        lanes[lane] = max(release, lanes[lane] + 1)
+    return max(lanes) + RAMP
+
+
 def bounds_for(mx, my, h, v, m, ramp_bw):
     n = mx * my
     b_eject = eject_lb(n, m, ramp_bw)
     b_corner = corner_lb(n, m)
     b_lat = latency_lb(mx, my, h, v, m)
     b_bisect = bisect_lb(mx, my, m)
-    t = max(b_eject, b_corner, b_lat, b_bisect)
+    b_release = receiver_release_lb(mx, my, h, v, m, ramp_bw)
+    t = max(b_eject, b_corner, b_lat, b_bisect, b_release)
     binding = [name for name, val in (
         ("eject", b_eject), ("corner", b_corner),
-        ("latency", b_lat), ("bisect", b_bisect)) if val == t]
+        ("latency", b_lat), ("bisect", b_bisect),
+        ("release", b_release)) if val == t]
     return {
         "eject_lb": b_eject,
         "corner_lb": b_corner,
         "latency_lb": b_lat,
         "bisect_lb": b_bisect,
+        "release_lb": b_release,
         "T": t,
         "binding": binding,
     }
@@ -114,14 +145,15 @@ def main():
                 payload["data"][key]["bw"][rb][m] = bounds_for(mx, my, args.h, args.v, m, rb)
 
     print(f"{'mesh':>8} {'bw':>3} {'m':>2} {'eject':>7} {'corner':>7} "
-          f"{'latency':>8} {'bisect':>7} {'T':>7}  binding")
+          f"{'latency':>8} {'bisect':>7} {'release':>8} {'T':>7}  binding")
     for mx, my in SIZES:
         key = f"{mx}x{my}"
         for rb in RAMP_BWS:
             for m in FLITS:
                 d = payload["data"][key]["bw"][rb][m]
                 print(f"{key:>8} {rb:>3} {m:>2} {d['eject_lb']:>7} {d['corner_lb']:>7} "
-                      f"{d['latency_lb']:>8} {d['bisect_lb']:>7} {d['T']:>7}  {'+'.join(d['binding'])}")
+                      f"{d['latency_lb']:>8} {d['bisect_lb']:>7} {d['release_lb']:>8} "
+                      f"{d['T']:>7}  {'+'.join(d['binding'])}")
 
     out_path = Path(args.json)
     out_path.parent.mkdir(parents=True, exist_ok=True)
