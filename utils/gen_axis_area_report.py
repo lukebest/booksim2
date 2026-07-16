@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""HTML report: axis+CCW makespan vs implementation area, Pareto front."""
+
+from __future__ import annotations
+
+import html
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+JSON_PATH = ROOT / "results" / "axis_area_makespan.json"
+HTML_PATH = ROOT / "results" / "report_axis_area_makespan.html"
+
+
+def esc(v) -> str:
+    return html.escape(str(v))
+
+
+def pareto_rows(front, hi_map):
+    rows = []
+    for p in front:
+        hi = hi_map.get((p["W"], p["E"], p["B"]))
+        bd = p["area_breakdown"]
+        rows.append(
+            f"<tr><td>W={p['W']} / E={p['E']} / B={p['B']}</td>"
+            f"<td class='{'win' if p['makespan']==96 else ''}'>{p['makespan']}</td>"
+            f"<td>{p['area_total']:.4f}</td>"
+            f"<td>{hi:.4f}</td>"
+            f"<td>{bd['crossbar_eject']:.4f}</td>"
+            f"<td>{bd['burst_buffer']:.4f}</td>"
+            f"<td>{bd['multiwrite_sram']:.4f}</td></tr>"
+        )
+    return "".join(rows)
+
+
+def main() -> None:
+    data = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+    lb = data["model"]["lower_bound_rb2"]
+    front = data["pareto_nominal"]
+    hi_map = {(p["W"], p["E"], p["B"]): p["area_total"]
+              for p in data["pareto_high_premium"]}
+    coeff = data["model"]["area_coeffs"]
+    gen = esc(data["generated_at"])
+    n_pts = len(data["points"])
+
+    knee = min(front, key=lambda p: p["area_total"] * p["makespan"])
+    cheapest96 = min((p for p in front if p["makespan"] == lb),
+                     key=lambda p: p["area_total"], default=None)
+    xover = data.get("e1_e2_crossover", {})
+    buf_x = xover.get("buffer_cost_multiplier_for_E2")
+    sram_x = xover.get("sram_premium_below_which_E2")
+
+    body = f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>axis+CCW：makespan × 实现面积 Pareto DSE</title>
+<style>
+:root{{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#cbd5e1;--win:#dcfce7;}}
+body{{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);
+margin:0;padding:28px 32px 64px;line-height:1.55;max-width:1120px}}
+h1{{font-size:1.5rem;margin:0 0 4px}} h2{{font-size:1.15rem;color:#1e3a8a;margin:0 0 12px}}
+.sub,.note{{color:var(--muted);font-size:.86rem}}
+.card{{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:18px 22px;margin:16px 0}}
+.hero{{border-color:#93c5fd;background:linear-gradient(180deg,#eff6ff,#fff)}}
+table{{border-collapse:collapse;width:100%;font-size:.82rem;margin:8px 0}}
+th,td{{border:1px solid var(--line);padding:6px 9px;text-align:center}}
+th{{background:#e2e8f0}} td.win{{background:var(--win);font-weight:700}}
+ul{{margin:6px 0;padding-left:22px}} li{{margin:5px 0}}
+code{{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.9em}}
+.formula{{font-family:ui-monospace,Menlo,monospace;background:#f1f5f9;border-radius:6px;
+padding:10px 12px;margin:8px 0;font-size:.84rem;white-space:pre-wrap}}
+img{{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;margin:8px 0}}
+.kpi{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}}
+.kpi div{{background:#f1f5f9;border-radius:8px;padding:12px 14px}}
+.kpi b{{display:block;font-size:1.3rem;color:#1d4ed8}} .kpi span{{font-size:.78rem;color:var(--muted)}}
+</style></head><body>
+
+<h1>axis+CCW：makespan × 芯片实现面积 Pareto DSE</h1>
+<p class="sub">8×6 mesh · H=7 · V=9 · 仅考察 axis+CCW · 设计变量 W/E/B ·
+{n_pts} 个协调设计点 · 数据 <code>axis_area_makespan.json</code> · 生成 {gen}</p>
+
+<div class="card hero">
+<h2>核心结论</h2>
+<div class="kpi">
+  <div><b>{lb}</b><span>makespan 下限（直径受限，无法突破）</span></div>
+  <div><b>W{cheapest96['W']}/E{cheapest96['E']}/B{cheapest96['B']}</b><span>达界 {lb} 的最省实现</span></div>
+  <div><b>{cheapest96['area_total']:.3f}</b><span>该实现面积（归一 IQ-XY）</span></div>
+  <div><b>W{knee['W']}/E{knee['E']}/B{knee['B']}</b><span>性价比拐点（{knee['makespan']}cy@{knee['area_total']:.3f}）</span></div>
+</div>
+<ul>
+<li><b>makespan 有硬地板 {lb}</b>：由网络直径（2·ramp+对角 Manhattan）决定，任何 W/E/B 组合都无法低于它——
+花面积只能<b>逼近</b>而非突破。</li>
+<li><b>Pareto 前沿全部落在 E=1</b>（单口漏出到 SRAM）：因为到达时刻被直径天然摊开，慢速漏出配合<b>深突发 buffer</b>
+即可跟上，<b>无需多口写 SRAM</b>。E&gt;1（多写口 SRAM）买不到更低 makespan 却更贵，永远被支配。</li>
+<li><b>W 与 B 是真正的杠杆</b>：沿前沿 W 从 1→4、B 从 0→11 换取 makespan 155→{lb}；
+面积从 1.0 升到 {cheapest96['area_total']:.3f}（+{(cheapest96['area_total']-1)*100:.0f}%）。</li>
+<li><b>耦合已体现</b>：B=0 时 W&gt;E 纯浪费（已剪枝，只留 W=E）；buffer 面积随 (W+E)/2 增大，
+即“crossbar 越宽、漏出越快，突发 buffer 每比特越贵”。</li>
+<li><b>结论对面积溢价稳健</b>：即使把多口 buffer/SRAM 溢价拉高（“high”列），前沿仍是同样的 E=1 配置。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>1. 散点图与 Pareto 前沿</h2>
+<img src="axis_ccw_area_makespan.png" alt="makespan vs area scatter">
+<p class="note">每点一个 (W,E,B) 实现；颜色=W；红线为 Pareto 前沿；蓝虚线为 rb=2 直径下限 {lb}。
+右侧高面积散点多为 E&gt;1（多写口 SRAM），均被 E=1 前沿支配。</p>
+</div>
+
+<div class="card">
+<h2>2. Pareto 前沿明细（nominal 面积模型）</h2>
+<table>
+<thead><tr><th>实现 (W/E/B)</th><th>makespan</th><th>面积(nominal)</th><th>面积(high溢价)</th>
+<th>crossbar 出口</th><th>突发buffer</th><th>多写SRAM</th></tr></thead>
+<tbody>{pareto_rows(front, hi_map)}</tbody></table>
+<p class="note">面积拆分单位为归一 IQ-XY；总面积 = 1.0(基础路由器) + 三项增量。
+“high溢价”把 buffer 端口因子取 (W+E−1)、SRAM 每写口取满额。</p>
+</div>
+
+<div class="card">
+<h2>3. 面积模型（可复算）</h2>
+<div class="formula">总面积 = 1.0 + Δcrossbar + Δbuffer + Δsram   (归一 IQ-XY=1.0)
+
+Δcrossbar(W) = {coeff['crossbar_port']} × (W−1)
+   （crossbar 向下ramp 多出 W−1 个 eject 输出列；{coeff['crossbar_port']}=0.380/5 每输出口）
+Δbuffer(W,E,B) = {coeff['A_FLIT_per_flit_1w1r']} × B × (W+E)/2
+   （深度 B、宽 512b；写口 W + 读口 E 的多端口因子 (W+E)/2，1W1R=1 基准）
+Δsram(E) = 0.5 × {coeff['A_FLIT_per_flit_1w1r']} × {coeff['gather_depth_flits']} × (E−1)
+   （gather SRAM 保存 {coeff['gather_depth_flits']} flit；每多一个写口 +50% 单口阵列面积）</div>
+<ul>
+<li><b>W</b>=crossbar 在下ramp方向物理带宽（flits/cy）：决定 eject 输出列数与 buffer 写口数。</li>
+<li><b>E</b>=读突发 buffer 再写 SRAM 的带宽（flits/cy）：决定 buffer 读口数与 gather SRAM 写口数（多口写成本）。</li>
+<li><b>B</b>=突发 buffer 深度（flit）：吸收 crossbar 瞬时 W 与漏出 E 之间的差。</li>
+<li>耦合规则：W≥E；B=0 需 W=E（无吸收则多余 W 无意义）。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>4. E=1 vs E=2 交叉点敏感性</h2>
+<p>前沿全落在 E=1，但与 E=2 的差距<b>极薄</b>（nominal 下 E=1 仅领先 &lt;1%）。扫描面积系数得交叉阈值：</p>
+<ul>
+<li><b>突发 buffer 成本 × ≥ {buf_x}</b> 时，E=2 首次进入 Pareto——即只要深多口 register-buffer 比本模型贵约
+{(buf_x-1)*100:.0f}%，最优解就从“E=1+深buffer”翻转到“E=2+浅buffer+双写SRAM”。</li>
+<li>反向：只有当多写口 SRAM 溢价压到 <b>≤ {sram_x}</b>（近乎免费）E=2 才靠“SRAM 变便宜”翻盘——
+说明<b>主导杠杆是 buffer 成本，而非 SRAM 端口成本</b>。</li>
+<li>工程含义：E=1（深buffer单写）与 E=2（浅buffer双写SRAM）实为<b>共最优</b>，选择取决于工艺上
+“深多口 flit-buffer”与“多写口 gather-SRAM”的相对单价。</li>
+</ul>
+<p class="note">W=5 从不进入前沿：makespan 已被直径封顶于 {lb}，W=4 即达界，W=5 只多花 crossbar 面积。</p>
+</div>
+
+<div class="card">
+<h2>5. 决策建议</h2>
+<ul>
+<li><b>要贴 makespan 下限 {lb}</b>：选 <b>W{cheapest96['W']}/E{cheapest96['E']}/B{cheapest96['B']}</b>
+（面积 {cheapest96['area_total']:.3f}）——宽 crossbar 出口 + 深突发 buffer + 单口漏出，避开多写口 SRAM。</li>
+<li><b>要性价比</b>：拐点 <b>W{knee['W']}/E{knee['E']}/B{knee['B']}</b>（{knee['makespan']}cy@{knee['area_total']:.3f}），
+再加面积收益急剧递减。</li>
+<li><b>不建议</b>为下ramp配多写口 SRAM（E&gt;1）：makespan 无法因此低于 {lb}，只增面积。
+经典“W4/E2/B2=96”配置面积略高于前沿的 W4/E1/B11，被支配。</li>
+<li><b>物理提示</b>：E=1 前沿要求 B 较深（8–11 flit×512b）且 crossbar eject 侧多口写入该 buffer；
+若工艺上深多写 buffer 比多写口 SRAM 更贵（与本模型相反），前沿会左移到中等 E——见 high 溢价列做敏感判断。</li>
+</ul>
+</div>
+
+<p class="note">生成脚本：<code>utils/gen_axis_area_report.py</code> ·
+DSE/绘图：<code>utils/dse_axis_area_makespan.py</code>（复用
+<code>dse_burst_sweep_8x6.py</code>、<code>ppa_analytic_model.py</code>）</p>
+</body></html>"""
+    HTML_PATH.write_text(body, encoding="utf-8")
+    print(f"Wrote {HTML_PATH}")
+
+
+if __name__ == "__main__":
+    main()

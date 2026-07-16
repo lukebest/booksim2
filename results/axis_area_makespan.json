@@ -1,0 +1,2096 @@
+{
+  "generated_at": "2026-07-16T05:38:23.117740+00:00",
+  "scheme": "axis_ccw",
+  "model": {
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "rb_nominal": 2,
+    "lower_bound_rb2": 96,
+    "design_vars": {
+      "W": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "E": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "B": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        11
+      ]
+    },
+    "area_coeffs": {
+      "A_FLIT_per_flit_1w1r": 0.00365,
+      "crossbar_port": 0.076,
+      "gather_depth_flits": 47
+    },
+    "coupling": "W>=E; B=0 requires W==E; buffer area scales with (W+E)/2"
+  },
+  "points": [
+    {
+      "W": 1,
+      "E": 1,
+      "B": 0,
+      "makespan": 155,
+      "area_total": 1.0,
+      "area_total_high": 1.0,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0,
+        "total": 1.0
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 1,
+      "makespan": 155,
+      "area_total": 1.00365,
+      "area_total_high": 1.00365,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.00365,
+        "multiwrite_sram": 0.0,
+        "delta": 0.00365,
+        "total": 1.00365
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 2,
+      "makespan": 155,
+      "area_total": 1.0073,
+      "area_total_high": 1.0073,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0073,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0073,
+        "total": 1.0073
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 3,
+      "makespan": 155,
+      "area_total": 1.01095,
+      "area_total_high": 1.01095,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.0,
+        "delta": 0.01095,
+        "total": 1.01095
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 4,
+      "makespan": 155,
+      "area_total": 1.0146,
+      "area_total_high": 1.0146,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0146,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0146,
+        "total": 1.0146
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 5,
+      "makespan": 155,
+      "area_total": 1.01825,
+      "area_total_high": 1.01825,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.01825,
+        "multiwrite_sram": 0.0,
+        "delta": 0.01825,
+        "total": 1.01825
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 6,
+      "makespan": 155,
+      "area_total": 1.0219,
+      "area_total_high": 1.0219,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0219,
+        "total": 1.0219
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 8,
+      "makespan": 155,
+      "area_total": 1.0292,
+      "area_total_high": 1.0292,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0292,
+        "total": 1.0292
+      }
+    },
+    {
+      "W": 1,
+      "E": 1,
+      "B": 11,
+      "makespan": 155,
+      "area_total": 1.04015,
+      "area_total_high": 1.04015,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.04015,
+        "multiwrite_sram": 0.0,
+        "delta": 0.04015,
+        "total": 1.04015
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.08147,
+      "area_total_high": 1.0833,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.00547,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08147,
+        "total": 1.08147
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 2,
+      "makespan": 121,
+      "area_total": 1.08695,
+      "area_total_high": 1.0906,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08695,
+        "total": 1.08695
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 3,
+      "makespan": 124,
+      "area_total": 1.09242,
+      "area_total_high": 1.0979,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.01642,
+        "multiwrite_sram": 0.0,
+        "delta": 0.09242,
+        "total": 1.09242
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 4,
+      "makespan": 121,
+      "area_total": 1.0979,
+      "area_total_high": 1.1052,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0979,
+        "total": 1.0979
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 5,
+      "makespan": 110,
+      "area_total": 1.10337,
+      "area_total_high": 1.1125,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.02737,
+        "multiwrite_sram": 0.0,
+        "delta": 0.10337,
+        "total": 1.10337
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 6,
+      "makespan": 110,
+      "area_total": 1.10885,
+      "area_total_high": 1.1198,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.03285,
+        "multiwrite_sram": 0.0,
+        "delta": 0.10885,
+        "total": 1.10885
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 8,
+      "makespan": 110,
+      "area_total": 1.1198,
+      "area_total_high": 1.1344,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1198,
+        "total": 1.1198
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 11,
+      "makespan": 110,
+      "area_total": 1.13623,
+      "area_total_high": 1.1563,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.06023,
+        "multiwrite_sram": 0.0,
+        "delta": 0.13622,
+        "total": 1.13623
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.1593,
+      "area_total_high": 1.16295,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0073,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1593,
+        "total": 1.1593
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 2,
+      "makespan": 114,
+      "area_total": 1.1666,
+      "area_total_high": 1.1739,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0146,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1666,
+        "total": 1.1666
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 3,
+      "makespan": 119,
+      "area_total": 1.1739,
+      "area_total_high": 1.18485,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1739,
+        "total": 1.1739
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 4,
+      "makespan": 107,
+      "area_total": 1.1812,
+      "area_total_high": 1.1958,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1812,
+        "total": 1.1812
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 5,
+      "makespan": 108,
+      "area_total": 1.1885,
+      "area_total_high": 1.20675,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0365,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1885,
+        "total": 1.1885
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 6,
+      "makespan": 108,
+      "area_total": 1.1958,
+      "area_total_high": 1.2177,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1958,
+        "total": 1.1958
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 8,
+      "makespan": 106,
+      "area_total": 1.2104,
+      "area_total_high": 1.2396,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2104,
+        "total": 1.2104
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 11,
+      "makespan": 98,
+      "area_total": 1.2323,
+      "area_total_high": 1.27245,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0803,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2323,
+        "total": 1.2323
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.23713,
+      "area_total_high": 1.2426,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.00912,
+        "multiwrite_sram": 0.0,
+        "delta": 0.23712,
+        "total": 1.23713
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 2,
+      "makespan": 114,
+      "area_total": 1.24625,
+      "area_total_high": 1.2572,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.01825,
+        "multiwrite_sram": 0.0,
+        "delta": 0.24625,
+        "total": 1.24625
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 3,
+      "makespan": 115,
+      "area_total": 1.25537,
+      "area_total_high": 1.2718,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.02738,
+        "multiwrite_sram": 0.0,
+        "delta": 0.25537,
+        "total": 1.25537
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 4,
+      "makespan": 112,
+      "area_total": 1.2645,
+      "area_total_high": 1.2864,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0365,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2645,
+        "total": 1.2645
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 5,
+      "makespan": 105,
+      "area_total": 1.27363,
+      "area_total_high": 1.301,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.04562,
+        "multiwrite_sram": 0.0,
+        "delta": 0.27363,
+        "total": 1.27363
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 6,
+      "makespan": 105,
+      "area_total": 1.28275,
+      "area_total_high": 1.3156,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.05475,
+        "multiwrite_sram": 0.0,
+        "delta": 0.28275,
+        "total": 1.28275
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 8,
+      "makespan": 100,
+      "area_total": 1.301,
+      "area_total_high": 1.3448,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.073,
+        "multiwrite_sram": 0.0,
+        "delta": 0.301,
+        "total": 1.301
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.32837,
+      "area_total_high": 1.3886,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.10037,
+        "multiwrite_sram": 0.0,
+        "delta": 0.32837,
+        "total": 1.32837
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.31495,
+      "area_total_high": 1.32225,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.0,
+        "delta": 0.31495,
+        "total": 1.31495
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 2,
+      "makespan": 114,
+      "area_total": 1.3259,
+      "area_total_high": 1.3405,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.0,
+        "delta": 0.3259,
+        "total": 1.3259
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 3,
+      "makespan": 115,
+      "area_total": 1.33685,
+      "area_total_high": 1.35875,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.03285,
+        "multiwrite_sram": 0.0,
+        "delta": 0.33685,
+        "total": 1.33685
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 4,
+      "makespan": 112,
+      "area_total": 1.3478,
+      "area_total_high": 1.377,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.0,
+        "delta": 0.3478,
+        "total": 1.3478
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 5,
+      "makespan": 105,
+      "area_total": 1.35875,
+      "area_total_high": 1.39525,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.05475,
+        "multiwrite_sram": 0.0,
+        "delta": 0.35875,
+        "total": 1.35875
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 6,
+      "makespan": 105,
+      "area_total": 1.3697,
+      "area_total_high": 1.4135,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0657,
+        "multiwrite_sram": 0.0,
+        "delta": 0.3697,
+        "total": 1.3697
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 8,
+      "makespan": 100,
+      "area_total": 1.3916,
+      "area_total_high": 1.45,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0876,
+        "multiwrite_sram": 0.0,
+        "delta": 0.3916,
+        "total": 1.3916
+      }
+    },
+    {
+      "W": 5,
+      "E": 1,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.42445,
+      "area_total_high": 1.50475,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.12045,
+        "multiwrite_sram": 0.0,
+        "delta": 0.42445,
+        "total": 1.42445
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "makespan": 110,
+      "area_total": 1.16178,
+      "area_total_high": 1.24755,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.16178,
+        "total": 1.16178
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 1,
+      "makespan": 110,
+      "area_total": 1.16908,
+      "area_total_high": 1.2585,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0073,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.16908,
+        "total": 1.16908
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 2,
+      "makespan": 110,
+      "area_total": 1.17637,
+      "area_total_high": 1.26945,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0146,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.17638,
+        "total": 1.17637
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 3,
+      "makespan": 110,
+      "area_total": 1.18368,
+      "area_total_high": 1.2804,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.18368,
+        "total": 1.18368
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 4,
+      "makespan": 110,
+      "area_total": 1.19097,
+      "area_total_high": 1.29135,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.19098,
+        "total": 1.19097
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 5,
+      "makespan": 110,
+      "area_total": 1.19827,
+      "area_total_high": 1.3023,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0365,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.19827,
+        "total": 1.19827
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 6,
+      "makespan": 110,
+      "area_total": 1.20558,
+      "area_total_high": 1.31325,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.20558,
+        "total": 1.20558
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 8,
+      "makespan": 110,
+      "area_total": 1.22018,
+      "area_total_high": 1.33515,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.22018,
+        "total": 1.22018
+      }
+    },
+    {
+      "W": 2,
+      "E": 2,
+      "B": 11,
+      "makespan": 110,
+      "area_total": 1.24208,
+      "area_total_high": 1.368,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.0803,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.24207,
+        "total": 1.24208
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 1,
+      "makespan": 98,
+      "area_total": 1.2469,
+      "area_total_high": 1.33815,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.00912,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.2469,
+        "total": 1.2469
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 2,
+      "makespan": 98,
+      "area_total": 1.25602,
+      "area_total_high": 1.35275,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.01825,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.25603,
+        "total": 1.25602
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 3,
+      "makespan": 98,
+      "area_total": 1.26515,
+      "area_total_high": 1.36735,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.02738,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.26515,
+        "total": 1.26515
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 4,
+      "makespan": 98,
+      "area_total": 1.27428,
+      "area_total_high": 1.38195,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0365,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.27427,
+        "total": 1.27428
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 5,
+      "makespan": 98,
+      "area_total": 1.2834,
+      "area_total_high": 1.39655,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.04562,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.2834,
+        "total": 1.2834
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 6,
+      "makespan": 98,
+      "area_total": 1.29252,
+      "area_total_high": 1.41115,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.05475,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.29252,
+        "total": 1.29252
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 8,
+      "makespan": 98,
+      "area_total": 1.31078,
+      "area_total_high": 1.44035,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.073,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.31077,
+        "total": 1.31078
+      }
+    },
+    {
+      "W": 3,
+      "E": 2,
+      "B": 11,
+      "makespan": 98,
+      "area_total": 1.33815,
+      "area_total_high": 1.48415,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.10037,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.33815,
+        "total": 1.33815
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 1,
+      "makespan": 98,
+      "area_total": 1.32472,
+      "area_total_high": 1.4178,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.32472,
+        "total": 1.32472
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.33567,
+      "area_total_high": 1.43605,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.33568,
+        "total": 1.33567
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.34662,
+      "area_total_high": 1.4543,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.03285,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.34662,
+        "total": 1.34662
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.35757,
+      "area_total_high": 1.47255,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.35757,
+        "total": 1.35757
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.36852,
+      "area_total_high": 1.4908,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.05475,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.36852,
+        "total": 1.36852
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.37948,
+      "area_total_high": 1.50905,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0657,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.37947,
+        "total": 1.37948
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.40138,
+      "area_total_high": 1.54555,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0876,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.40137,
+        "total": 1.40138
+      }
+    },
+    {
+      "W": 4,
+      "E": 2,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.43423,
+      "area_total_high": 1.6003,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.12045,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.43422,
+        "total": 1.43423
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 1,
+      "makespan": 98,
+      "area_total": 1.40255,
+      "area_total_high": 1.49745,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.01277,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.40255,
+        "total": 1.40255
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.41532,
+      "area_total_high": 1.51935,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.02555,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.41532,
+        "total": 1.41532
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.4281,
+      "area_total_high": 1.54125,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.03832,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.4281,
+        "total": 1.4281
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.44087,
+      "area_total_high": 1.56315,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0511,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.44087,
+        "total": 1.44087
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.45365,
+      "area_total_high": 1.58505,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.06388,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.45365,
+        "total": 1.45365
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.46643,
+      "area_total_high": 1.60695,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.07665,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.46642,
+        "total": 1.46643
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.49198,
+      "area_total_high": 1.65075,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.1022,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.49197,
+        "total": 1.49198
+      }
+    },
+    {
+      "W": 5,
+      "E": 2,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.5303,
+      "area_total_high": 1.71645,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.14052,
+        "multiwrite_sram": 0.08578,
+        "delta": 0.5303,
+        "total": 1.5303
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 0,
+      "makespan": 98,
+      "area_total": 1.32355,
+      "area_total_high": 1.4951,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.32355,
+        "total": 1.32355
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 1,
+      "makespan": 98,
+      "area_total": 1.3345,
+      "area_total_high": 1.51335,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.3345,
+        "total": 1.3345
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 2,
+      "makespan": 98,
+      "area_total": 1.34545,
+      "area_total_high": 1.5316,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0219,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.34545,
+        "total": 1.34545
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 3,
+      "makespan": 98,
+      "area_total": 1.3564,
+      "area_total_high": 1.54985,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.03285,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.3564,
+        "total": 1.3564
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 4,
+      "makespan": 98,
+      "area_total": 1.36735,
+      "area_total_high": 1.5681,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.36735,
+        "total": 1.36735
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 5,
+      "makespan": 98,
+      "area_total": 1.3783,
+      "area_total_high": 1.58635,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.05475,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.3783,
+        "total": 1.3783
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 6,
+      "makespan": 98,
+      "area_total": 1.38925,
+      "area_total_high": 1.6046,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0657,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.38925,
+        "total": 1.38925
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 8,
+      "makespan": 98,
+      "area_total": 1.41115,
+      "area_total_high": 1.6411,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0876,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.41115,
+        "total": 1.41115
+      }
+    },
+    {
+      "W": 3,
+      "E": 3,
+      "B": 11,
+      "makespan": 98,
+      "area_total": 1.444,
+      "area_total_high": 1.69585,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.12045,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.444,
+        "total": 1.444
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 1,
+      "makespan": 96,
+      "area_total": 1.41233,
+      "area_total_high": 1.593,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.01277,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.41232,
+        "total": 1.41233
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.4251,
+      "area_total_high": 1.6149,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.02555,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.4251,
+        "total": 1.4251
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.43788,
+      "area_total_high": 1.6368,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.03832,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.43788,
+        "total": 1.43788
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.45065,
+      "area_total_high": 1.6587,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0511,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.45065,
+        "total": 1.45065
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.46342,
+      "area_total_high": 1.6806,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.06388,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.46342,
+        "total": 1.46342
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.4762,
+      "area_total_high": 1.7025,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.07665,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.4762,
+        "total": 1.4762
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.50175,
+      "area_total_high": 1.7463,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.1022,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.50175,
+        "total": 1.50175
+      }
+    },
+    {
+      "W": 4,
+      "E": 3,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.54007,
+      "area_total_high": 1.812,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.14052,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.54007,
+        "total": 1.54007
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 1,
+      "makespan": 96,
+      "area_total": 1.49015,
+      "area_total_high": 1.67265,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0146,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.49015,
+        "total": 1.49015
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.50475,
+      "area_total_high": 1.6982,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.50475,
+        "total": 1.50475
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.51935,
+      "area_total_high": 1.72375,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.51935,
+        "total": 1.51935
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.53395,
+      "area_total_high": 1.7493,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.53395,
+        "total": 1.53395
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.54855,
+      "area_total_high": 1.77485,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.073,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.54855,
+        "total": 1.54855
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.56315,
+      "area_total_high": 1.8004,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0876,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.56315,
+        "total": 1.56315
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.59235,
+      "area_total_high": 1.8515,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.1168,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.59235,
+        "total": 1.59235
+      }
+    },
+    {
+      "W": 5,
+      "E": 3,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.63615,
+      "area_total_high": 1.92815,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.1606,
+        "multiwrite_sram": 0.17155,
+        "delta": 0.63615,
+        "total": 1.63615
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 0,
+      "makespan": 96,
+      "area_total": 1.48533,
+      "area_total_high": 1.74265,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.48533,
+        "total": 1.48533
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 1,
+      "makespan": 96,
+      "area_total": 1.49992,
+      "area_total_high": 1.7682,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0146,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.49993,
+        "total": 1.49992
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.51452,
+      "area_total_high": 1.79375,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.51453,
+        "total": 1.51452
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.52913,
+      "area_total_high": 1.8193,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0438,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.52913,
+        "total": 1.52913
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.54373,
+      "area_total_high": 1.84485,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.54373,
+        "total": 1.54373
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.55832,
+      "area_total_high": 1.8704,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.073,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.55832,
+        "total": 1.55832
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.57293,
+      "area_total_high": 1.89595,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.0876,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.57293,
+        "total": 1.57293
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.60213,
+      "area_total_high": 1.94705,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.1168,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.60213,
+        "total": 1.60213
+      }
+    },
+    {
+      "W": 4,
+      "E": 4,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.64593,
+      "area_total_high": 2.0237,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.1606,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.64592,
+        "total": 1.64593
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 1,
+      "makespan": 96,
+      "area_total": 1.57775,
+      "area_total_high": 1.84785,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.01642,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.57775,
+        "total": 1.57775
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 2,
+      "makespan": 96,
+      "area_total": 1.59417,
+      "area_total_high": 1.87705,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.03285,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.59418,
+        "total": 1.59417
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 3,
+      "makespan": 96,
+      "area_total": 1.6106,
+      "area_total_high": 1.90625,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.04927,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.6106,
+        "total": 1.6106
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 4,
+      "makespan": 96,
+      "area_total": 1.62702,
+      "area_total_high": 1.93545,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.0657,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.62702,
+        "total": 1.62702
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 5,
+      "makespan": 96,
+      "area_total": 1.64345,
+      "area_total_high": 1.96465,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.08212,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.64345,
+        "total": 1.64345
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 6,
+      "makespan": 96,
+      "area_total": 1.65987,
+      "area_total_high": 1.99385,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.09855,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.65987,
+        "total": 1.65987
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 8,
+      "makespan": 96,
+      "area_total": 1.69273,
+      "area_total_high": 2.05225,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.1314,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.69273,
+        "total": 1.69273
+      }
+    },
+    {
+      "W": 5,
+      "E": 4,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.742,
+      "area_total_high": 2.13985,
+      "area_breakdown": {
+        "crossbar_eject": 0.304,
+        "burst_buffer": 0.18068,
+        "multiwrite_sram": 0.25733,
+        "delta": 0.742,
+        "total": 1.742
+      }
+    }
+  ],
+  "pareto_nominal": [
+    {
+      "W": 1,
+      "E": 1,
+      "B": 0,
+      "makespan": 155,
+      "area_total": 1.0,
+      "area_total_high": 1.0,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0,
+        "total": 1.0
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.08147,
+      "area_total_high": 1.0833,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.00547,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08147,
+        "total": 1.08147
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 2,
+      "makespan": 121,
+      "area_total": 1.08695,
+      "area_total_high": 1.0906,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08695,
+        "total": 1.08695
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 5,
+      "makespan": 110,
+      "area_total": 1.10337,
+      "area_total_high": 1.1125,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.02737,
+        "multiwrite_sram": 0.0,
+        "delta": 0.10337,
+        "total": 1.10337
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 4,
+      "makespan": 107,
+      "area_total": 1.1812,
+      "area_total_high": 1.1958,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1812,
+        "total": 1.1812
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 8,
+      "makespan": 106,
+      "area_total": 1.2104,
+      "area_total_high": 1.2396,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2104,
+        "total": 1.2104
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 11,
+      "makespan": 98,
+      "area_total": 1.2323,
+      "area_total_high": 1.27245,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0803,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2323,
+        "total": 1.2323
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.32837,
+      "area_total_high": 1.3886,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.10037,
+        "multiwrite_sram": 0.0,
+        "delta": 0.32837,
+        "total": 1.32837
+      }
+    }
+  ],
+  "pareto_high_premium": [
+    {
+      "W": 1,
+      "E": 1,
+      "B": 0,
+      "makespan": 155,
+      "area_total": 1.0,
+      "area_total_high": 1.0,
+      "area_breakdown": {
+        "crossbar_eject": 0.0,
+        "burst_buffer": 0.0,
+        "multiwrite_sram": 0.0,
+        "delta": 0.0,
+        "total": 1.0
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 1,
+      "makespan": 124,
+      "area_total": 1.0833,
+      "area_total_high": 1.0833,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.00547,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08147,
+        "total": 1.08147
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 2,
+      "makespan": 121,
+      "area_total": 1.0906,
+      "area_total_high": 1.0906,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.01095,
+        "multiwrite_sram": 0.0,
+        "delta": 0.08695,
+        "total": 1.08695
+      }
+    },
+    {
+      "W": 2,
+      "E": 1,
+      "B": 5,
+      "makespan": 110,
+      "area_total": 1.1125,
+      "area_total_high": 1.1125,
+      "area_breakdown": {
+        "crossbar_eject": 0.076,
+        "burst_buffer": 0.02737,
+        "multiwrite_sram": 0.0,
+        "delta": 0.10337,
+        "total": 1.10337
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 4,
+      "makespan": 107,
+      "area_total": 1.1958,
+      "area_total_high": 1.1958,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0292,
+        "multiwrite_sram": 0.0,
+        "delta": 0.1812,
+        "total": 1.1812
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 8,
+      "makespan": 106,
+      "area_total": 1.2396,
+      "area_total_high": 1.2396,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0584,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2104,
+        "total": 1.2104
+      }
+    },
+    {
+      "W": 3,
+      "E": 1,
+      "B": 11,
+      "makespan": 98,
+      "area_total": 1.27245,
+      "area_total_high": 1.27245,
+      "area_breakdown": {
+        "crossbar_eject": 0.152,
+        "burst_buffer": 0.0803,
+        "multiwrite_sram": 0.0,
+        "delta": 0.2323,
+        "total": 1.2323
+      }
+    },
+    {
+      "W": 4,
+      "E": 1,
+      "B": 11,
+      "makespan": 96,
+      "area_total": 1.3886,
+      "area_total_high": 1.3886,
+      "area_breakdown": {
+        "crossbar_eject": 0.228,
+        "burst_buffer": 0.10037,
+        "multiwrite_sram": 0.0,
+        "delta": 0.32837,
+        "total": 1.32837
+      }
+    }
+  ],
+  "e1_e2_crossover": {
+    "buffer_cost_multiplier_for_E2": 1.1,
+    "sram_premium_below_which_E2": 0.01,
+    "note": "nominal buf_mult=1.0, sram_prem=0.5; E=1 leads by <1% at nominal",
+    "pareto_at_buffer_crossover": [
+      {
+        "W": 1,
+        "E": 1,
+        "B": 0,
+        "makespan": 155,
+        "area": 1.0
+      },
+      {
+        "W": 2,
+        "E": 1,
+        "B": 1,
+        "makespan": 124,
+        "area": 1.082
+      },
+      {
+        "W": 2,
+        "E": 1,
+        "B": 2,
+        "makespan": 121,
+        "area": 1.088
+      },
+      {
+        "W": 2,
+        "E": 1,
+        "B": 5,
+        "makespan": 110,
+        "area": 1.1061
+      },
+      {
+        "W": 3,
+        "E": 1,
+        "B": 4,
+        "makespan": 107,
+        "area": 1.1841
+      },
+      {
+        "W": 3,
+        "E": 1,
+        "B": 8,
+        "makespan": 106,
+        "area": 1.2162
+      },
+      {
+        "W": 3,
+        "E": 1,
+        "B": 11,
+        "makespan": 98,
+        "area": 1.2403
+      },
+      {
+        "W": 4,
+        "E": 2,
+        "B": 2,
+        "makespan": 96,
+        "area": 1.3379
+      }
+    ]
+  },
+  "plot": "results/axis_ccw_area_makespan.png"
+}
