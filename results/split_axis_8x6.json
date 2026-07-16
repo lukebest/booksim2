@@ -1,0 +1,755 @@
+{
+  "generated_at": "2026-07-16T03:02:43.506090+00:00",
+  "model": {
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "ramp": 1,
+    "rb": 2,
+    "xbar_write": 4,
+    "buffers": [
+      0,
+      1,
+      2,
+      4,
+      8,
+      11
+    ],
+    "lower_bound_m1": 96,
+    "vmid": 4,
+    "hmid": 3
+  },
+  "formal_lower_bounds": {
+    "1": {
+      "diameter_serialization": 96,
+      "receiver_release": 96,
+      "eject_duration": 24,
+      "corner_cut": 24,
+      "bisection": 4,
+      "source_injection_duration": 1,
+      "T_lb": 96,
+      "binding": [
+        "diameter_serialization",
+        "receiver_release"
+      ],
+      "worst_receivers": [
+        0,
+        40,
+        7,
+        47
+      ]
+    },
+    "2": {
+      "diameter_serialization": 97,
+      "receiver_release": 97,
+      "eject_duration": 47,
+      "corner_cut": 47,
+      "bisection": 8,
+      "source_injection_duration": 1,
+      "T_lb": 97,
+      "binding": [
+        "diameter_serialization",
+        "receiver_release"
+      ],
+      "worst_receivers": [
+        0,
+        40,
+        7,
+        47
+      ]
+    },
+    "3": {
+      "diameter_serialization": 98,
+      "receiver_release": 98,
+      "eject_duration": 71,
+      "corner_cut": 71,
+      "bisection": 12,
+      "source_injection_duration": 2,
+      "T_lb": 98,
+      "binding": [
+        "diameter_serialization",
+        "receiver_release"
+      ],
+      "worst_receivers": [
+        0,
+        40,
+        7,
+        47
+      ]
+    },
+    "4": {
+      "diameter_serialization": 99,
+      "receiver_release": 107,
+      "eject_duration": 94,
+      "corner_cut": 94,
+      "bisection": 16,
+      "source_injection_duration": 2,
+      "T_lb": 107,
+      "binding": [
+        "receiver_release"
+      ],
+      "worst_receivers": [
+        0,
+        40,
+        7,
+        47
+      ]
+    },
+    "5": {
+      "diameter_serialization": 100,
+      "receiver_release": 129,
+      "eject_duration": 118,
+      "corner_cut": 118,
+      "bisection": 20,
+      "source_injection_duration": 3,
+      "T_lb": 129,
+      "binding": [
+        "receiver_release"
+      ],
+      "worst_receivers": [
+        0,
+        40,
+        7,
+        47
+      ]
+    }
+  },
+  "schemes": {
+    "axis_ccw": {
+      "messages": {
+        "1": {
+          "makespan": 121,
+          "gap_to_formal_lb": 25,
+          "gap_to_scheme_lb": 25,
+          "max_inject_offset": 25,
+          "source_order": "center",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 96,
+            "directed_link_congestion": 42,
+            "scheme_lb": 96
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 48,
+            "calendar_entries_min": 48,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 15,
+            "topology_period_mean": 7.9583,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "2": {
+          "makespan": 177,
+          "gap_to_formal_lb": 80,
+          "gap_to_scheme_lb": 80,
+          "max_inject_offset": 119,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 97,
+            "directed_link_congestion": 84,
+            "scheme_lb": 97
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 96,
+            "calendar_entries_min": 96,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 16,
+            "topology_period_mean": 7.4167,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "3": {
+          "makespan": 244,
+          "gap_to_formal_lb": 146,
+          "gap_to_scheme_lb": 118,
+          "max_inject_offset": 185,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 98,
+            "directed_link_congestion": 126,
+            "scheme_lb": 126
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 144,
+            "calendar_entries_min": 144,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 11,
+            "topology_period_mean": 6.75,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "4": {
+          "makespan": 322,
+          "gap_to_formal_lb": 215,
+          "gap_to_scheme_lb": 154,
+          "max_inject_offset": 253,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 99,
+            "directed_link_congestion": 168,
+            "scheme_lb": 168
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 192,
+            "calendar_entries_min": 192,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 12,
+            "topology_period_mean": 6.4792,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "5": {
+          "makespan": 413,
+          "gap_to_formal_lb": 284,
+          "gap_to_scheme_lb": 203,
+          "max_inject_offset": 322,
+          "source_order": "ring",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 100,
+            "directed_link_congestion": 210,
+            "scheme_lb": 210
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 240,
+            "calendar_entries_min": 240,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 12,
+            "topology_period_mean": 6.7292,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        }
+      },
+      "burst_sweep": {
+        "tree_dilation": 96,
+        "shortest_path": true,
+        "makespan_by_buffer": {
+          "0": 110,
+          "1": 98,
+          "2": 96,
+          "4": 96,
+          "8": 96,
+          "11": 96
+        },
+        "reaches_lb": true,
+        "min_buffer_for_lb": 2
+      },
+      "architectures": {
+        "sparse_direct": {
+          "normalized_total": 0.772385,
+          "uncertainty_low": 0.754269,
+          "uncertainty_high": 0.7905,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.035385,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 256,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "sparse_replay_m1": {
+          "normalized_total": 0.745846,
+          "uncertainty_low": 0.735692,
+          "uncertainty_high": 0.756,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.008846,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 64,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "template_direct": {
+          "normalized_total": 0.741106,
+          "uncertainty_low": 0.732374,
+          "uncertainty_high": 0.749837,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.001106,
+            "multicast": 0.025,
+            "route_decoder": 0.003
+          },
+          "calendar_depth": 8,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": true
+        }
+      }
+    },
+    "split_vertical_4x6": {
+      "messages": {
+        "1": {
+          "makespan": 121,
+          "gap_to_formal_lb": 25,
+          "gap_to_scheme_lb": 25,
+          "max_inject_offset": 55,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 96,
+            "directed_link_congestion": 42,
+            "scheme_lb": 96
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 48,
+            "calendar_entries_min": 48,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 13,
+            "topology_period_mean": 7.0625,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "2": {
+          "makespan": 175,
+          "gap_to_formal_lb": 78,
+          "gap_to_scheme_lb": 78,
+          "max_inject_offset": 85,
+          "source_order": "center",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 97,
+            "directed_link_congestion": 84,
+            "scheme_lb": 97
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 96,
+            "calendar_entries_min": 96,
+            "calendar_issue_width": 3,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 12,
+            "topology_period_mean": 7.2083,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "3": {
+          "makespan": 264,
+          "gap_to_formal_lb": 166,
+          "gap_to_scheme_lb": 138,
+          "max_inject_offset": 191,
+          "source_order": "col",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 98,
+            "directed_link_congestion": 126,
+            "scheme_lb": 126
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 144,
+            "calendar_entries_min": 144,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 11,
+            "topology_period_mean": 6.5833,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "4": {
+          "makespan": 327,
+          "gap_to_formal_lb": 220,
+          "gap_to_scheme_lb": 159,
+          "max_inject_offset": 235,
+          "source_order": "natural",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 99,
+            "directed_link_congestion": 168,
+            "scheme_lb": 168
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 192,
+            "calendar_entries_min": 192,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 12,
+            "topology_period_mean": 6.625,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "5": {
+          "makespan": 396,
+          "gap_to_formal_lb": 267,
+          "gap_to_scheme_lb": 186,
+          "max_inject_offset": 303,
+          "source_order": "natural",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 100,
+            "directed_link_congestion": 210,
+            "scheme_lb": 210
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 240,
+            "calendar_entries_min": 240,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 13,
+            "topology_period_mean": 6.6875,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        }
+      },
+      "burst_sweep": {
+        "tree_dilation": 96,
+        "shortest_path": true,
+        "makespan_by_buffer": {
+          "0": 120,
+          "1": 114,
+          "2": 114,
+          "4": 114,
+          "8": 114,
+          "11": 114
+        },
+        "reaches_lb": false,
+        "min_buffer_for_lb": null
+      },
+      "architectures": {
+        "sparse_direct": {
+          "normalized_total": 0.790077,
+          "uncertainty_low": 0.766654,
+          "uncertainty_high": 0.8135,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.053077,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 256,
+          "calendar_issue_width": 3,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "sparse_replay_m1": {
+          "normalized_total": 0.745846,
+          "uncertainty_low": 0.735692,
+          "uncertainty_high": 0.756,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.008846,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 64,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "template_direct": {
+          "normalized_total": 0.741659,
+          "uncertainty_low": 0.732761,
+          "uncertainty_high": 0.750556,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.001659,
+            "multicast": 0.025,
+            "route_decoder": 0.003
+          },
+          "calendar_depth": 8,
+          "calendar_issue_width": 3,
+          "fanout_class": 4,
+          "template_decode": true
+        }
+      }
+    },
+    "split_horizontal_8x3": {
+      "messages": {
+        "1": {
+          "makespan": 127,
+          "gap_to_formal_lb": 31,
+          "gap_to_scheme_lb": 31,
+          "max_inject_offset": 61,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 96,
+            "directed_link_congestion": 40,
+            "scheme_lb": 96
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 48,
+            "calendar_entries_min": 48,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 11,
+            "topology_period_mean": 6.625,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "2": {
+          "makespan": 180,
+          "gap_to_formal_lb": 83,
+          "gap_to_scheme_lb": 83,
+          "max_inject_offset": 122,
+          "source_order": "corner",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 97,
+            "directed_link_congestion": 80,
+            "scheme_lb": 97
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 96,
+            "calendar_entries_min": 96,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 12,
+            "topology_period_mean": 6.5833,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "3": {
+          "makespan": 238,
+          "gap_to_formal_lb": 140,
+          "gap_to_scheme_lb": 118,
+          "max_inject_offset": 149,
+          "source_order": "center",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 98,
+            "directed_link_congestion": 120,
+            "scheme_lb": 120
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 144,
+            "calendar_entries_min": 144,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 11,
+            "topology_period_mean": 6.2917,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "4": {
+          "makespan": 298,
+          "gap_to_formal_lb": 191,
+          "gap_to_scheme_lb": 138,
+          "max_inject_offset": 208,
+          "source_order": "col",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 99,
+            "directed_link_congestion": 160,
+            "scheme_lb": 160
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 192,
+            "calendar_entries_min": 192,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 5,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 13,
+            "topology_period_mean": 6.9167,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        },
+        "5": {
+          "makespan": 361,
+          "gap_to_formal_lb": 232,
+          "gap_to_scheme_lb": 161,
+          "max_inject_offset": 270,
+          "source_order": "col",
+          "tree": {
+            "valid_all_sources": true,
+            "max_mesh_fanout": 4,
+            "max_weighted_distance": 94
+          },
+          "routing_lower_bounds": {
+            "tree_dilation": 100,
+            "directed_link_congestion": 200,
+            "scheme_lb": 200
+          },
+          "microarchitecture": {
+            "calendar_entries_max": 240,
+            "calendar_entries_min": 240,
+            "calendar_issue_width": 2,
+            "crossbar_outputs_peak": 6,
+            "single_input_outputs_peak": 4,
+            "topology_period_max": 11,
+            "topology_period_mean": 6.25,
+            "down_ramp_peak": 2,
+            "directed_link_peak": 1
+          }
+        }
+      },
+      "burst_sweep": {
+        "tree_dilation": 96,
+        "shortest_path": true,
+        "makespan_by_buffer": {
+          "0": 127,
+          "1": 126,
+          "2": 126,
+          "4": 126,
+          "8": 126,
+          "11": 126
+        },
+        "reaches_lb": false,
+        "min_buffer_for_lb": null
+      },
+      "architectures": {
+        "sparse_direct": {
+          "normalized_total": 0.772385,
+          "uncertainty_low": 0.754269,
+          "uncertainty_high": 0.7905,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.035385,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 256,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "sparse_replay_m1": {
+          "normalized_total": 0.745846,
+          "uncertainty_low": 0.735692,
+          "uncertainty_high": 0.756,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.008846,
+            "multicast": 0.025,
+            "route_decoder": 0.0
+          },
+          "calendar_depth": 64,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": false
+        },
+        "template_direct": {
+          "normalized_total": 0.741106,
+          "uncertainty_low": 0.732374,
+          "uncertainty_high": 0.749837,
+          "components": {
+            "crossbar": 0.38,
+            "buffers": 0.139,
+            "control": 0.193,
+            "calendar": 0.001106,
+            "multicast": 0.025,
+            "route_decoder": 0.003
+          },
+          "calendar_depth": 8,
+          "calendar_issue_width": 2,
+          "fanout_class": 4,
+          "template_decode": true
+        }
+      }
+    }
+  }
+}

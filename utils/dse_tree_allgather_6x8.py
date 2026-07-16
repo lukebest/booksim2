@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Formal bounds + router-area/makespan DSE for tree allgather on 6x8.
+"""Formal bounds + router-area/makespan DSE for tree allgather on 8x6.
 
 Target model:
-  * 6x8 mesh, H=7, V=9, PE ramp latency=1, ramp_bw=2.
+  * 8x6 mesh, H=7, V=9, PE ramp latency=1, ramp_bw=2.
   * One flit/cycle per directed mesh link.
   * Strict down-ramp capacity of two flits/cycle; no eject burst relaxation.
   * Every candidate is validated as a source-rooted spanning arborescence.
@@ -26,9 +26,9 @@ import sched_zerobuf_compare as S
 import slide_metrics as SM
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "results" / "tree_allgather_6x8_dse.json"
+OUT = ROOT / "results" / "tree_allgather_8x6_dse.json"
 
-MX, MY, H, V = 6, 8, 7, 9
+MX, MY, H, V = 8, 6, 7, 9
 N, RAMP, RAMP_BW = MX * MY, 1, 2
 MESSAGE_FLITS = tuple(range(1, 6))
 
@@ -137,6 +137,31 @@ def edge_comb_tree(
     return edges
 
 
+def col_comb_tree(source: int) -> list[tuple[int, int]]:
+    """Transposed NEC-3: source column both ways, nearest horizontal boundary
+    row as spine, per-column inward fill."""
+    sx, sy = coord(source)
+    edge = 0 if sy <= (MY - 1) // 2 else MY - 1
+    edges: list[tuple[int, int]] = []
+    for y in range(sy - 1, -1, -1):
+        edges.append((nid(sx, y + 1), nid(sx, y)))
+    for y in range(sy + 1, MY):
+        edges.append((nid(sx, y - 1), nid(sx, y)))
+    for x in range(sx - 1, -1, -1):
+        edges.append((nid(x + 1, edge), nid(x, edge)))
+    for x in range(sx + 1, MX):
+        edges.append((nid(x - 1, edge), nid(x, edge)))
+    ys = range(1, MY) if edge == 0 else range(MY - 2, -1, -1)
+    for x in range(MX):
+        if x == sx:
+            continue
+        p = edge
+        for y in ys:
+            edges.append((nid(x, p), nid(x, y)))
+            p = y
+    return edges
+
+
 SCHEMES = {
     "dim_xy": lambda s: dim_tree(s, "xy"),
     "dim_yx": lambda s: dim_tree(s, "yx"),
@@ -144,6 +169,7 @@ SCHEMES = {
     "nec3": lambda s: edge_comb_tree(s),
     "nec2": lambda s: edge_comb_tree(s, fanout_two=True),
     "comb_fixed_west": lambda s: edge_comb_tree(s, fixed_edge=0),
+    "col_comb3": col_comb_tree,
     "hamilton_bi_tree": lambda s: hamilton_tree(s, True),
     "hamilton_uni_tree": lambda s: hamilton_tree(s, False),
 }

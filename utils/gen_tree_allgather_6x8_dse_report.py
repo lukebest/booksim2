@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-JSON_PATH = ROOT / "results" / "tree_allgather_6x8_dse.json"
-HTML_PATH = ROOT / "results" / "report_tree_allgather_6x8_dse.html"
+JSON_PATH = ROOT / "results" / "tree_allgather_8x6_dse.json"
+HTML_PATH = ROOT / "results" / "report_tree_allgather_8x6_dse.html"
 
 LABELS = {
     "dim_xy": "dim-XY",
@@ -18,6 +18,7 @@ LABELS = {
     "nec3": "NEC-3",
     "nec2": "NEC-2",
     "comb_fixed_west": "fixed-west comb",
+    "col_comb3": "col-comb3",
     "hamilton_bi_tree": "Hamilton bi-tree",
     "hamilton_uni_tree": "Hamilton uni-tree",
 }
@@ -122,7 +123,7 @@ def main() -> None:
     generated = esc(data["generated_at"])
     body = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
-<title>6×8 树形 Allgather：形式化下界与 Router DSE</title>
+<title>8×6 树形 Allgather：形式化下界与 Router DSE</title>
 <style>
 :root{{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#cbd5e1;--accent:#1d4ed8;--win:#dcfce7;}}
 body{{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);
@@ -140,7 +141,7 @@ td.win{{background:var(--win);font-weight:700}} .wide{{overflow-x:auto}}
 ul{{margin:6px 0;padding-left:21px}} li{{margin:5px 0}}
 code{{background:#f1f5f9;padding:1px 4px;border-radius:4px}}
 </style></head><body>
-<h1>6×8 Mesh 树形 Allgather：形式化下界、Router 面积与 Makespan DSE</h1>
+<h1>8×6 Mesh 树形 Allgather：形式化下界、Router 面积与 Makespan DSE</h1>
 <p class="sub">rb=2 · H=7 · V=9 · ramp=1 · m=1..5 · 生成 {generated}</p>
 
 <div class="card hero">

@@ -1,0 +1,479 @@
+{
+  "generated_at": "2026-07-15T10:56:10.595615+00:00",
+  "model": {
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "rb": 2,
+    "xbar_write": 4,
+    "drain": 2,
+    "buffers": [
+      0,
+      1,
+      2,
+      4,
+      8,
+      11
+    ],
+    "lower_bound": 96,
+    "m": 1
+  },
+  "schemes": {
+    "axis_ccw": {
+      "tree_dilation": 96,
+      "shortest_path": true,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 110,
+          "max_offset": 21,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 98,
+          "max_offset": 17,
+          "fifo_peak_occ": 1
+        },
+        "2": {
+          "makespan": 96,
+          "max_offset": 0,
+          "fifo_peak_occ": 2
+        },
+        "4": {
+          "makespan": 96,
+          "max_offset": 0,
+          "fifo_peak_occ": 2
+        },
+        "8": {
+          "makespan": 96,
+          "max_offset": 0,
+          "fifo_peak_occ": 2
+        },
+        "11": {
+          "makespan": 96,
+          "max_offset": 0,
+          "fifo_peak_occ": 2
+        }
+      },
+      "reaches_lb": true,
+      "min_buffer_for_lb": 2
+    },
+    "dim_xy": {
+      "tree_dilation": 96,
+      "shortest_path": true,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 126,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    },
+    "dim_yx": {
+      "tree_dilation": 96,
+      "shortest_path": true,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 120,
+          "max_offset": 56,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    },
+    "col_comb3": {
+      "tree_dilation": 114,
+      "shortest_path": false,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 114,
+          "max_offset": 29,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    },
+    "nec3": {
+      "tree_dilation": 117,
+      "shortest_path": false,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 118,
+          "max_offset": 7,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    },
+    "nec2": {
+      "tree_dilation": 145,
+      "shortest_path": false,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 145,
+          "max_offset": 6,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    },
+    "hamilton_bi_tree": {
+      "tree_dilation": 210,
+      "shortest_path": false,
+      "makespan_by_buffer": {
+        "0": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        },
+        "1": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        },
+        "2": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        },
+        "4": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        },
+        "8": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        },
+        "11": {
+          "makespan": 210,
+          "max_offset": 0,
+          "fifo_peak_occ": 0
+        }
+      },
+      "reaches_lb": false,
+      "min_buffer_for_lb": null
+    }
+  },
+  "sp_exploration": {
+    "generated_at": "2026-07-16T02:46:33.419661+00:00",
+    "buffers": [
+      0,
+      1,
+      2,
+      4,
+      8,
+      11
+    ],
+    "lower_bound": 96,
+    "candidates": {
+      "axis_ccw": {
+        "dilation": 96,
+        "shortest_path": true,
+        "max_link_multiplicity": 42,
+        "topo_period_max": 15,
+        "crossbar_out_peak": 6,
+        "makespan_by_buffer": {
+          "0": 110,
+          "1": 98,
+          "2": 96,
+          "4": 96,
+          "8": 96,
+          "11": 96
+        },
+        "reaches_lb": true,
+        "min_buffer_for_lb": 2
+      },
+      "axis_cw": {
+        "dilation": 96,
+        "shortest_path": true,
+        "max_link_multiplicity": 42,
+        "topo_period_max": 15,
+        "crossbar_out_peak": 6,
+        "makespan_by_buffer": {
+          "0": 110,
+          "1": 98,
+          "2": 96,
+          "4": 96,
+          "8": 96,
+          "11": 96
+        },
+        "reaches_lb": true,
+        "min_buffer_for_lb": 2
+      },
+      "quad_balanced": {
+        "dilation": 96,
+        "shortest_path": true,
+        "max_link_multiplicity": 42,
+        "topo_period_max": 15,
+        "crossbar_out_peak": 6,
+        "makespan_by_buffer": {
+          "0": 110,
+          "1": 98,
+          "2": 96,
+          "4": 96,
+          "8": 96,
+          "11": 96
+        },
+        "reaches_lb": true,
+        "min_buffer_for_lb": 2
+      },
+      "quad_nearest": {
+        "dilation": 96,
+        "shortest_path": true,
+        "max_link_multiplicity": 30,
+        "topo_period_max": 10,
+        "crossbar_out_peak": 6,
+        "makespan_by_buffer": {
+          "0": 113,
+          "1": 104,
+          "2": 104,
+          "4": 104,
+          "8": 104,
+          "11": 104
+        },
+        "reaches_lb": false,
+        "min_buffer_for_lb": null
+      }
+    },
+    "findings": {
+      "reach_96_requires": "shortest-path tree (dilation=96) AND axis-family fanout (CCW/CW/quadrant-balanced)",
+      "reaching_schemes": [
+        "axis_ccw",
+        "axis_cw",
+        "quad_balanced"
+      ],
+      "reaching_cost": {
+        "min_burst_buffer": 2,
+        "topo_period_max": 15,
+        "crossbar_out_peak": 6,
+        "max_link_multiplicity": 42,
+        "crossbar_out_note": "6 = 4 mesh links + 2 eject (rb=2); physically a 5-port router with 2-wide eject"
+      },
+      "microarch_friendly_alt": {
+        "scheme": "quad_nearest",
+        "makespan": 104,
+        "gap_to_lb": 8,
+        "topo_period_max": 10,
+        "max_link_multiplicity": 30,
+        "crossbar_out_peak": 6,
+        "note": "nearest-arm fill lowers link reuse & Pmax but cannot reach 96 (loses 8 cy)"
+      },
+      "buffer_sensitivity": "burst buffer only helps axis-family (B0=110,B1=98,B2..=96); all others flat across B"
+    }
+  },
+  "outcap_study": {
+    "generated_at": "2026-07-15T11:51:17.258232+00:00",
+    "buffer": 11,
+    "lower_bound": 96,
+    "makespan_by_outcap": {
+      "axis_ccw": {
+        "4": 129,
+        "5": 107,
+        "6": 100
+      },
+      "axis_cw": {
+        "4": 129,
+        "5": 107,
+        "6": 100
+      },
+      "quad_balanced": {
+        "4": 129,
+        "5": 107,
+        "6": 100
+      },
+      "quad_nearest": {
+        "4": 121,
+        "5": 116,
+        "6": 104
+      }
+    },
+    "note": "outputs(r,t)=mesh children firing + eject; cap limits crossbar concurrency. out=6 is 4 mesh + 2 eject.",
+    "axis_ccw_tradeoff": {
+      "5": 107,
+      "6": 100,
+      "7": 98,
+      "8": 96,
+      "inf": 96,
+      "note": "crossbar out = mesh forwards + eject-FIFO writes (write width up to 4). Reaching LB=96 needs out=8 (4 mesh + 4 eject-write). The earlier \"6\" was the peak of the non-LB strict-rb schedule (mk=110), not the 96 schedule."
+    },
+    "corrected_finding": "To hit 96: shortest-path axis-family tree + burst buffer depth>=2 + crossbar per-router output bandwidth 8/cy. Lowering crossbar out to 6/5 costs +4/+11 cy."
+  },
+  "outcap_buffer_grid": {
+    "scheme": "axis_ccw",
+    "lower_bound": 96,
+    "makespan_by_outcap_buffer": {
+      "5": {
+        "0": 107,
+        "1": 107,
+        "2": 107,
+        "4": 107,
+        "8": 107,
+        "11": 107
+      },
+      "6": {
+        "0": 110,
+        "1": 100,
+        "2": 100,
+        "4": 100,
+        "8": 100,
+        "11": 100
+      },
+      "7": {
+        "0": 110,
+        "1": 98,
+        "2": 98,
+        "4": 98,
+        "8": 98,
+        "11": 98
+      },
+      "8": {
+        "0": 110,
+        "1": 98,
+        "2": 96,
+        "4": 96,
+        "8": 96,
+        "11": 96
+      }
+    },
+    "cheapest_lb_config": {
+      "out_cap": 8,
+      "buffer": 2
+    },
+    "loop_status": "converged"
+  }
+}

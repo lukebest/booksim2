@@ -1,0 +1,674 @@
+{
+  "generated_at": "2026-07-15T04:33:07.442928+00:00",
+  "model": {
+    "mesh": [
+      6,
+      8
+    ],
+    "H": 7,
+    "V": 9,
+    "rb": 2,
+    "m": 1,
+    "strict_zero_buffer": true
+  },
+  "schemes": {
+    "axis_ccw": {
+      "makespan": 120,
+      "source_order": "center",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 15,
+      "topo_period_mean": 8.042,
+      "mesh_fanout_max": 4,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 6,
+      "burst_buf_strict": 0,
+      "mk_c4": 100,
+      "burst_buf_c4": 2,
+      "delta2": 88,
+      "flits5_pipelined": 472,
+      "rounds2": {
+        "makespan": 177,
+        "order": "source_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 11.4,
+        "second_flit_max": 60
+      },
+      "rounds5_makespan": 326,
+      "steady_ii_by_buffer": {
+        "0": 88,
+        "2": 88,
+        "4": 88,
+        "8": 88,
+        "16": 88,
+        "link_lb": 42
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 69,
+          "first_round_mk": 143
+        },
+        "2": {
+          "ii": 51,
+          "first_round_mk": 100
+        },
+        "4": {
+          "ii": 51,
+          "first_round_mk": 100
+        },
+        "8": {
+          "ii": 51,
+          "first_round_mk": 100
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 61,
+          "first_round_mk": 153
+        },
+        "4": {
+          "ii": 51,
+          "first_round_mk": 100
+        }
+      }
+    },
+    "nec3": {
+      "makespan": 114,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.917,
+      "mesh_fanout_max": 3,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 114,
+      "burst_buf_c4": 0,
+      "delta2": 89,
+      "flits5_pipelined": 470,
+      "rounds2": {
+        "makespan": 146,
+        "order": "round_major",
+        "second_flit_min": 4,
+        "second_flit_mean": 24.1,
+        "second_flit_max": 47
+      },
+      "rounds5_makespan": 258,
+      "steady_ii_by_buffer": {
+        "0": 89,
+        "2": 89,
+        "4": 89,
+        "8": 89,
+        "16": 89,
+        "link_lb": 26
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 59,
+          "first_round_mk": 138
+        },
+        "2": {
+          "ii": 59,
+          "first_round_mk": 138
+        },
+        "4": {
+          "ii": 59,
+          "first_round_mk": 138
+        },
+        "8": {
+          "ii": 59,
+          "first_round_mk": 138
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 57,
+          "first_round_mk": 167
+        },
+        "4": {
+          "ii": 57,
+          "first_round_mk": 167
+        },
+        "0_cpsat": {
+          "ii": 41,
+          "first_round_mk": 152
+        }
+      },
+      "cpsat_pipeline": {
+        "ii": 41,
+        "first_round_mk": 152,
+        "flits2": 193,
+        "flits5": 316,
+        "flits16": 767
+      }
+    },
+    "nec2": {
+      "makespan": 135,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.917,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 135,
+      "burst_buf_c4": 0,
+      "delta2": 99,
+      "flits5_pipelined": 531,
+      "rounds2": {
+        "makespan": 156,
+        "order": "round_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 19.2,
+        "second_flit_max": 42
+      },
+      "rounds5_makespan": 287,
+      "steady_ii_by_buffer": {
+        "0": 99,
+        "2": 99,
+        "4": 99,
+        "8": 99,
+        "16": 99,
+        "link_lb": 26
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 53,
+          "first_round_mk": 139
+        },
+        "2": {
+          "ii": 53,
+          "first_round_mk": 139
+        },
+        "4": {
+          "ii": 53,
+          "first_round_mk": 139
+        },
+        "8": {
+          "ii": 53,
+          "first_round_mk": 139
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 53,
+          "first_round_mk": 139
+        },
+        "4": {
+          "ii": 53,
+          "first_round_mk": 139
+        }
+      }
+    },
+    "dim_xy": {
+      "makespan": 124,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 5,
+      "topo_period_mean": 3.917,
+      "mesh_fanout_max": 4,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 124,
+      "burst_buf_c4": 0,
+      "delta2": 87,
+      "flits5_pipelined": 472,
+      "rounds2": {
+        "makespan": 199,
+        "order": "round_major",
+        "second_flit_min": 14,
+        "second_flit_mean": 60.5,
+        "second_flit_max": 101
+      },
+      "rounds5_makespan": 370,
+      "steady_ii_by_buffer": {
+        "0": 87,
+        "2": 87,
+        "4": 87,
+        "8": 87,
+        "16": 87,
+        "link_lb": 42
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 87,
+          "first_round_mk": 140
+        },
+        "2": {
+          "ii": 87,
+          "first_round_mk": 140
+        },
+        "4": {
+          "ii": 87,
+          "first_round_mk": 140
+        },
+        "8": {
+          "ii": 87,
+          "first_round_mk": 140
+        }
+      },
+      "area": 0.7458
+    },
+    "hamilton_bi_tree": {
+      "makespan": 212,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.958,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 212,
+      "burst_buf_c4": 0,
+      "delta2": 1,
+      "flits5_pipelined": 216,
+      "rounds2": {
+        "makespan": 213,
+        "order": "round_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 1.0,
+        "second_flit_max": 1
+      },
+      "rounds5_makespan": 216,
+      "steady_ii_by_buffer": {
+        "0": 72,
+        "2": 72,
+        "4": 72,
+        "8": 72,
+        "16": 72,
+        "link_lb": 24
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 44,
+          "first_round_mk": 244
+        },
+        "2": {
+          "ii": 44,
+          "first_round_mk": 244
+        },
+        "4": {
+          "ii": 44,
+          "first_round_mk": 244
+        },
+        "8": {
+          "ii": 44,
+          "first_round_mk": 244
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 40,
+          "first_round_mk": 249
+        },
+        "4": {
+          "ii": 40,
+          "first_round_mk": 249
+        },
+        "0_cpsat": {
+          "ii": 36,
+          "first_round_mk": 243
+        }
+      },
+      "cpsat_pipeline": {
+        "ii": 36,
+        "first_round_mk": 243,
+        "flits2": 279,
+        "flits5": 387,
+        "flits16": 783
+      }
+    },
+    "dual_comb": {
+      "makespan": 139,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.917,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 139,
+      "burst_buf_c4": 0,
+      "delta2": 117,
+      "flits5_pipelined": 607,
+      "rounds2": {
+        "makespan": 215,
+        "order": "source_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 7.3,
+        "second_flit_max": 34
+      },
+      "rounds5_makespan": 405,
+      "steady_ii_by_buffer": {
+        "0": 117,
+        "2": 117,
+        "4": 117,
+        "8": 117,
+        "16": 117,
+        "link_lb": 37
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 91,
+          "first_round_mk": 165
+        },
+        "2": {
+          "ii": 91,
+          "first_round_mk": 165
+        },
+        "4": {
+          "ii": 91,
+          "first_round_mk": 165
+        },
+        "8": {
+          "ii": 91,
+          "first_round_mk": 165
+        }
+      },
+      "area": 0.7458
+    },
+    "col_comb3": {
+      "makespan": 127,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 3.0,
+      "mesh_fanout_max": 3,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 127,
+      "burst_buf_c4": 0,
+      "delta2": 100,
+      "flits5_pipelined": 527,
+      "rounds2": {
+        "makespan": 149,
+        "order": "round_major",
+        "second_flit_min": 4,
+        "second_flit_mean": 23.5,
+        "second_flit_max": 48
+      },
+      "rounds5_makespan": 266,
+      "steady_ii_by_buffer": {
+        "0": 100,
+        "2": 100,
+        "4": 100,
+        "8": 100,
+        "16": 100,
+        "link_lb": 27
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 45,
+          "first_round_mk": 152
+        },
+        "2": {
+          "ii": 45,
+          "first_round_mk": 152
+        },
+        "4": {
+          "ii": 45,
+          "first_round_mk": 152
+        },
+        "8": {
+          "ii": 45,
+          "first_round_mk": 152
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 45,
+          "first_round_mk": 152
+        },
+        "4": {
+          "ii": 45,
+          "first_round_mk": 152
+        },
+        "0_cpsat": {
+          "ii": 38,
+          "first_round_mk": 155
+        }
+      },
+      "cyclic_ii_exact": {
+        "scheme": "col_comb3",
+        "buffer_depth": 0,
+        "link_multiplicity_lb": 27,
+        "eject_lb": 24,
+        "proven_min_feasible_ii": 45,
+        "proven_max_infeasible_ii": null,
+        "per_ii": {
+          "45": {
+            "status": "FEASIBLE",
+            "detail": "nodes=78 elapsed=0.14s",
+            "mult_lb": 27
+          },
+          "44": {
+            "status": "UNKNOWN",
+            "detail": "TIMEOUT nodes=67762 elapsed=120.00s",
+            "mult_lb": 27
+          }
+        }
+      },
+      "cyclic_ii_cpsat": {
+        "buffer_depth": 0,
+        "results": {
+          "42": {
+            "status": "OPTIMAL",
+            "wall_s": 62.34
+          },
+          "40": {
+            "status": "OPTIMAL",
+            "wall_s": 78.66
+          },
+          "38": {
+            "status": "UNKNOWN",
+            "wall_s": 301.55
+          },
+          "36": {
+            "status": "UNKNOWN",
+            "wall_s": 180.83
+          },
+          "34": {
+            "status": "UNKNOWN",
+            "wall_s": 90.36
+          },
+          "32": {
+            "status": "UNKNOWN",
+            "wall_s": 90.47
+          },
+          "30": {
+            "status": "UNKNOWN",
+            "wall_s": 90.41
+          },
+          "28": {
+            "status": "UNKNOWN",
+            "wall_s": 90.54
+          },
+          "27": {
+            "status": "UNKNOWN",
+            "wall_s": 90.36
+          },
+          "33": {
+            "status": "UNKNOWN",
+            "wall_s": 240.82
+          },
+          "39": {
+            "status": "OPTIMAL",
+            "wall_s": 167.3
+          },
+          "37": {
+            "status": "UNKNOWN",
+            "wall_s": 301.12
+          }
+        },
+        "note": "CP-SAT constructive upper bound on min II; multiplicity LB=27; II in (27, proven_min) not fully resolved (UNKNOWN under ~3\u20135 min).",
+        "proven_min_feasible_ii": 37,
+        "proven_max_infeasible_ii": null,
+        "link_multiplicity_lb": 27,
+        "first_round_mk": 162,
+        "wrapup_ii37": {
+          "status": "OPTIMAL",
+          "first_round_mk": 162,
+          "wall_s": 251.17
+        }
+      },
+      "cpsat_pipeline": {
+        "ii": 37,
+        "first_round_mk": 162,
+        "flits2": 199,
+        "flits5": 310,
+        "flits16": 717
+      }
+    },
+    "pair_snake_comb": {
+      "makespan": 188,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 7,
+      "topo_period_mean": 3.417,
+      "mesh_fanout_max": 3,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 5,
+      "burst_buf_strict": 0,
+      "mk_c4": 188,
+      "burst_buf_c4": 0,
+      "delta2": 106,
+      "flits5_pipelined": 612,
+      "rounds2": {
+        "makespan": 199,
+        "order": "round_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 12.0,
+        "second_flit_max": 45
+      },
+      "rounds5_makespan": 312,
+      "steady_ii_by_buffer": {
+        "0": 106,
+        "2": 106,
+        "4": 106,
+        "8": 106,
+        "16": 106,
+        "link_lb": 28
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 54,
+          "first_round_mk": 206
+        },
+        "2": {
+          "ii": 54,
+          "first_round_mk": 206
+        },
+        "4": {
+          "ii": 54,
+          "first_round_mk": 206
+        },
+        "8": {
+          "ii": 54,
+          "first_round_mk": 206
+        }
+      },
+      "area": 0.7458,
+      "cyclic_pack_ii_opt": {
+        "0": {
+          "ii": 53,
+          "first_round_mk": 236
+        },
+        "4": {
+          "ii": 54,
+          "first_round_mk": 206
+        }
+      }
+    }
+  },
+  "recommendation": {
+    "generated_at": "2026-07-15T08:31:51.819893+00:00",
+    "loop_status": "stopped",
+    "stop_reason": "col_comb3 improved to II=37 (mk=162); recommendation updated then stopped",
+    "constraints": {
+      "mesh": [
+        6,
+        8
+      ],
+      "H": 7,
+      "V": 9,
+      "rb": 2,
+      "m_model": "1-flit rounds",
+      "slot_table_entries": 48,
+      "strict_zero_buffer_links": true,
+      "replay": "cyclic modular offsets, down-ramp a[t]<=rb"
+    },
+    "primary": {
+      "m1_oneshot": {
+        "scheme": "nec3",
+        "makespan": 114,
+        "rationale": "lowest single-flit makespan (114); Pmax=3; xbar peak 4; zero burst buffer; area 0.7458"
+      },
+      "m_ge_2_replay48": {
+        "scheme": "col_comb3",
+        "ii": 37,
+        "first_round_mk": 162,
+        "flits5": 310,
+        "flits16": 717,
+        "rationale": "best cyclic-replay pipeline under 48-entry calendar; same uarch cost as NEC-3"
+      }
+    },
+    "dominated": [
+      "axis_ccw",
+      "nec2",
+      "dual_comb",
+      "pair_snake_comb",
+      "dim_xy"
+    ],
+    "optional_long_message": {
+      "scheme": "hamilton_bi_tree",
+      "note": "lowest II (36) but first-round 243 loses through at least 16 flits vs col_comb3",
+      "pipeline": {
+        "ii": 36,
+        "first_round_mk": 243,
+        "flits2": 279,
+        "flits5": 387,
+        "flits16": 783
+      }
+    },
+    "pipelines_cpsat": {
+      "nec3": {
+        "ii": 41,
+        "first_round_mk": 152,
+        "flits2": 193,
+        "flits5": 316,
+        "flits16": 767
+      },
+      "hamilton_bi_tree": {
+        "ii": 36,
+        "first_round_mk": 243,
+        "flits2": 279,
+        "flits5": 387,
+        "flits16": 783
+      },
+      "col_comb3": {
+        "ii": 37,
+        "first_round_mk": 162,
+        "flits2": 199,
+        "flits5": 310,
+        "flits16": 717
+      }
+    }
+  }
+}

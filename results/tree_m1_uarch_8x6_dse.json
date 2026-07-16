@@ -1,0 +1,1117 @@
+{
+  "generated_at": "2026-07-15T09:29:01.119172+00:00",
+  "model": {
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "rb": 2,
+    "m": 1,
+    "strict_zero_buffer": true
+  },
+  "schemes": {
+    "axis_ccw": {
+      "makespan": 121,
+      "source_order": "center",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 15,
+      "topo_period_mean": 7.958,
+      "mesh_fanout_max": 4,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 6,
+      "burst_buf_strict": 0,
+      "mk_c4": 96,
+      "burst_buf_c4": 2,
+      "delta2": 85,
+      "flits5_pipelined": 461,
+      "rounds2": {
+        "makespan": 165,
+        "order": "source_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 9.2,
+        "second_flit_max": 49
+      },
+      "rounds5_makespan": 321,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 165,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 9.2,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 152,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 33.2,
+          "queue_depth_if_drain_rb": 3
+        },
+        "4": {
+          "makespan": 164,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 5.4,
+          "queue_depth_if_drain_rb": 5
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 85,
+        "2": 85,
+        "4": 85,
+        "8": 85,
+        "16": 85,
+        "link_lb": 42
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 61,
+          "first_round_mk": 133
+        },
+        "2": {
+          "ii": 47,
+          "first_round_mk": 96
+        },
+        "4": {
+          "ii": 47,
+          "first_round_mk": 96
+        },
+        "8": {
+          "ii": 47,
+          "first_round_mk": 96
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7888
+    },
+    "nec3": {
+      "makespan": 118,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.917,
+      "mesh_fanout_max": 3,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 118,
+      "burst_buf_c4": 0,
+      "delta2": 85,
+      "flits5_pipelined": 458,
+      "rounds2": {
+        "makespan": 146,
+        "order": "round_major",
+        "second_flit_min": 4,
+        "second_flit_mean": 26.0,
+        "second_flit_max": 48
+      },
+      "rounds5_makespan": 256,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 146,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 26.0,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 146,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 26.0,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 146,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 26.0,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 85,
+        "2": 85,
+        "4": 85,
+        "8": 85,
+        "16": 85,
+        "link_lb": 27
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 57,
+          "first_round_mk": 130
+        },
+        "2": {
+          "ii": 57,
+          "first_round_mk": 130
+        },
+        "4": {
+          "ii": 57,
+          "first_round_mk": 130
+        },
+        "8": {
+          "ii": 57,
+          "first_round_mk": 130
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458,
+      "cpsat_pipeline": {
+        "ii": 40,
+        "first_round_mk": 155,
+        "flits2": 195,
+        "flits5": 315,
+        "flits16": 755
+      }
+    },
+    "nec2": {
+      "makespan": 145,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.917,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 145,
+      "burst_buf_c4": 0,
+      "delta2": 109,
+      "flits5_pipelined": 581,
+      "rounds2": {
+        "makespan": 153,
+        "order": "round_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 15.7,
+        "second_flit_max": 46
+      },
+      "rounds5_makespan": 266,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 153,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 15.7,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 153,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 15.7,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 153,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 15.7,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 109,
+        "2": 109,
+        "4": 109,
+        "8": 109,
+        "16": 109,
+        "link_lb": 27
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 54,
+          "first_round_mk": 178
+        },
+        "2": {
+          "ii": 54,
+          "first_round_mk": 178
+        },
+        "4": {
+          "ii": 54,
+          "first_round_mk": 178
+        },
+        "8": {
+          "ii": 54,
+          "first_round_mk": 178
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458
+    },
+    "dim_xy": {
+      "makespan": 126,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 5,
+      "topo_period_mean": 3.708,
+      "mesh_fanout_max": 4,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 126,
+      "burst_buf_c4": 0,
+      "delta2": 100,
+      "flits5_pipelined": 526,
+      "rounds2": {
+        "makespan": 192,
+        "order": "source_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 7.6,
+        "second_flit_max": 44
+      },
+      "rounds5_makespan": 374,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 192,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.6,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 192,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.6,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 192,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.6,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 100,
+        "2": 100,
+        "4": 100,
+        "8": 100,
+        "16": 100,
+        "link_lb": 40
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 92,
+          "first_round_mk": 144
+        },
+        "2": {
+          "ii": 92,
+          "first_round_mk": 144
+        },
+        "4": {
+          "ii": 92,
+          "first_round_mk": 144
+        },
+        "8": {
+          "ii": 92,
+          "first_round_mk": 144
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458
+    },
+    "dim_yx": {
+      "makespan": 120,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 5,
+      "topo_period_mean": 3.875,
+      "mesh_fanout_max": 4,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 120,
+      "burst_buf_c4": 0,
+      "delta2": 96,
+      "flits5_pipelined": 504,
+      "rounds2": {
+        "makespan": 205,
+        "order": "source_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 7.4,
+        "second_flit_max": 32
+      },
+      "rounds5_makespan": 376,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 205,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.4,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 205,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.4,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 205,
+          "order": "source_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 7.4,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 96,
+        "2": 96,
+        "4": 96,
+        "8": 96,
+        "16": 96,
+        "link_lb": 42
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 94,
+          "first_round_mk": 150
+        },
+        "2": {
+          "ii": 94,
+          "first_round_mk": 150
+        },
+        "4": {
+          "ii": 94,
+          "first_round_mk": 150
+        },
+        "8": {
+          "ii": 94,
+          "first_round_mk": 150
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458
+    },
+    "hamilton_bi_tree": {
+      "makespan": 210,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 2.958,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 210,
+      "burst_buf_c4": 0,
+      "delta2": 1,
+      "flits5_pipelined": 214,
+      "rounds2": {
+        "makespan": 211,
+        "order": "round_major",
+        "second_flit_min": 1,
+        "second_flit_mean": 1.0,
+        "second_flit_max": 1
+      },
+      "rounds5_makespan": 214,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 211,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 1.0,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 211,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 1.0,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 211,
+          "order": "round_major",
+          "second_flit_min": 1,
+          "second_flit_mean": 1.0,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 97,
+        "2": 97,
+        "4": 97,
+        "8": 97,
+        "16": 97,
+        "link_lb": 24
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 42,
+          "first_round_mk": 220
+        },
+        "2": {
+          "ii": 42,
+          "first_round_mk": 220
+        },
+        "4": {
+          "ii": 42,
+          "first_round_mk": 220
+        },
+        "8": {
+          "ii": 42,
+          "first_round_mk": 220
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458,
+      "cpsat_pipeline": {
+        "ii": 33,
+        "first_round_mk": 242,
+        "flits2": 275,
+        "flits5": 374,
+        "flits16": 737
+      }
+    },
+    "dual_comb": {
+      "makespan": 145,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 3.0,
+      "mesh_fanout_max": 2,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 145,
+      "burst_buf_c4": 0,
+      "delta2": 113,
+      "flits5_pipelined": 597,
+      "rounds2": {
+        "makespan": 206,
+        "order": "round_major",
+        "second_flit_min": 38,
+        "second_flit_mean": 49.6,
+        "second_flit_max": 67
+      },
+      "rounds5_makespan": 381,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 206,
+          "order": "round_major",
+          "second_flit_min": 38,
+          "second_flit_mean": 49.6,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 206,
+          "order": "round_major",
+          "second_flit_min": 38,
+          "second_flit_mean": 49.6,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 206,
+          "order": "round_major",
+          "second_flit_min": 38,
+          "second_flit_mean": 49.6,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 113,
+        "2": 113,
+        "4": 113,
+        "8": 113,
+        "16": 113,
+        "link_lb": 38
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 82,
+          "first_round_mk": 159
+        },
+        "2": {
+          "ii": 82,
+          "first_round_mk": 159
+        },
+        "4": {
+          "ii": 82,
+          "first_round_mk": 159
+        },
+        "8": {
+          "ii": 82,
+          "first_round_mk": 159
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458
+    },
+    "col_comb3": {
+      "makespan": 114,
+      "source_order": "corner",
+      "slot_entries_max": 48,
+      "issue_width": 2,
+      "topo_period_max": 3,
+      "topo_period_mean": 3.0,
+      "mesh_fanout_max": 3,
+      "xbar_ramp_peak": 2,
+      "xbar_out_peak": 4,
+      "burst_buf_strict": 0,
+      "mk_c4": 114,
+      "burst_buf_c4": 0,
+      "delta2": 87,
+      "flits5_pipelined": 462,
+      "rounds2": {
+        "makespan": 156,
+        "order": "round_major",
+        "second_flit_min": 4,
+        "second_flit_mean": 18.3,
+        "second_flit_max": 52
+      },
+      "rounds5_makespan": 262,
+      "second_flit_by_down_cap": {
+        "2": {
+          "makespan": 156,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 18.3,
+          "queue_depth_if_drain_rb": 0
+        },
+        "3": {
+          "makespan": 156,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 18.3,
+          "queue_depth_if_drain_rb": 0
+        },
+        "4": {
+          "makespan": 156,
+          "order": "round_major",
+          "second_flit_min": 4,
+          "second_flit_mean": 18.3,
+          "queue_depth_if_drain_rb": 0
+        }
+      },
+      "steady_ii_by_buffer": {
+        "0": 87,
+        "2": 87,
+        "4": 87,
+        "8": 87,
+        "16": 87,
+        "link_lb": 26
+      },
+      "cyclic_pack_ii": {
+        "0": {
+          "ii": 55,
+          "first_round_mk": 150
+        },
+        "2": {
+          "ii": 55,
+          "first_round_mk": 150
+        },
+        "4": {
+          "ii": 55,
+          "first_round_mk": 150
+        },
+        "8": {
+          "ii": 55,
+          "first_round_mk": 150
+        }
+      },
+      "area": 0.7458,
+      "area_with_burst_c4": 0.7458,
+      "cpsat_pipeline": {
+        "ii": 41,
+        "first_round_mk": 151,
+        "flits2": 192,
+        "flits5": 315,
+        "flits16": 766
+      }
+    }
+  },
+  "recommendation": {
+    "generated_at": "2026-07-15T10:10:00.749905+00:00",
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "rb": 2,
+    "default_single_scheme": "axis_ccw",
+    "primary": {
+      "m1_oneshot_strict_rb2": {
+        "scheme": "col_comb3",
+        "makespan": 114,
+        "rationale": "Best if crossbar eject write also capped at 2 (no burst into FIFO)"
+      },
+      "m1_with_eject_burst_write": {
+        "scheme": "axis_ccw",
+        "makespan": 96,
+        "requires": "down_cap>=4 or equiv. wide eject write + FIFO depth>=4",
+        "rationale": "Hits formal LB=96; pay Pmax=15, xbar_out=6, burst area",
+        "area": 0.7968
+      },
+      "m1_xbar4_fifo_absorb": {
+        "scheme": "axis_ccw",
+        "pe_cmax": 96,
+        "fifo_depth_needed": 4,
+        "area": 0.7968,
+        "gap_to_lb": 0,
+        "rationale": "Under xbar write\u22644 + FIFO absorb + drain=2, axis_ccw achieves pe_cmax=96 (= formal LB)"
+      }
+    },
+    "ranking_m1": [
+      {
+        "scheme": "col_comb3",
+        "makespan": 114,
+        "slot": 48,
+        "Pmax": 3,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 4,
+        "area": 0.7458
+      },
+      {
+        "scheme": "nec3",
+        "makespan": 118,
+        "slot": 48,
+        "Pmax": 3,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 4,
+        "area": 0.7458
+      },
+      {
+        "scheme": "dim_yx",
+        "makespan": 120,
+        "slot": 48,
+        "Pmax": 5,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 1,
+        "area": 0.7458
+      },
+      {
+        "scheme": "axis_ccw",
+        "makespan": 121,
+        "slot": 48,
+        "Pmax": 15,
+        "ramp_peak": 2,
+        "out_peak": 6,
+        "burst4": 2,
+        "f2min": 1,
+        "area": 0.7458
+      },
+      {
+        "scheme": "dim_xy",
+        "makespan": 126,
+        "slot": 48,
+        "Pmax": 5,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 1,
+        "area": 0.7458
+      },
+      {
+        "scheme": "nec2",
+        "makespan": 145,
+        "slot": 48,
+        "Pmax": 3,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 1,
+        "area": 0.7458
+      },
+      {
+        "scheme": "dual_comb",
+        "makespan": 145,
+        "slot": 48,
+        "Pmax": 3,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 38,
+        "area": 0.7458
+      },
+      {
+        "scheme": "hamilton_bi_tree",
+        "makespan": 210,
+        "slot": 48,
+        "Pmax": 3,
+        "ramp_peak": 2,
+        "out_peak": 4,
+        "burst4": 0,
+        "f2min": 1,
+        "area": 0.7458
+      }
+    ],
+    "pipelines_cpsat": {
+      "col_comb3": {
+        "ii": 41,
+        "first_round_mk": 151,
+        "flits2": 192,
+        "flits5": 315,
+        "flits16": 766
+      },
+      "nec3": {
+        "ii": 40,
+        "first_round_mk": 155,
+        "flits2": 195,
+        "flits5": 315,
+        "flits16": 755
+      },
+      "hamilton_bi_tree": {
+        "ii": 33,
+        "first_round_mk": 242,
+        "flits2": 275,
+        "flits5": 374,
+        "flits16": 737
+      }
+    },
+    "k_flit_regimes": [
+      {
+        "k_lo": 1,
+        "k_hi": 5,
+        "scheme": "col_comb3"
+      },
+      {
+        "k_lo": 6,
+        "k_hi": 13,
+        "scheme": "nec3"
+      },
+      {
+        "k_lo": 14,
+        "k_hi": 32,
+        "scheme": "hamilton_bi_tree"
+      }
+    ],
+    "runners_up": {
+      "nec3": {
+        "makespan_m1": 118,
+        "pipeline": {
+          "ii": 41,
+          "first_round_mk": 153,
+          "flits2": 194,
+          "flits5": 317,
+          "flits16": 768
+        }
+      },
+      "hamilton_bi_tree": {
+        "makespan_m1": 210,
+        "pipeline": {
+          "ii": 33,
+          "first_round_mk": 242,
+          "flits2": 275,
+          "flits5": 374,
+          "flits16": 737
+        }
+      }
+    },
+    "burst_buffer_study": {
+      "axis_ccw": {
+        "rows": [
+          {
+            "down_cap": 2,
+            "makespan": 121,
+            "gap_to_lb": 25,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 0,
+            "area": 0.7458,
+            "area_delta_vs_base": 0.0,
+            "order": "center"
+          },
+          {
+            "down_cap": 3,
+            "makespan": 98,
+            "gap_to_lb": 2,
+            "arr_peak": 3,
+            "fifo_if_drain_rb": 4,
+            "area": 0.7968,
+            "area_delta_vs_base": 0.051,
+            "order": "natural"
+          },
+          {
+            "down_cap": 4,
+            "makespan": 96,
+            "gap_to_lb": 0,
+            "arr_peak": 4,
+            "fifo_if_drain_rb": 4,
+            "area": 0.7968,
+            "area_delta_vs_base": 0.051,
+            "order": "corner"
+          },
+          {
+            "down_cap": 8,
+            "makespan": 96,
+            "gap_to_lb": 0,
+            "arr_peak": 4,
+            "fifo_if_drain_rb": 4,
+            "area": 0.7968,
+            "area_delta_vs_base": 0.051,
+            "order": "corner"
+          }
+        ],
+        "down_cap2_fixed_best_mk": 121,
+        "note": "FIFO after a down_cap=2 port cannot beat down_cap2_fixed_best_mk; reaching lower mk requires allowing arr_peak>2 (wider eject write)."
+      },
+      "col_comb3": {
+        "rows": [
+          {
+            "down_cap": 2,
+            "makespan": 114,
+            "gap_to_lb": 18,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 0,
+            "area": 0.7458,
+            "area_delta_vs_base": 0.0,
+            "order": "corner"
+          },
+          {
+            "down_cap": 3,
+            "makespan": 114,
+            "gap_to_lb": 18,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 4,
+            "makespan": 114,
+            "gap_to_lb": 18,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 8,
+            "makespan": 114,
+            "gap_to_lb": 18,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          }
+        ],
+        "down_cap2_fixed_best_mk": 114,
+        "note": "FIFO after a down_cap=2 port cannot beat down_cap2_fixed_best_mk; reaching lower mk requires allowing arr_peak>2 (wider eject write)."
+      },
+      "nec3": {
+        "rows": [
+          {
+            "down_cap": 2,
+            "makespan": 118,
+            "gap_to_lb": 22,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 0,
+            "area": 0.7458,
+            "area_delta_vs_base": 0.0,
+            "order": "corner"
+          },
+          {
+            "down_cap": 3,
+            "makespan": 118,
+            "gap_to_lb": 22,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 4,
+            "makespan": 118,
+            "gap_to_lb": 22,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 8,
+            "makespan": 118,
+            "gap_to_lb": 22,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          }
+        ],
+        "down_cap2_fixed_best_mk": 118,
+        "note": "FIFO after a down_cap=2 port cannot beat down_cap2_fixed_best_mk; reaching lower mk requires allowing arr_peak>2 (wider eject write)."
+      },
+      "nec2": {
+        "rows": [
+          {
+            "down_cap": 2,
+            "makespan": 145,
+            "gap_to_lb": 49,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 0,
+            "area": 0.7458,
+            "area_delta_vs_base": 0.0,
+            "order": "corner"
+          },
+          {
+            "down_cap": 3,
+            "makespan": 145,
+            "gap_to_lb": 49,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 4,
+            "makespan": 145,
+            "gap_to_lb": 49,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          },
+          {
+            "down_cap": 8,
+            "makespan": 145,
+            "gap_to_lb": 49,
+            "arr_peak": 2,
+            "fifo_if_drain_rb": 2,
+            "area": 0.7888,
+            "area_delta_vs_base": 0.043,
+            "order": "corner"
+          }
+        ],
+        "down_cap2_fixed_best_mk": 145,
+        "note": "FIFO after a down_cap=2 port cannot beat down_cap2_fixed_best_mk; reaching lower mk requires allowing arr_peak>2 (wider eject write)."
+      }
+    },
+    "burst_buffer_conclusion": {
+      "down_cap_fixed_2": "Increasing eject FIFO alone cannot improve axis+CCW beyond mk=121; LB schedule needs arr_peak=4.",
+      "axis_reaches_lb_when": {
+        "down_cap": 4,
+        "makespan": 96,
+        "gap_to_lb": 0,
+        "arr_peak": 4,
+        "fifo_if_drain_rb": 4,
+        "area": 0.7968,
+        "area_delta_vs_base": 0.051,
+        "order": "corner"
+      },
+      "col_nec_insensitive": "col_comb3/nec3 makespan unchanged for down_cap>=2; tree dilation binds."
+    },
+    "uarch_model": {
+      "crossbar_to_fifo_cap": 4,
+      "fifo_to_pe_drain": 2,
+      "description": "Crossbar may deliver up to 4 flits/cy into eject FIFO; down-ramp/PE drains FIFO at rb=2. Makespan = PE completion."
+    },
+    "xbar4_fifo_results": {
+      "axis_ccw": {
+        "network_mk": 96,
+        "pe_cmax": 96,
+        "order": "corner",
+        "max_off": 0,
+        "xbar_arr_peak": 4,
+        "fifo_depth_needed": 4,
+        "area": 0.7968,
+        "area_delta": 0.051,
+        "gap_to_lb": 0
+      },
+      "col_comb3": {
+        "network_mk": 114,
+        "pe_cmax": 114,
+        "order": "corner",
+        "max_off": 29,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 18
+      },
+      "nec3": {
+        "network_mk": 118,
+        "pe_cmax": 118,
+        "order": "corner",
+        "max_off": 7,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 22
+      },
+      "nec2": {
+        "network_mk": 145,
+        "pe_cmax": 145,
+        "order": "corner",
+        "max_off": 6,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 49
+      },
+      "dim_yx": {
+        "network_mk": 120,
+        "pe_cmax": 120,
+        "order": "corner",
+        "max_off": 56,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 24
+      },
+      "dim_xy": {
+        "network_mk": 126,
+        "pe_cmax": 126,
+        "order": "corner",
+        "max_off": 56,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 30
+      },
+      "hamilton_bi_tree": {
+        "network_mk": 210,
+        "pe_cmax": 210,
+        "order": "corner",
+        "max_off": 0,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 114
+      },
+      "dual_comb": {
+        "network_mk": 145,
+        "pe_cmax": 145,
+        "order": "corner",
+        "max_off": 57,
+        "xbar_arr_peak": 2,
+        "fifo_depth_needed": 2,
+        "area": 0.7888,
+        "area_delta": 0.043,
+        "gap_to_lb": 49
+      }
+    }
+  }
+}

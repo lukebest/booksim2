@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>刚性 Allgather 排图的实现方案对比：源路由 / 路由器日历 / 混合 color</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#cbd5e1;
+--win:#dcfce7;--warn:#fef3c7;--bad:#fee2e2;}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);
+margin:0;padding:28px 32px 64px;line-height:1.55;max-width:1200px}
+h1{font-size:1.5rem;margin:0 0 4px} h2{font-size:1.15rem;color:#1e3a8a;margin:0 0 12px}
+h3{font-size:1rem;margin:14px 0 6px;color:#334155}
+.sub,.note{color:var(--muted);font-size:.86rem}
+.card{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:18px 22px;margin:16px 0}
+.hero{border-color:#93c5fd;background:linear-gradient(180deg,#eff6ff,#fff)}
+table{border-collapse:collapse;width:100%;font-size:.82rem;margin:8px 0}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:center;vertical-align:top}
+th{background:#e2e8f0} td.l{text-align:left}
+.win{background:var(--win)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+ul{margin:6px 0;padding-left:22px} li{margin:5px 0}
+code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.9em}
+.diag{background:#f8fafc;border:1px dashed #94a3b8;border-radius:8px;padding:14px 16px;
+font-family:ui-monospace,Menlo,monospace;font-size:.78rem;white-space:pre;line-height:1.4;
+overflow-x:auto;margin:10px 0}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}
+.kpi div{background:#f1f5f9;border-radius:8px;padding:12px 14px}
+.kpi b{display:block;font-size:1.3rem;color:#1d4ed8} .kpi span{font-size:.78rem;color:var(--muted)}
+.pill{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:10px;font-weight:600}
+.p-good{background:#dcfce7;color:#166534} .p-mid{background:#fef3c7;color:#92400e}
+.p-bad{background:#fee2e2;color:#991b1b}
+</style></head><body>
+
+<h1>刚性 Allgather 排图的三种实现方案对比与扩展探索</h1>
+<p class="sub">8×6 mesh · H=7 · V=9 · rb=2 · 以 axis+CCW 及两种半区切分为实测对象 ·
+数据源 <code>impl_schemes.json</code> · 生成 2026-07-16T03:58:02.342535+00:00</p>
+
+<div class="card hero">
+<h2>核心结论</h2>
+<div class="kpi">
+  <div><b>≤9</b><span>每路由器跨全部 48 源的不同出端口配置数</span></div>
+  <div><b>≤2</b><span>每 (路由器,入端口) 的不同出端口配置数</span></div>
+  <div><b>1 bit</b><span>混合 color 消歧所需相位比特（arm/fill）</span></div>
+  <div><b>~18×</b><span>日历 SRAM / color SRAM 面积比</span></div>
+</div>
+<ul>
+<li><b>排图的强规律性是关键杠杆</b>：虽然有 48 棵各不相同的多播树，但任一路由器的转发行为
+只由“源相对本节点的象限类”决定 → 每路由器<b>最多 9 种</b>出端口掩码；若再按<b>入端口</b>索引，
+<b>最多 2 种</b>。这意味着一个 <b>1-bit 相位标签</b>（在轴臂 vs 在象限填充）即可在每一跳消歧。</li>
+<li><b>成本排序（本排图）</b>：混合 color（≈80b/路由器 + 1b 头，无需时间同步）
+≈ 压缩源路由（72b + 8b 头）
+≪ 路由器日历（1472b + 全网时间基准）。</li>
+<li><b>日历方案唯一的独有代价是“时间”</b>：它把路由与全局周期耦合，省掉报文头，但需要全网时钟/
+栅栏对齐与漂移预算；另两者路由是数据驱动，对时序漂移鲁棒（错时只会拥塞、不会错发）。</li>
+<li><b>三者都仍需 PE 侧的注入偏移表（48 个常数）</b>来保证 0-buffer 无冲突——这是排图的“时间”部分，
+与“路由”部分正交。日历是唯一把两者合一的方案。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>1. 三种机制的定义与数据流</h2>
+<div class="diag">① 源路由（报文携带路由+多播，按规律压缩）
+   PE 编码 8b 头(源坐标+方案id) → 路由器组合逻辑算出 out_mask = f(源象限类)
+   [报文] --hdr--> (R 解析/复制) --hdr--> (R) --hdr--> ...   路由器无时间概念
+
+② 路由器日历（时间索引 in→out 表，无报文头）
+   全网同一时间基准 t ; 路由器按 t 查表得当拍 in→out ; 数据到达即“对号入座”直通
+   [裸数据] ==t==> (R[cal[t]]) ==t==> (R[cal[t]]) ...        依赖 rigid 注入 + 时钟对齐
+
+③ 混合 color（报文带指示位，选预置路由表——类 Cerebras）
+   PE 打 1b color(相位:arm/fill) → 路由器 (in_port,color)→(out_mask,新color) 静态表
+   [color|数据] --c--> (R 查(in,c)) --c'--> (R) ...          fork 处切换 color，无需时间</div>
+</div>
+
+<div class="card">
+<h2>2. 驱动成本的结构性事实（实测）</h2>
+<table>
+<thead><tr><th>方案</th><th>不同源树</th><th>每路由器<br>配置数(max)</th>
+<th>每(路由器,入口)<br>配置数(max)</th><th>最小 color 位</th><th>最深树跳数</th><th>Pmax</th></tr></thead>
+<tbody>
+<tr><td class='l'>axis_ccw</td><td>48</td><td>9</td><td>2</td><td>1</td><td>12</td><td>15</td></tr><tr><td class='l'>split_vertical_4x6</td><td>48</td><td>9</td><td>2</td><td>1</td><td>12</td><td>13</td></tr><tr><td class='l'>split_horizontal_8x3</td><td>48</td><td>9</td><td>2</td><td>1</td><td>12</td><td>11</td></tr>
+</tbody></table>
+<p class="note">“每(路由器,入口)配置数 ≤2”是最重要的一条：一个到达某入端口的 flit 只可能处于两种角色——
+仍在轴臂上（需继续直行并向垂直方向 fork）或已进入象限填充（只直行）——1 比特即可区分。</p>
+</div>
+
+<div class="card">
+<h2>3. 量化成本对比（以 axis+CCW，Pmax=15，issue=2）</h2>
+<table>
+<thead><tr><th>维度</th><th>① 源路由（压缩）</th><th>② 路由器日历</th><th>③ 混合 color</th></tr></thead>
+<tbody>
+<tr><td class='l'>每 flit 报文头</td>
+  <td class='warn'>8 b（源坐标+id）<br><span class="note">未压缩全路由 ~36b</span></td>
+  <td class='win'>0 b</td>
+  <td class='win'>1 b（相位）</td></tr>
+<tr><td class='l'>每路由器路由 SRAM</td>
+  <td class='win'>72 b（9 项类表/或纯逻辑）</td>
+  <td class='bad'>1472 b（depth=16(Pmax=15) x 23b x2 issue）</td>
+  <td class='win'>80 b（2-color x 5 in-port static route; fork swaps color）</td></tr>
+<tr><td class='l'>路由 SRAM 面积（‰ IQ-XY）</td>
+  <td class='win'>0.11</td>
+  <td class='bad'>2.21</td>
+  <td class='win'>0.12</td></tr>
+<tr><td class='l'>组合逻辑</td>
+  <td class='warn'>头解析 + out_mask=f(Δ象限) ALU + 多播复制</td>
+  <td class='win'>查表直通（最轻）</td>
+  <td class='win'>(in,color) 小查表 + fork 改 color</td></tr>
+<tr><td class='l'>全局时间同步</td>
+  <td class='win'>不需要</td>
+  <td class='bad'>需要（全网时钟/栅栏 + 漂移预算）</td>
+  <td class='win'>不需要</td></tr>
+<tr><td class='l'>注入偏移表(PE 侧)</td><td>需要(48)</td><td>需要(48)</td><td>需要(48)</td></tr>
+<tr><td class='l'>对时序漂移鲁棒性</td>
+  <td class='win'>高（错时只拥塞不错发）</td>
+  <td class='bad'>低（错拍即错发）</td>
+  <td class='win'>高</td></tr>
+<tr><td class='l'>带宽/能耗税</td>
+  <td class='warn'>每 flit 带头</td>
+  <td class='win'>无</td>
+  <td class='win'>近似无（1b）</td></tr>
+<tr><td class='l'>通用性（换排图/换集合）</td>
+  <td class='warn'>依赖排图仍算法化；否则头膨胀</td>
+  <td class='win'>任意排图皆可（重载表）</td>
+  <td class='warn'>依赖 ≤2 配置的规律；否则 color 数上升</td></tr>
+</tbody></table>
+<p class="note">面积单位为“‰ IQ-XY 归一面积”(×1000)。日历事件按 SparseCal 23b×2bank×2issue；
+color/类表按 8b/项。三种方案在两种切分下结论一致（日历随 Pmax 15/13/11 略降，但仍最大）。</p>
+</div>
+
+<div class="card">
+<h2>4. 各方案优劣小结</h2>
+<h3>① 源路由 <span class="pill p-mid">数据驱动</span></h3>
+<ul>
+<li><b>优</b>：路由器零/极小路由存储；无时间同步；灵活；漂移鲁棒。</li>
+<li><b>劣</b>：每 flit 带头（带宽/能耗税）；路由器需要头解析+多播复制逻辑；
+若排图不再算法化，头会退化到 ~36b 甚至更大。</li>
+<li><b>适用</b>：短消息、排图高度规律、看重灵活性与鲁棒性、路由器面积敏感。</li>
+</ul>
+<h3>② 路由器日历 <span class="pill p-bad">时间驱动</span></h3>
+<ul>
+<li><b>优</b>：零报文头（长消息带宽最优）；数据到达“对号入座”直通，转发逻辑最轻；对任意排图通用。</li>
+<li><b>劣</b>：每路由器 1472b 时间索引 SRAM（本排图里最大项）；<b>强制全网时间基准</b>与漂移预算；
+排图更新需重载所有日历。</li>
+<li><b>适用</b>：长消息为主、可承担全网同步、排图任意/频繁变化、带宽极敏感。</li>
+</ul>
+<h3>③ 混合 color（类 Cerebras） <span class="pill p-good">数据驱动 + 预置表</span></h3>
+<ul>
+<li><b>优</b>：本排图下<b>综合最省</b>——1b 头 + 80b 表，无时间同步，漂移鲁棒；
+fork 处改 color 天然表达“轴臂→填充”的相位切换。</li>
+<li><b>劣</b>：需要 color 分配与 fork 改写逻辑；通用性依赖“每入口配置≤2”这类规律，
+排图复杂时 color 数与表深上升；仍需注入偏移保 0-buffer。</li>
+<li><b>适用</b>：本类算法化排图的最佳落点；也最接近现成 Cerebras/label-switching 硬件范式。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>5. 扩展探索：还有哪些实现方案（loop 迭代收敛）</h2>
+<p>在“报文携带多少 / 路由器存多少 / 是否依赖时间”这三轴上系统枚举，逐个用本排图的实测规律打分：</p>
+<table>
+<thead><tr><th>#</th><th>方案</th><th>机制</th><th>路由器状态</th><th>头</th>
+<th>时间同步</th><th>对本排图评价</th></tr></thead>
+<tbody>
+<tr><td>A</td><td class='l'>纯静态入端口路由</td>
+  <td class='l'>(in_port)→out_mask 固定，无头无时间</td><td>~5 项</td><td>0</td><td class='win'>否</td>
+  <td class='l bad'>不成立：每入口有 2 种配置，无法只靠入端口消歧（需 1b）。
+  <b>可作设计目标</b>：改造成转向受限树使每入口唯一 → 真·零头零时间。</td></tr>
+<tr><td>B</td><td class='l'>标签交换 (MPLS 式)</td>
+  <td class='l'>(in,label)→(out,new_label)</td><td>2×5 项</td><td>1–2b</td><td class='win'>否</td>
+  <td class='l win'>与混合 color 等价（label=相位）；成熟范式，推荐作为 color 的工程实现。</td></tr>
+<tr><td>C</td><td class='l'>区间/区域路由</td>
+  <td class='l'>头带目的区间，路由器范围比较转发</td><td>比较器,无表</td><td>坐标位</td><td class='win'>否</td>
+  <td class='l warn'>对固定 axis+CCW 属杀鸡用牛刀；但换集合/多目的时通用性好，值得作可扩展后备。</td></tr>
+<tr><td>D</td><td class='l'>压缩日历（类指针+步幅/RLE）</td>
+  <td class='l'>depth×4b 类指针 + 9 项类表 + 周期编码</td><td>~136b</td><td>0</td><td class='bad'>是</td>
+  <td class='l win'>把日历 SRAM 由 1472b 降到 ~136b（≈5×），保留“零头+通用”；
+  推荐作为必须用时间索引时的日历优化。</td></tr>
+<tr><td>E</td><td class='l'>自定时/时间戳日历</td>
+  <td class='l'>头带 epoch/相位计数，与本地计数比对选槽</td><td>日历</td><td>few b</td><td class='warn'>弱化</td>
+  <td class='l win'>用几比特头换取放松全网严格同步（容忍 skew），提升日历鲁棒性；推荐作日历的鲁棒化。</td></tr>
+<tr><td>F</td><td class='l'>递归倍增/维度分阶 allgather</td>
+  <td class='l'>换算法：log 步，每阶 in→out 统一</td><td>~6 阶配置</td><td>阶号</td><td class='warn'>阶栅栏</td>
+  <td class='l warn'>路由状态极小（每阶一套），但非单发 0-buffer 树、需逐阶 store-forward，
+  makespan 模型不同；作为“路由极简但重构算法”的正交选项。</td></tr>
+<tr><td>G</td><td class='l'>两级层次 color</td>
+  <td class='l'>粗 color 走 tile 间 + 细 color tile 内</td><td>两张小表</td><td>2×few b</td><td class='win'>否</td>
+  <td class='l warn'>8×6 无需；<b>规模放大</b>（多 tile/更大 mesh）时抑制 color 爆炸，作扩展性储备。</td></tr>
+</tbody></table>
+<p class="note">收敛结论见下节。评分基于本排图实测（每入口≤2 配置、≤9 类、Pmax≤15）；换更不规律的排图时
+C/D/日历 的通用性优势会放大，而 color/源路由的头与表会上升。</p>
+</div>
+
+<div class="card">
+<h2>6. 建议（收敛）</h2>
+<ul>
+<li><b>本排图（axis+CCW/切分）落地首选：③ 混合 color = 方案 B 标签交换</b>，2 色（arm/fill）、
+(in,color) 静态表 + fork 改色。头 1b、路由 SRAM ~80b、无时间同步、漂移鲁棒，综合最省。</li>
+<li><b>若长消息、带宽极敏感且能全网同步</b>：走 ② 日历，并采用 <b>方案 D 压缩日历</b>把 SRAM 降 ~5×，
+可选 <b>方案 E 时间戳</b>放松同步。</li>
+<li><b>若追求灵活/频繁换集合</b>：② 日历（重载表）或 <b>方案 C 区间路由</b>通用性最好。</li>
+<li><b>激进设计目标</b>：<b>方案 A</b>——重排成转向受限树使“每入口配置=1”，即可实现<b>零报文头 + 零时间同步 + 纯 5 项入端口表</b>
+的极简路由（当前差 1 比特）。这是最值得后续投入验证的方向。</li>
+<li>三者共同前提：PE 侧 48 项注入偏移表保 0-buffer；这部分与路由机制正交，不可省。</li>
+</ul>
+</div>
+
+<p class="note">生成脚本：<code>utils/gen_impl_schemes_report.py</code> ·
+量化分析：<code>utils/analyze_impl_schemes.py</code>（复用 <code>ppa_analytic_model.py</code>、
+<code>dse_tree_allgather_6x8.py</code>、<code>dse_split_axis_8x6.py</code>）</p>
+</body></html>

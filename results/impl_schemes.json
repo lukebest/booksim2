@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-07-16T03:58:02.342535+00:00",
+  "model": {
+    "mesh": [
+      8,
+      6
+    ],
+    "H": 7,
+    "V": 9,
+    "cal_event_bits": 23,
+    "color_entry_bits": 8,
+    "k_per_bit": 1.5024038461538462e-06
+  },
+  "schemes": {
+    "axis_ccw": {
+      "structural": {
+        "distinct_trees": 48,
+        "router_configs_max": 9,
+        "router_configs_mean": 6.83,
+        "inport_configs_max": 2,
+        "inport_configs_mean": 1.66,
+        "color_bits_min": 1,
+        "max_tree_hops": 12
+      },
+      "pmax": 15,
+      "issue_width": 2,
+      "implementations": {
+        "source_routing": {
+          "header_bits_compressed": 8,
+          "header_bits_full": 36,
+          "router_sram_bits": 72,
+          "router_sram_area": 0.00011,
+          "needs_global_time": false,
+          "notes": "router computes out-mask = f(rel-quadrant of src); tiny LUT/ALU"
+        },
+        "router_calendar": {
+          "header_bits": 0,
+          "router_sram_bits": 1472,
+          "router_sram_area": 0.00221,
+          "needs_global_time": true,
+          "notes": "depth=16(Pmax=15) x 23b x2 issue"
+        },
+        "hybrid_color": {
+          "header_bits": 1,
+          "colors": 2,
+          "router_sram_bits": 80,
+          "router_sram_area": 0.00012,
+          "needs_global_time": false,
+          "notes": "2-color x 5 in-port static route; fork swaps color"
+        }
+      }
+    },
+    "split_vertical_4x6": {
+      "structural": {
+        "distinct_trees": 48,
+        "router_configs_max": 9,
+        "router_configs_mean": 6.25,
+        "inport_configs_max": 2,
+        "inport_configs_mean": 1.57,
+        "color_bits_min": 1,
+        "max_tree_hops": 12
+      },
+      "pmax": 13,
+      "issue_width": 2,
+      "implementations": {
+        "source_routing": {
+          "header_bits_compressed": 8,
+          "header_bits_full": 36,
+          "router_sram_bits": 72,
+          "router_sram_area": 0.00011,
+          "needs_global_time": false,
+          "notes": "router computes out-mask = f(rel-quadrant of src); tiny LUT/ALU"
+        },
+        "router_calendar": {
+          "header_bits": 0,
+          "router_sram_bits": 1472,
+          "router_sram_area": 0.00221,
+          "needs_global_time": true,
+          "notes": "depth=16(Pmax=13) x 23b x2 issue"
+        },
+        "hybrid_color": {
+          "header_bits": 1,
+          "colors": 2,
+          "router_sram_bits": 80,
+          "router_sram_area": 0.00012,
+          "needs_global_time": false,
+          "notes": "2-color x 5 in-port static route; fork swaps color"
+        }
+      }
+    },
+    "split_horizontal_8x3": {
+      "structural": {
+        "distinct_trees": 48,
+        "router_configs_max": 9,
+        "router_configs_mean": 6.0,
+        "inport_configs_max": 2,
+        "inport_configs_mean": 1.53,
+        "color_bits_min": 1,
+        "max_tree_hops": 12
+      },
+      "pmax": 11,
+      "issue_width": 2,
+      "implementations": {
+        "source_routing": {
+          "header_bits_compressed": 8,
+          "header_bits_full": 36,
+          "router_sram_bits": 72,
+          "router_sram_area": 0.00011,
+          "needs_global_time": false,
+          "notes": "router computes out-mask = f(rel-quadrant of src); tiny LUT/ALU"
+        },
+        "router_calendar": {
+          "header_bits": 0,
+          "router_sram_bits": 1472,
+          "router_sram_area": 0.00221,
+          "needs_global_time": true,
+          "notes": "depth=16(Pmax=11) x 23b x2 issue"
+        },
+        "hybrid_color": {
+          "header_bits": 1,
+          "colors": 2,
+          "router_sram_bits": 80,
+          "router_sram_area": 0.00012,
+          "needs_global_time": false,
+          "notes": "2-color x 5 in-port static route; fork swaps color"
+        }
+      }
+    }
+  }
+}
