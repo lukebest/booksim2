@@ -12,3 +12,5 @@ bfm/build/
 refc/build/
 *.o
 bfm/logs/
+.rat/
+.venv-ortools/
