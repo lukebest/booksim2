@@ -1,0 +1,390 @@
+{
+  "generated_at": "2026-07-22T11:05:16.060721+00:00",
+  "E_fixed": 2,
+  "note": "E=2 filter of full DSE for rigid/portbuf; multiflit E=2 measured. axis+CCW at E=2: delta2_min/avg/max \u2248 2/17/31 << cyclic link_reuse 42.",
+  "rigid": {
+    "n_points": 112,
+    "pareto": [
+      {
+        "scheme": "col_comb3",
+        "label": "col-comb3",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "makespan": 114,
+        "area_total": 1.18733
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW",
+        "pmax": 15,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "makespan": 110,
+        "area_total": 1.18899
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW",
+        "pmax": 15,
+        "issue": 2,
+        "W": 3,
+        "E": 2,
+        "B": 1,
+        "makespan": 98,
+        "area_total": 1.27411
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW",
+        "pmax": 15,
+        "issue": 2,
+        "W": 4,
+        "E": 2,
+        "B": 2,
+        "makespan": 96,
+        "area_total": 1.36289
+      }
+    ],
+    "plot": "results/e2_multi_area_makespan.png",
+    "scheme_floors": {
+      "axis_ccw": {
+        "label": "axis+CCW",
+        "floor": 96,
+        "area_at_floor": 1.36289
+      },
+      "dim_yx": {
+        "label": "dim-YX",
+        "floor": 120,
+        "area_at_floor": 1.18788
+      },
+      "dim_xy": {
+        "label": "dim-XY",
+        "floor": 126,
+        "area_at_floor": 1.18788
+      },
+      "col_comb3": {
+        "label": "col-comb3",
+        "floor": 114,
+        "area_at_floor": 1.18733
+      },
+      "nec3": {
+        "label": "NEC-3",
+        "floor": 118,
+        "area_at_floor": 1.18733
+      },
+      "nec2": {
+        "label": "NEC-2",
+        "floor": 145,
+        "area_at_floor": 1.18733
+      },
+      "hamilton_bi_tree": {
+        "label": "Hamilton bi-tree",
+        "floor": 210,
+        "area_at_floor": 1.18733
+      }
+    }
+  },
+  "multiflit": {
+    "n_points": 105,
+    "pareto_area_tavg": [
+      {
+        "scheme": "nec3",
+        "label": "NEC-3",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "t1": 118,
+        "t5": 256,
+        "t_avg": 187.0,
+        "ii": 34.5,
+        "ii_eff": 34.5,
+        "delta2_min": 1,
+        "delta2_avg": 6.71,
+        "delta2_max": 23,
+        "cyclic_ii_lb": 27,
+        "link_reuse": 27,
+        "area_total": 1.18733,
+        "ii_model": "measured_multiround"
+      }
+    ],
+    "pareto_t1_t5": [
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW",
+        "pmax": 15,
+        "issue": 2,
+        "W": 4,
+        "E": 2,
+        "B": 2,
+        "t1": 96,
+        "t5": 296,
+        "t_avg": 196.0,
+        "ii": 50.0,
+        "ii_eff": 50.0,
+        "delta2_min": 2,
+        "delta2_avg": 16.79,
+        "delta2_max": 31,
+        "cyclic_ii_lb": 42,
+        "link_reuse": 42,
+        "area_total": 1.36289,
+        "ii_model": "measured_multiround"
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW",
+        "pmax": 15,
+        "issue": 2,
+        "W": 3,
+        "E": 2,
+        "B": 1,
+        "t1": 101,
+        "t5": 286,
+        "t_avg": 193.5,
+        "ii": 46.25,
+        "ii_eff": 46.25,
+        "delta2_min": 1,
+        "delta2_avg": 10.92,
+        "delta2_max": 34,
+        "cyclic_ii_lb": 42,
+        "link_reuse": 42,
+        "area_total": 1.27411,
+        "ii_model": "measured_multiround"
+      },
+      {
+        "scheme": "col_comb3",
+        "label": "col-comb3",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "t1": 114,
+        "t5": 262,
+        "t_avg": 188.0,
+        "ii": 37.0,
+        "ii_eff": 37.0,
+        "delta2_min": 1,
+        "delta2_avg": 14.17,
+        "delta2_max": 33,
+        "cyclic_ii_lb": 26,
+        "link_reuse": 26,
+        "area_total": 1.18733,
+        "ii_model": "measured_multiround"
+      },
+      {
+        "scheme": "nec3",
+        "label": "NEC-3",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "t1": 118,
+        "t5": 256,
+        "t_avg": 187.0,
+        "ii": 34.5,
+        "ii_eff": 34.5,
+        "delta2_min": 1,
+        "delta2_avg": 6.71,
+        "delta2_max": 23,
+        "cyclic_ii_lb": 27,
+        "link_reuse": 27,
+        "area_total": 1.18733,
+        "ii_model": "measured_multiround"
+      },
+      {
+        "scheme": "hamilton_bi_tree",
+        "label": "Hamilton bi-tree",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "t1": 210,
+        "t5": 214,
+        "t_avg": 212.0,
+        "ii": 1.0,
+        "ii_eff": 1.0,
+        "delta2_min": 1,
+        "delta2_avg": 1.0,
+        "delta2_max": 1,
+        "cyclic_ii_lb": 24,
+        "link_reuse": 24,
+        "area_total": 1.18733,
+        "ii_model": "measured_multiround"
+      }
+    ],
+    "scheme_floors": {
+      "axis_ccw": {
+        "label": "axis+CCW",
+        "link_reuse": 42,
+        "cyclic_ii_lb": 42,
+        "t1": 96,
+        "t1_cfg": "W4/E2/B2",
+        "delta2_min": 2,
+        "delta2_avg": 16.79,
+        "delta2_max": 31,
+        "t5": 286,
+        "ii_eff": 46.25,
+        "t5_cfg": "W3/E2/B1",
+        "t_avg": 193.5,
+        "ii": 46.25
+      },
+      "dim_yx": {
+        "label": "dim-YX",
+        "link_reuse": 42,
+        "cyclic_ii_lb": 42,
+        "t1": 120,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 2,
+        "delta2_avg": 32.08,
+        "delta2_max": 70,
+        "t5": 376,
+        "ii_eff": 64.0,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 248.0,
+        "ii": 64.0
+      },
+      "dim_xy": {
+        "label": "dim-XY",
+        "link_reuse": 40,
+        "cyclic_ii_lb": 40,
+        "t1": 126,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 3,
+        "delta2_avg": 31.5,
+        "delta2_max": 80,
+        "t5": 374,
+        "ii_eff": 62.0,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 250.0,
+        "ii": 62.0
+      },
+      "col_comb3": {
+        "label": "col-comb3",
+        "link_reuse": 26,
+        "cyclic_ii_lb": 26,
+        "t1": 114,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 1,
+        "delta2_avg": 14.17,
+        "delta2_max": 33,
+        "t5": 262,
+        "ii_eff": 37.0,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 188.0,
+        "ii": 37.0
+      },
+      "nec3": {
+        "label": "NEC-3",
+        "link_reuse": 27,
+        "cyclic_ii_lb": 27,
+        "t1": 118,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 1,
+        "delta2_avg": 6.71,
+        "delta2_max": 23,
+        "t5": 256,
+        "ii_eff": 34.5,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 187.0,
+        "ii": 34.5
+      },
+      "nec2": {
+        "label": "NEC-2",
+        "link_reuse": 27,
+        "cyclic_ii_lb": 27,
+        "t1": 145,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 1,
+        "delta2_avg": 2.67,
+        "delta2_max": 6,
+        "t5": 266,
+        "ii_eff": 30.25,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 205.5,
+        "ii": 30.25
+      },
+      "hamilton_bi_tree": {
+        "label": "Hamilton bi-tree",
+        "link_reuse": 24,
+        "cyclic_ii_lb": 24,
+        "t1": 210,
+        "t1_cfg": "W2/E2/B0",
+        "delta2_min": 1,
+        "delta2_avg": 1.0,
+        "delta2_max": 1,
+        "t5": 214,
+        "ii_eff": 1.0,
+        "t5_cfg": "W2/E2/B0",
+        "t_avg": 212.0,
+        "ii": 1.0
+      }
+    },
+    "plot": "results/e2_multiflit_area_makespan.png",
+    "ii_model": "measured delta2 (per-source 2nd-flit) + II_eff=(T5-T1)/4; cyclic_ii_lb=max(link_reuse,ceil((N-1)/E)) is NOT the overlap II"
+  },
+  "portbuf": {
+    "n_points": 287,
+    "pareto_global": [
+      {
+        "scheme": "col_comb3",
+        "label": "col-comb3 rigid W2/E2/B0",
+        "pmax": 3,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "makespan": 114,
+        "area_total": 1.18733,
+        "mode": "rigid",
+        "Q": 0
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW rigid W2/E2/B0",
+        "pmax": 15,
+        "issue": 2,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "makespan": 110,
+        "area_total": 1.18899,
+        "mode": "rigid",
+        "Q": 0
+      },
+      {
+        "scheme": "axis_ccw",
+        "label": "axis+CCW rigid W3/E2/B1",
+        "pmax": 15,
+        "issue": 2,
+        "W": 3,
+        "E": 2,
+        "B": 1,
+        "makespan": 98,
+        "area_total": 1.27411,
+        "mode": "rigid",
+        "Q": 0
+      },
+      {
+        "scheme": "dim_yx",
+        "mode": "buffered",
+        "Q": 8,
+        "W": 2,
+        "E": 2,
+        "B": 0,
+        "makespan": 96,
+        "area_total": 1.30894,
+        "label": "dim-YX buf Q8/W2/E2/B0"
+      }
+    ],
+    "plot": "results/e2_portbuf_area_makespan.png"
+  }
+}

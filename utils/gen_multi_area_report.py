@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "multi_area_makespan.json"
 MF_JSON_PATH = ROOT / "results" / "multiflit_area_makespan.json"
 PB_JSON_PATH = ROOT / "results" / "portbuf_area_makespan.json"
+E2_JSON_PATH = ROOT / "results" / "e2_pareto_views.json"
 HTML_PATH = ROOT / "results" / "report_multi_area_makespan.html"
 
 
@@ -224,6 +225,74 @@ def main() -> None:
     cc_svg1 = _svg_col_comb(cc_s1)
     cc_svg2 = _svg_col_comb(cc_s2)
 
+    # ---- E≡2 constrained Pareto views ----
+    e2 = json.loads(E2_JSON_PATH.read_text(encoding="utf-8"))
+    e2_r = e2["rigid"]
+    e2_m = e2["multiflit"]
+    e2_p = e2["portbuf"]
+    e2_rigid_rows = "".join(
+        f"<tr><td>{p['area_total']:.4f}</td>"
+        f"<td class='{'win' if p['makespan']==lb else ''}'>{p['makespan']}</td>"
+        f"<td class='l'>{esc(p['label'])}</td>"
+        f"<td>W{p['W']}/E{p['E']}/B{p['B']}</td></tr>"
+        for p in e2_r["pareto"]
+    )
+    e2_floor_rows = "".join(
+        f"<tr><td class='l'>{esc(v['label'])}</td>"
+        f"<td>{v['floor']}</td><td>{v['area_at_floor']:.4f}</td></tr>"
+        for v in e2_r["scheme_floors"].values()
+    )
+    e2_mf_floor_rows = "".join(
+        f"<tr><td class='l'>{esc(v['label'])}</td>"
+        f"<td>{v['link_reuse']}</td>"
+        f"<td>{v.get('cyclic_ii_lb', v['link_reuse'])}</td>"
+        f"<td>{v['t1']}</td>"
+        f"<td>{v.get('delta2_min','—')}/{v.get('delta2_avg','—')}/{v.get('delta2_max','—')}</td>"
+        f"<td>{v.get('ii_eff', v.get('ii'))}</td>"
+        f"<td class='{'win' if v['t5']==min(x['t5'] for x in e2_m['scheme_floors'].values()) else ''}'>{v['t5']}</td>"
+        f"<td>{v['t_avg']}</td></tr>"
+        for v in sorted(e2_m["scheme_floors"].values(), key=lambda x: x["t5"])
+    )
+    e2_tavg_rows = "".join(
+        f"<tr><td>{p['area_total']:.4f}</td><td>{p['t_avg']}</td>"
+        f"<td>{p['t1']}</td><td>{p.get('ii_eff', p.get('ii'))}</td>"
+        f"<td>{p.get('delta2_avg','—')}</td><td>{p['t5']}</td>"
+        f"<td class='l'>{esc(p['label'])}</td>"
+        f"<td>W{p['W']}/E{p['E']}/B{p['B']}</td></tr>"
+        for p in e2_m["pareto_area_tavg"]
+    )
+    e2_t15_rows = "".join(
+        f"<tr><td>{p['t1']}</td><td>{p['t5']}</td>"
+        f"<td>{p.get('ii_eff', p.get('ii'))}</td>"
+        f"<td>{p.get('delta2_min','—')}/{p.get('delta2_avg','—')}/{p.get('delta2_max','—')}</td>"
+        f"<td class='l'>{esc(p['label'])}</td>"
+        f"<td>W{p['W']}/E{p['E']}/B{p['B']}</td></tr>"
+        for p in e2_m["pareto_t1_t5"]
+    )
+    ax_e2f = e2_m["scheme_floors"].get("axis_ccw", {})
+    ax_e2_d2 = (f"{ax_e2f.get('delta2_min')} / {ax_e2f.get('delta2_avg')} / "
+                f"{ax_e2f.get('delta2_max')}")
+    ax_e2_t1 = ax_e2f.get("t1", "—")
+    ax_e2_t5 = ax_e2f.get("t5", "—")
+    ax_e2_ii = ax_e2f.get("ii_eff", ax_e2f.get("ii", "—"))
+    e2_pb_rows = "".join(
+        f"<tr><td>{p['area_total']:.4f}</td><td>{p['makespan']}</td>"
+        f"<td class='l'>{esc(p['label'])}</td>"
+        f"<td>{'动态buffer' if p['mode']=='buffered' else '刚性日历'}</td></tr>"
+        for p in e2_p["pareto_global"]
+    )
+    e2_rigid_lb_area = next(
+        (p["area_total"] for p in e2_r["pareto"] if p["makespan"] == lb), None)
+    e2_buf_lb = next(
+        (p for p in e2_p["pareto_global"]
+         if p["mode"] == "buffered" and p["makespan"] == lb), None)
+    e2_rigid_lb_s = (f"{e2_rigid_lb_area:.3f}" if e2_rigid_lb_area is not None
+                     else "—")
+    e2_buf_lb_note = (
+        f"，面积 {e2_buf_lb['area_total']:.3f}"
+        f"（{esc(e2_buf_lb['label'])}）"
+        if e2_buf_lb else "")
+
     kbit = PPA.K_CTRL
     baseline_total = (PPA.BASELINE_CROSSBAR + PPA.BASELINE_BUFFERS
                       + PPA.BASELINE_CONTROL)
@@ -267,8 +336,8 @@ img{{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;margin:8px 0}}
 
 <h1>Allgather 多方案：makespan × 芯片实现面积 Pareto</h1>
 <p class="sub">8×6 mesh · H=7 · V=9 · 方案 axis+CCW / dim-XY / dim-YX / col-comb3 / NEC-3 / NEC-2 / Hamilton-bi ·
-每方案扫 W/E/B eject 通路变量 · {len(pts)} 个设计点 · 含<b>多 flit（R={R}）流水 Pareto（§5）</b> ·
-数据 <code>multi_area_makespan.json</code> / <code>multiflit_area_makespan.json</code> · 生成 {gen}</p>
+每方案扫 W/E/B eject 通路变量 · {len(pts)} 个设计点 · 含多 flit（§5）/ port-buffer（§6）/
+<b>E≡2 约束版（§8）</b> · 数据 <code>multi_area_makespan.json</code> 等 · 生成 {gen}</p>
 
 <div class="card hero">
 <h2>核心结论</h2>
@@ -357,13 +426,16 @@ tile 编程可以在<b>某个 1-flit allgather 一完成就立刻开始该 tile 
 决定总时间的是每轮初始间隔 II（吞吐），而不是单轮时延。</li>
 </ul>
 <p>细粒度流水每轮就绪一块、就绪即可算，因此真正该优化的是<b>各轮平均就绪时延</b>：</p>
-<div class="formula">T_avg = (1/R) · Σ_{{k=0..R−1}} (T1 + k·II) = T1 + (R−1)/2 · II   → R={R} 时为 T1 + 2·II
-II 的资源下界 = max( 链路复用次数 ,  ⌈(N−1)/E⌉ )
-  · 一条有向链路一轮被走 r 次 → 相邻轮在该链路上至少隔 r 拍；
-  · 每个 PE 每轮要把 N−1 个汇聚 flit 以 E flit/拍写入 gather SRAM → 相邻轮至少隔 ⌈(N−1)/E⌉ 拍。</div>
-<p class="note">T_avg 同时惩罚高填充时延（T1）和低吞吐（大 II），且<b>与计算量无关</b>（不假设 compute 开销），
-是细粒度流水下最中立的单一指标。II 是资源下界，与 W/B 无关：突发 buffer B 与 crossbar 写宽 W
-只帮助<b>逼近</b>该速率并决定 T1，无法突破 II。故 T5 为理想重叠下界。</p>
+<div class="formula">T_avg = (T1 + T5) / 2   [= T1 + (R−1)/2 · II_eff]
+II 有三种不同含义，不可混用：
+  · delta2     = 单源发完第1个 flit 后，最早可发第2个 flit 的间隔（实测，可 ≪ 链路复用）
+  · II_eff     = (T5−T1)/(R−1)，由自由多轮打包测得的轮次吞吐间隔
+  · cyclic_lb  = max(链路复用, ⌈(N−1)/E⌉) ——仅约束“整表平移”的周期重放，
+                 不是 one-shot / 逐源重叠的下界</div>
+<p class="note">T_avg 同时惩罚高填充时延（T1）和低吞吐（大 T5），且与计算量无关。
+<b>纠正</b>：早期把 axis+CCW 的 II 直接取成链路复用 42；在 E=2 下实测
+delta2 远小于 42（见 §8.2）。cyclic_lb 仍是周期重放下界，但不能用来估计
+“第2个 flit 最早重叠时间”。</p>
 
 <h3>5.2 Pareto 图</h3>
 <img src="multiflit_area_makespan.png" alt="multi-flit pareto">
@@ -380,10 +452,11 @@ Hamilton 复用最低（24）却因 T1 太差（填充 210）而 T5 被淘汰。
 
 <h3>5.4 结论：填充冠军 ≠ 吞吐冠军</h3>
 <ul>
-<li><b>axis+CCW 赢“填充”</b>：T1={axis_t1}（贴下限），但它把流量高度集中，
-<b>链路复用高达 {mf_meta['axis_ccw']['link_reuse']}</b> → II 卡在 42 → T5={axis_t5}。</li>
-<li><b>{esc(mf_lbl[best_t5_key])} 赢“吞吐”</b>：链路复用只有 {mf_meta[best_t5_key]['link_reuse']}，
-II 更小 → <b>T5={best_t5}</b>（在所有方案中最低），代价是 T1 稍大。</li>
+<li><b>axis+CCW 赢“填充”</b>：T1={axis_t1}（贴下限）。链路复用虽高达
+{mf_meta['axis_ccw']['link_reuse']}（cyclic_lb=42），但<b>逐源第2 flit 重叠（delta2）可以远小于 42</b>
+——E=2 实测见 §8.2。T5 需用多轮打包测量，不能再用 T1+4×42 估算。</li>
+<li><b>{esc(mf_lbl[best_t5_key])} 等低复用树</b>在解析 cyclic 模型下 T5 更优；
+以实测为准时见 §8.2（E≡2）。</li>
 <li>因此 T1/T5 前沿由 <b>axis+CCW（低 T1）</b> 与 <b>{esc(mf_lbl[best_t5_key])}（低 T5）</b> 两端把持；
 组合指标 T_avg 的 Pareto 则由 {esc('、'.join(mf_lbl[k] for k in sorted({p['scheme'] for p in front_avg})))} 共同占据。</li>
 <li><b>吞吐要靠 E（写 SRAM 带宽）和“扁平/低复用”的树</b>；填充要靠 axis 的短树 + 足够 W/B。
@@ -482,7 +555,8 @@ NEC-3 <b>Q4</b>/W1/E1/B0（151 cy，面积 ≈1.089，省掉时隙表与 eject �
 crossbar fork 需求低于 axis+CCW（扇出 4）。</li>
 <li><b>Pmax=3</b>：每个 router 的非空日历模式极少（梳齿链是纯直通），时隙表最浅、控制最简单。</li>
 <li><b>链路复用最低的实用方案（26）</b>：流量分散在 8 条列梳齿上，没有 axis+CCW 的十字臂热点（42）。
-这直接给出全场最优吞吐：II 地板 26 → <b>T5=218、T_avg=166（双双第一，§5）</b>。</li>
+周期重放 cyclic_lb=26 低于 axis 的 42；E≡2 下实测多轮打包见 §8.2
+（delta2 / II_eff / T5，不再用 T1+4×reuse 估算）。</li>
 <li><b>代价是填充时延</b>：T1 地板 114 > axis+CCW 的 96——每个 flit 都要先绕到边界行再进列，
 路径有非最短段（树 dilation 114 > 96）。</li>
 <li><b>适用场景</b>：多 flit / 细粒度流水、计算轻（吞吐主导）时的首选；单次 1-flit 延迟敏感时让位给 axis+CCW。</li>
@@ -490,9 +564,79 @@ crossbar fork 需求低于 axis+CCW（扇出 4）。</li>
 </div>
 
 <div class="card">
-<h2>8. 建议</h2>
+<h2>8. E≡2 约束版：下 ramp eject 带宽固定为 2 flit/cycle/node</h2>
+<p>本附录从完整 DSE 中<b>筛出 E=2</b> 的设计点并重算三张 Pareto（W、B 仍自由，约束仍是 W≥E，
+且 B=0 仅当 W=E）。面积含 E=2 带来的 gather-SRAM 双写口增量。数据：
+<code>e2_pareto_views.json</code>；脚本 <code>utils/gen_e2_pareto_views.py</code>。</p>
+
+<h3>8.1 刚性日历：面积 × makespan</h3>
+<img src="e2_multi_area_makespan.png" alt="E=2 rigid pareto">
+<table>
+<thead><tr><th>面积(归一)</th><th>makespan</th><th>方案</th><th>W/E/B</th></tr></thead>
+<tbody>{e2_rigid_rows}</tbody></table>
+<table>
+<thead><tr><th>方案</th><th>makespan 地板（E=2）</th><th>地板处面积</th></tr></thead>
+<tbody>{e2_floor_rows}</tbody></table>
 <ul>
-<li><b>贴下限 {lb}</b>：axis+CCW，W4/E1/B11（面积约 1.356）。唯一能到 {lb} 的方案。</li>
+<li>前沿起点从全扫描的 ≈1.03（W1/E1/B0）抬到 ≈1.19——E=1 的廉价角全部消失。</li>
+<li><b>NEC-3 退出全局 Pareto</b>（原中段 118–124 的点都是 E=1）。</li>
+<li>低时延段仍由 <b>axis+CCW</b> 独占；贴 LB={lb} 需 W4/E2/B2（面积 {e2_rigid_lb_s}），
+不必再堆到 B=11。</li>
+<li>col-comb3 仅占最左一点（114 cy），与 axis@110 面积几乎相同。</li>
+</ul>
+
+<h3>8.2 多 flit（R=5）：实测打包（纠正 II=链路复用 的误用）</h3>
+<p><b>检查结论（axis+CCW @ E=2）</b>：在 T1=96（W4/E2/B2）的可行 1-flit 排图上，
+逐源发第 2 个 flit 的最早间隔 <b>delta2 = {ax_e2_d2}（min/avg/max）</b>，
+全部 <b>&lt; cyclic_lb = 42</b>。把 II 直接取成链路复用 42 会高估“第2 flit 重叠”限制。
+周期重放下界 cyclic_lb=max(reuse, ⌈47/2⌉)=42 仍然成立，但只约束整表平移重放，
+不约束 one-shot / 逐源自由重叠。</p>
+<img src="e2_multiflit_area_makespan.png" alt="E=2 multiflit pareto">
+<table>
+<thead><tr><th>方案</th><th>链路复用</th><th>cyclic_lb</th><th>T1</th>
+<th>delta2 min/avg/max</th><th>II_eff</th><th>T5（实测）</th><th>T_avg</th></tr></thead>
+<tbody>{e2_mf_floor_rows}</tbody></table>
+<p class="note">T5 / II_eff 来自 (source,round) 自由贪心打包（round_major / source_major）；
+delta2 为固定其余源偏移后、单源第2 flit 的最早可注入间隔。
+axis+CCW：T1={ax_e2_t1}，delta2≪42，实测 T5≈{ax_e2_t5}（II_eff≈{ax_e2_ii}）。</p>
+<table>
+<thead><tr><th>面积</th><th>T_avg</th><th>T1</th><th>II_eff</th><th>delta2_avg</th><th>T5</th><th>方案</th><th>W/E/B</th></tr></thead>
+<tbody>{e2_tavg_rows}</tbody></table>
+<table>
+<thead><tr><th>T1</th><th>T5</th><th>II_eff</th><th>delta2 min/avg/max</th><th>方案</th><th>W/E/B</th></tr></thead>
+<tbody>{e2_t15_rows}</tbody></table>
+<ul>
+<li><b>axis+CCW 的“早重叠”能力被证实</b>：delta2 avg ≈ 11–17 ≪ 42；细粒度 tile
+（算得动、等第1 flit）受益的是 delta2/T1，不是 cyclic_lb。</li>
+<li><b>全局 5-flit 吞吐</b>仍受全网拥塞影响：实测 II_eff 可高于或接近 cyclic_lb
+（axis ≈46–50），T5 需实测，不能写 T1+4×42。</li>
+<li>按实测 T_avg，E≡2 下 <b>NEC-3</b> 等低复用方案可占据组合指标前沿；
+T1–T5 前沿仍由 axis（低 T1）与 NEC-3/col-comb3（低 T5）等共同构成。</li>
+</ul>
+
+<h3>8.3 含 port-buffer：刚性 + 动态合并前沿</h3>
+<img src="e2_portbuf_area_makespan.png" alt="E=2 portbuf pareto">
+<table>
+<thead><tr><th>面积(归一)</th><th>makespan</th><th>设计点</th><th>控制方式</th></tr></thead>
+<tbody>{e2_pb_rows}</tbody></table>
+<ul>
+<li>动态达界仍是 <b>dim-YX Q8</b>{e2_buf_lb_note}；
+相对刚性达界点（≈{e2_rigid_lb_s}）仅省约 4%，
+远小于全扫描（E 可取 1）时的 ~15%——E=2 的 SRAM 双写口吃掉了大部分优势。</li>
+<li>NEC-3 Q4 的低成本动态点（原 151 cy / E=1）不再进入前沿。</li>
+<li>中段（98–110）仍由刚性 axis+CCW 占优。</li>
+</ul>
+
+<p class="note"><b>E≡2 下的实用取舍</b>：贴 96 → 刚性 axis+CCW W4/E2/B2，或动态 dim-YX Q8
+（免排图，面积略低）；细粒度早重叠看 <b>delta2</b>（axis 可 ≪42），5-flit 总吞吐看实测 T5/II_eff；
+不要再用 II=链路复用估算 axis 的第2 flit 重叠。</p>
+</div>
+
+<div class="card">
+<h2>9. 建议</h2>
+<ul>
+<li><b>贴下限 {lb}</b>：axis+CCW，W4/E1/B11（面积约 1.356）。唯一能到 {lb} 的方案。
+（若强制 E=2，见 §8：W4/E2/B2 即可，面积约 {e2_rigid_lb_s}。）</li>
 <li><b>性价比区间（106–121 cy）</b>：仍是 axis+CCW（W2–3/E1/B4–8）。</li>
 <li><b>eject 带宽受限（只能 W≤2）且可接受 ~118 cy</b>：NEC-3（低 Pmax、窄 eject 即可）是更省 eject 的选择。</li>
 <li><b>不建议</b>为了时隙表面积去选 dim/col/NEC：在本归一模型里时隙表占比 ~0.2%，节省可忽略，
@@ -502,14 +646,16 @@ crossbar fork 需求低于 axis+CCW（扇出 4）。</li>
 若计算重（稳态被计算掩盖），仍选 <b>axis+CCW</b>（T1={axis_t1} 填充最快）。组合指标 T_avg 给出中间取舍。</li>
 <li><b>允许每 port 少量 buffer（见 §6）</b>：Q=1–2 作日历兜底（吸收抖动，makespan 不变，+0.03 面积）；
 若能付 Q=8（+0.12 面积）并做死锁规避，<b>dim-YX 动态路由以 ≈1.147 面积达 LB=96</b>，
-比刚性达界点便宜 ~15%，且免去逐拍排图/对时。</li>
+比刚性达界点便宜 ~15%，且免去逐拍排图/对时。（E≡2 时优势缩至 ~4%，见 §8.3。）</li>
+<li><b>强制下 ramp eject = 2（见 §8）</b>：前沿整体右移至 ≈1.19；NEC-3 退出；
+贴 96 用 axis W4/E2/B2 或 dim-YX Q8；多 flit 选 col-comb3。</li>
 </ul>
 </div>
 
 <div class="card">
-<h2>9. 芯片实现面积：工艺信息与评估方法</h2>
+<h2>10. 芯片实现面积：工艺信息与评估方法</h2>
 
-<h3>9.1 工艺信息（重要口径）</h3>
+<h3>10.1 工艺信息（重要口径）</h3>
 <ul>
 <li><b>相对/归一面积，非绝对 mm²</b>：所有面积以<b>五端口、512-bit flit 的输入队列 XY 路由器（IQ-XY）= 1.00</b>
 为基准归一。图/表里的数字是“相对该基准路由器的倍数”。</li>
@@ -524,12 +670,12 @@ crossbar fork 需求低于 axis+CCW（扇出 4）。</li>
 增量项带 <b>±{unc}%</b> 不确定度。</li>
 </ul>
 
-<h3>9.2 基准分解（IQ-XY = 1.00）</h3>
+<h3>10.2 基准分解（IQ-XY = 1.00）</h3>
 <div class="formula">crossbar {PPA.BASELINE_CROSSBAR} + buffers {PPA.BASELINE_BUFFERS} + control {PPA.BASELINE_CONTROL} = {baseline_total:.2f}
 每比特控制 SRAM 面积系数 K = 稠密日历锚点 0.040 /(2×1024×13 bit) = {kbit:.3e}
 SparseCal 时隙表 = {PPA.SPARSE_CAL_BANKS}×{PPA.SPARSE_CAL_DEPTH}×{PPA.SPARSE_CAL_EVENT_BITS} = {cal_bits} bit（0.009 量级）</div>
 
-<h3>9.3 本报告的总面积构成</h3>
+<h3>10.3 本报告的总面积构成</h3>
 <div class="formula">总面积 = 1.00（IQ-XY 核）
         + 时隙表(Pmax)   = 2 bank × 2^⌈log2 Pmax⌉ × {PPA.SPARSE_CAL_EVENT_BITS} bit × issue × K
         + 多播 CalFork    = {PPA.CALFORK_MC_DELTA}（扇出&gt;1 固定一份）
@@ -539,7 +685,7 @@ SparseCal 时隙表 = {PPA.SPARSE_CAL_BANKS}×{PPA.SPARSE_CAL_DEPTH}×{PPA.SPARS
 Δbuffer(W,E,B) = {A_FLIT} × B × (W+E)/2        （深 B、512b；写口 W+读口 E 的多端口因子；{A_FLIT}=每 512b flit 1W1R 位面积）
 Δsram(E)   = {sram_port_coeff:.4f} × (E−1)          （gather SRAM {GATHER_DEPTH} flit；每多一写口 +50% 单口阵列面积）</div>
 
-<h3>9.4 方法覆盖与边界</h3>
+<h3>10.4 方法覆盖与边界</h3>
 <ul>
 <li><b>已建模</b>：crossbar 交叉点/端口数、VC/突发 buffer 的 flit 位数与端口数、时隙表深度×位宽×bank、
 多播掩码扩展、gather SRAM 多写口；动态 buffered 模式的 port FIFO（4×Q×flit 位面积）、
@@ -552,7 +698,7 @@ Pmax 带来的<b>控制复杂度</b>（本模型仅记其微小 SRAM 面积，�
 
 <p class="note">生成脚本：<code>utils/gen_multi_area_report.py</code> ·
 DSE/绘图：<code>utils/dse_multi_area_makespan.py</code>、<code>utils/dse_multiflit_area_makespan.py</code>、
-<code>utils/dse_portbuf_area_makespan.py</code>（复用
+<code>utils/dse_portbuf_area_makespan.py</code>、<code>utils/gen_e2_pareto_views.py</code>（复用
 <code>dse_burst_sweep_8x6.py</code>、<code>dse_axis_area_makespan.py</code>、<code>ppa_analytic_model.py</code>）</p>
 </body></html>"""
     HTML_PATH.write_text(body, encoding="utf-8")

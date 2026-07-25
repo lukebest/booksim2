@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>40-compute allgather with 8 holes (8×6)</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:1040px;margin:28px;line-height:1.55;color:#0f172a}
+h1{font-size:1.4rem} h2{font-size:1.1rem;color:#1e3a8a}
+.card{border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:14px 0;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:center}
+th{background:#e2e8f0} td.l{text-align:left} td.win{background:#dcfce7;font-weight:700}
+.note{color:#64748b;font-size:.86rem} .map{font-family:ui-monospace,monospace;background:#f1f5f9;
+padding:12px;border-radius:8px;line-height:1.4}
+img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px}
+.legend span{margin-right:14px;font-size:.8rem;color:#64748b}
+</style></head><body>
+<h1>8×6 mesh · 8 非计算节点 · 40 计算节点 allgather</h1>
+<p class="note">无阻塞 / 无冲突 / 无缓冲（B=0）· 下 ramp E=W=2 · H=7 V=9 ·
+生成 2026-07-22T13:57:54.685351+00:00</p>
+
+<div class="card">
+<h2>拓扑</h2>
+<p>1-indexed：第 4、5 列 × 第 1–4 行 = 8 个<strong>非计算节点</strong>（图中 <b>H</b>）；
+其余 40 个为计算节点 <b>C</b>。Allgather 端点仅在 40 个 C 之间。</p>
+<p><b>H 不是坏点 / 故障点</b>：其上的 <b>router 与相邻 mesh 链路全部可用</b>，可正常转发 flit。
+与 C 的唯一差别是<strong>没有参与本次 allgather 的计算 PE</strong>——不 inject、不 eject，
+只作中转（树上的 Steiner 点）。橙虚线边表示路径经过这些活着的 H router，不是绕开故障。</p>
+<div class="map">C C C C C C C C  y=5<br>C C C C C C C C  y=4<br>C C C H H C C C  y=3<br>C C C H H C C C  y=2<br>C C C H H C C C  y=1<br>C C C H H C C C  y=0<br>x=0⋯7 →</div>
+<p class="note">图例：C = 计算端点；H = 非计算但 router/链路仍在线的中转节点。</p>
+</div>
+
+<div class="card" style="border-color:#93c5fd;background:linear-gradient(180deg,#eff6ff,#fff)">
+<h2>结论：makespan 最优排图</h2>
+<ul>
+<li><b>排图骨架</b>：每个计算源做 <b>axis+CCW</b> 生成全 mesh 树，再<b>剪枝</b>为只覆盖 40 个
+计算端点的支撑树；<b>H 的 router/链路可留在树上作中转</b>（不 inject/eject）。</li>
+<li><b>1-flit</b>：刚性 0-buffer 打包，注入序 =「距非计算块中心 (3.5, 1.5) 最远者优先」→
+<b>T1 = 96 = T_lb</b>（已达形式下界，故 1-flit makespan 最优）。</li>
+<li><b>多 flit（R=5）</b>：同一骨架上自由多轮打包 → <b>T5 = 257</b>
+（方案：axis+CCW pruned）。delta2 可远早于 cyclic_lb 重叠。</li>
+<li>双翼 bridge/comb（y=4 / y=5）未击败 axis 剪枝；Steiner / dim 全面落后。</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>axis+CCW 剪枝示意（源 (6,1)）</h2>
+<svg width="364" height="284" viewBox="0 0 364 284" xmlns="http://www.w3.org/2000/svg"><line x1="63.0" y1="248.0" x2="39.0" y2="248.0" stroke="#2563eb" stroke-width="2.2"/><line x1="107.0" y1="248.0" x2="83.0" y2="248.0" stroke="#2563eb" stroke-width="2.2"/><line x1="151.0" y1="248.0" x2="127.0" y2="248.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="195.0" y1="248.0" x2="171.0" y2="248.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="239.0" y1="248.0" x2="215.0" y2="248.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="283.0" y1="248.0" x2="259.0" y2="248.0" stroke="#2563eb" stroke-width="2.2"/><line x1="28.0" y1="195.0" x2="28.0" y2="171.0" stroke="#2563eb" stroke-width="2.2"/><line x1="63.0" y1="204.0" x2="39.0" y2="204.0" stroke="#2563eb" stroke-width="2.2"/><line x1="72.0" y1="195.0" x2="72.0" y2="171.0" stroke="#2563eb" stroke-width="2.2"/><line x1="107.0" y1="204.0" x2="83.0" y2="204.0" stroke="#2563eb" stroke-width="2.2"/><line x1="116.0" y1="195.0" x2="116.0" y2="171.0" stroke="#2563eb" stroke-width="2.2"/><line x1="151.0" y1="204.0" x2="127.0" y2="204.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="160.0" y1="195.0" x2="160.0" y2="171.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="195.0" y1="204.0" x2="171.0" y2="204.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="204.0" y1="195.0" x2="204.0" y2="171.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="239.0" y1="204.0" x2="215.0" y2="204.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="248.0" y1="195.0" x2="248.0" y2="171.0" stroke="#2563eb" stroke-width="2.2"/><line x1="292.0" y1="213.0" x2="292.0" y2="237.0" stroke="#2563eb" stroke-width="2.2"/><line x1="283.0" y1="204.0" x2="259.0" y2="204.0" stroke="#2563eb" stroke-width="2.2"/><line x1="301.0" y1="204.0" x2="325.0" y2="204.0" stroke="#2563eb" stroke-width="2.2"/><line x1="292.0" y1="195.0" x2="292.0" y2="171.0" stroke="#2563eb" stroke-width="2.2"/><line x1="336.0" y1="213.0" x2="336.0" y2="237.0" stroke="#2563eb" stroke-width="2.2"/><line x1="28.0" y1="151.0" x2="28.0" y2="127.0" stroke="#2563eb" stroke-width="2.2"/><line x1="72.0" y1="151.0" x2="72.0" y2="127.0" stroke="#2563eb" stroke-width="2.2"/><line x1="116.0" y1="151.0" x2="116.0" y2="127.0" stroke="#2563eb" stroke-width="2.2"/><line x1="160.0" y1="151.0" x2="160.0" y2="127.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="204.0" y1="151.0" x2="204.0" y2="127.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="248.0" y1="151.0" x2="248.0" y2="127.0" stroke="#2563eb" stroke-width="2.2"/><line x1="301.0" y1="160.0" x2="325.0" y2="160.0" stroke="#2563eb" stroke-width="2.2"/><line x1="292.0" y1="151.0" x2="292.0" y2="127.0" stroke="#2563eb" stroke-width="2.2"/><line x1="28.0" y1="107.0" x2="28.0" y2="83.0" stroke="#2563eb" stroke-width="2.2"/><line x1="72.0" y1="107.0" x2="72.0" y2="83.0" stroke="#2563eb" stroke-width="2.2"/><line x1="116.0" y1="107.0" x2="116.0" y2="83.0" stroke="#2563eb" stroke-width="2.2"/><line x1="160.0" y1="107.0" x2="160.0" y2="83.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="204.0" y1="107.0" x2="204.0" y2="83.0" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="4 3"/><line x1="248.0" y1="107.0" x2="248.0" y2="83.0" stroke="#2563eb" stroke-width="2.2"/><line x1="301.0" y1="116.0" x2="325.0" y2="116.0" stroke="#2563eb" stroke-width="2.2"/><line x1="292.0" y1="107.0" x2="292.0" y2="83.0" stroke="#2563eb" stroke-width="2.2"/><line x1="28.0" y1="63.0" x2="28.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="72.0" y1="63.0" x2="72.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="116.0" y1="63.0" x2="116.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="160.0" y1="63.0" x2="160.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="204.0" y1="63.0" x2="204.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="248.0" y1="63.0" x2="248.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="301.0" y1="72.0" x2="325.0" y2="72.0" stroke="#2563eb" stroke-width="2.2"/><line x1="292.0" y1="63.0" x2="292.0" y2="39.0" stroke="#2563eb" stroke-width="2.2"/><line x1="301.0" y1="28.0" x2="325.0" y2="28.0" stroke="#2563eb" stroke-width="2.2"/><circle cx="28" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="248" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="160" y="251" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="204" cy="248" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="204" y="251" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="248" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="336" cy="248" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="28" cy="204" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="204" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="204" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="204" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="160" y="207" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="204" cy="204" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="204" y="207" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="248" cy="204" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="204" r="8" fill="#dc2626" stroke="#dc2626" stroke-width="2"/><circle cx="336" cy="204" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="28" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="160" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="160" y="163" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="204" cy="160" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="204" y="163" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="248" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="336" cy="160" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="28" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="116" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="160" y="119" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="204" cy="116" r="8" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5"/><text x="204" y="119" text-anchor="middle" font-size="8" fill="#475569">H</text><circle cx="248" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="336" cy="116" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="28" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="204" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="248" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="336" cy="72" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="28" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="72" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="116" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="160" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="204" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="248" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="292" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><circle cx="336" cy="28" r="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/><text x="28" y="280" font-size="11" fill="#64748b">source=(6,1) · blue=C↔C · orange dashed=via live H router (H≠fault)</text></svg>
+<p class="legend">
+<span style="color:#2563eb">■</span> C↔C 边 &nbsp;
+<span style="color:#ea580c">■</span> 经 H router 中转（虚线；H≠故障）&nbsp;
+<span style="color:#dc2626">●</span> 源 &nbsp;
+<span style="color:#64748b">●H</span> 非计算节点（router/链路可用）
+</p>
+</div>
+
+<div class="card">
+<h2>1-flit 形式下界（E=2）</h2>
+<ul>
+<li>receiver_release = <b>96</b></li>
+<li>eject_duration = ⌈39/2⌉ = <b>20</b></li>
+<li>diameter_serialization = <b>96</b></li>
+<li><b>T_lb = 96</b></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>方案对比（刚性 0-buffer 打包）</h2>
+<img src="holes_40_allgather.png" alt="T1 vs T5">
+<table>
+<thead><tr><th>方案</th><th>dilation</th><th>链路复用</th><th>cyclic_lb</th>
+<th>T1</th><th>gap→LB</th><th>delta2 min/avg/max</th>
+<th>T5（5-flit 实测）</th><th>II_eff</th><th>T_avg</th></tr></thead>
+<tbody><tr><td class='l'>shortest-path Steiner</td><td>96</td><td>34</td><td>34</td><td class=''>110</td><td>14</td><td>1/27.4/74</td><td class=''>306</td><td>49.0</td><td>208.0</td></tr><tr><td class='l'>dim-XY</td><td>96</td><td>34</td><td>34</td><td class=''>110</td><td>14</td><td>1/27.4/74</td><td class=''>306</td><td>49.0</td><td>208.0</td></tr><tr><td class='l'>dim-YX</td><td>96</td><td>34</td><td>34</td><td class=''>125</td><td>29</td><td>4/26.05/60</td><td class=''>307</td><td>45.5</td><td>216.0</td></tr><tr><td class='l'>axis+CCW pruned</td><td>96</td><td>34</td><td>34</td><td class='win'>96</td><td>0</td><td>1/8.15/26</td><td class='win'>257</td><td>40.25</td><td>176.5</td></tr><tr><td class='l'>dual-wing bridge y=4</td><td>123</td><td>39</td><td>39</td><td class=''>132</td><td>36</td><td>1/22.9/54</td><td class=''>336</td><td>51.0</td><td>234.0</td></tr><tr><td class='l'>dual-wing comb y=5</td><td>141</td><td>39</td><td>39</td><td class=''>141</td><td>45</td><td>1/20.6/53</td><td class=''>344</td><td>50.75</td><td>242.5</td></tr></tbody></table>
+<p class="note">最优 1-flit：<b>axis+CCW pruned</b>；最优 5-flit：<b>axis+CCW pruned</b>；
+最优 T_avg：<b>axis+CCW pruned</b>。
+delta2 = 逐源第2 flit 最早间隔；II_eff=(T5−T1)/4；cyclic_lb 仅约束整表平移。</p>
+</div>
+
+<div class="card">
+<h2>排图形态建议</h2>
+<ul>
+<li><b>1-flit 最优形态</b>：<b>axis+CCW 剪枝到 40 个计算端点</b>（非计算节点以其仍可用的
+router/链路充当树上中转），配合「距非计算块中心最远的源先打包」的注入序，可把 T1 压到
+形式下界（receiver_release / diameter = LB）。</li>
+<li><b>多 flit</b>：同一排图下看实测 T5 / delta2；axis 剪枝在本拓扑上同时赢 T1 与 T5。
+非计算块把端点分成左翼（x≤2）/右翼（x≥5）；跨翼最短路常<strong>穿过仍可用的 H</strong>，
+或绕行 y≥4——这是路由选择，不是规避坏点。</li>
+<li><b>无缓冲</b>：B=0 ⇒ W=E=2，每拍每节点下 ramp ≤2；注入序是达界的关键，
+不是可有可无的启发式。</li>
+</ul>
+</div>
+</body></html>
