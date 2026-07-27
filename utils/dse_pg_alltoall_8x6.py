@@ -31,7 +31,9 @@ INJ = 4
 T_MAX = 200_000
 STALL_LIMIT = 2_000
 
-SCHEMES = ["xy", "rect_xy", "updown", "segment", "fault_ring_vc"]
+SCHEMES = ["xy", "rect_xy", "updown", "segment",
+           "fault_ring_vc", "lash", "lash_tor", "stripe_vc",
+           "dual_updown", "virtual_mesh"]
 # updown_lb / segment_lb produced inside solve_all
 MSG_SIZES = [1, 5]
 Q_RANGE = [4, 8, 19]
@@ -376,6 +378,7 @@ def run_one(pg: dict, scheme: str, m: int, Q: int,
         "n_compute_used": sol["n_compute_used"],
         "n_originally_good": sol["n_originally_good"],
         "reason": sol.get("reason"),
+        "num_vc": sol.get("num_vc", 1),
         "makespan": None,
         "ordered_ok": None,
         "max_load": sol.get("max_load"),
@@ -392,7 +395,7 @@ def run_one(pg: dict, scheme: str, m: int, Q: int,
     rec["bounds"] = {k: v for k, v in bounds.items()}
     rec["max_load"] = bounds["max_load"]
 
-    num_vc = 2 if scheme.startswith("fault_ring") else 1
+    num_vc = sol.get("num_vc", 1)
     t0 = time.time()
     sim = simulate_alltoall(
         sol["paths"], sol["compute_nodes"], sol["route_adj"],
@@ -438,7 +441,7 @@ def run_sweep(q_list: list[int] | None = None,
         scenarios = [s for s in scenarios if s["name"] in (
             "link_center_1", "node_center_1x1", "node_corner_2x2",
             "node_edge_2x2")]
-        schemes = ["xy", "rect_xy", "updown", "segment", "fault_ring_vc"]
+        schemes = list(SCHEMES)
         q_list = [DEFAULT_Q]
     elif q_list == [DEFAULT_Q]:
         q_sense_scenarios = [s for s in scenarios if s["name"] in (

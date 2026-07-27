@@ -22,7 +22,12 @@ SCHEME_LABELS = {
     "updown_lb": "M3 Up*/Down* + LB",
     "segment": "M4 Segment",
     "segment_lb": "M4 Segment + LB",
-    "fault_ring_vc": "M5 Fault-ring 2VC",
+    "fault_ring_vc": "M5 f-ring 4VC",
+    "lash": "M6 LASH",
+    "lash_tor": "M6b LASH-TOR",
+    "stripe_vc": "M7 Stripe dateline",
+    "dual_updown": "M9 Dual Up*/Down*",
+    "virtual_mesh": "M10 Virtual mesh",
 }
 
 
@@ -68,10 +73,80 @@ def _caption(w, h, text):
             f'font-size="11" font-family="sans-serif" fill="#444">{text}</text>')
 
 
-def _defs_arrow(uid="arr"):
+def _defs_arrow(uid="arr", fill="#27ae60"):
     return (f'<defs><marker id="{uid}" markerWidth="7" markerHeight="7" '
             f'refX="6" refY="3.5" orient="auto">'
-            f'<polygon points="0 0, 7 3.5, 0 7" fill="#27ae60"/></marker></defs>')
+            f'<polygon points="0 0, 7 3.5, 0 7" fill="{fill}"/></marker></defs>')
+
+
+def class_diagrams() -> dict[str, str]:
+    """Two figures contrasting how each family kills the dependency cycle."""
+    out = {}
+
+    # SVG marker fill cannot inherit the line stroke (context-stroke is not
+    # portable), so emit one marker per colour actually used.
+    def square(uid: str, colors: list[str]):
+        C, W, H = _mini_xy(2, 2, pad=44, gap=76)
+        defs = "".join(
+            f'<marker id="{uid}{i}" markerWidth="8" markerHeight="8" '
+            f'refX="7" refY="4" orient="auto">'
+            f'<polygon points="0 0, 8 4, 0 8" fill="{c}"/></marker>'
+            for i, c in enumerate(colors))
+        return C, W, H, [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+            f'viewBox="0 0 {W} {H}"><defs>{defs}</defs>']
+
+    def arrow(a, b, color, uid, colors, shrink=11):
+        import math
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy)
+        ax, ay = a[0] + dx / L * shrink, a[1] + dy / L * shrink
+        bx, by = b[0] - dx / L * shrink, b[1] - dy / L * shrink
+        return (f'<line x1="{ax:.1f}" y1="{ay:.1f}" x2="{bx:.1f}" '
+                f'y2="{by:.1f}" stroke="{color}" stroke-width="3.2" '
+                f'marker-end="url(#{uid}{colors.index(color)})"/>')
+
+    # --- turn-restriction: forbid one turn, ring is broken ---
+    pal = ["#34495e", "#c0392b"]
+    C, W, H, parts = square("t1", pal)
+    ring = [((0, 0), (1, 0)), ((1, 0), (1, 1)),
+            ((1, 1), (0, 1)), ((0, 1), (0, 0))]
+    for i, (a, b) in enumerate(ring):
+        col = "#c0392b" if i == 2 else "#34495e"
+        parts.append(arrow(C[a], C[b], col, "t1", pal))
+    p = C[(1, 1)]
+    parts.append(f'<text x="{p[0] - 4}" y="{p[1] - 16}" font-size="19" '
+                 f'fill="#c0392b" font-weight="700">✕</text>')
+    parts.append(f'<text x="{W / 2}" y="{H / 2 + 4}" text-anchor="middle" '
+                 f'font-size="11" fill="#7f8c8d">通道环依赖</text>')
+    for (c, r), pt in C.items():
+        parts.append(_node(*pt, fill="#2980b9", r=8))
+    parts.append(_caption(W, H, "禁掉一类转弯 → 环断，但最短路也少了"))
+    parts.append("</svg>")
+    out["turn"] = "".join(parts)
+
+    # --- VC layering: same paths, layer index only increases ---
+    pal = ["#2980b9", "#c0392b"]
+    C, W, H, parts = square("t2", pal)
+    cols = ["#2980b9", "#2980b9", "#c0392b", "#c0392b"]
+    for i, (a, b) in enumerate(ring):
+        parts.append(arrow(C[a], C[b], cols[i], "t2", pal))
+    lab = [("VC0", (0, 0), (1, 0)), ("VC1", (1, 1), (0, 1))]
+    for txt, a, b in lab:
+        mx = (C[a][0] + C[b][0]) / 2
+        my = (C[a][1] + C[b][1]) / 2
+        parts.append(f'<text x="{mx}" y="{my - 8}" text-anchor="middle" '
+                     f'font-size="10" fill="#555">{txt}</text>')
+    parts.append(f'<text x="{W / 2}" y="{H / 2 - 2}" text-anchor="middle" '
+                 f'font-size="11" fill="#c0392b">VC 只增不减</text>')
+    parts.append(f'<text x="{W / 2}" y="{H / 2 + 12}" text-anchor="middle" '
+                 f'font-size="11" fill="#7f8c8d">→ 回不到 VC0</text>')
+    for (c, r), pt in C.items():
+        parts.append(_node(*pt, fill="#2980b9", r=8))
+    parts.append(_caption(W, H, "路径不动，靠层序断环（代价：缓冲×层数）"))
+    parts.append("</svg>")
+    out["vc"] = "".join(parts)
+    return out
 
 
 def scheme_diagrams() -> dict[str, str]:
@@ -153,7 +228,8 @@ def scheme_diagrams() -> dict[str, str]:
     # ---- M3 Up*/Down*: root + labels, path up then down ----
     C, W, H = _mini_xy(3, 3, pad=32, gap=42)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-             f'viewBox="0 0 {W} {H}">', _defs_arrow("a3")]
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a3u", "#2980b9"),
+             _defs_arrow("a3d", "#e67e22")]
     for r in range(3):
         for c in range(2):
             parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.5))
@@ -165,9 +241,11 @@ def scheme_diagrams() -> dict[str, str]:
     # path S(0,0) up to root (1,1) then down to D(2,2): (0,0)->(0,1)->(1,1)->(2,1)->(2,2)
     path = [(0, 0), (0, 1), (1, 1), (2, 1), (2, 2)]
     for i in range(2):
-        parts.append(_edge(C[path[i]], C[path[i + 1]], "#2980b9", 3.2, marker="a3"))
+        parts.append(_edge(C[path[i]], C[path[i + 1]], "#2980b9", 3.2,
+                           marker="a3u"))
     for i in range(2, 4):
-        parts.append(_edge(C[path[i]], C[path[i + 1]], "#e67e22", 3.2, marker="a3"))
+        parts.append(_edge(C[path[i]], C[path[i + 1]], "#e67e22", 3.2,
+                           marker="a3d"))
     for r in range(3):
         for c in range(3):
             if (c, r) == (1, 1):
@@ -289,57 +367,164 @@ def scheme_diagrams() -> dict[str, str]:
     parts.append("</svg>")
     out["segment_lb"] = "".join(parts)
 
-    # ---- M5 Fault-ring 2VC ----
-    C, W, H = _mini_xy(4, 3, pad=28, gap=36)
+    # ---- M5 true f-ring, 4 VC: exactly what _fring_path emits for
+    #      S(0,1)->D(4,3) with a 1x1 block at (2,1) ----
+    C, W, H = _mini_xy(5, 4, pad=30, gap=40)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-             f'viewBox="0 0 {W} {H}">', _defs_arrow("a5")]
-    fault = {(1, 1), (2, 1)}
-    dlx = (C[(1, 0)][0] + C[(2, 0)][0]) / 2
-    parts.append(
-        f'<line x1="{dlx}" y1="{C[(0, 2)][1] - 20}" x2="{dlx}" '
-        f'y2="{C[(0, 0)][1] + 20}" stroke="#8e44ad" stroke-width="2" '
-        f'stroke-dasharray="4,3"/>')
-    parts.append(
-        f'<text x="{dlx + 4}" y="{C[(0, 2)][1] - 8}" font-size="10" '
-        f'fill="#8e44ad">dateline</text>')
-    for r in range(3):
-        for c in range(3):
-            if (c, r) in fault or (c + 1, r) in fault:
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a5x", "#2980b9"),
+             _defs_arrow("a5y", "#8e44ad")]
+    block = {(2, 1)}
+    # fault block halo = the fault ring
+    bx, by = C[(2, 1)]
+    parts.append(f'<rect x="{bx - 20}" y="{by - 20}" width="40" height="40" '
+                 f'fill="#fdecea" stroke="#c0392b" stroke-width="1.4" '
+                 f'stroke-dasharray="4,3" rx="3"/>')
+    for r in range(4):
+        for c in range(4):
+            if (c, r) in block or (c + 1, r) in block:
                 continue
-            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.5))
-        for c in range(4):
-            if r < 2 and (c, r) not in fault and (c, r + 1) not in fault:
-                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#bdc3c7", 1.5))
-    # around the hole along the top, then down
-    path = [(0, 0), (0, 1), (0, 2), (1, 2), (2, 2), (3, 2), (3, 1), (3, 0)]
-    crossed = False
-    for i in range(len(path) - 1):
-        a, b = path[i], path[i + 1]
-        hop_crosses = a[0] <= 1 and b[0] >= 2
-        if hop_crosses or crossed:
-            col = "#e74c3c"
-        else:
-            col = "#3498db"
-        parts.append(_edge(C[a], C[b], col, 3, marker="a5"))
-        if hop_crosses:
-            crossed = True
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.4))
     for r in range(3):
-        for c in range(4):
-            if (c, r) in fault:
-                parts.append(_node(*C[(c, r)], fill="#c0392b", label="洞"))
-            elif (c, r) == (0, 0):
+        for c in range(5):
+            if (c, r) in block or (c, r + 1) in block:
+                continue
+            parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.4))
+    xph = [(0, 1), (1, 1), (1, 2), (2, 2), (3, 2), (3, 1), (4, 1)]
+    yph = [(4, 1), (4, 2), (4, 3)]
+    for i in range(len(xph) - 1):
+        parts.append(_edge(C[xph[i]], C[xph[i + 1]], "#2980b9", 3.2,
+                           marker="a5x"))
+    for i in range(len(yph) - 1):
+        parts.append(_edge(C[yph[i]], C[yph[i + 1]], "#8e44ad", 3.2,
+                           marker="a5y"))
+    for r in range(4):
+        for c in range(5):
+            if (c, r) in block:
+                parts.append(_node(*C[(c, r)], fill="#c0392b", r=8, label="块"))
+            elif (c, r) == (0, 1):
                 parts.append(_node(*C[(c, r)], fill="#27ae60", label="S"))
-            elif (c, r) == (3, 0):
+            elif (c, r) == (4, 3):
                 parts.append(_node(*C[(c, r)], fill="#27ae60", label="D"))
             else:
                 parts.append(_node(*C[(c, r)]))
     parts.append(
-        f'<text x="8" y="14" font-size="10" fill="#3498db">蓝=VC0</text>'
-        f'<text x="70" y="14" font-size="10" fill="#e74c3c">'
-        f'红=VC1（过线翻转）</text>')
-    parts.append(_caption(W, H, "禁止穿洞，绕行；过 dateline 换 VC"))
+        f'<text x="8" y="14" font-size="10" fill="#2980b9">'
+        f'蓝=X 相（东行→VC0）</text>'
+        f'<text x="{W / 2 - 10}" y="14" font-size="10" fill="#8e44ad">'
+        f'紫=Y 相（北行→VC2）</text>')
+    parts.append(_caption(W, H, "撞块→沿环绕行→回原行续 XY；相位定 VC"))
     parts.append("</svg>")
     out["fault_ring_vc"] = "".join(parts)
+
+    # ---- M5 aux: a broken link must retire an endpoint to become a block ----
+    C, W, H = _mini_xy(3, 2, pad=30, gap=52)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">']
+    for r in range(2):
+        for c in range(2):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.4))
+    for c in range(3):
+        parts.append(_edge(C[(c, 0)], C[(c, 1)], "#cfd6da", 1.4))
+    a, b = C[(1, 0)], C[(2, 0)]
+    parts.append(_edge(a, b, "#c0392b", 3, "5,3"))
+    parts.append(f'<text x="{(a[0] + b[0]) / 2}" y="{a[1] - 8}" '
+                 f'text-anchor="middle" font-size="13" fill="#c0392b" '
+                 f'font-weight="700">✕</text>')
+    parts.append(f'<rect x="{a[0] - 17}" y="{a[1] - 17}" width="34" '
+                 f'height="34" fill="#fdecea" stroke="#e67e22" '
+                 f'stroke-width="1.4" stroke-dasharray="4,3" rx="3"/>')
+    for r in range(2):
+        for c in range(3):
+            if (c, r) == (1, 0):
+                parts.append(_node(*C[(c, r)], fill="#e67e22", r=8,
+                                   label="退休"))
+            else:
+                parts.append(_node(*C[(c, r)]))
+    parts.append(_caption(W, H, "块模型没有「断链」概念 → 必须退休一个端点"))
+    parts.append("</svg>")
+    out["fring_block"] = "".join(parts)
+
+    # ---- M6 LASH: shortest paths painted into 2 layers ----
+    C, W, H = _mini_xy(3, 3, pad=30, gap=40)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a6a", "#2980b9"),
+             _defs_arrow("a6b", "#c0392b")]
+    for r in range(3):
+        for c in range(2):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.4))
+        for c in range(3):
+            if r < 2:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.4))
+    # layer0 path (blue): (0,0)->(1,0)->(2,0)->(2,1)
+    for a, b in [((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (2, 1))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3, marker="a6a"))
+    # layer1 path (red): (0,2)->(0,1)->(1,1)->(1,2)->(2,2) — different layer
+    for a, b in [((0, 2), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (2, 1)),
+                 ((2, 1), (2, 2))]:
+        parts.append(_edge(C[a], C[b], "#c0392b", 2.6, "4,2", marker="a6b"))
+    # hole
+    parts.append(_node(*C[(1, 0)], fill="#c0392b", r=6, label=""))
+    for r in range(3):
+        for c in range(3):
+            if (c, r) == (1, 0):
+                continue
+            lab = "S" if (c, r) in ((0, 0), (0, 2)) else (
+                "D" if (c, r) in ((2, 1), (2, 2)) else "")
+            parts.append(_node(*C[(c, r)],
+                               fill="#27ae60" if lab else "#2980b9",
+                               label=lab))
+    parts.append(
+        f'<text x="8" y="14" font-size="10" fill="#2980b9">蓝=层0</text>'
+        f'<text x="70" y="14" font-size="10" fill="#c0392b">红=层1</text>')
+    parts.append(_caption(W, H, "每对一条最短路；装进无环的最少 VC 层"))
+    parts.append("</svg>")
+    out["lash"] = "".join(parts)
+
+    # ---- M7 Stripe dateline ----
+    C, W, H = _mini_xy(4, 2, pad=28, gap=44)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a7a", "#2980b9"),
+             _defs_arrow("a7b", "#e67e22"), _defs_arrow("a7c", "#8e44ad")]
+    # band backgrounds
+    for c in range(4):
+        x0 = C[(c, 0)][0] - 18
+        fill = ["#d6eaf8", "#d5f5e3", "#fdebd0", "#f5eef8"][c]
+        parts.append(
+            f'<rect x="{x0}" y="{C[(0,1)][1]-20}" width="36" '
+            f'height="{C[(0,0)][1]-C[(0,1)][1]+40}" fill="{fill}" '
+            f'opacity="0.75"/>')
+    # datelines between cols
+    for c in (1, 2, 3):
+        x = (C[(c - 1, 0)][0] + C[(c, 0)][0]) / 2
+        parts.append(
+            f'<line x1="{x}" y1="{C[(0,1)][1]-22}" x2="{x}" '
+            f'y2="{C[(0,0)][1]+18}" stroke="#7f8c8d" stroke-width="1.5" '
+            f'stroke-dasharray="3,2"/>')
+    for r in range(2):
+        for c in range(3):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.4))
+    for c in range(4):
+        parts.append(_edge(C[(c, 0)], C[(c, 1)], "#bdc3c7", 1.4))
+    # path S(0,0)->(1,0)->(2,0)->(3,0)->(3,1) with VC 0,1,2
+    segs = [((0, 0), (1, 0), "#2980b9", "a7a"),
+            ((1, 0), (2, 0), "#e67e22", "a7b"),
+            ((2, 0), (3, 0), "#8e44ad", "a7c"),
+            ((3, 0), (3, 1), "#8e44ad", "a7c")]
+    for a, b, col, mk in segs:
+        parts.append(_edge(C[a], C[b], col, 3.2, marker=mk))
+    for r in range(2):
+        for c in range(4):
+            lab = "S" if (c, r) == (0, 0) else ("D" if (c, r) == (3, 1) else "")
+            parts.append(_node(*C[(c, r)],
+                               fill="#27ae60" if lab else "#2980b9",
+                               label=lab))
+    parts.append(
+        f'<text x="8" y="14" font-size="10" fill="#2980b9">VC0</text>'
+        f'<text x="48" y="14" font-size="10" fill="#e67e22">VC1</text>'
+        f'<text x="88" y="14" font-size="10" fill="#8e44ad">VC2…</text>')
+    parts.append(_caption(W, H, "竖条带；每跨一条 dateline，VC +1"))
+    parts.append("</svg>")
+    out["stripe_vc"] = "".join(parts)
 
     return out
 
@@ -411,9 +596,13 @@ def main():
     primary = [r for r in rows if not r.get("q_sensitivity")]
     qrows = [r for r in rows if r.get("q_sensitivity")]
     diagrams = scheme_diagrams()
+    cls_fig = class_diagrams()
 
-    def scheme_block(title_html: str, key: str, body_html: str) -> str:
+    def scheme_block(title_html: str, key: str, body_html: str,
+                     extra_key: str | None = None) -> str:
         fig = diagrams.get(key, "")
+        if extra_key:
+            fig += diagrams.get(extra_key, "")
         return (
             f'<div class="scheme"><h4>{title_html}</h4>'
             f'<div class="scheme-body"><div class="scheme-text">{body_html}</div>'
@@ -427,43 +616,74 @@ def main():
     scenarios = F.all_scenarios()
     scen_map = {s["name"]: s for s in scenarios}
 
-    # Summary: best scheme per (scenario, semantics, m) at Q=19
-    summary_rows = []
-    for scen in scenarios:
-        for sem in ("dead", "transit"):
-            for m in (1, 5):
-                cands = [r for r in primary
-                         if r["scenario"] == scen["name"]
-                         and r["semantics"] == sem
-                         and r["m"] == m and r["Q"] == 19
-                         and r.get("makespan") is not None]
-                if not cands:
-                    continue
-                best = min(cands, key=lambda r: (
-                    r["makespan"], r["n_sacrificed"]))
-                summary_rows.append(best)
+    def feasible_for(scen_name: str, sem: str, m: int) -> list[dict]:
+        return [r for r in primary
+                if r["scenario"] == scen_name and r["semantics"] == sem
+                and r["m"] == m and r["Q"] == 19
+                and r.get("makespan") is not None]
 
-    def summary_table(m: int) -> str:
-        head = ("<tr><th>场景</th><th>语义</th><th>最佳方案</th>"
-                "<th>makespan</th><th>golden</th><th>raw slowdown</th>"
-                "<th>irreg. penalty</th><th>牺牲</th><th>A</th></tr>")
+    def pareto(cands: list[dict]) -> list[dict]:
+        """Non-dominated on (n_sacrificed, makespan) — both minimised."""
+        keep = []
+        for r in cands:
+            if not any(o is not r
+                       and o["n_sacrificed"] <= r["n_sacrificed"]
+                       and o["makespan"] <= r["makespan"]
+                       and (o["n_sacrificed"] < r["n_sacrificed"]
+                            or o["makespan"] < r["makespan"])
+                       for o in cands):
+                keep.append(r)
+        # one entry per (sac, mk) corner, cheapest scheme label wins
+        seen, out = set(), []
+        for r in sorted(keep, key=lambda r: (r["n_sacrificed"], r["makespan"])):
+            k = (r["n_sacrificed"], r["makespan"])
+            if k not in seen:
+                seen.add(k)
+                out.append(r)
+        return out
+
+    def optimal_table(sem: str, m: int) -> str:
+        head = (
+            "<tr>"
+            "<th class='l'>场景</th>"
+            "<th class='l'>推荐方案"
+            "<div class='sub'>牺牲最少 → 再快</div></th>"
+            "<th>牺牲</th><th>A</th><th>VC</th><th>makespan</th>"
+            "<th title='raw_slowdown = mk/mk_golden − 1'>"
+            "raw"
+            "<div class='sub'>相对健康 XY</div></th>"
+            "<th title='irregularity_penalty = mk/LB_same_A − 1'>"
+            "irreg"
+            "<div class='sub'>相对同 A 下界</div></th>"
+            "<th class='l'>Pareto 备选 方案(牺牲,makespan)</th>"
+            "</tr>")
         body = []
-        for r in summary_rows:
-            if r["m"] != m:
+        for scen in scenarios:
+            cands = feasible_for(scen["name"], sem, m)
+            if not cands:
+                body.append(f"<tr><td class='l'>{esc(scen['name'])}</td>"
+                            f"<td colspan='8' class='bad'>无可行方案</td></tr>")
                 continue
+            best = min(cands, key=lambda r: (r["n_sacrificed"], r["makespan"]))
+            pf = pareto(cands)
+            alts = " · ".join(
+                f"{SCHEME_LABELS.get(r['scheme'], r['scheme']).split()[0]}"
+                f"({r['n_sacrificed']},{r['makespan']})"
+                for r in pf if r is not best)
             body.append(
                 "<tr>"
-                f"<td class='l'>{esc(r['scenario'])}</td>"
-                f"<td>{esc(r['semantics'])}</td>"
-                f"<td class='l'>{esc(SCHEME_LABELS.get(r['scheme'], r['scheme']))}</td>"
-                f"<td>{r['makespan']}</td>"
-                f"<td>{r['golden_makespan']}</td>"
-                f"<td>{pct(r.get('raw_slowdown'))}</td>"
-                f"<td>{pct(r.get('irregularity_penalty'))}</td>"
-                f"<td>{r['n_sacrificed']}</td>"
-                f"<td>{r['n_compute_used']}</td>"
-                "</tr>"
-            )
+                f"<td class='l'>{esc(scen['name'])}</td>"
+                f"<td class='l'><b>"
+                f"{esc(SCHEME_LABELS.get(best['scheme'], best['scheme']))}"
+                f"</b></td>"
+                f"<td>{best['n_sacrificed']}</td>"
+                f"<td>{best['n_compute_used']}</td>"
+                f"<td>{best.get('num_vc', 1)}</td>"
+                f"<td><b>{best['makespan']}</b></td>"
+                f"<td>{pct(best.get('raw_slowdown'))}</td>"
+                f"<td>{pct(best.get('irregularity_penalty'))}</td>"
+                f"<td class='l sub'>{esc(alts) or '—（推荐方案同时最快）'}</td>"
+                "</tr>")
         return (f"<table><thead>{head}</thead>"
                 f"<tbody>{''.join(body)}</tbody></table>")
 
@@ -490,6 +710,8 @@ def main():
                     cells.append(
                         f"<td title='sac={hit['n_sacrificed']} "
                         f"A={hit['n_compute_used']} "
+                        f"VC={hit.get('num_vc', 1)} "
+                        f"max_load={hit.get('max_load')} "
                         f"irreg={pct(hit.get('irregularity_penalty'))}'>"
                         f"{hit['makespan']}"
                         f"<div class='sub'>{pct(hit.get('raw_slowdown'))} "
@@ -589,6 +811,16 @@ td.bad {{ color: #c0392b; font-weight: 600; }}
 .scheme-fig {{ flex: 0 0 auto; background: #fafbfc; border: 1px solid #e8e8e8;
                padding: 0.35rem; border-radius: 4px; }}
 .scheme-fig svg {{ display: block; }}
+.cls {{ display: flex; flex-wrap: wrap; gap: 1rem; max-width: 60rem;
+        margin: 1rem 0 1.4rem; }}
+.cls-card {{ flex: 1 1 24rem; background: #fff; border: 1px solid #e0e0e0;
+             border-top: 3px solid #8e44ad; padding: 0.75rem 1rem; }}
+.cls-card h3 {{ margin: 0 0 0.4rem; font-size: 1rem; }}
+.cls-card p {{ margin: 0.35rem 0; font-size: 0.9rem; }}
+.cls-fig {{ text-align: center; margin: 0.3rem 0 0.5rem; }}
+.cls-fig svg {{ display: inline-block; }}
+table.vctab {{ font-size: 0.8rem; margin: 0.3rem 0; }}
+table.vctab td {{ padding: 0.15rem 0.45rem; }}
 .gallery {{ display: flex; flex-wrap: wrap; gap: 1rem; }}
 figure {{ margin: 0; background: #fff; padding: 0.5rem;
          border: 1px solid #e0e0e0; }}
@@ -622,6 +854,35 @@ m=5 → <b>{golden.get('5', golden.get(5))}</b> cy。
 <p class="note">实现见 <code>utils/pg_routing.py</code>。所有进入 DES 的表必须同时满足：
 CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集合连通。
 失败时由统一牺牲恢复器禁用额外 good 节点（边界 → 整行/整列 → 矩形屏蔽）。</p>
+
+<p class="note"><b>保序不排斥 VC。</b>保序真正要求的只是「每个 (src,dst) 一条固定路径、
+且沿路 VC 序列确定」——只要 VC 是 (src,dst) 的函数而非 per-packet 动态选择，
+同一对的包就不会跨 VC 乱序。因此本研究的方案按<b>断环手段</b>分成两大类：</p>
+
+<div class="cls">
+  <div class="cls-card">
+    <h3>A 类 · 转向限制（1 VC）</h3>
+    <div class="cls-fig">{cls_fig['turn']}</div>
+    <p>mesh 的死锁来自「东→北→西→南→东」这样的通道环。A 类的做法是
+    <b>删掉环上的某一类转弯</b>，让环无法闭合。</p>
+    <p><b>代价：</b>被删的转弯同时也删掉了一批最短路，绕路变长、负载更不均。
+    洞越大，被迫绕得越远。</p>
+    <p><b>成员：</b>M1 XY、M2 Rect-XY、M3 Up*/Down*、M4 Segment。</p>
+  </div>
+  <div class="cls-card">
+    <h3>B 类 · VC 分层（多 VC）</h3>
+    <div class="cls-fig">{cls_fig['vc']}</div>
+    <p>不动路径，而是给通道<b>编层号</b>，规定报文沿路层号<b>只增不减</b>。
+    环要闭合就必须从高层回到低层，而这被禁止 → 无环。</p>
+    <p><b>代价：</b>每层要独立缓冲与 credit，面积随层数放大；
+    换来的是路径可以贴近最短路。</p>
+    <p><b>成员：</b>M5 真 f-ring（4 VC）、M6 LASH / M6b LASH-TOR（1–2 VC）、
+    M7 条带 dateline（约 5–6 VC）、M9 双向 Up*/Down*（2 VC）、
+    M10 虚拟规则网格（2 VC）。</p>
+  </div>
+</div>
+
+<h3>2.1 A 类：转向限制</h3>
 
 {scheme_block("M1 — XY（<code>xy</code>）", "xy", '''
 <p><b>思想：</b>坚持维序路由（DOR）：先走完 X，再走 Y；硬件几乎不用改路由逻辑。</p>
@@ -669,41 +930,121 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 <p>与 M3+LB 相同流程，起点换成 M4 路径表；同样受转向合法集合限制。</p>
 ''')}
 
-{scheme_block("M5 — Fault-ring + 2 VC（<code>fault_ring_vc</code>）", "fault_ring_vc", '''
-<p><b>思想：</b>强制绕开故障矩形（即使 transit 下洞内 router 仍活着也不穿洞），
-在穿孔图上用 Up*/Down* 选路，并用 2 VC + 垂线 dateline 加强隔离。</p>
-<p><b>做法：</b>(1) 节点故障：取故障 bbox，内部节点从路由图剔除；纯链路故障无 bbox，
-只在已断链图上路由；(2) 剩余图上跑 Up*/Down*；(3) dateline = 故障中心列
-（链路故障用 mx//2）；路径每水平穿过该列一次，VC 奇偶翻转。DES 每端口按 VC 分队列与 credit。</p>
-<p><b>与 M3 差别：</b>transit 节点洞上 M3 可穿洞转发，M5 禁止；M5 多 2 VC 硬件假设。</p>
-<p><b>特征：</b>零牺牲场景多，makespan 常接近 M3；大洞绕行时可能略差于可穿洞的 transit-M3。</p>
+<h3>2.2 B 类：VC 分层</h3>
+
+{scheme_block("M5 — 真 Fault-ring + 4 VC（<code>fault_ring_vc</code>）",
+              "fault_ring_vc", '''
+<p><b>思想：</b>Boppana–Chalasani 式容错 e-cube。把所有故障吸收进<b>矩形故障块</b>，
+块周围一圈健康节点构成 <i>fault ring</i>；底层仍是原封不动的 XY，
+只有撞上块的报文才沿环绕到对面，然后接着走 XY。</p>
+<p><b>四条 VC 怎么分：</b>按<b>相位 × 方向</b>，整条路径上确定，因此保序。</p>
+<table class="vctab"><tbody>
+<tr><td>VC0</td><td class="l">X 相 · 东行</td><td>VC1</td><td class="l">X 相 · 西行</td></tr>
+<tr><td>VC2</td><td class="l">Y 相 · 北行</td><td>VC3</td><td class="l">Y 相 · 南行</td></tr>
+</tbody></table>
+<p><b>为什么无死锁（可证）：</b>X 相的绕行只会「竖着走」或「朝本报文的 X 方向走」，
+所以 VC0 里<b>每条横向通道都朝东</b>。环要闭合就得让 x 回到原点，于是环里不能有横向通道；
+剩下纯竖向的环又需要 180° 掉头，而构造上不产生掉头 → VC0 无环（VC1 对称）。
+Y 相镜像同理，VC2 内每条竖向通道都朝北。又因为报文只会从 X 相走向 Y 相、绝不回头，
+依赖只会从 VC0/VC1 流向 VC2/VC3 → 整张 CDG 无环。</p>
+<p><b>链路故障要付牺牲：</b>块模型里没有「两个活节点之间断了一条链」这种状态，
+必须退休一个端点把它变成 1×1 块（右下图）。这是 M5 相对 M3 的固有代价：
+纯节点故障零牺牲，纯链路故障牺牲 1–4 个好节点。</p>
+<p><b>固有开销：</b>绕行后要回到原来那一行才继续 XY（图中 (1,2)→(3,2) 再下到 (3,1)），
+这正是换取「X 相严格单调 ⇒ 4 VC 可证无死锁」所付的绕路。</p>
+''', extra_key="fring_block")}
+
+{scheme_block("M6 — LASH（<code>lash</code>）", "lash", '''
+<p><b>思想：</b>Skeie 等 Layered Shortest Path。每对取一条<strong>最短路</strong>（可绕障），
+再把全部路径贪心装进尽可能少的 VC 层，使<strong>每层 CDG 无环</strong>。
+路径质量与无死锁解耦——断环靠分层，不靠砍转弯。</p>
+<p><b>做法：</b>(1) 存活路由图上 BFS 最短路；(2) 按路径长度降序，尝试放入已有层，
+加入后若该层 CDG 仍无环则收下，否则开新层；(3) 整条路径使用同一层号（常数 VC）
+→ 保序。本 8×6 上实测通常 <b>1–2 层</b>。</p>
+<p><b>与 M5 差别：</b>不强制矩形块、不强制绕回原行；链路故障只需牺牲孤立节点
+（度 0），不必把端点做成块。负载往往低于 f-ring。</p>
 ''')}
 
+{scheme_block("M6b — LASH-TOR（<code>lash_tor</code>）", "lash", '''
+<p><b>思想：</b>在 LASH 上允许路径<strong>中途升一层</strong>（Trail / Transition On Route）：
+hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进已有层。</p>
+<p><b>做法：</b>先尝试整路径入单层；失败则枚举分割点，前半段层 <code>lo</code>、后半段层
+<code>hi≥lo</code>，分别维护层内 CDG。本 8×6 上 LASH 已是 1–2 层，TOR 收益通常很小。</p>
+''')}
+
+{scheme_block("M7 — 条带 dateline（<code>stripe_vc</code>）", "stripe_vc", '''
+<p><b>思想：</b>竖向条带 + 边界 dateline。路径优先 XY，不通则最短路；
+每水平穿过一条 dateline，<code>VC += 1</code>（沿路单调不减）。</p>
+<p><b>做法：</b>dateline 放在每 2 列边界，并叠加故障列邻边；若稀疏 dateline 下
+CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格约 5–6）。</p>
+<p><b>特征：</b>实现极简、路径贴近最短；VC 数高于 LASH/f-ring，缓冲面积更大。</p>
+''')}
+
+{scheme_block("M9 — 双向 Up*/Down*（<code>dual_updown</code>）", "updown", '''
+<p><b>思想：</b>VC0 跑经典 Up*/Down*（先上后下），VC1 跑对称的 Down*/Up*（先下后上）；
+每对选更短的那条，整路径固定在所选 VC → 保序。</p>
+<p><b>无死锁：</b>两套规则各自 CDG 无环，且路径不跨 VC 混用。</p>
+<p><b>特征：</b>固定 2 VC，实现比 LASH 简单；路径短于单层 Up*/Down*，但通常仍长于最短路族。</p>
+''')}
+
+{scheme_block("M10 — 虚拟规则网格（<code>virtual_mesh</code>）", "xy", '''
+<p><b>思想：</b>上层仍看完整 8×6 逻辑 mesh 与 XY；物理上缺失的逻辑边用<strong>固定最短绕路</strong>
+替换。逻辑路径遇洞则跳过死节点并桥接。</p>
+<p><b>VC：</b>到达目的列之前的物理 hop → VC0（逻辑 X 相），之后 → VC1（逻辑 Y 相）。</p>
+<p><b>特征：</b>软件映射可保持规则 mesh；链路故障友好；大洞时绕路变长，CDG 硬校验。</p>
+''')}
+
+<h3>2.3 横向对比</h3>
 <table>
-<thead><tr><th>方案</th><th>路由本质</th><th>硬件改动</th><th>典型牺牲</th><th>适用意图</th></tr></thead>
+<thead><tr><th>类</th><th>方案</th><th>路由本质</th><th>VC</th><th>硬件改动</th><th>典型牺牲</th><th>适用意图</th></tr></thead>
 <tbody>
-<tr><td class="l">M1 XY</td><td class="l">严格先 X 后 Y</td><td class="l">最小（原 XY）</td><td>高</td><td class="l">量化不改路由的代价</td></tr>
-<tr><td class="l">M2 Rect-XY</td><td class="l">裁矩形 + XY</td><td class="l">最小</td><td>固定偏高</td><td class="l">规整化、可预测</td></tr>
-<tr><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l"><b>保规模主方案</b></td></tr>
-<tr><td class="l">M3+LB</td><td class="l">M3 + 热点重路由</td><td class="l">同 M3</td><td>同 M3</td><td class="l">压最大链路负载</td></tr>
-<tr><td class="l">M4 Segment</td><td class="l">列带奇偶转向</td><td class="l">转向限制</td><td>中高</td><td class="l">折中绕路能力</td></tr>
-<tr><td class="l">M4+LB</td><td class="l">M4 + LB</td><td class="l">同 M4</td><td>同 M4</td><td class="l">同左</td></tr>
-<tr><td class="l">M5 Fault-ring 2VC</td><td class="l">禁穿洞 + Up*/Down* + dateline VC</td><td class="l">2 VC + 绕障表</td><td>通常 0</td><td class="l">强制隔离故障区</td></tr>
+<tr><td>A</td><td class="l">M1 XY</td><td class="l">严格先 X 后 Y</td><td>1</td><td class="l">最小（原 XY）</td><td>高</td><td class="l">量化不改路由的代价</td></tr>
+<tr><td>A</td><td class="l">M2 Rect-XY</td><td class="l">裁矩形 + XY</td><td>1</td><td class="l">最小</td><td>固定偏高</td><td class="l">规整化、可预测</td></tr>
+<tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">零 VC 成本保规模</td></tr>
+<tr><td>A</td><td class="l">M3+LB / M4 / M4+LB</td><td class="l">转向限制 ± LB</td><td>1</td><td class="l">同左</td><td>中～高</td><td class="l">折中</td></tr>
+<tr><td>B</td><td class="l">M5 真 f-ring</td><td class="l">矩形块 + XY 环绕，相位×方向</td><td>4</td><td class="l">4 VC + 绕障</td><td>节点洞 0；链路 1–4</td><td class="l">保 XY 硬件语义</td></tr>
+<tr><td>B</td><td class="l">M6 LASH</td><td class="l">最短路 + 贪心装层</td><td><b>1–2</b></td><td class="l">少 VC + 离线表</td><td>通常仅孤立点</td><td class="l">VC 性价比</td></tr>
+<tr><td>B</td><td class="l">M6b LASH-TOR</td><td class="l">LASH + 中途升层</td><td>1–2</td><td class="l">同 LASH</td><td>同 LASH</td><td class="l">再压层数（收益有限）</td></tr>
+<tr><td>B</td><td class="l">M7 Stripe</td><td class="l">最短/XY + 跨带 VC+1</td><td>5–6</td><td class="l">多 VC，逻辑简单</td><td>通常仅孤立点</td><td class="l">面积换极限性能</td></tr>
+<tr><td>B</td><td class="l">M9 Dual UD</td><td class="l">UD / DU 双层，按对选</td><td>2</td><td class="l">2 VC + 双规则</td><td>通常 0</td><td class="l">易实现的树路由增强</td></tr>
+<tr><td>B</td><td class="l">M10 Virtual mesh</td><td class="l">逻辑 XY + 物理绕路</td><td>2</td><td class="l">2 VC + 绕路表</td><td>链路友好</td><td class="l">保留规则映射</td></tr>
 </tbody>
 </table>
 
-<h3>2.1 方案可行性与牺牲代价（m=1, Q=19）</h3>
+<h3>2.4 方案可行性与牺牲代价（m=1, Q=19）</h3>
 {feas_html}
 
-<h2>3. 每场景最佳方案（按 makespan，并列取少牺牲）</h2>
-<h3>3.1 m=1 flit</h3>
-{summary_table(1)}
-<h3>3.2 m=5 flit（同源同目的保序 wormhole）</h3>
-{summary_table(5)}
+<h2>3. 每场景最优方案选择</h2>
+<p class="note">判据按用户口径：<b>先看牺牲节点数，再看 makespan</b>。这也让比较更公平——
+牺牲数相同意味着参与 alltoall 的节点数 A 相同，makespan 才可直接对比
+（A 变小会让 makespan 无偿变好，见 M2）。
+「Pareto 备选」列出所有<b>非受支配</b>的 (牺牲, makespan) 组合：
+若愿意多牺牲若干节点换更快，就从这里挑。</p>
+<p class="note"><b>表头 raw / irreg 百分比含义：</b></p>
+<ul class="note">
+<li><b>raw</b>（<code>raw_slowdown = mk / mk_golden − 1</code>）：相对<strong>健康 8×6 XY</strong> golden 的变慢比例。
+例如 <code>+20.0%</code> 表示 makespan 比 golden 长 20%；
+<code>−30.0%</code> 表示比 golden 还短——通常因为牺牲后参与者 A 变少、总流量按 A² 下降，
+<strong>不是</strong>路由变好。跨场景比「路由质量」时不要只看 raw。</li>
+<li><b>irreg</b>（<code>irregularity_penalty = mk / LB_same_A − 1</code>）：相对<strong>同一存活集合 A</strong>
+上解析下界（带宽/注入/延迟三项取 max）的额外开销。
+例如 <code>+9.8%</code> 表示在「这些节点本来就该跑多久」之上，又慢了约 10%——
+主要来自绕路、负载不均、死锁约束等。比 raw 更适合比较不同方案的路由质量。</li>
+<li>百分比由比值减 1 再 ×100 显示；正=更慢，负=更快（对 raw 常见于高牺牲）。</li>
+</ul>
+<h3>3.1 dead · m=1 flit</h3>
+{optimal_table('dead', 1)}
+<h3>3.2 dead · m=5 flit（同源同目的保序 wormhole）</h3>
+{optimal_table('dead', 5)}
+<h3>3.3 transit · m=1 flit</h3>
+{optimal_table('transit', 1)}
+<h3>3.4 transit · m=5 flit</h3>
+{optimal_table('transit', 5)}
 
 <h2>4. 全方案 makespan 矩阵</h2>
-<p class="note">单元格：makespan；副行：raw slowdown | 牺牲节点数。
-INF = 在牺牲预算内仍无法得到无死锁保序路由，或 DES 死锁。</p>
+<p class="note">单元格主行：makespan（cy）；副行：<b>raw</b>（相对健康 XY 的 slowdown 百分比）
+| 牺牲节点数。INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。
+raw / irreg 定义见第 3 节与第 6 节。</p>
 <h3>4.1 dead · m=1</h3>
 {scheme_matrix('dead', 1)}
 <h3>4.2 transit · m=1</h3>
@@ -718,20 +1059,43 @@ INF = 在牺牲预算内仍无法得到无死锁保序路由，或 DES 死锁。
 
 <h2>6. 指标定义</h2>
 <ul>
-<li><code>raw_slowdown = mk / mk_golden − 1</code>（与 ring_report 同口径）</li>
-<li><code>irregularity_penalty = mk / LB_same_A − 1</code>（同存活集合、无死锁约束参考负载下界）</li>
+<li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
+基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
+负值多半来自 A 变小，解读时要对照「牺牲」列。</li>
+<li><b>irreg / irregularity_penalty</b> = <code>mk / LB_same_A − 1</code>。
+<code>LB_same_A</code> = 同一 compute 集合上
+<code>max(unbound_bw, inj_term, lat_term)</code>。
+衡量「去掉死锁/绕路约束后还该多慢」——越小说明路由越接近该规模下的带宽/延迟极限。</li>
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 
 <h2>7. 主要观察</h2>
-<ul>
-<li>Up*/Down*（M3）在 link/node 故障下通常以 <b>零牺牲</b> 给出无死锁保序路由，是保住计算规模时的主推荐。</li>
-<li>XY / Rect-XY 中位牺牲 24–28 节点，raw slowdown 可到 <b>−71%</b>（参与者变少），但 irregularity_penalty 仍约 +19%——读劣化请看后者。</li>
-<li>Fault-ring 2VC 与 Up*/Down* 接近（绕开故障 bbox + dateline VC），零牺牲。</li>
-<li>transit 下 XY 约半数场景可零牺牲；Up*/Down* 中位略优于 dead。</li>
-<li>Q=4 时 Up*/Down* 可慢 3–4×（H/V 长线需要 Q≈19）；小矩形 XY 对 Q 不敏感。</li>
-<li>全部 DES 行 <code>ordered_ok=True</code>；m=5 带宽项放大后 Up*/Down* raw ≈ +150%。</li>
-</ul>
+<ol>
+<li><b>全 B 类就位后，按「牺牲→makespan」仍几乎全是 M7 Stripe</b>
+（约 70/72 场）。dead·m=1 中位 mk：Stripe 194 &lt; Virtual 240 &lt; f-ring 248
+&lt; LASH/TOR 257 &lt; Dual-UD 342 ≈ Up*/Down* 344。</li>
+
+<li><b>M6b LASH-TOR 与 M6 中位完全相同</b>（本网格 LASH 已是 1–2 层，升层无额外收益）。
+<strong>M9 Dual-UD</strong> 相对 M3 几乎无改善。
+<strong>M10 Virtual mesh</strong> 以 2 VC 夹在 f-ring 与 LASH 之间，适合要保留规则映射的场景。</li>
+
+<li><b>链路故障：</b>M5 须退休端点；LASH/Stripe/Virtual 通常只需拿掉孤立点，
+且中心链路可零牺牲。</li>
+
+<li><b>按「先牺牲、再 makespan」：M7 Stripe 几乎通吃</b>
+（dead/transit × m=1/5 合计约 70/72 场）。仅个别场次 M5/M6 并列或略胜。
+代价是 5–6 VC。若看 Pareto 上「同牺牲、更少 VC」，常落到 M6 LASH。</li>
+
+<li><b>M2 Rect-XY 仍在 Pareto 极端点</b>（高牺牲换极低 makespan），但那是 A 变小所致；
+看 irreg. 并不占优。只有上层本就不需要满规模时才有意义。</li>
+
+<li><b>M3+LB / M4+LB 几乎无效</b>——想降负载应换 B 类。</li>
+
+<li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 慢 3–4×。多 VC 独立缓冲面积随层数放大
+（Stripe 最贵，LASH 最省）；共享池可压低，需另评。</li>
+
+<li>全部可行 DES 行 <code>ordered_ok=True</code>（含 LASH / Stripe / f-ring）。</li>
+</ol>
 </body></html>
 """
     HTML_PATH.write_text(doc)

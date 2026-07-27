@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Deadlock-free order-preserving routing for 8x6 PG mesh alltoall.
 
-Schemes:
+Turn-restriction class (1 VC, deadlock freedom from forbidden turns):
   M1 xy            — dimension-order XY (with sacrifice recovery)
   M2 rect_xy       — mask rows/cols containing faults → rectangular XY
   M3 updown        — Up*/Down* on a BFS spanning tree
   M4 segment       — simplified segment-based routing (turn restrictions)
-  M5 fault_ring_vc — XY + rectangular fault-block ring detour with 2 VCs
+
+VC-layering class (deadlock freedom from ordered channel classes):
+  M5 fault_ring_vc — true f-ring (Boppana–Chalasani), 4 VCs
+  M6 lash          — shortest paths packed into acyclic VC layers
+  M6b lash_tor     — LASH with mid-path layer climb (TOR)
+  M7 stripe_vc     — shortest/XY paths; VC += 1 at each vertical dateline
+  M9 dual_updown   — VC0=Up*/Down*, VC1=Down*/Up*, pick shorter per pair
+  M10 virtual_mesh — logical XY on full mesh; physical detours; X/Y → 2 VCs
 
 Hard requirements for a usable table: CDG acyclic, compute pairwise reachable,
 exactly one path per (src,dst). On failure, a shared sacrifice recoverer disables
@@ -365,82 +372,80 @@ def _updown_labels(adj: dict[int, list[int]], root: int
     return dist
 
 
+def _tree_path(s: int, d: int, adj: dict[int, list[int]],
+               labels: dict[int, int], mode: str = "ud"
+               ) -> list[int] | None:
+    """BFS under Up*/Down* (`ud`) or Down*/Up* (`du`) turn rules."""
+    if s == d:
+        return [s]
+    # phase 0 = first direction still allowed; 1 = second direction only
+    prev: dict[tuple[int, int], tuple[int, int] | None] = {(s, 0): None}
+    q = deque([(s, 0)])
+    found = None
+    while q:
+        u, ph = q.popleft()
+        for v in adj.get(u, ()):
+            if u not in labels or v not in labels:
+                continue
+            going_up = labels[v] < labels[u]
+            going_down = labels[v] > labels[u]
+            lateral = labels[v] == labels[u]
+            if mode == "ud":
+                # up then down (lateral counts as down)
+                if going_up:
+                    if ph == 1:
+                        continue
+                    nph = 0
+                else:
+                    nph = 1
+            else:
+                # down then up (lateral counts as down / first phase)
+                if going_down or lateral:
+                    if ph == 1:
+                        continue
+                    nph = 0
+                else:
+                    # up
+                    nph = 1
+            st = (v, nph)
+            if st in prev:
+                continue
+            prev[st] = (u, ph)
+            if v == d:
+                found = st
+                q.clear()
+                break
+            q.append(st)
+    if found is None:
+        return None
+    path = [found[0]]
+    cur = found
+    while prev[cur] is not None:
+        cur = prev[cur]  # type: ignore
+        path.append(cur[0])
+    path.reverse()
+    out = [path[0]]
+    for n in path[1:]:
+        if n != out[-1]:
+            out.append(n)
+    return out if out[0] == s and out[-1] == d else None
+
+
 def gen_updown(pg: dict) -> dict[str, Any] | None:
     adj = pg["route_adj"]
     compute = pg["compute_nodes"]
     if len(compute) < 2 or not adj:
         return None
-    # Root = highest degree among nodes reachable from some compute node
     root = max(adj.keys(), key=lambda n: (len(adj[n]), -n))
     labels = _updown_labels(adj, root)
     if labels is None:
         return None
-
-    def allowed(prev, cur, nxt):
-        # Up*/Down*: once we start going down (label increases? wait:
-        # up = toward root = decreasing distance; down = away = increasing.
-        # Legal: zero or more up hops then zero or more down hops.
-        # We encode state via whether we have already taken a down hop.
-        # BFS shortest under this constraint needs state — use dijkstra/BFS
-        # with state. For allowed_next we only have prev,cur,nxt; reconstruct
-        # whether the path so far already went down by checking if any hop
-        # increased distance. That needs full path — so use custom search.
-        return True  # placeholder; real filter in _updown_path
-
-    def updown_path(s, d):
-        if s == d:
-            return [s]
-        # state: (node, phase) phase 0=up-allowed, 1=down-only
-        prev: dict[tuple[int, int], tuple[int, int] | None] = {(s, 0): None}
-        q = deque([(s, 0)])
-        found = None
-        while q:
-            u, ph = q.popleft()
-            for v in adj.get(u, ()):
-                if u not in labels or v not in labels:
-                    continue
-                if labels[v] < labels[u]:
-                    # up hop
-                    if ph == 1:
-                        continue
-                    nph = 0
-                elif labels[v] > labels[u]:
-                    nph = 1
-                else:
-                    # same level: treat as down-ish lateral; forbid after? allow as down
-                    nph = 1
-                st = (v, nph)
-                if st in prev:
-                    continue
-                # also allow staying in phase 0 only via up
-                prev[st] = (u, ph)
-                if v == d:
-                    found = st
-                    q.clear()
-                    break
-                q.append(st)
-        if found is None:
-            # try also ending in phase 0
-            return None
-        path = [found[0]]
-        cur = found
-        while prev[cur] is not None:
-            cur = prev[cur]  # type: ignore
-            path.append(cur[0])
-        path.reverse()
-        # dedupe consecutive (shouldn't happen)
-        out = [path[0]]
-        for n in path[1:]:
-            if n != out[-1]:
-                out.append(n)
-        return out if out[0] == s and out[-1] == d else None
-
     paths = {}
     for s in compute:
         for d in compute:
             if s == d:
                 continue
-            p = updown_path(s, d)
+            p = _tree_path(s, d, adj, labels, "ud")
             if p is None:
                 return None
             paths[(s, d)] = p
@@ -493,71 +498,717 @@ def gen_segment(pg: dict) -> dict[str, Any] | None:
     return {"paths": paths, "vc_of": None, "scheme": "segment"}
 
 
-def _fault_bbox(pg: dict) -> tuple[int, int, int, int] | None:
-    """Axis-aligned bbox of dead nodes; None if no node faults."""
-    nodes = list(pg.get("dead_nodes", []))
-    if not nodes:
+# ---------------------------------------------------------------------------
+# M5: true fault-ring (Boppana-Chalasani style) XY with 4 VCs
+# ---------------------------------------------------------------------------
+#
+# Fault model: every fault is absorbed into an axis-aligned *rectangular fault
+# block* of deactivated nodes; the healthy nodes hugging a block form its
+# fault ring. Base routing is plain XY; a packet that would enter a block walks
+# the ring to the far side and resumes XY.
+#
+# VC assignment (constant per hop-phase, so still one path + deterministic VC
+# sequence per (src,dst) -> in-order):
+#     VC0 = X-phase, packet's X direction is East
+#     VC1 = X-phase, packet's X direction is West
+#     VC2 = Y-phase, packet's Y direction is North
+#     VC3 = Y-phase, packet's Y direction is South
+#
+# Why this is deadlock free:
+#   * X-phase detours only step vertically or in the packet's X direction, so
+#     inside VC0 every horizontal channel points East (VC1: West). A CDG cycle
+#     would need x to return to its start, so it can contain no horizontal
+#     channel; a purely vertical cycle inside one column needs a 180 turn,
+#     which the construction never emits.
+#   * Y-phase detours are the mirror image: inside VC2 every vertical channel
+#     points North (VC3: South), same argument on y.
+#   * A packet only ever moves X-phase -> Y-phase, so dependencies run from
+#     {VC0,VC1} to {VC2,VC3} and never back. Acyclic per VC + one-way между
+#     the two groups => the whole CDG is acyclic.
+
+FRING_NUM_VC = 4
+
+
+def _link_seed_nodes(dead_links, dead_nodes) -> set[int]:
+    """Pick one endpoint per faulty link to deactivate (greedy set cover).
+
+    The rectangular-block model has no notion of a broken link between two live
+    routers, so f-ring must retire a node to absorb each link fault.
+    """
+    dead = set(dead_nodes)
+    todo = [tuple(l) for l in dead_links
+            if l[0] not in dead and l[1] not in dead]
+    chosen: set[int] = set()
+    while todo:
+        cnt: dict[int, int] = defaultdict(int)
+        for a, b in todo:
+            cnt[a] += 1
+            cnt[b] += 1
+        pick = max(cnt, key=lambda n: (cnt[n], -n))
+        chosen.add(pick)
+        todo = [l for l in todo if pick not in l]
+    return chosen
+
+
+def _rect_blocks(pg: dict) -> list[tuple[int, int, int, int]]:
+    """Grow faults into disjoint rectangular blocks (merge on overlap/touch)."""
+    seeds = set(pg.get("dead_nodes", []))
+    seeds |= _link_seed_nodes(pg.get("route_dead_links", []), seeds)
+    seeds |= set(pg.get("route_dead_nodes", []))
+    if not seeds:
+        return []
+    rects = [(coord(n)[0], coord(n)[1], coord(n)[0], coord(n)[1])
+             for n in seeds]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(rects)):
+            for j in range(i + 1, len(rects)):
+                ax0, ay0, ax1, ay1 = rects[i]
+                bx0, by0, bx1, by1 = rects[j]
+                # touching or overlapping bounding boxes -> one block
+                if (ax0 <= bx1 + 1 and bx0 <= ax1 + 1
+                        and ay0 <= by1 + 1 and by0 <= ay1 + 1):
+                    rects[i] = (min(ax0, bx0), min(ay0, by0),
+                                max(ax1, bx1), max(ay1, by1))
+                    rects.pop(j)
+                    merged = True
+                    break
+            if merged:
+                break
+    return sorted(rects)
+
+
+def _block_at(x: int, y: int, blocks) -> tuple[int, int, int, int] | None:
+    if not (0 <= x < MX and 0 <= y < MY):
         return None
-    xs = [coord(n)[0] for n in nodes]
-    ys = [coord(n)[1] for n in nodes]
-    return min(xs), min(ys), max(xs), max(ys)
+    for b in blocks:
+        if b[0] <= x <= b[2] and b[1] <= y <= b[3]:
+            return b
+    return None
+
+
+def _between(a: int, b: int) -> list[int]:
+    """Coordinates strictly after a up to and including b."""
+    if a == b:
+        return []
+    step = 1 if b > a else -1
+    return list(range(a + step, b + step, step))
+
+
+def _leg_ok(cells, alive, avoid) -> bool:
+    """All ring cells live, and the walk does not start with a 180 turn."""
+    if not cells or cells[0] == avoid:
+        return False
+    return all(0 <= x < MX and 0 <= y < MY and nid(x, y) in alive
+               for x, y in cells)
+
+
+def _pick_leg(opts, alive, avoid):
+    legal = [c for c in opts if _leg_ok(c, alive, avoid)]
+    return min(legal, key=len) if legal else None
+
+
+def _x_detour(x, y, xdir, dx, blk, alive, avoid, prefer_up: bool):
+    """Ring-walk around blk during the X phase.
+
+    Normally rejoins row y on the far side. When the destination column lies
+    inside the block, the walk stops on the ring row at column dx instead —
+    otherwise it would overshoot and never converge.
+    """
+    x0, y0, x1, y1 = blk
+    inside = x0 <= dx <= x1
+    hstop = dx if inside else (x1 + 1 if xdir > 0 else x0 - 1)
+    opts = []
+    for side in ((1, -1) if prefer_up else (-1, 1)):
+        yring = y1 + 1 if side > 0 else y0 - 1
+        cells = [(x, yy) for yy in _between(y, yring)]
+        cells += [(xx, yring) for xx in _between(x, hstop)]
+        if not inside:
+            cells += [(hstop, yy) for yy in _between(yring, y)]
+        opts.append(cells)
+    return _pick_leg(opts, alive, avoid)
+
+
+def _y_detour(x, y, ydir, blk, alive, avoid, prefer_east: bool):
+    """Ring-walk around blk during the Y phase; rejoins column x beyond it."""
+    x0, y0, x1, y1 = blk
+    far = y1 + 1 if ydir > 0 else y0 - 1
+    opts = []
+    for side in ((1, -1) if prefer_east else (-1, 1)):
+        xring = x1 + 1 if side > 0 else x0 - 1
+        cells = [(xx, y) for xx in _between(x, xring)]
+        cells += [(xring, yy) for yy in _between(y, far)]
+        cells += [(xx, far) for xx in _between(xring, x)]
+        opts.append(cells)
+    return _pick_leg(opts, alive, avoid)
+
+
+def _fring_path(s: int, d: int, blocks, alive
+                ) -> tuple[list[int], int, int] | None:
+    """XY with fault-ring detours → (path, n_hops_in_X_phase, y_direction)."""
+    sx, sy = coord(s)
+    dx, dy = coord(d)
+    xdir = (dx > sx) - (dx < sx)
+    path = [s]
+    x, y = sx, sy
+
+    def prev_cell():
+        return coord(path[-2]) if len(path) >= 2 else None
+
+    def emit(cells) -> bool:
+        nonlocal x, y
+        for cx, cy in cells:
+            n = nid(cx, cy)
+            if n not in alive or n == path[-1]:
+                return False
+            path.append(n)
+            x, y = cx, cy
+        return True
+
+    guard = 0
+    while x != dx:
+        guard += 1
+        if guard > MX * MY:
+            return None
+        blk = _block_at(x + xdir, y, blocks)
+        if blk is None:
+            if not emit([(x + xdir, y)]):
+                return None
+        else:
+            # Prefer the ring side that also carries us toward the dst row.
+            leg = _x_detour(x, y, xdir, dx, blk, alive, prev_cell(),
+                            prefer_up=(dy >= y))
+            if leg is None or not emit(leg):
+                return None
+    x_hops = len(path) - 1
+
+    # Y direction is taken *after* the X phase: a ring detour may have already
+    # moved the packet in y, and the VC class must match the direction actually
+    # travelled for the monotonicity argument to hold.
+    ydir = (dy > y) - (dy < y)
+    y_sign = ydir
+    while y != dy:
+        guard += 1
+        if guard > 2 * MX * MY:
+            return None
+        blk = _block_at(x, y + ydir, blocks)
+        if blk is None:
+            if not emit([(x, y + ydir)]):
+                return None
+        else:
+            leg = _y_detour(x, y, ydir, blk, alive, prev_cell(),
+                            prefer_east=(xdir >= 0))
+            if leg is None or not emit(leg):
+                return None
+    return path, x_hops, y_sign
 
 
 def gen_fault_ring_vc(pg: dict) -> dict[str, Any] | None:
-    """Force traffic around the fault bbox (even under transit), route with
-    Up*/Down* on the punctured graph, and assign 2 VCs by a vertical dateline
-    through the fault centre (VC flips when crossing the dateline column).
-
-    Link-only faults have no bbox: fall back to Up*/Down* on the cut graph
-    with the same dateline at mx//2 (still 2 VC).
-    """
-    bbox = _fault_bbox(pg)
-    adj = pg["route_adj"]
-    if bbox is not None:
-        x0, y0, x1, y1 = bbox
-        blocked = {nid(x, y)
-                   for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
-        dateline_col = (x0 + x1) // 2
-    else:
-        blocked = set()
-        dateline_col = MX // 2
-    radj = {n: [m for m in nbs if m not in blocked]
-            for n, nbs in adj.items() if n not in blocked}
-    compute = [n for n in pg["compute_nodes"] if n in radj]
+    """True fault-ring XY on rectangular fault blocks with 4 VCs (see above)."""
+    blocks = _rect_blocks(pg)
+    deact = {nid(x, y)
+             for (x0, y0, x1, y1) in blocks
+             for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+    alive = set(range(N)) - deact
+    radj = {n: sorted(m for m in grid_neighbors(n) if m in alive)
+            for n in alive}
+    compute = [n for n in pg["compute_nodes"] if n in alive]
     if len(compute) < 2:
         return None
-    # Reuse Up*/Down* path construction on radj
-    sub = {
-        **pg,
-        "route_adj": radj,
-        "compute_nodes": compute,
-    }
-    ud = gen_updown(sub)
-    if ud is None:
-        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    meta: dict[tuple[int, int], tuple[int, int, int]] = {}
+    for s in compute:
+        sx, _ = coord(s)
+        for d in compute:
+            if s == d:
+                continue
+            r = _fring_path(s, d, blocks, alive)
+            if r is None:
+                return None
+            p, x_hops, y_sign = r
+            meta[(s, d)] = (x_hops,
+                            0 if coord(d)[0] >= sx else 1,
+                            2 if y_sign >= 0 else 3)
+            paths[(s, d)] = p
 
     def vc_of(path: list[int], i: int) -> int:
-        # VC = parity of how many times the path has crossed dateline_col
-        # horizontally before (and including) this hop.
-        crosses = 0
-        for j in range(i + 1):
-            a, b = path[j], path[j + 1]
-            ax, _ = coord(a)
-            bx, _ = coord(b)
-            if ax != bx and min(ax, bx) < dateline_col <= max(ax, bx):
-                # crossing the vertical line x = dateline_col
-                if ax < dateline_col <= bx or bx < dateline_col <= ax:
-                    crosses += 1
-        return crosses & 1
+        x_hops, vx, vy = meta[(path[0], path[-1])]
+        return vx if i < x_hops else vy
 
     forced = sorted(set(pg["compute_nodes"]) - set(compute))
     return {
-        "paths": ud["paths"],
+        "paths": paths,
         "vc_of": vc_of,
+        "num_vc": FRING_NUM_VC,
         "scheme": "fault_ring_vc",
         "forced_sacrificed": forced,
         "compute_nodes": compute,
         "route_adj": radj,
+        "blocks": blocks,
+    }
+
+
+# ---------------------------------------------------------------------------
+# M6: LASH — Layered Shortest Path (Skeie et al.)
+# ---------------------------------------------------------------------------
+
+LASH_MAX_LAYERS = 8
+
+
+def _cdg_add_path(cdg: dict[Any, set[Any]], path: list[int]) -> list[tuple]:
+    """Add consecutive channel deps of path; return list of added edges for undo."""
+    added = []
+    if len(path) < 2:
+        return added
+    chans = [(path[i], path[i + 1]) for i in range(len(path) - 1)]
+    for i in range(len(chans) - 1):
+        a, b = chans[i], chans[i + 1]
+        if b not in cdg[a]:
+            cdg[a].add(b)
+            added.append((a, b))
+        _ = cdg[b]
+    return added
+
+
+def _cdg_undo(cdg: dict[Any, set[Any]], added: list[tuple]) -> None:
+    for a, b in added:
+        cdg[a].discard(b)
+
+
+def gen_lash(pg: dict) -> dict[str, Any] | None:
+    """Shortest path per pair; greedy-pack into fewest VC layers with acyclic CDG.
+
+    Each (src,dst) gets one layer for its entire path (constant VC) → in-order.
+    """
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+    if len(compute) < 2:
+        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = shortest_path(s, d, adj)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+
+    pairs = sorted(paths.keys(), key=lambda sd: (-len(paths[sd]), sd[0], sd[1]))
+    layers: list[dict[Any, set[Any]]] = [defaultdict(set)]
+    assign: dict[tuple[int, int], int] = {}
+
+    for sd in pairs:
+        p = paths[sd]
+        placed = False
+        for li, cdg in enumerate(layers):
+            added = _cdg_add_path(cdg, p)
+            if cdg_acyclic(cdg):
+                assign[sd] = li
+                placed = True
+                break
+            _cdg_undo(cdg, added)
+        if not placed:
+            if len(layers) >= LASH_MAX_LAYERS:
+                return None
+            cdg: dict[Any, set[Any]] = defaultdict(set)
+            _cdg_add_path(cdg, p)
+            if not cdg_acyclic(cdg):
+                return None  # single path forming a cycle — impossible for simple path
+            layers.append(cdg)
+            assign[sd] = len(layers) - 1
+
+    num_vc = len(layers)
+
+    def vc_of(path: list[int], i: int) -> int:
+        del i
+        return assign[(path[0], path[-1])]
+
+    return {
+        "paths": paths,
+        "vc_of": vc_of,
+        "num_vc": num_vc,
+        "scheme": "lash",
+        "n_layers": num_vc,
+    }
+
+
+def _cdg_add_segment(cdg: dict[Any, set[Any]], path: list[int],
+                     i0: int, i1: int) -> list[tuple]:
+    """Add deps for hops path[i0]..path[i1] (node indices); i1 exclusive on nodes
+    so last hop is (path[i1-2], path[i1-1]) wait — hops covering nodes[i0:i1+1]."""
+    # segment nodes path[i0 .. i1] inclusive; hops between them
+    added = []
+    nodes = path[i0:i1 + 1]
+    if len(nodes) < 2:
+        return added
+    return _cdg_add_path(cdg, nodes)
+
+
+def gen_lash_tor(pg: dict) -> dict[str, Any] | None:
+    """LASH-TOR: allow one mid-path climb to a higher layer to pack denser.
+
+    Hop VC is non-decreasing along each path (in-order preserved: same
+    deterministic sequence per pair). Each layer's CDG stays acyclic.
+    """
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+    if len(compute) < 2:
+        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = shortest_path(s, d, adj)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+
+    pairs = sorted(paths.keys(), key=lambda sd: (-len(paths[sd]), sd[0], sd[1]))
+    layers: list[dict[Any, set[Any]]] = [defaultdict(set)]
+    # assign[(s,d)] = list of per-hop VC, length = len(path)-1
+    hop_vc: dict[tuple[int, int], list[int]] = {}
+
+    def try_place_flat(p, li) -> bool:
+        added = _cdg_add_path(layers[li], p)
+        if cdg_acyclic(layers[li]):
+            return True
+        _cdg_undo(layers[li], added)
+        return False
+
+    def try_place_split(p, lo, hi, split_after_hop: int) -> bool:
+        """Hops [0..split] on `lo`, hops (split..end] on `hi` (hi >= lo)."""
+        # nodes: hop k is (path[k], path[k+1])
+        n = len(p) - 1
+        if split_after_hop < 0 or split_after_hop >= n - 1:
+            return False
+        # segment0: nodes 0 .. split_after_hop+1
+        # segment1: nodes split_after_hop+1 .. end
+        a0 = _cdg_add_segment(layers[lo], p, 0, split_after_hop + 1)
+        a1 = _cdg_add_segment(layers[hi], p, split_after_hop + 1, n)
+        ok = cdg_acyclic(layers[lo]) and cdg_acyclic(layers[hi])
+        if not ok:
+            _cdg_undo(layers[lo], a0)
+            _cdg_undo(layers[hi], a1)
+        return ok
+
+    for sd in pairs:
+        p = paths[sd]
+        n_hops = len(p) - 1
+        placed = False
+        # 1) flat into existing layer
+        for li in range(len(layers)):
+            if try_place_flat(p, li):
+                hop_vc[sd] = [li] * n_hops
+                placed = True
+                break
+        if placed:
+            continue
+        # 2) TOR split across existing layers (lo <= hi)
+        for lo in range(len(layers)):
+            for hi in range(lo, len(layers)):
+                if lo == hi:
+                    continue
+                for sp in range(n_hops - 1):
+                    if try_place_split(p, lo, hi, sp):
+                        hop_vc[sd] = [lo] * (sp + 1) + [hi] * (n_hops - sp - 1)
+                        placed = True
+                        break
+                if placed:
+                    break
+            if placed:
+                break
+        if placed:
+            continue
+        # 3) open a new top layer; try flat then TOR climb into it
+        if len(layers) >= LASH_MAX_LAYERS:
+            return None
+        layers.append(defaultdict(set))
+        top = len(layers) - 1
+        if try_place_flat(p, top):
+            hop_vc[sd] = [top] * n_hops
+            continue
+        ok_tor = False
+        for lo in range(top):
+            for sp in range(n_hops - 1):
+                if try_place_split(p, lo, top, sp):
+                    hop_vc[sd] = [lo] * (sp + 1) + [top] * (n_hops - sp - 1)
+                    ok_tor = True
+                    break
+            if ok_tor:
+                break
+        if not ok_tor:
+            return None
+
+    num_vc = len(layers)
+
+    def vc_of(path: list[int], i: int) -> int:
+        return hop_vc[(path[0], path[-1])][i]
+
+    return {
+        "paths": paths,
+        "vc_of": vc_of,
+        "num_vc": num_vc,
+        "scheme": "lash_tor",
+        "n_layers": num_vc,
+    }
+
+
+# ---------------------------------------------------------------------------
+# M7: Stripe dateline — vertical bands, VC += 1 per boundary cross
+# ---------------------------------------------------------------------------
+
+def _stripe_datelines(pg: dict, width: int = 2) -> list[int]:
+    """Vertical dateline columns: every `width` cols, plus fault-touched cols."""
+    lines = set(range(width, MX, width))
+    _, fcols = _fault_rows_cols(pg)
+    for x in fcols:
+        if 0 < x < MX:
+            lines.add(x)
+        if 0 < x + 1 < MX:
+            lines.add(x + 1)
+    return sorted(lines)
+
+
+def _dateline_crossings(path: list[int], datelines: list[int],
+                        upto: int) -> int:
+    """How many times hops [0..upto] inclusive cross a vertical dateline."""
+    crosses = 0
+    for j in range(upto + 1):
+        ax, _ = coord(path[j])
+        bx, _ = coord(path[j + 1])
+        if ax == bx:
+            continue
+        lo, hi = (ax, bx) if ax < bx else (bx, ax)
+        for d in datelines:
+            if lo < d <= hi:
+                crosses += 1
+    return crosses
+
+
+def gen_stripe_vc(pg: dict) -> dict[str, Any] | None:
+    """Shortest paths (XY preferred); VC = # vertical-dateline crossings so far.
+
+    Datelines at every 2 columns and at fault-column edges. Monotonic VC along
+    each path; CDG is checked — denser datelines tried if the sparse set fails.
+    """
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+    if len(compute) < 2:
+        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = xy_path(s, d, adj)
+            if p is None:
+                p = shortest_path(s, d, adj)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+
+    # Try sparse then dense datelines until CDG is acyclic
+    trials = [
+        _stripe_datelines(pg, width=2),
+        list(range(1, MX)),  # every column boundary
+    ]
+    # dedupe trial lists
+    seen_dl: set[tuple[int, ...]] = set()
+    best = None
+    for dlines in trials:
+        key = tuple(dlines)
+        if key in seen_dl:
+            continue
+        seen_dl.add(key)
+
+        def vc_of(path: list[int], i: int, _dl=dlines) -> int:
+            return _dateline_crossings(path, _dl, i)
+
+        ok, _ = validate_routing(paths, compute, adj, vc_of)
+        if not ok:
+            continue
+        num_vc = 1
+        for p in paths.values():
+            if len(p) >= 2:
+                num_vc = max(num_vc, 1 + _dateline_crossings(p, dlines, len(p) - 2))
+        best = {
+            "paths": paths,
+            "vc_of": vc_of,
+            "num_vc": num_vc,
+            "scheme": "stripe_vc",
+            "datelines": dlines,
+        }
+        break
+    return best
+
+
+# ---------------------------------------------------------------------------
+# M9: Dual Up*/Down* — VC0 = UD, VC1 = DU, pick shorter path per pair
+# ---------------------------------------------------------------------------
+
+def gen_dual_updown(pg: dict) -> dict[str, Any] | None:
+    """VC0 runs Up*/Down*, VC1 runs Down*/Up*; each pair picks the shorter."""
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+    if len(compute) < 2 or not adj:
+        return None
+    root = max(adj.keys(), key=lambda n: (len(adj[n]), -n))
+    labels = _updown_labels(adj, root)
+    if labels is None:
+        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    which: dict[tuple[int, int], int] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            pud = _tree_path(s, d, adj, labels, "ud")
+            pdu = _tree_path(s, d, adj, labels, "du")
+            if pud is None and pdu is None:
+                return None
+            if pud is None:
+                paths[(s, d)] = pdu
+                which[(s, d)] = 1
+            elif pdu is None or len(pud) <= len(pdu):
+                paths[(s, d)] = pud
+                which[(s, d)] = 0
+            else:
+                paths[(s, d)] = pdu
+                which[(s, d)] = 1
+
+    def vc_of(path: list[int], i: int) -> int:
+        del i
+        return which[(path[0], path[-1])]
+
+    return {
+        "paths": paths,
+        "vc_of": vc_of,
+        "num_vc": 2,
+        "scheme": "dual_updown",
+        "root": root,
+    }
+
+
+# ---------------------------------------------------------------------------
+# M10: Virtual regular mesh — logical XY, physical detours, X/Y → 2 VC
+# ---------------------------------------------------------------------------
+
+def _logical_xy(s: int, d: int) -> list[int]:
+    """XY on the complete healthy mesh (ignores faults)."""
+    sx, sy = coord(s)
+    dx, dy = coord(d)
+    path = [s]
+    x, y = sx, sy
+    step = 1 if dx > sx else -1
+    while x != dx:
+        x += step
+        path.append(nid(x, y))
+    step = 1 if dy > sy else -1
+    while y != dy:
+        y += step
+        path.append(nid(x, y))
+    return path
+
+
+def _expand_logical_edge(a: int, b: int, adj: dict[int, list[int]],
+                         ban: set[int] | None = None) -> list[int] | None:
+    """Physical realisation of one logical hop a→b (neighbor on full mesh)."""
+    if b in adj.get(a, ()):
+        return [a, b]
+    # Detour: shortest path avoiding `ban` (other logical endpoints mid-detour
+    # may still be used). Prefer paths that stay near the broken edge.
+    if ban:
+        radj = {u: [v for v in nbs if v not in ban or v in (a, b)]
+                for u, nbs in adj.items() if u not in ban or u in (a, b)}
+        p = shortest_path(a, b, radj)
+    else:
+        p = shortest_path(a, b, adj)
+    return p
+
+
+def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
+    """Logical full-mesh XY; missing links replaced by fixed physical detours.
+
+    VC0 = logical X-phase hops (after expansion), VC1 = logical Y-phase.
+    Compute nodes that are route-dead cannot host logical hops and are
+    forced-sacrificed.
+    """
+    adj = pg["route_adj"]
+    # Logical routers = nodes with at least one live link (isolates are unusable).
+    alive = {n for n, nbs in adj.items() if nbs}
+    compute = [n for n in pg["compute_nodes"] if n in alive]
+    if len(compute) < 2:
+        return None
+
+    # Precompute physical expansion for every logical unit edge among alive
+    expand: dict[tuple[int, int], list[int]] = {}
+    for a in alive:
+        ax, ay = coord(a)
+        for dx, dy in DIRS:
+            bx, by = ax + dx, ay + dy
+            if not (0 <= bx < MX and 0 <= by < MY):
+                continue
+            b = nid(bx, by)
+            if b not in alive:
+                continue
+            p = _expand_logical_edge(a, b, adj)
+            if p is None:
+                # cannot bridge this logical edge — mark unusable
+                continue
+            expand[(a, b)] = p
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    x_hops: dict[tuple[int, int], int] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            full = _logical_xy(s, d)
+            # Drop dead routers on the logical polyline; bridge gaps physically.
+            way = [n for n in full if n in alive]
+            if not way or way[0] != s or way[-1] != d:
+                return None
+            phys = [s]
+            for i in range(len(way) - 1):
+                a, b = way[i], way[i + 1]
+                seg = expand.get((a, b)) or shortest_path(a, b, adj)
+                if seg is None:
+                    return None
+                phys.extend(seg[1:])
+            # X-phase = hops until the packet first sits in dst's column.
+            dx = coord(d)[0]
+            n_x = 0
+            if coord(s)[0] != dx:
+                for i in range(len(phys) - 1):
+                    n_x += 1
+                    if coord(phys[i + 1])[0] == dx:
+                        break
+            paths[(s, d)] = phys
+            x_hops[(s, d)] = n_x
+
+    def vc_of(path: list[int], i: int) -> int:
+        return 0 if i < x_hops[(path[0], path[-1])] else 1
+
+    forced = sorted(set(pg["compute_nodes"]) - set(compute))
+    ok, _ = validate_routing(paths, compute, adj, vc_of)
+    if not ok:
+        return None
+    return {
+        "paths": paths,
+        "vc_of": vc_of,
+        "num_vc": 2,
+        "scheme": "virtual_mesh",
+        "forced_sacrificed": forced,
+        "compute_nodes": compute,
+        "route_adj": adj,
     }
 
 
@@ -567,6 +1218,11 @@ SCHEME_GENERATORS = {
     "updown": gen_updown,
     "segment": gen_segment,
     "fault_ring_vc": gen_fault_ring_vc,
+    "lash": gen_lash,
+    "lash_tor": gen_lash_tor,
+    "stripe_vc": gen_stripe_vc,
+    "dual_updown": gen_dual_updown,
+    "virtual_mesh": gen_virtual_mesh,
 }
 
 
@@ -668,6 +1324,8 @@ def _finalize(pg: dict, raw: dict, sacrificed: set[int],
         "n_compute_used": len(compute),
         "n_originally_good": n_good,
         "sacrifice_cost": (len(sac) / n_good) if n_good else 0.0,
+        "num_vc": raw.get("num_vc", 1),
+        "max_load": max_link_load(paths),
         "reason": "ok",
     }
 
@@ -707,73 +1365,110 @@ def _try_rect_recovery(pg: dict, scheme: str,
 
 
 def solve_scheme(pg: dict, scheme: str) -> dict[str, Any]:
-    """Generate a deadlock-free order-preserving routing, sacrificing if needed."""
+    """Generate a deadlock-free order-preserving routing, sacrificing if needed.
+
+    Trials are ordered by increasing sacrifice size so the first hit is a
+    minimum-cardinality recovery (among the candidate set), not a coarse
+    row/col wipe.
+    """
     gen = SCHEME_GENERATORS[scheme]
     # M2/M5 always remove sacrificed routers from route; others follow PG semantics
     remove_route = (scheme in ("rect_xy", "fault_ring_vc")
                     or pg["semantics"] == "dead")
 
-    # k=0 first
-    raw = gen(pg)
+    # Isolated compute nodes can never send/recv — drop them first.
+    base_sac = {n for n in pg["compute_nodes"]
+                if not pg["route_adj"].get(n)}
+    base_pg = (apply_sacrifice(pg, base_sac, remove_route)
+               if base_sac else pg)
+
+    raw = gen(base_pg)
     if raw is not None:
-        fin = _finalize(pg, raw, set(), remove_route)
+        fin = _finalize(base_pg, raw, base_sac, remove_route)
         if fin is not None:
             return fin
 
-    # Rect-xy itself IS the coarse sacrifice scheme
     if scheme == "rect_xy":
-        fin = _try_rect_recovery(pg, scheme, remove_route)
+        fin = _try_rect_recovery(base_pg, scheme, remove_route)
         if fin is not None:
+            # fold isolation sac into the result
+            if base_sac and fin.get("feasible"):
+                fin = dict(fin)
+                fin["sacrificed"] = sorted(set(fin["sacrificed"]) | base_sac)
+                fin["n_sacrificed"] = len(fin["sacrificed"])
+                n_good = pg["n_originally_good"]
+                fin["sacrifice_cost"] = (fin["n_sacrificed"] / n_good
+                                         if n_good else 0.0)
             return fin
 
-    cands = sacrifice_candidates(pg)
-    bundles = row_col_bundles(pg)
-    # Allow sacrificing up to a full row+col (~14) to recover a rectangle
-    k_max = min(16, max(1, len(pg["compute_nodes"]) // 2))
+    cands = [n for n in sacrifice_candidates(base_pg) if n not in base_sac]
+    bundles = row_col_bundles(base_pg)
+    k_max = min(16, max(1, len(base_pg["compute_nodes"]) // 2))
 
+    # Prefer small sets; coarse bundles only after k<=2 singles/pairs fail.
     ordered_trials: list[list[int]] = []
+    pool = cands[: min(12, len(cands))]
+    for n in pool:
+        ordered_trials.append([n])
+    ordered_trials.extend(list(p) for p in itertools.combinations(pool[:8], 2))
+    for k in range(3, min(k_max, 6) + 1):
+        ordered_trials.append(pool[:k])
     for b in bundles:
         if 1 <= len(b) <= k_max:
             ordered_trials.append(b)
-    # Combined fault-row + fault-col (classic XY recovery)
-    frows, fcols = _fault_rows_cols(pg)
+    frows, fcols = _fault_rows_cols(base_pg)
     for y in list(frows)[:2]:
         for x in list(fcols)[:2]:
-            combo = [n for n in pg["compute_nodes"]
+            combo = [n for n in base_pg["compute_nodes"]
                      if coord(n)[0] == x or coord(n)[1] == y]
             if combo:
                 ordered_trials.append(combo)
-    for k in range(1, min(k_max, 6) + 1):
-        pool = cands[: min(10, len(cands))]
-        if k == 1:
-            ordered_trials.extend([[n] for n in pool])
-        elif k == 2:
-            ordered_trials.extend(list(p) for p in
-                                  itertools.combinations(pool[:6], 2))
-        else:
-            ordered_trials.append(pool[:k])
 
     seen_t: set[frozenset[int]] = set()
+    # Track best feasible by (n_sac, max_load) in case early trial is larger.
+    best: dict[str, Any] | None = None
     for trial in ordered_trials:
-        key = frozenset(trial)
-        if key in seen_t or not key:
+        key = frozenset(trial) | base_sac
+        if key in seen_t or not (frozenset(trial) or base_sac):
+            continue
+        # Skip if we already have a feasible with fewer or equal sac and this
+        # trial cannot improve (larger than best sac).
+        if best is not None and len(key) > best["n_sacrificed"]:
             continue
         seen_t.add(key)
         if len(key) > k_max:
             continue
-        view = apply_sacrifice(pg, set(trial), remove_route)
+        view = apply_sacrifice(pg, set(key), remove_route)
         if view["n_compute"] < 2:
             continue
         raw = gen(view)
         if raw is None:
             continue
-        fin = _finalize(view, raw, set(trial), remove_route)
-        if fin is not None:
-            return fin
+        fin = _finalize(view, raw, set(key), remove_route)
+        if fin is None:
+            continue
+        if (best is None
+                or fin["n_sacrificed"] < best["n_sacrificed"]
+                or (fin["n_sacrificed"] == best["n_sacrificed"]
+                    and fin.get("max_load", 10 ** 9)
+                    < best.get("max_load", 10 ** 9))):
+            best = fin
+            if best["n_sacrificed"] <= len(base_sac) + 1:
+                # Already near-minimal; stop early.
+                break
 
-    # Last resort: rectangular mask recovery
-    fin = _try_rect_recovery(pg, scheme, remove_route)
+    if best is not None:
+        return best
+
+    fin = _try_rect_recovery(base_pg, scheme, remove_route)
     if fin is not None:
+        if base_sac and fin.get("feasible"):
+            fin = dict(fin)
+            fin["sacrificed"] = sorted(set(fin["sacrificed"]) | base_sac)
+            fin["n_sacrificed"] = len(fin["sacrificed"])
+            n_good = pg["n_originally_good"]
+            fin["sacrifice_cost"] = (fin["n_sacrificed"] / n_good
+                                     if n_good else 0.0)
         return fin
 
     return {
@@ -781,6 +1476,7 @@ def solve_scheme(pg: dict, scheme: str) -> dict[str, Any]:
         "scheme": scheme,
         "paths": {},
         "vc_of": None,
+        "num_vc": 1,
         "compute_nodes": [],
         "route_adj": {},
         "sacrificed": [],
