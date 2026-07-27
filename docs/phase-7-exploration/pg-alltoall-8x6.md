@@ -28,6 +28,24 @@ M1 XY · M2 Rect-XY · M3 Up\*/Down\*（±LB）· M4 Segment（±LB）
 
 **M3 / M5 / M7 / M10** 的逐步算法、无死锁论证、示意图与端到端角色见 HTML 报告 §2。
 
+### 2.1 三性质核验与排除（`utils/pg_capability_probe.py`）
+
+对 36 个 (场景 × 语义)，在**零额外牺牲**下（仅先剔除孤立点）让每个方案自力建全表：
+
+| 方案 | 避障 | 无死锁 | 结论 |
+|------|------|--------|------|
+| M1 XY | ✗ 27/36 建不出路径 | ✓ | **排除** |
+| M2 Rect-XY | △ 36/36 靠裁行裁列，累计 1018 节点 | ✓ | **排除** |
+| M4 Segment（±LB） | ✗ 17/36 建不出路径 | ✗ 7/36 CDG 成环 | **排除** |
+| M5 f-ring | △ 16/36 靠退休端点，累计 28 节点 | ✓ | 保留（标注） |
+| M3 / M6 / M6b / M7 / M9 / M10 | ✓ 36/36 零牺牲绕开 | ✓ | 保留 |
+
+**保序全员通过**：882 行 DES 无一例 `ordered_ok=False`——每对唯一路径且 `vc_of` 为纯函数的必然结果。
+M4 CDG 成环的 7 例：`link_edge_2`、`link_center_2`（dead+transit）、`node_edge_1x1`、`node_center_2x2`、`node_center_3x3`（dead）。
+
+M1/M2/M4 **不进入 §5–6 的 makespan 对比**：它们裸 makespan 常常最快，但那是牺牲一半阵列换来的（A 小 ⇒ 流量按 A² 降）。
+端到端评估（§6）仍保留它们，因为那里已把牺牲折算回时间。
+
 ## 3. Golden 与规模
 
 - 健康 XY：`m=1 → 188 cy`，`m=5 → 770 cy`
@@ -76,8 +94,9 @@ dead·m=1 中位：
 
 ## 6. 端到端评估：时间 × 面积 Pareto
 
-第 5 节按纯 makespan 排序会误导——M1 XY 的 makespan 最小，但它中位牺牲了 28/48 个节点。
-把通信放回一个真实计算任务里，牺牲的代价才显现。
+按纯 makespan 排序会误导——M1 XY 的 makespan 最小，但它中位牺牲了 28/48 个节点
+（这正是 §2.1 把它排除出第 5 节对比的原因）。把通信放回一个真实计算任务里，
+牺牲的代价才显现，被排除的方案也就能在同一把尺子上重新参与比较，故本节把它们放回。
 
 ### 6.1 模型
 
@@ -135,7 +154,7 @@ VC1=0.897，VC2=1.244，VC4=1.937，VC6=2.631。每个方案按它在 18 个场�
 | M1 XY / M2 Rect-XY | 1 | 0.897 | 16/6 | 28–32 | 820 ns | 9845 ns | 0.46–0.54 |
 | M4 Segment（±LB） | 1 | 0.897 | 24/6 | 28 | 1025 ns | 13800 ns | 0.69–0.73 |
 
-**排名翻转：** M1 XY / M2 Rect-XY 在第 5 节的 makespan 矩阵里是最快的（中位 62 cy），
+**排名翻转：** M1 XY / M2 Rect-XY 的裸 makespan 是最快的（中位 62 cy），
 端到端却成了倒数——它们被 **M3 Up\*/Down\* 严格支配**（同为 VC1、面积相同，但 M3 慢 0 牺牲、
 最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 个 PE，
 计算时间涨 8 倍、每对载荷涨 64 倍。M4 Segment 同理，更糟。
@@ -162,7 +181,7 @@ M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 
 >
 > **例外：** 若 router 面积在系统里占比很小、延迟是硬指标，直接上 **M7 Stripe（6 VC）**，
 > 它在两个载荷下都是最快的（471 / 4913 ns）。
-> **不要**因为 makespan 矩阵好看就选 M1 XY —— 端到端它被同面积的 M3 严格支配。
+> **不要**因为裸 makespan 好看就选 M1 XY —— 端到端它被同面积的 M3 严格支配。
 
 ### 6.4 已知局限
 
@@ -176,10 +195,12 @@ M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 
 | 文件 | 作用 |
 |------|------|
 | `utils/pg_routing.py` | M1–M10 路由 / CDG / 牺牲 / 割下界 |
+| `utils/pg_capability_probe.py` | 三性质核验（零牺牲下的避障 / 无死锁） |
 | `utils/dse_pg_alltoall_8x6.py` | DES + 扫描 |
 | `utils/gen_pg_alltoall_report.py` | HTML |
 | `utils/dse_pg_e2e_pareto.py` | 端到端时间 × 面积扫描 |
 | `utils/gen_pg_e2e_pareto_plot.py` | Pareto 图 |
 | `results/pg_alltoall_8x6.json` | makespan 数据 |
+| `results/pg_capability.json` | 三性质核验结果 |
 | `results/report_pg_alltoall_8x6.html` | 报告 |
 | `results/pg_e2e_pareto.json` / `.png` | 端到端数据 / Pareto 图 |
