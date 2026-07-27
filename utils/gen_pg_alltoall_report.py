@@ -556,18 +556,30 @@ def scheme_diagrams() -> dict[str, str]:
     parts.append("</svg>")
     out["segment_lb"] = "".join(parts)
 
-    # ---- M5 true f-ring, 4 VC: exactly what _fring_path emits for
-    #      S(0,1)->D(4,3) with a 1x1 block at (2,1) ----
-    C, W, H = _mini_xy(5, 4, pad=30, gap=40)
+    # ---- M5 true f-ring panel set -------------------------------------------
+    def _m5_legend(parts, *lines):
+        for i, (txt, col) in enumerate(lines):
+            parts.append(
+                f'<text x="10" y="{14 + i * 12}" font-size="10" '
+                f'fill="{col}">{txt}</text>')
+
+    # ① X-phase ring detour then Y-phase
+    C, W, H = _mini_xy(5, 4, pad=32, gap=42, bottom_extra=16, side_extra=40)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
              f'viewBox="0 0 {W} {H}">', _defs_arrow("a5x", "#2980b9"),
              _defs_arrow("a5y", "#8e44ad")]
     block = {(2, 1)}
-    # fault block halo = the fault ring
     bx, by = C[(2, 1)]
     parts.append(f'<rect x="{bx - 20}" y="{by - 20}" width="40" height="40" '
                  f'fill="#fdecea" stroke="#c0392b" stroke-width="1.4" '
                  f'stroke-dasharray="4,3" rx="3"/>')
+    # ring halo hint
+    for a, b in [((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (3, 2)),
+                 ((3, 2), (3, 1)), ((3, 1), (3, 0)), ((3, 0), (2, 0)),
+                 ((2, 0), (1, 0)), ((1, 0), (1, 1))]:
+        if a in block or b in block:
+            continue
+        parts.append(_edge(C[a], C[b], "#f5b7b1", 4.5))
     for r in range(4):
         for c in range(4):
             if (c, r) in block or (c + 1, r) in block:
@@ -596,17 +608,16 @@ def scheme_diagrams() -> dict[str, str]:
                 parts.append(_node(*C[(c, r)], fill="#27ae60", label="D"))
             else:
                 parts.append(_node(*C[(c, r)]))
-    parts.append(
-        f'<text x="8" y="14" font-size="10" fill="#2980b9">'
-        f'蓝=X 相（东行→VC0）</text>'
-        f'<text x="{W / 2 - 10}" y="14" font-size="10" fill="#8e44ad">'
-        f'紫=Y 相（北行→VC2）</text>')
-    parts.append(_caption(W, H, "撞块→沿环绕行→回原行续 XY；相位定 VC"))
+    _m5_legend(parts,
+               ("粉粗线 = fault ring", "#e74c3c"),
+               ("蓝 = X 相 → VC0", "#2980b9"),
+               ("紫 = Y 相 → VC2", "#8e44ad"))
+    parts.append(_caption(W, H, "① 撞块→沿环绕行→回原行续 XY；相位定 VC"))
     parts.append("</svg>")
     out["fault_ring_vc"] = "".join(parts)
 
-    # ---- M5 aux: a broken link must retire an endpoint to become a block ----
-    C, W, H = _mini_xy(3, 2, pad=30, gap=52)
+    # ② link fault must retire an endpoint
+    C, W, H = _mini_xy(3, 2, pad=34, gap=56, bottom_extra=14, side_extra=36)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
              f'viewBox="0 0 {W} {H}">']
     for r in range(2):
@@ -616,11 +627,11 @@ def scheme_diagrams() -> dict[str, str]:
         parts.append(_edge(C[(c, 0)], C[(c, 1)], "#cfd6da", 1.4))
     a, b = C[(1, 0)], C[(2, 0)]
     parts.append(_edge(a, b, "#c0392b", 3, "5,3"))
-    parts.append(f'<text x="{(a[0] + b[0]) / 2}" y="{a[1] - 8}" '
+    parts.append(f'<text x="{(a[0] + b[0]) / 2}" y="{a[1] - 10}" '
                  f'text-anchor="middle" font-size="13" fill="#c0392b" '
-                 f'font-weight="700">✕</text>')
-    parts.append(f'<rect x="{a[0] - 17}" y="{a[1] - 17}" width="34" '
-                 f'height="34" fill="#fdecea" stroke="#e67e22" '
+                 f'font-weight="700">✕ 断链</text>')
+    parts.append(f'<rect x="{a[0] - 18}" y="{a[1] - 18}" width="36" '
+                 f'height="36" fill="#fdecea" stroke="#e67e22" '
                  f'stroke-width="1.4" stroke-dasharray="4,3" rx="3"/>')
     for r in range(2):
         for c in range(3):
@@ -629,9 +640,89 @@ def scheme_diagrams() -> dict[str, str]:
                                    label="退休"))
             else:
                 parts.append(_node(*C[(c, r)]))
-    parts.append(_caption(W, H, "块模型没有「断链」概念 → 必须退休一个端点"))
+    parts.append(_caption(W, H, "② 块模型无「断链」→ 必须退休一端成 1×1 块"))
     parts.append("</svg>")
     out["fring_block"] = "".join(parts)
+
+    # ③ VC = phase × direction
+    C, W, H = _mini_xy(2, 2, pad=48, gap=90, bottom_extra=14, side_extra=30)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">']
+    cells = [
+        ((0, 1), "VC0", "X·东", "#2980b9"),
+        ((1, 1), "VC1", "X·西", "#3498db"),
+        ((0, 0), "VC2", "Y·北", "#8e44ad"),
+        ((1, 0), "VC3", "Y·南", "#9b59b6"),
+    ]
+    for (c, r), vc, lab, col in cells:
+        x, y = C[(c, r)]
+        parts.append(
+            f'<rect x="{x - 36}" y="{y - 28}" width="72" height="56" '
+            f'rx="6" fill="{col}" opacity="0.15" stroke="{col}" '
+            f'stroke-width="1.6"/>')
+        parts.append(
+            f'<text x="{x}" y="{y - 4}" text-anchor="middle" font-size="14" '
+            f'font-weight="700" fill="{col}">{vc}</text>')
+        parts.append(
+            f'<text x="{x}" y="{y + 14}" text-anchor="middle" font-size="11" '
+            f'fill="#444">{lab}</text>')
+    # arrow X→Y
+    parts.append(
+        f'<text x="{W / 2}" y="{C[(0, 1)][1] + 40}" text-anchor="middle" '
+        f'font-size="11" fill="#555">报文只从 X 相 → Y 相，不回头</text>')
+    parts.append(_caption(W, H, "③ 4 VC = 相位 × 方向；整路径离线定好 → 保序"))
+    parts.append("</svg>")
+    out["fring_vc"] = "".join(parts)
+
+    # ④ why return to original row (X-phase monotonicity)
+    C, W, H = _mini_xy(4, 3, pad=32, gap=46, bottom_extra=16, side_extra=36)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a5ok", "#27ae60"),
+             _defs_arrow("a5bad", "#c0392b")]
+    blk = {(1, 1), (2, 1)}
+    for (c, r) in blk:
+        parts.append(
+            f'<rect x="{C[(c, r)][0] - 18}" y="{C[(c, r)][1] - 18}" '
+            f'width="36" height="36" fill="#fdecea" stroke="#c0392b" '
+            f'stroke-width="1" stroke-dasharray="3,2" rx="2"/>')
+    for r in range(3):
+        for c in range(3):
+            if (c, r) in blk or (c + 1, r) in blk:
+                continue
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.3))
+        for c in range(4):
+            if r < 2 and (c, r) not in blk and (c, r + 1) not in blk:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.3))
+    # good: up, across, down back to row
+    for a, b in [((0, 1), (0, 2)), ((0, 2), (1, 2)), ((1, 2), (2, 2)),
+                 ((2, 2), (3, 2)), ((3, 2), (3, 1))]:
+        parts.append(_edge(C[a], C[b], "#27ae60", 3.0, marker="a5ok"))
+    # bad ghost: stay on ring row without returning (west hop would break E-mono)
+    parts.append(_edge(C[(3, 2)], C[(2, 2)], "#c0392b", 2.2, "4,3",
+                       marker="a5bad"))
+    parts.append(
+        f'<text x="{C[(2, 2)][0]}" y="{C[(2, 2)][1] - 16}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">'
+        f'西向 ← 破东向单调</text>')
+    for r in range(3):
+        for c in range(4):
+            if (c, r) in blk:
+                parts.append(_node(*C[(c, r)], fill="#c0392b", r=7, label="块"))
+            elif (c, r) == (0, 1):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="S"))
+            elif (c, r) == (3, 1):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="续"))
+            else:
+                parts.append(_node(*C[(c, r)]))
+    _m5_legend(parts,
+               ("绿 = 合法绕行（竖/东）", "#27ae60"),
+               ("红虚 = 禁止的西向回跳", "#c0392b"))
+    parts.append(_caption(W, H, "④ 回原行是为保 X 相单向；换 4 VC 可证无死锁"))
+    parts.append("</svg>")
+    out["fring_mono"] = "".join(parts)
+
+    out["fring_aux"] = (out["fring_block"] + out["fring_vc"]
+                        + out["fring_mono"])
 
     # ---- M6 LASH: shortest paths painted into 2 layers ----
     C, W, H = _mini_xy(3, 3, pad=30, gap=40)
@@ -669,38 +760,50 @@ def scheme_diagrams() -> dict[str, str]:
     parts.append("</svg>")
     out["lash"] = "".join(parts)
 
-    # ---- M7 Stripe dateline ----
-    C, W, H = _mini_xy(4, 2, pad=28, gap=44)
+    # ---- M7 Stripe dateline panel set ---------------------------------------
+    def _m7_bands(C, parts, cols, rows, dlines, top_pad=22):
+        fills = ["#d6eaf8", "#d5f5e3", "#fdebd0", "#f5eef8", "#eaf2f8"]
+        y0 = C[(0, rows - 1)][1] - top_pad
+        y1 = C[(0, 0)][1] + 18
+        for c in range(cols):
+            x0 = C[(c, 0)][0] - 20
+            parts.append(
+                f'<rect x="{x0}" y="{y0}" width="40" height="{y1 - y0}" '
+                f'fill="{fills[c % len(fills)]}" opacity="0.75"/>')
+        for d in dlines:
+            # dateline at column boundary d (between d-1 and d)
+            x = (C[(d - 1, 0)][0] + C[(d, 0)][0]) / 2
+            parts.append(
+                f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y1}" '
+                f'stroke="#7f8c8d" stroke-width="1.8" '
+                f'stroke-dasharray="3,2"/>')
+            parts.append(
+                f'<text x="{x}" y="{y0 - 4}" text-anchor="middle" '
+                f'font-size="9" fill="#7f8c8d">DL</text>')
+
+    # ① horizontal crosses bump VC
+    C, W, H = _mini_xy(4, 2, pad=34, gap=50, bottom_extra=16, side_extra=40)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
              f'viewBox="0 0 {W} {H}">', _defs_arrow("a7a", "#2980b9"),
              _defs_arrow("a7b", "#e67e22"), _defs_arrow("a7c", "#8e44ad")]
-    # band backgrounds
-    for c in range(4):
-        x0 = C[(c, 0)][0] - 18
-        fill = ["#d6eaf8", "#d5f5e3", "#fdebd0", "#f5eef8"][c]
-        parts.append(
-            f'<rect x="{x0}" y="{C[(0,1)][1]-20}" width="36" '
-            f'height="{C[(0,0)][1]-C[(0,1)][1]+40}" fill="{fill}" '
-            f'opacity="0.75"/>')
-    # datelines between cols
-    for c in (1, 2, 3):
-        x = (C[(c - 1, 0)][0] + C[(c, 0)][0]) / 2
-        parts.append(
-            f'<line x1="{x}" y1="{C[(0,1)][1]-22}" x2="{x}" '
-            f'y2="{C[(0,0)][1]+18}" stroke="#7f8c8d" stroke-width="1.5" '
-            f'stroke-dasharray="3,2"/>')
+    _m7_bands(C, parts, 4, 2, (1, 2, 3))
     for r in range(2):
         for c in range(3):
             parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.4))
     for c in range(4):
         parts.append(_edge(C[(c, 0)], C[(c, 1)], "#bdc3c7", 1.4))
-    # path S(0,0)->(1,0)->(2,0)->(3,0)->(3,1) with VC 0,1,2
-    segs = [((0, 0), (1, 0), "#2980b9", "a7a"),
-            ((1, 0), (2, 0), "#e67e22", "a7b"),
-            ((2, 0), (3, 0), "#8e44ad", "a7c"),
-            ((3, 0), (3, 1), "#8e44ad", "a7c")]
-    for a, b, col, mk in segs:
+    segs = [((0, 0), (1, 0), "#2980b9", "a7a", "VC0"),
+            ((1, 0), (2, 0), "#e67e22", "a7b", "VC1"),
+            ((2, 0), (3, 0), "#8e44ad", "a7c", "VC2"),
+            ((3, 0), (3, 1), "#8e44ad", "a7c", "")]
+    for a, b, col, mk, tag in segs:
         parts.append(_edge(C[a], C[b], col, 3.2, marker=mk))
+        if tag:
+            mx = (C[a][0] + C[b][0]) / 2
+            my = (C[a][1] + C[b][1]) / 2 - 10
+            parts.append(
+                f'<text x="{mx}" y="{my}" text-anchor="middle" '
+                f'font-size="10" fill="{col}" font-weight="700">{tag}</text>')
     for r in range(2):
         for c in range(4):
             lab = "S" if (c, r) == (0, 0) else ("D" if (c, r) == (3, 1) else "")
@@ -708,15 +811,115 @@ def scheme_diagrams() -> dict[str, str]:
                                fill="#27ae60" if lab else "#2980b9",
                                label=lab))
     parts.append(
-        f'<text x="8" y="14" font-size="10" fill="#2980b9">VC0</text>'
-        f'<text x="48" y="14" font-size="10" fill="#e67e22">VC1</text>'
-        f'<text x="88" y="14" font-size="10" fill="#8e44ad">VC2…</text>')
-    parts.append(_caption(W, H, "竖条带；每跨一条 dateline，VC +1"))
+        f'<text x="10" y="14" font-size="10" fill="#555">'
+        f'竖虚线 = dateline</text>')
+    parts.append(_caption(W, H, "① 每水平跨一条 DL，VC+1；竖走不升层"))
     parts.append("</svg>")
     out["stripe_vc"] = "".join(parts)
 
-    # ---- M10 Virtual mesh: logical XY with a hole; missing hops physically ----
-    C, W, H = _mini_xy(4, 3, pad=30, gap=42)
+    # ② vertical hops keep same VC
+    C, W, H = _mini_xy(3, 3, pad=34, gap=48, bottom_extra=16, side_extra=40)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a7v0", "#2980b9"),
+             _defs_arrow("a7v1", "#e67e22")]
+    _m7_bands(C, parts, 3, 3, (1, 2), top_pad=26)
+    for r in range(3):
+        for c in range(2):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.3))
+        for c in range(3):
+            if r < 2:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#bdc3c7", 1.3))
+    # path: (0,0)->(0,1)->(0,2) stay VC0; then (0,2)->(1,2) → VC1; (1,2)->(1,0) stay VC1
+    for a, b in [((0, 0), (0, 1)), ((0, 1), (0, 2))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3.2, marker="a7v0"))
+    parts.append(_edge(C[(0, 2)], C[(1, 2)], "#e67e22", 3.2, marker="a7v1"))
+    for a, b in [((1, 2), (1, 1)), ((1, 1), (1, 0))]:
+        parts.append(_edge(C[a], C[b], "#e67e22", 3.2, marker="a7v1"))
+    parts.append(
+        f'<text x="{C[(0, 1)][0] - 22}" y="{C[(0, 1)][1] + 4}" '
+        f'font-size="10" fill="#2980b9">VC0</text>')
+    parts.append(
+        f'<text x="{C[(1, 1)][0] + 14}" y="{C[(1, 1)][1] + 4}" '
+        f'font-size="10" fill="#e67e22">VC1</text>')
+    for r in range(3):
+        for c in range(3):
+            lab = "S" if (c, r) == (0, 0) else ("D" if (c, r) == (1, 0) else "")
+            parts.append(_node(*C[(c, r)],
+                               fill="#27ae60" if lab else "#2980b9",
+                               label=lab))
+    parts.append(_caption(W, H, "② 同列竖走：VC 不变；只有跨 DL 才 +1"))
+    parts.append("</svg>")
+    out["stripe_vert"] = "".join(parts)
+
+    # ③ densify datelines near fault column
+    C, W, H = _mini_xy(5, 2, pad=30, gap=44, bottom_extra=16, side_extra=36)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">']
+    # sparse DLs at 2; fault at col 3 → also DL at 3 and 4
+    _m7_bands(C, parts, 5, 2, (2, 3, 4), top_pad=24)
+    for r in range(2):
+        for c in range(4):
+            if c == 2 and r == 0:
+                parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#c0392b", 2.5,
+                                   "4,3"))
+            else:
+                parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.3))
+    for c in range(5):
+        parts.append(_edge(C[(c, 0)], C[(c, 1)], "#bdc3c7", 1.3))
+    # mark fault node-ish: broken edge between (2,0)-(3,0)
+    parts.append(
+        f'<text x="{(C[(2, 0)][0] + C[(3, 0)][0]) / 2}" y="{C[(2, 0)][1] - 12}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">故障列附近</text>')
+    for r in range(2):
+        for c in range(5):
+            parts.append(_node(*C[(c, r)],
+                               fill="#e74c3c" if (c, r) == (2, 0) else "#2980b9",
+                               label="坏" if (c, r) == (2, 0) else ""))
+    parts.append(
+        f'<text x="10" y="14" font-size="10" fill="#555">'
+        f'默认每 2 列一条；故障列再加密</text>')
+    parts.append(_caption(W, H, "③ 故障列邻边加 DL，避免绕障在稀疏带内成环"))
+    parts.append("</svg>")
+    out["stripe_dense"] = "".join(parts)
+
+    # ④ monotonic VC kills wrap-around dependency
+    C, W, H = _mini_xy(2, 2, pad=50, gap=88, bottom_extra=14, side_extra=30)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a7c0", "#2980b9"),
+             _defs_arrow("a7c1", "#c0392b")]
+    # ring of deps: three edges on VC0, return would need VC0 again — blocked
+    ring = [((0, 0), (1, 0), "#2980b9", "a7c0", "VC0"),
+            ((1, 0), (1, 1), "#2980b9", "a7c0", "VC0"),
+            ((1, 1), (0, 1), "#c0392b", "a7c1", "VC1"),
+            ((0, 1), (0, 0), "#c0392b", "a7c1", "VC1")]
+    for a, b, col, mk, tag in ring:
+        parts.append(_edge(C[a], C[b], col, 3.2, marker=mk))
+        mx = (C[a][0] + C[b][0]) / 2
+        my = (C[a][1] + C[b][1]) / 2
+        parts.append(
+            f'<text x="{mx}" y="{my - 8}" text-anchor="middle" '
+            f'font-size="10" fill="{col}">{tag}</text>')
+    parts.append(
+        f'<text x="{W / 2}" y="{H / 2 + 6}" text-anchor="middle" '
+        f'font-size="11" fill="#c0392b">无法回到 VC0</text>')
+    for pt in C.values():
+        parts.append(_node(*pt, fill="#2980b9", r=8))
+    parts.append(_caption(W, H, "④ VC 只增不减 → 通道依赖回不到低层 → 无环"))
+    parts.append("</svg>")
+    out["stripe_cdg"] = "".join(parts)
+
+    out["stripe_aux"] = (out["stripe_vert"] + out["stripe_dense"]
+                         + out["stripe_cdg"])
+
+    # ---- M10 Virtual mesh panel set -----------------------------------------
+    def _m10_legend(parts, *lines):
+        for i, (txt, col) in enumerate(lines):
+            parts.append(
+                f'<text x="10" y="{14 + i * 12}" font-size="10" '
+                f'fill="{col}">{txt}</text>')
+
+    # ① physical expand of logical XY
+    C, W, H = _mini_xy(4, 3, pad=34, gap=48, bottom_extra=16, side_extra=48)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
              f'viewBox="0 0 {W} {H}">', _defs_arrow("a10x", "#2980b9"),
              _defs_arrow("a10y", "#8e44ad"), _defs_arrow("a10d", "#e67e22")]
@@ -729,14 +932,11 @@ def scheme_diagrams() -> dict[str, str]:
         for c in range(4):
             if r < 2 and (c, r) not in hole and (c, r + 1) not in hole:
                 parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.4))
-    # S(0,1)→D(3,0): logical XY through hole (2,1); physical expands the gap
-    # (1,1)⇢(3,1) as (1,1)→(1,2)→(2,2)→(3,2)→(3,1), then Y down to (3,0).
     parts.append(_edge(C[(1, 1)], C[(2, 1)], "#c0392b", 2, "4,3"))
     parts.append(_edge(C[(2, 1)], C[(3, 1)], "#c0392b", 2, "4,3"))
     parts.append(
-        f'<text x="{(C[(1, 1)][0] + C[(3, 1)][0]) / 2}" y="{C[(2, 1)][1] - 10}" '
+        f'<text x="{(C[(1, 1)][0] + C[(3, 1)][0]) / 2}" y="{C[(2, 1)][1] - 12}" '
         f'text-anchor="middle" font-size="10" fill="#c0392b">逻辑边缺失</text>')
-    # X 相直到首次到达目的列；途中 (1,1)⇢(3,1) 的逻辑跨越用橙色散开
     for a, b in [((0, 1), (1, 1))]:
         parts.append(_edge(C[a], C[b], "#2980b9", 3.2, marker="a10x"))
     for a, b in [((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (3, 2))]:
@@ -753,13 +953,129 @@ def scheme_diagrams() -> dict[str, str]:
                 parts.append(_node(*C[(c, r)], fill="#27ae60", label="D"))
             else:
                 parts.append(_node(*C[(c, r)]))
-    parts.append(
-        f'<text x="8" y="14" font-size="10" fill="#2980b9">蓝=逻辑 X</text>'
-        f'<text x="78" y="14" font-size="10" fill="#e67e22">橙=物理绕路</text>'
-        f'<text x="168" y="14" font-size="10" fill="#8e44ad">紫=逻辑 Y</text>')
-    parts.append(_caption(W, H, "逻辑仍是 XY；缺边用固定物理最短路替换"))
+    _m10_legend(parts,
+                ("蓝 = 逻辑 X（VC0）", "#2980b9"),
+                ("橙 = 缺边的物理展开（仍算 VC0）", "#e67e22"),
+                ("紫 = 逻辑 Y（VC1）", "#8e44ad"))
+    parts.append(_caption(W, H, "① 逻辑仍是 XY；缺边用固定物理最短路替换"))
     parts.append("</svg>")
     out["virtual_mesh"] = "".join(parts)
+
+    # ② what software sees: pristine logical XY
+    C, W, H = _mini_xy(4, 3, pad=34, gap=48, bottom_extra=16, side_extra=40)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a10L", "#27ae60")]
+    for r in range(3):
+        for c in range(3):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#d5f5e3", 1.6))
+        for c in range(4):
+            if r < 2:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#d5f5e3", 1.6))
+    # ghost hole
+    parts.append(
+        f'<circle cx="{C[(2, 1)][0]}" cy="{C[(2, 1)][1]}" r="10" '
+        f'fill="none" stroke="#c0392b" stroke-width="1.4" '
+        f'stroke-dasharray="3,2"/>')
+    parts.append(
+        f'<text x="{C[(2, 1)][0]}" y="{C[(2, 1)][1] - 16}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">'
+        f'物理有洞</text>')
+    for a, b in [((0, 1), (1, 1)), ((1, 1), (2, 1)), ((2, 1), (3, 1)),
+                 ((3, 1), (3, 0))]:
+        parts.append(_edge(C[a], C[b], "#27ae60", 3.2, marker="a10L"))
+    for r in range(3):
+        for c in range(4):
+            lab = "S" if (c, r) == (0, 1) else ("D" if (c, r) == (3, 0) else "")
+            parts.append(_node(*C[(c, r)],
+                               fill="#27ae60" if lab else "#2980b9",
+                               label=lab))
+    parts.append(
+        f'<text x="10" y="14" font-size="10" fill="#27ae60">'
+        f'上层看见的仍是完整 XY</text>')
+    parts.append(_caption(W, H, "② 软件映射 / 调度不改；洞由 NoC 内部展开消化"))
+    parts.append("</svg>")
+    out["vmesh_logical"] = "".join(parts)
+
+    # ③ expand table: one logical hop → multi-hop physical
+    C, W, H = _mini_xy(3, 3, pad=36, gap=52, bottom_extra=16, side_extra=40)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a10e0", "#95a5a6"),
+             _defs_arrow("a10e1", "#e67e22")]
+    for r in range(3):
+        for c in range(2):
+            if not ((c, r) == (0, 1) and (c + 1, r) == (1, 1)):
+                parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.3))
+        for c in range(3):
+            if r < 2:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.3))
+    # missing logical edge A→B
+    parts.append(_edge(C[(0, 1)], C[(1, 1)], "#c0392b", 2.5, "4,3"))
+    parts.append(
+        f'<text x="{(C[(0, 1)][0] + C[(1, 1)][0]) / 2}" y="{C[(0, 1)][1] - 14}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">'
+        f'逻辑 hop A→B</text>')
+    # physical expand
+    for a, b in [((0, 1), (0, 2)), ((0, 2), (1, 2)), ((1, 2), (1, 1))]:
+        parts.append(_edge(C[a], C[b], "#e67e22", 3.2, marker="a10e1"))
+    parts.append(
+        f'<text x="{C[(0, 2)][0] + 24}" y="{C[(0, 2)][1] - 10}" '
+        f'font-size="10" fill="#e67e22">expand[A→B]</text>')
+    for r in range(3):
+        for c in range(3):
+            if (c, r) == (0, 1):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="A"))
+            elif (c, r) == (1, 1):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="B"))
+            else:
+                parts.append(_node(*C[(c, r)]))
+    parts.append(_caption(W, H, "③ 每条逻辑邻边预计算一条固定物理绕路"))
+    parts.append("</svg>")
+    out["vmesh_expand"] = "".join(parts)
+
+    # ④ VC by logical phase: vertical detour still VC0
+    C, W, H = _mini_xy(3, 3, pad=36, gap=52, bottom_extra=16, side_extra=40)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a10p0", "#2980b9"),
+             _defs_arrow("a10p1", "#8e44ad")]
+    for r in range(3):
+        for c in range(2):
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.3))
+        for c in range(3):
+            if r < 2:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.3))
+    # path with vertical hops in X phase then Y
+    for a, b in [((0, 0), (0, 1)), ((0, 1), (0, 2)), ((0, 2), (1, 2)),
+                 ((1, 2), (2, 2))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3.2, marker="a10p0"))
+    for a, b in [((2, 2), (2, 1)), ((2, 1), (2, 0))]:
+        parts.append(_edge(C[a], C[b], "#8e44ad", 3.2, marker="a10p1"))
+    # column marker
+    x = C[(2, 0)][0]
+    parts.append(
+        f'<line x1="{x}" y1="{C[(2, 2)][1] - 20}" x2="{x}" '
+        f'y2="{C[(2, 0)][1] + 20}" stroke="#8e44ad" stroke-width="1.2" '
+        f'stroke-dasharray="2,2"/>')
+    parts.append(
+        f'<text x="{x + 8}" y="{C[(2, 2)][1] - 8}" font-size="10" '
+        f'fill="#8e44ad">目的列</text>')
+    parts.append(
+        f'<text x="{C[(0, 1)][0] - 8}" y="{C[(0, 1)][1]}" '
+        f'text-anchor="end" font-size="10" fill="#2980b9">VC0</text>')
+    parts.append(
+        f'<text x="{C[(2, 1)][0] + 12}" y="{C[(2, 1)][1]}" '
+        f'font-size="10" fill="#8e44ad">VC1</text>')
+    for r in range(3):
+        for c in range(3):
+            lab = "S" if (c, r) == (0, 0) else ("D" if (c, r) == (2, 0) else "")
+            parts.append(_node(*C[(c, r)],
+                               fill="#27ae60" if lab else "#2980b9",
+                               label=lab))
+    parts.append(_caption(W, H, "④ 首次到目的列前都是 VC0；竖向绕路也算 X 相"))
+    parts.append("</svg>")
+    out["vmesh_vc"] = "".join(parts)
+
+    out["vmesh_aux"] = (out["vmesh_logical"] + out["vmesh_expand"]
+                        + out["vmesh_vc"])
 
     return out
 
@@ -1435,7 +1751,9 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
 <p><b>端到端角色：</b>m₀=13 时落在严格 Pareto 前沿，但不在凸包上
 （M10→M5 边际回报低于 M5→M7）——理性选择会跳过它。
 若硬件已按 XY+绕障做死、且愿意付 4 VC，它仍是「保 XY 语义」的正统答案。</p>
-''', extra_key="fring_block")}
+<p class="note">右图：① 环绕行全路径 · ② 断链须退休端点 · ③ 4 VC 相位×方向 ·
+④ 回原行以保 X 相单向。</p>
+''', extra_key="fring_aux")}
 
 {scheme_block("M6 — LASH（<code>lash</code>）", "lash", '''
 <p><b>思想：</b>Skeie 等 Layered Shortest Path。每对取一条<strong>最短路</strong>（可绕障），
@@ -1464,15 +1782,61 @@ hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进
 <ol>
 <li><b>选路</b>：对每个 (s,d)，先试 <code>xy_path</code>；若因故障不通，退回
 <code>shortest_path</code>。路径固定后不再改 → 保序。</li>
-<li><b>布 dateline</b>（优先稀疏）：列边界 <code>x ∈ {{2,4,6}}</code>（每 2 列一条），
-再并上所有故障列及其右邻列边界（故障附近加密，避免绕障路径在稀疏带内绕出环）。</li>
+<li><b>确定 dateline</b>（见下「Dateline 如何确定」）→ 得到竖向边界集合。</li>
 <li><b>赋 VC</b>：报文走第 i 跳时，
 <code>VC(i) =</code> 此前（含本跳）水平跨越 dateline 的次数。
 竖走不跨带，VC 不变；每水平穿一条虚线，VC+1。</li>
-<li><b>校验 / 加密</b>：用稀疏 dateline 建 <code>vc_of</code> 后做 CDG 校验；
-若仍有环，退化为「每个列边界都是 dateline」（<code>1..MX-1</code>），再校验。
-<code>num_vc = 1 + max 跨越数</code>。</li>
+<li><b>定尺寸</b>：<code>num_vc = 1 + max 跨越数</code>（按本场景最坏路径）。</li>
 </ol>
+
+<div class="faq">
+<p><b class="q">Dateline 如何确定？</b></p>
+<p>Dateline 是画在<strong>列与列之间</strong>的竖线（实现用列坐标
+<code>d</code>：水平 hop 从列 <code>a</code> 到 <code>b</code> 且区间覆盖
+<code>d</code> 即算跨越）。集合只由<strong>列几何 + 故障列 + CDG 是否过关</strong>
+决定，与流量、报文长度、makespan 无关。</p>
+<ol>
+<li><b>基础稀疏带（<code>width=2</code>）</b>：
+<code>range(width, MX, width)</code> → 8×6 上即
+<code>{2, 4, 6}</code>。条带越窄，DL 越密，东西向路径跨越次数越多，VC 越高。</li>
+<li><b>故障列加密</b>：从 dead 节点所在列、断链两端点列收集
+<code>fcols</code>；对每个故障列 <code>x</code>，再并入边界
+<code>x</code> 与 <code>x+1</code>（右邻）。绕障多在故障列附近拐弯，
+加密后跨带更勤、VC 升得更快，降低稀疏带里绕出通道环的概率（图③）。</li>
+<li><b>CDG 密封顶</b>：用「基础 + 故障加密」建 <code>vc_of</code> 后做 CDG；
+<strong>无环则采用</strong>；仍有环则退化为每个列边界都是 dateline
+（<code>1..MX-1</code>），再校验。本实现仍做硬校验，失败则方案失败。</li>
+</ol>
+<p>间接关系：路径形状（XY / 绕障最短路）× DL 集合 → 跨越次数 →
+<code>num_vc</code>。东西跨度大、弯得多的 (s,d) 通常贡献最大跨越数。</p>
+</div>
+
+<div class="faq">
+<p><b class="q">如何避开故障？</b></p>
+<p><b>1. 故障先从路由图里删掉。</b>
+<code>expand_pg</code> 生成的 <code>route_adj</code> 已不含 dead 节点 / 断链
+（transit 语义下故障节点可不参与 compute，但 router 仍可转发）。
+M7 <strong>不造矩形块、不退休链路端点</strong>（对比 M5），活着的点边都还能用。</p>
+<p><b>2. 选路时「能 XY 就 XY，撞障就绕」。 </b>
+对每个 (s,d)：</p>
+<ul>
+<li>先在存活邻接表上跑 <code>xy_path</code>——若 XY 折线上没有故障，路径与健康网格相同；</li>
+<li>XY 某跳不存在（节点洞或断链）→ 该函数返回 <code>None</code>，改走
+<code>shortest_path</code>（BFS），在活边上绕过故障到达目的地。</li>
+</ul>
+<p>因此避障完全是<strong>图搜索绕行</strong>：没有 f-ring 的「撞块→沿环→回原行」，
+路径可以是任意形状的最短路。某对在活图上仍不可达 → 整方案失败，
+外层 <code>solve_scheme</code> 再靠牺牲孤立点 / good 节点恢复。</p>
+<p><b>3. Dateline 加密是为无死锁，不是为避障。</b>
+绕障后路径更弯，可能在稀疏条带里绕出通道环——故故障列附近多插 DL，
+并在必要时加密封顶（见上）。换句话说——
+<strong>避障靠最短路，破环靠升 VC</strong>；两者解耦。</p>
+<p><b>4. 与 M5 / M10 对比。</b>
+链路故障时 M5 必须退休端点做成块；M7 只要图仍连通就可零牺牲绕过去。
+M10 用「逻辑 XY + 固定展开表」绕障；M7 直接在物理图上求最短路，
+通常更短，代价是 VC 数随跨带次数涨到 5–6。</p>
+</div>
+
 <p><b>无死锁：</b>沿任意路径 VC 只增不减。通道依赖
 <code>(e, vc) → (e′, vc′)</code> 满足 <code>vc′ ≥ vc</code>；
 同层内若路径本身无环依赖，跨层又只能「升」——整体 CDG 无环。
@@ -1488,7 +1852,9 @@ hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进
 <p><b>端到端角色：</b>Pareto 凸包右端点——<b>两个载荷下都最快</b>
 （最差 471 / 4913 ns），面积也最贵。适合「router 面积不敏感、延迟是硬指标」。
 从 M10 再走到 M7：+111% 面积只换约 13% 加速，边际回报比 M3→M10 低一个数量级。</p>
-''')}
+<p class="note">右图：① 跨 DL 升 VC · ② 竖走不升层 · ③ 故障列加密 DL ·
+④ VC 单调 ⇒ CDG 无环。</p>
+''', extra_key="stripe_aux")}
 
 {scheme_block("M9 — 双向 Up*/Down*（<code>dual_updown</code>）", "updown", '''
 <p><b>思想：</b>VC0 跑经典 Up*/Down*（先上后下），VC1 跑对称的 Down*/Up*（先下后上）；
@@ -1533,7 +1899,9 @@ VC 只要 2 条（vs 4）。大洞时绕路可能比 f-ring 更「自由」，�
 相对 M3 只多 39% router 面积，换约 20% 端到端加速（回报 381 / 4205 ns/area）；
 再往 M7 多花 111% 面积只多买 ~13%。两个载荷尺寸结论一致。
 附带好处：软件仍看规则 8×6，映射 / 调度不用为 PG 改写。</p>
-''')}
+<p class="note">右图：① 逻辑 XY + 物理展开 · ② 软件所见完整网格 ·
+③ 单条逻辑边的 expand 表 · ④ VC 按逻辑相位（竖向绕路仍属 VC0）。</p>
+''', extra_key="vmesh_aux")}
 
 <h3>2.3 横向对比</h3>
 <table>

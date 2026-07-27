@@ -22,7 +22,7 @@ M1 XY · M2 Rect-XY · M3 Up\*/Down\*（±LB）· M4 Segment（±LB）
 | M5 | 真 f-ring | 相位×方向（E/W/N/S） | 4 | 矩形块 + XY 环绕；链路须退休端点 |
 | M6 | LASH | 每对一层，层内 CDG 无环 | 1–2 | 最短路；VC 性价比高 |
 | M6b | LASH-TOR | 允许中途升层 | 1–2 | 层数已很低时收益有限 |
-| M7 | 条带 dateline | 跨竖带 VC+1 | 5–6 | 极简；面积换极限性能 |
+| M7 | 条带 dateline | 跨竖带 VC+1 | 5–6 | 避障=存活图上 XY/最短路；破环=升 VC；面积换极限性能 |
 | M9 | 双向 Up\*/Down\* | VC0=UD，VC1=DU，按对选 | 2 | 易实现；路径短于单层 UD |
 | M10 | 虚拟规则网格 | 逻辑 XY；X 相 VC0 / Y 相 VC1 | 2 | 上层仍见规则 mesh；缺边固定绕路 |
 
