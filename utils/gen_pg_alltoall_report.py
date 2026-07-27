@@ -13,6 +13,8 @@ import pg_routing as R
 
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
+E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
+E2E_PNG = "pg_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
 SCHEME_LABELS = {
@@ -28,6 +30,21 @@ SCHEME_LABELS = {
     "stripe_vc": "M7 Stripe dateline",
     "dual_updown": "M9 Dual Up*/Down*",
     "virtual_mesh": "M10 Virtual mesh",
+}
+
+E2E_SHORT = {
+    "xy": "M1 XY",
+    "rect_xy": "M2 Rect-XY",
+    "updown": "M3 Up*/Down*",
+    "updown_lb": "M3+LB",
+    "segment": "M4 Segment",
+    "segment_lb": "M4+LB",
+    "fault_ring_vc": "M5 f-ring",
+    "lash": "M6 LASH",
+    "lash_tor": "M6b LASH-TOR",
+    "stripe_vc": "M7 Stripe",
+    "dual_updown": "M9 Dual UD",
+    "virtual_mesh": "M10 Virtual",
 }
 
 
@@ -526,6 +543,52 @@ def scheme_diagrams() -> dict[str, str]:
     parts.append("</svg>")
     out["stripe_vc"] = "".join(parts)
 
+    # ---- M10 Virtual mesh: logical XY with a hole; missing hops physically ----
+    C, W, H = _mini_xy(4, 3, pad=30, gap=42)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a10x", "#2980b9"),
+             _defs_arrow("a10y", "#8e44ad"), _defs_arrow("a10d", "#e67e22")]
+    hole = {(2, 1)}
+    for r in range(3):
+        for c in range(3):
+            if (c, r) in hole or (c + 1, r) in hole:
+                continue
+            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#cfd6da", 1.4))
+        for c in range(4):
+            if r < 2 and (c, r) not in hole and (c, r + 1) not in hole:
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#cfd6da", 1.4))
+    # S(0,1)→D(3,0): logical XY through hole (2,1); physical expands the gap
+    # (1,1)⇢(3,1) as (1,1)→(1,2)→(2,2)→(3,2)→(3,1), then Y down to (3,0).
+    parts.append(_edge(C[(1, 1)], C[(2, 1)], "#c0392b", 2, "4,3"))
+    parts.append(_edge(C[(2, 1)], C[(3, 1)], "#c0392b", 2, "4,3"))
+    parts.append(
+        f'<text x="{(C[(1, 1)][0] + C[(3, 1)][0]) / 2}" y="{C[(2, 1)][1] - 10}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">逻辑边缺失</text>')
+    # X 相直到首次到达目的列；途中 (1,1)⇢(3,1) 的逻辑跨越用橙色散开
+    for a, b in [((0, 1), (1, 1))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3.2, marker="a10x"))
+    for a, b in [((1, 1), (1, 2)), ((1, 2), (2, 2)), ((2, 2), (3, 2))]:
+        parts.append(_edge(C[a], C[b], "#e67e22", 3.2, marker="a10d"))
+    for a, b in [((3, 2), (3, 1)), ((3, 1), (3, 0))]:
+        parts.append(_edge(C[a], C[b], "#8e44ad", 3.2, marker="a10y"))
+    for r in range(3):
+        for c in range(4):
+            if (c, r) in hole:
+                parts.append(_node(*C[(c, r)], fill="#c0392b", r=8, label="洞"))
+            elif (c, r) == (0, 1):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="S"))
+            elif (c, r) == (3, 0):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="D"))
+            else:
+                parts.append(_node(*C[(c, r)]))
+    parts.append(
+        f'<text x="8" y="14" font-size="10" fill="#2980b9">蓝=逻辑 X</text>'
+        f'<text x="78" y="14" font-size="10" fill="#e67e22">橙=物理绕路</text>'
+        f'<text x="168" y="14" font-size="10" fill="#8e44ad">紫=逻辑 Y</text>')
+    parts.append(_caption(W, H, "逻辑仍是 XY；缺边用固定物理最短路替换"))
+    parts.append("</svg>")
+    out["virtual_mesh"] = "".join(parts)
+
     return out
 
 
@@ -586,11 +649,183 @@ def mesh_svg(scenario: dict, sacrificed: list[int], loads: dict | None = None,
     return "".join(parts)
 
 
+def _e2e_pareto_front(pts: list[dict], xk: str, yk: str) -> list[dict]:
+    out = [p for p in pts
+           if not any(o is not p and o[xk] <= p[xk] and o[yk] <= p[yk]
+                      and (o[xk] < p[xk] or o[yk] < p[yk]) for o in pts)]
+    return sorted(out, key=lambda p: p[xk])
+
+
+def e2e_section_html() -> str:
+    """Build §6 end-to-end time × area Pareto from pg_e2e_pareto.json."""
+    if not E2E_JSON_PATH.exists():
+        return ("<h2>6. 端到端时间 × 面积 Pareto</h2>"
+                "<p class='note'>尚无 <code>results/pg_e2e_pareto.json</code>。"
+                "请先跑 <code>utils/dse_pg_e2e_pareto.py</code> 与 "
+                "<code>utils/gen_pg_e2e_pareto_plot.py</code>。</p>")
+    data = json.loads(E2E_JSON_PATH.read_text())
+    meta, summary = data["meta"], data["summary"]
+    m0s = meta["m0_list"]
+    tokens = meta["total_tokens"]
+    am = meta["area_model"]
+
+    def e2e_table(m0: int) -> str:
+        cand = sorted((s for s in summary if s["m0"] == m0),
+                      key=lambda s: s["t_e2e_ns_worst"])
+        head = ("<tr><th class='l'>方案</th><th>VC</th><th>area</th>"
+                "<th>A 中位/最差</th><th>牺牲中位</th>"
+                "<th>T<sub>e2e</sub> 中位 (ns)</th>"
+                "<th>T<sub>e2e</sub> 最差 (ns)</th>"
+                "<th>通信占比</th><th>Pareto</th></tr>")
+        body = []
+        for s in cand:
+            mark = "<b>yes</b>" if s.get("pareto_worst") else ""
+            body.append(
+                "<tr>"
+                f"<td class='l'>{esc(E2E_SHORT.get(s['scheme'], s['scheme']))}</td>"
+                f"<td>{s['num_vc']}</td>"
+                f"<td>{s['area']:.3f}</td>"
+                f"<td>{s['A_med']}/{s['A_worst']}</td>"
+                f"<td>{s['sac_med']}</td>"
+                f"<td>{s['t_e2e_ns_med']:.0f}</td>"
+                f"<td><b>{s['t_e2e_ns_worst']:.0f}</b></td>"
+                f"<td>{s['comm_frac_med']:.2f}</td>"
+                f"<td>{mark}</td>"
+                "</tr>")
+        return (f"<table><thead>{head}</thead>"
+                f"<tbody>{''.join(body)}</tbody></table>")
+
+    # Marginal returns on the worst-case convex hull (dedupe same area/time)
+    def marginal_html(m0: int) -> str:
+        raw = [s for s in summary if s["m0"] == m0 and s.get("pareto_worst")]
+        front = _e2e_pareto_front(raw, "area", "t_e2e_ns_worst")
+        # merge identical (area, worst) corners
+        merged: list[dict] = []
+        for s in front:
+            if (merged and abs(merged[-1]["area"] - s["area"]) < 1e-9
+                    and abs(merged[-1]["t"] - s["t_e2e_ns_worst"]) < 0.5):
+                merged[-1]["names"].append(
+                    E2E_SHORT.get(s["scheme"], s["scheme"]))
+            else:
+                merged.append({
+                    "area": s["area"],
+                    "t": s["t_e2e_ns_worst"],
+                    "vc": s["num_vc"],
+                    "names": [E2E_SHORT.get(s["scheme"], s["scheme"])],
+                })
+        if len(merged) < 2:
+            return "<p class='note'>前沿点数不足，无法算边际回报。</p>"
+        rows_h = ("<tr><th class='l'>台阶</th><th>Δarea</th>"
+                  f"<th>ΔT (m₀={m0})</th><th>回报 (ns/area)</th></tr>")
+        body = []
+        for i in range(1, len(merged)):
+            a, b = merged[i - 1], merged[i]
+            da = b["area"] - a["area"]
+            dt = a["t"] - b["t"]
+            body.append(
+                "<tr>"
+                f"<td class='l'>{esc(' / '.join(a['names']))} → "
+                f"{esc(' / '.join(b['names']))}</td>"
+                f"<td>+{100 * da / a['area']:.1f}% "
+                f"<span class='sub'>({a['area']:.3f}→{b['area']:.3f})</span></td>"
+                f"<td>−{100 * dt / a['t']:.1f}% "
+                f"<span class='sub'>({a['t']:.0f}→{b['t']:.0f} ns)</span></td>"
+                f"<td><b>{dt / da:.0f}</b></td>"
+                "</tr>")
+        return (f"<table><thead>{rows_h}</thead>"
+                f"<tbody>{''.join(body)}</tbody></table>")
+
+    png_note = ""
+    if not (ROOT / "results" / E2E_PNG).exists():
+        png_note = ("<p class='note bad'>缺少 "
+                    f"<code>results/{E2E_PNG}</code>，"
+                    "请跑 <code>gen_pg_e2e_pareto_plot.py</code>。</p>")
+
+    return f"""
+<h2>6. 端到端时间 × 面积 Pareto</h2>
+<p class="note">第 3–4 节按纯 makespan 排序会误导——M1 XY 的 makespan 最小，
+但中位牺牲 28/48 个节点。把通信放回真实计算任务后，牺牲的代价才显现。
+本节用 <b>端到端任务完成时间</b>（计算 + alltoall）与 <b>router 面积</b>
+构造 Pareto 前沿，评估选型。</p>
+
+<h3>6.1 模型</h3>
+<ul class="note">
+<li><b>任务</b>：MoE 专家并行 FFN 的 dispatch 半程 —
+<code>alltoall → 专家 FFN</code>，<b>串行不重叠</b>
+（完整层还有对称的 combine alltoall，会让通信项翻倍；此处略去以对齐「一次 alltoall」口径）。</li>
+<li><b>计算</b>：PE 每拍一次 <code>8×64×16</code> matmul = {meta['pe_macs_per_cycle']} MAC/cy
+@ <b>{meta['freq_ghz']} GHz</b>。FFN <code>d_model={meta['d_model']}</code>、
+<code>d_ff={meta['d_ff']}</code>、fp16 —— <code>8×64×16</code> 恰好整除两层 matmul，
+无 tile 量化浪费，<b>{meta['cycles_per_token']:.0f} 拍/token</b>。
+token = {meta['token_bytes']} B = {meta['token_bytes'] // meta['flit_bytes']} flits
+（flit = {meta['flit_bytes']} B）。</li>
+<li><b>强扩展</b>：总 token 钉在健康 48-PE 配置（每对载荷 = 标称 m₀）：
+<code>T_total = 48²·m₀·64B/128B = 1152·m₀</code> tokens。
+只剩 A 个存活 PE 时两项同时变重：
+<code>T_compute = ceil(4·T_total/A)</code>；
+<code>m_eff = ceil(m₀·(48/A)²)</code>（通信也必须重标定，否则重牺牲方案白拿 1/A² 流量减免）；
+<code>T_e2e = T_compute + T_alltoall(m_eff)</code> → ns @ {meta['freq_ghz']} GHz。</li>
+<li><b>面积（仅 router）</b>：牺牲的 PE 只计时间不计面积；48 个 router 始终物理存在，
+唯一杠杆是 VC 数。归一化到 IQ-XY 基线 = 1.0：
+<code>area = crossbar({am['crossbar']}) + control({am['control']})
+ + {am['ports']} port × VC × Q({meta['Q']}) × {am['a_flit']:.5f}</code>。
+DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
+每个方案按 18 场景中需要的<b>最大 VC 数</b>定尺寸。</li>
+</ul>
+<p class="note">扫描：dead 语义 × {len(m0s)} 个 m₀ × 12 方案 × 18 场景 =
+{sum(1 for _ in data['rows'])} 行 DES；耗时 {meta.get('elapsed_s')}s。
+数据 <code>results/pg_e2e_pareto.json</code>。</p>
+
+<h3>6.2 Pareto 图与结果表</h3>
+<p class="note">实心点 = 18 个 dead 场景中的<b>最差值</b>（PG 必须覆盖全部场景，
+这才是设计点）；空心点 = 中位；竖线连中位→最差。</p>
+{png_note}
+<figure class="e2e-fig">
+<img src="{E2E_PNG}" alt="end-to-end time vs router area Pareto"
+     style="max-width:100%;height:auto;background:#fff;border:1px solid #e0e0e0"/>
+<figcaption>端到端 MoE FFN 时间 vs router 面积（左 m₀=1 / {int(float(tokens['1']))} tokens；
+右 m₀=13 / {int(float(tokens['13']))} tokens）</figcaption>
+</figure>
+
+<h4>m₀ = 1 flit（{int(float(tokens['1']))} tokens）</h4>
+{e2e_table(1)}
+{marginal_html(1)}
+
+<h4>m₀ = 13 flit（{int(float(tokens['13']))} tokens）</h4>
+{e2e_table(13)}
+{marginal_html(13)}
+
+<h3>6.3 选型结论</h3>
+<ol>
+<li><b>排名翻转：</b>M1 XY / M2 Rect-XY 在第 3–4 节 makespan 矩阵中最快（中位 ~62 cy），
+端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
+（最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
+计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。</li>
+<li><b>通信占端到端 70–86%</b>（除重牺牲的 XY/Rect-XY）。即便配了
+{meta['pe_macs_per_cycle']} MAC/cy 的 PE，任务仍是通信瓶颈——
+花 router 面积买带宽划算。</li>
+<li><b>凸包只剩三点：M3（VC1）→ M10（VC2）→ M7（VC6）</b>。
+M3→M10 多 39% 面积换约 20% 加速（回报 381 / 4205 ns/area）；
+M10→M7 再多 111% 面积只多买 ~13%（回报低一个数量级）。
+M5 f-ring 虽在 m₀=13 严格前沿上，但 <code>M10→M5</code> 边际回报低于
+<code>M5→M7</code>，不在凸包——理性选择会跳过它。</li>
+<li><b>推荐：M10 虚拟规则网格（2 VC）</b>——拐点干净，两个载荷尺寸结论一致；
+上层软件仍见规则 8×6 mesh。若 router 面积在系统中占比很小、延迟是硬指标，
+直接上 <b>M7 Stripe（6 VC）</b>（两个载荷下都最快）。
+<strong>不要</strong>因 makespan 矩阵好看就选 M1 XY。</li>
+</ol>
+<p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall（加 combine 更利好 M7）；
+面积不计牺牲的 PE tile（计入会进一步惩罚 M1/M2/M4）；
+control 面积按常数、未随 VC 增长（对 6 VC 的 M7 偏乐观，更利好 M10）。</p>
+"""
+
+
 def main():
     data = json.loads(JSON_PATH.read_text())
     meta = data["meta"]
     rows = data["rows"]
     golden = meta["golden"]
+    e2e_html = e2e_section_html()
 
     # Index primary rows (not q_sensitivity)
     primary = [r for r in rows if not r.get("q_sensitivity")]
@@ -825,7 +1060,8 @@ table.vctab td {{ padding: 0.15rem 0.45rem; }}
 .gallery {{ display: flex; flex-wrap: wrap; gap: 1rem; }}
 figure {{ margin: 0; background: #fff; padding: 0.5rem;
          border: 1px solid #e0e0e0; }}
-figcaption {{ font-size: 0.75rem; margin-bottom: 0.25rem; }}
+figure.e2e-fig {{ max-width: 72rem; margin: 1rem 0; padding: 0.75rem; }}
+figcaption {{ font-size: 0.75rem; margin: 0.35rem 0 0; color: #555; }}
 code {{ background: #eee; padding: 0.1rem 0.3rem; }}
 </style></head><body>
 <h1>8×6 分组交换 NoC：Partial-Good 解决方案与 Alltoall 性能劣化</h1>
@@ -903,13 +1139,30 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 ''')}
 
 {scheme_block("M3 — Up*/Down*（<code>updown</code>）", "updown", '''
-<p><b>思想：</b>在存活路由图上建 BFS 生成树，用「先上后下」限制转向，保证不规则连通图上的无死锁确定性路由。</p>
-<p><b>做法：</b>(1) 根 = 路由图中度最大节点；(2) <code>label(n)</code> = 到根 BFS 距离，
-朝根为 up、离根为 down、同层侧向视为 down；(3) 合法路径 = 若干 up 之后只能 down；
-(4) 约束下 BFS 取最短合法路径。</p>
-<p><b>无死锁：</b>Up*/Down* 按构造 CDG 无环。</p>
-<p><b>特征：</b>link/node 故障下通常<strong>零牺牲</strong>即可全表可行，是保住计算规模的主推荐；
-路径往往比 XY 更绕、负载更不均，故 raw slowdown 较高。</p>
+<p><b>类别：</b>A 类 · 转向限制 · <b>1 VC</b>（无需虚拟通道分层）。</p>
+<p><b>思想：</b>在任意连通的存活路由图上，先建一棵以某个根为中心的生成树标号，
+再强制报文只走「先朝根（up）、再离根（down）」的路径。
+这是不规则拓扑上最经典的无死锁确定性路由（Glass–Ni / Autonet Up*/Down*）。
+故障后只要图仍连通，通常就能零牺牲跑通全表——本研究里它是「保住计算规模」的基线。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>选根</b>：在存活路由邻接表上取度最大的节点（并列取编号小者），尽量让树更「中心」。</li>
+<li><b>标号</b>：从根做 BFS，<code>label(n) = dist(root, n)</code>。
+朝根走（label 减小）= <b>up</b>；离根走（label 增大）或同层侧向 = <b>down</b>。</li>
+<li><b>转向规则</b>：路径分两相——相 0 允许 up；一旦走出 down，进入相 1，
+此后<b>禁止再 up</b>。同层侧向也算 down，因此不能「下完又上」。</li>
+<li><b>选路</b>：在上述合法转移上做 BFS，得到每对 (s,d) 的最短合法路径；
+整表确定性、唯一路径 → 同源同目的保序。</li>
+</ol>
+<p><b>无死锁证明要点：</b>任何合法路径上，通道依赖只能经历
+「up 边 → up 边 → … → down 边 → down 边」。
+不可能出现 down→up，因此 CDG 按构造无环（实现里仍做一次硬校验）。</p>
+<p><b>与本网格实测：</b>dead/transit 下几乎全部场景 <b>n_sacrificed = 0</b>（A≈39–48），
+是 1 VC 方案里规模保持最好的；但合法路径集合窄，负载集中在树的「脊」，
+alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
+M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益几乎为零。</p>
+<p><b>端到端角色：</b>Pareto 凸包的左端点——面积最小（VC1≈0.90），
+作为「面积受限时的保底方案」。不要用它追极限延迟。</p>
 ''')}
 
 {scheme_block("M3+LB — Up*/Down* + 负载均衡（<code>updown_lb</code>）", "updown_lb", '''
@@ -935,24 +1188,48 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 
 {scheme_block("M5 — 真 Fault-ring + 4 VC（<code>fault_ring_vc</code>）",
               "fault_ring_vc", '''
-<p><b>思想：</b>Boppana–Chalasani 式容错 e-cube。把所有故障吸收进<b>矩形故障块</b>，
-块周围一圈健康节点构成 <i>fault ring</i>；底层仍是原封不动的 XY，
-只有撞上块的报文才沿环绕到对面，然后接着走 XY。</p>
-<p><b>四条 VC 怎么分：</b>按<b>相位 × 方向</b>，整条路径上确定，因此保序。</p>
+<p><b>类别：</b>B 类 · VC 分层 · <b>固定 4 VC</b>。保留 XY（e-cube）硬件语义的容错路由。</p>
+<p><b>思想：</b>Boppana–Chalasani 式真 <i>fault-ring</i>。把故障吸收进若干互不重叠的
+<b>矩形故障块</b>；块外围一圈健康节点构成 fault ring。底层路由仍是「先 X 后 Y」：
+不撞块就走普通 XY；下一步会踏进块时，改沿 ring 绕到块的对面，再回到原行/原列继续 XY。</p>
+<p><b>块怎么造：</b></p>
+<ol>
+<li>种子 = 故障节点 ∪（链路故障贪心选出的端点，见下）∪ 路由死节点。</li>
+<li>每个种子先成 1×1 矩形；若两矩形接触或重叠则合并包围盒，直到稳定。</li>
+<li>块内全部节点从路由图剔除；compute 集也去掉这些点（forced sacrifice）。</li>
+</ol>
+<p><b>链路故障的固有代价：</b>矩形块模型没有「两活节点之间断一条链」的状态，
+必须退休一个端点把它变成 1×1 块（辅图）。实现用贪心集合覆盖：每轮选覆盖最多残留坏链的端点。
+因此——<b>纯节点故障通常零额外牺牲；纯链路故障要付 1–4 个好节点</b>。这是相对 M3/M7/M10 的固有税。</p>
+<p><b>路径构造（<code>_fring_path</code>）：</b></p>
+<ol>
+<li><b>X 相：</b>朝目的列一步步走。下一步坐标落在块内 → 调用 <code>_x_detour</code>：
+先竖走到环的上/下边（优先朝目的行一侧），再水平走到块远侧列，必要时竖走回原行。
+若目的列本身落在块内，则水平停在目的列（避免冲过块再也收敛不了）。</li>
+<li><b>Y 相：</b>X 相结束后（可能已被绕行带到别的行），按当前行→目的行方向走；
+撞块则 <code>_y_detour</code> 左右绕，回到原列后再继续。</li>
+</ol>
+<p><b>四条 VC（相位 × 方向，整路径确定性 → 保序）：</b></p>
 <table class="vctab"><tbody>
 <tr><td>VC0</td><td class="l">X 相 · 东行</td><td>VC1</td><td class="l">X 相 · 西行</td></tr>
 <tr><td>VC2</td><td class="l">Y 相 · 北行</td><td>VC3</td><td class="l">Y 相 · 南行</td></tr>
 </tbody></table>
-<p><b>为什么无死锁（可证）：</b>X 相的绕行只会「竖着走」或「朝本报文的 X 方向走」，
-所以 VC0 里<b>每条横向通道都朝东</b>。环要闭合就得让 x 回到原点，于是环里不能有横向通道；
-剩下纯竖向的环又需要 180° 掉头，而构造上不产生掉头 → VC0 无环（VC1 对称）。
-Y 相镜像同理，VC2 内每条竖向通道都朝北。又因为报文只会从 X 相走向 Y 相、绝不回头，
-依赖只会从 VC0/VC1 流向 VC2/VC3 → 整张 CDG 无环。</p>
-<p><b>链路故障要付牺牲：</b>块模型里没有「两个活节点之间断了一条链」这种状态，
-必须退休一个端点把它变成 1×1 块（右下图）。这是 M5 相对 M3 的固有代价：
-纯节点故障零牺牲，纯链路故障牺牲 1–4 个好节点。</p>
-<p><b>固有开销：</b>绕行后要回到原来那一行才继续 XY（图中 (1,2)→(3,2) 再下到 (3,1)），
-这正是换取「X 相严格单调 ⇒ 4 VC 可证无死锁」所付的绕路。</p>
+<p>X 相 hop 数 = 到达目的列之前的物理跳数；之后全部进 Y 相 VC。
+方向类按「源→目的的 X 符号 / Y 相实际行进符号」在离线时固化进 <code>vc_of</code>。</p>
+<p><b>无死锁（可证）：</b></p>
+<ul>
+<li>X 相绕行只允许「竖走」或「朝本报文的 X 方向走」→ VC0 内每条横向通道都朝东。
+环要闭合必须让 x 回到起点，于是环内不能含横向通道；纯竖环又需要 180° 掉头，
+而构造不产生掉头 → VC0 无环（VC1 对称）。</li>
+<li>Y 相镜像：VC2 内每条竖向通道朝北（VC3 朝南）。</li>
+<li>报文只从 X 相进 Y 相、从不回头 → 依赖 {VC0,VC1}→{VC2,VC3} 单向。
+单 VC 无环 + 组间单向 ⇒ 整张 CDG 无环。</li>
+</ul>
+<p><b>固有绕路：</b>绕行后常要回到原行再续 XY（图中竖上环、横穿、再竖下），
+这是换取「X 相严格单调 ⇒ 4 VC 可证」所付的代价；负载通常高于 M7/M10。</p>
+<p><b>端到端角色：</b>m₀=13 时落在严格 Pareto 前沿，但不在凸包上
+（M10→M5 边际回报低于 M5→M7）——理性选择会跳过它。
+若硬件已按 XY+绕障做死、且愿意付 4 VC，它仍是「保 XY 语义」的正统答案。</p>
 ''', extra_key="fring_block")}
 
 {scheme_block("M6 — LASH（<code>lash</code>）", "lash", '''
@@ -974,11 +1251,38 @@ hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进
 ''')}
 
 {scheme_block("M7 — 条带 dateline（<code>stripe_vc</code>）", "stripe_vc", '''
-<p><b>思想：</b>竖向条带 + 边界 dateline。路径优先 XY，不通则最短路；
-每水平穿过一条 dateline，<code>VC += 1</code>（沿路单调不减）。</p>
-<p><b>做法：</b>dateline 放在每 2 列边界，并叠加故障列邻边；若稀疏 dateline 下
-CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格约 5–6）。</p>
-<p><b>特征：</b>实现极简、路径贴近最短；VC 数高于 LASH/f-ring，缓冲面积更大。</p>
+<p><b>类别：</b>B 类 · VC 分层 · 本网格实测 <b>5–6 VC</b>（按场景中最坏跨越数定尺寸）。</p>
+<p><b>思想：</b>把 mesh 竖切成条带，条带边界就是 <i>dateline</i>（类似环形拓扑破环的日期线）。
+路径本身尽量走最短路（优先 XY，不通再 BFS）；<b>无死锁不靠砍转弯，而靠跨带时升 VC</b>。
+每条路径上 VC 沿途单调不减 → 天然无环，实现极简。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>选路</b>：对每个 (s,d)，先试 <code>xy_path</code>；若因故障不通，退回
+<code>shortest_path</code>。路径固定后不再改 → 保序。</li>
+<li><b>布 dateline</b>（优先稀疏）：列边界 <code>x ∈ {{2,4,6}}</code>（每 2 列一条），
+再并上所有故障列及其右邻列边界（故障附近加密，避免绕障路径在稀疏带内绕出环）。</li>
+<li><b>赋 VC</b>：报文走第 i 跳时，
+<code>VC(i) =</code> 此前（含本跳）水平跨越 dateline 的次数。
+竖走不跨带，VC 不变；每水平穿一条虚线，VC+1。</li>
+<li><b>校验 / 加密</b>：用稀疏 dateline 建 <code>vc_of</code> 后做 CDG 校验；
+若仍有环，退化为「每个列边界都是 dateline」（<code>1..MX-1</code>），再校验。
+<code>num_vc = 1 + max 跨越数</code>。</li>
+</ol>
+<p><b>无死锁：</b>沿任意路径 VC 只增不减。通道依赖
+<code>(e, vc) → (e′, vc′)</code> 满足 <code>vc′ ≥ vc</code>；
+同层内若路径本身无环依赖，跨层又只能「升」——整体 CDG 无环。
+本实现仍做硬校验，失败则加密封顶。</p>
+<p><b>与 M5 / M6 / M10 的差别：</b></p>
+<ul>
+<li>相对 M5：不强制矩形块、不强制绕回原行；链路故障通常只牺牲孤立点，不必退休端点。
+路径更短、负载更低，但 VC 更多（5–6 vs 4）。</li>
+<li>相对 M6 LASH：不需要离线贪心装层；逻辑就是「跨带 +1」，硬件几乎只是计数器。
+代价是 VC 上限更高（LASH 常 1–2 层就够）。</li>
+<li>相对 M10：路径质量相近或更好（真最短路），但面积贵一截（VC6≈2.63 vs VC2≈1.24）。</li>
+</ul>
+<p><b>端到端角色：</b>Pareto 凸包右端点——<b>两个载荷下都最快</b>
+（最差 471 / 4913 ns），面积也最贵。适合「router 面积不敏感、延迟是硬指标」。
+从 M10 再走到 M7：+111% 面积只换约 13% 加速，边际回报比 M3→M10 低一个数量级。</p>
 ''')}
 
 {scheme_block("M9 — 双向 Up*/Down*（<code>dual_updown</code>）", "updown", '''
@@ -988,11 +1292,42 @@ CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格
 <p><b>特征：</b>固定 2 VC，实现比 LASH 简单；路径短于单层 Up*/Down*，但通常仍长于最短路族。</p>
 ''')}
 
-{scheme_block("M10 — 虚拟规则网格（<code>virtual_mesh</code>）", "xy", '''
-<p><b>思想：</b>上层仍看完整 8×6 逻辑 mesh 与 XY；物理上缺失的逻辑边用<strong>固定最短绕路</strong>
-替换。逻辑路径遇洞则跳过死节点并桥接。</p>
-<p><b>VC：</b>到达目的列之前的物理 hop → VC0（逻辑 X 相），之后 → VC1（逻辑 Y 相）。</p>
-<p><b>特征：</b>软件映射可保持规则 mesh；链路故障友好；大洞时绕路变长，CDG 硬校验。</p>
+{scheme_block("M10 — 虚拟规则网格（<code>virtual_mesh</code>）", "virtual_mesh", '''
+<p><b>类别：</b>B 类 · VC 分层 · <b>固定 2 VC</b>。上层软件仍看见完整规则 8×6 XY mesh。</p>
+<p><b>思想：</b>把「逻辑拓扑」和「物理走线」拆开。逻辑层永远是健康的 8×6 全网格 + 经典 XY；
+物理上某条逻辑边坏了（节点洞或链路断），就用一条<b>预先算好的、固定的物理最短绕路</b>替换它。
+对编译器 / 映射层来说，集合通信调度、坐标寻址都不用改——缺的只是 NoC 内部把逻辑 hop 展开。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>存活集</b>：至少有一条活链路的节点才算逻辑路由器；孤立点 forced-sacrifice。</li>
+<li><b>预计算展开表</b>：对每一对逻辑相邻的活节点 (a,b)，若物理直连存在则
+<code>expand[a→b]=[a,b]</code>；否则 <code>shortest_path(a,b)</code> 作为该逻辑边的固定绕路。
+绕路离线算一次、全局共享 → 确定性。</li>
+<li><b>逻辑 XY</b>：忽略故障，在完整网格上走先 X 后 Y，得到逻辑折线
+<code>full = _logical_xy(s,d)</code>。</li>
+<li><b>物理展开</b>：丢掉折线上的死节点得 <code>way</code>（须仍以 s 开头、d 结尾）；
+依次把 <code>way[i]→way[i+1]</code> 用展开表（或临时最短路）拼成物理路径。</li>
+<li><b>VC 划分</b>：物理 hop 在「首次到达目的列」之前 → <b>VC0（逻辑 X 相）</b>；
+之后 → <b>VC1（逻辑 Y 相）</b>。即使 X 相里含有竖向绕路 hop，仍算 VC0——
+分层按逻辑相位，不按物理边方向。</li>
+</ol>
+<p><b>无死锁：</b>依赖「逻辑 X→逻辑 Y」的单向相位切换（类似维度序）。
+绕路可能在 VC0 内引入竖边、在 VC1 内引入横边，理论上有可能成环，
+因此实现里对整表做 CDG 硬校验；失败则该 PG 场景判定不可行（再走牺牲恢复）。
+本 8×6 的 18 个 dead 场景上全部通过，通常只需去掉孤立点。</p>
+<p><b>与 M5 / M7 的关键差别：</b></p>
+<ul>
+<li>相对 M5：不造矩形块、不强制绕回原行；链路故障不必退休端点，牺牲更少。
+VC 只要 2 条（vs 4）。大洞时绕路可能比 f-ring 更「自由」，也可能更绕——以实测负载为准。</li>
+<li>相对 M7：路径不是全局最短路，而是「逻辑 XY + 局部展开」，有时多走几跳；
+但 VC 固定为 2，面积约 1.24（vs Stripe 的 2.63），是性价比拐点。</li>
+<li>相对 M3：多 1 条 VC，换来接近最短路的路径质量和显著更低的 makespan /
+端到端时间；上层映射还保持规则网格。</li>
+</ul>
+<p><b>端到端角色：</b><b>推荐默认方案</b>。Pareto 凸包拐点：
+相对 M3 只多 39% router 面积，换约 20% 端到端加速（回报 381 / 4205 ns/area）；
+再往 M7 多花 111% 面积只多买 ~13%。两个载荷尺寸结论一致。
+附带好处：软件仍看规则 8×6，映射 / 调度不用为 PG 改写。</p>
 ''')}
 
 <h3>2.3 横向对比</h3>
@@ -1060,7 +1395,9 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <h2>5. Q 敏感度（子集，m=1, dead）</h2>
 {q_table or '<p class="note">无 Q 敏感度数据</p>'}
 
-<h2>6. 指标定义</h2>
+{e2e_html}
+
+<h2>7. 指标定义</h2>
 <ul>
 <li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
 基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
@@ -1082,7 +1419,7 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 
-<h2>7. 主要观察</h2>
+<h2>8. 主要观察</h2>
 <ol>
 <li><b>全 B 类就位后，按「牺牲→makespan」仍几乎全是 M7 Stripe</b>
 （约 70/72 场）。dead·m=1 中位 mk：Stripe 194 &lt; Virtual 240 &lt; f-ring 248
@@ -1108,6 +1445,11 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 （Stripe 最贵，LASH 最省）；共享池可压低，需另评。</li>
 
 <li>全部可行 DES 行 <code>ordered_ok=True</code>（含 LASH / Stripe / f-ring）。</li>
+
+<li><b>端到端时间×面积（第 6 节）翻转了 makespan 排名：</b>
+M1/M2 被同面积的 M3 严格支配；凸包为 <b>M3 → M10 → M7</b>。
+推荐默认选 <b>M10（2 VC）</b>；延迟硬指标再上 M7。
+通信占端到端 70–86%，花 router 面积买带宽划算。</li>
 </ol>
 </body></html>
 """

@@ -35,7 +35,8 @@ table.vctab td { padding: 0.15rem 0.45rem; }
 .gallery { display: flex; flex-wrap: wrap; gap: 1rem; }
 figure { margin: 0; background: #fff; padding: 0.5rem;
          border: 1px solid #e0e0e0; }
-figcaption { font-size: 0.75rem; margin-bottom: 0.25rem; }
+figure.e2e-fig { max-width: 72rem; margin: 1rem 0; padding: 0.75rem; }
+figcaption { font-size: 0.75rem; margin: 0.35rem 0 0; color: #555; }
 code { background: #eee; padding: 0.1rem 0.3rem; }
 </style></head><body>
 <h1>8×6 分组交换 NoC：Partial-Good 解决方案与 Alltoall 性能劣化</h1>
@@ -113,13 +114,30 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="184" height="156" viewBox="0 0 184 156"><defs><marker id="a2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#27ae60"/></marker></defs><line x1="28" y1="128" x2="64" y2="128" stroke="#e0e0e0" stroke-width="1"/><line x1="64" y1="128" x2="100" y2="128" stroke="#e0e0e0" stroke-width="1"/><line x1="100" y1="128" x2="136" y2="128" stroke="#27ae60" stroke-width="1.8"/><line x1="28" y1="128" x2="28" y2="92" stroke="#e0e0e0" stroke-width="1"/><line x1="64" y1="128" x2="64" y2="92" stroke="#e0e0e0" stroke-width="1"/><line x1="100" y1="128" x2="100" y2="92" stroke="#27ae60" stroke-width="1.8"/><line x1="136" y1="128" x2="136" y2="92" stroke="#27ae60" stroke-width="1.8"/><line x1="28" y1="92" x2="64" y2="92" stroke="#e0e0e0" stroke-width="1"/><line x1="64" y1="92" x2="100" y2="92" stroke="#e0e0e0" stroke-width="1"/><line x1="100" y1="92" x2="136" y2="92" stroke="#27ae60" stroke-width="1.8"/><line x1="28" y1="92" x2="28" y2="56" stroke="#e0e0e0" stroke-width="1"/><line x1="64" y1="92" x2="64" y2="56" stroke="#e0e0e0" stroke-width="1"/><line x1="100" y1="92" x2="100" y2="56" stroke="#27ae60" stroke-width="1.8"/><line x1="136" y1="92" x2="136" y2="56" stroke="#27ae60" stroke-width="1.8"/><line x1="28" y1="56" x2="64" y2="56" stroke="#e0e0e0" stroke-width="1"/><line x1="64" y1="56" x2="100" y2="56" stroke="#e0e0e0" stroke-width="1"/><line x1="100" y1="56" x2="136" y2="56" stroke="#27ae60" stroke-width="1.8"/><line x1="100" y1="128" x2="136" y2="128" stroke="#1e8449" stroke-width="3" marker-end="url(#a2)"/><line x1="136" y1="128" x2="136" y2="92" stroke="#1e8449" stroke-width="3" marker-end="url(#a2)"/><line x1="136" y1="92" x2="136" y2="56" stroke="#1e8449" stroke-width="3" marker-end="url(#a2)"/><line x1="64" y1="128" x2="64" y2="92" stroke="#c0392b" stroke-width="2.5" stroke-dasharray="4,3"/><circle cx="28" cy="128" r="7" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><circle cx="64" cy="128" r="7" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><circle cx="100" cy="128" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="100" y="116" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="136" cy="128" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="28" cy="92" r="7" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><circle cx="64" cy="92" r="7" fill="#c0392b" stroke="#2c3e50" stroke-width="1.2"/><text x="64" y="80" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">坏</text><circle cx="100" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="136" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="28" cy="56" r="7" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><circle cx="64" cy="56" r="7" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><circle cx="100" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="136" cy="56" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="136" y="44" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="92.0" y="150" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">橙=牺牲行/列；绿矩形内继续 XY</text></svg></div></div></div>
 
 <div class="scheme"><h4>M3 — Up*/Down*（<code>updown</code>）</h4><div class="scheme-body"><div class="scheme-text">
-<p><b>思想：</b>在存活路由图上建 BFS 生成树，用「先上后下」限制转向，保证不规则连通图上的无死锁确定性路由。</p>
-<p><b>做法：</b>(1) 根 = 路由图中度最大节点；(2) <code>label(n)</code> = 到根 BFS 距离，
-朝根为 up、离根为 down、同层侧向视为 down；(3) 合法路径 = 若干 up 之后只能 down；
-(4) 约束下 BFS 取最短合法路径。</p>
-<p><b>无死锁：</b>Up*/Down* 按构造 CDG 无环。</p>
-<p><b>特征：</b>link/node 故障下通常<strong>零牺牲</strong>即可全表可行，是保住计算规模的主推荐；
-路径往往比 XY 更绕、负载更不均，故 raw slowdown 较高。</p>
+<p><b>类别：</b>A 类 · 转向限制 · <b>1 VC</b>（无需虚拟通道分层）。</p>
+<p><b>思想：</b>在任意连通的存活路由图上，先建一棵以某个根为中心的生成树标号，
+再强制报文只走「先朝根（up）、再离根（down）」的路径。
+这是不规则拓扑上最经典的无死锁确定性路由（Glass–Ni / Autonet Up*/Down*）。
+故障后只要图仍连通，通常就能零牺牲跑通全表——本研究里它是「保住计算规模」的基线。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>选根</b>：在存活路由邻接表上取度最大的节点（并列取编号小者），尽量让树更「中心」。</li>
+<li><b>标号</b>：从根做 BFS，<code>label(n) = dist(root, n)</code>。
+朝根走（label 减小）= <b>up</b>；离根走（label 增大）或同层侧向 = <b>down</b>。</li>
+<li><b>转向规则</b>：路径分两相——相 0 允许 up；一旦走出 down，进入相 1，
+此后<b>禁止再 up</b>。同层侧向也算 down，因此不能「下完又上」。</li>
+<li><b>选路</b>：在上述合法转移上做 BFS，得到每对 (s,d) 的最短合法路径；
+整表确定性、唯一路径 → 同源同目的保序。</li>
+</ol>
+<p><b>无死锁证明要点：</b>任何合法路径上，通道依赖只能经历
+「up 边 → up 边 → … → down 边 → down 边」。
+不可能出现 down→up，因此 CDG 按构造无环（实现里仍做一次硬校验）。</p>
+<p><b>与本网格实测：</b>dead/transit 下几乎全部场景 <b>n_sacrificed = 0</b>（A≈39–48），
+是 1 VC 方案里规模保持最好的；但合法路径集合窄，负载集中在树的「脊」，
+alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
+M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益几乎为零。</p>
+<p><b>端到端角色：</b>Pareto 凸包的左端点——面积最小（VC1≈0.90），
+作为「面积受限时的保底方案」。不要用它追极限延迟。</p>
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="168" height="176" viewBox="0 0 168 176"><defs><marker id="a3u" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a3d" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#e67e22"/></marker></defs><line x1="32" y1="144" x2="74" y2="144" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="144" x2="116" y2="144" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="144" x2="32" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="144" x2="74" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="116" y1="144" x2="116" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="102" x2="74" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="102" x2="116" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="102" x2="32" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="102" x2="74" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="116" y1="102" x2="116" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="60" x2="74" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="60" x2="116" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="144" x2="32" y2="102" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a3u)"/><line x1="32" y1="102" x2="74" y2="102" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a3u)"/><line x1="74" y1="102" x2="116" y2="102" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a3d)"/><line x1="116" y1="102" x2="116" y2="60" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a3d)"/><circle cx="32" cy="144" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="32" y="132" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><text x="44" y="148" font-size="10" fill="#7f8c8d">d=2</text><circle cx="74" cy="144" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="86" y="148" font-size="10" fill="#7f8c8d">d=1</text><circle cx="116" cy="144" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="128" y="148" font-size="10" fill="#7f8c8d">d=2</text><circle cx="32" cy="102" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="44" y="106" font-size="10" fill="#7f8c8d">d=1</text><circle cx="74" cy="102" r="7" fill="#8e44ad" stroke="#2c3e50" stroke-width="1.2"/><text x="74" y="90" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">根</text><text x="86" y="106" font-size="10" fill="#7f8c8d">d=0</text><circle cx="116" cy="102" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="128" y="106" font-size="10" fill="#7f8c8d">d=1</text><circle cx="32" cy="60" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="44" y="64" font-size="10" fill="#7f8c8d">d=2</text><circle cx="74" cy="60" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="86" y="64" font-size="10" fill="#7f8c8d">d=1</text><circle cx="116" cy="60" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="116" y="48" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="128" y="64" font-size="10" fill="#7f8c8d">d=2</text><text x="8" y="14" font-size="10" fill="#2980b9">蓝=up(朝根)</text><text x="84.0" y="14" font-size="10" fill="#e67e22">橙=down(离根)</text><text x="84.0" y="170" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">合法路径：先 up，再 down（不能回头 up）</text></svg></div></div></div>
 
 <div class="scheme"><h4>M3+LB — Up*/Down* + 负载均衡（<code>updown_lb</code>）</h4><div class="scheme-body"><div class="scheme-text">
@@ -144,24 +162,48 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 <h3>2.2 B 类：VC 分层</h3>
 
 <div class="scheme"><h4>M5 — 真 Fault-ring + 4 VC（<code>fault_ring_vc</code>）</h4><div class="scheme-body"><div class="scheme-text">
-<p><b>思想：</b>Boppana–Chalasani 式容错 e-cube。把所有故障吸收进<b>矩形故障块</b>，
-块周围一圈健康节点构成 <i>fault ring</i>；底层仍是原封不动的 XY，
-只有撞上块的报文才沿环绕到对面，然后接着走 XY。</p>
-<p><b>四条 VC 怎么分：</b>按<b>相位 × 方向</b>，整条路径上确定，因此保序。</p>
+<p><b>类别：</b>B 类 · VC 分层 · <b>固定 4 VC</b>。保留 XY（e-cube）硬件语义的容错路由。</p>
+<p><b>思想：</b>Boppana–Chalasani 式真 <i>fault-ring</i>。把故障吸收进若干互不重叠的
+<b>矩形故障块</b>；块外围一圈健康节点构成 fault ring。底层路由仍是「先 X 后 Y」：
+不撞块就走普通 XY；下一步会踏进块时，改沿 ring 绕到块的对面，再回到原行/原列继续 XY。</p>
+<p><b>块怎么造：</b></p>
+<ol>
+<li>种子 = 故障节点 ∪（链路故障贪心选出的端点，见下）∪ 路由死节点。</li>
+<li>每个种子先成 1×1 矩形；若两矩形接触或重叠则合并包围盒，直到稳定。</li>
+<li>块内全部节点从路由图剔除；compute 集也去掉这些点（forced sacrifice）。</li>
+</ol>
+<p><b>链路故障的固有代价：</b>矩形块模型没有「两活节点之间断一条链」的状态，
+必须退休一个端点把它变成 1×1 块（辅图）。实现用贪心集合覆盖：每轮选覆盖最多残留坏链的端点。
+因此——<b>纯节点故障通常零额外牺牲；纯链路故障要付 1–4 个好节点</b>。这是相对 M3/M7/M10 的固有税。</p>
+<p><b>路径构造（<code>_fring_path</code>）：</b></p>
+<ol>
+<li><b>X 相：</b>朝目的列一步步走。下一步坐标落在块内 → 调用 <code>_x_detour</code>：
+先竖走到环的上/下边（优先朝目的行一侧），再水平走到块远侧列，必要时竖走回原行。
+若目的列本身落在块内，则水平停在目的列（避免冲过块再也收敛不了）。</li>
+<li><b>Y 相：</b>X 相结束后（可能已被绕行带到别的行），按当前行→目的行方向走；
+撞块则 <code>_y_detour</code> 左右绕，回到原列后再继续。</li>
+</ol>
+<p><b>四条 VC（相位 × 方向，整路径确定性 → 保序）：</b></p>
 <table class="vctab"><tbody>
 <tr><td>VC0</td><td class="l">X 相 · 东行</td><td>VC1</td><td class="l">X 相 · 西行</td></tr>
 <tr><td>VC2</td><td class="l">Y 相 · 北行</td><td>VC3</td><td class="l">Y 相 · 南行</td></tr>
 </tbody></table>
-<p><b>为什么无死锁（可证）：</b>X 相的绕行只会「竖着走」或「朝本报文的 X 方向走」，
-所以 VC0 里<b>每条横向通道都朝东</b>。环要闭合就得让 x 回到原点，于是环里不能有横向通道；
-剩下纯竖向的环又需要 180° 掉头，而构造上不产生掉头 → VC0 无环（VC1 对称）。
-Y 相镜像同理，VC2 内每条竖向通道都朝北。又因为报文只会从 X 相走向 Y 相、绝不回头，
-依赖只会从 VC0/VC1 流向 VC2/VC3 → 整张 CDG 无环。</p>
-<p><b>链路故障要付牺牲：</b>块模型里没有「两个活节点之间断了一条链」这种状态，
-必须退休一个端点把它变成 1×1 块（右下图）。这是 M5 相对 M3 的固有代价：
-纯节点故障零牺牲，纯链路故障牺牲 1–4 个好节点。</p>
-<p><b>固有开销：</b>绕行后要回到原来那一行才继续 XY（图中 (1,2)→(3,2) 再下到 (3,1)），
-这正是换取「X 相严格单调 ⇒ 4 VC 可证无死锁」所付的绕路。</p>
+<p>X 相 hop 数 = 到达目的列之前的物理跳数；之后全部进 Y 相 VC。
+方向类按「源→目的的 X 符号 / Y 相实际行进符号」在离线时固化进 <code>vc_of</code>。</p>
+<p><b>无死锁（可证）：</b></p>
+<ul>
+<li>X 相绕行只允许「竖走」或「朝本报文的 X 方向走」→ VC0 内每条横向通道都朝东。
+环要闭合必须让 x 回到起点，于是环内不能含横向通道；纯竖环又需要 180° 掉头，
+而构造不产生掉头 → VC0 无环（VC1 对称）。</li>
+<li>Y 相镜像：VC2 内每条竖向通道朝北（VC3 朝南）。</li>
+<li>报文只从 X 相进 Y 相、从不回头 → 依赖 {VC0,VC1}→{VC2,VC3} 单向。
+单 VC 无环 + 组间单向 ⇒ 整张 CDG 无环。</li>
+</ul>
+<p><b>固有绕路：</b>绕行后常要回到原行再续 XY（图中竖上环、横穿、再竖下），
+这是换取「X 相严格单调 ⇒ 4 VC 可证」所付的代价；负载通常高于 M7/M10。</p>
+<p><b>端到端角色：</b>m₀=13 时落在严格 Pareto 前沿，但不在凸包上
+（M10→M5 边际回报低于 M5→M7）——理性选择会跳过它。
+若硬件已按 XY+绕障做死、且愿意付 4 VC，它仍是「保 XY 语义」的正统答案。</p>
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="240" height="208" viewBox="0 0 240 208"><defs><marker id="a5x" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a5y" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#8e44ad"/></marker></defs><rect x="90" y="118" width="40" height="40" fill="#fdecea" stroke="#c0392b" stroke-width="1.4" stroke-dasharray="4,3" rx="3"/><line x1="30" y1="178" x2="70" y2="178" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="178" x2="110" y2="178" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="178" x2="150" y2="178" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="178" x2="190" y2="178" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="138" x2="70" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="138" x2="190" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="98" x2="70" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="98" x2="110" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="98" x2="150" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="98" x2="190" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="58" x2="70" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="58" x2="110" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="58" x2="150" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="58" x2="190" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="178" x2="30" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="178" x2="70" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="178" x2="150" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="190" y1="178" x2="190" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="138" x2="30" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="138" x2="70" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="138" x2="150" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="190" y1="138" x2="190" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="98" x2="30" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="98" x2="70" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="98" x2="110" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="150" y1="98" x2="150" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="190" y1="98" x2="190" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="138" x2="70" y2="138" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="70" y1="138" x2="70" y2="98" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="70" y1="98" x2="110" y2="98" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="110" y1="98" x2="150" y2="98" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="150" y1="98" x2="150" y2="138" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="150" y1="138" x2="190" y2="138" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a5x)"/><line x1="190" y1="138" x2="190" y2="98" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a5y)"/><line x1="190" y1="98" x2="190" y2="58" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a5y)"/><circle cx="30" cy="178" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="70" cy="178" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="178" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="150" cy="178" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="190" cy="178" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="138" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="30" y="126" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="70" cy="138" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="138" r="8" fill="#c0392b" stroke="#2c3e50" stroke-width="1.2"/><text x="110" y="126" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">块</text><circle cx="150" cy="138" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="190" cy="138" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="70" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="150" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="190" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="70" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="150" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="190" cy="58" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="190" y="46" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="8" y="14" font-size="10" fill="#2980b9">蓝=X 相（东行→VC0）</text><text x="110.0" y="14" font-size="10" fill="#8e44ad">紫=Y 相（北行→VC2）</text><text x="120.0" y="202" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">撞块→沿环绕行→回原行续 XY；相位定 VC</text></svg><svg xmlns="http://www.w3.org/2000/svg" width="184" height="140" viewBox="0 0 184 140"><line x1="30" y1="110" x2="82" y2="110" stroke="#cfd6da" stroke-width="1.4"/><line x1="82" y1="110" x2="134" y2="110" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="58" x2="82" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="82" y1="58" x2="134" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="110" x2="30" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="82" y1="110" x2="82" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="134" y1="110" x2="134" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="82" y1="110" x2="134" y2="110" stroke="#c0392b" stroke-width="3" stroke-dasharray="5,3"/><text x="108.0" y="102" text-anchor="middle" font-size="13" fill="#c0392b" font-weight="700">✕</text><rect x="65" y="93" width="34" height="34" fill="#fdecea" stroke="#e67e22" stroke-width="1.4" stroke-dasharray="4,3" rx="3"/><circle cx="30" cy="110" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="82" cy="110" r="8" fill="#e67e22" stroke="#2c3e50" stroke-width="1.2"/><text x="82" y="98" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">退休</text><circle cx="134" cy="110" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="82" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="134" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="92.0" y="134" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">块模型没有「断链」概念 → 必须退休一个端点</text></svg></div></div></div>
 
 <div class="scheme"><h4>M6 — LASH（<code>lash</code>）</h4><div class="scheme-body"><div class="scheme-text">
@@ -183,11 +225,38 @@ hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="160" height="168" viewBox="0 0 160 168"><defs><marker id="a6a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a6b" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#c0392b"/></marker></defs><line x1="30" y1="138" x2="70" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="138" x2="110" y2="138" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="138" x2="30" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="138" x2="70" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="138" x2="110" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="98" x2="70" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="98" x2="110" y2="98" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="98" x2="30" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="98" x2="70" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="110" y1="98" x2="110" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="58" x2="70" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="70" y1="58" x2="110" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="138" x2="70" y2="138" stroke="#2980b9" stroke-width="3" marker-end="url(#a6a)"/><line x1="70" y1="138" x2="110" y2="138" stroke="#2980b9" stroke-width="3" marker-end="url(#a6a)"/><line x1="110" y1="138" x2="110" y2="98" stroke="#2980b9" stroke-width="3" marker-end="url(#a6a)"/><line x1="30" y1="58" x2="30" y2="98" stroke="#c0392b" stroke-width="2.6" stroke-dasharray="4,2" marker-end="url(#a6b)"/><line x1="30" y1="98" x2="70" y2="98" stroke="#c0392b" stroke-width="2.6" stroke-dasharray="4,2" marker-end="url(#a6b)"/><line x1="70" y1="98" x2="110" y2="98" stroke="#c0392b" stroke-width="2.6" stroke-dasharray="4,2" marker-end="url(#a6b)"/><line x1="110" y1="98" x2="110" y2="58" stroke="#c0392b" stroke-width="2.6" stroke-dasharray="4,2" marker-end="url(#a6b)"/><circle cx="70" cy="138" r="6" fill="#c0392b" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="138" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="30" y="126" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="110" cy="138" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="70" cy="98" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="98" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="110" y="86" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><circle cx="30" cy="58" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="30" y="46" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="70" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="110" cy="58" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="110" y="46" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="8" y="14" font-size="10" fill="#2980b9">蓝=层0</text><text x="70" y="14" font-size="10" fill="#c0392b">红=层1</text><text x="80.0" y="162" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">每对一条最短路；装进无环的最少 VC 层</text></svg></div></div></div>
 
 <div class="scheme"><h4>M7 — 条带 dateline（<code>stripe_vc</code>）</h4><div class="scheme-body"><div class="scheme-text">
-<p><b>思想：</b>竖向条带 + 边界 dateline。路径优先 XY，不通则最短路；
-每水平穿过一条 dateline，<code>VC += 1</code>（沿路单调不减）。</p>
-<p><b>做法：</b>dateline 放在每 2 列边界，并叠加故障列邻边；若稀疏 dateline 下
-CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格约 5–6）。</p>
-<p><b>特征：</b>实现极简、路径贴近最短；VC 数高于 LASH/f-ring，缓冲面积更大。</p>
+<p><b>类别：</b>B 类 · VC 分层 · 本网格实测 <b>5–6 VC</b>（按场景中最坏跨越数定尺寸）。</p>
+<p><b>思想：</b>把 mesh 竖切成条带，条带边界就是 <i>dateline</i>（类似环形拓扑破环的日期线）。
+路径本身尽量走最短路（优先 XY，不通再 BFS）；<b>无死锁不靠砍转弯，而靠跨带时升 VC</b>。
+每条路径上 VC 沿途单调不减 → 天然无环，实现极简。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>选路</b>：对每个 (s,d)，先试 <code>xy_path</code>；若因故障不通，退回
+<code>shortest_path</code>。路径固定后不再改 → 保序。</li>
+<li><b>布 dateline</b>（优先稀疏）：列边界 <code>x ∈ {{2,4,6}}</code>（每 2 列一条），
+再并上所有故障列及其右邻列边界（故障附近加密，避免绕障路径在稀疏带内绕出环）。</li>
+<li><b>赋 VC</b>：报文走第 i 跳时，
+<code>VC(i) =</code> 此前（含本跳）水平跨越 dateline 的次数。
+竖走不跨带，VC 不变；每水平穿一条虚线，VC+1。</li>
+<li><b>校验 / 加密</b>：用稀疏 dateline 建 <code>vc_of</code> 后做 CDG 校验；
+若仍有环，退化为「每个列边界都是 dateline」（<code>1..MX-1</code>），再校验。
+<code>num_vc = 1 + max 跨越数</code>。</li>
+</ol>
+<p><b>无死锁：</b>沿任意路径 VC 只增不减。通道依赖
+<code>(e, vc) → (e′, vc′)</code> 满足 <code>vc′ ≥ vc</code>；
+同层内若路径本身无环依赖，跨层又只能「升」——整体 CDG 无环。
+本实现仍做硬校验，失败则加密封顶。</p>
+<p><b>与 M5 / M6 / M10 的差别：</b></p>
+<ul>
+<li>相对 M5：不强制矩形块、不强制绕回原行；链路故障通常只牺牲孤立点，不必退休端点。
+路径更短、负载更低，但 VC 更多（5–6 vs 4）。</li>
+<li>相对 M6 LASH：不需要离线贪心装层；逻辑就是「跨带 +1」，硬件几乎只是计数器。
+代价是 VC 上限更高（LASH 常 1–2 层就够）。</li>
+<li>相对 M10：路径质量相近或更好（真最短路），但面积贵一截（VC6≈2.63 vs VC2≈1.24）。</li>
+</ul>
+<p><b>端到端角色：</b>Pareto 凸包右端点——<b>两个载荷下都最快</b>
+（最差 471 / 4913 ns），面积也最贵。适合「router 面积不敏感、延迟是硬指标」。
+从 M10 再走到 M7：+111% 面积只换约 13% 加速，边际回报比 M3→M10 低一个数量级。</p>
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="208" height="128" viewBox="0 0 208 128"><defs><marker id="a7a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a7b" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#e67e22"/></marker></defs><defs><marker id="a7c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#8e44ad"/></marker></defs><rect x="10" y="36" width="36" height="84" fill="#d6eaf8" opacity="0.75"/><rect x="54" y="36" width="36" height="84" fill="#d5f5e3" opacity="0.75"/><rect x="98" y="36" width="36" height="84" fill="#fdebd0" opacity="0.75"/><rect x="142" y="36" width="36" height="84" fill="#f5eef8" opacity="0.75"/><line x1="50.0" y1="34" x2="50.0" y2="118" stroke="#7f8c8d" stroke-width="1.5" stroke-dasharray="3,2"/><line x1="94.0" y1="34" x2="94.0" y2="118" stroke="#7f8c8d" stroke-width="1.5" stroke-dasharray="3,2"/><line x1="138.0" y1="34" x2="138.0" y2="118" stroke="#7f8c8d" stroke-width="1.5" stroke-dasharray="3,2"/><line x1="28" y1="100" x2="72" y2="100" stroke="#bdc3c7" stroke-width="1.4"/><line x1="72" y1="100" x2="116" y2="100" stroke="#bdc3c7" stroke-width="1.4"/><line x1="116" y1="100" x2="160" y2="100" stroke="#bdc3c7" stroke-width="1.4"/><line x1="28" y1="56" x2="72" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="72" y1="56" x2="116" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="116" y1="56" x2="160" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="28" y1="100" x2="28" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="72" y1="100" x2="72" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="116" y1="100" x2="116" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="160" y1="100" x2="160" y2="56" stroke="#bdc3c7" stroke-width="1.4"/><line x1="28" y1="100" x2="72" y2="100" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a7a)"/><line x1="72" y1="100" x2="116" y2="100" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a7b)"/><line x1="116" y1="100" x2="160" y2="100" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a7c)"/><line x1="160" y1="100" x2="160" y2="56" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a7c)"/><circle cx="28" cy="100" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="28" y="88" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="72" cy="100" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="116" cy="100" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="160" cy="100" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="28" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="72" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="116" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="160" cy="56" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="160" y="44" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="8" y="14" font-size="10" fill="#2980b9">VC0</text><text x="48" y="14" font-size="10" fill="#e67e22">VC1</text><text x="88" y="14" font-size="10" fill="#8e44ad">VC2…</text><text x="104.0" y="122" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">竖条带；每跨一条 dateline，VC +1</text></svg></div></div></div>
 
 <div class="scheme"><h4>M9 — 双向 Up*/Down*（<code>dual_updown</code>）</h4><div class="scheme-body"><div class="scheme-text">
@@ -198,11 +267,42 @@ CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格
 </div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="168" height="176" viewBox="0 0 168 176"><defs><marker id="a3u" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a3d" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#e67e22"/></marker></defs><line x1="32" y1="144" x2="74" y2="144" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="144" x2="116" y2="144" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="144" x2="32" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="144" x2="74" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="116" y1="144" x2="116" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="102" x2="74" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="102" x2="116" y2="102" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="102" x2="32" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="102" x2="74" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="116" y1="102" x2="116" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="60" x2="74" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="74" y1="60" x2="116" y2="60" stroke="#bdc3c7" stroke-width="1.5"/><line x1="32" y1="144" x2="32" y2="102" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a3u)"/><line x1="32" y1="102" x2="74" y2="102" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a3u)"/><line x1="74" y1="102" x2="116" y2="102" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a3d)"/><line x1="116" y1="102" x2="116" y2="60" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a3d)"/><circle cx="32" cy="144" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="32" y="132" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><text x="44" y="148" font-size="10" fill="#7f8c8d">d=2</text><circle cx="74" cy="144" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="86" y="148" font-size="10" fill="#7f8c8d">d=1</text><circle cx="116" cy="144" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="128" y="148" font-size="10" fill="#7f8c8d">d=2</text><circle cx="32" cy="102" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="44" y="106" font-size="10" fill="#7f8c8d">d=1</text><circle cx="74" cy="102" r="7" fill="#8e44ad" stroke="#2c3e50" stroke-width="1.2"/><text x="74" y="90" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">根</text><text x="86" y="106" font-size="10" fill="#7f8c8d">d=0</text><circle cx="116" cy="102" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="128" y="106" font-size="10" fill="#7f8c8d">d=1</text><circle cx="32" cy="60" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="44" y="64" font-size="10" fill="#7f8c8d">d=2</text><circle cx="74" cy="60" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="86" y="64" font-size="10" fill="#7f8c8d">d=1</text><circle cx="116" cy="60" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="116" y="48" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><text x="128" y="64" font-size="10" fill="#7f8c8d">d=2</text><text x="8" y="14" font-size="10" fill="#2980b9">蓝=up(朝根)</text><text x="84.0" y="14" font-size="10" fill="#e67e22">橙=down(离根)</text><text x="84.0" y="170" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">合法路径：先 up，再 down（不能回头 up）</text></svg></div></div></div>
 
 <div class="scheme"><h4>M10 — 虚拟规则网格（<code>virtual_mesh</code>）</h4><div class="scheme-body"><div class="scheme-text">
-<p><b>思想：</b>上层仍看完整 8×6 逻辑 mesh 与 XY；物理上缺失的逻辑边用<strong>固定最短绕路</strong>
-替换。逻辑路径遇洞则跳过死节点并桥接。</p>
-<p><b>VC：</b>到达目的列之前的物理 hop → VC0（逻辑 X 相），之后 → VC1（逻辑 Y 相）。</p>
-<p><b>特征：</b>软件映射可保持规则 mesh；链路故障友好；大洞时绕路变长，CDG 硬校验。</p>
-</div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="184" height="156" viewBox="0 0 184 156"><defs><marker id="a1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#27ae60"/></marker></defs><line x1="28" y1="128" x2="64" y2="128" stroke="#bdc3c7" stroke-width="1.5"/><line x1="64" y1="128" x2="100" y2="128" stroke="#bdc3c7" stroke-width="1.5"/><line x1="100" y1="128" x2="136" y2="128" stroke="#bdc3c7" stroke-width="1.5"/><line x1="28" y1="128" x2="28" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="64" y1="128" x2="64" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="100" y1="128" x2="100" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="136" y1="128" x2="136" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="28" y1="92" x2="64" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="64" y1="92" x2="100" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="100" y1="92" x2="136" y2="92" stroke="#bdc3c7" stroke-width="1.5"/><line x1="28" y1="92" x2="28" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="64" y1="92" x2="64" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="100" y1="92" x2="100" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="136" y1="92" x2="136" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="28" y1="56" x2="64" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="64" y1="56" x2="100" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="100" y1="56" x2="136" y2="56" stroke="#bdc3c7" stroke-width="1.5"/><line x1="28" y1="128" x2="64" y2="128" stroke="#27ae60" stroke-width="3" marker-end="url(#a1)"/><line x1="64" y1="128" x2="100" y2="128" stroke="#c0392b" stroke-width="3.5" stroke-dasharray="5,3"/><text x="82.0" y="120.0" text-anchor="middle" font-size="14" fill="#c0392b" font-weight="700">✕</text><line x1="100" y1="128" x2="100" y2="92" stroke="#27ae60" stroke-width="3" marker-end="url(#a1)"/><line x1="100" y1="92" x2="100" y2="56" stroke="#27ae60" stroke-width="3" marker-end="url(#a1)"/><circle cx="28" cy="128" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="28" y="116" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="64" cy="128" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="100" cy="128" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="136" cy="128" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="28" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="64" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="100" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="136" cy="92" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="28" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="64" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="100" cy="56" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="100" y="44" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><circle cx="136" cy="56" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="92.0" y="150" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">先横后纵；XY 上断一跳 → 失败</text></svg></div></div></div>
+<p><b>类别：</b>B 类 · VC 分层 · <b>固定 2 VC</b>。上层软件仍看见完整规则 8×6 XY mesh。</p>
+<p><b>思想：</b>把「逻辑拓扑」和「物理走线」拆开。逻辑层永远是健康的 8×6 全网格 + 经典 XY；
+物理上某条逻辑边坏了（节点洞或链路断），就用一条<b>预先算好的、固定的物理最短绕路</b>替换它。
+对编译器 / 映射层来说，集合通信调度、坐标寻址都不用改——缺的只是 NoC 内部把逻辑 hop 展开。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>存活集</b>：至少有一条活链路的节点才算逻辑路由器；孤立点 forced-sacrifice。</li>
+<li><b>预计算展开表</b>：对每一对逻辑相邻的活节点 (a,b)，若物理直连存在则
+<code>expand[a→b]=[a,b]</code>；否则 <code>shortest_path(a,b)</code> 作为该逻辑边的固定绕路。
+绕路离线算一次、全局共享 → 确定性。</li>
+<li><b>逻辑 XY</b>：忽略故障，在完整网格上走先 X 后 Y，得到逻辑折线
+<code>full = _logical_xy(s,d)</code>。</li>
+<li><b>物理展开</b>：丢掉折线上的死节点得 <code>way</code>（须仍以 s 开头、d 结尾）；
+依次把 <code>way[i]→way[i+1]</code> 用展开表（或临时最短路）拼成物理路径。</li>
+<li><b>VC 划分</b>：物理 hop 在「首次到达目的列」之前 → <b>VC0（逻辑 X 相）</b>；
+之后 → <b>VC1（逻辑 Y 相）</b>。即使 X 相里含有竖向绕路 hop，仍算 VC0——
+分层按逻辑相位，不按物理边方向。</li>
+</ol>
+<p><b>无死锁：</b>依赖「逻辑 X→逻辑 Y」的单向相位切换（类似维度序）。
+绕路可能在 VC0 内引入竖边、在 VC1 内引入横边，理论上有可能成环，
+因此实现里对整表做 CDG 硬校验；失败则该 PG 场景判定不可行（再走牺牲恢复）。
+本 8×6 的 18 个 dead 场景上全部通过，通常只需去掉孤立点。</p>
+<p><b>与 M5 / M7 的关键差别：</b></p>
+<ul>
+<li>相对 M5：不造矩形块、不强制绕回原行；链路故障不必退休端点，牺牲更少。
+VC 只要 2 条（vs 4）。大洞时绕路可能比 f-ring 更「自由」，也可能更绕——以实测负载为准。</li>
+<li>相对 M7：路径不是全局最短路，而是「逻辑 XY + 局部展开」，有时多走几跳；
+但 VC 固定为 2，面积约 1.24（vs Stripe 的 2.63），是性价比拐点。</li>
+<li>相对 M3：多 1 条 VC，换来接近最短路的路径质量和显著更低的 makespan /
+端到端时间；上层映射还保持规则网格。</li>
+</ul>
+<p><b>端到端角色：</b><b>推荐默认方案</b>。Pareto 凸包拐点：
+相对 M3 只多 39% router 面积，换约 20% 端到端加速（回报 381 / 4205 ns/area）；
+再往 M7 多花 111% 面积只多买 ~13%。两个载荷尺寸结论一致。
+附带好处：软件仍看规则 8×6，映射 / 调度不用为 PG 改写。</p>
+</div><div class="scheme-fig"><svg xmlns="http://www.w3.org/2000/svg" width="206" height="172" viewBox="0 0 206 172"><defs><marker id="a10x" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2980b9"/></marker></defs><defs><marker id="a10y" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#8e44ad"/></marker></defs><defs><marker id="a10d" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#e67e22"/></marker></defs><line x1="30" y1="142" x2="72" y2="142" stroke="#cfd6da" stroke-width="1.4"/><line x1="72" y1="142" x2="114" y2="142" stroke="#cfd6da" stroke-width="1.4"/><line x1="114" y1="142" x2="156" y2="142" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="142" x2="30" y2="100" stroke="#cfd6da" stroke-width="1.4"/><line x1="72" y1="142" x2="72" y2="100" stroke="#cfd6da" stroke-width="1.4"/><line x1="156" y1="142" x2="156" y2="100" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="100" x2="72" y2="100" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="100" x2="30" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="72" y1="100" x2="72" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="156" y1="100" x2="156" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="30" y1="58" x2="72" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="72" y1="58" x2="114" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="114" y1="58" x2="156" y2="58" stroke="#cfd6da" stroke-width="1.4"/><line x1="72" y1="100" x2="114" y2="100" stroke="#c0392b" stroke-width="2" stroke-dasharray="4,3"/><line x1="114" y1="100" x2="156" y2="100" stroke="#c0392b" stroke-width="2" stroke-dasharray="4,3"/><text x="114.0" y="90" text-anchor="middle" font-size="10" fill="#c0392b">逻辑边缺失</text><line x1="30" y1="100" x2="72" y2="100" stroke="#2980b9" stroke-width="3.2" marker-end="url(#a10x)"/><line x1="72" y1="100" x2="72" y2="58" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a10d)"/><line x1="72" y1="58" x2="114" y2="58" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a10d)"/><line x1="114" y1="58" x2="156" y2="58" stroke="#e67e22" stroke-width="3.2" marker-end="url(#a10d)"/><line x1="156" y1="58" x2="156" y2="100" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a10y)"/><line x1="156" y1="100" x2="156" y2="142" stroke="#8e44ad" stroke-width="3.2" marker-end="url(#a10y)"/><circle cx="30" cy="142" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="72" cy="142" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="114" cy="142" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="156" cy="142" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="156" y="130" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">D</text><circle cx="30" cy="100" r="7" fill="#27ae60" stroke="#2c3e50" stroke-width="1.2"/><text x="30" y="88" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">S</text><circle cx="72" cy="100" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="114" cy="100" r="8" fill="#c0392b" stroke="#2c3e50" stroke-width="1.2"/><text x="114" y="88" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#222">洞</text><circle cx="156" cy="100" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="30" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="72" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="114" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><circle cx="156" cy="58" r="7" fill="#2980b9" stroke="#2c3e50" stroke-width="1.2"/><text x="8" y="14" font-size="10" fill="#2980b9">蓝=逻辑 X</text><text x="78" y="14" font-size="10" fill="#e67e22">橙=物理绕路</text><text x="168" y="14" font-size="10" fill="#8e44ad">紫=逻辑 Y</text><text x="103.0" y="166" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#444">逻辑仍是 XY；缺边用固定物理最短路替换</text></svg></div></div></div>
 
 <h3>2.3 横向对比</h3>
 <table>
@@ -269,7 +369,85 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <h2>5. Q 敏感度（子集，m=1, dead）</h2>
 <table><thead><tr><th>场景</th><th>方案</th><th>Q=4</th><th>Q=8</th><th>Q=19</th></tr></thead><tbody><tr><td class='l'>link_center_1</td><td class='l'>M4 Segment</td><td>110</td><td>57</td><td>52</td></tr><tr><td class='l'>link_center_1</td><td class='l'>M3 Up*/Down*</td><td>1401</td><td>668</td><td>341</td></tr><tr><td class='l'>link_center_1</td><td class='l'>M1 XY (+sacrifice)</td><td>78</td><td>57</td><td>51</td></tr><tr><td class='l'>node_center_1x1</td><td class='l'>M4 Segment</td><td>110</td><td>57</td><td>52</td></tr><tr><td class='l'>node_center_1x1</td><td class='l'>M3 Up*/Down*</td><td>1422</td><td>679</td><td>341</td></tr><tr><td class='l'>node_center_1x1</td><td class='l'>M1 XY (+sacrifice)</td><td>78</td><td>57</td><td>51</td></tr><tr><td class='l'>node_corner_2x2</td><td class='l'>M4 Segment</td><td>395</td><td>190</td><td>101</td></tr><tr><td class='l'>node_corner_2x2</td><td class='l'>M3 Up*/Down*</td><td>1172</td><td>572</td><td>275</td></tr><tr><td class='l'>node_corner_2x2</td><td class='l'>M1 XY (+sacrifice)</td><td>221</td><td>130</td><td>90</td></tr></tbody></table>
 
-<h2>6. 指标定义</h2>
+
+<h2>6. 端到端时间 × 面积 Pareto</h2>
+<p class="note">第 3–4 节按纯 makespan 排序会误导——M1 XY 的 makespan 最小，
+但中位牺牲 28/48 个节点。把通信放回真实计算任务后，牺牲的代价才显现。
+本节用 <b>端到端任务完成时间</b>（计算 + alltoall）与 <b>router 面积</b>
+构造 Pareto 前沿，评估选型。</p>
+
+<h3>6.1 模型</h3>
+<ul class="note">
+<li><b>任务</b>：MoE 专家并行 FFN 的 dispatch 半程 —
+<code>alltoall → 专家 FFN</code>，<b>串行不重叠</b>
+（完整层还有对称的 combine alltoall，会让通信项翻倍；此处略去以对齐「一次 alltoall」口径）。</li>
+<li><b>计算</b>：PE 每拍一次 <code>8×64×16</code> matmul = 8192 MAC/cy
+@ <b>1.5 GHz</b>。FFN <code>d_model=64</code>、
+<code>d_ff=256</code>、fp16 —— <code>8×64×16</code> 恰好整除两层 matmul，
+无 tile 量化浪费，<b>4 拍/token</b>。
+token = 128 B = 2 flits
+（flit = 64 B）。</li>
+<li><b>强扩展</b>：总 token 钉在健康 48-PE 配置（每对载荷 = 标称 m₀）：
+<code>T_total = 48²·m₀·64B/128B = 1152·m₀</code> tokens。
+只剩 A 个存活 PE 时两项同时变重：
+<code>T_compute = ceil(4·T_total/A)</code>；
+<code>m_eff = ceil(m₀·(48/A)²)</code>（通信也必须重标定，否则重牺牲方案白拿 1/A² 流量减免）；
+<code>T_e2e = T_compute + T_alltoall(m_eff)</code> → ns @ 1.5 GHz。</li>
+<li><b>面积（仅 router）</b>：牺牲的 PE 只计时间不计面积；48 个 router 始终物理存在，
+唯一杠杆是 VC 数。归一化到 IQ-XY 基线 = 1.0：
+<code>area = crossbar(0.38) + control(0.17)
+ + 5 port × VC × Q(19) × 0.00365</code>。
+DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
+每个方案按 18 场景中需要的<b>最大 VC 数</b>定尺寸。</li>
+</ul>
+<p class="note">扫描：dead 语义 × 2 个 m₀ × 12 方案 × 18 场景 =
+432 行 DES；耗时 515.4s。
+数据 <code>results/pg_e2e_pareto.json</code>。</p>
+
+<h3>6.2 Pareto 图与结果表</h3>
+<p class="note">实心点 = 18 个 dead 场景中的<b>最差值</b>（PG 必须覆盖全部场景，
+这才是设计点）；空心点 = 中位；竖线连中位→最差。</p>
+
+<figure class="e2e-fig">
+<img src="pg_e2e_pareto.png" alt="end-to-end time vs router area Pareto"
+     style="max-width:100%;height:auto;background:#fff;border:1px solid #e0e0e0"/>
+<figcaption>端到端 MoE FFN 时间 vs router 面积（左 m₀=1 / 1152 tokens；
+右 m₀=13 / 14976 tokens）</figcaption>
+</figure>
+
+<h4>m₀ = 1 flit（1152 tokens）</h4>
+<table><thead><tr><th class='l'>方案</th><th>VC</th><th>area</th><th>A 中位/最差</th><th>牺牲中位</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>通信占比</th><th>Pareto</th></tr></thead><tbody><tr><td class='l'>M7 Stripe</td><td>6</td><td>2.631</td><td>47/39</td><td>0</td><td>276</td><td><b>471</b></td><td>0.76</td><td><b>yes</b></td></tr><tr><td class='l'>M10 Virtual</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>301</td><td><b>546</b></td><td>0.77</td><td><b>yes</b></td></tr><tr><td class='l'>M5 f-ring</td><td>4</td><td>1.937</td><td>46/39</td><td>1</td><td>389</td><td><b>555</b></td><td>0.82</td><td></td></tr><tr><td class='l'>M6 LASH</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>492</td><td><b>665</b></td><td>0.86</td><td></td></tr><tr><td class='l'>M6b LASH-TOR</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>492</td><td><b>665</b></td><td>0.86</td><td></td></tr><tr><td class='l'>M3 Up*/Down*</td><td>1</td><td>0.897</td><td>47/39</td><td>0</td><td>497</td><td><b>678</b></td><td>0.86</td><td><b>yes</b></td></tr><tr><td class='l'>M9 Dual UD</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>507</td><td><b>678</b></td><td>0.85</td><td></td></tr><tr><td class='l'>M3+LB</td><td>1</td><td>0.897</td><td>47/39</td><td>0</td><td>497</td><td><b>678</b></td><td>0.86</td><td><b>yes</b></td></tr><tr><td class='l'>M1 XY</td><td>1</td><td>0.897</td><td>16/6</td><td>28</td><td>356</td><td><b>820</b></td><td>0.52</td><td></td></tr><tr><td class='l'>M2 Rect-XY</td><td>1</td><td>0.897</td><td>16/6</td><td>32</td><td>356</td><td><b>820</b></td><td>0.46</td><td></td></tr><tr><td class='l'>M4 Segment</td><td>1</td><td>0.897</td><td>24/6</td><td>28</td><td>519</td><td><b>1025</b></td><td>0.69</td><td></td></tr><tr><td class='l'>M4+LB</td><td>1</td><td>0.897</td><td>24/6</td><td>28</td><td>519</td><td><b>1025</b></td><td>0.69</td><td></td></tr></tbody></table>
+<table><thead><tr><th class='l'>台阶</th><th>Δarea</th><th>ΔT (m₀=1)</th><th>回报 (ns/area)</th></tr></thead><tbody><tr><td class='l'>M3 Up*/Down* / M3+LB → M10 Virtual</td><td>+38.7% <span class='sub'>(0.897→1.244)</span></td><td>−19.5% <span class='sub'>(678→546 ns)</span></td><td><b>381</b></td></tr><tr><td class='l'>M10 Virtual → M7 Stripe</td><td>+111.5% <span class='sub'>(1.244→2.631)</span></td><td>−13.8% <span class='sub'>(546→471 ns)</span></td><td><b>54</b></td></tr></tbody></table>
+
+<h4>m₀ = 13 flit（14976 tokens）</h4>
+<table><thead><tr><th class='l'>方案</th><th>VC</th><th>area</th><th>A 中位/最差</th><th>牺牲中位</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>通信占比</th><th>Pareto</th></tr></thead><tbody><tr><td class='l'>M7 Stripe</td><td>6</td><td>2.631</td><td>47/39</td><td>0</td><td>2773</td><td><b>4913</b></td><td>0.70</td><td><b>yes</b></td></tr><tr><td class='l'>M5 f-ring</td><td>4</td><td>1.937</td><td>46/39</td><td>1</td><td>3207</td><td><b>5469</b></td><td>0.73</td><td><b>yes</b></td></tr><tr><td class='l'>M10 Virtual</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>2977</td><td><b>5631</b></td><td>0.72</td><td><b>yes</b></td></tr><tr><td class='l'>M3 Up*/Down*</td><td>1</td><td>0.897</td><td>47/39</td><td>0</td><td>4748</td><td><b>7089</b></td><td>0.82</td><td><b>yes</b></td></tr><tr><td class='l'>M9 Dual UD</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>4688</td><td><b>7089</b></td><td>0.82</td><td></td></tr><tr><td class='l'>M3+LB</td><td>1</td><td>0.897</td><td>47/39</td><td>0</td><td>4748</td><td><b>7089</b></td><td>0.82</td><td><b>yes</b></td></tr><tr><td class='l'>M6 LASH</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>4564</td><td><b>7428</b></td><td>0.81</td><td></td></tr><tr><td class='l'>M6b LASH-TOR</td><td>2</td><td>1.244</td><td>47/39</td><td>0</td><td>4564</td><td><b>7428</b></td><td>0.81</td><td></td></tr><tr><td class='l'>M1 XY</td><td>1</td><td>0.897</td><td>16/6</td><td>28</td><td>5405</td><td><b>9845</b></td><td>0.54</td><td></td></tr><tr><td class='l'>M2 Rect-XY</td><td>1</td><td>0.897</td><td>16/6</td><td>32</td><td>5405</td><td><b>9845</b></td><td>0.54</td><td></td></tr><tr><td class='l'>M4 Segment</td><td>1</td><td>0.897</td><td>24/6</td><td>28</td><td>7783</td><td><b>13800</b></td><td>0.73</td><td></td></tr><tr><td class='l'>M4+LB</td><td>1</td><td>0.897</td><td>24/6</td><td>28</td><td>7783</td><td><b>13800</b></td><td>0.73</td><td></td></tr></tbody></table>
+<table><thead><tr><th class='l'>台阶</th><th>Δarea</th><th>ΔT (m₀=13)</th><th>回报 (ns/area)</th></tr></thead><tbody><tr><td class='l'>M3 Up*/Down* / M3+LB → M10 Virtual</td><td>+38.7% <span class='sub'>(0.897→1.244)</span></td><td>−20.6% <span class='sub'>(7089→5631 ns)</span></td><td><b>4207</b></td></tr><tr><td class='l'>M10 Virtual → M5 f-ring</td><td>+55.8% <span class='sub'>(1.244→1.937)</span></td><td>−2.9% <span class='sub'>(5631→5469 ns)</span></td><td><b>233</b></td></tr><tr><td class='l'>M5 f-ring → M7 Stripe</td><td>+35.8% <span class='sub'>(1.937→2.631)</span></td><td>−10.2% <span class='sub'>(5469→4913 ns)</span></td><td><b>803</b></td></tr></tbody></table>
+
+<h3>6.3 选型结论</h3>
+<ol>
+<li><b>排名翻转：</b>M1 XY / M2 Rect-XY 在第 3–4 节 makespan 矩阵中最快（中位 ~62 cy），
+端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
+（最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
+计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。</li>
+<li><b>通信占端到端 70–86%</b>（除重牺牲的 XY/Rect-XY）。即便配了
+8192 MAC/cy 的 PE，任务仍是通信瓶颈——
+花 router 面积买带宽划算。</li>
+<li><b>凸包只剩三点：M3（VC1）→ M10（VC2）→ M7（VC6）</b>。
+M3→M10 多 39% 面积换约 20% 加速（回报 381 / 4205 ns/area）；
+M10→M7 再多 111% 面积只多买 ~13%（回报低一个数量级）。
+M5 f-ring 虽在 m₀=13 严格前沿上，但 <code>M10→M5</code> 边际回报低于
+<code>M5→M7</code>，不在凸包——理性选择会跳过它。</li>
+<li><b>推荐：M10 虚拟规则网格（2 VC）</b>——拐点干净，两个载荷尺寸结论一致；
+上层软件仍见规则 8×6 mesh。若 router 面积在系统中占比很小、延迟是硬指标，
+直接上 <b>M7 Stripe（6 VC）</b>（两个载荷下都最快）。
+<strong>不要</strong>因 makespan 矩阵好看就选 M1 XY。</li>
+</ol>
+<p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall（加 combine 更利好 M7）；
+面积不计牺牲的 PE tile（计入会进一步惩罚 M1/M2/M4）；
+control 面积按常数、未随 VC 增长（对 6 VC 的 M7 偏乐观，更利好 M10）。</p>
+
+
+<h2>7. 指标定义</h2>
 <ul>
 <li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
 基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
@@ -291,7 +469,7 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 
-<h2>7. 主要观察</h2>
+<h2>8. 主要观察</h2>
 <ol>
 <li><b>全 B 类就位后，按「牺牲→makespan」仍几乎全是 M7 Stripe</b>
 （约 70/72 场）。dead·m=1 中位 mk：Stripe 194 &lt; Virtual 240 &lt; f-ring 248
@@ -317,5 +495,10 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 （Stripe 最贵，LASH 最省）；共享池可压低，需另评。</li>
 
 <li>全部可行 DES 行 <code>ordered_ok=True</code>（含 LASH / Stripe / f-ring）。</li>
+
+<li><b>端到端时间×面积（第 6 节）翻转了 makespan 排名：</b>
+M1/M2 被同面积的 M3 严格支配；凸包为 <b>M3 → M10 → M7</b>。
+推荐默认选 <b>M10（2 VC）</b>；延迟硬指标再上 M7。
+通信占端到端 70–86%，花 router 面积买带宽划算。</li>
 </ol>
 </body></html>
