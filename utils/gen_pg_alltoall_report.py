@@ -14,8 +14,20 @@ import pg_routing as R
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
+CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 E2E_PNG = "pg_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
+
+# Schemes that fail a hard property on their own and only "work" by sacrificing
+# large parts of the array — excluded from the §3/§4 makespan comparisons, where
+# a smaller A would otherwise make them look artificially fast.
+# See results/pg_capability.json for the measurements behind each reason.
+EXCLUDED_SCHEMES = {
+    "xy": "36 场景中 27 个建不出路径（避障失败）",
+    "rect_xy": "36/36 必须裁行裁列，累计牺牲 1018 节点（中位 31/48）",
+    "segment": "17 个场景建不出路径 + 7 个场景 CDG 成环",
+    "segment_lb": "同 M4 Segment",
+}
 
 SCHEME_LABELS = {
     "xy": "M1 XY (+sacrifice)",
@@ -1231,10 +1243,11 @@ def e2e_section_html() -> str:
 
     return f"""
 <h2>6. 端到端时间 × 面积 Pareto</h2>
-<p class="note">第 3–4 节按纯 makespan 排序会误导——M1 XY 的 makespan 最小，
-但中位牺牲 28/48 个节点。把通信放回真实计算任务后，牺牲的代价才显现。
+<p class="note">按纯 makespan 排序会误导——M1 XY 的 makespan 最小，
+但中位牺牲 28/48 个节点（这正是它被 §2.4 排除出第 3–4 节对比的原因）。
+把通信放回真实计算任务后，牺牲的代价才显现，就可以在同一把尺子上重新比较。
 本节用 <b>端到端任务完成时间</b>（计算 + alltoall）与 <b>router 面积</b>
-构造 Pareto 前沿，评估选型。</p>
+构造 Pareto 前沿，<b>把被排除的方案也一并放回</b>，量化它们到底差多少。</p>
 
 <h3>6.1 模型</h3>
 <ul class="note">
@@ -1285,10 +1298,11 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 
 <h3>6.3 选型结论</h3>
 <ol>
-<li><b>排名翻转：</b>M1 XY / M2 Rect-XY 在第 3–4 节 makespan 矩阵中最快（中位 ~62 cy），
+<li><b>排名翻转：</b>M1 XY / M2 Rect-XY 的裸 makespan 最快（中位 ~62 cy），
 端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
 （最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
-计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。</li>
+计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。
+这一条正是 §2.4 把它们排除出 makespan 对比的量化依据。</li>
 <li><b>通信占端到端 70–86%</b>（除重牺牲的 XY/Rect-XY）。即便配了
 {meta['pe_macs_per_cycle']} MAC/cy 的 PE，任务仍是通信瓶颈——
 花 router 面积买带宽划算。</li>
@@ -1300,7 +1314,7 @@ M10→M7 再多 111% 面积只多买 10.4% / 7.3%（回报 39 / 281，低一个�
 <li><b>推荐：M10 虚拟规则网格（2 VC）</b>——拐点干净，两个载荷尺寸结论一致；
 上层软件仍见规则 8×6 mesh。若 router 面积在系统中占比很小、延迟是硬指标，
 直接上 <b>M7 Stripe（6 VC）</b>（两个载荷下都最快）。
-<strong>不要</strong>因 makespan 矩阵好看就选 M1 XY。</li>
+<strong>不要</strong>因裸 makespan 好看就选 M1 XY。</li>
 </ol>
 <p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall（加 combine 更利好 M7）；
 面积不计牺牲的 PE tile（计入会进一步惩罚 M1/M2/M4）；
@@ -1354,6 +1368,7 @@ def main():
         return [r for r in primary
                 if r["scenario"] == scen_name and r["semantics"] == sem
                 and r["m"] == m and r["Q"] == 19
+                and r["scheme"] not in EXCLUDED_SCHEMES
                 and r.get("makespan") is not None]
 
     def pareto(cands: list[dict]) -> list[dict]:
@@ -1424,7 +1439,7 @@ def main():
     def scheme_matrix(sem: str, m: int) -> str:
         schemes = []
         for r in primary:
-            if r["scheme"] not in schemes:
+            if r["scheme"] not in schemes and r["scheme"] not in EXCLUDED_SCHEMES:
                 schemes.append(r["scheme"])
         head = ("<tr><th>场景</th>" +
                 "".join(f"<th>{esc(SCHEME_LABELS.get(s, s))}</th>"
@@ -1522,6 +1537,65 @@ def main():
         for s in SCHEME_LABELS if s in feas_counts
     ) + "</ul>"
 
+    # ---- capability check: the three hard properties, measured ---------------
+    def capability_html() -> str:
+        if not CAP_JSON_PATH.exists():
+            return ("<p class='note bad'>缺少 <code>results/pg_capability.json"
+                    "</code>，请跑 <code>utils/pg_capability_probe.py</code>。</p>")
+        cap = json.loads(CAP_JSON_PATH.read_text())
+        n_cells = cap["meta"]["n_cells"]
+        # Ordering can only be seen in the DES → read it off the sweep rows.
+        ord_bad, ord_tot = defaultdict(int), defaultdict(int)
+        for r in primary:
+            if r.get("makespan") is None:
+                continue
+            ord_tot[r["scheme"]] += 1
+            if r.get("ordered_ok") is False:
+                ord_bad[r["scheme"]] += 1
+
+        def cell(good: bool, text: str) -> str:
+            cls = "cap-ok" if good else "cap-bad"
+            return f"<td class='l {cls}'>{text}</td>"
+
+        head = ("<tr><th class='l'>方案</th><th class='l'>避障</th>"
+                "<th class='l'>无死锁</th><th class='l'>保序</th>"
+                "<th class='l'>判定</th></tr>")
+        body = []
+        for sch, lab in SCHEME_LABELS.items():
+            base = "segment" if sch == "segment_lb" else (
+                "updown" if sch == "updown_lb" else sch)
+            c = cap["schemes"].get(base)
+            if c is None:
+                continue
+            # fault avoidance
+            if c["fail_path"]:
+                avoid = cell(False, f"<b>✗</b> {c['fail_path']}/{n_cells} 建不出路径")
+            elif c["sacrifice"]:
+                avoid = cell(True, f"△ 靠牺牲：{c['sacrifice']}/{n_cells} 场景，"
+                                   f"累计 {c['forced_nodes']} 节点")
+            else:
+                avoid = cell(True, f"✓ {n_cells}/{n_cells} 零牺牲绕开")
+            # deadlock freedom
+            dl = (cell(False, f"<b>✗</b> {c['fail_cdg']}/{n_cells} CDG 成环")
+                  if c["fail_cdg"] else cell(True, f"✓ {n_cells}/{n_cells} 无环"))
+            # ordering (DES-observed)
+            nb, nt = ord_bad[sch], ord_tot[sch]
+            order = (cell(False, f"<b>✗</b> {nb}/{nt} 行乱序")
+                     if nb else cell(True, f"✓ {nt}/{nt} 行 ordered_ok"))
+            if sch in EXCLUDED_SCHEMES:
+                mark = (f"<td class='l cap-bad'><b>排除</b>"
+                        f"<div class='sub'>{esc(EXCLUDED_SCHEMES[sch])}</div></td>")
+                name = f"<td class='l cap-bad'><s>{esc(lab)}</s></td>"
+            else:
+                mark = "<td class='l cap-ok'>纳入对比</td>"
+                name = f"<td class='l'>{esc(lab)}</td>"
+            body.append("<tr>" + name + avoid + dl + order + mark + "</tr>")
+        return (f"<table class='cap'><thead>{head}</thead>"
+                f"<tbody>{''.join(body)}</tbody></table>")
+
+    cap_html = capability_html()
+    excluded_labels = "、".join(SCHEME_LABELS[s] for s in EXCLUDED_SCHEMES)
+
     doc = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"/>
 <title>8×6 PG 分组交换 Alltoall</title>
@@ -1550,6 +1624,9 @@ td.bad {{ color: #c0392b; font-weight: 600; }}
 .scheme-fig svg {{ display: block; background: #fff;
                    border: 1px solid #eef0f2; border-radius: 3px;
                    overflow: visible; max-width: 100%; height: auto; }}
+table.cap td.cap-ok {{ background: #f2faf5; }}
+table.cap td.cap-bad {{ background: #fdf1ef; color: #922b21; }}
+table.cap {{ max-width: 62rem; }}
 table.qa3 {{ font-size: 0.82rem; margin: 0.6rem 0 0.3rem; width: 100%; }}
 table.qa3 th {{ background: #f3ecf7; text-align: left; white-space: nowrap;
                 width: 6.5rem; font-weight: 600; }}
@@ -2090,13 +2167,31 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 </tbody>
 </table>
 
-<h3>2.4 方案可行性与牺牲代价（m=1, Q=19）</h3>
+<h3>2.4 三性质核验与排除标记</h3>
+<p class="note">对每个 (故障场景 × 语义) 让方案在<b>零额外牺牲</b>下建全表
+（仅先剔除度为 0 的孤立点，那对谁都不可避免），看它能否自力满足三条硬性质。
+避障 / 无死锁来自 <code>utils/pg_capability_probe.py</code>
+（<code>results/pg_capability.json</code>）；
+保序只能在 DES 里观察，取自扫描结果的 <code>ordered_ok</code>。</p>
+{cap_html}
+<p class="note"><b>读法：</b><b>✗</b> = 该性质<b>自力做不到</b>，只能靠牺牲恢复器兜底；
+△ = 做得到，但方式是按构造牺牲好节点（不是绕行）。
+<b>保序全员通过</b>——882 行 DES 无一例乱序，这是「每对唯一路径 +
+<code>vc_of</code> 为纯函数」的必然结果。</p>
+<p class="note"><b>排除规则：</b>第 3–4 节的 makespan / irreg 对比<b>不含</b>
+{esc(excluded_labels)}。原因不是它们跑得慢，恰恰相反——它们在矩阵里常常「最快」，
+但那是<b>把一半阵列裁掉换来的</b>：参与者 A 变小，总流量按 A² 下降，
+makespan 自然虚低。既然它们连三条硬性质都要靠大规模牺牲才成立，
+放进同一张表比较只会误导。第 6 节的端到端评估仍保留它们，
+因为那里已经用强扩展把牺牲的代价折算回时间了。</p>
+
+<h3>2.5 方案可行性与牺牲代价（m=1, Q=19，含被排除方案）</h3>
 {feas_html}
 
 <h2>3. 每场景最优方案选择</h2>
 <p class="note">判据按用户口径：<b>先看牺牲节点数，再看 makespan</b>。这也让比较更公平——
-牺牲数相同意味着参与 alltoall 的节点数 A 相同，makespan 才可直接对比
-（A 变小会让 makespan 无偿变好，见 M2）。
+牺牲数相同意味着参与 alltoall 的节点数 A 相同，makespan 才可直接对比。
+<b>已排除 {esc(excluded_labels)}</b>（见 §2.4）。
 「Pareto 备选」列出所有<b>非受支配</b>的 (牺牲, makespan) 组合：
 若愿意多牺牲若干节点换更快，就从这里挑。</p>
 <p class="note"><b>表头 raw / irreg 百分比含义：</b></p>
@@ -2120,10 +2215,12 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <h3>3.4 transit · m=5 flit</h3>
 {optimal_table('transit', 5)}
 
-<h2>4. 全方案 makespan 矩阵</h2>
+<h2>4. makespan 矩阵（已排除三性质不达标的方案）</h2>
 <p class="note">单元格主行：makespan（cy）；副行：<b>irreg</b>（相对同 A 下界的额外开销）
 | 牺牲节点数。这里用 irreg 而非 raw：不同方案牺牲数不同、参与者 A 不同，
 raw 会因 A 变小而虚低；irreg 以各自 A 的下界为分母，跨方案可比。
+<b>不含 {esc(excluded_labels)}</b>（见 §2.4；它们的原始数据仍在
+<code>results/pg_alltoall_8x6.json</code> 里）。
 raw 值仍保留在单元格 tooltip 里。
 INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <h3>4.1 dead · m=1</h3>
@@ -2179,8 +2276,13 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 （dead/transit × m=1/5 合计约 70/72 场）。仅个别场次 M5/M6 并列或略胜。
 代价是 5–6 VC。若看 Pareto 上「同牺牲、更少 VC」，常落到 M6 LASH。</li>
 
-<li><b>M2 Rect-XY 仍在 Pareto 极端点</b>（高牺牲换极低 makespan），但那是 A 变小所致；
-看 irreg. 并不占优。只有上层本就不需要满规模时才有意义。</li>
+<li><b>M1 / M2 / M4 已被排除出 makespan 对比（§2.4）。</b>三性质核验显示：
+M1 有 27/36 场景建不出路径，M4 有 17/36 建不出、另有 7/36 CDG 成环，
+M2 则 36/36 都要靠裁行裁列（累计牺牲 1018 节点）。
+它们裸 makespan 好看纯粹是 A 变小的假象——端到端（§6）里全部垫底。</li>
+
+<li><b>保序全员通过</b>：882 行 DES 无一例 <code>ordered_ok=False</code>。
+本研究的三条硬性质里，真正区分方案的是避障与无死锁。</li>
 
 <li><b>M3+LB / M4+LB 几乎无效</b>——想降负载应换 B 类。</li>
 
