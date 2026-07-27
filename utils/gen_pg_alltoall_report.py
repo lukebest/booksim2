@@ -58,14 +58,21 @@ def pct(x) -> str:
     return f"{x * 100:+.1f}%"
 
 
-def _mini_xy(cols: int, rows: int, pad: float = 28, gap: float = 36):
-    """Return (cell centers dict (c,r)->(x,y), width, height). row 0 at bottom."""
-    w = pad * 2 + (cols - 1) * gap + 20
-    h = pad * 2 + (rows - 1) * gap + 28
+def _mini_xy(cols: int, rows: int, pad: float = 28, gap: float = 36,
+             bottom_extra: float = 0, side_extra: float = 0):
+    """Return (cell centers dict (c,r)->(x,y), width, height). row 0 at bottom.
+
+    Base height reserves room for a 2-line caption (~14px/line) so wrapped
+    Chinese footnotes are not clipped by the SVG viewBox.
+    """
+    w = pad * 2 + (cols - 1) * gap + 20 + side_extra
+    h = pad * 2 + (rows - 1) * gap + 44 + bottom_extra
+    # Keep the grid centred when side_extra widens the canvas for captions.
+    x0 = pad + side_extra / 2
     centers = {}
     for r in range(rows):
         for c in range(cols):
-            centers[(c, r)] = (pad + c * gap, h - pad - r * gap)
+            centers[(c, r)] = (x0 + c * gap, h - pad - r * gap)
     return centers, w, h
 
 
@@ -85,9 +92,42 @@ def _edge(a, b, stroke="#7f8c8d", width=2, dash="", marker=""):
             f'stroke="{stroke}" stroke-width="{width}"{d}{m}/>')
 
 
-def _caption(w, h, text):
-    return (f'<text x="{w / 2}" y="{h - 6}" text-anchor="middle" '
-            f'font-size="11" font-family="sans-serif" fill="#444">{text}</text>')
+def _wrap_caption(text: str, max_chars: int = 18) -> list[str]:
+    """Split a caption so it fits a narrow SVG (CJK ≈ 1 char wide)."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text]
+    # Prefer semantic breaks; allow the first line a little over budget.
+    for sep in ("；", "。", "，", "、", "：", ":", ";"):
+        if sep not in text:
+            continue
+        left, right = text.split(sep, 1)
+        left, right = left + sep, right.strip()
+        if right and 4 <= len(left) <= max_chars + 4:
+            return [left] + _wrap_caption(right, max_chars)
+    # Hard wrap; keep a short lead-in (e.g. "③ ") with the next chunk.
+    if len(text) > max_chars:
+        cut = max_chars
+        # Prefer breaking after a space near the cut.
+        sp = text.rfind(" ", 0, cut + 1)
+        if sp >= 4:
+            cut = sp + 1
+        return [text[:cut].rstrip()] + _wrap_caption(text[cut:].lstrip(),
+                                                      max_chars)
+    return [text]
+
+
+def _caption(w, h, text, max_chars: int = 18):
+    lines = _wrap_caption(text, max_chars=max_chars)
+    n = len(lines)
+    # Bottom-most line sits at h-5; earlier lines stack upward.
+    out = []
+    for i, line in enumerate(lines):
+        y = h - 5 - (n - 1 - i) * 13
+        out.append(
+            f'<text x="{w / 2}" y="{y}" text-anchor="middle" '
+            f'font-size="11" font-family="sans-serif" fill="#444">{line}</text>')
+    return "".join(out)
 
 
 def _defs_arrow(uid="arr", fill="#27ae60"):
@@ -242,20 +282,46 @@ def scheme_diagrams() -> dict[str, str]:
     parts.append("</svg>")
     out["rect_xy"] = "".join(parts)
 
-    # ---- M3 Up*/Down*: root + labels, path up then down ----
-    C, W, H = _mini_xy(3, 3, pad=32, gap=42)
+    # ---- M3 Up*/Down* panel set ------------------------------------------------
+    def _m3_grid(C, parts, hole=(), gray_edges=True):
+        for r in range(3):
+            for c in range(2):
+                if (c, r) in hole or (c + 1, r) in hole:
+                    continue
+                if gray_edges:
+                    parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.5))
+            for c in range(3):
+                if r < 2 and (c, r) not in hole and (c, r + 1) not in hole:
+                    if gray_edges:
+                        parts.append(_edge(C[(c, r)], C[(c, r + 1)],
+                                           "#bdc3c7", 1.5))
+
+    def _m3_labels_text(C, parts, labels, skip=()):
+        for (c, r), lab in labels.items():
+            if (c, r) in skip:
+                continue
+            parts.append(
+                f'<text x="{C[(c, r)][0] + 11}" y="{C[(c, r)][1] + 4}" '
+                f'font-size="10" fill="#7f8c8d">d={lab}</text>')
+
+    labels3 = {(c, r): abs(c - 1) + abs(r - 1)
+               for c in range(3) for r in range(3)}
+
+    def _m3_canvas():
+        # Extra width/height so Chinese captions & 2-line legends are not clipped.
+        return _mini_xy(3, 3, pad=36, gap=48, bottom_extra=20, side_extra=56)
+
+    def _m3_legend(parts, left, right, c_left, c_right):
+        parts.append(
+            f'<text x="10" y="14" font-size="10" fill="{c_left}">{left}</text>'
+            f'<text x="10" y="26" font-size="10" fill="{c_right}">{right}</text>')
+
+    # (1) Main: height labels + path that happens to pass near root
+    C, W, H = _m3_canvas()
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
              f'viewBox="0 0 {W} {H}">', _defs_arrow("a3u", "#2980b9"),
              _defs_arrow("a3d", "#e67e22")]
-    for r in range(3):
-        for c in range(2):
-            parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.5))
-        for c in range(3):
-            if r < 2:
-                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#bdc3c7", 1.5))
-    # labels = manhattan to root (1,1)
-    labels = {(c, r): abs(c - 1) + abs(r - 1) for c in range(3) for r in range(3)}
-    # path S(0,0) up to root (1,1) then down to D(2,2): (0,0)->(0,1)->(1,1)->(2,1)->(2,2)
+    _m3_grid(C, parts)
     path = [(0, 0), (0, 1), (1, 1), (2, 1), (2, 2)]
     for i in range(2):
         parts.append(_edge(C[path[i]], C[path[i + 1]], "#2980b9", 3.2,
@@ -274,16 +340,122 @@ def scheme_diagrams() -> dict[str, str]:
             else:
                 fill, lab = "#2980b9", ""
             parts.append(_node(*C[(c, r)], fill=fill, label=lab))
-            parts.append(
-                f'<text x="{C[(c, r)][0] + 12}" y="{C[(c, r)][1] + 4}" '
-                f'font-size="10" fill="#7f8c8d">d={labels[(c, r)]}</text>')
-    # legend
-    parts.append(
-        f'<text x="8" y="14" font-size="10" fill="#2980b9">蓝=up(朝根)</text>'
-        f'<text x="{W/2}" y="14" font-size="10" fill="#e67e22">橙=down(离根)</text>')
-    parts.append(_caption(W, H, "合法路径：先 up，再 down（不能回头 up）"))
+    _m3_labels_text(C, parts, labels3)
+    _m3_legend(parts, "蓝 = up（label↓）", "橙 = down（label↑）",
+               "#2980b9", "#e67e22")
+    parts.append(_caption(W, H, "① 先 up 再 down；此例恰好过根，根不是中转站"))
     parts.append("</svg>")
     out["updown"] = "".join(parts)
+
+    # (2) Same root/labels; path never visits root
+    C, W, H = _m3_canvas()
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a3nu", "#2980b9"),
+             _defs_arrow("a3nd", "#e67e22")]
+    _m3_grid(C, parts)
+    # S(0,2) d=2 → (1,2) d=1 → D(2,2) d=2 : up then down, skip root (1,1)
+    parts.append(_edge(C[(0, 2)], C[(1, 2)], "#2980b9", 3.2, marker="a3nu"))
+    parts.append(_edge(C[(1, 2)], C[(2, 2)], "#e67e22", 3.2, marker="a3nd"))
+    for r in range(3):
+        for c in range(3):
+            if (c, r) == (1, 1):
+                fill, lab = "#8e44ad", "根"
+            elif (c, r) == (0, 2):
+                fill, lab = "#27ae60", "S"
+            elif (c, r) == (2, 2):
+                fill, lab = "#27ae60", "D"
+            else:
+                fill, lab = "#2980b9", ""
+            parts.append(_node(*C[(c, r)], fill=fill, label=lab,
+                               r=8 if (c, r) == (1, 1) else 7))
+    _m3_labels_text(C, parts, labels3)
+    _m3_legend(parts, "根只提供高度坐标", "路径：d=2 → 1 → 2",
+               "#8e44ad", "#555")
+    parts.append(_caption(W, H, "② 同一套 label；合法最短路可以完全不经过根"))
+    parts.append("</svg>")
+    out["updown_noroot"] = "".join(parts)
+
+    # (3) One root shared by two (s,d) pairs
+    C, W, H = _m3_canvas()
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a3s1u", "#2980b9"),
+             _defs_arrow("a3s1d", "#e67e22"),
+             _defs_arrow("a3s2u", "#16a085"),
+             _defs_arrow("a3s2d", "#d35400")]
+    _m3_grid(C, parts)
+    # pair1: (0,0)->(0,1)->(1,1)->(2,1)->(2,2)
+    for a, b in [((0, 0), (0, 1)), ((0, 1), (1, 1))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3.0, marker="a3s1u"))
+    for a, b in [((1, 1), (2, 1)), ((2, 1), (2, 2))]:
+        parts.append(_edge(C[a], C[b], "#e67e22", 3.0, marker="a3s1d"))
+    # pair2: (2,0)->(1,0)->(1,1)->(1,2)->(0,2)  (offset slightly via dash)
+    for a, b in [((2, 0), (1, 0)), ((1, 0), (1, 1))]:
+        parts.append(_edge(C[a], C[b], "#16a085", 2.6, "4,2", marker="a3s2u"))
+    for a, b in [((1, 1), (1, 2)), ((1, 2), (0, 2))]:
+        parts.append(_edge(C[a], C[b], "#d35400", 2.6, "4,2", marker="a3s2d"))
+    for r in range(3):
+        for c in range(3):
+            if (c, r) == (1, 1):
+                fill, lab = "#8e44ad", "根"
+            elif (c, r) == (0, 0):
+                fill, lab = "#27ae60", "S₁"
+            elif (c, r) == (2, 2):
+                fill, lab = "#27ae60", "D₁"
+            elif (c, r) == (2, 0):
+                fill, lab = "#1abc9c", "S₂"
+            elif (c, r) == (0, 2):
+                fill, lab = "#1abc9c", "D₂"
+            else:
+                fill, lab = "#2980b9", ""
+            parts.append(_node(*C[(c, r)], fill=fill, label=lab))
+    _m3_labels_text(C, parts, labels3)
+    _m3_legend(parts, "实线 = S₁→D₁", "虚线 = S₂→D₂",
+               "#2980b9", "#16a085")
+    parts.append(_caption(W, H, "③ 每种故障场景只选一个 root；所有 (s,d) 共用"))
+    parts.append("</svg>")
+    out["updown_share"] = "".join(parts)
+
+    # (4) Not DOR + fault pruned from adj
+    C, W, H = _m3_canvas()
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+             f'viewBox="0 0 {W} {H}">', _defs_arrow("a3fu", "#2980b9"),
+             _defs_arrow("a3fd", "#e67e22")]
+    hole = {(1, 0)}
+    _m3_grid(C, parts, hole=hole)
+    # ghost XY that would hit the hole: (0,0)->(1,0)->(2,0)->(2,2)
+    for a, b in [((0, 0), (1, 0)), ((1, 0), (2, 0)), ((2, 0), (2, 1)),
+                 ((2, 1), (2, 2))]:
+        parts.append(_edge(C[a], C[b], "#c0392b", 2.0, "3,3"))
+    parts.append(
+        f'<text x="{C[(1, 0)][0]}" y="{C[(1, 0)][1] - 22}" '
+        f'text-anchor="middle" font-size="10" fill="#c0392b">'
+        f'XY/DOR 撞洞 ✕</text>')
+    # Up*/Down* around: (0,0)->(0,1)->(1,1)->(2,1)->(2,2)
+    for a, b in [((0, 0), (0, 1)), ((0, 1), (1, 1))]:
+        parts.append(_edge(C[a], C[b], "#2980b9", 3.2, marker="a3fu"))
+    for a, b in [((1, 1), (2, 1)), ((2, 1), (2, 2))]:
+        parts.append(_edge(C[a], C[b], "#e67e22", 3.2, marker="a3fd"))
+    for r in range(3):
+        for c in range(3):
+            if (c, r) in hole:
+                parts.append(_node(*C[(c, r)], fill="#c0392b", r=8, label="坏"))
+            elif (c, r) == (1, 1):
+                parts.append(_node(*C[(c, r)], fill="#8e44ad", label="根"))
+            elif (c, r) == (0, 0):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="S"))
+            elif (c, r) == (2, 2):
+                parts.append(_node(*C[(c, r)], fill="#27ae60", label="D"))
+            else:
+                parts.append(_node(*C[(c, r)]))
+    _m3_labels_text(C, parts, labels3, skip=hole)
+    _m3_legend(parts, "红虚线 = DOR", "彩实线 = Up*/Down* BFS",
+               "#c0392b", "#2980b9")
+    parts.append(_caption(W, H, "④ 非 DOR；坏节点已从邻接表删除，只在活边上搜"))
+    parts.append("</svg>")
+    out["updown_fault"] = "".join(parts)
+
+    out["updown_aux"] = (out["updown_noroot"] + out["updown_share"]
+                         + out["updown_fault"])
 
     # ---- M3+LB: congested edge vs detour ----
     C, W, H = _mini_xy(3, 2, pad=30, gap=48)
@@ -834,10 +1006,11 @@ def main():
     cls_fig = class_diagrams()
 
     def scheme_block(title_html: str, key: str, body_html: str,
-                     extra_key: str | None = None) -> str:
+                     extra_key: str | None = None,
+                     extra_keys: list[str] | None = None) -> str:
         fig = diagrams.get(key, "")
-        if extra_key:
-            fig += diagrams.get(extra_key, "")
+        for k in ([extra_key] if extra_key else []) + (extra_keys or []):
+            fig += diagrams.get(k, "")
         return (
             f'<div class="scheme"><h4>{title_html}</h4>'
             f'<div class="scheme-body"><div class="scheme-text">{body_html}</div>'
@@ -1045,8 +1218,16 @@ td.bad {{ color: #c0392b; font-weight: 600; }}
 .scheme-body {{ display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }}
 .scheme-text {{ flex: 1 1 16rem; min-width: 14rem; }}
 .scheme-fig {{ flex: 0 0 auto; background: #fafbfc; border: 1px solid #e8e8e8;
-               padding: 0.35rem; border-radius: 4px; }}
-.scheme-fig svg {{ display: block; }}
+               padding: 0.45rem; border-radius: 4px;
+               display: flex; flex-direction: column; gap: 0.65rem;
+               max-width: 28rem; }}
+.scheme-fig svg {{ display: block; background: #fff;
+                   border: 1px solid #eef0f2; border-radius: 3px;
+                   overflow: visible; max-width: 100%; height: auto; }}
+.faq {{ background: #f8fafc; border-left: 3px solid #8e44ad;
+        padding: 0.45rem 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; }}
+.faq p {{ margin: 0.3rem 0; }}
+.faq b.q {{ color: #6c3483; }}
 .cls {{ display: flex; flex-wrap: wrap; gap: 1rem; max-width: 60rem;
         margin: 1rem 0 1.4rem; }}
 .cls-card {{ flex: 1 1 24rem; background: #fff; border: 1px solid #e0e0e0;
@@ -1146,14 +1327,38 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 故障后只要图仍连通，通常就能零牺牲跑通全表——本研究里它是「保住计算规模」的基线。</p>
 <p><b>算法步骤：</b></p>
 <ol>
-<li><b>选根</b>：在存活路由邻接表上取度最大的节点（并列取编号小者），尽量让树更「中心」。</li>
+<li><b>选根</b>：在存活路由邻接表上取度最大的节点（并列取编号小者），尽量让树更「中心」。
+<strong>每种故障场景只选一次</strong>，所有 (s,d) 共用（见图③）。</li>
 <li><b>标号</b>：从根做 BFS，<code>label(n) = dist(root, n)</code>。
 朝根走（label 减小）= <b>up</b>；离根走（label 增大）或同层侧向 = <b>down</b>。</li>
 <li><b>转向规则</b>：路径分两相——相 0 允许 up；一旦走出 down，进入相 1，
 此后<b>禁止再 up</b>。同层侧向也算 down，因此不能「下完又上」。</li>
-<li><b>选路</b>：在上述合法转移上做 BFS，得到每对 (s,d) 的最短合法路径；
+<li><b>选路</b>：在上述合法转移上对 <code>route_adj</code> 做 BFS，
+得到每对 (s,d) 的最短合法路径——<strong>不是 XY/DOR，也不是「先走到根再离开」</strong>。
 整表确定性、唯一路径 → 同源同目的保序。</li>
 </ol>
+
+<div class="faq">
+<p><b class="q">Q1. root 是每种故障一个，还是每个 (src,dst) 一个？</b><br/>
+<strong>每种故障场景（一份存活路由图）只选一个 root。</strong>
+换 (s,d) 不换 root；换故障 / 牺牲后图变了，root 才可能变（度最大点可能换人）。
+见图③：S₁→D₁ 与 S₂→D₂ 共用同一套 <code>d=…</code> 标号。</p>
+<p><b class="q">Q2. src→root、root→dst 还是 DOR 吗？</b><br/>
+<strong>都不是。</strong>实现是「约束 BFS」：在活边上枚举邻居，只按 label 升降判断
+up/down 是否合法，取最短跳数路径。跳的方向可以是任意 mesh 邻边（东/西/南/北），
+与「先 X 后 Y」无关。见图④红虚线（DOR 撞洞）vs 彩实线（Up*/Down* 绕开）。</p>
+<p><b class="q">Q3. 路径必须经过 root 吗？</b><br/>
+<strong>不必。</strong>Root 只提供高度坐标系，不是中转站。
+路径可以过根（图①，S、D 分居两侧时常见），也可以完全不过根
+（图②：<code>d=2→1→2</code>，只在顶行走）。示意图画「S→根→D」是为展示两相，
+不是算法字面步骤。</p>
+<p><b class="q">Q4. 怎么避开故障节点？</b><br/>
+<strong>建图时就删掉了。</strong><code>expand_pg</code> 生成的 <code>route_adj</code>
+不含 dead 节点及其入射边（transit 语义下故障节点不当 compute，但 router 可仍在图中）。
+<code>_tree_path</code> 只遍历 <code>adj.get(u)</code>，不可能踏进已删除的点/边。
+若图被割裂或「先上后下」下无合法路，则该场景失败，外层再靠牺牲好节点恢复。</p>
+</div>
+
 <p><b>无死锁证明要点：</b>任何合法路径上，通道依赖只能经历
 「up 边 → up 边 → … → down 边 → down 边」。
 不可能出现 down→up，因此 CDG 按构造无环（实现里仍做一次硬校验）。</p>
@@ -1163,7 +1368,7 @@ alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
 M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益几乎为零。</p>
 <p><b>端到端角色：</b>Pareto 凸包的左端点——面积最小（VC1≈0.90），
 作为「面积受限时的保底方案」。不要用它追极限延迟。</p>
-''')}
+''', extra_key="updown_aux")}
 
 {scheme_block("M3+LB — Up*/Down* + 负载均衡（<code>updown_lb</code>）", "updown_lb", '''
 <p><b>在 M3 路径表上后处理：</b>统计有向边 alltoall 对数负载；每轮重排途经最热边的若干 (s,d)，
