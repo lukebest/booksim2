@@ -712,9 +712,10 @@ def main():
                         f"A={hit['n_compute_used']} "
                         f"VC={hit.get('num_vc', 1)} "
                         f"max_load={hit.get('max_load')} "
-                        f"irreg={pct(hit.get('irregularity_penalty'))}'>"
+                        f"raw={pct(hit.get('raw_slowdown'))}'>"
                         f"{hit['makespan']}"
-                        f"<div class='sub'>{pct(hit.get('raw_slowdown'))} "
+                        f"<div class='sub'>"
+                        f"{pct(hit.get('irregularity_penalty'))} "
                         f"| sac {hit['n_sacrificed']}</div></td>"
                     )
             body.append("<tr>" + "".join(cells) + "</tr>")
@@ -1027,10 +1028,10 @@ CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格
 <code>−30.0%</code> 表示比 golden 还短——通常因为牺牲后参与者 A 变少、总流量按 A² 下降，
 <strong>不是</strong>路由变好。跨场景比「路由质量」时不要只看 raw。</li>
 <li><b>irreg</b>（<code>irregularity_penalty = mk / LB_same_A − 1</code>）：相对<strong>同一存活集合 A</strong>
-上解析下界（带宽/注入/延迟三项取 max）的额外开销。
-例如 <code>+9.8%</code> 表示在「这些节点本来就该跑多久」之上，又慢了约 10%——
-主要来自绕路、负载不均、死锁约束等。比 raw 更适合比较不同方案的路由质量。</li>
-<li>百分比由比值减 1 再 ×100 显示；正=更慢，负=更快（对 raw 常见于高牺牲）。</li>
+上<strong>与路由无关的真下界</strong>（割下界带宽项 / 注入 / 延迟三者取 max）的额外开销。
+例如 <code>+9.8%</code> 表示在「这些节点无论怎么路由都至少要跑这么久」之上，又慢了约 10%——
+来自绕路、负载不均、死锁约束等。比 raw 更适合比较路由质量，且<b>恒 ≥ 0</b>。</li>
+<li>百分比由比值减 1 再 ×100 显示。raw 可能为负（牺牲后 A 变小所致）；irreg 不会为负。</li>
 </ul>
 <h3>3.1 dead · m=1 flit</h3>
 {optimal_table('dead', 1)}
@@ -1042,9 +1043,11 @@ CDG 仍有环，则加密到每个列边界。VC 数 ≈ 跨越数+1（本网格
 {optimal_table('transit', 5)}
 
 <h2>4. 全方案 makespan 矩阵</h2>
-<p class="note">单元格主行：makespan（cy）；副行：<b>raw</b>（相对健康 XY 的 slowdown 百分比）
-| 牺牲节点数。INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。
-raw / irreg 定义见第 3 节与第 6 节。</p>
+<p class="note">单元格主行：makespan（cy）；副行：<b>irreg</b>（相对同 A 下界的额外开销）
+| 牺牲节点数。这里用 irreg 而非 raw：不同方案牺牲数不同、参与者 A 不同，
+raw 会因 A 变小而虚低；irreg 以各自 A 的下界为分母，跨方案可比。
+raw 值仍保留在单元格 tooltip 里。
+INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 <h3>4.1 dead · m=1</h3>
 {scheme_matrix('dead', 1)}
 <h3>4.2 transit · m=1</h3>
@@ -1062,10 +1065,20 @@ raw / irreg 定义见第 3 节与第 6 节。</p>
 <li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
 基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
 负值多半来自 A 变小，解读时要对照「牺牲」列。</li>
-<li><b>irreg / irregularity_penalty</b> = <code>mk / LB_same_A − 1</code>。
-<code>LB_same_A</code> = 同一 compute 集合上
-<code>max(unbound_bw, inj_term, lat_term)</code>。
-衡量「去掉死锁/绕路约束后还该多慢」——越小说明路由越接近该规模下的带宽/延迟极限。</li>
+<li><b>irreg / irregularity_penalty</b> = <code>mk / LB_same_A − 1</code>，其中
+<code>LB_same_A = max(minimax_load_lb·m, inj_term, lat_lb)</code>，
+在<strong>同一存活集合</strong>上计算，且<strong>与路由无关</strong>：
+<ul>
+<li><code>minimax_load_lb</code>：对所有轴对齐割 (S,S̄)，S→S̄ 的
+<code>|S∩C|·|S̄∩C|</code> 对必须挤过 S 的出边，取
+<code>ceil(需求/出边数)</code> 的最大值。任何路由都无法低于它
+（健康 8×6 上该值 = 96，正是 XY 的实际负载，说明界是紧的）。</li>
+<li><code>lat_lb</code>：按 H/V 加权的最短路直径 + <code>2·RAMP + (m−1)</code>。</li>
+<li><code>inj_term</code>：<code>ceil((A−1)·m / RAMP_BW)</code>。</li>
+</ul>
+因为最忙链路至少要搬 <code>minimax_load_lb·m</code> 个 flit，
+所以 <code>mk ≥ LB_same_A</code> 恒成立，<b>irreg 不会为负</b>。
+（早期版本分母用的是 XY 随手装填的可达负载，不是下界，故会出现负值。）</li>
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 

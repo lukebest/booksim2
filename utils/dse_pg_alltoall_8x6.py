@@ -308,9 +308,10 @@ def metrics(mk: int | None, golden_mk: int, lb: dict, n_flits: int,
             "throughput_ratio": None,
             "sacrifice_cost": n_sac / n_good if n_good else 0.0,
         }
-    unb = lb.get("unbound_bw_lb") or lb.get("lb") or 1
-    # irregularity uses max(unbound bw, lat) style LB on same compute set
-    denom = max(unb, lb.get("lat_term", 0), lb.get("inj_term", 0), 1)
+    # Routing-independent minimax lower bound on the same compute set, so the
+    # penalty is always >= 0 (the old unbound_bw_lb was an achievable XY load,
+    # not a bound, and schemes that beat it produced negative penalties).
+    denom = max(lb.get("true_lb") or 0, 1)
     thr = n_flits / mk
     thr_g = n_flits / golden_mk if golden_mk else thr
     # golden throughput uses golden's flit count — compare per-node rates later

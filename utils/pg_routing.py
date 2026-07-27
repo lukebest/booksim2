@@ -1702,6 +1702,90 @@ def unbound_minimax_load(compute: list[int], adj: dict[int, list[int]]
     return max_link_load(paths)
 
 
+_MINIMAX_CACHE: dict[Any, int] = {}
+_WIREDIAM_CACHE: dict[Any, int] = {}
+
+
+def _topology_key(compute: list[int], adj: dict[int, list[int]]) -> Any:
+    return (tuple(sorted(compute)),
+            tuple(sorted((u, v) for u, nbs in adj.items() for v in nbs)))
+
+
+def minimax_load_lb(compute: list[int], adj: dict[int, list[int]]) -> int:
+    """True lower bound on max directed link load (counted in src-dst pairs).
+
+    For any cut (S, S̄), all |S∩C|·|S̄∩C| pairs going S→S̄ must share the live
+    directed links leaving S, so some link carries at least the ceiling of that
+    ratio. Maximising over all axis-aligned rectangles S gives a bound that no
+    routing — deadlock-free or not — can beat. On the healthy 8×6 this is 96,
+    exactly what XY achieves, so the bound is tight there.
+    """
+    cs = set(compute)
+    a = len(cs)
+    if a < 2:
+        return 0
+    key = _topology_key(compute, adj)
+    hit = _MINIMAX_CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    best = 0
+    for x0 in range(MX):
+        for x1 in range(x0, MX):
+            for y0 in range(MY):
+                for y1 in range(y0, MY):
+                    inside = set()
+                    for x in range(x0, x1 + 1):
+                        for y in range(y0, y1 + 1):
+                            n = nid(x, y)
+                            if n in adj:
+                                inside.add(n)
+                    if not inside:
+                        continue
+                    k = len(cs & inside)
+                    demand = k * (a - k)
+                    if demand == 0:
+                        continue
+                    out_edges = sum(1 for u in inside
+                                    for v in adj[u] if v not in inside)
+                    if out_edges == 0:
+                        continue
+                    lb = -(-demand // out_edges)
+                    if lb > best:
+                        best = lb
+    _MINIMAX_CACHE[key] = best
+    return best
+
+
+def wire_diameter_lb(compute: list[int], adj: dict[int, list[int]]) -> int:
+    """Max over compute pairs of the minimum achievable wire delay."""
+    if len(compute) < 2:
+        return 0
+    key = _topology_key(compute, adj)
+    hit = _WIREDIAM_CACHE.get(key)
+    if hit is not None:
+        return hit
+    cs = set(compute)
+    worst = 0
+    for s in compute:
+        dist = {s: 0}
+        pq = [(0, s)]
+        while pq:
+            d, u = heapq.heappop(pq)
+            if d != dist[u]:
+                continue
+            for v in adj.get(u, ()):
+                nd = d + link_lat(u, v)
+                if v not in dist or nd < dist[v]:
+                    dist[v] = nd
+                    heapq.heappush(pq, (nd, v))
+        for t in cs:
+            if t != s and t in dist:
+                worst = max(worst, dist[t])
+    _WIREDIAM_CACHE[key] = worst
+    return worst
+
+
 def analytical_lb(paths: dict[tuple[int, int], list[int]],
                   compute: list[int], m: int = 1,
                   adj: dict[int, list[int]] | None = None,
@@ -1710,7 +1794,7 @@ def analytical_lb(paths: dict[tuple[int, int], list[int]],
     a = len(compute)
     if a < 2:
         return {"lb": 0, "bw_term": 0, "inj_term": 0, "lat_term": 0,
-                "max_load": 0}
+                "max_load": 0, "true_lb": 0}
     max_load = max_link_load(paths)
     bw_term = max_load * m
     inj_term = ((a - 1) * m + RAMP_BW - 1) // RAMP_BW
@@ -1718,6 +1802,14 @@ def analytical_lb(paths: dict[tuple[int, int], list[int]],
     for p in paths.values():
         lat_term = max(lat_term, path_wire_delay(p) + 2 * RAMP + (m - 1))
     lb = max(bw_term, inj_term, lat_term)
+
+    # Routing-independent lower bound on the same compute set: no routing can
+    # finish faster than this, so mk / true_lb - 1 is always >= 0.
+    mm_load = minimax_load_lb(compute, adj) if adj is not None else 0
+    lat_lb = ((wire_diameter_lb(compute, adj) + 2 * RAMP + (m - 1))
+              if adj is not None else 0)
+    true_lb = max(mm_load * m, inj_term, lat_lb, 1)
+
     unbound = unbound_max_load
     if unbound is None and compute_unbound and adj is not None:
         unbound = unbound_minimax_load(compute, adj)
@@ -1727,6 +1819,10 @@ def analytical_lb(paths: dict[tuple[int, int], list[int]],
         "inj_term": inj_term,
         "lat_term": lat_term,
         "max_load": max_load,
+        "minimax_load_lb": mm_load,
+        "true_bw_lb": mm_load * m,
+        "true_lat_lb": lat_lb,
+        "true_lb": true_lb,
         "unbound_max_load": unbound,
         "unbound_bw_lb": (unbound * m) if unbound is not None else None,
     }
