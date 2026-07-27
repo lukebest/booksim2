@@ -111,7 +111,7 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <h1>NoC 动态时延降低：控制论与科学方法论的形式化推导</h1>
 <p class="sub">
 把集合通信 NoC 建模为受控对象 · 用网络演算给出时延证书 · 逐步推导前馈 / 整形 / 反馈三条路径 ·
-对应 Arch-A5 与 <code>results/nc_mesh_analysis.json</code> · 生成 2026-07-24T03:31:38Z
+对应 Arch-A5 与 <code>results/nc_mesh_analysis.json</code> · 生成 2026-07-25T08:33:44Z
 </p>
 
 <div class="card hero">
@@ -127,7 +127,7 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <li><b>控制论处方</b>：高先验用<strong>前馈</strong>对齐 \(\alpha\) 与 \(\beta\)；低先验用<strong>请示授权（在线准入）</strong>把注入变成受控输入；开放残余用<strong>反馈</strong>保有界——三者按信息结构分层。</li>
 <li><b>科学方法</b>：先分解、再辨识可控变量、用 \(h(\alpha,\beta)\) 或 \(v=0\) 作接受准则、对照证伪、与面积共优化。</li>
 </ol>
-<p class="note">文中对关键公式配有内联 SVG 示意：图 1 时延分解 · 图 2–4 网络演算 \(\alpha/\beta/h/v\) · 图 5 前馈对齐 · 图 6 软优先 · 图 7 整形压 \(\sigma\) · 图 8 请示授权交叉点。</p>
+<p class="note">文中对关键公式配有内联 SVG 示意：图 1 时延分解 · 图 2–4 网络演算 \(\alpha/\beta/h/v\) · 图 4b \(\beta\) 四层合成 · 图 5 前馈对齐 · 图 6 软优先 · 图 7 整形压 \(\sigma\) · 图 8 请示授权交叉点 · 图 9 四象限（DOR/排图 × 注入控制）。</p>
 </div>
 
 <div class="card toc">
@@ -135,7 +135,7 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <ol>
 <li><a href="#s1">被控对象：累积过程、缓冲与时延</a></li>
 <li><a href="#s2">目标分解：\(T_{\mathrm{bound}}\) 与 \(T_{\mathrm{dyn}}\)</a></li>
-<li><a href="#s3">网络演算证书：\(\alpha,\beta \mapsto h,v\)</a></li>
+<li><a href="#s3">网络演算证书：\(\alpha,\beta \mapsto h,v\)</a>（含 <a href="#s3-6">§3.6 \(\beta\) 四层合成</a>）</li>
 <li><a href="#s4">最优控制问题的形式化</a></li>
 <li><a href="#s5">路径 A：前馈 / 开环排图</a></li>
 <li><a href="#s6">路径 B：到达整形 / 有界松弛</a></li>
@@ -144,6 +144,7 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <li><a href="#s9">科学方法论的六步闭环</a></li>
 <li><a href="#s10">落地设计（Arch-A5）与数据对照</a></li>
 <li><a href="#s11">低先验：在线请示授权（admission / request–grant）</a></li>
+<li><a href="#s12">四象限对比：DOR / 静态排图 × 有无注入控制</a></li>
 </ol>
 </div>
 
@@ -426,6 +427,117 @@ C(u)\le C_{\max}.
 \]
 </div>
 <p>证书是 \(h\)，资源是 \(v\) 与面积 \(C\)；执行器 \(u\) 动 \(\alpha/\beta/B\)。</p>
+</div>
+
+<div class="step" id="s3-6">
+<span class="tag">步骤 3.6 · \(\beta\) 的合成结构：拓扑 / 路由 / 纪律 / 流控</span>
+<p>\(\beta\) <strong>不是链路的固有属性</strong>，而是某条流在某条路径上、在某套仲裁与流控下真正拿得到的服务——由四层合成：</p>
+<div class="eq">\[
+\beta_{\mathrm{flow}}
+=\underbrace{\Big(\bigotimes_{e\in P}\beta_e\Big)}_{\text{①单跳}\,\times\,\text{②拓扑/路由串联}}
+\ \ominus\ \underbrace{\sum_{j\in\mathcal{I}(P)}\alpha_j}_{\text{③纪律：干扰扣除}}
+\quad\text{再取}\quad
+R\leftarrow\underbrace{\min\!\big(R,\ B/\mathrm{RTT}\big)}_{\text{④流控速率折损}}.
+\]
+</div>
+
+<h4>① 单跳 \(\beta_e\)：硬件原始服务</h4>
+<div class="eq">\[ \beta_e(t)=R\,[t-T_e]^+. \]</div>
+<ul>
+<li>\(R\)：链路带宽（本仓库 1 flit/cycle/方向，flit=64 B）；</li>
+<li>\(T_e\)：线延迟 + 路由器流水（横向 H=7、纵向 V=9 cycle）；</li>
+<li>crossbar 输出容量限制瞬时服务：8×6 广播实测 <code>out_cap=8→96</code>（=LB）、<code>6→100</code>、<code>5→107</code>。</li>
+</ul>
+
+<h4>② 拓扑 + 路由：串联定理</h4>
+<div class="eq">\[
+\beta_1\otimes\beta_2=\min(R_1,R_2)\,\big[t-(T_1+T_2)\big]^+.
+\]
+</div>
+<p>速率取路径最小，延迟沿路径累加。6×8 mesh 上 XY 路径：</p>
+<div class="eq">\[
+\beta_P(t)=1\cdot\big[t-(7\,dx+9\,dy+2_{\mathrm{ramp}})\big]^+.
+\]
+</div>
+<p>对角 \(dx=5,dy=7\)：\(35+63+2=100\) cycles = <code>latency_lb</code>。路由还通过<strong>共享集 \(\mathcal{I}(P)\)</strong>决定谁干扰谁、通过 <code>link_reuse</code>（24–42）决定有效速率 \(R_{\mathrm{eff}}\approx R/k\)。弹出端 \(\beta_{\mathrm{eject}}(t)=\mathrm{ramp\_bw}\cdot t\) 绑死 allgather 下界 188（\(m=4\)）。</p>
+
+<h4>③ 服务纪律：剩余服务（leftover）</h4>
+<table>
+<thead><tr><th>纪律</th><th>流 \(i\) 拿到的 \(\beta_i\)</th><th>本仓库实证</th></tr></thead>
+<tbody>
+<tr class="bad"><td>FIFO</td><td>\(\beta_i^\theta=[\beta-\alpha_j(t-\theta)]^+\)（与对方突发耦合）</td><td>allgather ≈15,880</td></tr>
+<tr class="warn"><td>严格/软优先</td><td>\(\beta_{\mathrm{hi}}=\beta,\ \beta_{\mathrm{lo}}=[\beta-\alpha_{\mathrm{hi}}]^+\)</td><td>BG 上界 ~160–188；PRIO coll≈1,800</td></tr>
+<tr class="warn"><td>硬 TDM（帧 \(K\)，占 \(n\)）</td><td>\(R\cdot n/K\ [t-T_P-(K-n)s]^+\)</td><td>1-in-16 → BG 界 328</td></tr>
+<tr class="win"><td>Calendar</td><td>\(\beta_{\mathcal{C}}=\alpha_{\mathcal{C}}\)（逐槽阶梯）</td><td>\(v=0,\ h=T_{\mathrm{sched}}\)</td></tr>
+</tbody></table>
+<p>Calendar 不是“更好的仲裁”，而是<strong>换了 \(\beta\) 的函数形状</strong>去贴合 \(\alpha\)。</p>
+
+<h4>④ 流控 / 缓冲：速率隐性折损</h4>
+<div class="eq">\[
+R_{\mathrm{eff}}=\min\!\Big(R,\ \frac{B_{\mathrm{buf}}}{\mathrm{RTT}_{\mathrm{credit}}}\Big).
+\]
+</div>
+<p>credit RTT：H≈16、V≈20 cycles。浅缓冲 8–16 flit &lt; V 向 RTT 时 \(R_{\mathrm{eff}}&lt;1\) → 气泡与背压——“缓冲不足反而降低服务曲线”的精确定义。</p>
+
+<div class="fig">
+<svg viewBox="0 0 560 320" width="560" height="320" xmlns="http://www.w3.org/2000/svg" aria-label="beta four-layer composition">
+  <text x="280" y="22" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">β 的四层合成：从硬件到 per-flow 服务</text>
+  <!-- layer boxes -->
+  <rect x="40" y="40" width="120" height="70" rx="8" fill="#dbeafe" stroke="#3b82f6"/>
+  <text x="100" y="62" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="600">① 单跳 β_e</text>
+  <text x="100" y="80" text-anchor="middle" font-size="10" fill="#334155">R [t−T_e]⁺</text>
+  <text x="100" y="96" text-anchor="middle" font-size="9" fill="#64748b">H/V · out_cap</text>
+
+  <text x="175" y="78" font-size="18" fill="#94a3b8">→</text>
+
+  <rect x="195" y="40" width="130" height="70" rx="8" fill="#dcfce7" stroke="#22c55e"/>
+  <text x="260" y="62" text-anchor="middle" font-size="12" fill="#166534" font-weight="600">② 串联 ⊗</text>
+  <text x="260" y="80" text-anchor="middle" font-size="10" fill="#334155">min R, Σ T_e</text>
+  <text x="260" y="96" text-anchor="middle" font-size="9" fill="#64748b">拓扑 · 路由 · ramp</text>
+
+  <text x="340" y="78" font-size="18" fill="#94a3b8">→</text>
+
+  <rect x="360" y="40" width="160" height="70" rx="8" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="440" y="62" text-anchor="middle" font-size="12" fill="#92400e" font-weight="600">③ 剩余服务 ⊖</text>
+  <text x="440" y="80" text-anchor="middle" font-size="10" fill="#334155">[β − α_other]⁺</text>
+  <text x="440" y="96" text-anchor="middle" font-size="9" fill="#64748b">FIFO / 优先 / TDM / Cal</text>
+
+  <!-- arrow down to layer 4 -->
+  <line x1="440" y1="110" x2="440" y2="140" stroke="#94a3b8" stroke-width="2"/>
+  <polygon points="440,145 436,137 444,137" fill="#94a3b8"/>
+
+  <rect x="300" y="150" width="220" height="55" rx="8" fill="#fee2e2" stroke="#ef4444"/>
+  <text x="410" y="172" text-anchor="middle" font-size="12" fill="#991b1b" font-weight="600">④ 流控折损 R_eff</text>
+  <text x="410" y="190" text-anchor="middle" font-size="10" fill="#334155">min(R, B / RTT_credit)</text>
+
+  <!-- result -->
+  <line x1="300" y1="177" x2="200" y2="177" stroke="#94a3b8" stroke-width="2"/>
+  <polygon points="195,177 203,173 203,181" fill="#94a3b8"/>
+  <rect x="40" y="150" width="155" height="55" rx="8" fill="#ede9fe" stroke="#8b5cf6"/>
+  <text x="117" y="172" text-anchor="middle" font-size="12" fill="#5b21b6" font-weight="600">β_flow</text>
+  <text x="117" y="190" text-anchor="middle" font-size="10" fill="#334155">per-flow 服务曲线</text>
+
+  <!-- bottom: design implication -->
+  <rect x="40" y="230" width="480" height="70" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="280" y="252" text-anchor="middle" font-size="12" fill="#0f172a" font-weight="600">降时延的四个入口（性价比递减）</text>
+  <text x="280" y="272" text-anchor="middle" font-size="11" fill="#334155">①降 T_P（路由）免费 · ③消干扰（纪律）近免费 · ④对齐形状（calendar）花编译期信息</text>
+  <text x="280" y="290" text-anchor="middle" font-size="11" fill="#64748b">②抬 R（更宽链路）最贵 —— 最优解常在“对齐 β 形状”，不在“抬高 β”</text>
+</svg>
+<p class="cap"><b>图 4b.</b> \(\beta\) 四层合成。拓扑/路由进②，服务纪律进③，缓冲与 credit 进④。最优控制往往不抬高 \(\beta\)，而让其<strong>形状贴合 \(\alpha\)</strong>（calendar / 授权）。</p>
+</div>
+
+<table>
+<thead><tr><th>设计旋钮</th><th>改 \(\beta\) 的哪一层</th><th>实证</th></tr></thead>
+<tbody>
+<tr><td>链路带宽 / flit 宽</td><td>① \(R\)</td><td>512b、1 flit/cy</td></tr>
+<tr><td>线延迟 H/V、流水级</td><td>① \(T_e\)</td><td>7 / 9 cycle</td></tr>
+<tr><td>crossbar out_cap</td><td>① 瞬时服务</td><td>8/6/5 → 96/100/107</td></tr>
+<tr><td>路径长度（路由）</td><td>② \(T_P=\sum T_e\)</td><td>直径 100 cy</td></tr>
+<tr><td>链路共享 / 复用</td><td>② \(R_{\mathrm{eff}}\)、\(\mathcal{I}(P)\)</td><td>link_reuse 24–42</td></tr>
+<tr><td>ramp / eject 带宽</td><td>② \(\beta_{\mathrm{eject}}\)</td><td>188 = 47×4</td></tr>
+<tr><td>FIFO / 优先 / TDM / Cal</td><td>③ 剩余服务形状</td><td>15880 / 1800 / 328 / 188</td></tr>
+<tr><td>缓冲深度 vs credit RTT</td><td>④ \(R_{\mathrm{eff}}\) 折损</td><td>B&lt;20 → 气泡</td></tr>
+</tbody></table>
 </div>
 </div>
 
@@ -956,6 +1068,208 @@ T_{\mathrm{dyn}}^{C}(\rho) \;>\; R_{rg}.
 </div>
 </div>
 
+<div class="card" id="s12">
+<h2>12. 四象限对比：DOR / 静态排图 × 有无注入控制</h2>
+<p>用同一套 \((\alpha,\beta)\) 证书比较四种常见组合。注入控制管 \(\alpha\)；静态排图管 \(\beta\) 的槽位形状；二者正交。</p>
+
+<div class="step">
+<span class="tag">步骤 12.1 · 四象限定义</span>
+<table>
+<thead>
+<tr>
+  <th></th>
+  <th>无注入控制<br/><span class="note">\(\alpha\) 自由（同步突发 \(\sigma\) 大）</span></th>
+  <th>有注入控制<br/><span class="note">\(\alpha\) 整形 / 贴表</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><b>DOR + 动态仲裁</b><br/><span class="note">\(\beta=\beta_{\mathrm{leftover}}\)</span></td>
+  <td class="bad"><b>方案①</b> 基线 DOR，无注入控</td>
+  <td class="warn"><b>方案②</b> DOR + 注入控</td>
+</tr>
+<tr>
+  <td><b>静态排图</b><br/><span class="note">\(\beta=\beta_{\mathrm{cal}}\)</span></td>
+  <td class="bad"><b>方案③</b> 排图，无注入控</td>
+  <td class="win"><b>方案④</b> 排图 + 注入控（CAL / Arch-A5）</td>
+</tr>
+</tbody>
+</table>
+<div class="fig">
+<svg viewBox="0 0 520 280" width="520" height="280" xmlns="http://www.w3.org/2000/svg" aria-label="four quadrant alpha beta">
+  <text x="260" y="22" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">图 9 · 控制完备性四象限</text>
+  <!-- axes labels -->
+  <text x="260" y="48" text-anchor="middle" font-size="11" fill="#64748b">α →</text>
+  <text x="28" y="160" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 28 160)">β →</text>
+  <text x="155" y="68" text-anchor="middle" font-size="10" fill="#64748b">α 自由</text>
+  <text x="365" y="68" text-anchor="middle" font-size="10" fill="#64748b">α 受控</text>
+  <text x="52" y="130" text-anchor="middle" font-size="10" fill="#64748b">β 动态</text>
+  <text x="52" y="220" text-anchor="middle" font-size="10" fill="#64748b">β 静态</text>
+  <!-- Q1 -->
+  <rect x="70" y="80" width="200" height="80" rx="6" fill="#fee2e2" stroke="#ef4444"/>
+  <text x="170" y="112" text-anchor="middle" font-size="13" fill="#991b1b" font-weight="600">① DOR，无注入控</text>
+  <text x="170" y="132" text-anchor="middle" font-size="11" fill="#7f1d1d">排队爆炸 · T_dyn ≫ LB</text>
+  <text x="170" y="148" text-anchor="middle" font-size="10" fill="#64748b">FIFO ≈15880 vs LB 188</text>
+  <!-- Q2 -->
+  <rect x="280" y="80" width="200" height="80" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="380" y="112" text-anchor="middle" font-size="13" fill="#92400e" font-weight="600">② DOR + 注入控</text>
+  <text x="380" y="132" text-anchor="middle" font-size="11" fill="#78350f">有界排队 · 可近 LB</text>
+  <text x="380" y="148" text-anchor="middle" font-size="10" fill="#64748b">封闭世界可重放，非契约</text>
+  <!-- Q3 -->
+  <rect x="70" y="170" width="200" height="80" rx="6" fill="#fecaca" stroke="#dc2626"/>
+  <text x="170" y="202" text-anchor="middle" font-size="13" fill="#991b1b" font-weight="600">③ 排图，无注入控</text>
+  <text x="170" y="222" text-anchor="middle" font-size="11" fill="#7f1d1d">契约破裂 · 日历被冲垮</text>
+  <text x="170" y="238" text-anchor="middle" font-size="10" fill="#64748b">反模式（仅故障态）</text>
+  <!-- Q4 -->
+  <rect x="280" y="170" width="200" height="80" rx="6" fill="#dcfce7" stroke="#22c55e"/>
+  <text x="380" y="202" text-anchor="middle" font-size="13" fill="#166534" font-weight="600">④ 排图 + 注入控</text>
+  <text x="380" y="222" text-anchor="middle" font-size="11" fill="#14532d">v=0 · T=T_sched</text>
+  <text x="380" y="238" text-anchor="middle" font-size="10" fill="#64748b">CAL_SOFT / Arch-A5</text>
+</svg>
+<p class="cap"><b>图 9.</b> 横轴是否控制 \(\alpha\)（注入），纵轴 \(\beta\) 是动态 leftover 还是静态槽位。只有右下角④同时锁定二者。</p>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.2 · 方案①：DOR，无注入控制</span>
+<div class="eq">\[
+\alpha(t)\approx\sigma_{\mathrm{sync}}+\rho t,\quad
+\sigma_{\mathrm{sync}}\sim O(Nm);\qquad
+\beta_i=\big[\beta_{\mathrm{link}}-\alpha_{-i}\big]^+.
+\]
+</div>
+<ul>
+<li>\(v=\sup(\alpha-\beta)\)：无界或随 \(\rho\) 发散（同类汇聚 + 类间耦合）。</li>
+<li>\(h(\alpha,\beta)\gg T_{\mathrm{bound}}\)。</li>
+<li>实证：allgather \(m=4\)，\(T_{\mathrm{bound}}=188\)，FIFO \(\approx 15880\) → \(T_{\mathrm{dyn}}/T\approx 98.8\%\)。</li>
+<li>控制论：无前馈、无门控，仅事后仲裁 → 路径 C 最差形态。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.3 · 方案②：DOR + 注入控制</span>
+<div class="eq">\[
+\alpha'(t)=\sigma'+\rho't,\ \sigma'\ll\sigma_{\mathrm{sync}};\qquad
+\beta\ \text{仍为动态 leftover}.
+\]
+</div>
+<p>令牌桶闭式（\(\rho'\le R_{\mathrm{eff}}\)）：</p>
+<div class="eq">\[
+h(\alpha',\beta)\le\frac{\sigma'}{R_{\mathrm{eff}}}+T_P,\qquad
+v\le\sigma'+\rho'T_P.
+\]
+</div>
+<ul>
+<li>相对①：\(T_{\mathrm{dyn}}\) 大幅下降，\(v\) 有界 → 可用 \(B\ge v\) 吸收。</li>
+<li>实证：8×6 广播 \(B=0/1/2\to 110/98/96\)；16×16 allgather 可近 LB。</li>
+<li>确定性：封闭世界可重放；开放背景共享 \(\beta\) 时 \(h\) 仍随机，<b>无契约</b>。</li>
+<li>控制论：只整形 \(\alpha\)，不锁 \(\beta\) → 路径 B。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.4 · 方案③：静态排图，无注入控制</span>
+<p>排图给出 \(\beta_{\mathrm{cal}}\)，但源端仍突发，使得在若干区间</p>
+<div class="eq">\[ \alpha\not\le\beta_{\mathrm{cal}}. \]</div>
+<p>则 \(v_{\mathrm{cal}}=0\) 证书前提被违反，典型后果：</p>
+<ol>
+<li>冲突进缓冲 → 退化成②，排图 fidelity 破坏，\(v&gt;0\)；</li>
+<li>watchdog demote → 走 DOR 逃生，\(T\) 回到①量级；</li>
+<li>硬背压堵在源 → 等效“被迫注入控制”，但时延变成错位等待。</li>
+</ol>
+<div class="eq">\[
+v_{\mathrm{net}}=\sup(\alpha-\beta_{\mathrm{cal}})&gt;0
+\quad\Rightarrow\quad
+\text{“静态排图”名存实亡}.
+\]
+</div>
+<p>控制论：只改 \(\beta\)、不控 \(\alpha\) → 前馈半套。工程上几乎不单独采用；Arch-A5 的 demote 正是③的违规降级态。</p>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.5 · 方案④：静态排图 + 注入控制</span>
+<div class="eq">\[
+\alpha_{\mathrm{cal}}(t)=\beta_{\mathrm{cal}}(t),\qquad
+v=0,\qquad
+h=T_{\mathrm{schedule}}\approx T_{\mathrm{bound}}+\varepsilon_{\mathrm{rigid}}.
+\]
+</div>
+<ul>
+<li>\(T_{\mathrm{dyn}}\approx\varepsilon_{\mathrm{rigid}}\)（刚性税；1–3 flit 对齐可压小）。</li>
+<li>背景：\(\beta_{\mathrm{BG}}=[\beta_{\mathrm{link}}-\alpha_{\mathrm{cal}}]^+\)（软优先），集体证书不被破坏。</li>
+<li>实证：CAL_SOFT <code>coll_delay=LB</code>，<code>coll_buf=0</code>。</li>
+<li>控制论：同时锁 \(\alpha\) 与 \(\beta\) → 路径 A（Arch-A5 集体路径）。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.6 · 证书总表</span>
+<table>
+<thead>
+<tr>
+  <th>方案</th><th>\(\alpha\)</th><th>\(\beta\)</th><th>\(v\)</th>
+  <th>\(h\) / \(T_{\mathrm{dyn}}\)</th><th>开放背景下集体确定性</th>
+</tr>
+</thead>
+<tbody>
+<tr class="bad">
+  <td>① DOR，无注入控</td><td>自由突发</td><td>动态 leftover</td><td>无界/发散</td>
+  <td>\(\gg T_{\mathrm{bound}}\)（~80×）</td><td>无</td>
+</tr>
+<tr class="warn">
+  <td>② DOR + 注入控</td><td>整形 \(\sigma'\)</td><td>动态 leftover</td><td>\(\le\sigma'+\rho'T\)</td>
+  <td>可近 LB（靠 \(B\)）</td><td>弱（封闭世界可重放）</td>
+</tr>
+<tr class="bad">
+  <td>③ 排图，无注入控</td><td>自由突发</td><td>槽位 \(\beta_{\mathrm{cal}}\)</td><td>\(&gt;0\)（违约）</td>
+  <td>不确定 / 降级</td><td>无（契约破）</td>
+</tr>
+<tr class="win">
+  <td>④ 排图 + 注入控</td><td>贴表</td><td>槽位 \(\beta_{\mathrm{cal}}\)</td><td>\(=0\)</td>
+  <td>\(T_{\mathrm{sched}}\)</td><td><b>强</b>（守约流）</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.7 · 结构命题与完备性序</span>
+<div class="prop">
+<strong>命题（四象限）。</strong> 在链路容量恒定下：
+<ol style="margin:8px 0 0; padding-left:22px;">
+<li><b>仅控 \(\alpha\)（②）</b> 可使 \(v\) 有界并逼近 \(T_{\mathrm{bound}}\)，但不能给出与背景无关的 \(T_{\mathrm{dyn}}=0\) 证书。</li>
+<li><b>仅控 \(\beta\)（③）</b> 在 \(\alpha\not\le\beta_{\mathrm{cal}}\) 时不能维持 \(v=0\)；静态排图的充分条件是注入侧同时服从排图。</li>
+<li><b>\(\alpha\) 与 \(\beta\) 同时对齐（④）</b> 是使守约流满足 \(v=0\) 且 \(T_{\mathrm{dyn}}=\varepsilon_{\mathrm{rigid}}\) 的充分条件。</li>
+<li><b>两者都不控（①）</b> 时，同步集合通信下 \(T_{\mathrm{dyn}}/T_{\mathrm{bound}}\) 可趋于大常数甚至随负载发散。</li>
+</ol>
+<p style="margin:10px 0 0">完备性序（③ 在违约时往往退化到①，故劣于②）：</p>
+<div class="eq" style="margin:8px 0 0;">\[
+\text{① 无控}
+\;\prec\;
+\text{③ 半控（只 }\beta\text{）}
+\;\prec\;
+\text{② 半控（只 }\alpha\text{）}
+\;\prec\;
+\text{④ 双控}.
+\]
+</div>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.8 · 面积含义与选型</span>
+<table>
+<thead><tr><th>方案</th><th>路由器主要成本</th><th>源端成本</th><th>选型</th></tr></thead>
+<tbody>
+<tr><td>①</td><td>深 VC ≈ BDP×端口</td><td>无</td><td>仅作对照基线</td></tr>
+<tr><td>②</td><td>中等缓冲 \(\ge v(\alpha',\beta)\)</td><td>offset / 整形器</td><td>要平均时延、可接受封闭世界确定性</td></tr>
+<tr><td>③</td><td>日历表 + 仍可能要深缓冲兜违约</td><td>无</td><td><b>反模式</b>；最多作为④的 demote 故障态</td></tr>
+<tr class="win"><td>④</td><td>浅/零集体缓冲 + 小 BG 池</td><td>offset + 守时注入</td><td>要开放背景下集体确定性 → 必选</td></tr>
+</tbody></table>
+<p><b>工程口径：</b>要集体确定性必须④，不能停在③；只要平均时延可加缓冲则②常够用；①只作基线；③单独上线是反模式。</p>
+</div>
+</div>
+
 <div class="card">
 <h2>符号表</h2>
 <table>
@@ -973,6 +1287,10 @@ T_{\mathrm{dyn}}^{C}(\rho) \;>\; R_{rg}.
 <tr><td>\(W_{\mathrm{grant}}\)</td><td>源端等待授权的边缘排队</td></tr>
 <tr><td>\(v_{\mathrm{net}},\,\alpha_{\mathrm{granted}}\)</td><td>网内 backlog / 已授权到达曲线</td></tr>
 <tr><td>\(\rho^\star\)</td><td>\(T_{\mathrm{dyn}}^{C}=R_{rg}\) 的交叉负载</td></tr>
+<tr><td>\(\beta_e,\ \beta_P,\ \beta_{\mathrm{flow}}\)</td><td>单跳 / 路径串联 / per-flow 服务曲线</td></tr>
+<tr><td>\(\otimes,\ \ominus\)</td><td>min-plus 卷积（串联）/ 剩余服务（扣除干扰）</td></tr>
+<tr><td>\(R_{\mathrm{eff}},\ \mathrm{RTT}_{\mathrm{credit}}\)</td><td>流控折损后有效速率 / credit 往返</td></tr>
+<tr><td>\(\mathcal{I}(P)\)</td><td>路径 \(P\) 上与本流共享链路的干扰流集合</td></tr>
 </tbody></table>
 <p class="note">延伸阅读：<code>docs/collective-noc-dynamic-latency.md</code>。本报告专责控制论形式化与逐步推导。</p>
 </div>
