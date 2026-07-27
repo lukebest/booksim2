@@ -1134,6 +1134,21 @@ def _expand_logical_edge(a: int, b: int, adj: dict[int, list[int]],
     return p
 
 
+def _trim_revisits(path: list[int]) -> list[int]:
+    """Drop the loop between repeated nodes (concatenated detours can overshoot)."""
+    out: list[int] = []
+    pos: dict[int, int] = {}
+    for n in path:
+        if n in pos:
+            for m in out[pos[n] + 1:]:
+                del pos[m]
+            del out[pos[n] + 1:]
+        else:
+            pos[n] = len(out)
+            out.append(n)
+    return out
+
+
 def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
     """Logical full-mesh XY; missing links replaced by fixed physical detours.
 
@@ -1165,8 +1180,7 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
                 continue
             expand[(a, b)] = p
 
-    paths: dict[tuple[int, int], list[int]] = {}
-    x_hops: dict[tuple[int, int], int] = {}
+    concat: dict[tuple[int, int], list[int]] = {}
     for s in compute:
         for d in compute:
             if s == d:
@@ -1183,6 +1197,18 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
                 if seg is None:
                     return None
                 phys.extend(seg[1:])
+            concat[(s, d)] = phys
+
+    # A detour can overshoot through a node that the remaining logical hops
+    # revisit, leaving a 180° U-turn in the concatenated path. Trimming those
+    # loops is shorter and usually kills the resulting CDG cycles, but it also
+    # shifts the X/Y phase boundary and can create a cycle of its own — so try
+    # the trimmed table first and fall back to the plain concatenation.
+    for trim in (True, False):
+        paths: dict[tuple[int, int], list[int]] = {}
+        x_hops: dict[tuple[int, int], int] = {}
+        for (s, d), raw_phys in concat.items():
+            phys = _trim_revisits(raw_phys) if trim else raw_phys
             # X-phase = hops until the packet first sits in dst's column.
             dx = coord(d)[0]
             n_x = 0
@@ -1194,13 +1220,16 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
             paths[(s, d)] = phys
             x_hops[(s, d)] = n_x
 
-    def vc_of(path: list[int], i: int) -> int:
-        return 0 if i < x_hops[(path[0], path[-1])] else 1
+        def vc_of(path: list[int], i: int, _x=x_hops) -> int:
+            return 0 if i < _x[(path[0], path[-1])] else 1
+
+        ok, _ = validate_routing(paths, compute, adj, vc_of)
+        if ok:
+            break
+    else:
+        return None
 
     forced = sorted(set(pg["compute_nodes"]) - set(compute))
-    ok, _ = validate_routing(paths, compute, adj, vc_of)
-    if not ok:
-        return None
     return {
         "paths": paths,
         "vc_of": vc_of,

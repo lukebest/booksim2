@@ -1333,6 +1333,16 @@ def main():
             f'<div class="scheme-fig">{fig}</div></div></div>'
         )
 
+    def qa3(avoid: str, deadlock: str, order: str) -> str:
+        """Uniform 三问 table: fault avoidance / deadlock freedom / ordering."""
+        return (
+            '<table class="qa3"><tbody>'
+            f'<tr><th>如何避障</th><td class="l">{avoid}</td></tr>'
+            f'<tr><th>如何无死锁</th><td class="l">{deadlock}</td></tr>'
+            f'<tr><th>如何保序</th><td class="l">{order}</td></tr>'
+            '</tbody></table>'
+        )
+
     by_key = defaultdict(list)
     for r in primary:
         by_key[(r["scenario"], r["semantics"], r["m"], r["Q"])].append(r)
@@ -1540,6 +1550,10 @@ td.bad {{ color: #c0392b; font-weight: 600; }}
 .scheme-fig svg {{ display: block; background: #fff;
                    border: 1px solid #eef0f2; border-radius: 3px;
                    overflow: visible; max-width: 100%; height: auto; }}
+table.qa3 {{ font-size: 0.82rem; margin: 0.6rem 0 0.3rem; width: 100%; }}
+table.qa3 th {{ background: #f3ecf7; text-align: left; white-space: nowrap;
+                width: 6.5rem; font-weight: 600; }}
+table.qa3 th, table.qa3 td {{ padding: 0.3rem 0.5rem; vertical-align: top; }}
 .faq {{ background: #f8fafc; border-left: 3px solid #8e44ad;
         padding: 0.45rem 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; }}
 .faq p {{ margin: 0.3rem 0; }}
@@ -1593,6 +1607,26 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 且沿路 VC 序列确定」——只要 VC 是 (src,dst) 的函数而非 per-packet 动态选择，
 同一对的包就不会跨 VC 乱序。因此本研究的方案按<b>断环手段</b>分成两大类：</p>
 
+<div class="faq">
+<p><b class="q">三问的共同底座（各方案只写自己的差异部分）</b></p>
+<p><b>1. 避障的共同前提：</b><code>expand_pg</code> 给出的 <code>route_adj</code>
+已经删掉了故障节点与断链，任何选路函数只在这张<strong>存活图</strong>上搜索，
+不可能踏进坏点坏边。真正的差异在于「图上搜不到合法路时怎么办」：
+绕行（M3/M4/M6/M7/M10）、裁剪（M2/M5），还是直接失败（M1）。
+所有方案失败后都落到同一个恢复器 <code>solve_scheme</code>：
+先去孤立点，再按「单点 → 点对 → 整行整列 → 矩形」逐级牺牲 good 节点，
+取<strong>牺牲最少</strong>的可行解。</p>
+<p><b>2. 无死锁的共同判据：</b>不管构造上怎么论证，进入 DES 之前一律过
+<code>validate_routing</code> → <code>build_cdg(paths, vc_of)</code> +
+<code>cdg_acyclic</code>。CDG 结点是 <b>(有向边, VC)</b> 二元组，
+只要存在环就判不可行。构造性证明只决定「一次过还是要重试」。</p>
+<p><b>3. 保序的共同机制：</b>本研究全部是<strong>确定性离线路由</strong>——
+每个 (src,dst) 只有一条路径，且 <code>vc_of(path, i)</code> 是
+(该对, 跳序号) 的纯函数，运行时不做自适应选路、不做 per-packet VC 竞争选择。
+同一对的 flit 序列走同一串 (边, VC)，wormhole 下天然 FIFO ⇒ 保序。
+带 LB 的变体只是在<strong>离线迭代</strong>里换路，最终仍是一对一条固定路径。</p>
+</div>
+
 <div class="cls">
   <div class="cls-card">
     <h3>A 类 · 转向限制（1 VC）</h3>
@@ -1621,19 +1655,30 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 {scheme_block("M1 — XY（<code>xy</code>）", "xy", '''
 <p><b>思想：</b>坚持维序路由（DOR）：先走完 X，再走 Y；硬件几乎不用改路由逻辑。</p>
 <p><b>路径：</b>对每个 (s,d) 严格按 XY 折线前进；所需 hop 被故障删除则整表失败，进入牺牲恢复。</p>
-<p><b>无死锁：</b>完整矩形上 XY 的 CDG 无环；残图上仍以 CDG 硬校验。</p>
 <p><b>特征：</b>中心/角链路一断极易「穿不过」；恢复时常退化成与 M2 类似的大矩形牺牲。
 用于量化「坚持 XY 硬件」要付多少牺牲代价。</p>
-''')}
+''' + qa3(
+    '<b>不避</b>——这是它的定义。<code>xy_path</code> 在存活图上死走 XY 折线，'
+    '任一 hop 缺失立刻返回 <code>None</code>，整表作废。'
+    '唯一出路是牺牲好节点把「折线必经的洞」移出参与集合，所以牺牲最重。',
+    'X 相走完才进 Y 相，<b>Y→X 转弯根本不存在</b>；'
+    '完整矩形上 XY 的 CDG 是经典无环结论。残图上路径仍是 XY 子集，'
+    '照样无环，实现仍跑一次 CDG 硬校验。<b>1 VC</b> 即可。',
+    '每对唯一的 XY 折线，单 VC，无自适应 → 同一对的 flit 串行经过同一串通道。'))}
 
 {scheme_block("M2 — Rect-XY（<code>rect_xy</code>）", "rect_xy", '''
 <p><b>思想：</b>不在破损拓扑上绕路，而是裁成仍规则的子矩形，矩形内继续跑 XY。</p>
 <p><b>做法：</b>(1) 标出故障触及的行/列；(2) 在剩余行、列中各取最长连续段，叉成最大轴对齐矩形；
 (3) 矩形外原计算节点全部记为 <code>forced_sacrificed</code>；(4) 矩形内生成 XY 全表。</p>
-<p><b>无死锁：</b>子矩形上经典 XY，CDG 无环。</p>
 <p><b>特征：</b>牺牲粗、可预测；raw slowdown 常为负是因为参与者变少——应看
 <code>irregularity_penalty</code> 与 <code>sacrifice_cost</code>。</p>
-''')}
+''' + qa3(
+    '<b>靠裁剪，不靠绕行。</b>把故障触及的<strong>整行整列</strong>全部划掉'
+    '（<code>_fault_rows_cols</code>），在剩余行列里各取最长连续段，'
+    '叉出最大轴对齐矩形；矩形外的好节点记为 <code>forced_sacrificed</code>。'
+    '于是路由域内<strong>一个洞都没有</strong>，不需要任何避障逻辑。',
+    '子矩形是一张完整规则 mesh，其上跑标准 XY ⇒ CDG 无环（与 M1 同理），<b>1 VC</b>。',
+    '矩形内每对唯一 XY 路径，单 VC，确定性。'))}
 
 {scheme_block("M3 — Up*/Down*（<code>updown</code>）", "updown", '''
 <p><b>类别：</b>A 类 · 转向限制 · <b>1 VC</b>（无需虚拟通道分层）。</p>
@@ -1675,9 +1720,19 @@ up/down 是否合法，取最短跳数路径。跳的方向可以是任意 mesh 
 若图被割裂或「先上后下」下无合法路，则该场景失败，外层再靠牺牲好节点恢复。</p>
 </div>
 
-<p><b>无死锁证明要点：</b>任何合法路径上，通道依赖只能经历
-「up 边 → up 边 → … → down 边 → down 边」。
-不可能出现 down→up，因此 CDG 按构造无环（实现里仍做一次硬校验）。</p>
+''' + qa3(
+    '<b>约束 BFS 自动绕。</b><code>_tree_path</code> 只枚举 <code>route_adj</code> 的邻居，'
+    '洞和断链根本不在候选里；它在存活图上找「先上后下」的最短合法路，'
+    '形状可以是任意折线（不是 XY、不必过 root）。'
+    '只要图连通且合法相位下有解，<b>通常零牺牲</b>——这是 M3 最大的优点。'
+    '无解才交给统一牺牲恢复器。',
+    '给每点一个高度 <code>label = BFS dist(root, ·)</code>；'
+    '规定路径分两相：<b>相 0 可 up，一旦 down 就永远禁止再 up</b>（同层侧向算 down）。'
+    '通道依赖只能是 up→up、up→down、down→down，<b>永远没有 down→up</b>，'
+    '所以依赖关系随 (相位, 高度) 单调 ⇒ CDG 按构造无环，<b>1 VC 够用</b>。实现仍硬校验。',
+    'root 与 label 每个故障场景只算一次、全表共享；'
+    '给定 (s,d) 的约束 BFS 结果确定且唯一，单 VC。')
++ '''
 <p><b>与本网格实测：</b>dead/transit 下几乎全部场景 <b>n_sacrificed = 0</b>（A≈39–48），
 是 1 VC 方案里规模保持最好的；但合法路径集合窄，负载集中在树的「脊」，
 alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
@@ -1691,19 +1746,36 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
 用负载感知 Dijkstra（边权 ≈ 1+负载）换路；每轮后整表再校验 CDG。失败则回退。</p>
 <p><b>特征：</b>目标是压低最大链路负载；在本 8×6 上对 median makespan 改善通常很小
 （Up*/Down* 合法路径集合较窄）。</p>
-''')}
+''' + qa3(
+    '与 M3 完全相同——换路仍在同一张存活图、同一套合法转向集合内进行，'
+    '不会新引入穿越故障的路径。',
+    '<b>靠「换完再验」而不是靠构造。</b>负载感知 Dijkstra 可能选出破坏原有相位单调性的路径，'
+    '所以每一轮结束都对<strong>整表</strong>重跑 <code>validate_routing</code>；'
+    '一旦 CDG 出环，立刻整体回退到上一个已验证的 best 并停止迭代。',
+    'LB 是<strong>离线迭代</strong>：收敛后每对仍只有一条固定路径，'
+    '运行时不会按实时负载改路 ⇒ 保序不受影响。'))}
 
 {scheme_block("M4 — Segment / 奇偶转向（<code>segment</code>）", "segment", '''
 <p><b>思想：</b>简化 segment-based / odd-even 族：按列带施加不同转向禁令，打破 mesh 环依赖。</p>
 <p><b>转向规则</b>（列段宽 2，<code>seg=(x//2)%2</code>）：直行允许、180° 禁止；
 偶段禁 北→东 / 南→西；奇段禁 北→西 / 南→东。路径 = 约束下最短路。</p>
-<p><b>无死锁：</b>完整 mesh 上属奇偶转向模型族；破损后仍 CDG 硬校验，不通则牺牲恢复。</p>
 <p><b>特征：</b>介于 XY 与 Up*/Down*——有时零牺牲，中心故障时常需矩形化。</p>
-''')}
+''' + qa3(
+    '<code>shortest_path(s, d, adj, turn_ok)</code> 在存活图上做<strong>带转向过滤的 BFS</strong>：'
+    '洞不在邻接表里，自然绕过。比 M1 灵活（可上下绕），比 M3 严格'
+    '（转向禁令可能把某些绕行方向堵死）→ 中心大洞时常搜不到路，需要牺牲。',
+    '按列带交替施加转向禁令（<code>seg=(x//2)%2</code>）：'
+    '偶段禁 <b>北→东 / 南→西</b>，奇段禁 <b>北→西 / 南→东</b>，并全局禁 180° 掉头。'
+    '这属于奇偶转向模型族，每个方向环都缺一个必需转弯 ⇒ 环无法闭合，<b>1 VC</b>。'
+    '残图上仍以 CDG 硬校验兜底。',
+    '给定 (s,d) 的约束 BFS 确定性求解，路径唯一，单 VC。'))}
 
 {scheme_block("M4+LB — Segment + 负载均衡（<code>segment_lb</code>）", "segment_lb", '''
 <p>与 M3+LB 相同流程，起点换成 M4 路径表；同样受转向合法集合限制。</p>
-''')}
+''' + qa3(
+    '同 M4：换路仍在同一存活图上，不会产生穿越故障的路径。',
+    '同 M3+LB：每轮换路后整表重跑 CDG 校验，出环即回退到上一 best。',
+    '离线迭代，收敛后一对一条固定路径，单 VC。'))}
 
 <h3>2.2 B 类：VC 分层</h3>
 
@@ -1753,7 +1825,20 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
 若硬件已按 XY+绕障做死、且愿意付 4 VC，它仍是「保 XY 语义」的正统答案。</p>
 <p class="note">右图：① 环绕行全路径 · ② 断链须退休端点 · ③ 4 VC 相位×方向 ·
 ④ 回原行以保 X 相单向。</p>
-''', extra_key="fring_aux")}
+''' + qa3(
+    '<b>矩形块 + 沿环绕行。</b>先把所有故障吸收进互不重叠的矩形块（接触即合并包围盒），'
+    '块内节点整体退出路由图与 compute 集；块外贴边一圈健康节点即 fault ring。'
+    '路由仍是 XY，只有「下一步会踏进块」时才改走 ring：绕到块的远侧，再回原行/原列续 XY。'
+    '<b>代价：</b>矩形模型表达不了「两活节点之间断一条链」，'
+    '必须贪心退休一个端点变成 1×1 块 ⇒ 纯链路故障要付 1–4 个好节点。',
+    '<b>4 VC = 相位 × 方向</b>（VC0/1 = X 相东/西，VC2/3 = Y 相北/南），是<strong>可证</strong>的：'
+    'X 相绕行只允许竖走或朝本报文的 X 方向走 ⇒ VC0 内所有横向通道一律朝东，'
+    '环要闭合就得让 x 回到起点，故环内不能有横向通道；纯竖环又需 180° 掉头，构造不产生 ⇒ VC0 无环'
+    '（VC1/2/3 对称）。报文只从 X 相进 Y 相、从不回头 ⇒ '
+    '{VC0,VC1} → {VC2,VC3} 单向。单层无环 + 层间单向 ⇒ 整图无环。',
+    '路径与 VC 都在离线固化：<code>meta[(s,d)]</code> 记下 X 相跳数与两个方向类，'
+    '<code>vc_of</code> 只按 hop 序号查表 ⇒ 同一对的 VC 序列完全确定。'),
+              extra_key="fring_aux")}
 
 {scheme_block("M6 — LASH（<code>lash</code>）", "lash", '''
 <p><b>思想：</b>Skeie 等 Layered Shortest Path。每对取一条<strong>最短路</strong>（可绕障），
@@ -1764,14 +1849,30 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
 → 保序。本 8×6 上实测通常 <b>1–2 层</b>。</p>
 <p><b>与 M5 差别：</b>不强制矩形块、不强制绕回原行；链路故障只需牺牲孤立节点
 （度 0），不必把端点做成块。负载往往低于 f-ring。</p>
-''')}
+''' + qa3(
+    '<b>纯图搜索。</b>直接在存活图上 BFS 最短路，洞和断链天然被绕开，'
+    '路径形状不受任何转向或矩形约束 ⇒ 路径质量最好的一档。'
+    '不造块、不退休链路端点；只有度为 0 的孤立点必须先牺牲（它谁也连不上）。',
+    '<b>把无死锁从路径里剥离出来，交给分层。</b>按路径长度降序遍历所有 (s,d)：'
+    '试着把整条路径加进第 <code>li</code> 层的 CDG，'
+    '<strong>加完仍无环就收下，出环就撤销、试下一层</strong>，都不行才开新层（上限 8 层）。'
+    '每层各自维护 CDG、互不共享通道 ⇒ 层内无环 + 层间无依赖 ⇒ 全局无环。'
+    '本 8×6 上通常只需 <b>1–2 层</b>。',
+    '<b>整条路径同一层号</b>（常数 VC，<code>vc_of</code> 忽略 hop 序号只查 (s,d)），'
+    '加上路径唯一 ⇒ 严格保序。'))}
 
 {scheme_block("M6b — LASH-TOR（<code>lash_tor</code>）", "lash", '''
 <p><b>思想：</b>在 LASH 上允许路径<strong>中途升一层</strong>（Trail / Transition On Route）：
 hop 的 VC 沿路单调不减，从而把本来需要新开一层的路径塞进已有层。</p>
 <p><b>做法：</b>先尝试整路径入单层；失败则枚举分割点，前半段层 <code>lo</code>、后半段层
 <code>hi≥lo</code>，分别维护层内 CDG。本 8×6 上 LASH 已是 1–2 层，TOR 收益通常很小。</p>
-''')}
+''' + qa3(
+    '与 M6 完全相同：存活图上 BFS 最短路，先牺牲孤立点。TOR 只改层分配，不改路径。',
+    '在 M6 的「层内 CDG 无环」之上，额外允许<strong>一次中途升层</strong>：'
+    '前段走 <code>lo</code>、后段走 <code>hi ≥ lo</code>，两段分别记入各自层的 CDG 并各自校验。'
+    '因为 hop 的 VC <b>单调不减</b>，跨层依赖只能由低指向高、回不去 ⇒ 层间依然单向无环。',
+    '分割点与两个层号都在离线贪心时固定，'
+    '<code>vc_of(path, i)</code> 查的是预存的 per-hop VC 表 ⇒ 同一对序列确定。'))}
 
 {scheme_block("M7 — 条带 dateline（<code>stripe_vc</code>）", "stripe_vc", '''
 <p><b>类别：</b>B 类 · VC 分层 · 本网格实测 <b>5–6 VC</b>（按场景中最坏跨越数定尺寸）。</p>
@@ -1854,14 +1955,33 @@ M10 用「逻辑 XY + 固定展开表」绕障；M7 直接在物理图上求最�
 从 M10 再走到 M7：+111% 面积只换约 13% 加速，边际回报比 M3→M10 低一个数量级。</p>
 <p class="note">右图：① 跨 DL 升 VC · ② 竖走不升层 · ③ 故障列加密 DL ·
 ④ VC 单调 ⇒ CDG 无环。</p>
-''', extra_key="stripe_aux")}
+''' + qa3(
+    '<b>能 XY 就 XY，撞障就走最短路。</b>先在存活图上试 <code>xy_path</code>——'
+    '若 XY 折线没碰到故障，路径与健康网格一模一样；某跳不存在则改用 BFS '
+    '<code>shortest_path</code> 绕过去。不造块、不退休端点，活着的点边全都能用，'
+    '通常只需牺牲孤立点。<b>Dateline 与避障无关</b>（详见上）。',
+    '<b>跨一条 dateline 就 VC+1</b>，因此沿任意路径 VC 单调不减。'
+    '通道依赖 <code>(e,vc) → (e′,vc′)</code> 恒有 <code>vc′ ≥ vc</code>：'
+    '环若要闭合必须从高层降回低层，而这被禁止 ⇒ 只剩「同层内成环」一种可能，'
+    '而条带内水平跨度被 DL 限死。实现仍硬校验，出环就把 DL 加密到每个列边界再验。'
+    '代价是 <b>5–6 VC</b>。',
+    '路径固定；<code>vc_of(path, i)</code> = 前 i 跳的跨越数，'
+    '是 (路径, hop 序号) 的纯函数、离线即可算全 ⇒ 同一对的 (边, VC) 序列唯一。'),
+              extra_key="stripe_aux")}
 
 {scheme_block("M9 — 双向 Up*/Down*（<code>dual_updown</code>）", "updown", '''
 <p><b>思想：</b>VC0 跑经典 Up*/Down*（先上后下），VC1 跑对称的 Down*/Up*（先下后上）；
 每对选更短的那条，整路径固定在所选 VC → 保序。</p>
-<p><b>无死锁：</b>两套规则各自 CDG 无环，且路径不跨 VC 混用。</p>
 <p><b>特征：</b>固定 2 VC，实现比 LASH 简单；路径短于单层 Up*/Down*，但通常仍长于最短路族。</p>
-''')}
+''' + qa3(
+    '与 M3 相同的约束 BFS，但<strong>两套规则各搜一次</strong>：'
+    'Up*/Down* 与 Down*/Up*。某一套被故障堵死时另一套往往仍有解，'
+    '<b>两条都无解才算失败</b> ⇒ 可行性略好于单层 M3。',
+    '两套相位规则各自满足「不许回头」（UD 无 down→up，DU 无 up→down），'
+    '各自 CDG 无环；两者<strong>放在不同 VC 上、整条路径不混用</strong>，'
+    '所以两层之间没有任何通道依赖 ⇒ 并集仍无环。固定 <b>2 VC</b>。',
+    '每对选哪套规则由 <code>which[(s,d)]</code> 离线定死（取更短者），'
+    '整条路径锁在该 VC 上、中途不切换 ⇒ 路径与 VC 都唯一。'))}
 
 {scheme_block("M10 — 虚拟规则网格（<code>virtual_mesh</code>）", "virtual_mesh", '''
 <p><b>类别：</b>B 类 · VC 分层 · <b>固定 2 VC</b>。上层软件仍看见完整规则 8×6 XY mesh。</p>
@@ -1882,10 +2002,21 @@ M10 用「逻辑 XY + 固定展开表」绕障；M7 直接在物理图上求最�
 之后 → <b>VC1（逻辑 Y 相）</b>。即使 X 相里含有竖向绕路 hop，仍算 VC0——
 分层按逻辑相位，不按物理边方向。</li>
 </ol>
-<p><b>无死锁：</b>依赖「逻辑 X→逻辑 Y」的单向相位切换（类似维度序）。
-绕路可能在 VC0 内引入竖边、在 VC1 内引入横边，理论上有可能成环，
-因此实现里对整表做 CDG 硬校验；失败则该 PG 场景判定不可行（再走牺牲恢复）。
-本 8×6 的 18 个 dead 场景上全部通过，通常只需去掉孤立点。</p>
+''' + qa3(
+    '<b>逻辑层假装网格完好，物理层偷偷绕。</b>坏掉的逻辑边被一条'
+    '<strong>离线算好、全局共享的固定物理最短路</strong>替换'
+    '（<code>expand[a→b]</code>）；逻辑折线上的死节点直接跳过，再把相邻的活节点桥接起来。'
+    '孤立点 forced-sacrifice。对上层软件而言故障是<strong>不可见</strong>的——'
+    '仍是规则 8×6 XY，映射与调度不用改。',
+    '意图是维度序：<b>VC0 = 逻辑 X 相，VC1 = 逻辑 Y 相</b>，相位只能 X→Y 单向切换。'
+    '但绕路会在 VC0 里塞进竖向边、在 VC1 里塞进横向边，'
+    '<strong>几何证明因此失效，理论上可能成环</strong>——所以 <code>gen_virtual_mesh</code> '
+    '内部就直接调用 <code>validate_routing</code> 做 CDG 硬校验，'
+    '不过就返回 <code>None</code>、转入牺牲恢复。本网格 18 个 dead 场景全部一次通过。'
+    '固定 <b>2 VC</b>。',
+    'expand 表离线固定且全局共享，逻辑折线由 (s,d) 唯一决定 ⇒ 物理路径唯一；'
+    'VC 只看「是否已首次到达目的列」这个 hop 阈值，同样确定。')
++ '''
 <p><b>与 M5 / M7 的关键差别：</b></p>
 <ul>
 <li>相对 M5：不造矩形块、不强制绕回原行；链路故障不必退休端点，牺牲更少。
