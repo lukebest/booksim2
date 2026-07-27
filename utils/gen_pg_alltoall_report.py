@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
+M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
 E2E_PNG = "pg_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
@@ -22,6 +23,22 @@ HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 # large parts of the array — excluded from the §3/§4 makespan comparisons, where
 # a smaller A would otherwise make them look artificially fast.
 # See results/pg_capability.json for the measurements behind each reason.
+# How each scheme earns its acyclic CDG. A ✓ backed by a construction is a
+# stronger claim than a ✓ that merely survived the 36-scenario catalog.
+DEADLOCK_BASIS = {
+    "xy": "构造性：只 X→Y 单向转弯",
+    "rect_xy": "构造性：矩形内纯 XY",
+    "updown": "构造性：不许 down→up",
+    "segment": "构造性论证在残图上失效",
+    "fault_ring_vc": "构造性：4 VC 相位×方向",
+    "lash": "构造：逐层校验，不行就开新层（≤8）",
+    "lash_tor": "同 LASH，允许中途升层",
+    "stripe_vc": "构造性：跨 dateline 单调升 VC",
+    "dual_updown": "构造性：两套已证规则各占一 VC",
+    "virtual_mesh": "<b>无证明</b>：两版取一 + 事后校验，"
+                    "已知 8×6 反例（见 M10 章 FAQ）",
+}
+
 EXCLUDED_SCHEMES = {
     "xy": "36 场景中 27 个建不出路径（避障失败）",
     "rect_xy": "36/36 必须裁行裁列，累计牺牲 1018 节点（中位 31/48）",
@@ -1092,6 +1109,130 @@ def scheme_diagrams() -> dict[str, str]:
     return out
 
 
+M10_STAGE_LABELS = [
+    ("1_link", "单链路断", "82（全）"),
+    ("1_node", "单节点死", "48（全）"),
+    ("2_link", "双链路断", "3321（全）"),
+    ("2_node", "双节点死", "1128（全）"),
+    ("3_node", "<b>三节点死</b>", "17296（全）"),
+    ("rand_3to6_links", "随机 3–6 断链", "6000 抽样"),
+    ("rand_nodes_links", "随机 1–4 死点 + 0–4 断链", "4000 抽样"),
+]
+
+
+def m10_scan_html() -> str:
+    """Stage table + shape table for the M10 cycle scan (data-driven)."""
+    if not M10_SCAN_PATH.exists():
+        return ("<p class='note bad'>缺少 <code>results/pg_m10_cycle_scan.json"
+                "</code>，请跑 <code>utils/pg_m10_cycle_scan.py --full</code>。</p>")
+    d = json.loads(M10_SCAN_PATH.read_text())
+    st = d["stages"]
+
+    rows = []
+    for key, label, size in M10_STAGE_LABELS:
+        s = st.get(key)
+        if s is None:
+            continue
+        n = sum(s.values()) - s.get("nopath", 0)
+        bad = s.get("BOTH_CYCLIC", 0)
+        cell = (f"<td class='cap-bad'><b>{bad}（{bad / n * 100:.1f}%）</b></td>"
+                if bad else "<td>0</td>")
+        rows.append(f"<tr><td class='l'>{label}</td><td>{size}</td>"
+                    f"<td>{s.get('trim_only', 0)}</td>"
+                    f"<td>{s.get('raw_only', 0)}</td>{cell}</tr>")
+    cat = d["catalog_summary"]
+    rows.append(f"<tr><td class='l'>出厂故障目录</td><td>36（全）</td>"
+                f"<td>{cat.get('trim_only', 0)}</td>"
+                f"<td>{cat.get('raw_only', 0)}</td>"
+                f"<td>{cat.get('BOTH_CYCLIC', 0)}</td></tr>")
+    stage_tbl = (
+        '<table class="qa3"><thead><tr><th class="l">故障空间</th><th>规模</th>'
+        '<th>需去环才行</th><th>需退回原版</th><th>两版都成环</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>')
+
+    safe = [k for k, v in d["shapes"].items() if v != "BOTH_CYCLIC"]
+    bad_shapes = [k for k, v in d["shapes"].items() if v == "BOTH_CYCLIC"]
+    shape_tbl = (
+        '<table class="qa3"><tbody>'
+        f'<tr><th>安全</th><td class="l">{esc(" · ".join(safe))}</td></tr>'
+        f'<tr><th>失效</th><td class="l cap-bad">{esc(" · ".join(bad_shapes))}'
+        '</td></tr></tbody></table>')
+    return stage_tbl + shape_tbl
+
+
+def m10_cycle_figs() -> str:
+    """The two CDG cycles of the minimal 8x6 fault that defeats both M10 tables.
+
+    Window is x=0..5, y=0..2 of the real mesh; dead nodes (1,0) (3,1) (5,1).
+    """
+    dead = {(1, 0), (3, 1), (5, 1)}
+    COLS, ROWS = 6, 3
+
+    def panel(uid, colour, arrows, notes, caption, uturn=False):
+        top = 12 + 13 * len(notes)
+        # _mini_xy only leaves `pad` between the bottom row and the caption
+        # (bottom_extra pads above the grid), so pad has to carry the clearance.
+        C, W, H = _mini_xy(COLS, ROWS, pad=42, gap=44, side_extra=26)
+        H += top
+
+        def P(x, y):  # mesh (x,y) -> svg point, y=0 drawn on top
+            px, py = C[(x, ROWS - 1 - y)]
+            return px, py + top
+
+        def trim_seg(a, b, by=9):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            ln = (dx * dx + dy * dy) ** 0.5 or 1
+            ux, uy = dx / ln, dy / ln
+            return ((a[0] + ux * by, a[1] + uy * by),
+                    (b[0] - ux * by, b[1] - uy * by))
+
+        parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" '
+                 f'height="{H}" viewBox="0 0 {W} {H}">',
+                 _defs_arrow(uid, colour)]
+        for y in range(ROWS):
+            for x in range(COLS):
+                if (x, y) in dead:
+                    continue
+                if x + 1 < COLS and (x + 1, y) not in dead:
+                    parts.append(_edge(P(x, y), P(x + 1, y), "#dde3e7", 1.3))
+                if y + 1 < ROWS and (x, y + 1) not in dead:
+                    parts.append(_edge(P(x, y), P(x, y + 1), "#dde3e7", 1.3))
+        for (ax_, ay_), (bx_, by_) in arrows:
+            a, b = trim_seg(P(ax_, ay_), P(bx_, by_))
+            if uturn:  # antiparallel pair: offset sideways so both are visible
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                ln = (dx * dx + dy * dy) ** 0.5 or 1
+                ox, oy = dy / ln * 5, -dx / ln * 5
+                a, b = (a[0] + ox, a[1] + oy), (b[0] + ox, b[1] + oy)
+            parts.append(_edge(a, b, colour, 3.0, marker=uid))
+        for y in range(ROWS):
+            for x in range(COLS):
+                parts.append(_node(*P(x, y),
+                                   fill="#c0392b" if (x, y) in dead else "#8fa3b0",
+                                   r=7 if (x, y) in dead else 5))
+        for i, (txt, col) in enumerate(notes):
+            parts.append(f'<text x="10" y="{13 + i * 13}" font-size="10.5" '
+                         f'fill="{col}">{txt}</text>')
+        parts.append(_caption(W, H, caption, max_chars=30))
+        parts.append("</svg>")
+        return "".join(parts)
+
+    raw = panel(
+        "m10cr", "#e67e22", [((2, 1), (2, 0)), ((2, 0), (2, 1))],
+        [("红 = 死节点 (1,0) (3,1) (5,1)", "#c0392b"),
+         ("橙 = 掉头环，2 通道同在 VC1", "#e67e22")],
+        "原始拼接版：链路 (2,0)-(2,1) 两个方向互等", uturn=True)
+    trim = panel(
+        "m10ct", "#8e44ad",
+        [((2, 1), (2, 2)), ((2, 2), (3, 2)), ((3, 2), (4, 2)),
+         ((4, 2), (4, 1)), ((4, 1), (4, 0)), ((4, 0), (3, 0)),
+         ((3, 0), (2, 0)), ((2, 0), (2, 1))],
+        [("紫 = 矩形环，8 通道全在 VC0", "#8e44ad"),
+         ("+Y,+X,+X,−Y,−Y,−X,−X,+Y", "#8e44ad")],
+        "去回环版：绕死节点 (3,1) 首尾闭合")
+    return f'<div class="cycfig">{raw}{trim}</div>'
+
+
 def mesh_svg(scenario: dict, sacrificed: list[int], loads: dict | None = None,
              w: int = 320, h: int = 260) -> str:
     mx, my = F.MX, F.MY
@@ -1575,9 +1716,15 @@ def main():
                                    f"累计 {c['forced_nodes']} 节点")
             else:
                 avoid = cell(True, f"✓ {n_cells}/{n_cells} 零牺牲绕开")
-            # deadlock freedom
-            dl = (cell(False, f"<b>✗</b> {c['fail_cdg']}/{n_cells} CDG 成环")
-                  if c["fail_cdg"] else cell(True, f"✓ {n_cells}/{n_cells} 无环"))
+            # deadlock freedom — a ✓ from a constructive proof is not the same
+            # guarantee as a ✓ that merely survived the 36-scenario catalog.
+            if c["fail_cdg"]:
+                dl = cell(False, f"<b>✗</b> {c['fail_cdg']}/{n_cells} CDG 成环"
+                                 f"<div class='sub'>{DEADLOCK_BASIS[base]}</div>")
+            else:
+                good = base != "virtual_mesh"
+                dl = cell(good, f"{'✓' if good else '△'} {n_cells}/{n_cells} 无环"
+                                f"<div class='sub'>{DEADLOCK_BASIS[base]}</div>")
             # ordering (DES-observed)
             nb, nt = ord_bad[sch], ord_tot[sch]
             order = (cell(False, f"<b>✗</b> {nb}/{nt} 行乱序")
@@ -1624,6 +1771,10 @@ td.bad {{ color: #c0392b; font-weight: 600; }}
 .scheme-fig svg {{ display: block; background: #fff;
                    border: 1px solid #eef0f2; border-radius: 3px;
                    overflow: visible; max-width: 100%; height: auto; }}
+div.cycfig {{ display: flex; gap: 0.8rem; flex-wrap: wrap;
+             margin: 0.6rem 0; }}
+div.cycfig svg {{ background: #fff; border: 1px solid #e3e8ec;
+                 border-radius: 4px; }}
 table.cap td.cap-ok {{ background: #f2faf5; }}
 table.cap td.cap-bad {{ background: #fdf1ef; color: #922b21; }}
 table.cap {{ max-width: 62rem; }}
@@ -2103,31 +2254,37 @@ M10 用「逻辑 XY + 固定展开表」绕障；M7 直接在物理图上求最�
 + '''
 
 <div class="faq">
-<p><b class="q">什么情况下 M10 会真的死锁？（实测反例）</b></p>
-<p><b>触发条件：</b>坏逻辑边的物理绕路<strong>穿过了后续逻辑折线还要经过的节点</strong>。
-逐段展开是直接拼接的，于是路径重复访问该节点，留下一个 <b>180° 掉头</b>；
-掉头把 <code>(a→b)</code> 与 <code>(b→a)</code> 两条反向通道锁进同一个 VC，
-几条这样的路径接龙就闭环。</p>
-<p><b>最小反例（只断 2 条链路、零死节点）：</b>断
-<code>(1,0)-(2,0)</code> 与 <code>(2,2)-(3,2)</code>。
-逻辑 XY <code>(0,0)→(2,1)</code> 的第二跳坏了，绕路
-<code>(1,0)→(1,1)→(2,1)→(2,0)</code> <b>已经路过目的地 (2,1)</b>，
-下一段逻辑跳又把它送回去 ⇒ 路径
-<code>(0,0),(1,0),(1,1),(2,1),(2,0),(2,1)</code>。
-VC1 内四条通道
-<code>(2,1)→(2,0) ⇒ (2,0)→(2,1) ⇒ (2,1)→(2,2) ⇒ (2,2)→(2,1) ⇒</code> 回到起点，
-由 <code>(0,0)→(2,1)</code>、<code>(0,0)→(2,2)</code>、<code>(3,2)→(2,0)</code>、
-<code>(0,2)→(2,0)</code> 四对提供。</p>
-<p><b>发生频率（随机 1–3 断链 + 0–2 死点，547 例）：</b>
-未去环时 <b>9.7%</b> 的故障图会成环，且 <b>100%</b> 的故障图都存在掉头路径；
-只去环降到 0.5%，但会让 <code>node_center_2x2/3x3</code> 由无环变成有环
-（路径变短会挪动 X/Y 相分界，把横向绕路 hop 推进 VC1）。
-<b>「先去环、成环退回」两版取一后降到 0.2%</b>，且出厂目录 36 个 (场景×语义) 全过——
-其中 34 个用去环版（更短、负载更低），2 个退回未去环版。</p>
+<p><b class="q">什么情况下 M10 会真的死锁？（8×6 故障空间穷举）</b></p>
+<p><b>先说结论：M10 是本报告保留方案里唯一<strong>没有构造性无死锁证明</strong>的。</b>
+它靠「两版取一 + CDG 事后校验」兜底，两版都成环就整体失败。
+下表由 <code>utils/pg_m10_cycle_scan.py</code> 穷举
+（<code>results/pg_m10_cycle_scan.json</code>）：</p>
+''' + m10_scan_html() + '''
+<p><b>两个故障以内怎么摆都安全</b>，三个死节点起才出现失效；而且危险的是<b>死节点</b>不是断链——
+同规模下混合故障的失效率比纯断链高约 50 倍。目录里那 2 个「需退回原版」的场次是
+<code>node_center_2x2/dead</code> 与 <code>node_center_3x3/dead</code>，
+正是回退机制存在的理由。上表第二张是形状假设检验：
+<strong>紧凑的洞反而安全，散落错开的洞才致命。</strong>洞连成一片时绕路方向一致，
+绕过去就完事；洞错开时不同 (s,d) 被迫朝相反方向绕，绕行段互相咬合。
+这也解释了为何出厂目录一个都没触发——目录的节点故障全是 1×1/2×2/3×3 规整方块。</p>
+''' + m10_cycle_figs() + '''
+<p><b>最小失效实例 <code>(1,0) (3,1) (5,1)</code>，两版成环机理完全不同</b>（上图）：</p>
+<ul>
+<li><b>原始拼接版 = 2 通道掉头环。</b>绕路走过头，后续逻辑跳原路折回，
+<code>(2,1)→(2,0)</code> 与 <code>(2,0)→(2,1)</code> 同处 VC1 互相等待。
+这正是引入去回环的原因。</li>
+<li><b>去回环版 = 8 通道矩形环，全在 VC0。</b>去环消掉了掉头，
+但缩短后的路径贴着洞走，绕死节点 (3,1) 首尾相接闭合成经典通道环。</li>
+</ul>
+<p><b>根因在 VC 划分：</b>M10 按<strong>逻辑相位</strong>分 VC，而死节点逼出的绕路会在逻辑 X 相里
+走<strong>物理竖直跳</strong>，这些竖直通道落进 VC0。于是 VC0 里同时存在横向与纵向通道、
+又没有任何转向限制 —— XY 的无环论证在此失效。这与 M7 靠 dateline 单调升 VC、
+M6 靠分层校验、M5 靠「相位×方向」四层的<strong>可证</strong>断环有本质区别。</p>
 <p><b>成环了怎么办：</b>两版都成环 → <code>gen_virtual_mesh</code> 返回 <code>None</code>
 → <code>solve_scheme</code> 按「孤立点 → 单点 → 点对 → k≤6 → 整行整列 → 矩形」
 逐级牺牲 good 节点并重新生成、重新校验，取牺牲最少的可行解；全失败才判 INFEASIBLE。
-上面那个最小反例在去环前需要牺牲 2 个好节点（M3/M6/M7 都是 0），去环后为 0。</p>
+上面的最小实例实测牺牲 <b>1</b> 个节点 (0,0)（A=44/45），
+同故障下 M7 / M6 / M3 牺牲 <b>0</b> —— 代价不大，但这就是「有证明」与「靠试」的差距。</p>
 </div>
 '''
 + '''
@@ -2175,7 +2332,10 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 保序只能在 DES 里观察，取自扫描结果的 <code>ordered_ok</code>。</p>
 {cap_html}
 <p class="note"><b>读法：</b><b>✗</b> = 该性质<b>自力做不到</b>，只能靠牺牲恢复器兜底；
-△ = 做得到，但方式是按构造牺牲好节点（不是绕行）。
+避障列的 △ = 做得到，但方式是按构造牺牲好节点（不是绕行）；
+无死锁列的 △ = 36 个场景<b>实测</b>没成环，但<b>没有构造性证明</b>，
+换个故障形状就会失效（只有 M10 属此类，反例与穷举见 §2.2 的 M10 章 FAQ）。
+子行标出每个 ✓ 的依据——「构造性」与「实测通过」不是同一强度的保证。
 <b>保序全员通过</b>——882 行 DES 无一例乱序，这是「每对唯一路径 +
 <code>vc_of</code> 为纯函数」的必然结果。</p>
 <p class="note"><b>排除规则：</b>第 3–4 节的 makespan / irreg 对比<b>不含</b>
