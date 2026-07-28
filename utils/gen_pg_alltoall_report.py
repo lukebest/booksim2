@@ -17,6 +17,7 @@ E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
 EF_REACH_PATH = ROOT / "results" / "pg_east_first_reach.json"
+BEYOND_REACH_PATH = ROOT / "results" / "pg_beyond_catalog_reach.json"
 E2E_PNG = "pg_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
@@ -1193,6 +1194,95 @@ EF_SPACE_LABELS = [
 ]
 
 
+def beyond_catalog_html() -> str:
+    """§2.3: STRUCT vs disc reachability outside the 36-scenario catalog."""
+    if not BEYOND_REACH_PATH.exists():
+        return ("<p class='note bad'>缺少 <code>results/pg_beyond_catalog_reach.json"
+                "</code>。</p>")
+    d = json.loads(BEYOND_REACH_PATH.read_text())
+    spaces = d["spaces"]
+    schemes = d["schemes"]
+    # space keys shown in the summary table (skip 3_node_full for schemes
+    # that only have a sample — show whichever key each scheme has)
+    order = ["1_link", "1_node", "2_link", "2_node", "3_node_sample",
+             "3_node_full", "mixed"]
+    sch_order = ["updown", "segment", "fault_ring_vc", "lash", "stripe_vc",
+                 "virtual_mesh"]
+
+    def cell(r: dict | None) -> str:
+        if r is None:
+            return "<td>—</td>"
+        ok = r.get("ok", 0) + r.get("forced_sac", 0)
+        st = r.get("struct", 0)
+        di = r.get("disc", 0)
+        n = ok + st + di
+        if st:
+            return (f"<td class='cap-bad'>{ok}/{n}<br/>"
+                    f"<span style='font-size:0.8em'>STRUCT {st}</span></td>")
+        if di:
+            return (f"<td class='cap-ok'>{ok}/{n}<br/>"
+                    f"<span style='font-size:0.8em'>仅 disc {di}</span></td>")
+        return f"<td class='cap-ok'>{ok}/{n}</td>"
+
+    # header: only spaces that at least one scheme reports
+    used_spaces = [k for k in order
+                   if any(k in schemes[s]["results"] for s in sch_order)]
+    head = "".join(f"<th>{spaces[k]['label']}</th>" for k in used_spaces)
+    rows = []
+    for sid in sch_order:
+        s = schemes[sid]
+        flag = ("<td class='cap-bad'>会</td>" if s["struct_possible"]
+                else "<td class='cap-ok'>否</td>")
+        cells = "".join(cell(s["results"].get(k)) for k in used_spaces)
+        rows.append(
+            f"<tr><td class='l'>{esc(s['label'])}</td>{flag}{cells}"
+            f"<td class='l'>{esc(s['solution'])}</td></tr>")
+
+    detail = []
+    for sid in sch_order:
+        s = schemes[sid]
+        detail.append(
+            f"<p><b>{esc(s['label'])}：</b>{esc(s['summary'])} "
+            f"<b>补救：</b>{esc(s['solution'])}</p>")
+        if sid == "fault_ring_vc" and "boundary_struct" in s:
+            b = s["boundary_struct"]
+            detail.append(
+                f"<p class='note'>边界 STRUCT：单链 {b['1_link_struct']}/82、"
+                f"单点 {b['1_node_struct']}/48——"
+                f"{esc(b['note'])}</p>")
+        if sid == "virtual_mesh" and "m10_cycle_crossref" in s:
+            x = s["m10_cycle_crossref"]
+            detail.append(
+                f"<p class='note'>与 M10 成环穷举交叉："
+                f"三节点全量 BOTH_CYCLIC="
+                f"<b>{x['3_node_full_BOTH_CYCLIC']}</b> / "
+                f"{x['3_node_full_n']}，nopath={x['3_node_full_nopath']}；"
+                f"{esc(x['note'])}。详见 §2.2 M10 FAQ。</p>")
+
+    return f"""
+<h3>2.3 目录外可达性（不限于 36 场景）</h3>
+<p class="note">出厂目录只有 18×2=36 格。下面把故障空间扩到单/双链路、单/双/三节点
+与随机混合，区分两种失败：</p>
+<ul>
+<li><b>STRUCT</b>（结构性不可达）：残图上存活 compute <b>仍连通</b>，但方案自己建不出合法表
+（转向堵死 / 环绕失败 / 双版 CDG 成环 / …）。</li>
+<li><b>disc</b>：残图已断开——任何方案都要先牺牲才能恢复连通。</li>
+</ul>
+<p>表中分数 = <code>(ok + forced_sac) / n</code>；
+<code>forced_sac</code> 只出现在 M5（链路端点退休仍算出表）。
+数据 <code>results/pg_beyond_catalog_reach.json</code>。</p>
+<table class="cap">
+<thead><tr><th>方案</th><th>会 STRUCT？</th>{head}<th>不可达时怎么办</th></tr></thead>
+<tbody>{''.join(rows)}</tbody>
+</table>
+{''.join(detail)}
+<p class="note"><b>一句话：</b>M3 / M6 / M7 在连通残图上<b>从不</b>结构性不可达
+（三节点全量 / 双故障全量 / 混合抽样 STRUCT=0）；
+M4 极常见、M5 在左右边中段块上会、M10 在散落 ≥3 死节点上会。
+M0 的东向盲区见 §2.1 M0 FAQ，机制不同，未并入上表。</p>
+"""
+
+
 def ef_reach_html(fail_fig: str = "") -> str:
     """M0 east-first: where it becomes unreachable, and what fixes it."""
     if not EF_REACH_PATH.exists():
@@ -1555,7 +1645,7 @@ def e2e_section_html() -> str:
     return f"""
 <h2>6. 端到端时间 × 面积 Pareto</h2>
 <p class="note">按纯 makespan 排序会误导——M1 XY 的 makespan 最小，
-但中位牺牲 28/48 个节点（这正是它被 §2.4 排除出第 3–4 节对比的原因）。
+但中位牺牲 28/48 个节点（这正是它被 §2.5 排除出第 3–4 节对比的原因）。
 把通信放回真实计算任务后，牺牲的代价才显现，就可以在同一把尺子上重新比较。
 本节用 <b>端到端任务完成时间</b>（计算 + alltoall）与 <b>router 面积</b>
 构造 Pareto 前沿，<b>把被排除的方案也一并放回</b>，量化它们到底差多少。</p>
@@ -1613,7 +1703,7 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
 （最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
 计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。
-这一条正是 §2.4 把它们排除出 makespan 对比的量化依据。
+这一条正是 §2.5 把它们排除出 makespan 对比的量化依据。
 <b>M0 East-first</b> 是这一族里最好的一个——中位只牺牲 1 个节点、中位 A=44
 （XY 是 28 / 16），中位端到端也快过 XY；但设计点看最差场景时它同样掉到
 6/48 PE、和 XY 一样是 820 / 9845 ns。<b>转弯放宽只改善中位，不改善最差</b>，
@@ -1976,6 +2066,14 @@ figure {{ margin: 0; background: #fff; padding: 0.5rem;
 figure.e2e-fig {{ max-width: 72rem; margin: 1rem 0; padding: 0.75rem; }}
 figcaption {{ font-size: 0.75rem; margin: 0.35rem 0 0; color: #555; }}
 code {{ background: #eee; padding: 0.1rem 0.3rem; }}
+.exec {{ max-width: 52rem; margin: 1rem 0 1.6rem; padding: 1rem 1.15rem 1.05rem;
+         background: #f7faf8; border: 1px solid #c8ddd0; border-top: 4px solid #1e8449; }}
+.exec h2 {{ margin: 0 0 0.55rem; font-size: 1.2rem; color: #145a32; }}
+.exec ol {{ margin: 0.35rem 0 0.2rem 1.2rem; padding: 0; }}
+.exec li {{ margin: 0.4rem 0; }}
+.exec .pick {{ font-size: 1.05rem; margin: 0.2rem 0 0.7rem; }}
+.exec .pick b {{ color: #145a32; }}
+.exec .sub {{ color: #555; font-size: 0.9rem; }}
 </style></head><body>
 <h1>8×6 分组交换 NoC：Partial-Good 解决方案与 Alltoall 性能劣化</h1>
 <p class="note">几何 <code>{meta['mx']}×{meta['my']}</code>，
@@ -1990,6 +2088,8 @@ m=1 → <b>{golden.get('1', golden.get(1))}</b> cy，
 m=5 → <b>{golden.get('5', golden.get(5))}</b> cy。
 生成于 {esc(meta.get('generated_at',''))}，耗时 {meta.get('elapsed_s')}s。
 </p>
+
+{exec_summary_html(excluded_labels)}
 
 <h2>1. 故障目录与 PG 语义</h2>
 <ul>
@@ -2167,6 +2267,12 @@ up/down 是否合法，取最短跳数路径。跳的方向可以是任意 mesh 
     'root 与 label 每个故障场景只算一次、全表共享；'
     '给定 (s,d) 的约束 BFS 结果确定且唯一，单 VC。')
 + '''
+<div class="faq">
+<p><b class="q">目录外会不会连通却不可达？</b>
+<strong>不会。</strong>单/双故障全枚举 + 三节点全量 17296 + 随机混合 5000：
+失败集合与残图断连完全重合，<b>STRUCT=0</b>。
+连通残图上 UD 必有合法路；不可达时只牺牲孤立点/小子图。见 §2.3。</p>
+</div>
 <p><b>与本网格实测：</b>dead/transit 下几乎全部场景 <b>n_sacrificed = 0</b>（A≈39–48），
 是 1 VC 方案里规模保持最好的；但合法路径集合窄，负载集中在树的「脊」，
 alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
@@ -2201,8 +2307,16 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
     '按列带交替施加转向禁令（<code>seg=(x//2)%2</code>）：'
     '偶段禁 <b>北→东 / 南→西</b>，奇段禁 <b>北→西 / 南→东</b>，并全局禁 180° 掉头。'
     '这属于奇偶转向模型族，每个方向环都缺一个必需转弯 ⇒ 环无法闭合，<b>1 VC</b>。'
-    '残图上仍以 CDG 硬校验兜底。',
-    '给定 (s,d) 的约束 BFS 确定性求解，路径唯一，单 VC。'))}
+    '残图上仍以 CDG 硬校验兜底——但实测残图上会失效（见下）。',
+    '给定 (s,d) 的约束 BFS 确定性求解，路径唯一，单 VC。')
++ '''
+<div class="faq">
+<p><b class="q">目录外会不会连通却不可达？</b>
+<strong>会，而且极常见。</strong>单链路 72/82、双链路 3272/3321 在残图仍连通时
+建不出表（路径失败或 CDG 成环）。奇偶转向在残图上既堵绕行又破无环假设。
+<strong>补救：</strong>统一牺牲恢复（代价重），或换 M3/M6/M7。见 §2.3。</p>
+</div>
+''')}
 
 {scheme_block("M4+LB — Segment + 负载均衡（<code>segment_lb</code>）", "segment_lb", '''
 <p>与 M3+LB 相同流程，起点换成 M4 路径表；同样受转向合法集合限制。</p>
@@ -2272,7 +2386,16 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
     '（VC1/2/3 对称）。报文只从 X 相进 Y 相、从不回头 ⇒ '
     '{VC0,VC1} → {VC2,VC3} 单向。单层无环 + 层间单向 ⇒ 整图无环。',
     '路径与 VC 都在离线固化：<code>meta[(s,d)]</code> 记下 X 相跳数与两个方向类，'
-    '<code>vc_of</code> 只按 hop 序号查表 ⇒ 同一对的 VC 序列完全确定。'),
+    '<code>vc_of</code> 只按 hop 序号查表 ⇒ 同一对的 VC 序列完全确定。')
++ '''
+<div class="faq">
+<p><b class="q">目录外会不会连通却不可达？</b>
+<strong>会。</strong>两类：(1) 链路故障 → 强制退休端点（多数仍可出表）；
+(2) 故障块贴在左右边中段（如死节点 <code>(0|7, y)</code>，y∈{1..4}）时
+环绕缺侧向空间 → STRUCT（单链 12/82、单点 8/48）。
+<strong>补救：</strong>端点退休；再不行 <code>solve_scheme</code> 多牺牲 1–2 点。见 §2.3。</p>
+</div>
+''',
               extra_key="fring_aux")}
 
 {scheme_block("M6 — LASH（<code>lash</code>）", "lash", '''
@@ -2294,7 +2417,16 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
     '每层各自维护 CDG、互不共享通道 ⇒ 层内无环 + 层间无依赖 ⇒ 全局无环。'
     '本 8×6 上通常只需 <b>1–2 层</b>。',
     '<b>整条路径同一层号</b>（常数 VC，<code>vc_of</code> 忽略 hop 序号只查 (s,d)），'
-    '加上路径唯一 ⇒ 严格保序。'))}
+    '加上路径唯一 ⇒ 严格保序。')
++ '''
+<div class="faq">
+<p><b class="q">目录外会不会连通却不可达？</b>
+<strong>实测不会。</strong>双故障全量 + 三节点抽样 4000 + 混合 5000：
+失败 = 断连，<b>STRUCT=0</b>；VC 最多 3（≪ 上限 8）。
+理论上层数封顶才可能 STRUCT——本次未观察到。
+断连时牺牲；若真层满则抬 <code>LASH_MAX_LAYERS</code> / 用 LASH-TOR。见 §2.3。</p>
+</div>
+''')}
 
 {scheme_block("M6b — LASH-TOR（<code>lash_tor</code>）", "lash", '''
 <p><b>思想：</b>在 LASH 上允许路径<strong>中途升一层</strong>（Trail / Transition On Route）：
@@ -2402,7 +2534,15 @@ M10 用「逻辑 XY + 固定展开表」绕障；M7 直接在物理图上求最�
     '而条带内水平跨度被 DL 限死。实现仍硬校验，出环就把 DL 加密到每个列边界再验。'
     '代价是 <b>5–6 VC</b>。',
     '路径固定；<code>vc_of(path, i)</code> = 前 i 跳的跨越数，'
-    '是 (路径, hop 序号) 的纯函数、离线即可算全 ⇒ 同一对的 (边, VC) 序列唯一。'),
+    '是 (路径, hop 序号) 的纯函数、离线即可算全 ⇒ 同一对的 (边, VC) 序列唯一。')
++ '''
+<div class="faq">
+<p><b class="q">目录外会不会连通却不可达？</b>
+<strong>实测不会。</strong>与 M6 相同的故障空间：失败 = 断连，<b>STRUCT=0</b>。
+最密 dateline（每列边界）兜底未在实测中被打穿。
+断连时牺牲；极罕见再加密 dateline。见 §2.3。</p>
+</div>
+''',
               extra_key="stripe_aux")}
 
 {scheme_block("M9 — 双向 Up*/Down*（<code>dual_updown</code>）", "updown", '''
@@ -2490,7 +2630,8 @@ M6 靠分层校验、M5 靠「相位×方向」四层的<strong>可证</strong>�
 → <code>solve_scheme</code> 按「孤立点 → 单点 → 点对 → k≤6 → 整行整列 → 矩形」
 逐级牺牲 good 节点并重新生成、重新校验，取牺牲最少的可行解；全失败才判 INFEASIBLE。
 上面的最小实例实测牺牲 <b>1</b> 个节点 (0,0)（A=44/45），
-同故障下 M7 / M6 / M3 牺牲 <b>0</b> —— 代价不大，但这就是「有证明」与「靠试」的差距。</p>
+同故障下 M7 / M6 / M3 牺牲 <b>0</b> —— 代价不大，但这就是「有证明」与「靠试」的差距。
+目录外 STRUCT / disc 对照表见 §2.3。</p>
 </div>
 '''
 + '''
@@ -2513,14 +2654,17 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 ③ 单条逻辑边的 expand 表 · ④ VC 按逻辑相位（竖向绕路仍属 VC0）。</p>
 ''', extra_key="vmesh_aux")}
 
-<h3>2.3 横向对比</h3>
+{beyond_catalog_html()}
+
+<h3>2.4 横向对比</h3>
 <table>
 <thead><tr><th>类</th><th>方案</th><th>路由本质</th><th>VC</th><th>硬件改动</th><th>典型牺牲</th><th>适用意图</th></tr></thead>
 <tbody>
 <tr><td>A</td><td class="l">M1 XY</td><td class="l">严格先 X 后 Y</td><td>1</td><td class="l">最小（原 XY）</td><td>高</td><td class="l">量化不改路由的代价</td></tr>
 <tr><td>A</td><td class="l">M2 Rect-XY</td><td class="l">裁矩形 + XY</td><td>1</td><td class="l">最小</td><td>固定偏高</td><td class="l">规整化、可预测</td></tr>
-<tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">零 VC 成本保规模</td></tr>
-<tr><td>A</td><td class="l">M3+LB / M4 / M4+LB</td><td class="l">转向限制 ± LB</td><td>1</td><td class="l">同左</td><td>中～高</td><td class="l">折中</td></tr>
+<tr><td>A</td><td class="l">M0 East-first</td><td class="l">禁 N→E / S→E</td><td>1</td><td class="l">转向过滤</td><td>东向切断时高</td><td class="l">比 XY 宽、仍有东向盲区</td></tr>
+<tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">零 VC 成本保规模；连通即达（§2.3）</td></tr>
+<tr><td>A</td><td class="l">M3+LB / M4 / M4+LB</td><td class="l">转向限制 ± LB</td><td>1</td><td class="l">同左</td><td>中～高</td><td class="l">M4 目录外 STRUCT 极常见（§2.3）</td></tr>
 <tr><td>B</td><td class="l">M5 真 f-ring</td><td class="l">矩形块 + XY 环绕，相位×方向</td><td>4</td><td class="l">4 VC + 绕障</td><td>节点洞 0；链路 1–4</td><td class="l">保 XY 硬件语义</td></tr>
 <tr><td>B</td><td class="l">M6 LASH</td><td class="l">最短路 + 贪心装层</td><td><b>1–2</b></td><td class="l">少 VC + 离线表</td><td>通常仅孤立点</td><td class="l">VC 性价比</td></tr>
 <tr><td>B</td><td class="l">M6b LASH-TOR</td><td class="l">LASH + 中途升层</td><td>1–2</td><td class="l">同 LASH</td><td>同 LASH</td><td class="l">再压层数（收益有限）</td></tr>
@@ -2530,7 +2674,7 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 </tbody>
 </table>
 
-<h3>2.4 三性质核验与排除标记</h3>
+<h3>2.5 三性质核验与排除标记</h3>
 <p class="note">对每个 (故障场景 × 语义) 让方案在<b>零额外牺牲</b>下建全表
 （仅先剔除度为 0 的孤立点，那对谁都不可避免），看它能否自力满足三条硬性质。
 避障 / 无死锁来自 <code>utils/pg_capability_probe.py</code>
@@ -2551,13 +2695,13 @@ makespan 自然虚低。既然它们连三条硬性质都要靠大规模牺牲�
 放进同一张表比较只会误导。第 6 节的端到端评估仍保留它们，
 因为那里已经用强扩展把牺牲的代价折算回时间了。</p>
 
-<h3>2.5 方案可行性与牺牲代价（m=1, Q=19，含被排除方案）</h3>
+<h3>2.6 方案可行性与牺牲代价（m=1, Q=19，含被排除方案）</h3>
 {feas_html}
 
 <h2>3. 每场景最优方案选择</h2>
 <p class="note">判据按用户口径：<b>先看牺牲节点数，再看 makespan</b>。这也让比较更公平——
 牺牲数相同意味着参与 alltoall 的节点数 A 相同，makespan 才可直接对比。
-<b>已排除 {esc(excluded_labels)}</b>（见 §2.4）。
+<b>已排除 {esc(excluded_labels)}</b>（见 §2.5）。
 「Pareto 备选」列出所有<b>非受支配</b>的 (牺牲, makespan) 组合：
 若愿意多牺牲若干节点换更快，就从这里挑。</p>
 <p class="note"><b>表头 raw / irreg 百分比含义：</b></p>
@@ -2585,7 +2729,7 @@ makespan 自然虚低。既然它们连三条硬性质都要靠大规模牺牲�
 <p class="note">单元格主行：makespan（cy）；副行：<b>irreg</b>（相对同 A 下界的额外开销）
 | 牺牲节点数。这里用 irreg 而非 raw：不同方案牺牲数不同、参与者 A 不同，
 raw 会因 A 变小而虚低；irreg 以各自 A 的下界为分母，跨方案可比。
-<b>不含 {esc(excluded_labels)}</b>（见 §2.4；它们的原始数据仍在
+<b>不含 {esc(excluded_labels)}</b>（见 §2.5；它们的原始数据仍在
 <code>results/pg_alltoall_8x6.json</code> 里）。
 raw 值仍保留在单元格 tooltip 里。
 INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
@@ -2642,7 +2786,7 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 （dead/transit × m=1/5 合计约 70/72 场）。仅个别场次 M5/M6 并列或略胜。
 代价是 5–6 VC。若看 Pareto 上「同牺牲、更少 VC」，常落到 M6 LASH。</li>
 
-<li><b>M1 / M2 / M4 已被排除出 makespan 对比（§2.4）。</b>三性质核验显示：
+<li><b>M1 / M2 / M4 已被排除出 makespan 对比（§2.5）。</b>三性质核验显示：
 M1 有 27/36 场景建不出路径，M4 有 17/36 建不出、另有 7/36 CDG 成环，
 M2 则 36/36 都要靠裁行裁列（累计牺牲 1018 节点）。
 它们裸 makespan 好看纯粹是 A 变小的假象——端到端（§6）里全部垫底。</li>

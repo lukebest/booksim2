@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "note": "STRUCT = residual route graph still connected among live compute, but gen_* cannot build a legal table. disc = graph disconnected. Numbers from utils/pg_beyond_catalog_reach.py / ad-hoc scans 2026-07-28.",
+    "generated_at": "2026-07-28T05:09:17+00:00"
+  },
+  "spaces": {
+    "1_link": {"n": 82, "label": "单链路断（全）"},
+    "1_node": {"n": 48, "label": "单节点死（全）"},
+    "2_link": {"n": 3321, "label": "双链路断（全）"},
+    "2_node": {"n": 1128, "label": "双节点死（全）"},
+    "3_node_full": {"n": 17296, "label": "三节点死（全）"},
+    "3_node_sample": {"n": null, "label": "三节点死（抽样）"},
+    "mixed": {"n": null, "label": "随机混合死点+断链（抽样）"}
+  },
+  "schemes": {
+    "updown": {
+      "label": "M3 Up*/Down*",
+      "struct_possible": false,
+      "summary": "连通残图上构造性可达；失败集合与断连完全重合。",
+      "solution": "牺牲孤立点 / 小子图内的 compute 节点。",
+      "results": {
+        "1_link": {"ok": 82, "struct": 0, "disc": 0},
+        "1_node": {"ok": 48, "struct": 0, "disc": 0},
+        "2_link": {"ok": 3321, "struct": 0, "disc": 0},
+        "2_node": {"ok": 1128, "struct": 0, "disc": 0},
+        "3_node_full": {"ok": 17284, "struct": 0, "disc": 12},
+        "mixed": {"ok": 4982, "struct": 0, "disc": 18}
+      }
+    },
+    "segment": {
+      "label": "M4 Segment",
+      "struct_possible": true,
+      "summary": "列带奇偶禁转在残图上既堵路又会破无环假设；结构性失败极常见。",
+      "solution": "统一牺牲恢复（代价重），或换 M3 / M6 / M7。",
+      "results": {
+        "1_link": {"ok": 10, "struct": 72, "disc": 0, "forced_sac": 0,
+                   "fail_path_struct": 51, "fail_cdg_struct": 21},
+        "1_node": {"ok": 6, "struct": 42, "disc": 0,
+                   "fail_path_struct": 40, "fail_cdg_struct": 2},
+        "2_link": {"ok": 49, "struct": 3272, "disc": 0,
+                   "fail_path_struct": 2824, "fail_cdg_struct": 448},
+        "2_node": {"ok": 27, "struct": 1101, "disc": 0,
+                   "fail_path_struct": 1070, "fail_cdg_struct": 31},
+        "3_node_sample": {"ok": 24, "struct": 5973, "disc": 3,
+                          "fail_path_struct": 5863, "fail_cdg_struct": 110},
+        "mixed": {"ok": 34, "struct": 3949, "disc": 17,
+                  "fail_path_struct": 3892, "fail_cdg_struct": 57}
+      }
+    },
+    "fault_ring_vc": {
+      "label": "M5 f-ring",
+      "struct_possible": true,
+      "summary": "链路故障多靠强制退休端点（forced_sac）；块贴左右边中段时环绕缺侧向空间 → STRUCT。",
+      "solution": "内建端点退休；再不行 solve_scheme 多牺牲 1–2 点。",
+      "boundary_struct": {
+        "1_link_struct": 12,
+        "1_node_struct": 8,
+        "note": "单点 STRUCT 全在 x∈{0,7}、y∈{1..4}；对应入射链路亦 STRUCT。"
+      },
+      "results": {
+        "1_link": {"ok": 0, "forced_sac": 70, "struct": 12, "disc": 0},
+        "1_node": {"ok": 40, "forced_sac": 0, "struct": 8, "disc": 0},
+        "2_link": {"ok": 4, "forced_sac": 2407, "struct": 910, "disc": 0},
+        "2_node": {"ok": 718, "forced_sac": 58, "struct": 352, "disc": 0},
+        "3_node_sample": {"ok": 2649, "forced_sac": 738, "struct": 2613, "disc": 0},
+        "mixed": {"ok": 475, "forced_sac": 1326, "struct": 2189, "disc": 10}
+      }
+    },
+    "lash": {
+      "label": "M6 LASH",
+      "struct_possible": false,
+      "summary": "扫过的空间里失败 = 断连；实测 VC≤3 ≪ 上限 8，未见层数封顶。",
+      "solution": "断连→牺牲；若真出现层满→抬 LASH_MAX_LAYERS 或改用 LASH-TOR。",
+      "results": {
+        "1_link": {"ok": 82, "struct": 0, "disc": 0, "vc_max": 2},
+        "1_node": {"ok": 48, "struct": 0, "disc": 0, "vc_max": 2},
+        "2_link": {"ok": 3321, "struct": 0, "disc": 0, "vc_max": 2},
+        "2_node": {"ok": 1128, "struct": 0, "disc": 0, "vc_max": 3},
+        "3_node_sample": {"ok": 3997, "struct": 0, "disc": 3, "vc_max": 3},
+        "mixed": {"ok": 4982, "struct": 0, "disc": 18, "vc_max": 3}
+      }
+    },
+    "stripe_vc": {
+      "label": "M7 Stripe",
+      "struct_possible": false,
+      "summary": "与 M6 同：失败集合与断连重合；最密 dateline 兜底未在实测中被打穿。",
+      "solution": "断连→牺牲；极罕见再加密 dateline（实现已试每列边界）。",
+      "results": {
+        "1_link": {"ok": 82, "struct": 0, "disc": 0},
+        "1_node": {"ok": 48, "struct": 0, "disc": 0},
+        "2_link": {"ok": 3321, "struct": 0, "disc": 0},
+        "2_node": {"ok": 1128, "struct": 0, "disc": 0},
+        "3_node_sample": {"ok": 3997, "struct": 0, "disc": 3},
+        "mixed": {"ok": 4982, "struct": 0, "disc": 18}
+      }
+    },
+    "virtual_mesh": {
+      "label": "M10 Virtual mesh",
+      "struct_possible": true,
+      "summary": "≤2 故障 100% 出表；≥3 散落死节点会出现 trim/raw 两版都成环（见 M10 FAQ）。",
+      "solution": "solve_scheme 牺牲恢复（最小反例常 sac=1）；紧凑故障块更安全。",
+      "results": {
+        "1_link": {"ok": 82, "struct": 0, "disc": 0},
+        "1_node": {"ok": 48, "struct": 0, "disc": 0},
+        "2_link": {"ok": 3321, "struct": 0, "disc": 0},
+        "2_node": {"ok": 1128, "struct": 0, "disc": 0},
+        "3_node_sample": {"ok": 5863, "struct": 134, "disc": 3},
+        "mixed": {"ok": 3749, "struct": 234, "disc": 17}
+      },
+      "m10_cycle_crossref": {
+        "3_node_full_BOTH_CYCLIC": 380,
+        "3_node_full_nopath": 12,
+        "3_node_full_n": 17296,
+        "note": "STRUCT≈BOTH_CYCLIC+部分桥接失败；精确分类见 pg_m10_cycle_scan.json"
+      }
+    }
+  }
+}

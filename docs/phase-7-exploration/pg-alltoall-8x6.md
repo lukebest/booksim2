@@ -48,7 +48,19 @@ M0 East-first · M1 XY · M2 Rect-XY · M3 Up\*/Down\*（±LB）· M4 Segment（
 **保序全员通过**：882 行 DES 无一例 `ordered_ok=False`——每对唯一路径且 `vc_of` 为纯函数的必然结果。
 M4 CDG 成环的 7 例：`link_edge_2`、`link_center_2`（dead+transit）、`node_edge_1x1`、`node_center_2x2`、`node_center_3x3`（dead）。
 
-### 2.2 M10 的无死锁是「试出来的」（`utils/pg_m10_cycle_scan.py`）
+### 2.2 目录外可达性（不限于 36 场景）
+
+区分 **STRUCT**（残图仍连通但方案建不出表）与 **disc**（图已断开）。
+数据见 `results/pg_beyond_catalog_reach.json`，HTML §2.3。
+
+| 方案 | 会 STRUCT？ | 要点 | 补救 |
+|------|------------|------|------|
+| M3 / M6 / M7 | **否** | 双故障全量 + 三节点/混合抽样失败 = 断连 | 牺牲孤立点 |
+| M4 Segment | **会** | 单链 72/82、双链 3272/3321 STRUCT | 重牺牲或换方案 |
+| M5 f-ring | **会** | 链路 forced_sac；左右边中段块环绕失败 | 端点退休 / 多牺牲 1–2 |
+| M10 Virtual | **会** | ≤2 故障安全；≥3 散落洞 BOTH_CYCLIC | 牺牲（常 sac=1） |
+
+### 2.3 M10 的无死锁是「试出来的」（`utils/pg_m10_cycle_scan.py`）
 
 M10 没有构造性证明：它建两张候选表（去回环版 / 原始拼接版），取 CDG 无环的那张，两张都成环就整体失败。
 穷举 8×6 故障空间（`results/pg_m10_cycle_scan.json`）：
@@ -76,7 +88,7 @@ M10 没有构造性证明：它建两张候选表（去回环版 / 原始拼接�
 M0/M1/M2/M4 **不进入 §5–6 的 makespan 对比**：它们裸 makespan 常常最快，但那是牺牲一半阵列换来的（A 小 ⇒ 流量按 A² 降）。
 端到端评估（§6）仍保留它们，因为那里已把牺牲折算回时间。
 
-### 2.3 M0 East-first 的不可达是可判定的（`utils/pg_east_first_reach.py`）
+### 2.4 M0 East-first 的不可达是可判定的（`utils/pg_east_first_reach.py`）
 
 east-first 禁掉「转向东」的两类转弯（N→E、S→E）+ 禁 180°，两条抽象环各断一处 ⇒
 **CDG 无环是构造性的，且不依赖网格完整**（删链路只减少转弯、不创造转弯），1 VC。
@@ -262,6 +274,7 @@ M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 
 | `utils/pg_capability_probe.py` | 三性质核验（零牺牲下的避障 / 无死锁） |
 | `utils/pg_m10_cycle_scan.py` | M10 成环穷举（`--full` 含三死节点全枚举） |
 | `utils/pg_east_first_reach.py` | M0 可达性穷举 + 闭式判据交叉验证（`--full` 含双故障全枚举） |
+| `results/pg_beyond_catalog_reach.json` | M3–M10 目录外 STRUCT/disc 可达性扫描 |
 | `utils/dse_pg_alltoall_8x6.py` | DES + 扫描 |
 | `utils/gen_pg_alltoall_report.py` | HTML |
 | `utils/dse_pg_e2e_pareto.py` | 端到端时间 × 面积扫描 |
