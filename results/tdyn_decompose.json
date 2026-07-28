@@ -1,0 +1,446 @@
+{
+ "model": {
+  "mesh": [
+   6,
+   8
+  ],
+  "h": 7,
+  "v": 9,
+  "m": 4,
+  "mb": 4,
+  "root": 6,
+  "lam": 0.02,
+  "tdm_k": 16,
+  "C": 1.0
+ },
+ "bg_view": {
+  "model": {
+   "dx": 5,
+   "dy": 7,
+   "h": 7,
+   "v": 9,
+   "ramp": 1,
+   "t_router": 3,
+   "bg_window": 16,
+   "max_cal_occupancy": 49,
+   "horizon": 952,
+   "pool_size": 28,
+   "soft_wait": 2
+  },
+  "policies": [
+   {
+    "policy": "hard TDM 1-in-16",
+    "per_hop_wait": 16,
+    "hops": 12,
+    "terms": {
+     "wire": 98,
+     "ramp": 2,
+     "router_pipeline": 36,
+     "arbitration_wait": 192,
+     "pool_turnover": 0
+    },
+    "t_bound": 100,
+    "t_dyn": 228,
+    "total": 328
+   },
+   {
+    "policy": "soft-prio",
+    "per_hop_wait": 2,
+    "hops": 12,
+    "terms": {
+     "wire": 98,
+     "ramp": 2,
+     "router_pipeline": 36,
+     "arbitration_wait": 24,
+     "pool_turnover": 0
+    },
+    "t_bound": 100,
+    "t_dyn": 60,
+    "total": 160
+   },
+   {
+    "policy": "soft-prio + shared pool",
+    "per_hop_wait": 2,
+    "hops": 12,
+    "terms": {
+     "wire": 98,
+     "ramp": 2,
+     "router_pipeline": 36,
+     "arbitration_wait": 24,
+     "pool_turnover": 28
+    },
+    "t_bound": 100,
+    "t_dyn": 88,
+    "total": 188
+   }
+  ]
+ },
+ "collective_view": [
+  {
+   "collective": "broadcast",
+   "m": 4,
+   "f_c": 0.0426,
+   "period": 94,
+   "lam": 0.02,
+   "t_bound": 94,
+   "max_link_load": 4.0,
+   "designs": [
+    {
+     "design": "CAL_SOFT",
+     "total": 94,
+     "t_bound": 94,
+     "t_dyn": 0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "alpha=beta 逐槽对齐；coll_buf=0"
+    },
+    {
+     "design": "CAL_SHAPED",
+     "total": 94,
+     "t_bound": 94,
+     "t_dyn": 0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0,
+      "bound_offset": 0.0
+     },
+     "note": "刻意拉匀以压低对 BG 的 sigma_H"
+    },
+    {
+     "design": "TDM",
+     "total": 1520.0,
+     "t_bound": 94,
+     "t_dyn": 1426.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 1410.0,
+      "frame_wait": 16.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "预留 1/16 槽：速率只有 C·1/16"
+    },
+    {
+     "design": "PRIO_DYN",
+     "total": 373.0,
+     "t_bound": 94,
+     "t_dyn": 279.0,
+     "terms": {
+      "arbitration": 235.0,
+      "interference_queue": 47.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -3.0
+     },
+     "note": "每跳 T=1(仲裁)+4(低优先非抢占阻塞)；最长树 47 跳"
+    },
+    {
+     "design": "FIFO",
+     "total": 10999.5,
+     "t_bound": 94,
+     "t_dyn": 10905.5,
+     "terms": {
+      "arbitration": 47.0,
+      "interference_queue": 10861.5,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -3.0
+     },
+     "note": "集体与 BG 同类聚合：sigma 含全部干扰"
+    }
+   ]
+  },
+  {
+   "collective": "allgather",
+   "m": 4,
+   "f_c": 0.05,
+   "period": 3360.0,
+   "lam": 0.02,
+   "t_bound": 188.0,
+   "max_link_load": 168.0,
+   "designs": [
+    {
+     "design": "CAL_SOFT",
+     "total": 188.0,
+     "t_bound": 188.0,
+     "t_dyn": 0.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "alpha=beta 逐槽对齐；coll_buf=0"
+    },
+    {
+     "design": "CAL_SHAPED",
+     "total": 3360.0,
+     "t_bound": 188.0,
+     "t_dyn": 3172.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 3172.0,
+      "bound_offset": 0.0
+     },
+     "note": "刻意拉匀以压低对 BG 的 sigma_H"
+    },
+    {
+     "design": "TDM",
+     "total": 3024.0,
+     "t_bound": 188.0,
+     "t_dyn": 2836.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 2820.0,
+      "frame_wait": 16.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "预留 1/16 槽：速率只有 C·1/16"
+    },
+    {
+     "design": "PRIO_DYN",
+     "total": 1799.5,
+     "t_bound": 188.0,
+     "t_dyn": 1611.5,
+     "terms": {
+      "arbitration": 235.0,
+      "interference_queue": 1473.5,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -97.0
+     },
+     "note": "每跳 T=1(仲裁)+4(低优先非抢占阻塞)；最长树 47 跳"
+    },
+    {
+     "design": "FIFO",
+     "total": 15879.6,
+     "t_bound": 188.0,
+     "t_dyn": 15691.6,
+     "terms": {
+      "arbitration": 47.0,
+      "interference_queue": 15766.6,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -122.0
+     },
+     "note": "集体与 BG 同类聚合：sigma 含全部干扰"
+    }
+   ]
+  },
+  {
+   "collective": "allgather",
+   "m": 4,
+   "f_c": 0.4,
+   "period": 420.0,
+   "lam": 0.02,
+   "t_bound": 188.0,
+   "max_link_load": 168.0,
+   "designs": [
+    {
+     "design": "CAL_SOFT",
+     "total": 188.0,
+     "t_bound": 188.0,
+     "t_dyn": 0.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "alpha=beta 逐槽对齐；coll_buf=0"
+    },
+    {
+     "design": "CAL_SHAPED",
+     "total": 420.0,
+     "t_bound": 188.0,
+     "t_dyn": 232.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 232.0,
+      "bound_offset": 0.0
+     },
+     "note": "刻意拉匀以压低对 BG 的 sigma_H"
+    },
+    {
+     "design": "TDM",
+     "total": 432.7,
+     "t_bound": 188.0,
+     "t_dyn": 244.7,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 241.7,
+      "frame_wait": 3.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "预留 7/16 槽：速率只有 C·7/16"
+    },
+    {
+     "design": "PRIO_DYN",
+     "total": 9723.1,
+     "t_bound": 188.0,
+     "t_dyn": 9535.1,
+     "terms": {
+      "arbitration": 235.0,
+      "interference_queue": 9415.1,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -115.0
+     },
+     "note": "每跳 T=1(仲裁)+4(低优先非抢占阻塞)；最长树 47 跳"
+    },
+    {
+     "design": "FIFO",
+     "total": 96718.5,
+     "t_bound": 188.0,
+     "t_dyn": 96530.5,
+     "terms": {
+      "arbitration": 47.0,
+      "interference_queue": 96605.5,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -122.0
+     },
+     "note": "集体与 BG 同类聚合：sigma 含全部干扰"
+    }
+   ]
+  },
+  {
+   "collective": "allgather",
+   "m": 4,
+   "f_c": 0.8,
+   "period": 210.0,
+   "lam": 0.02,
+   "t_bound": 188.0,
+   "max_link_load": 168.0,
+   "designs": [
+    {
+     "design": "CAL_SOFT",
+     "total": 188.0,
+     "t_bound": 188.0,
+     "t_dyn": 0.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "alpha=beta 逐槽对齐；coll_buf=0"
+    },
+    {
+     "design": "CAL_SHAPED",
+     "total": 210.0,
+     "t_bound": 188.0,
+     "t_dyn": 22.0,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 22.0,
+      "bound_offset": 0.0
+     },
+     "note": "刻意拉匀以压低对 BG 的 sigma_H"
+    },
+    {
+     "design": "TDM",
+     "total": 233.4,
+     "t_bound": 188.0,
+     "t_dyn": 45.4,
+     "terms": {
+      "arbitration": 0.0,
+      "interference_queue": 0.0,
+      "rate_deficit": 43.4,
+      "frame_wait": 2.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": 0.0
+     },
+     "note": "预留 13/16 槽：速率只有 C·13/16"
+    },
+    {
+     "design": "PRIO_DYN",
+     "total": 159634.7,
+     "t_bound": 188.0,
+     "t_dyn": 159446.7,
+     "terms": {
+      "arbitration": 235.0,
+      "interference_queue": 159326.7,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -115.0
+     },
+     "note": "每跳 T=1(仲裁)+4(低优先非抢占阻塞)；最长树 47 跳"
+    },
+    {
+     "design": "FIFO",
+     "total": 1155778.7,
+     "t_bound": 188.0,
+     "t_dyn": 1155590.7,
+     "terms": {
+      "arbitration": 47.0,
+      "interference_queue": 1155665.7,
+      "rate_deficit": 0.0,
+      "frame_wait": 0.0,
+      "shaping_dilation": 0.0,
+      "bound_offset": -122.0
+     },
+     "note": "集体与 BG 同类聚合：sigma 含全部干扰"
+    }
+   ]
+  }
+ ],
+ "leftover_illustration": [
+  {
+   "C": 1.0,
+   "T0": 1.0,
+   "sigma_H": 168.0,
+   "rho_H": 0.05,
+   "R_leftover": 0.95,
+   "rate_deficit": 0.050000000000000044,
+   "T_leftover": 177.89473684210526,
+   "latency_inflation": 176.89473684210526
+  },
+  {
+   "C": 1.0,
+   "T0": 1.0,
+   "sigma_H": 168.0,
+   "rho_H": 0.4,
+   "R_leftover": 0.6,
+   "rate_deficit": 0.4,
+   "T_leftover": 281.6666666666667,
+   "latency_inflation": 280.6666666666667
+  }
+ ]
+}

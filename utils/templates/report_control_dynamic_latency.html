@@ -111,7 +111,8 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <h1>NoC 动态时延降低：控制论与科学方法论的形式化推导</h1>
 <p class="sub">
 把集合通信 NoC 建模为受控对象 · 用网络演算给出时延证书 · 逐步推导前馈 / 整形 / 反馈三条路径 ·
-对应 Arch-A5 与 <code>results/nc_mesh_analysis.json</code> · 生成 @@GEN@@
+按服务纪律逐项归因 \(T_{\mathrm{dyn}}\) ·
+对应 Arch-A5 与 <code>results/nc_mesh_analysis.json</code>、<code>results/tdyn_decompose.json</code> · 生成 @@GEN@@
 </p>
 
 <div class="card hero">
@@ -126,8 +127,9 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <li><b>物理规律</b>：端到端时延 = 图论地板 \(T_{\mathrm{bound}}\) + 到达–服务失配造成的动态超额 \(T_{\mathrm{dyn}}\)；基线 FIFO 下后者可达地板的数十倍。</li>
 <li><b>控制论处方</b>：高先验用<strong>前馈</strong>对齐 \(\alpha\) 与 \(\beta\)；低先验用<strong>请示授权（在线准入）</strong>把注入变成受控输入；开放残余用<strong>反馈</strong>保有界——三者按信息结构分层。</li>
 <li><b>科学方法</b>：先分解、再辨识可控变量、用 \(h(\alpha,\beta)\) 或 \(v=0\) 作接受准则、对照证伪、与面积共优化。</li>
+<li><b>分项归因</b>（§13）：\(T_{\mathrm{dyn}}\) 可精确拆为八个纪律项。动态方案里 \(D^{\mathrm{intf}}\)（干扰突发）占正向分量的 \(97.6\%\!\sim\!99.95\%\)；硬 TDM 的病灶则是 \(D^{\mathrm{rate}}\)（速率亏损）而非 \(D^{\mathrm{frame}}\)（等槽），比例 \(80{:}1\)。两者都含 \(1/(C-\rho)\) 极点——缓冲与反馈只能搬动极点，前馈才能约去它。</li>
 </ol>
-<p class="note">文中对关键公式配有内联 SVG 示意：图 1 时延分解 · 图 2–4 网络演算 \(\alpha/\beta/h/v\) · 图 5 前馈对齐 · 图 6 软优先 · 图 7 整形压 \(\sigma\) · 图 8 请示授权交叉点。</p>
+<p class="note">文中对关键公式配有内联 SVG 示意：图 1 时延分解 · 图 2–4 网络演算 \(\alpha/\beta/h/v\) · 图 4b \(\beta\) 四层合成 · 图 5 前馈对齐 · 图 6 软优先 · 图 7 整形压 \(\sigma\) · 图 8 请示授权交叉点 · 图 9 四象限（DOR/排图 × 注入控制）· 图 10 背景流逐项对账 · 图 11 \(1/(C-\rho)\) 极点。</p>
 </div>
 
 <div class="card toc">
@@ -144,6 +146,8 @@ mjx-container { overflow-x: auto; overflow-y: hidden; }
 <li><a href="#s9">科学方法论的六步闭环</a></li>
 <li><a href="#s10">落地设计（Arch-A5）与数据对照</a></li>
 <li><a href="#s11">低先验：在线请示授权（admission / request–grant）</a></li>
+<li><a href="#s12">四象限对比：DOR / 静态排图 × 有无注入控制</a></li>
+<li><a href="#s13">\(T_{\mathrm{dyn}}\) 的细粒度分解：服务纪律逐项归因</a></li>
 </ol>
 </div>
 
@@ -956,6 +960,524 @@ T_{\mathrm{dyn}}^{C}(\rho) \;>\; R_{rg}.
 </div>
 </div>
 
+<div class="card" id="s12">
+<h2>12. 四象限对比：DOR / 静态排图 × 有无注入控制</h2>
+<p>用同一套 \((\alpha,\beta)\) 证书比较四种常见组合。注入控制管 \(\alpha\)；静态排图管 \(\beta\) 的槽位形状；二者正交。</p>
+
+<div class="step">
+<span class="tag">步骤 12.1 · 四象限定义</span>
+<table>
+<thead>
+<tr>
+  <th></th>
+  <th>无注入控制<br/><span class="note">\(\alpha\) 自由（同步突发 \(\sigma\) 大）</span></th>
+  <th>有注入控制<br/><span class="note">\(\alpha\) 整形 / 贴表</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><b>DOR + 动态仲裁</b><br/><span class="note">\(\beta=\beta_{\mathrm{leftover}}\)</span></td>
+  <td class="bad"><b>方案①</b> 基线 DOR，无注入控</td>
+  <td class="warn"><b>方案②</b> DOR + 注入控</td>
+</tr>
+<tr>
+  <td><b>静态排图</b><br/><span class="note">\(\beta=\beta_{\mathrm{cal}}\)</span></td>
+  <td class="bad"><b>方案③</b> 排图，无注入控</td>
+  <td class="win"><b>方案④</b> 排图 + 注入控（CAL / Arch-A5）</td>
+</tr>
+</tbody>
+</table>
+<div class="fig">
+<svg viewBox="0 0 520 280" width="520" height="280" xmlns="http://www.w3.org/2000/svg" aria-label="four quadrant alpha beta">
+  <text x="260" y="22" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">图 9 · 控制完备性四象限</text>
+  <!-- axes labels -->
+  <text x="260" y="48" text-anchor="middle" font-size="11" fill="#64748b">α →</text>
+  <text x="28" y="160" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 28 160)">β →</text>
+  <text x="155" y="68" text-anchor="middle" font-size="10" fill="#64748b">α 自由</text>
+  <text x="365" y="68" text-anchor="middle" font-size="10" fill="#64748b">α 受控</text>
+  <text x="52" y="130" text-anchor="middle" font-size="10" fill="#64748b">β 动态</text>
+  <text x="52" y="220" text-anchor="middle" font-size="10" fill="#64748b">β 静态</text>
+  <!-- Q1 -->
+  <rect x="70" y="80" width="200" height="80" rx="6" fill="#fee2e2" stroke="#ef4444"/>
+  <text x="170" y="112" text-anchor="middle" font-size="13" fill="#991b1b" font-weight="600">① DOR，无注入控</text>
+  <text x="170" y="132" text-anchor="middle" font-size="11" fill="#7f1d1d">排队爆炸 · T_dyn ≫ LB</text>
+  <text x="170" y="148" text-anchor="middle" font-size="10" fill="#64748b">FIFO ≈15880 vs LB 188</text>
+  <!-- Q2 -->
+  <rect x="280" y="80" width="200" height="80" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="380" y="112" text-anchor="middle" font-size="13" fill="#92400e" font-weight="600">② DOR + 注入控</text>
+  <text x="380" y="132" text-anchor="middle" font-size="11" fill="#78350f">有界排队 · 可近 LB</text>
+  <text x="380" y="148" text-anchor="middle" font-size="10" fill="#64748b">封闭世界可重放，非契约</text>
+  <!-- Q3 -->
+  <rect x="70" y="170" width="200" height="80" rx="6" fill="#fecaca" stroke="#dc2626"/>
+  <text x="170" y="202" text-anchor="middle" font-size="13" fill="#991b1b" font-weight="600">③ 排图，无注入控</text>
+  <text x="170" y="222" text-anchor="middle" font-size="11" fill="#7f1d1d">契约破裂 · 日历被冲垮</text>
+  <text x="170" y="238" text-anchor="middle" font-size="10" fill="#64748b">反模式（仅故障态）</text>
+  <!-- Q4 -->
+  <rect x="280" y="170" width="200" height="80" rx="6" fill="#dcfce7" stroke="#22c55e"/>
+  <text x="380" y="202" text-anchor="middle" font-size="13" fill="#166534" font-weight="600">④ 排图 + 注入控</text>
+  <text x="380" y="222" text-anchor="middle" font-size="11" fill="#14532d">v=0 · T=T_sched</text>
+  <text x="380" y="238" text-anchor="middle" font-size="10" fill="#64748b">CAL_SOFT / Arch-A5</text>
+</svg>
+<p class="cap"><b>图 9.</b> 横轴是否控制 \(\alpha\)（注入），纵轴 \(\beta\) 是动态 leftover 还是静态槽位。只有右下角④同时锁定二者。</p>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.2 · 方案①：DOR，无注入控制</span>
+<div class="eq">\[
+\alpha(t)\approx\sigma_{\mathrm{sync}}+\rho t,\quad
+\sigma_{\mathrm{sync}}\sim O(Nm);\qquad
+\beta_i=\big[\beta_{\mathrm{link}}-\alpha_{-i}\big]^+.
+\]
+</div>
+<ul>
+<li>\(v=\sup(\alpha-\beta)\)：无界或随 \(\rho\) 发散（同类汇聚 + 类间耦合）。</li>
+<li>\(h(\alpha,\beta)\gg T_{\mathrm{bound}}\)。</li>
+<li>实证：allgather \(m=4\)，\(T_{\mathrm{bound}}=188\)，FIFO \(\approx 15880\) → \(T_{\mathrm{dyn}}/T\approx 98.8\%\)。</li>
+<li>控制论：无前馈、无门控，仅事后仲裁 → 路径 C 最差形态。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.3 · 方案②：DOR + 注入控制</span>
+<div class="eq">\[
+\alpha'(t)=\sigma'+\rho't,\ \sigma'\ll\sigma_{\mathrm{sync}};\qquad
+\beta\ \text{仍为动态 leftover}.
+\]
+</div>
+<p>令牌桶闭式（\(\rho'\le R_{\mathrm{eff}}\)）：</p>
+<div class="eq">\[
+h(\alpha',\beta)\le\frac{\sigma'}{R_{\mathrm{eff}}}+T_P,\qquad
+v\le\sigma'+\rho'T_P.
+\]
+</div>
+<ul>
+<li>相对①：\(T_{\mathrm{dyn}}\) 大幅下降，\(v\) 有界 → 可用 \(B\ge v\) 吸收。</li>
+<li>实证：8×6 广播 \(B=0/1/2\to 110/98/96\)；16×16 allgather 可近 LB。</li>
+<li>确定性：封闭世界可重放；开放背景共享 \(\beta\) 时 \(h\) 仍随机，<b>无契约</b>。</li>
+<li>控制论：只整形 \(\alpha\)，不锁 \(\beta\) → 路径 B。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.4 · 方案③：静态排图，无注入控制</span>
+<p>排图给出 \(\beta_{\mathrm{cal}}\)，但源端仍突发，使得在若干区间</p>
+<div class="eq">\[ \alpha\not\le\beta_{\mathrm{cal}}. \]</div>
+<p>则 \(v_{\mathrm{cal}}=0\) 证书前提被违反，典型后果：</p>
+<ol>
+<li>冲突进缓冲 → 退化成②，排图 fidelity 破坏，\(v&gt;0\)；</li>
+<li>watchdog demote → 走 DOR 逃生，\(T\) 回到①量级；</li>
+<li>硬背压堵在源 → 等效“被迫注入控制”，但时延变成错位等待。</li>
+</ol>
+<div class="eq">\[
+v_{\mathrm{net}}=\sup(\alpha-\beta_{\mathrm{cal}})&gt;0
+\quad\Rightarrow\quad
+\text{“静态排图”名存实亡}.
+\]
+</div>
+<p>控制论：只改 \(\beta\)、不控 \(\alpha\) → 前馈半套。工程上几乎不单独采用；Arch-A5 的 demote 正是③的违规降级态。</p>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.5 · 方案④：静态排图 + 注入控制</span>
+<div class="eq">\[
+\alpha_{\mathrm{cal}}(t)=\beta_{\mathrm{cal}}(t),\qquad
+v=0,\qquad
+h=T_{\mathrm{schedule}}\approx T_{\mathrm{bound}}+\varepsilon_{\mathrm{rigid}}.
+\]
+</div>
+<ul>
+<li>\(T_{\mathrm{dyn}}\approx\varepsilon_{\mathrm{rigid}}\)（刚性税；1–3 flit 对齐可压小）。</li>
+<li>背景：\(\beta_{\mathrm{BG}}=[\beta_{\mathrm{link}}-\alpha_{\mathrm{cal}}]^+\)（软优先），集体证书不被破坏。</li>
+<li>实证：CAL_SOFT <code>coll_delay=LB</code>，<code>coll_buf=0</code>。</li>
+<li>控制论：同时锁 \(\alpha\) 与 \(\beta\) → 路径 A（Arch-A5 集体路径）。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.6 · 证书总表</span>
+<table>
+<thead>
+<tr>
+  <th>方案</th><th>\(\alpha\)</th><th>\(\beta\)</th><th>\(v\)</th>
+  <th>\(h\) / \(T_{\mathrm{dyn}}\)</th><th>开放背景下集体确定性</th>
+</tr>
+</thead>
+<tbody>
+<tr class="bad">
+  <td>① DOR，无注入控</td><td>自由突发</td><td>动态 leftover</td><td>无界/发散</td>
+  <td>\(\gg T_{\mathrm{bound}}\)（~80×）</td><td>无</td>
+</tr>
+<tr class="warn">
+  <td>② DOR + 注入控</td><td>整形 \(\sigma'\)</td><td>动态 leftover</td><td>\(\le\sigma'+\rho'T\)</td>
+  <td>可近 LB（靠 \(B\)）</td><td>弱（封闭世界可重放）</td>
+</tr>
+<tr class="bad">
+  <td>③ 排图，无注入控</td><td>自由突发</td><td>槽位 \(\beta_{\mathrm{cal}}\)</td><td>\(&gt;0\)（违约）</td>
+  <td>不确定 / 降级</td><td>无（契约破）</td>
+</tr>
+<tr class="win">
+  <td>④ 排图 + 注入控</td><td>贴表</td><td>槽位 \(\beta_{\mathrm{cal}}\)</td><td>\(=0\)</td>
+  <td>\(T_{\mathrm{sched}}\)</td><td><b>强</b>（守约流）</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.7 · 结构命题与完备性序</span>
+<div class="prop">
+<strong>命题（四象限）。</strong> 在链路容量恒定下：
+<ol style="margin:8px 0 0; padding-left:22px;">
+<li><b>仅控 \(\alpha\)（②）</b> 可使 \(v\) 有界并逼近 \(T_{\mathrm{bound}}\)，但不能给出与背景无关的 \(T_{\mathrm{dyn}}=0\) 证书。</li>
+<li><b>仅控 \(\beta\)（③）</b> 在 \(\alpha\not\le\beta_{\mathrm{cal}}\) 时不能维持 \(v=0\)；静态排图的充分条件是注入侧同时服从排图。</li>
+<li><b>\(\alpha\) 与 \(\beta\) 同时对齐（④）</b> 是使守约流满足 \(v=0\) 且 \(T_{\mathrm{dyn}}=\varepsilon_{\mathrm{rigid}}\) 的充分条件。</li>
+<li><b>两者都不控（①）</b> 时，同步集合通信下 \(T_{\mathrm{dyn}}/T_{\mathrm{bound}}\) 可趋于大常数甚至随负载发散。</li>
+</ol>
+<p style="margin:10px 0 0">完备性序（③ 在违约时往往退化到①，故劣于②）：</p>
+<div class="eq" style="margin:8px 0 0;">\[
+\text{① 无控}
+\;\prec\;
+\text{③ 半控（只 }\beta\text{）}
+\;\prec\;
+\text{② 半控（只 }\alpha\text{）}
+\;\prec\;
+\text{④ 双控}.
+\]
+</div>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 12.8 · 面积含义与选型</span>
+<table>
+<thead><tr><th>方案</th><th>路由器主要成本</th><th>源端成本</th><th>选型</th></tr></thead>
+<tbody>
+<tr><td>①</td><td>深 VC ≈ BDP×端口</td><td>无</td><td>仅作对照基线</td></tr>
+<tr><td>②</td><td>中等缓冲 \(\ge v(\alpha',\beta)\)</td><td>offset / 整形器</td><td>要平均时延、可接受封闭世界确定性</td></tr>
+<tr><td>③</td><td>日历表 + 仍可能要深缓冲兜违约</td><td>无</td><td><b>反模式</b>；最多作为④的 demote 故障态</td></tr>
+<tr class="win"><td>④</td><td>浅/零集体缓冲 + 小 BG 池</td><td>offset + 守时注入</td><td>要开放背景下集体确定性 → 必选</td></tr>
+</tbody></table>
+<p><b>工程口径：</b>要集体确定性必须④，不能停在③；只要平均时延可加缓冲则②常够用；①只作基线；③单独上线是反模式。</p>
+</div>
+</div>
+
+<div class="card" id="s13">
+<h2>13. \(T_{\mathrm{dyn}}\) 的细粒度分解：服务纪律逐项归因</h2>
+<p>
+§2 把时延切成 \(T_{\mathrm{bound}}+T_{\mathrm{dyn}}\)，但 \(T_{\mathrm{dyn}}\) 是一个聚合量，不足以指导微架构取舍。
+本节把它拆成<strong>可分别归零</strong>的纪律项：每一项都对应服务曲线 \(\beta\) 的一个具体参数，
+因而对应一条具体的设计动作。全部数值由 <code>utils/tdyn_decompose.py</code> 生成，
+落盘 <code>results/tdyn_decompose.json</code>。
+</p>
+
+<div class="step">
+<span class="tag">步骤 13.1 · 单跳的两项分解：延迟膨胀 + 速率亏损</span>
+<p>取<strong>理想单跳</strong>为参照——独占链路、无干扰、只付路由器流水线：</p>
+<div class="eq">\[
+\beta^{0}_{e}(t) = C\,[\,t-T_{0}\,]^{+},
+\qquad T_{0}=t_{\mathrm{router}} .
+\]
+</div>
+<p>实际纪律给出的服务曲线是 \(\beta'_{e}(t)=R'[\,t-T'\,]^{+}\)，\(R'\le C,\;T'\ge T_{0}\)。对令牌桶 \(\alpha=\sigma+\rho t\)，两者的时延界之差<strong>恰好加法可分</strong>：</p>
+<div class="eq">\[
+\underbrace{\Big(T'+\frac{\sigma}{R'}\Big)}_{d_{e}}
+-\underbrace{\Big(T_{0}+\frac{\sigma}{C}\Big)}_{d^{0}_{e}}
+=\underbrace{(T'-T_{0})}_{\textstyle D^{\mathrm{lat}}_{e}\ \text{延迟膨胀}}
++\underbrace{\sigma\,\frac{C-R'}{C\,R'}}_{\textstyle D^{\mathrm{rate}}_{e}\ \text{速率亏损}} .
+\]
+</div>
+<p>
+这是本节的骨架：<b>任何</b>服务纪律对 \(T_{\mathrm{dyn}}\) 的贡献，最终只能走这两条通道——
+要么抬高 \(\beta\) 的横截距 \(T'\)（我要等），要么压低 \(\beta\) 的斜率 \(R'\)（我拿不到满速）。
+两者的经济学完全不同：\(D^{\mathrm{lat}}\) 是<strong>一次性通行费</strong>，与自身突发 \(\sigma\) 无关；
+\(D^{\mathrm{rate}}\) 是<strong>按量征税</strong>，与 \(\sigma\) 成正比且含 \(1/R'\) 极点。
+</p>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.2 · 剩余服务定理：优先级复用如何生成这两项</span>
+<p>严格优先级下，低优先类在高优先聚合 \(\alpha_H=\sigma_H+\rho_H t\) 之后拿到的剩余服务为（\(\beta\ominus\alpha_H\)，见 <code>nc_mesh_analysis.leftover</code>）：</p>
+<div class="eq">\[
+\beta_{L}(t)=\big(C-\rho_{H}\big)
+\left[\,t-\frac{\sigma_{H}+C\,T_{0}}{C-\rho_{H}}\,\right]^{+}.
+\]
+</div>
+<p>代入 13.1 的定义，逐项读出：</p>
+<div class="eq">\[
+D^{\mathrm{rate}}_{e}=\sigma_{L}\,\frac{\rho_{H}}{C\,(C-\rho_{H})},
+\qquad
+D^{\mathrm{lat}}_{e}=T'-T_{0}=\frac{\sigma_{H}+\rho_{H}T_{0}}{C-\rho_{H}} .
+\]
+</div>
+<p><b>一个有用的恒等式：</b>上式分子 \(\sigma_{H}+\rho_{H}T_{0}\) 正是干扰流自身的 backlog 界 \(v(\alpha_{H},\beta^{0})\)，于是</p>
+<div class="eq">\[
+D^{\mathrm{lat}}_{e}=\frac{v(\alpha_{H},\beta^{0})}{C-\rho_{H}} .
+\]
+</div>
+<p>
+物理含义直白：<strong>我的延迟膨胀 = 干扰流的积压 ÷ 我剩下的速率</strong>——我必须先等对方的队列以我被削弱后的速率排空。
+这解释了为什么"给集体流加优先级"只把痛苦转移给背景流，而<strong>不减少系统总的 \(D^{\mathrm{lat}}\)</strong>：\(v(\alpha_H,\cdot)\) 一分不少地出现在别人的分母上。
+真正的解法是让 \(\sigma_{H}\to 0\)（槽外无干扰到达），把<strong>分子清零</strong>，而不是去调分母。
+</p>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.3 · 纪律项清单：八个可分别归零的分量</span>
+<p>把 \(D^{\mathrm{lat}}\) 与 \(D^{\mathrm{rate}}\) 按<strong>物理成因</strong>细分，得到下表。每一行都是一个独立的设计旋钮。</p>
+<table>
+<thead><tr><th>记号</th><th>分量</th><th>数学来源（\(\beta\) 的哪个参数）</th><th>由哪种纪律引入</th><th>双控（④）能否归零</th></tr></thead>
+<tbody>
+<tr><td>\(D^{\mathrm{pipe}}\)</td><td>流水线级数</td><td>\(T_{0}=t_{\mathrm{router}}\)</td><td>任何流水路由器（与负载无关）</td><td class="warn">不能——应计入 \(T_{\mathrm{bound}}\) 的实现常数</td></tr>
+<tr><td>\(D^{\mathrm{arb}}\)</td><td>仲裁判决</td><td>\(T_{0}\) 中的 \(+1\)（VA/SA 一拍）</td><td>动态仲裁（需要看到请求才能决策）</td><td class="win">能——slot-owned 无需仲裁</td></tr>
+<tr><td>\(D^{\mathrm{np}}\)</td><td>非抢占阻塞</td><td>\(T'\mathrel{+}=m_{b}\)</td><td>flit/packet 粒度不可抢占</td><td class="win">能——槽边界与 flit 对齐</td></tr>
+<tr><td>\(D^{\mathrm{intf}}\)</td><td>干扰突发</td><td>\(\dfrac{\sigma_{H}+\rho_{H}T_{0}}{C-\rho_{H}}\)</td><td>FIFO / 优先级 / 任何共享复用</td><td class="win">能——自己槽内 \(\sigma_{H}=0\)</td></tr>
+<tr><td>\(D^{\mathrm{rate}}\)</td><td>速率亏损</td><td>\(R'=C-\rho_{H}\) 或 \(C\cdot n/k\)</td><td>无预留共享；TDM 占空比份额</td><td class="win">能——槽内独占 \(R'=C\)</td></tr>
+<tr><td>\(D^{\mathrm{frame}}\)</td><td>帧等待</td><td>\(T'=\lceil k/n\rceil\)</td><td>硬 TDM 的轮次结构</td><td class="win">能——软优先不设轮次</td></tr>
+<tr><td>\(D^{\mathrm{fc}}\)</td><td>流控折损</td><td>\(R_{\mathrm{eff}}=\min\{C,\,B/\mathrm{RTT}\}\)</td><td>credit 环 + 浅 buffer（\(B&lt;C\cdot\mathrm{RTT}\)）</td><td class="win">能——零缓冲直通无 credit 环</td></tr>
+<tr class="bad"><td>\(D^{\mathrm{hol}}\)</td><td>队首阻塞</td><td><b>非加法</b>：\(R'\mathrel{\ast}=(1-p_{\mathrm{blk}})\)</td><td>单队列多目的（非工作保持）</td><td class="win">能——per-slot <code>out_port_mask</code> 定向</td></tr>
+<tr><td>\(D^{\mathrm{rigid}}\)</td><td>刚性税</td><td>排图可行性间隙</td><td>零缓冲 calendar 自身</td><td class="warn">不能——这就是④的残余项</td></tr>
+</tbody></table>
+<p class="note">
+\(D^{\mathrm{hol}}\) 单列且标红：它是<strong>唯一乘性</strong>的分量，见步骤 13.7。其余七项在路径上加法求和。
+</p>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.4 · 路径求和：完整分解式</span>
+<p>沿路径 \(P\)（多播则沿树的边集）求和，并显式带上下界口径差：</p>
+<div class="eq">\[
+T_{\mathrm{dyn}}
+=\sum_{e\in P}\Big[
+D^{\mathrm{arb}}_{e}+D^{\mathrm{np}}_{e}
++D^{\mathrm{intf}}_{e}+D^{\mathrm{rate}}_{e}
++D^{\mathrm{frame}}_{e}+D^{\mathrm{fc}}_{e}\Big]
+\;+\;D^{\mathrm{hol}}+D^{\mathrm{rigid}}
+\;-\;\Delta_{\mathrm{bound}} .
+\]
+</div>
+<ul>
+<li><b>\(\Delta_{\mathrm{bound}}\)（口径差）</b>：\(T_{\mathrm{bound}}\) 取的是<strong>割集族的最大值</strong>（link / ramp / degree / latency 割），
+而单条流自己的线延迟 \(+\) ramp 可能短于该最大值。差额记为 \(\Delta_{\mathrm{bound}}\)，保证上式<strong>精确</strong>加和而非近似。
+allgather 下它约为 \(97\sim122\) cycles（因 \(T_{\mathrm{bound}}=188\) 由 eject 割给出，而非由最长路径给出）。</li>
+<li><b>\(D^{\mathrm{pipe}}\) 不在式中</b>：它与负载、纪律都无关，归入 \(T_{\mathrm{bound}}\) 的实现常数更诚实（见 13.5 的分栏）。</li>
+</ul>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.5 · 数据 A：背景单播 12 跳的<strong>精确</strong>逐项分解</span>
+<p>
+背景（动态点对点）流量的界有闭式，可以做到逐项精确对账。取最坏跳距 \(d_x=5,d_y=7\)，
+\(H=7,V=9,t_{\mathrm{router}}=3\)（见 <code>ppa_analytic_model.py</code>）：
+</p>
+<div class="eq">\[
+T=\underbrace{\big(d_xH+d_yV+2\big)}_{T_{\mathrm{bound}}=100}
++\underbrace{(d_x{+}d_y)\,t_{\mathrm{router}}}_{D^{\mathrm{pipe}}=36}
++\underbrace{(d_x{+}d_y)\cdot w}_{D^{\mathrm{arb}}+D^{\mathrm{intf}}+D^{\mathrm{frame}}}
++\underbrace{B_{\mathrm{pool}}}_{D^{\mathrm{fc}}} .
+\]
+</div>
+<p>纪律的<strong>全部</strong>影响浓缩在单跳等待 \(w\) 上：硬 TDM 下 \(w=\)（BG 窗口）\(=16\)；软优先下由日历占用率给出 \(w=\lceil (\Theta+\Theta_{\mathrm{idle}}-1)/\Theta_{\mathrm{idle}}\rceil=2\)（\(\Theta=952,\ \Theta_{\mathrm{occ}}=49\)）。</p>
+<table>
+<thead><tr><th>纪律</th><th>\(w\)</th><th>线延迟+ramp<br>(\(T_{\mathrm{bound}}\))</th><th>\(D^{\mathrm{pipe}}\)<br>12×3</th><th>\(D^{\mathrm{arb}}\)等<br>12×\(w\)</th><th>\(D^{\mathrm{fc}}\)<br>共享池</th><th>合计 \(T\)</th><th>\(T_{\mathrm{dyn}}\)</th></tr></thead>
+<tbody>
+<tr class="bad"><td>硬 TDM 1-in-16</td><td class="num">16</td><td class="num">100</td><td class="num">36</td><td class="num">192</td><td class="num">0</td><td class="num">328</td><td class="num">228</td></tr>
+<tr><td>软优先（CAL_SOFT）</td><td class="num">2</td><td class="num">100</td><td class="num">36</td><td class="num">24</td><td class="num">0</td><td class="num">160</td><td class="num">60</td></tr>
+<tr class="win"><td>软优先 + 共享池</td><td class="num">2</td><td class="num">100</td><td class="num">36</td><td class="num">24</td><td class="num">28</td><td class="num">188</td><td class="num">88</td></tr>
+</tbody></table>
+<p><b>读数：</b></p>
+<ol>
+<li>硬 TDM 的 \(T_{\mathrm{dyn}}=228\) 中有 \(192\)（<b>84%</b>）纯粹来自"等自己的槽"——这是<strong>纪律项，不是拥塞项</strong>：即使网络空载它也照付。</li>
+<li>软优先把同一项从 \(192\) 压到 \(24\)（<b>8×</b>），机制是把"轮次配额"换成"占用率互补"：集体只占日历 \(49/952=5.1\%\)，剩下 \(94.9\%\) 的周期背景流可以立刻用。</li>
+<li>共享池的 \(28\) 是<strong>用 \(D^{\mathrm{fc}}\) 换面积</strong>的自愿代价：把 per-port 深缓冲折成一个 28-flit 共享池，代价是池周转的排队，收益见 §10 的面积数。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 580 250" width="580" height="250" xmlns="http://www.w3.org/2000/svg" aria-label="BG delay term decomposition">
+  <text x="290" y="20" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">背景单播 12 跳时延的逐项分解（cycles）</text>
+  <!-- axis -->
+  <line x1="95" y1="196" x2="530" y2="196" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="95" y="212" font-size="10" fill="#64748b">0</text>
+  <text x="215" y="212" font-size="10" fill="#64748b" text-anchor="middle">100</text>
+  <text x="335" y="212" font-size="10" fill="#64748b" text-anchor="middle">200</text>
+  <text x="455" y="212" font-size="10" fill="#64748b" text-anchor="middle">300</text>
+  <line x1="215" y1="46" x2="215" y2="196" stroke="#e2e8f0" stroke-width="1"/>
+  <line x1="335" y1="46" x2="335" y2="196" stroke="#e2e8f0" stroke-width="1"/>
+  <line x1="455" y1="46" x2="455" y2="196" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- row 1: hard TDM  wire98 ramp2 pipe36 arb192 -->
+  <text x="90" y="66" text-anchor="end" font-size="10" fill="#0f172a">硬 TDM</text>
+  <rect x="95" y="52" width="117.6" height="24" fill="#22c55e"/>
+  <rect x="212.6" y="52" width="2.4" height="24" fill="#15803d"/>
+  <rect x="215" y="52" width="43.2" height="24" fill="#60a5fa"/>
+  <rect x="258.2" y="52" width="230.4" height="24" fill="#ef4444"/>
+  <text x="373" y="68" text-anchor="middle" font-size="10" fill="#fff" font-weight="600">纪律等待 192</text>
+  <text x="496" y="68" font-size="10" fill="#0f172a" font-weight="600">328</text>
+
+  <!-- row 2: soft  arb24 -->
+  <text x="90" y="112" text-anchor="end" font-size="10" fill="#0f172a">软优先</text>
+  <rect x="95" y="98" width="117.6" height="24" fill="#22c55e"/>
+  <rect x="212.6" y="98" width="2.4" height="24" fill="#15803d"/>
+  <rect x="215" y="98" width="43.2" height="24" fill="#60a5fa"/>
+  <rect x="258.2" y="98" width="28.8" height="24" fill="#ef4444"/>
+  <text x="296" y="114" font-size="10" fill="#0f172a" font-weight="600">160</text>
+
+  <!-- row 3: soft + pool -->
+  <text x="90" y="158" text-anchor="end" font-size="10" fill="#0f172a">软优先+池</text>
+  <rect x="95" y="144" width="117.6" height="24" fill="#22c55e"/>
+  <rect x="212.6" y="144" width="2.4" height="24" fill="#15803d"/>
+  <rect x="215" y="144" width="43.2" height="24" fill="#60a5fa"/>
+  <rect x="258.2" y="144" width="28.8" height="24" fill="#ef4444"/>
+  <rect x="287" y="144" width="33.6" height="24" fill="#f59e0b"/>
+  <text x="330" y="160" font-size="10" fill="#0f172a" font-weight="600">188</text>
+
+  <!-- legend -->
+  <rect x="95" y="228" width="11" height="11" fill="#22c55e"/>
+  <text x="110" y="237" font-size="10" fill="#334155">线延迟+ramp = T_bound (100)</text>
+  <rect x="258" y="228" width="11" height="11" fill="#60a5fa"/>
+  <text x="273" y="237" font-size="10" fill="#334155">D_pipe (36)</text>
+  <rect x="358" y="228" width="11" height="11" fill="#ef4444"/>
+  <text x="373" y="237" font-size="10" fill="#334155">纪律等待</text>
+  <rect x="443" y="228" width="11" height="11" fill="#f59e0b"/>
+  <text x="458" y="237" font-size="10" fill="#334155">D_fc 共享池</text>
+</svg>
+<p class="cap"><b>图 10.</b> 背景流 \(T_{\mathrm{dyn}}\) 的逐项对账。绿+深绿为不可压缩的 \(T_{\mathrm{bound}}\)，蓝为与负载无关的流水线常数，<b>红段是唯一由服务纪律决定的部分</b>——软优先把它压掉 8×，橙段是共享池换面积的自愿代价。</p>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.6 · 数据 B：集体侧五方案的 \(T_{\mathrm{dyn}}\) 归因</span>
+<p>6×8 mesh，allgather，\(m=4\)，\(\lambda=0.02\)，\(T_{\mathrm{bound}}=188\)。各行的分量精确加和为 \(T_{\mathrm{dyn}}\)。</p>
+<table>
+<thead><tr><th>方案</th><th>\(f_c\)</th><th>\(T\)</th><th>\(T_{\mathrm{dyn}}\)</th><th>\(D^{\mathrm{arb}}{+}D^{\mathrm{np}}\)</th><th>\(D^{\mathrm{intf}}\)</th><th>\(D^{\mathrm{rate}}\)</th><th>\(D^{\mathrm{frame}}\)</th><th>整形拉匀</th><th>\(-\Delta_{\mathrm{bound}}\)</th></tr></thead>
+<tbody>
+<tr class="win"><td>CAL_SOFT</td><td class="num">0.4</td><td class="num">188</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><td>CAL_SHAPED</td><td class="num">0.4</td><td class="num">420</td><td class="num">232</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">232</td><td class="num">0</td></tr>
+<tr class="warn"><td>TDM 1-in-16</td><td class="num">0.4</td><td class="num">433</td><td class="num">245</td><td class="num">0</td><td class="num">0</td><td class="num">242</td><td class="num">3</td><td class="num">0</td><td class="num">0</td></tr>
+<tr class="bad"><td>PRIO_DYN</td><td class="num">0.4</td><td class="num">9,723</td><td class="num">9,535</td><td class="num">235</td><td class="num">9,415</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">−115</td></tr>
+<tr class="bad"><td>FIFO</td><td class="num">0.4</td><td class="num">96,719</td><td class="num">96,531</td><td class="num">47</td><td class="num">96,606</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">−122</td></tr>
+<tr class="win"><td>CAL_SOFT</td><td class="num">0.8</td><td class="num">188</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><td>CAL_SHAPED</td><td class="num">0.8</td><td class="num">210</td><td class="num">22</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">22</td><td class="num">0</td></tr>
+<tr class="warn"><td>TDM 1-in-16</td><td class="num">0.8</td><td class="num">233</td><td class="num">45</td><td class="num">0</td><td class="num">0</td><td class="num">43</td><td class="num">2</td><td class="num">0</td><td class="num">0</td></tr>
+<tr class="bad"><td>PRIO_DYN</td><td class="num">0.8</td><td class="num">159,635</td><td class="num">159,447</td><td class="num">235</td><td class="num">159,327</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">−115</td></tr>
+<tr class="bad"><td>FIFO</td><td class="num">0.8</td><td class="num">1,155,779</td><td class="num">1,155,591</td><td class="num">47</td><td class="num">1,155,666</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">−122</td></tr>
+</tbody></table>
+<p class="note">
+模型约定：多播流的每跳项沿<strong>整棵树的边集</strong>求和（保守上界，与 <code>nc_mesh_analysis.sfa_class</code> 一致）；
+6×8 广播树有 47 条边，故 PRIO_DYN 的 \(D^{\mathrm{arb}}{+}D^{\mathrm{np}}=47\times(1+m_b)=47\times 5=235\)，FIFO 为 \(47\times 1=47\)。
+</p>
+<p><b>四个反直觉读数：</b></p>
+<ol>
+<li>
+<b>动态仲裁方案的病灶是 \(D^{\mathrm{intf}}\)，不是仲裁本身。</b>
+按正向分量计（\(\Delta_{\mathrm{bound}}\) 为负，故用正向分量之和作分母才有 \(\le 100\%\) 的口径）：
+PRIO_DYN 的 \(D^{\mathrm{intf}}\) 占 \(9415/(235{+}9415)=97.6\%\)，FIFO 占 \(96606/(47{+}96606)=99.95\%\)。
+其中<strong>仲裁判决本身</strong>（\(D^{\mathrm{arb}}=47\) 拍）不到 \(0.5\%\)——把仲裁器做得再快也拿不回什么。
+</li>
+<li>
+<b>硬 TDM 的病灶是 \(D^{\mathrm{rate}}\)，不是 \(D^{\mathrm{frame}}\)。</b>
+\(f_c=0.4\) 时 \(D^{\mathrm{rate}}=242\) 而 \(D^{\mathrm{frame}}=3\)——比例 \(80{:}1\)。
+"等槽"只是零头，真正的税是<strong>只拿到占空比份额的速率</strong>：
+\(D^{\mathrm{rate}}=T_{\mathrm{bound}}\big(k/n-1\big)\)，\(n=\lceil f_c k\rceil\)。
+所以给硬 TDM 加更细的帧粒度（减小 \(D^{\mathrm{frame}}\)）是<strong>治错了病</strong>；要治病必须放弃固定份额。
+</li>
+<li>
+<b>优先级付了一笔与 \(T_{\mathrm{bound}}\) 同量级的非抢占税。</b>
+\(D^{\mathrm{np}}=47\times m_b=188\)，恰好等于 \(T_{\mathrm{bound}}=188\)。
+在低负载下这就是"加优先级也快不过 2×地板"的原因；\(m_b\) 越大（长包）越糟。
+</li>
+<li>
+<b>只有 CAL_SOFT 全零。</b>
+它不是"把某一项优化得很好"，而是<strong>八项同时构造性为零</strong>：槽内独占（\(D^{\mathrm{rate}}=0\)）、
+槽外无干扰到达（\(D^{\mathrm{intf}}=0\)）、无轮次（\(D^{\mathrm{frame}}=0\)）、预判无仲裁（\(D^{\mathrm{arb}}=0\)）、
+槽与 flit 对齐（\(D^{\mathrm{np}}=0\)）、零缓冲无 credit 环（\(D^{\mathrm{fc}}=0\)）、掩码定向（\(D^{\mathrm{hol}}=0\)）。
+CAL_SHAPED 的 \(22\sim232\) 也不是失配，而是<strong>刻意</strong>拉匀以压低对背景流的 \(\sigma_H\)（换 §13.2 分子）。
+</li>
+</ol>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.7 · 为什么 \(D^{\mathrm{intf}}\) 会发散：极点在哪、谁能搬动它</span>
+<p>把 13.2 的速率亏损项对聚合负载求极限。单 FIFO 中流 \(i\) 的剩余速率是 \(R'_i=C-\sum_{j\ne i}\rho_j\)，于是</p>
+<div class="eq">\[
+D^{\mathrm{rate}}_{i}=\sigma_i\,\frac{\sum_{j\ne i}\rho_j}{C\big(C-\sum_{j\ne i}\rho_j\big)}
+\;\xrightarrow[\ \sum\rho\to C\ ]{}\;\infty .
+\]
+</div>
+<p>
+这个 \(1/(C-\rho)\) <strong>极点</strong>就是表 13.6 中 \(f_c:0.4\to0.8\) 时 PRIO_DYN 由 \(9.5\mathrm{k}\to159\mathrm{k}\)（\(16.7\times\)，远超负载的 \(2\times\)）的全部原因。
+更糟的是，逐跳突发增长 \(\sigma^{(k+1)}=\sigma^{(k)}+\rho\,d_{\mathrm{hop}}\) 让分子也随跳数复利放大，于是发散是<strong>超线性</strong>的。
+</p>
+<p>据此可以给三类手段做一个干净的定性排序——<strong>它们对极点做的事根本不同</strong>：</p>
+<table>
+<thead><tr><th>手段</th><th>对极点的作用</th><th>能否消除发散</th></tr></thead>
+<tbody>
+<tr><td>加深缓冲 / 多 VC</td><td>把极点从<strong>聚合</strong>速率移到 <strong>per-class</strong> 速率</td><td class="bad">不能——只是推远，仍在 \(\rho\to C\) 处爆</td></tr>
+<tr><td>反馈 / credit 背压</td><td>不动极点，只把 backlog 从网内搬到源端</td><td class="warn">总时延不减（§7），但换来 \(v\) 有界</td></tr>
+<tr class="win"><td>前馈排图（\(\sigma_H\to0\)）</td><td>把<strong>分子</strong>清零，极点被约去</td><td class="win">能——\(D^{\mathrm{intf}}\equiv0\) 与 \(\rho\) 无关</td></tr>
+</tbody></table>
+<p>
+<b>\(D^{\mathrm{hol}}\) 的特殊性：</b>其余各项都作用在 \(\beta\) 的截距或斜率上，是加法的；
+而队首阻塞使服务器<strong>非工作保持</strong>——输出空闲时本流仍可能被队首堵住，被浪费的周期不可追回。
+它等价于把速率<strong>乘性</strong>缩放 \(R'\mapsto R'(1-p_{\mathrm{blk}})\)，于是它把极点<strong>往左搬</strong>（在 \(\rho<C\) 处就爆），
+无法用任何 rate-latency \(\beta\) 保守覆盖。这是"单队列多目的"必须靠 per-slot <code>out_port_mask</code> 结构性消除、而不能靠加缓冲缓解的形式化理由。
+</p>
+<div class="fig">
+<svg viewBox="0 0 520 250" width="520" height="250" xmlns="http://www.w3.org/2000/svg" aria-label="1/(C-rho) pole of D_rate">
+  <text x="260" y="20" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">D_rate = σρ / (C(C−ρ)) 的极点（σ=4, C=1）</text>
+  <!-- axes -->
+  <line x1="70" y1="196" x2="470" y2="196" stroke="#94a3b8" stroke-width="1.2"/>
+  <line x1="70" y1="196" x2="70" y2="40" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="270" y="222" text-anchor="middle" font-size="11" fill="#64748b">聚合干扰负载 ρ_H / C</text>
+  <text x="24" y="118" font-size="11" fill="#64748b" transform="rotate(-90 24 118)">D_rate (cycles)</text>
+  <text x="70" y="212" font-size="10" fill="#64748b" text-anchor="middle">0</text>
+  <text x="250" y="212" font-size="10" fill="#64748b" text-anchor="middle">0.5</text>
+  <text x="430" y="212" font-size="10" fill="#64748b" text-anchor="middle">1.0</text>
+  <text x="64" y="200" font-size="10" fill="#64748b" text-anchor="end">0</text>
+  <text x="64" y="44" font-size="10" fill="#64748b" text-anchor="end">20</text>
+  <!-- asymptote -->
+  <line x1="430" y1="40" x2="430" y2="196" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="425" y="54" font-size="10" fill="#ef4444" text-anchor="end">极点 ρ_H → C</text>
+  <!-- pole curve -->
+  <path d="M70,196 L106,192.7 L142,188.5 L178,183.1 L214,176 L250,166 L286,151 L322,126 L340,106 L358,76 L370,40"
+        fill="none" stroke="#ef4444" stroke-width="2.4"/>
+  <text x="300" y="112" font-size="11" fill="#b91c1c" font-weight="600">共享复用（FIFO/优先级）</text>
+  <!-- calendar flat line -->
+  <line x1="70" y1="194" x2="466" y2="194" stroke="#16a34a" stroke-width="2.8"/>
+  <text x="200" y="186" font-size="11" fill="#166534" font-weight="600">前馈排图：σ_H = 0 ⇒ D ≡ 0（与 ρ 无关）</text>
+  <!-- VC arrow: pole shifted right -->
+  <line x1="322" y1="126" x2="356" y2="126" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#ar13)"/>
+  <defs><marker id="ar13" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L6,3 L0,6 z" fill="#f59e0b"/></marker></defs>
+  <text x="360" y="130" font-size="10" fill="#b45309">加 VC/缓冲：只推远极点</text>
+</svg>
+<p class="cap"><b>图 11.</b> \(D^{\mathrm{rate}}\) 的 \(1/(C-\rho)\) 极点。加缓冲/多 VC（橙）只把极点右移，反馈只搬动积压的位置；只有把分子 \(\sigma_H\) 清零（绿）才让曲线整体塌到 \(0\)，从而与负载解耦。</p>
+</div>
+</div>
+
+<div class="step">
+<span class="tag">步骤 13.8 · 归零清单：从分解到设计动作</span>
+<p>把 13.3 的可归零列翻译成 Arch-A5 的具体机制，并给出实证锚点：</p>
+<table>
+<thead><tr><th>分量</th><th>归零机制</th><th>实证</th></tr></thead>
+<tbody>
+<tr><td>\(D^{\mathrm{rate}},D^{\mathrm{intf}}\)</td><td>SparseCal 槽内独占 + 守时注入使槽外 \(\sigma_H=0\)</td><td>CAL_SOFT \(T=188=T_{\mathrm{bound}}\)</td></tr>
+<tr><td>\(D^{\mathrm{frame}}\)</td><td>CAL_SOFT 软优先：占用率互补而非轮次配额</td><td>BG 单跳等待 \(16\to2\)</td></tr>
+<tr><td>\(D^{\mathrm{arb}},D^{\mathrm{np}}\)</td><td>slot-owned 无仲裁；槽边界与 flit 对齐</td><td>省下 \(47\times5=235\)</td></tr>
+<tr><td>\(D^{\mathrm{hol}}\)</td><td>CalFork 的 per-slot <code>out_port_mask</code> 定向转发</td><td>多播不建队列，\(v=0\)</td></tr>
+<tr><td>\(D^{\mathrm{fc}}\)</td><td>集体路径零缓冲直通（无 credit 环）；背景流才用共享池</td><td>池代价 \(+28\)，面积 \(0.746\times\)</td></tr>
+<tr class="warn"><td>\(D^{\mathrm{rigid}}\)</td><td><b>不可归零</b>，但可用 1–2 flit 对齐缓冲赎回大部分</td><td>8×6 广播 \(B=0/1/2\to110/98/96\)（LB=96）</td></tr>
+<tr class="warn"><td>\(D^{\mathrm{pipe}}\)</td><td><b>不可归零</b>：应改口径计入 \(T_{\mathrm{bound}}\)</td><td>\(12\times3=36\)，与负载无关</td></tr>
+</tbody></table>
+<p>
+<b>本节结论：</b>\(T_{\mathrm{dyn}}\) 不是一团需要"调优"的拥塞，而是<strong>八个成因明确、可分别归零的纪律项</strong>。
+其中 \(D^{\mathrm{intf}}\) 与 \(D^{\mathrm{rate}}\) 在动态方案里占正向分量的 \(97.6\%\sim99.95\%\)，且都含 \(1/(C-\rho)\) 极点——
+这决定了<strong>缓冲与反馈只能搬动极点、前馈才能约去极点</strong>。
+最后剩下的 \(D^{\mathrm{rigid}}\) 与 \(D^{\mathrm{pipe}}\) 一个用 1–2 flit 赎回、一个应当改口径归入地板：
+这正是 §8 分层结构与 §12 第④象限在<strong>分项层面</strong>的完整依据。
+</p>
+</div>
+</div>
+
 <div class="card">
 <h2>符号表</h2>
 <table>
@@ -973,8 +1495,19 @@ T_{\mathrm{dyn}}^{C}(\rho) \;>\; R_{rg}.
 <tr><td>\(W_{\mathrm{grant}}\)</td><td>源端等待授权的边缘排队</td></tr>
 <tr><td>\(v_{\mathrm{net}},\,\alpha_{\mathrm{granted}}\)</td><td>网内 backlog / 已授权到达曲线</td></tr>
 <tr><td>\(\rho^\star\)</td><td>\(T_{\mathrm{dyn}}^{C}=R_{rg}\) 的交叉负载</td></tr>
+<tr><td>\(\beta_e,\ \beta_P,\ \beta_{\mathrm{flow}}\)</td><td>单跳 / 路径串联 / per-flow 服务曲线</td></tr>
+<tr><td>\(\otimes,\ \ominus\)</td><td>min-plus 卷积（串联）/ 剩余服务（扣除干扰）</td></tr>
+<tr><td>\(R_{\mathrm{eff}},\ \mathrm{RTT}_{\mathrm{credit}}\)</td><td>流控折损后有效速率 / credit 往返</td></tr>
+<tr><td>\(\mathcal{I}(P)\)</td><td>路径 \(P\) 上与本流共享链路的干扰流集合</td></tr>
+<tr><td>\(D^{\mathrm{lat}},\,D^{\mathrm{rate}}\)</td><td>单跳延迟膨胀（抬高 \(T'\)）/ 速率亏损（压低 \(R'\)）</td></tr>
+<tr><td>\(D^{\mathrm{pipe}},\,D^{\mathrm{arb}},\,D^{\mathrm{np}}\)</td><td>流水线级数 / 仲裁判决 / 非抢占阻塞</td></tr>
+<tr><td>\(D^{\mathrm{intf}},\,D^{\mathrm{frame}},\,D^{\mathrm{fc}}\)</td><td>干扰突发 / 帧等待 / 流控折损</td></tr>
+<tr><td>\(D^{\mathrm{hol}},\,p_{\mathrm{blk}}\)</td><td>队首阻塞（乘性，非工作保持）/ 队首受阻比例</td></tr>
+<tr><td>\(D^{\mathrm{rigid}},\,\Delta_{\mathrm{bound}}\)</td><td>排图刚性税 / 下界口径差（割集界与自身路径之差）</td></tr>
+<tr><td>\(t_{\mathrm{router}},\,w\)</td><td>路由器流水线拍数 / 单跳纪律等待</td></tr>
+<tr><td>\(\Theta,\,\Theta_{\mathrm{occ}}\)</td><td>日历周期长度 / 日历最大占用槽数</td></tr>
 </tbody></table>
-<p class="note">延伸阅读：<code>docs/collective-noc-dynamic-latency.md</code>。本报告专责控制论形式化与逐步推导。</p>
+<p class="note">延伸阅读：<code>docs/collective-noc-dynamic-latency.md</code>。本报告专责控制论形式化与逐步推导。分项数值由 <code>utils/tdyn_decompose.py</code> 生成（<code>results/tdyn_decompose.json</code>）。</p>
 </div>
 
 <p class="footer">
