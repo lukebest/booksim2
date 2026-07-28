@@ -33,8 +33,9 @@ from pg_faults_8x6 import all_scenarios, expand_pg
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "pg_capability.json"
 
-SCHEMES = ["xy", "rect_xy", "updown", "segment", "fault_ring_vc",
-           "lash", "lash_tor", "stripe_vc", "dual_updown", "virtual_mesh"]
+SCHEMES = ["east_first", "xy", "rect_xy", "updown", "segment",
+           "fault_ring_vc", "lash", "lash_tor", "stripe_vc", "dual_updown",
+           "virtual_mesh"]
 
 _REAL_VALIDATE = R.validate_routing
 

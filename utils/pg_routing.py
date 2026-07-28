@@ -261,6 +261,84 @@ def validate_routing(paths: dict[tuple[int, int], list[int]],
 # Scheme path generators (no sacrifice yet)
 # ---------------------------------------------------------------------------
 
+def _turn_bfs(src: int, dst: int, adj: dict[int, list[int]],
+              turn_ok: Callable[[int, int], bool]) -> list[int] | None:
+    """Shortest legal path under a turn model `turn_ok(d_in, d_out)`.
+
+    Searches (node, incoming direction) states. `shortest_path(..., allowed_next)`
+    dedupes by node, so the direction of the first arrival silently fixes which
+    continuations stay legal and legal paths can be missed. Keying the frontier
+    on the incoming direction makes an unreachable verdict mean genuinely
+    unreachable under the turn rules.
+    """
+    if src == dst:
+        return [src]
+    if src not in adj or dst not in adj:
+        return None
+    start = (src, -1)  # -1 = injected, no incoming direction yet
+    prev: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+    q = deque([start])
+    while q:
+        u, din = q.popleft()
+        for v in adj[u]:
+            dout = dir_of(u, v)
+            st = (v, dout)
+            if st in prev:
+                continue
+            if din >= 0 and not turn_ok(din, dout):
+                continue
+            prev[st] = (u, din)
+            if v == dst:
+                path = [v]
+                cur: tuple[int, int] | None = st
+                while prev[cur] is not None:
+                    cur = prev[cur]
+                    path.append(cur[0])
+                path.reverse()
+                return path
+            q.append(st)
+    return None
+
+
+def gen_east_first(pg: dict) -> dict[str, Any] | None:
+    """M0: Glass-Ni east-first minimal turn model (mirror of west-first).
+
+    Prohibits the two turns *into* east (N->E, S->E) plus all 180 turns. That
+    removes one turn from each of the two abstract cycles of a 2D mesh, so the
+    CDG is acyclic on the full mesh *and on every subgraph of it* — deleting
+    links cannot create a turn. 1 VC.
+
+    Consequence for routing: no turn leads back to east, so every eastward hop
+    must precede the first N/S/W hop. A packet therefore walks east inside its
+    source row and can never detour around a fault while doing so.
+
+    Every XY path is legal here (E..E then N/S is E->N / E->S; W..W then N/S is
+    W->N / W->S), so XY is preferred and the turn-aware BFS only kicks in where
+    XY is blocked — same reachability as a pure BFS, far better link balance.
+    """
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+
+    def turn_ok(d_in: int, d_out: int) -> bool:
+        if d_in == d_out:
+            return True  # straight
+        if d_in == (d_out ^ 1):
+            return False  # 180 turn
+        # d: E=0 W=1 N=2 S=3 — forbid N->E and S->E
+        return (d_in, d_out) not in ((2, 0), (3, 0))
+
+    paths = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = xy_path(s, d, adj) or _turn_bfs(s, d, adj, turn_ok)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+    return {"paths": paths, "vc_of": None, "scheme": "east_first"}
+
+
 def gen_xy(pg: dict) -> dict[str, Any] | None:
     adj = pg["route_adj"]
     compute = pg["compute_nodes"]
@@ -1242,6 +1320,7 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
 
 
 SCHEME_GENERATORS = {
+    "east_first": gen_east_first,
     "xy": gen_xy,
     "rect_xy": gen_rect_xy,
     "updown": gen_updown,

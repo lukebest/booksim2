@@ -31,7 +31,7 @@ INJ = 4
 T_MAX = 200_000
 STALL_LIMIT = 2_000
 
-SCHEMES = ["xy", "rect_xy", "updown", "segment",
+SCHEMES = ["east_first", "xy", "rect_xy", "updown", "segment",
            "fault_ring_vc", "lash", "lash_tor", "stripe_vc",
            "dual_updown", "virtual_mesh"]
 # updown_lb / segment_lb produced inside solve_all

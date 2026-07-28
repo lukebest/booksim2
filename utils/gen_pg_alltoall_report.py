@@ -16,6 +16,7 @@ JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
+EF_REACH_PATH = ROOT / "results" / "pg_east_first_reach.json"
 E2E_PNG = "pg_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
@@ -26,6 +27,7 @@ HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 # How each scheme earns its acyclic CDG. A ✓ backed by a construction is a
 # stronger claim than a ✓ that merely survived the 36-scenario catalog.
 DEADLOCK_BASIS = {
+    "east_first": "构造性：禁 N→E / S→E，两条抽象环各断一处",
     "xy": "构造性：只 X→Y 单向转弯",
     "rect_xy": "构造性：矩形内纯 XY",
     "updown": "构造性：不许 down→up",
@@ -40,6 +42,7 @@ DEADLOCK_BASIS = {
 }
 
 EXCLUDED_SCHEMES = {
+    "east_first": "36 场景中 12 个建不出路径（东向不可绕行）",
     "xy": "36 场景中 27 个建不出路径（避障失败）",
     "rect_xy": "36/36 必须裁行裁列，累计牺牲 1018 节点（中位 31/48）",
     "segment": "17 个场景建不出路径 + 7 个场景 CDG 成环",
@@ -47,6 +50,7 @@ EXCLUDED_SCHEMES = {
 }
 
 SCHEME_LABELS = {
+    "east_first": "M0 East-first",
     "xy": "M1 XY (+sacrifice)",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -62,6 +66,7 @@ SCHEME_LABELS = {
 }
 
 E2E_SHORT = {
+    "east_first": "M0 East-first",
     "xy": "M1 XY",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -238,6 +243,66 @@ def class_diagrams() -> dict[str, str]:
 def scheme_diagrams() -> dict[str, str]:
     """Compact educational SVGs keyed by scheme id."""
     out = {}
+
+    # ---- M0 east-first: legal path shape, then the two ways it dead-ends ----
+    def _ef_grid(cols, rows, uid, side_extra=0.0):
+        C, W, H = _mini_xy(cols, rows, side_extra=side_extra)
+        parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" '
+                 f'height="{H}" viewBox="0 0 {W} {H}">',
+                 _defs_arrow(uid), _defs_arrow(uid + "r", "#c0392b")]
+        for r in range(rows):
+            for c in range(cols - 1):
+                parts.append(_edge(C[(c, r)], C[(c + 1, r)], "#bdc3c7", 1.5))
+        for r in range(rows - 1):
+            for c in range(cols):
+                parts.append(_edge(C[(c, r)], C[(c, r + 1)], "#bdc3c7", 1.5))
+        return C, W, H, parts
+
+    def _ban(a, b, text=""):
+        """✕ over the midpoint of a forbidden/broken edge, optional label under."""
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        s = (f'<text x="{mx + 2}" y="{my - 7}" text-anchor="middle" '
+             f'font-size="14" fill="#c0392b" font-weight="700">✕</text>')
+        if text:
+            s += (f'<text x="{mx + 2}" y="{my + 16}" text-anchor="middle" '
+                  f'font-size="10" font-family="sans-serif" fill="#c0392b">'
+                  f'{text}</text>')
+        return s
+
+    C, W, H, parts = _ef_grid(4, 3, "ef1", side_extra=76)
+    legal = [(0, 0), (1, 0), (2, 0), (2, 1), (1, 1), (1, 2)]
+    for i in range(len(legal) - 1):
+        parts.append(_edge(C[legal[i]], C[legal[i + 1]], "#27ae60", 3,
+                           marker="ef1"))
+    # no turn leads back east: the N->E continuation at (2,1) is the banned one
+    parts.append(_edge(C[(2, 1)], C[(3, 1)], "#c0392b", 2.5, "4,3",
+                       marker="ef1r"))
+    parts.append(_ban(C[(2, 1)], C[(3, 1)], "N→E"))
+    for r in range(3):
+        for c in range(4):
+            fill = "#27ae60" if (c, r) in ((0, 0), (1, 2)) else "#2980b9"
+            lab = "S" if (c, r) == (0, 0) else ("D" if (c, r) == (1, 2) else "")
+            parts.append(_node(*C[(c, r)], fill=fill, label=lab))
+    parts.append(_caption(W, H, "东向排在最前，之后只剩 N/S/W"))
+    parts.append("</svg>")
+    out["east_first"] = "".join(parts)
+
+    C, W, H, parts = _ef_grid(4, 3, "ef2", side_extra=76)
+    parts.append(_edge(C[(0, 0)], C[(1, 0)], "#27ae60", 3, marker="ef2"))
+    parts.append(_edge(C[(1, 0)], C[(2, 0)], "#c0392b", 3.5, "5,3"))
+    parts.append(_ban(C[(1, 0)], C[(2, 0)]))
+    for a, b in (((1, 0), (1, 1)), ((1, 1), (2, 1))):
+        parts.append(_edge(C[a], C[b], "#c0392b", 2.5, "4,3", marker="ef2r"))
+    parts.append(_ban(C[(1, 1)], C[(2, 1)], "N→E"))
+    for r in range(3):
+        for c in range(4):
+            fill = "#27ae60" if (c, r) == (0, 0) else (
+                "#e67e22" if c >= 2 else "#2980b9")
+            lab = "S" if (c, r) == (0, 0) else ""
+            parts.append(_node(*C[(c, r)], fill=fill, label=lab))
+    parts.append(_caption(W, H, "源行东侧一断，橙色节点全体不可达"))
+    parts.append("</svg>")
+    out["east_first_fail"] = "".join(parts)
 
     # ---- M1 XY: L-shaped path; broken link on the XY route ----
     C, W, H = _mini_xy(4, 3)
@@ -1120,6 +1185,111 @@ M10_STAGE_LABELS = [
 ]
 
 
+EF_SPACE_LABELS = [
+    ("1_link", "单链路断（穷举）"),
+    ("1_node", "单节点死（穷举）"),
+    ("2_link", "任意两链路断（穷举）"),
+    ("2_node", "任意两节点死（穷举）"),
+]
+
+
+def ef_reach_html(fail_fig: str = "") -> str:
+    """M0 east-first: where it becomes unreachable, and what fixes it."""
+    if not EF_REACH_PATH.exists():
+        return ("<p class='note bad'>缺少 <code>results/pg_east_first_reach.json"
+                "</code>，请跑 <code>utils/pg_east_first_reach.py --full</code>。</p>")
+    d = json.loads(EF_REACH_PATH.read_text())
+    sp, bd = d["spaces"], d["single_fault_breakdown"]
+    cs = d["catalog_summary"]
+    n_checked = sum(s["n"] for s in sp.values())
+
+    rows = []
+    for key, label in EF_SPACE_LABELS:
+        s = sp.get(key)
+        if s is None:
+            continue
+        n = s["n"]
+        def frac(v, bad_below=0.5):
+            cls = "cap-bad" if v / n < bad_below else "cap-ok"
+            return f"<td class='{cls}'>{v}/{n}（{v / n * 100:.0f}%）</td>"
+        rows.append(f"<tr><td class='l'>{label}</td>{frac(s['east_first_ok'])}"
+                    f"{frac(s['xy_ok'])}{frac(s['dual_ok'], 0.95)}</tr>")
+
+    cat_rows = []
+    for name, v in d["catalog"].items():
+        if v["verdict"] == "ok":
+            continue
+        scen, sem = name.split("/")
+        cat_rows.append(
+            f"<tr><td class='l'>{esc(scen)}</td><td>{sem}</td>"
+            f"<td class='cap-bad'>{v['sacrifice']}</td><td>{v['A']}</td>"
+            f"<td>{v['xy_sacrifice']}</td>"
+            f"<td class='cap-ok'>{'可行' if v['dual_fixes'] else '仍失败'}</td>"
+            f"<td>{v['dual_vc1_frac'] * 100:.1f}%</td></tr>")
+
+    vc1 = [v["dual_vc1_frac"] for v in d["catalog"].values()
+           if v["verdict"] != "ok"]
+    vc1_lo, vc1_hi = (min(vc1), max(vc1)) if vc1 else (0.0, 0.0)
+    hv = bd["by_link_orientation"]
+    v_cols = "、".join(f"x={c}" for c in bd["vertical_fail_columns"])
+    ok_cols = "、".join(f"x={c}" for c in bd["node_ok_columns"])
+    return f"""
+<div class="faq">
+<p><b class="q">M0 在哪些故障下不可达？</b>
+先说判据。因为「向东只能排在最前面」，一条合法路径必然是
+<b>源行内一段向东直线 + 之后只用 N/S/W 的走法</b>。照这个形状直接构造可达集
+（<code>pg_east_first_reach.py: reach_model</code>，完全不碰转向搜索），
+再和真实路由器逐例对比：<b>{n_checked} 个故障集 + 36 个目录格，判定分歧
+{d['meta']['model_mismatches']} 例</b>。所以下面不是「试出来的」，是判据本身。</p>
+
+<p><b>模式 ①（主因）横向切断源行。</b>源行里 s 以东断一跳（横向链路断，或该行有个洞），
+则 s 到该断点以东的<b>所有</b>目标都不可达——绕行必须先 N/S 再 E，而 N→E / S→E 正是被禁的两类。
+单链路穷举里 <b>{hv.get('H_fail', 0)} 条横向链路每一条都单独致命</b>，
+单节点死则只有最西列（{ok_cols}）的洞无害——它们西边没有源。</p>
+
+<p><b>模式 ② 最东列被切开。</b>东边的列一旦离开就回不去，所以最东列内部断纵向链路时，
+该列会被自己切成两段：{v_cols} 上的 {hv.get('V_fail', 0)} 条纵向链路因此失败，
+其余 {hv.get('V_ok', 0)} 条纵向链路全部无害（在非最东列可以先向东一格、上下绕、再向西回来）。</p>
+
+<table class="cap">
+<thead><tr><th>故障空间</th><th>M0 east-first 零牺牲可行</th>
+<th>M1 XY 零牺牲可行</th><th>M0+镜像 2 VC 可行</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table>
+<p class="note">同一残图上 M0 严格强于 M1（合法路径集是超集），但纵向自由度救不了横向切断：
+双节点故障里 M0 只剩 {sp.get('2_node', {}).get('east_first_ok', 0)} /
+{sp.get('2_node', {}).get('n', 0)} 可行。</p>
+
+<div class="cycfig">{fail_fig}</div>
+
+<p><b class="q">不可达了怎么办？</b>出厂目录里 <b>{cs['n_fail']}/36</b> 格建不出表，
+本框架的默认出路是<b>牺牲好节点</b>把「挡路的洞」挪出参与集合——
+代价中位 <b>{cs['sacrifice_median']} 个节点</b>、合计 {cs['sacrifice_total']} 个，
+和 M1 XY 同一量级（最坏 A 掉到 6/48）。这也是 M0 被 §3/§4 排除的原因。</p>
+
+<table class="cap">
+<thead><tr><th>失败场景</th><th>语义</th><th>M0 牺牲</th><th>剩余 A</th>
+<th>M1 牺牲</th><th>加镜像 VC 后</th><th>走 VC1 的对数占比</th></tr></thead>
+<tbody>{''.join(cat_rows)}</tbody></table>
+
+<p><b>更划算的三条出路（按代价从低到高）：</b></p>
+<ol>
+<li><b>加镜像模型到第 2 个 VC（推荐）。</b>west-first 禁的是「转向西」（N→W / S→W），
+所以它<b>允许</b> N→E / S→E，正好能做 M0 做不到的东向绕行。
+VC0 跑 east-first、VC1 跑 west-first、每对整条路径锁死在一个 VC 上：
+两层各自无环、层间无依赖 ⇒ 并集无环，保序不变。实测
+<b>目录 36/36 全部零牺牲可行、CDG 0 例成环</b>，
+且只有 {vc1_lo * 100:.1f}–{vc1_hi * 100:.1f}% 的对数需要用到 VC1。
+代价：2 VC ≈ 与 M9/M10 同档面积。</li>
+<li><b>按行选方向。</b>把「东优先」换成「远离故障的一侧优先」，即每行独立决定
+east-first / west-first。仍是 1 VC，但两种模型混在同一层会重新引入
+N→E 与 S→W 共存 → 抽象环复活，必须逐场景跑 CDG 校验，属于「实测无环」而非构造性。</li>
+<li><b>改用不依赖方向的族。</b>M3 Up*/Down*（1 VC）在同样 36 格里 36/36 零牺牲，
+是彻底躲开这个问题的最省面积选项。</li>
+</ol>
+</div>
+"""
+
+
 def m10_scan_html() -> str:
     """Stage table + shape table for the M10 cycle scan (data-driven)."""
     if not M10_SCAN_PATH.exists():
@@ -1443,7 +1613,11 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
 （最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
 计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。
-这一条正是 §2.4 把它们排除出 makespan 对比的量化依据。</li>
+这一条正是 §2.4 把它们排除出 makespan 对比的量化依据。
+<b>M0 East-first</b> 是这一族里最好的一个——中位只牺牲 1 个节点、中位 A=44
+（XY 是 28 / 16），中位端到端也快过 XY；但设计点看最差场景时它同样掉到
+6/48 PE、和 XY 一样是 820 / 9845 ns。<b>转弯放宽只改善中位，不改善最差</b>，
+所以它照样进不了前沿、也照样被排除。</li>
 <li><b>通信占端到端 70–86%</b>（除重牺牲的 XY/Rect-XY）。即便配了
 {meta['pe_macs_per_cycle']} MAC/cy 的 PE，任务仍是通信瓶颈——
 花 router 面积买带宽划算。</li>
@@ -1863,7 +2037,8 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
     <b>删掉环上的某一类转弯</b>，让环无法闭合。</p>
     <p><b>代价：</b>被删的转弯同时也删掉了一批最短路，绕路变长、负载更不均。
     洞越大，被迫绕得越远。</p>
-    <p><b>成员：</b>M1 XY、M2 Rect-XY、M3 Up*/Down*、M4 Segment。</p>
+    <p><b>成员：</b>M0 East-first、M1 XY、M2 Rect-XY、M3 Up*/Down*、M4 Segment。
+    同一族里禁得越少、可用最短路越多：M0 只禁 2 类转弯，XY 禁 4 类。</p>
   </div>
   <div class="cls-card">
     <h3>B 类 · VC 分层（多 VC）</h3>
@@ -1879,6 +2054,37 @@ CDG 无环（无死锁）、每 (src,dst) 唯一路径（保序）、compute 集
 </div>
 
 <h3>2.1 A 类：转向限制</h3>
+
+{scheme_block("M0 — East-first turn model（<code>east_first</code>）",
+              "east_first", '''
+<p><b>类别：</b>A 类 · 转向限制 · <b>1 VC</b>。Glass–Ni 最小转向模型家族，
+west-first 的镜像。</p>
+<p><b>思想：</b>XY 禁掉了 4 类转弯（N→E、N→W、S→E、S→W），其实<b>只禁 2 类就够断环</b>。
+east-first 只禁「<b>转向东</b>」的两类——N→E 与 S→E（外加一律禁 180° 掉头），
+剩下 6 类转弯全部合法。合法路径集是 XY 的<b>真超集</b>，所以 XY 能走的它都能走，
+XY 被堵死时它还有绕行余地。</p>
+<p><b>路径形状：</b>没有任何转弯能回到东向，于是每条合法路径必然是
+<b>「先在源行里一路直冲东，再只用 N/S/W 走完」</b>。实现上优先取 XY 折线
+（XY 本身合法），XY 被堵才退到带来向状态的转向 BFS。</p>
+<p class="note">注意：普通 <code>shortest_path(..., allowed_next)</code> 按<b>节点</b>去重，
+首次到达的方向会把后续合法转弯悄悄锁死，会误报不可达。M0 用
+<code>_turn_bfs</code> 按 <b>(节点, 来向)</b> 去重，所以「不可达」是真不可达。
+（M4 Segment 仍用按节点去重的版本，它 17/36 的建表失败里可能含这种搜索不完备的成分。）</p>
+''' + qa3(
+    '<b>只能向北/南/西绕，不能向东绕。</b>转弯集比 XY 宽，所以纵向链路断、'
+    '非首列的洞大多能绕过去（36 格里 24 格零牺牲，M1 XY 只有 9 格）。'
+    '但<strong>东向永不可绕</strong>：源行东侧一断，该行以东全体失联，'
+    '这是它 12/36 建不出表的唯一原因（见下表与右下图）。',
+    '<b>构造性，且对残图同样成立。</b>2D mesh 的通道依赖环只有两条抽象环：'
+    '顺时针 W→N→E→S→W 用到 N→E，逆时针 W→S→E→N→W 用到 S→E；'
+    'east-first 把这<strong>两条各断一处</strong>，加上禁 180°，CDG 必无环。'
+    '关键是<strong>删链路只会减少转弯、不会创造转弯</strong>，'
+    '所以证明不依赖网格完整——任何故障残图上都无环，<b>1 VC</b>。'
+    '实测 36 格 CDG 硬校验 0 例成环。',
+    '每对 (s,d) 离线定死一条路径（先试 XY，再试 BFS，两者都是确定性的），'
+    '单 VC 无自适应 ⇒ 同一对的 flit 顺序经过同一串通道。'))}
+
+{ef_reach_html(diagrams.get("east_first_fail", ""))}
 
 {scheme_block("M1 — XY（<code>xy</code>）", "xy", '''
 <p><b>思想：</b>坚持维序路由（DOR）：先走完 X，再走 Y；硬件几乎不用改路由逻辑。</p>

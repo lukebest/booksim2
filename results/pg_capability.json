@@ -1,11 +1,32 @@
 {
  "meta": {
-  "generated_at": "2026-07-27T12:41:39.746397+00:00",
+  "generated_at": "2026-07-28T01:54:34.827125+00:00",
   "n_cells": 36,
-  "elapsed_s": 27.42,
+  "elapsed_s": 31.17,
   "note": "zero-extra-sacrifice attempt per scenario x semantics; isolated compute nodes dropped first"
  },
  "schemes": {
+  "east_first": {
+   "ok": 24,
+   "sacrifice": 0,
+   "fail_path": 12,
+   "fail_cdg": 0,
+   "forced_nodes": 0,
+   "cases": {
+    "link_corner_1/dead": "fail_path",
+    "link_corner_1/transit": "fail_path",
+    "link_edge_3/dead": "fail_path",
+    "link_edge_3/transit": "fail_path",
+    "link_center_3/dead": "fail_path",
+    "link_center_3/transit": "fail_path",
+    "node_edge_1x1/dead": "fail_path",
+    "node_center_1x1/dead": "fail_path",
+    "node_edge_2x2/dead": "fail_path",
+    "node_center_2x2/dead": "fail_path",
+    "node_edge_3x3/dead": "fail_path",
+    "node_center_3x3/dead": "fail_path"
+   }
+  },
   "xy": {
    "ok": 9,
    "sacrifice": 0,

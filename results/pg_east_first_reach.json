@@ -1,0 +1,228 @@
+{
+ "meta": {
+  "generated_at": "2026-07-28T02:17:12.614142+00:00",
+  "full": true,
+  "elapsed_s": 242.8,
+  "model_mismatches": 0
+ },
+ "spaces": {
+  "1_link": {
+   "east_first_ok": 35,
+   "xy_ok": 0,
+   "dual_ok": 82,
+   "dual_cyclic": 0,
+   "n": 82
+  },
+  "1_node": {
+   "east_first_ok": 6,
+   "xy_ok": 0,
+   "dual_ok": 48,
+   "dual_cyclic": 0,
+   "n": 48
+  },
+  "2_link": {
+   "east_first_ok": 597,
+   "xy_ok": 0,
+   "dual_ok": 3241,
+   "dual_cyclic": 0,
+   "n": 3321
+  },
+  "2_node": {
+   "east_first_ok": 23,
+   "xy_ok": 0,
+   "dual_ok": 1068,
+   "dual_cyclic": 0,
+   "n": 1128
+  }
+ },
+ "single_fault_breakdown": {
+  "by_link_orientation": {
+   "H_fail": 42,
+   "V_ok": 35,
+   "V_fail": 5
+  },
+  "vertical_fail_columns": [
+   7
+  ],
+  "node_ok_columns": [
+   0
+  ]
+ },
+ "catalog": {
+  "link_corner_1/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 1,
+   "A": 47,
+   "xy_sacrifice": 6,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0186
+  },
+  "link_corner_1/transit": {
+   "verdict": "fail_path",
+   "sacrifice": 1,
+   "A": 47,
+   "xy_sacrifice": 6,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0186
+  },
+  "link_corner_2/dead": {
+   "verdict": "ok"
+  },
+  "link_corner_2/transit": {
+   "verdict": "ok"
+  },
+  "link_corner_3/dead": {
+   "verdict": "ok"
+  },
+  "link_corner_3/transit": {
+   "verdict": "ok"
+  },
+  "link_edge_1/dead": {
+   "verdict": "ok"
+  },
+  "link_edge_1/transit": {
+   "verdict": "ok"
+  },
+  "link_edge_2/dead": {
+   "verdict": "ok"
+  },
+  "link_edge_2/transit": {
+   "verdict": "ok"
+  },
+  "link_edge_3/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 32,
+   "A": 16,
+   "xy_sacrifice": 32,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0421
+  },
+  "link_edge_3/transit": {
+   "verdict": "fail_path",
+   "sacrifice": 8,
+   "A": 40,
+   "xy_sacrifice": 32,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0421
+  },
+  "link_center_1/dead": {
+   "verdict": "ok"
+  },
+  "link_center_1/transit": {
+   "verdict": "ok"
+  },
+  "link_center_2/dead": {
+   "verdict": "ok"
+  },
+  "link_center_2/transit": {
+   "verdict": "ok"
+  },
+  "link_center_3/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 36,
+   "A": 12,
+   "xy_sacrifice": 36,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0443
+  },
+  "link_center_3/transit": {
+   "verdict": "fail_path",
+   "sacrifice": 8,
+   "A": 40,
+   "xy_sacrifice": 36,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0443
+  },
+  "node_corner_1x1/dead": {
+   "verdict": "ok"
+  },
+  "node_corner_1x1/transit": {
+   "verdict": "ok"
+  },
+  "node_edge_1x1/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 7,
+   "A": 40,
+   "xy_sacrifice": 7,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0426
+  },
+  "node_edge_1x1/transit": {
+   "verdict": "ok"
+  },
+  "node_center_1x1/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 35,
+   "A": 12,
+   "xy_sacrifice": 35,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0426
+  },
+  "node_center_1x1/transit": {
+   "verdict": "ok"
+  },
+  "node_corner_2x2/dead": {
+   "verdict": "ok"
+  },
+  "node_corner_2x2/transit": {
+   "verdict": "ok"
+  },
+  "node_edge_2x2/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 28,
+   "A": 16,
+   "xy_sacrifice": 28,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0846
+  },
+  "node_edge_2x2/transit": {
+   "verdict": "ok"
+  },
+  "node_center_2x2/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 32,
+   "A": 12,
+   "xy_sacrifice": 32,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.0846
+  },
+  "node_center_2x2/transit": {
+   "verdict": "ok"
+  },
+  "node_corner_3x3/dead": {
+   "verdict": "ok"
+  },
+  "node_corner_3x3/transit": {
+   "verdict": "ok"
+  },
+  "node_edge_3x3/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 30,
+   "A": 9,
+   "xy_sacrifice": 30,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.1275
+  },
+  "node_edge_3x3/transit": {
+   "verdict": "ok"
+  },
+  "node_center_3x3/dead": {
+   "verdict": "fail_path",
+   "sacrifice": 33,
+   "A": 6,
+   "xy_sacrifice": 33,
+   "dual_fixes": true,
+   "dual_vc1_frac": 0.1275
+  },
+  "node_center_3x3/transit": {
+   "verdict": "ok"
+  }
+ },
+ "catalog_summary": {
+  "n_fail": 12,
+  "sacrifice_total": 251,
+  "sacrifice_median": 30,
+  "dual_fixes_all": true
+ },
+ "model_mismatches": []
+}
