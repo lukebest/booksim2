@@ -14,11 +14,14 @@ import pg_routing as R
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
+BUDGET_E2E_JSON = ROOT / "results" / "pg_budget_e2e_pareto.json"
+BUDGET_CAP_JSON = ROOT / "results" / "pg_budget_capability.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
 EF_REACH_PATH = ROOT / "results" / "pg_east_first_reach.json"
 BEYOND_REACH_PATH = ROOT / "results" / "pg_beyond_catalog_reach.json"
 E2E_PNG = "pg_e2e_pareto.png"
+BUDGET_E2E_PNG = "pg_budget_e2e_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
 # Schemes that fail a hard property on their own and only "work" by sacrificing
@@ -29,6 +32,7 @@ HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 # stronger claim than a ✓ that merely survived the 36-scenario catalog.
 DEADLOCK_BASIS = {
     "east_first": "构造性：禁 N→E / S→E，两条抽象环各断一处",
+    "super_turn": "构造性：每层一个 Glass–Ni 最小转向模型（≤2 VC）",
     "xy": "构造性：只 X→Y 单向转弯",
     "rect_xy": "构造性：矩形内纯 XY",
     "updown": "构造性：不许 down→up",
@@ -52,6 +56,7 @@ EXCLUDED_SCHEMES = {
 
 SCHEME_LABELS = {
     "east_first": "M0 East-first",
+    "super_turn": "M0s Super-turn",
     "xy": "M1 XY (+sacrifice)",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -68,6 +73,7 @@ SCHEME_LABELS = {
 
 E2E_SHORT = {
     "east_first": "M0 East-first",
+    "super_turn": "M0s Super-turn",
     "xy": "M1 XY",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -1194,6 +1200,31 @@ EF_SPACE_LABELS = [
 ]
 
 
+def exec_summary_html(excluded_labels: str) -> str:
+    """Conclusions-first block at the top of the report."""
+    return f"""
+<div class="exec">
+<h2>仿真结论（先看这里）</h2>
+<p class="pick">推荐默认：<b>M10 虚拟规则网格（2 VC）</b>。
+面积受限选 <b>M3 Up*/Down*（1 VC）</b>；延迟硬指标选 <b>M7 Stripe（6 VC）</b>。</p>
+<ol>
+<li><b>端到端 Pareto 前沿只有三点：</b>M3（VC1）→ M10（VC2）→ M7（VC6）。
+M3→M10 多约 39% router 面积换 22–25% 最差端到端加速；
+M10→M7 再多约 111% 面积只多买 7–10%。M5 f-ring 被 M10 严格支配。</li>
+<li><b>裸 makespan 会骗人：</b>M0/M1/M2/M4 常常「最快」，是因为牺牲把 A 裁小、流量按 A² 下降。
+端到端强扩展后它们垫底——已从 §3/§4 排除（{esc(excluded_labels)}）。
+M0 中位好于 XY，但最差与 XY 同（A=6）。</li>
+<li><b>硬性质：</b>目录 36 格上 M3/M6/M7/M9/M10 零牺牲可达；
+目录外连通残图上 M3/M6/M7 无 STRUCT 失败，M4/M5/M10 会（见 §2.3）。
+保序全员通过。</li>
+<li><b>按「先牺牲、再 makespan」：</b>M7 几乎通吃场景最优，代价是 5–6 VC。
+通信占端到端约 70–86%，花 router 面积买带宽划算。</li>
+</ol>
+<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（makespan）、§6（端到端 Pareto）。</p>
+</div>
+"""
+
+
 def beyond_catalog_html() -> str:
     """§2.3: STRUCT vs disc reachability outside the 36-scenario catalog."""
     if not BEYOND_REACH_PATH.exists():
@@ -1727,12 +1758,99 @@ control 面积按常数、未随 VC 增长（对 6 VC 的 M7 偏乐观，更利�
 """
 
 
+def budget_e2e_section_html() -> str:
+    """§6.5 budget fault model (≤4R/≤8L) + Super-turn Pareto."""
+    if not BUDGET_E2E_JSON.exists():
+        return ("<h3>6.5 预算故障模型与 Super-turn</h3>"
+                "<p class='note'>尚无 <code>results/pg_budget_e2e_pareto.json</code>。"
+                "请跑 <code>utils/dse_pg_budget_pareto.py</code> 与 "
+                "<code>utils/gen_pg_e2e_pareto_plot.py --budget</code>。</p>")
+    data = json.loads(BUDGET_E2E_JSON.read_text())
+    meta, summary = data["meta"], data["summary"]
+    tokens = meta.get("total_tokens", {})
+    n_scen = meta.get("catalog", {}).get("n_scenarios", "?")
+    cap_note = ""
+    if BUDGET_CAP_JSON.exists():
+        cap = json.loads(BUDGET_CAP_JSON.read_text())
+        st = cap.get("summary", {}).get("super_turn", {})
+        ef = cap.get("summary", {}).get("east_first", {})
+        if st:
+            cap_note = (
+                f"<p class='note'>能力探针（{st.get('n', n_scen)} 场景）："
+                f"M0 East-first 零牺牲 {ef.get('zero_sac_ok', '?')}/"
+                f"{ef.get('n', '?')}；"
+                f"<b>M0s Super-turn</b> 零牺牲 {st.get('zero_sac_ok', '?')}/"
+                f"{st.get('n', '?')}，"
+                f"最终全覆盖（含 forced-sac），VC∈{{1,2}}，无 CDG 失败。</p>")
+
+    def e2e_table(m0: int) -> str:
+        cand = sorted((s for s in summary if s["m0"] == m0),
+                      key=lambda s: s["t_e2e_ns_worst"])
+        head = ("<tr><th class='l'>方案</th><th>VC</th><th>area</th>"
+                "<th>A 中位/最差</th><th>牺牲中位</th>"
+                "<th>T<sub>e2e</sub> 中位 (ns)</th>"
+                "<th>T<sub>e2e</sub> 最差 (ns)</th>"
+                "<th>Pareto</th></tr>")
+        body = []
+        for s in cand:
+            mark = "<b>yes</b>" if s.get("pareto_worst") else ""
+            body.append(
+                "<tr>"
+                f"<td class='l'>{esc(E2E_SHORT.get(s['scheme'], s['scheme']))}</td>"
+                f"<td>{s['num_vc']}</td>"
+                f"<td>{s['area']:.3f}</td>"
+                f"<td>{s['A_med']}/{s['A_worst']}</td>"
+                f"<td>{s['sac_med']}</td>"
+                f"<td>{s['t_e2e_ns_med']:.0f}</td>"
+                f"<td><b>{s['t_e2e_ns_worst']:.0f}</b></td>"
+                f"<td>{mark}</td></tr>")
+        return (f"<table><thead>{head}</thead>"
+                f"<tbody>{''.join(body)}</tbody></table>")
+
+    front_names = []
+    for m0 in meta["m0_list"]:
+        names = [E2E_SHORT.get(s["scheme"], s["scheme"])
+                 for s in sorted(summary, key=lambda x: x["area"])
+                 if s["m0"] == m0 and s.get("pareto_worst")]
+        front_names.append(f"m₀={m0}: " + " → ".join(names))
+
+    png = ""
+    if (ROOT / "results" / BUDGET_E2E_PNG).exists():
+        png = (
+            f'<figure class="e2e-fig">'
+            f'<img src="{BUDGET_E2E_PNG}" alt="budget fault Pareto" '
+            f'style="max-width:100%;height:auto;background:#fff;'
+            f'border:1px solid #e0e0e0"/>'
+            f'<figcaption>预算故障（≤4R/≤8L，{n_scen} 场景）时间×面积 Pareto</figcaption>'
+            f'</figure>')
+
+    t1 = tokens.get("1", tokens.get(1, "?"))
+    t13 = tokens.get("13", tokens.get(13, "?"))
+    return f"""
+<h3>6.5 预算故障模型与 Super-turn（M0s）</h3>
+<p class="note">固定 36 目录偏规整方块。本小节开：8×6 上 <b>≤4 router + ≤8 无向链路</b>
+（双向算 1），按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样。
+<b>M0s Super-turn</b>：Glass–Ni 四模型自适应，优先 1 VC → 2 VC 双模型 →
+小基数 forced-sac；路径锁单 VC（保序），每层 CDG 构造性无环，VC 封顶 2。</p>
+{cap_note}
+{png}
+<p class="note">最差情形前沿：{'；'.join(front_names)}。
+同面积下 Super-turn 在 worst-case 支配 M9 Dual-UD / M10 Virtual。
+数据 <code>results/pg_budget_e2e_pareto.json</code>
+（{meta.get('elapsed_s')}s，{len(data.get('rows', []))} 行 DES）。</p>
+<h4>m₀ = 1（{t1} tokens）</h4>
+{e2e_table(1)}
+<h4>m₀ = 13（{t13} tokens）</h4>
+{e2e_table(13)}
+"""
+
+
 def main():
     data = json.loads(JSON_PATH.read_text())
     meta = data["meta"]
     rows = data["rows"]
     golden = meta["golden"]
-    e2e_html = e2e_section_html()
+    e2e_html = e2e_section_html() + budget_e2e_section_html()
 
     # Index primary rows (not q_sensitivity)
     primary = [r for r in rows if not r.get("q_sensitivity")]

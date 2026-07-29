@@ -339,6 +339,228 @@ def gen_east_first(pg: dict) -> dict[str, Any] | None:
     return {"paths": paths, "vc_of": None, "scheme": "east_first"}
 
 
+# Glass–Ni minimal turn models: each bans two turns, one from each abstract
+# cycle, plus all 180s. CDG acyclicity is constructive on every subgraph.
+_TURN_MODELS: dict[str, frozenset[tuple[int, int]]] = {
+    "east_first": frozenset(((2, 0), (3, 0))),   # ban N→E, S→E
+    "west_first": frozenset(((2, 1), (3, 1))),   # ban N→W, S→W
+    "north_last": frozenset(((0, 2), (1, 2))),   # ban E→N, W→N
+    "south_last": frozenset(((0, 3), (1, 3))),   # ban E→S, W→S
+}
+
+
+def _turn_ok_factory(banned: frozenset[tuple[int, int]]):
+    def turn_ok(d_in: int, d_out: int) -> bool:
+        if d_in == d_out:
+            return True
+        if d_in == (d_out ^ 1):
+            return False
+        return (d_in, d_out) not in banned
+    return turn_ok
+
+
+def _path_obeys_turns(path: list[int], turn_ok) -> bool:
+    if len(path) < 3:
+        return True
+    for i in range(len(path) - 2):
+        if not turn_ok(dir_of(path[i], path[i + 1]),
+                       dir_of(path[i + 1], path[i + 2])):
+            return False
+    return True
+
+
+def _paths_under_turn(adj, compute, banned) -> dict[tuple[int, int], list[int]] | None:
+    turn_ok = _turn_ok_factory(banned)
+    # XY is always legal under east/west-first, but E→N / W→N break north-last
+    # (and E→S / W→S break south-last) — only accept XY when it obeys the model.
+    paths = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = xy_path(s, d, adj)
+            if p is None or not _path_obeys_turns(p, turn_ok):
+                p = _turn_bfs(s, d, adj, turn_ok)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+    return paths
+
+
+def _pick_turn_path(s: int, d: int, adj: dict, turn_ok) -> list[int] | None:
+    p = xy_path(s, d, adj)
+    if p is not None and _path_obeys_turns(p, turn_ok):
+        return p
+    return _turn_bfs(s, d, adj, turn_ok)
+
+
+def _assign_turn_layers(
+    adj: dict, compute: list[int], model_names: list[str],
+) -> tuple[dict, dict, int, list[tuple[int, int]]] | None:
+    """Lock each OD onto one Glass–Ni model (→ one VC). Prefer shorter paths.
+
+    Returns (paths, which_vc, total_hops, miss_pairs). miss_pairs empty ⇒ full
+    cover. which_vc maps (s,d) → index into model_names.
+    """
+    oks = [_turn_ok_factory(_TURN_MODELS[n]) for n in model_names]
+    paths: dict[tuple[int, int], list[int]] = {}
+    which: dict[tuple[int, int], int] = {}
+    hops = 0
+    miss: list[tuple[int, int]] = []
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            best_p, best_i = None, -1
+            for i, ok in enumerate(oks):
+                p = _pick_turn_path(s, d, adj, ok)
+                if p is None:
+                    continue
+                if best_p is None or len(p) < len(best_p):
+                    best_p, best_i = p, i
+            if best_p is None:
+                miss.append((s, d))
+                continue
+            paths[(s, d)] = best_p
+            which[(s, d)] = best_i
+            hops += len(best_p) - 1
+    return paths, which, hops, miss
+
+
+def _hit_set_endpoints(miss: list[tuple[int, int]], k_max: int = 4) -> set[int]:
+    """Greedy vertex cover of miss OD endpoints (small forced sacrifice)."""
+    remain = list(miss)
+    forced: set[int] = set()
+    while remain and len(forced) < k_max:
+        counts: dict[int, int] = {}
+        for s, d in remain:
+            counts[s] = counts.get(s, 0) + 1
+            counts[d] = counts.get(d, 0) + 1
+        n = max(counts, key=counts.get)
+        forced.add(n)
+        remain = [(s, d) for s, d in remain if s != n and d != n]
+    return forced if not remain else set()
+
+
+def _pack_super_turn(paths, which, hops, model_names, tag, forced=None):
+    used = sorted(set(which.values()))
+    remap = {old: i for i, old in enumerate(used)}
+    which2 = {k: remap[v] for k, v in which.items()}
+    n_vc = max(1, len(used))
+
+    def vc_of(path, i, _w=which2):
+        del i
+        return _w[(path[0], path[-1])]
+
+    out = {
+        "paths": paths, "vc_of": vc_of if n_vc > 1 else None,
+        "num_vc": n_vc, "scheme": "super_turn",
+        "turn_mode": tag, "turn_vc": n_vc, "total_hops": hops,
+        "turn_layers": [model_names[u] for u in used],
+    }
+    if forced:
+        out["forced_sacrificed"] = sorted(forced)
+    if n_vc > 1 and which2:
+        out["vc1_frac"] = sum(1 for v in which2.values() if v > 0) / len(which2)
+    return out
+
+
+def gen_super_turn(pg: dict) -> dict[str, Any] | None:
+    """M0s: adaptive Glass–Ni turn model — ≤2 VC, escalate via dual then sac.
+
+    1. Try each of the four minimal 1-VC models globally; keep shortest cover.
+    2. Else try every 2-model dual (complementary first); 2 VC, pair-locked.
+    3. Else greedily force-sacrifice OD endpoints that block the best dual and
+       retry — prefer sacrifice over a 4th VC so the silicon VC budget stays 2.
+
+    Each layer's CDG is acyclic on every subgraph; layers do not share channels.
+    Paths are locked to one VC end-to-end → order-preserving.
+    """
+    duals = [
+        ("east_west", ["east_first", "west_first"]),
+        ("north_south", ["north_last", "south_last"]),
+        ("east_north", ["east_first", "north_last"]),
+        ("east_south", ["east_first", "south_last"]),
+        ("west_north", ["west_first", "north_last"]),
+        ("west_south", ["west_first", "south_last"]),
+    ]
+
+    def try_build(adj_i, compute_i, forced=None):
+        # 1 VC
+        best_1: tuple[int, str, dict] | None = None
+        for name, banned in _TURN_MODELS.items():
+            paths = _paths_under_turn(adj_i, compute_i, banned)
+            if paths is None:
+                continue
+            hops = sum(len(p) - 1 for p in paths.values())
+            cand = (hops, name, paths)
+            if best_1 is None or cand < best_1:
+                best_1 = cand
+        if best_1 is not None:
+            hops, name, paths = best_1
+            ok, _ = validate_routing(paths, compute_i, adj_i, None)
+            if ok:
+                return {
+                    "paths": paths, "vc_of": None, "num_vc": 1,
+                    "scheme": "super_turn", "turn_mode": name,
+                    "turn_vc": 1, "total_hops": hops,
+                    **({"forced_sacrificed": sorted(forced)} if forced else {}),
+                }
+
+        best_2 = None
+        best_miss = None
+        for tag, models in duals:
+            paths, which, hops, miss = _assign_turn_layers(
+                adj_i, compute_i, models)
+            if miss:
+                if best_miss is None or len(miss) < len(best_miss[0]):
+                    best_miss = (miss, tag, models)
+                continue
+
+            def vc_tmp(path, i, _w=which):
+                del i
+                return _w[(path[0], path[-1])]
+
+            ok, _ = validate_routing(paths, compute_i, adj_i, vc_tmp)
+            if not ok:
+                continue
+            cand = (hops, tag, paths, which, models)
+            if best_2 is None or cand[:2] < best_2[:2]:
+                best_2 = cand
+        if best_2 is not None:
+            hops, tag, paths, which, models = best_2
+            return _pack_super_turn(
+                paths, which, hops, models, tag, forced)
+        return best_miss  # (miss, tag, models) or None
+
+    forced: set[int] = set()
+    view = pg
+    for _ in range(8):
+        adj_i = view["route_adj"]
+        compute_i = view["compute_nodes"]
+        if len(compute_i) < 2:
+            return None
+        built = try_build(adj_i, compute_i, forced or None)
+        if isinstance(built, dict):
+            if forced:
+                built = dict(built)
+                built["compute_nodes"] = compute_i
+                built["route_adj"] = adj_i
+                built["forced_sacrificed"] = sorted(forced)
+            return built
+        if not built:
+            return None
+        miss, _tag, _models = built
+        hit = _hit_set_endpoints(miss, k_max=1)
+        if not hit:
+            hit = {miss[0][1]}
+        if hit & forced:
+            return None
+        forced |= hit
+        view = apply_sacrifice(pg, forced, remove_from_route=True)
+    return None
+
+
 def gen_xy(pg: dict) -> dict[str, Any] | None:
     adj = pg["route_adj"]
     compute = pg["compute_nodes"]
@@ -1321,6 +1543,7 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
 
 SCHEME_GENERATORS = {
     "east_first": gen_east_first,
+    "super_turn": gen_super_turn,
     "xy": gen_xy,
     "rect_xy": gen_rect_xy,
     "updown": gen_updown,
@@ -1435,6 +1658,8 @@ def _finalize(pg: dict, raw: dict, sacrificed: set[int],
         "num_vc": raw.get("num_vc", 1),
         "max_load": max_link_load(paths),
         "reason": "ok",
+        "turn_mode": raw.get("turn_mode"),
+        "turn_vc": raw.get("turn_vc"),
     }
 
 

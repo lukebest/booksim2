@@ -1,0 +1,5142 @@
+{
+ "meta": {
+  "mx": 8,
+  "my": 6,
+  "max_routers": 4,
+  "max_links": 8,
+  "n_per_cell": 4,
+  "seed": 0,
+  "n_scenarios": 176,
+  "note": "undirected link = 1 fault; replaces the fixed 36-catalogue for the budget / super-turn Pareto track"
+ },
+ "scenarios": [
+  {
+   "name": "b_r0_l1_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 1,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     26,
+     27
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 1 links"
+  },
+  {
+   "name": "b_r0_l1_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 1,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     28,
+     29
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 1 links"
+  },
+  {
+   "name": "b_r0_l1_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 1,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     2,
+     10
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 1 links"
+  },
+  {
+   "name": "b_r0_l1_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 1,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     17,
+     25
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 1 links"
+  },
+  {
+   "name": "b_r0_l2_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 2,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     33,
+     34
+    ],
+    [
+     34,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 2 links"
+  },
+  {
+   "name": "b_r0_l2_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 2,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     20,
+     21
+    ],
+    [
+     27,
+     28
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 2 links"
+  },
+  {
+   "name": "b_r0_l2_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 2,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     24,
+     25
+    ],
+    [
+     32,
+     40
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 2 links"
+  },
+  {
+   "name": "b_r0_l2_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 2,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     14,
+     15
+    ],
+    [
+     39,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 2 links"
+  },
+  {
+   "name": "b_r0_l3_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 3,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     9,
+     10
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     34,
+     35
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 3 links"
+  },
+  {
+   "name": "b_r0_l3_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 3,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     6,
+     7
+    ],
+    [
+     9,
+     10
+    ],
+    [
+     44,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 3 links"
+  },
+  {
+   "name": "b_r0_l3_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 3,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     17,
+     18
+    ],
+    [
+     36,
+     37
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 3 links"
+  },
+  {
+   "name": "b_r0_l3_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 3,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     6,
+     7
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     20,
+     28
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 3 links"
+  },
+  {
+   "name": "b_r0_l4_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 4,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     37,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 4 links"
+  },
+  {
+   "name": "b_r0_l4_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 4,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     6,
+     7
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     29,
+     30
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 4 links"
+  },
+  {
+   "name": "b_r0_l4_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 4,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     13,
+     21
+    ],
+    [
+     37,
+     38
+    ],
+    [
+     43,
+     44
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 4 links"
+  },
+  {
+   "name": "b_r0_l4_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 4,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     17,
+     25
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 4 links"
+  },
+  {
+   "name": "b_r0_l5_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 5,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     3,
+     11
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     37,
+     38
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 5 links"
+  },
+  {
+   "name": "b_r0_l5_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 5,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     43,
+     44
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 5 links"
+  },
+  {
+   "name": "b_r0_l5_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 5,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     4,
+     5
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     38,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 5 links"
+  },
+  {
+   "name": "b_r0_l5_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 5,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 5 links"
+  },
+  {
+   "name": "b_r0_l6_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 6,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     6,
+     14
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     34,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 6 links"
+  },
+  {
+   "name": "b_r0_l6_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 6,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     8,
+     9
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     37,
+     38
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 6 links"
+  },
+  {
+   "name": "b_r0_l6_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 6,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     13,
+     21
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     36,
+     44
+    ],
+    [
+     37,
+     38
+    ],
+    [
+     40,
+     41
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 6 links"
+  },
+  {
+   "name": "b_r0_l6_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 6,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     5,
+     13
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     38,
+     46
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 6 links"
+  },
+  {
+   "name": "b_r0_l7_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 7,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     12,
+     13
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     44,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 7 links"
+  },
+  {
+   "name": "b_r0_l7_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 7,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     4,
+     5
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     32,
+     33
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 7 links"
+  },
+  {
+   "name": "b_r0_l7_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 7,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     14,
+     15
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     35,
+     43
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 7 links"
+  },
+  {
+   "name": "b_r0_l7_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 7,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     18,
+     26
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     39,
+     47
+    ],
+    [
+     40,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 7 links"
+  },
+  {
+   "name": "b_r0_l8_0000",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 8,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     7,
+     15
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     40,
+     41
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 8 links"
+  },
+  {
+   "name": "b_r0_l8_0001",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 8,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     7,
+     15
+    ],
+    [
+     11,
+     12
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     25,
+     26
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 8 links"
+  },
+  {
+   "name": "b_r0_l8_0002",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 8,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     3,
+     11
+    ],
+    [
+     6,
+     7
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     36,
+     37
+    ],
+    [
+     38,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 8 links"
+  },
+  {
+   "name": "b_r0_l8_0003",
+   "fault_class": "budget",
+   "n_routers": 0,
+   "n_links": 8,
+   "dead_nodes": [],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     4,
+     12
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     38,
+     46
+    ],
+    [
+     42,
+     43
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 0 routers + 8 links"
+  },
+  {
+   "name": "b_r1_l0_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 0,
+   "dead_nodes": [
+    5
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 0 links"
+  },
+  {
+   "name": "b_r1_l0_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 0,
+   "dead_nodes": [
+    23
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 0 links"
+  },
+  {
+   "name": "b_r1_l0_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 0,
+   "dead_nodes": [
+    7
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 0 links"
+  },
+  {
+   "name": "b_r1_l0_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 0,
+   "dead_nodes": [
+    2
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 0 links"
+  },
+  {
+   "name": "b_r1_l1_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 1,
+   "dead_nodes": [
+    38
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 1 links"
+  },
+  {
+   "name": "b_r1_l1_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 1,
+   "dead_nodes": [
+    12
+   ],
+   "dead_links": [
+    [
+     12,
+     13
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 1 links"
+  },
+  {
+   "name": "b_r1_l1_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 1,
+   "dead_nodes": [
+    45
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 1 links"
+  },
+  {
+   "name": "b_r1_l1_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 1,
+   "dead_nodes": [
+    30
+   ],
+   "dead_links": [
+    [
+     13,
+     21
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 1 links"
+  },
+  {
+   "name": "b_r1_l2_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 2,
+   "dead_nodes": [
+    46
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     3,
+     11
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 2 links"
+  },
+  {
+   "name": "b_r1_l2_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 2,
+   "dead_nodes": [
+    34
+   ],
+   "dead_links": [
+    [
+     28,
+     36
+    ],
+    [
+     44,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 2 links"
+  },
+  {
+   "name": "b_r1_l2_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 2,
+   "dead_nodes": [
+    6
+   ],
+   "dead_links": [
+    [
+     4,
+     5
+    ],
+    [
+     17,
+     25
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 2 links"
+  },
+  {
+   "name": "b_r1_l2_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 2,
+   "dead_nodes": [
+    14
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     20,
+     21
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 2 links"
+  },
+  {
+   "name": "b_r1_l3_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 3,
+   "dead_nodes": [
+    22
+   ],
+   "dead_links": [
+    [
+     3,
+     11
+    ],
+    [
+     12,
+     13
+    ],
+    [
+     29,
+     30
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 3 links"
+  },
+  {
+   "name": "b_r1_l3_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 3,
+   "dead_nodes": [
+    32
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 3 links"
+  },
+  {
+   "name": "b_r1_l3_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 3,
+   "dead_nodes": [
+    6
+   ],
+   "dead_links": [
+    [
+     13,
+     14
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     26,
+     34
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 3 links"
+  },
+  {
+   "name": "b_r1_l3_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 3,
+   "dead_nodes": [
+    22
+   ],
+   "dead_links": [
+    [
+     11,
+     12
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     38,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 3 links"
+  },
+  {
+   "name": "b_r1_l4_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 4,
+   "dead_nodes": [
+    44
+   ],
+   "dead_links": [
+    [
+     3,
+     11
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     22,
+     30
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 4 links"
+  },
+  {
+   "name": "b_r1_l4_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 4,
+   "dead_nodes": [
+    33
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 4 links"
+  },
+  {
+   "name": "b_r1_l4_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 4,
+   "dead_nodes": [
+    42
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     11,
+     19
+    ],
+    [
+     27,
+     35
+    ],
+    [
+     32,
+     33
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 4 links"
+  },
+  {
+   "name": "b_r1_l4_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 4,
+   "dead_nodes": [
+    36
+   ],
+   "dead_links": [
+    [
+     20,
+     28
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     34,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 4 links"
+  },
+  {
+   "name": "b_r1_l5_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 5,
+   "dead_nodes": [
+    42
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     37,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 5 links"
+  },
+  {
+   "name": "b_r1_l5_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 5,
+   "dead_nodes": [
+    47
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 5 links"
+  },
+  {
+   "name": "b_r1_l5_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 5,
+   "dead_nodes": [
+    8
+   ],
+   "dead_links": [
+    [
+     16,
+     17
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 5 links"
+  },
+  {
+   "name": "b_r1_l5_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 5,
+   "dead_nodes": [
+    43
+   ],
+   "dead_links": [
+    [
+     8,
+     16
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     40,
+     41
+    ],
+    [
+     44,
+     45
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 5 links"
+  },
+  {
+   "name": "b_r1_l6_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 6,
+   "dead_nodes": [
+    45
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     20,
+     28
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 6 links"
+  },
+  {
+   "name": "b_r1_l6_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 6,
+   "dead_nodes": [
+    12
+   ],
+   "dead_links": [
+    [
+     10,
+     18
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     30,
+     31
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 6 links"
+  },
+  {
+   "name": "b_r1_l6_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 6,
+   "dead_nodes": [
+    45
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     38,
+     39
+    ],
+    [
+     45,
+     46
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 6 links"
+  },
+  {
+   "name": "b_r1_l6_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 6,
+   "dead_nodes": [
+    42
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     4,
+     5
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     11,
+     12
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     30,
+     31
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 6 links"
+  },
+  {
+   "name": "b_r1_l7_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 7,
+   "dead_nodes": [
+    28
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     2,
+     3
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     35,
+     43
+    ],
+    [
+     37,
+     45
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 7 links"
+  },
+  {
+   "name": "b_r1_l7_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 7,
+   "dead_nodes": [
+    20
+   ],
+   "dead_links": [
+    [
+     3,
+     4
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     20,
+     28
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     37,
+     38
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 7 links"
+  },
+  {
+   "name": "b_r1_l7_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 7,
+   "dead_nodes": [
+    46
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     8
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     28,
+     29
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 7 links"
+  },
+  {
+   "name": "b_r1_l7_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 7,
+   "dead_nodes": [
+    0
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     6,
+     7
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     13,
+     14
+    ],
+    [
+     35,
+     43
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 7 links"
+  },
+  {
+   "name": "b_r1_l8_0000",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 8,
+   "dead_nodes": [
+    19
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     6,
+     7
+    ],
+    [
+     12,
+     13
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 8 links"
+  },
+  {
+   "name": "b_r1_l8_0001",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 8,
+   "dead_nodes": [
+    28
+   ],
+   "dead_links": [
+    [
+     7,
+     15
+    ],
+    [
+     9,
+     10
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     23,
+     31
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 8 links"
+  },
+  {
+   "name": "b_r1_l8_0002",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 8,
+   "dead_nodes": [
+    1
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     24,
+     32
+    ],
+    [
+     37,
+     45
+    ],
+    [
+     38,
+     39
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 8 links"
+  },
+  {
+   "name": "b_r1_l8_0003",
+   "fault_class": "budget",
+   "n_routers": 1,
+   "n_links": 8,
+   "dead_nodes": [
+    2
+   ],
+   "dead_links": [
+    [
+     11,
+     19
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     36,
+     37
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 1 routers + 8 links"
+  },
+  {
+   "name": "b_r2_l0_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 0,
+   "dead_nodes": [
+    24,
+    37
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 0 links"
+  },
+  {
+   "name": "b_r2_l0_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 0,
+   "dead_nodes": [
+    0,
+    18
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 0 links"
+  },
+  {
+   "name": "b_r2_l0_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 0,
+   "dead_nodes": [
+    8,
+    9
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 0 links"
+  },
+  {
+   "name": "b_r2_l0_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 0,
+   "dead_nodes": [
+    17,
+    21
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 0 links"
+  },
+  {
+   "name": "b_r2_l1_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 1,
+   "dead_nodes": [
+    21,
+    23
+   ],
+   "dead_links": [
+    [
+     5,
+     13
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 1 links"
+  },
+  {
+   "name": "b_r2_l1_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 1,
+   "dead_nodes": [
+    21,
+    39
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 1 links"
+  },
+  {
+   "name": "b_r2_l1_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 1,
+   "dead_nodes": [
+    2,
+    17
+   ],
+   "dead_links": [
+    [
+     10,
+     18
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 1 links"
+  },
+  {
+   "name": "b_r2_l1_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 1,
+   "dead_nodes": [
+    9,
+    37
+   ],
+   "dead_links": [
+    [
+     19,
+     27
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 1 links"
+  },
+  {
+   "name": "b_r2_l2_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 2,
+   "dead_nodes": [
+    23,
+    25
+   ],
+   "dead_links": [
+    [
+     8,
+     16
+    ],
+    [
+     37,
+     38
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 2 links"
+  },
+  {
+   "name": "b_r2_l2_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 2,
+   "dead_nodes": [
+    7,
+    18
+   ],
+   "dead_links": [
+    [
+     16,
+     17
+    ],
+    [
+     32,
+     40
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 2 links"
+  },
+  {
+   "name": "b_r2_l2_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 2,
+   "dead_nodes": [
+    3,
+    19
+   ],
+   "dead_links": [
+    [
+     11,
+     19
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 2 links"
+  },
+  {
+   "name": "b_r2_l2_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 2,
+   "dead_nodes": [
+    4,
+    46
+   ],
+   "dead_links": [
+    [
+     20,
+     21
+    ],
+    [
+     27,
+     28
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 2 links"
+  },
+  {
+   "name": "b_r2_l3_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 3,
+   "dead_nodes": [
+    19,
+    21
+   ],
+   "dead_links": [
+    [
+     6,
+     7
+    ],
+    [
+     6,
+     14
+    ],
+    [
+     28,
+     29
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 3 links"
+  },
+  {
+   "name": "b_r2_l3_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 3,
+   "dead_nodes": [
+    30,
+    35
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ],
+    [
+     22,
+     30
+    ],
+    [
+     32,
+     33
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 3 links"
+  },
+  {
+   "name": "b_r2_l3_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 3,
+   "dead_nodes": [
+    7,
+    30
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     33,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 3 links"
+  },
+  {
+   "name": "b_r2_l3_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 3,
+   "dead_nodes": [
+    19,
+    21
+   ],
+   "dead_links": [
+    [
+     10,
+     11
+    ],
+    [
+     11,
+     12
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 3 links"
+  },
+  {
+   "name": "b_r2_l4_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 4,
+   "dead_nodes": [
+    24,
+    36
+   ],
+   "dead_links": [
+    [
+     4,
+     5
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 4 links"
+  },
+  {
+   "name": "b_r2_l4_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 4,
+   "dead_nodes": [
+    12,
+    47
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     3,
+     11
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     26,
+     27
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 4 links"
+  },
+  {
+   "name": "b_r2_l4_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 4,
+   "dead_nodes": [
+    6,
+    25
+   ],
+   "dead_links": [
+    [
+     19,
+     27
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     37,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 4 links"
+  },
+  {
+   "name": "b_r2_l4_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 4,
+   "dead_nodes": [
+    31,
+    37
+   ],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     28,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 4 links"
+  },
+  {
+   "name": "b_r2_l5_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 5,
+   "dead_nodes": [
+    14,
+    16
+   ],
+   "dead_links": [
+    [
+     11,
+     12
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     39,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 5 links"
+  },
+  {
+   "name": "b_r2_l5_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 5,
+   "dead_nodes": [
+    4,
+    7
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     13,
+     14
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 5 links"
+  },
+  {
+   "name": "b_r2_l5_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 5,
+   "dead_nodes": [
+    25,
+    31
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     44,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 5 links"
+  },
+  {
+   "name": "b_r2_l5_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 5,
+   "dead_nodes": [
+    6,
+    9
+   ],
+   "dead_links": [
+    [
+     13,
+     14
+    ],
+    [
+     24,
+     32
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 5 links"
+  },
+  {
+   "name": "b_r2_l6_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 6,
+   "dead_nodes": [
+    6,
+    9
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     38,
+     39
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 6 links"
+  },
+  {
+   "name": "b_r2_l6_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 6,
+   "dead_nodes": [
+    31,
+    33
+   ],
+   "dead_links": [
+    [
+     13,
+     14
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     36,
+     44
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 6 links"
+  },
+  {
+   "name": "b_r2_l6_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 6,
+   "dead_nodes": [
+    0,
+    21
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 6 links"
+  },
+  {
+   "name": "b_r2_l6_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 6,
+   "dead_nodes": [
+    9,
+    38
+   ],
+   "dead_links": [
+    [
+     4,
+     5
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     39,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 6 links"
+  },
+  {
+   "name": "b_r2_l7_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 7,
+   "dead_nodes": [
+    2,
+    33
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     4,
+     5
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     30,
+     31
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 7 links"
+  },
+  {
+   "name": "b_r2_l7_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 7,
+   "dead_nodes": [
+    10,
+    21
+   ],
+   "dead_links": [
+    [
+     10,
+     11
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     34,
+     35
+    ],
+    [
+     35,
+     43
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 7 links"
+  },
+  {
+   "name": "b_r2_l7_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 7,
+   "dead_nodes": [
+    2,
+    36
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 7 links"
+  },
+  {
+   "name": "b_r2_l7_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 7,
+   "dead_nodes": [
+    34,
+    38
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     40,
+     41
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 7 links"
+  },
+  {
+   "name": "b_r2_l8_0000",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 8,
+   "dead_nodes": [
+    0,
+    42
+   ],
+   "dead_links": [
+    [
+     4,
+     5
+    ],
+    [
+     12,
+     13
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     34,
+     35
+    ],
+    [
+     38,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 8 links"
+  },
+  {
+   "name": "b_r2_l8_0001",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 8,
+   "dead_nodes": [
+    16,
+    19
+   ],
+   "dead_links": [
+    [
+     3,
+     11
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     27,
+     35
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 8 links"
+  },
+  {
+   "name": "b_r2_l8_0002",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 8,
+   "dead_nodes": [
+    21,
+    46
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     11
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     33,
+     34
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 8 links"
+  },
+  {
+   "name": "b_r2_l8_0003",
+   "fault_class": "budget",
+   "n_routers": 2,
+   "n_links": 8,
+   "dead_nodes": [
+    22,
+    26
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     4
+    ],
+    [
+     6,
+     7
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 2 routers + 8 links"
+  },
+  {
+   "name": "b_r3_l0_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 0,
+   "dead_nodes": [
+    1,
+    2,
+    9
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 0 links"
+  },
+  {
+   "name": "b_r3_l0_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 0,
+   "dead_nodes": [
+    8,
+    38,
+    39
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 0 links"
+  },
+  {
+   "name": "b_r3_l0_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 0,
+   "dead_nodes": [
+    6,
+    20,
+    40
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 0 links"
+  },
+  {
+   "name": "b_r3_l0_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 0,
+   "dead_nodes": [
+    35,
+    41,
+    44
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 0 links"
+  },
+  {
+   "name": "b_r3_l1_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 1,
+   "dead_nodes": [
+    12,
+    22,
+    24
+   ],
+   "dead_links": [
+    [
+     33,
+     34
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 1 links"
+  },
+  {
+   "name": "b_r3_l1_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 1,
+   "dead_nodes": [
+    3,
+    7,
+    39
+   ],
+   "dead_links": [
+    [
+     31,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 1 links"
+  },
+  {
+   "name": "b_r3_l1_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 1,
+   "dead_nodes": [
+    21,
+    39,
+    40
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 1 links"
+  },
+  {
+   "name": "b_r3_l1_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 1,
+   "dead_nodes": [
+    39,
+    43,
+    45
+   ],
+   "dead_links": [
+    [
+     19,
+     27
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 1 links"
+  },
+  {
+   "name": "b_r3_l2_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 2,
+   "dead_nodes": [
+    8,
+    18,
+    24
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 2 links"
+  },
+  {
+   "name": "b_r3_l2_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 2,
+   "dead_nodes": [
+    2,
+    12,
+    25
+   ],
+   "dead_links": [
+    [
+     25,
+     26
+    ],
+    [
+     29,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 2 links"
+  },
+  {
+   "name": "b_r3_l2_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 2,
+   "dead_nodes": [
+    12,
+    22,
+    29
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 2 links"
+  },
+  {
+   "name": "b_r3_l2_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 2,
+   "dead_nodes": [
+    2,
+    16,
+    31
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 2 links"
+  },
+  {
+   "name": "b_r3_l3_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 3,
+   "dead_nodes": [
+    13,
+    36,
+    42
+   ],
+   "dead_links": [
+    [
+     5,
+     13
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 3 links"
+  },
+  {
+   "name": "b_r3_l3_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 3,
+   "dead_nodes": [
+    32,
+    33,
+    44
+   ],
+   "dead_links": [
+    [
+     20,
+     28
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     34,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 3 links"
+  },
+  {
+   "name": "b_r3_l3_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 3,
+   "dead_nodes": [
+    7,
+    9,
+    27
+   ],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     38,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 3 links"
+  },
+  {
+   "name": "b_r3_l3_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 3,
+   "dead_nodes": [
+    4,
+    6,
+    26
+   ],
+   "dead_links": [
+    [
+     6,
+     7
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     28,
+     29
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 3 links"
+  },
+  {
+   "name": "b_r3_l4_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 4,
+   "dead_nodes": [
+    1,
+    28,
+    46
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     33,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 4 links"
+  },
+  {
+   "name": "b_r3_l4_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 4,
+   "dead_nodes": [
+    16,
+    20,
+    46
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     24,
+     25
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 4 links"
+  },
+  {
+   "name": "b_r3_l4_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 4,
+   "dead_nodes": [
+    1,
+    22,
+    44
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     11,
+     19
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     23,
+     31
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 4 links"
+  },
+  {
+   "name": "b_r3_l4_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 4,
+   "dead_nodes": [
+    4,
+    23,
+    38
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     13,
+     21
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 4 links"
+  },
+  {
+   "name": "b_r3_l5_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 5,
+   "dead_nodes": [
+    0,
+    18,
+    47
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     9,
+     17
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 5 links"
+  },
+  {
+   "name": "b_r3_l5_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 5,
+   "dead_nodes": [
+    7,
+    11,
+    29
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     23,
+     31
+    ],
+    [
+     32,
+     40
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 5 links"
+  },
+  {
+   "name": "b_r3_l5_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 5,
+   "dead_nodes": [
+    13,
+    21,
+    23
+   ],
+   "dead_links": [
+    [
+     12,
+     13
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     37,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 5 links"
+  },
+  {
+   "name": "b_r3_l5_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 5,
+   "dead_nodes": [
+    5,
+    6,
+    37
+   ],
+   "dead_links": [
+    [
+     11,
+     12
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     36,
+     44
+    ],
+    [
+     40,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 5 links"
+  },
+  {
+   "name": "b_r3_l6_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 6,
+   "dead_nodes": [
+    8,
+    9,
+    14
+   ],
+   "dead_links": [
+    [
+     12,
+     20
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 6 links"
+  },
+  {
+   "name": "b_r3_l6_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 6,
+   "dead_nodes": [
+    23,
+    26,
+    42
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     4,
+     12
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 6 links"
+  },
+  {
+   "name": "b_r3_l6_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 6,
+   "dead_nodes": [
+    4,
+    8,
+    44
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     37,
+     38
+    ],
+    [
+     40,
+     41
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 6 links"
+  },
+  {
+   "name": "b_r3_l6_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 6,
+   "dead_nodes": [
+    19,
+    27,
+    40
+   ],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     24,
+     32
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     36,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 6 links"
+  },
+  {
+   "name": "b_r3_l7_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 7,
+   "dead_nodes": [
+    3,
+    24,
+    26
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     21,
+     29
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     29,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 7 links"
+  },
+  {
+   "name": "b_r3_l7_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 7,
+   "dead_nodes": [
+    5,
+    11,
+    30
+   ],
+   "dead_links": [
+    [
+     6,
+     14
+    ],
+    [
+     7,
+     15
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     37,
+     45
+    ],
+    [
+     42,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 7 links"
+  },
+  {
+   "name": "b_r3_l7_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 7,
+   "dead_nodes": [
+    11,
+    25,
+    26
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     11,
+     19
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     22,
+     30
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 7 links"
+  },
+  {
+   "name": "b_r3_l7_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 7,
+   "dead_nodes": [
+    22,
+    29,
+    40
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     5,
+     13
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     32,
+     40
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 7 links"
+  },
+  {
+   "name": "b_r3_l8_0000",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 8,
+   "dead_nodes": [
+    0,
+    29,
+    39
+   ],
+   "dead_links": [
+    [
+     7,
+     15
+    ],
+    [
+     10,
+     11
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     32,
+     33
+    ],
+    [
+     36,
+     44
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 8 links"
+  },
+  {
+   "name": "b_r3_l8_0001",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 8,
+   "dead_nodes": [
+    5,
+    31,
+    43
+   ],
+   "dead_links": [
+    [
+     1,
+     2
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 8 links"
+  },
+  {
+   "name": "b_r3_l8_0002",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 8,
+   "dead_nodes": [
+    0,
+    16,
+    25
+   ],
+   "dead_links": [
+    [
+     6,
+     14
+    ],
+    [
+     17,
+     18
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     35,
+     43
+    ],
+    [
+     39,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 8 links"
+  },
+  {
+   "name": "b_r3_l8_0003",
+   "fault_class": "budget",
+   "n_routers": 3,
+   "n_links": 8,
+   "dead_nodes": [
+    12,
+    38,
+    43
+   ],
+   "dead_links": [
+    [
+     2,
+     3
+    ],
+    [
+     4,
+     12
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     20,
+     28
+    ],
+    [
+     22,
+     30
+    ],
+    [
+     36,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 3 routers + 8 links"
+  },
+  {
+   "name": "b_r4_l0_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 0,
+   "dead_nodes": [
+    4,
+    10,
+    15,
+    33
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 0 links"
+  },
+  {
+   "name": "b_r4_l0_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 0,
+   "dead_nodes": [
+    8,
+    18,
+    26,
+    33
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 0 links"
+  },
+  {
+   "name": "b_r4_l0_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 0,
+   "dead_nodes": [
+    13,
+    33,
+    36,
+    40
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 0 links"
+  },
+  {
+   "name": "b_r4_l0_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 0,
+   "dead_nodes": [
+    6,
+    26,
+    34,
+    40
+   ],
+   "dead_links": [],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 0 links"
+  },
+  {
+   "name": "b_r4_l1_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 1,
+   "dead_nodes": [
+    17,
+    25,
+    34,
+    47
+   ],
+   "dead_links": [
+    [
+     20,
+     21
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 1 links"
+  },
+  {
+   "name": "b_r4_l1_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 1,
+   "dead_nodes": [
+    23,
+    28,
+    36,
+    40
+   ],
+   "dead_links": [
+    [
+     9,
+     10
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 1 links"
+  },
+  {
+   "name": "b_r4_l1_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 1,
+   "dead_nodes": [
+    7,
+    10,
+    24,
+    44
+   ],
+   "dead_links": [
+    [
+     27,
+     28
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 1 links"
+  },
+  {
+   "name": "b_r4_l1_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 1,
+   "dead_nodes": [
+    8,
+    29,
+    35,
+    37
+   ],
+   "dead_links": [
+    [
+     20,
+     21
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 1 links"
+  },
+  {
+   "name": "b_r4_l2_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 2,
+   "dead_nodes": [
+    22,
+    30,
+    40,
+    47
+   ],
+   "dead_links": [
+    [
+     14,
+     15
+    ],
+    [
+     28,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 2 links"
+  },
+  {
+   "name": "b_r4_l2_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 2,
+   "dead_nodes": [
+    30,
+    31,
+    32,
+    44
+   ],
+   "dead_links": [
+    [
+     21,
+     22
+    ],
+    [
+     34,
+     35
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 2 links"
+  },
+  {
+   "name": "b_r4_l2_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 2,
+   "dead_nodes": [
+    3,
+    19,
+    28,
+    41
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     33,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 2 links"
+  },
+  {
+   "name": "b_r4_l2_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 2,
+   "dead_nodes": [
+    1,
+    3,
+    13,
+    39
+   ],
+   "dead_links": [
+    [
+     24,
+     25
+    ],
+    [
+     32,
+     33
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 2 links"
+  },
+  {
+   "name": "b_r4_l3_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 3,
+   "dead_nodes": [
+    0,
+    4,
+    25,
+    33
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     27,
+     28
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 3 links"
+  },
+  {
+   "name": "b_r4_l3_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 3,
+   "dead_nodes": [
+    2,
+    7,
+    23,
+    39
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 3 links"
+  },
+  {
+   "name": "b_r4_l3_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 3,
+   "dead_nodes": [
+    14,
+    18,
+    44,
+    46
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     38,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 3 links"
+  },
+  {
+   "name": "b_r4_l3_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 3,
+   "dead_nodes": [
+    6,
+    12,
+    27,
+    29
+   ],
+   "dead_links": [
+    [
+     11,
+     12
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     26,
+     27
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 3 links"
+  },
+  {
+   "name": "b_r4_l4_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 4,
+   "dead_nodes": [
+    21,
+    26,
+    41,
+    43
+   ],
+   "dead_links": [
+    [
+     9,
+     17
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 4 links"
+  },
+  {
+   "name": "b_r4_l4_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 4,
+   "dead_nodes": [
+    8,
+    11,
+    13,
+    20
+   ],
+   "dead_links": [
+    [
+     23,
+     31
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     29,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 4 links"
+  },
+  {
+   "name": "b_r4_l4_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 4,
+   "dead_nodes": [
+    14,
+    24,
+    31,
+    46
+   ],
+   "dead_links": [
+    [
+     13,
+     14
+    ],
+    [
+     13,
+     21
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     40,
+     41
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 4 links"
+  },
+  {
+   "name": "b_r4_l4_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 4,
+   "dead_nodes": [
+    2,
+    3,
+    24,
+    45
+   ],
+   "dead_links": [
+    [
+     5,
+     13
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     25,
+     26
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 4 links"
+  },
+  {
+   "name": "b_r4_l5_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 5,
+   "dead_nodes": [
+    3,
+    40,
+    43,
+    47
+   ],
+   "dead_links": [
+    [
+     5,
+     13
+    ],
+    [
+     11,
+     19
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     20,
+     21
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 5 links"
+  },
+  {
+   "name": "b_r4_l5_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 5,
+   "dead_nodes": [
+    18,
+    22,
+    32,
+    45
+   ],
+   "dead_links": [
+    [
+     3,
+     4
+    ],
+    [
+     27,
+     35
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     45,
+     46
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 5 links"
+  },
+  {
+   "name": "b_r4_l5_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 5,
+   "dead_nodes": [
+    35,
+    41,
+    42,
+    47
+   ],
+   "dead_links": [
+    [
+     17,
+     18
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     39,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 5 links"
+  },
+  {
+   "name": "b_r4_l5_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 5,
+   "dead_nodes": [
+    13,
+    21,
+    30,
+    45
+   ],
+   "dead_links": [
+    [
+     2,
+     10
+    ],
+    [
+     3,
+     4
+    ],
+    [
+     10,
+     18
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     24,
+     25
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 5 links"
+  },
+  {
+   "name": "b_r4_l6_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 6,
+   "dead_nodes": [
+    0,
+    8,
+    18,
+    41
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     27,
+     28
+    ],
+    [
+     29,
+     30
+    ],
+    [
+     38,
+     39
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 6 links"
+  },
+  {
+   "name": "b_r4_l6_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 6,
+   "dead_nodes": [
+    12,
+    14,
+    21,
+    29
+   ],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     6,
+     14
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     43,
+     44
+    ],
+    [
+     46,
+     47
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 6 links"
+  },
+  {
+   "name": "b_r4_l6_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 6,
+   "dead_nodes": [
+    16,
+    20,
+    29,
+    34
+   ],
+   "dead_links": [
+    [
+     1,
+     9
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     5,
+     6
+    ],
+    [
+     12,
+     20
+    ],
+    [
+     25,
+     26
+    ],
+    [
+     35,
+     36
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 6 links"
+  },
+  {
+   "name": "b_r4_l6_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 6,
+   "dead_nodes": [
+    12,
+    13,
+    22,
+    33
+   ],
+   "dead_links": [
+    [
+     13,
+     21
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     20,
+     28
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 6 links"
+  },
+  {
+   "name": "b_r4_l7_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 7,
+   "dead_nodes": [
+    16,
+    22,
+    30,
+    45
+   ],
+   "dead_links": [
+    [
+     0,
+     8
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     4,
+     12
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     20,
+     28
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     37,
+     45
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 7 links"
+  },
+  {
+   "name": "b_r4_l7_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 7,
+   "dead_nodes": [
+    3,
+    28,
+    31,
+    46
+   ],
+   "dead_links": [
+    [
+     5,
+     6
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     27,
+     35
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     30,
+     38
+    ],
+    [
+     33,
+     41
+    ],
+    [
+     41,
+     42
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 7 links"
+  },
+  {
+   "name": "b_r4_l7_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 7,
+   "dead_nodes": [
+    6,
+    9,
+    15,
+    26
+   ],
+   "dead_links": [
+    [
+     4,
+     12
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     26,
+     34
+    ],
+    [
+     28,
+     36
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     37,
+     45
+    ],
+    [
+     43,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 7 links"
+  },
+  {
+   "name": "b_r4_l7_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 7,
+   "dead_nodes": [
+    2,
+    11,
+    15,
+    31
+   ],
+   "dead_links": [
+    [
+     6,
+     14
+    ],
+    [
+     8,
+     16
+    ],
+    [
+     14,
+     22
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     29,
+     30
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 7 links"
+  },
+  {
+   "name": "b_r4_l8_0000",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 8,
+   "dead_nodes": [
+    18,
+    34,
+    35,
+    39
+   ],
+   "dead_links": [
+    [
+     13,
+     14
+    ],
+    [
+     17,
+     25
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     29,
+     37
+    ],
+    [
+     31,
+     39
+    ],
+    [
+     35,
+     36
+    ],
+    [
+     36,
+     44
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 8 links"
+  },
+  {
+   "name": "b_r4_l8_0001",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 8,
+   "dead_nodes": [
+    1,
+    7,
+    14,
+    39
+   ],
+   "dead_links": [
+    [
+     0,
+     1
+    ],
+    [
+     6,
+     7
+    ],
+    [
+     11,
+     19
+    ],
+    [
+     14,
+     15
+    ],
+    [
+     16,
+     24
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     28,
+     29
+    ],
+    [
+     36,
+     37
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 8 links"
+  },
+  {
+   "name": "b_r4_l8_0002",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 8,
+   "dead_nodes": [
+    3,
+    7,
+    27,
+    32
+   ],
+   "dead_links": [
+    [
+     8,
+     9
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     19,
+     20
+    ],
+    [
+     24,
+     25
+    ],
+    [
+     26,
+     27
+    ],
+    [
+     36,
+     44
+    ],
+    [
+     38,
+     39
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 8 links"
+  },
+  {
+   "name": "b_r4_l8_0003",
+   "fault_class": "budget",
+   "n_routers": 4,
+   "n_links": 8,
+   "dead_nodes": [
+    4,
+    14,
+    15,
+    47
+   ],
+   "dead_links": [
+    [
+     11,
+     12
+    ],
+    [
+     16,
+     17
+    ],
+    [
+     19,
+     27
+    ],
+    [
+     21,
+     22
+    ],
+    [
+     22,
+     23
+    ],
+    [
+     25,
+     33
+    ],
+    [
+     33,
+     34
+    ],
+    [
+     35,
+     43
+    ]
+   ],
+   "desc": "budget \u22644R/\u22648L: 4 routers + 8 links"
+  }
+ ]
+}

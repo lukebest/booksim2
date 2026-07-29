@@ -57,6 +57,14 @@ figure { margin: 0; background: #fff; padding: 0.5rem;
 figure.e2e-fig { max-width: 72rem; margin: 1rem 0; padding: 0.75rem; }
 figcaption { font-size: 0.75rem; margin: 0.35rem 0 0; color: #555; }
 code { background: #eee; padding: 0.1rem 0.3rem; }
+.exec { max-width: 52rem; margin: 1rem 0 1.6rem; padding: 1rem 1.15rem 1.05rem;
+         background: #f7faf8; border: 1px solid #c8ddd0; border-top: 4px solid #1e8449; }
+.exec h2 { margin: 0 0 0.55rem; font-size: 1.2rem; color: #145a32; }
+.exec ol { margin: 0.35rem 0 0.2rem 1.2rem; padding: 0; }
+.exec li { margin: 0.4rem 0; }
+.exec .pick { font-size: 1.05rem; margin: 0.2rem 0 0.7rem; }
+.exec .pick b { color: #145a32; }
+.exec .sub { color: #555; font-size: 0.9rem; }
 </style></head><body>
 <h1>8×6 分组交换 NoC：Partial-Good 解决方案与 Alltoall 性能劣化</h1>
 <p class="note">几何 <code>8×6</code>，
@@ -71,6 +79,28 @@ m=1 → <b>188</b> cy，
 m=5 → <b>770</b> cy。
 生成于 2026-07-28T02:01:46.756332+00:00，耗时 425.83s。
 </p>
+
+
+<div class="exec">
+<h2>仿真结论（先看这里）</h2>
+<p class="pick">推荐默认：<b>M10 虚拟规则网格（2 VC）</b>。
+面积受限选 <b>M3 Up*/Down*（1 VC）</b>；延迟硬指标选 <b>M7 Stripe（6 VC）</b>。</p>
+<ol>
+<li><b>端到端 Pareto 前沿只有三点：</b>M3（VC1）→ M10（VC2）→ M7（VC6）。
+M3→M10 多约 39% router 面积换 22–25% 最差端到端加速；
+M10→M7 再多约 111% 面积只多买 7–10%。M5 f-ring 被 M10 严格支配。</li>
+<li><b>裸 makespan 会骗人：</b>M0/M1/M2/M4 常常「最快」，是因为牺牲把 A 裁小、流量按 A² 下降。
+端到端强扩展后它们垫底——已从 §3/§4 排除（M0 East-first、M1 XY (+sacrifice)、M2 Rect-XY、M4 Segment、M4 Segment + LB）。
+M0 中位好于 XY，但最差与 XY 同（A=6）。</li>
+<li><b>硬性质：</b>目录 36 格上 M3/M6/M7/M9/M10 零牺牲可达；
+目录外连通残图上 M3/M6/M7 无 STRUCT 失败，M4/M5/M10 会（见 §2.3）。
+保序全员通过。</li>
+<li><b>按「先牺牲、再 makespan」：</b>M7 几乎通吃场景最优，代价是 5–6 VC。
+通信占端到端约 70–86%，花 router 面积买带宽划算。</li>
+</ol>
+<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（makespan）、§6（端到端 Pareto）。</p>
+</div>
+
 
 <h2>1. 故障目录与 PG 语义</h2>
 <ul>
@@ -757,6 +787,22 @@ M10→M7 再多 111% 面积只多买 10.4% / 7.3%（回报 39 / 281，低一个�
 <p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall（加 combine 更利好 M7）；
 面积不计牺牲的 PE tile（计入会进一步惩罚 M1/M2/M4）；
 control 面积按常数、未随 VC 增长（对 6 VC 的 M7 偏乐观，更利好 M10）。</p>
+
+<h3>6.5 预算故障模型与 Super-turn（M0s）</h3>
+<p class="note">固定 36 目录偏规整方块。本小节开：8×6 上 <b>≤4 router + ≤8 无向链路</b>
+（双向算 1），按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样。
+<b>M0s Super-turn</b>：Glass–Ni 四模型自适应，优先 1 VC → 2 VC 双模型 →
+小基数 forced-sac；路径锁单 VC（保序），每层 CDG 构造性无环，VC 封顶 2。</p>
+<p class='note'>能力探针（176 场景）：M0 East-first 零牺牲 3/176；<b>M0s Super-turn</b> 零牺牲 125/176，最终全覆盖（含 forced-sac），VC∈{1,2}，无 CDG 失败。</p>
+<figure class="e2e-fig"><img src="pg_budget_e2e_pareto.png" alt="budget fault Pareto" style="max-width:100%;height:auto;background:#fff;border:1px solid #e0e0e0"/><figcaption>预算故障（≤4R/≤8L，176 场景）时间×面积 Pareto</figcaption></figure>
+<p class="note">最差情形前沿：m₀=1: M3 Up*/Down* → M0s Super-turn → M7 Stripe；m₀=13: M3 Up*/Down* → M10 Virtual → M7 Stripe。
+同面积下 Super-turn 在 worst-case 支配 M9 Dual-UD / M10 Virtual。
+数据 <code>results/pg_budget_e2e_pareto.json</code>
+（4486.9s，2658 行 DES）。</p>
+<h4>m₀ = 1（1152.0 tokens）</h4>
+<table><thead><tr><th class='l'>方案</th><th>VC</th><th>area</th><th>A 中位/最差</th><th>牺牲中位</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>Pareto</th></tr></thead><tbody><tr><td class='l'>M7 Stripe</td><td>11</td><td>4.364</td><td>46/43</td><td>0</td><td>354</td><td><b>697</b></td><td><b>yes</b></td></tr><tr><td class='l'>M0s Super-turn</td><td>2</td><td>1.244</td><td>46/39</td><td>0</td><td>481</td><td><b>751</b></td><td><b>yes</b></td></tr><tr><td class='l'>M10 Virtual</td><td>2</td><td>1.244</td><td>46/42</td><td>0</td><td>410</td><td><b>781</b></td><td></td></tr><tr><td class='l'>M9 Dual UD</td><td>2</td><td>1.244</td><td>46/43</td><td>0</td><td>590</td><td><b>867</b></td><td></td></tr><tr><td class='l'>M6 LASH</td><td>3</td><td>1.590</td><td>46/43</td><td>0</td><td>643</td><td><b>925</b></td><td></td></tr><tr><td class='l'>M3 Up*/Down*</td><td>1</td><td>0.897</td><td>46/43</td><td>0</td><td>603</td><td><b>1115</b></td><td><b>yes</b></td></tr></tbody></table>
+<h4>m₀ = 13（14976.0 tokens）</h4>
+<table><thead><tr><th class='l'>方案</th><th>VC</th><th>area</th><th>A 中位/最差</th><th>牺牲中位</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>Pareto</th></tr></thead><tbody><tr><td class='l'>M7 Stripe</td><td>11</td><td>4.364</td><td>46/43</td><td>0</td><td>3395</td><td><b>5961</b></td><td><b>yes</b></td></tr><tr><td class='l'>M10 Virtual</td><td>2</td><td>1.244</td><td>46/42</td><td>0</td><td>3695</td><td><b>7118</b></td><td><b>yes</b></td></tr><tr><td class='l'>M0s Super-turn</td><td>2</td><td>1.244</td><td>46/39</td><td>0</td><td>4943</td><td><b>7207</b></td><td></td></tr><tr><td class='l'>M9 Dual UD</td><td>2</td><td>1.244</td><td>46/43</td><td>0</td><td>5283</td><td><b>8386</b></td><td></td></tr><tr><td class='l'>M3 Up*/Down*</td><td>1</td><td>0.897</td><td>46/43</td><td>0</td><td>5437</td><td><b>8444</b></td><td><b>yes</b></td></tr><tr><td class='l'>M6 LASH</td><td>3</td><td>1.590</td><td>46/43</td><td>0</td><td>6113</td><td><b>9088</b></td><td></td></tr></tbody></table>
 
 
 <h2>7. 指标定义</h2>

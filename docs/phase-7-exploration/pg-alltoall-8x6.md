@@ -266,6 +266,37 @@ M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 
 - control 面积按常数处理，未随 VC 数增长；真实 VC allocator 复杂度约 O(V²P²)，
   这对 M7（6 VC）偏乐观，即 M7 的实际面积代价应更高，更利好 M10。
 
+### 6.5 预算故障模型与 Super-turn（M0s）
+
+固定 36 目录偏「规整方块」。另开一条轨：8×6 上 **≤4 router + ≤8 无向链路**（双向算 1），
+按 `(n_R, n_L)` 分层抽样（默认每格 4 个，`--quick` 每格 1 个）。
+
+**M0s Super-turn**（`gen_super_turn`）：在 Glass–Ni 四个最小转向模型上自适应，
+优先 1 VC 全局模型 → 否则 2 VC 双模型（互补对优先，其余对次之）→
+仍不够则对阻挡 OD 端点做小基数 forced-sacrifice 后重试。路径锁在单 VC 上 → 保序；
+每层 CDG 对任意残图构造性无环。VC 预算封顶 2（不升到 4 VC 换覆盖）。
+
+能力探针（full，176 场景 = 每格 4 样本，零额外牺牲建表）：
+
+| 方案 | 零牺牲可达 | VC | 备注 |
+|------|-----------|----|------|
+| M0 East-first | 3/176 (1.7%) | 1 | 73/176 连牺牲恢复也不可行 |
+| **M0s Super-turn** | **125/176 (71%)**；另 49 forced-sac + 2 牺牲恢复 | 1–2 | 无 `fail_cdg`；多为 east∪west |
+| M3 / M6 / M7 / M9 | 175/176 | 1 / ≤3 / ≤11 / 2 | 1 例需牺牲（同断连格） |
+| M10 Virtual | 161/176 (91.5%) | 2 | 15 例需牺牲恢复 |
+
+端到端 Pareto（同口径，full 176 场景，`results/pg_budget_e2e_pareto.*`）：
+
+![预算模型 Pareto](../../results/pg_budget_e2e_pareto.png)
+
+| 载荷 | 最差情形前沿 | VC2 槽位说明 |
+|------|-------------|-------------|
+| m₀=1 | **M3 → M0s Super-turn → M7**（Stripe VC11） | Super-turn 751 ns 严格优于同面积 M10 781 / M9 867 |
+| m₀=13 | **M3 → M10 Virtual → M7** | Super-turn 7207 ns，略慢于 M10 的 7118，掉出严格前沿 |
+
+M0 East-first（103/176）与 M5 f-ring（170/176）未全覆盖，不进汇总。
+相对 36 目录轨：预算模型下 Stripe 最坏需 **11 VC**（面积 4.364）；VC2 拐点在短载荷上由 **Super-turn** 占据，长载荷上仍是 **M10**。
+
 ## 7. 文件
 
 | 文件 | 作用 |
@@ -278,10 +309,16 @@ M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 
 | `utils/dse_pg_alltoall_8x6.py` | DES + 扫描 |
 | `utils/gen_pg_alltoall_report.py` | HTML |
 | `utils/dse_pg_e2e_pareto.py` | 端到端时间 × 面积扫描 |
-| `utils/gen_pg_e2e_pareto_plot.py` | Pareto 图 |
+| `utils/dse_pg_budget_pareto.py` | 预算故障（≤4R/≤8L）端到端 Pareto |
+| `utils/pg_faults_budget_8x6.py` | 预算故障分层采样 |
+| `utils/pg_budget_probe.py` | 预算模型下能力探针 |
+| `utils/gen_pg_e2e_pareto_plot.py` | Pareto 图（`--budget`） |
 | `results/pg_alltoall_8x6.json` | makespan 数据 |
 | `results/pg_capability.json` | 三性质核验结果 |
+| `results/pg_budget_capability.json` | 预算模型能力探针 |
+| `results/pg_faults_budget_8x6.json` | 预算故障目录 |
 | `results/pg_m10_cycle_scan.json` | M10 成环穷举结果 |
 | `results/pg_east_first_reach.json` | M0 可达性穷举结果 |
 | `results/report_pg_alltoall_8x6.html` | 报告 |
 | `results/pg_e2e_pareto.json` / `.png` | 端到端数据 / Pareto 图 |
+| `results/pg_budget_e2e_pareto.json` / `.png` | 预算模型端到端 / Pareto 图 |
