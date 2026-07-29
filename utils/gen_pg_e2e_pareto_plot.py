@@ -40,6 +40,12 @@ LABELS = {
 }
 
 
+def _n_scen(meta: dict) -> str:
+    return str(meta.get("n_scenarios")
+               or meta.get("catalog", {}).get("n_scenarios")
+               or "?")
+
+
 def pareto(pts: list[dict], xk: str, yk: str) -> list[dict]:
     out = [p for p in pts
            if not any(o is not p and o[xk] <= p[xk] and o[yk] <= p[yk]

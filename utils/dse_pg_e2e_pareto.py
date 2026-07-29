@@ -1,37 +1,20 @@
 #!/usr/bin/env python3
 """End-to-end (compute + alltoall) time vs router area Pareto for 8x6 PG.
 
+Fault model: stratified random ≤4 dead routers + ≤8 undirected links
+(bidirectional = 1), with no router–link endpoint overlap. Replaces the
+fixed link_*/node_* catalogue. See utils/pg_faults_budget_8x6.py.
+
 Workload: the dispatch half of a MoE expert-parallel FFN layer --
   alltoall dispatch -> expert FFN, run back to back (no overlap).
-  A full layer would add a symmetric combine alltoall; that doubles the
-  communication term and is left out so the reported time matches the
-  "one alltoall of m flits" framing.
 
-Compute model
-  PE does one 8x64x16 matmul per cycle = 8192 MAC/cycle @ 1.5 GHz.
-  FFN d_model=64, d_ff=256, fp16. Per token 2*64*256 = 32768 MAC = 4 cycles.
-  The 8x64x16 tile divides both FFN matmuls exactly, so there is no tile
-  quantization waste (verified: tile count == MAC count == 4 cy/token).
-
-Strong scaling
-  Total token count is pinned at the healthy 48-PE config, where the per-pair
-  alltoall payload is the nominal m0 flits:
-      T_total = 48^2 * m0 * 64 B / 128 B = 1152 * m0 tokens
-  With only A survivors the same tokens are spread over A PEs, so BOTH terms
-  grow: compute as 1/A, and the per-pair payload as (48/A)^2 (each of the A^2
-  pair slots must carry more).  Holding m fixed at m0 instead would hand
-  heavy-sacrifice schemes a free 1/A^2 traffic cut, which is why m is rescaled.
-
-Area model (router only, per the study scope)
-  Sacrificed PEs cost time, not area -- all 48 routers are physically present
-  in every scheme, so the only area lever is VC count:
-      area = crossbar + control + 5 ports * VC * Q flits * A_FLIT
-  Normalized to the IQ-XY baseline router (= 1.0) via ppa_analytic_model.
-  A scheme is sized for the worst VC count it needs across all scenarios.
+Strong scaling pins total tokens at the healthy 48-PE config; area is
+router-only and scales with the worst VC count a scheme needs.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import time
@@ -39,34 +22,38 @@ from collections import defaultdict
 from pathlib import Path
 
 import dse_pg_alltoall_8x6 as D
-import pg_faults_8x6 as F
+import pg_faults_budget_8x6 as B
 import ppa_analytic_model as PPA
 
 FREQ_GHZ = 1.5
-PE_MACS_PER_CYCLE = 8 * 64 * 16          # 8x64x16 matmul per cycle
-D_MODEL, D_FF, ELEM_BYTES = 64, 256, 2   # fp16 FFN
-FLIT_BYTES = 64                          # 512-bit flit, project-wide
-TOKEN_BYTES = D_MODEL * ELEM_BYTES       # 128 B = 2 flits
-CYCLES_PER_TOKEN = (2 * D_MODEL * D_FF) / PE_MACS_PER_CYCLE  # 4.0
+PE_MACS_PER_CYCLE = 8 * 64 * 16
+D_MODEL, D_FF, ELEM_BYTES = 64, 256, 2
+FLIT_BYTES = 64
+TOKEN_BYTES = D_MODEL * ELEM_BYTES
+CYCLES_PER_TOKEN = (2 * D_MODEL * D_FF) / PE_MACS_PER_CYCLE
 
 A_FULL = 48
 M0_LIST = [1, 13]
-SCHEMES = D.SCHEMES + ["updown_lb", "segment_lb"]
+# All schemes under evaluation + super_turn. Cover-all-scenarios rule still
+# drops schemes that cannot recover every sample.
+SCHEMES = list(D.SCHEMES) + ["updown_lb", "segment_lb"]
+if "super_turn" not in SCHEMES:
+    SCHEMES = SCHEMES + ["super_turn"]
 SEMANTICS = "dead"
 Q = D.DEFAULT_Q
 
-# Router area, normalized to the IQ-XY baseline (crossbar+buffers+control=1.0)
-A_FLIT = PPA.ARCH_A3_BUFFERS / PPA.ARCH_A3_INTERIOR_FLITS   # per 512b flit
+A_FLIT = PPA.ARCH_A3_BUFFERS / PPA.ARCH_A3_INTERIOR_FLITS
 PORTS = 5
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "results" / "pg_e2e_pareto.json"
 
 
 def total_tokens(m0: int) -> float:
-    """Tokens in the layer, pinned at the healthy 48-PE config."""
     return A_FULL * A_FULL * m0 * FLIT_BYTES / TOKEN_BYTES
 
 
 def m_effective(a: int, m0: int) -> int:
-    """Per-pair flits needed to move the same total tokens over A PEs."""
     return max(1, math.ceil(m0 * (A_FULL / a) ** 2))
 
 
@@ -80,7 +67,6 @@ def router_area(num_vc: int) -> float:
 
 
 def pareto(points: list[dict], xk: str, yk: str) -> list[dict]:
-    """Non-dominated on (x, y), both minimised."""
     out = []
     for p in points:
         if not any(o is not p and o[xk] <= p[xk] and o[yk] <= p[yk]
@@ -89,34 +75,42 @@ def pareto(points: list[dict], xk: str, yk: str) -> list[dict]:
     return sorted(out, key=lambda p: p[xk])
 
 
-def run() -> dict:
-    scenarios = [s for s in F.all_scenarios()]
+def run(quick: bool = False, n_per_cell: int | None = None,
+        seed: int = 0) -> dict:
+    n_per = n_per_cell if n_per_cell is not None else (1 if quick else 4)
+    cat = B.write_catalog(n_per_cell=n_per, seed=seed)
+    scenarios = cat["scenarios"]
+    if "super_turn" not in D.SCHEMES:
+        D.SCHEMES = list(D.SCHEMES) + ["super_turn"]
+
     rows = []
     t0 = time.time()
     total = len(scenarios) * len(SCHEMES) * len(M0_LIST)
     i = 0
     for scen in scenarios:
-        pg = F.expand_pg(scen, SEMANTICS)
+        pg = B.expand_budget(scen, SEMANTICS)
         for sch in SCHEMES:
             for m0 in M0_LIST:
                 i += 1
                 base = D.get_solution(pg, sch)
                 if not base["feasible"]:
                     print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
-                          f"m0={m0:2d} -> INFEASIBLE")
+                          f"m0={m0:2d} -> INFEASIBLE", flush=True)
                     continue
                 a = base["n_compute_used"]
                 me = m_effective(a, m0)
                 rec = D.run_one(pg, sch, me, Q)
                 if not rec["feasible"] or rec["makespan"] is None:
                     print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
-                          f"m0={m0:2d} -> {rec.get('reason')}")
+                          f"m0={m0:2d} -> {rec.get('reason')}", flush=True)
                     continue
                 t_comp = compute_cycles(a, m0)
                 t_comm = rec["makespan"]
                 t_tot = t_comp + t_comm
                 rows.append({
                     "scenario": scen["name"],
+                    "n_routers": scen["n_routers"],
+                    "n_links": scen["n_links"],
                     "scheme": sch,
                     "m0": m0,
                     "m_eff": me,
@@ -128,13 +122,14 @@ def run() -> dict:
                     "t_e2e_cy": t_tot,
                     "t_e2e_ns": t_tot / FREQ_GHZ,
                     "comm_frac": t_comm / t_tot,
+                    "turn_mode": base.get("turn_mode"),
+                    "turn_vc": base.get("turn_vc"),
                 })
-                print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
-                      f"m0={m0:2d} A={a:2d} m_eff={me:4d} "
-                      f"comp={t_comp:6d} a2a={t_comm:6d} "
-                      f"e2e={t_tot / FREQ_GHZ:9.1f}ns")
+                if i % 20 == 0 or sch == "super_turn":
+                    print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
+                          f"m0={m0:2d} A={a:2d} vc={rec['num_vc']} "
+                          f"e2e={t_tot / FREQ_GHZ:8.1f}ns", flush=True)
 
-    # Size each scheme's router for the worst VC count it ever needs.
     vc_req: dict[str, int] = defaultdict(int)
     for r in rows:
         vc_req[r["scheme"]] = max(vc_req[r["scheme"]], r["num_vc"])
@@ -144,7 +139,9 @@ def run() -> dict:
         for sch in SCHEMES:
             sel = [r for r in rows if r["scheme"] == sch and r["m0"] == m0]
             if len(sel) < len(scenarios):
-                continue  # scheme must cover every scenario to be a candidate
+                print(f"  skip summary {sch} m0={m0}: "
+                      f"{len(sel)}/{len(scenarios)} covered", flush=True)
+                continue
             ts = sorted(r["t_e2e_ns"] for r in sel)
             summary.append({
                 "scheme": sch,
@@ -172,6 +169,9 @@ def run() -> dict:
             s["pareto_med"] = s["scheme"] in front_m
 
     meta = {
+        "fault_model": "budget_≤4R_≤8L_nonoverlap",
+        "catalog": cat["meta"],
+        "n_scenarios": len(scenarios),
         "freq_ghz": FREQ_GHZ,
         "pe_macs_per_cycle": PE_MACS_PER_CYCLE,
         "d_model": D_MODEL, "d_ff": D_FF, "elem_bytes": ELEM_BYTES,
@@ -179,6 +179,7 @@ def run() -> dict:
         "cycles_per_token": CYCLES_PER_TOKEN,
         "semantics": SEMANTICS, "Q": Q,
         "m0_list": M0_LIST,
+        "schemes": SCHEMES,
         "total_tokens": {str(m): total_tokens(m) for m in M0_LIST},
         "area_model": {
             "a_flit": A_FLIT, "ports": PORTS,
@@ -193,10 +194,23 @@ def run() -> dict:
 
 
 def main() -> None:
-    out = run()
-    p = Path(__file__).resolve().parents[1] / "results" / "pg_e2e_pareto.json"
-    p.write_text(json.dumps(out, indent=1))
-    print(f"Wrote {p}  ({len(out['rows'])} rows, {out['meta']['elapsed_s']}s)")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--quick", action="store_true",
+                    help="1 sample per (nr,nl) cell (~44 scenarios)")
+    ap.add_argument("--n-per-cell", type=int, default=None)
+    ap.add_argument("--seed", type=int, default=0)
+    args = ap.parse_args()
+    out = run(quick=args.quick, n_per_cell=args.n_per_cell, seed=args.seed)
+    OUT.write_text(json.dumps(out, indent=1))
+    print(f"Wrote {OUT}  ({len(out['rows'])} rows, {out['meta']['elapsed_s']}s)")
+    for m0 in M0_LIST:
+        print(f"\n=== m0={m0} Pareto (worst) ===")
+        cand = [s for s in out["summary"] if s["m0"] == m0]
+        for s in sorted(cand, key=lambda x: x["area"]):
+            mark = " *" if s.get("pareto_worst") else ""
+            print(f"  {s['scheme']:16s} vc={s['num_vc']} area={s['area']:.3f} "
+                  f"worst={s['t_e2e_ns_worst']:.0f} med={s['t_e2e_ns_med']:.0f}"
+                  f"{mark}")
 
 
 if __name__ == "__main__":

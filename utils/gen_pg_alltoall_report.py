@@ -9,11 +9,13 @@ from collections import defaultdict
 from pathlib import Path
 
 import pg_faults_8x6 as F
+import pg_faults_budget_8x6 as B
 import pg_routing as R
 
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
+BUDGET_FAULTS_JSON = ROOT / "results" / "pg_faults_budget_8x6.json"
 BUDGET_E2E_JSON = ROOT / "results" / "pg_budget_e2e_pareto.json"
 BUDGET_CAP_JSON = ROOT / "results" / "pg_budget_capability.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
@@ -1703,15 +1705,17 @@ token = {meta['token_bytes']} B = {meta['token_bytes'] // meta['flit_bytes']} fl
 <code>area = crossbar({am['crossbar']}) + control({am['control']})
  + {am['ports']} port × VC × Q({meta['Q']}) × {am['a_flit']:.5f}</code>。
 DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
-每个方案按 18 场景中需要的<b>最大 VC 数</b>定尺寸。</li>
+每个方案按全部场景中需要的<b>最大 VC 数</b>定尺寸。</li>
 </ul>
-<p class="note">扫描：dead 语义 × {len(m0s)} 个 m₀ × 12 方案 × 18 场景 =
+<p class="note">故障模型：≤4 router + ≤8 无向链路（双向算 1，与 router 不重叠），
+分层随机抽样 {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 场景。
+扫描：dead × {len(m0s)} 个 m₀ × {len(meta.get('schemes', []))} 方案 =
 {sum(1 for _ in data['rows'])} 行 DES；耗时 {meta.get('elapsed_s')}s。
 数据 <code>results/pg_e2e_pareto.json</code>。</p>
 
 <h3>6.2 Pareto 图与结果表</h3>
-<p class="note">实心点 = 18 个 dead 场景中的<b>最差值</b>（PG 必须覆盖全部场景，
-这才是设计点）；空心点 = 中位；竖线连中位→最差。</p>
+<p class="note">实心点 = {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 个
+预算故障场景中的<b>最差值</b>（必须覆盖全部场景）；空心点 = 中位；竖线连中位→最差。</p>
 {png_note}
 <figure class="e2e-fig">
 <img src="{E2E_PNG}" alt="end-to-end time vs router area Pareto"
@@ -1994,26 +1998,34 @@ def main():
         return (f"<table class='matrix'><thead>{head}</thead>"
                 f"<tbody>{''.join(body)}</tbody></table>")
 
-    # SVG gallery: one per scenario under dead + updown
+    # §1 SVG gallery: budget fault model (≤4R/≤8L, non-overlap).
+    # One sample per (n_routers, n_links) cell (_0000) so the grid shows the
+    # whole budget without dumping every stratified replicate.
+    if BUDGET_FAULTS_JSON.exists():
+        budget_doc = json.loads(BUDGET_FAULTS_JSON.read_text())
+        budget_all = budget_doc["scenarios"]
+        budget_meta = budget_doc.get("meta", {})
+    else:
+        budget_doc = B.write_catalog()
+        budget_all = budget_doc["scenarios"]
+        budget_meta = budget_doc["meta"]
+    gallery_scens = [s for s in budget_all if s["name"].endswith("_0000")]
     gallery = []
-    for scen in scenarios:
-        hit = next((r for r in primary
-                    if r["scenario"] == scen["name"]
-                    and r["semantics"] == "dead"
-                    and r["scheme"] == "updown"
-                    and r["m"] == 1 and r["Q"] == 19), None)
-        sac = hit["sacrificed"] if hit else []
-        # rebuild loads for updown
-        pg = F.expand_pg(scen, "dead")
-        sol = R.solve_scheme(pg, "updown")
-        loads = R.link_loads(sol["paths"]) if sol["feasible"] else None
-        svg = mesh_svg(scen, sol.get("sacrificed", sac), loads)
-        mk = hit["makespan"] if hit else "—"
+    for scen in gallery_scens:
+        # Pure fault map only — no sacrifice preview. Each routing scheme
+        # decides its own sacrificed set later.
+        svg = mesh_svg(scen, sacrificed=[], loads=None)
         gallery.append(
-            f"<figure><figcaption>{esc(scen['name'])} · updown · "
-            f"mk={mk} · sac={sol.get('n_sacrificed', 0)}</figcaption>"
-            f"{svg}</figure>"
+            f"<figure><figcaption>"
+            f"{esc(scen['name'])} · R={scen['n_routers']} L={scen['n_links']}"
+            f"</figcaption>{svg}</figure>"
         )
+    gallery_note = (
+        f"分层抽样目录共 <b>{budget_meta.get('n_scenarios', len(budget_all))}</b> 场景"
+        f"（每格 {budget_meta.get('n_per_cell', '?')} 个，seed="
+        f"{budget_meta.get('seed', '?')}）；下图每格展示 <code>_0000</code> 样本，"
+        f"共 {len(gallery_scens)} 张。仅标故障本身；牺牲由各方案自行判定，不在此预画。"
+    )
 
     q_table = ""
     if qrows:
@@ -2196,8 +2208,9 @@ code {{ background: #eee; padding: 0.1rem 0.3rem; }}
 <h1>8×6 分组交换 NoC：Partial-Good 解决方案与 Alltoall 性能劣化</h1>
 <p class="note">几何 <code>{meta['mx']}×{meta['my']}</code>，
 H={meta['H']} V={meta['V']} RAMP={meta['RAMP']} RAMP_BW={meta['RAMP_BW']}。
-故障模型：link 1/2/3 × corner/edge/center，node 1×1/2×2/3×3（不含 quadrant）。
-corner 链路故障在角节点 (0,0) 的入射边：(0,0)-(1,0)、(0,0)-(0,1)，第 3 条为 (1,0)-(1,1)。
+故障模型（端到端）：≤4 router + ≤8 无向链路（双向算 1），
+router 与链路故障<strong>不重叠</strong>；分层随机抽样见
+<code>results/pg_faults_budget_8x6.json</code>（已替换固定 link_*/node_* 目录）。
 Q = 入端口 FIFO 深度 / 出链路 credit 初值；默认 Q=19 = 2·V+1（V=9），
 足以覆盖最长链路的 credit 往返，链路可跑满 1 flit/cy。
 硬性约束：无死锁（CDG 无环）+ 保序（每 (src,dst) 单路径 wormhole）。
@@ -2211,11 +2224,13 @@ m=5 → <b>{golden.get('5', golden.get(5))}</b> cy。
 
 <h2>1. 故障目录与 PG 语义</h2>
 <ul>
-<li><b>dead</b>：故障节点 PE+router+链路全失效（严格 ring_report）</li>
-<li><b>transit</b>：PE 不参与 alltoall，router/链路仍可转发</li>
-<li>图例：蓝=存活计算节点，红=故障节点，橙=牺牲的 good 节点，红虚线=故障链路，
-链路透明度∝ updown 方案有向负载</li>
+<li><b>预算故障模型</b>：0…4 个死 router × 0…8 条无向断链（跳过健康格），
+链路两端必须仍为存活 router（与死点不重叠）。</li>
+<li><b>dead</b>：故障节点 PE+router+链路全失效；端到端评估用此语义。</li>
+<li><b>transit</b>：PE 不参与 alltoall，router/链路仍可转发（对照口径，目录图仍按 dead 展开）。</li>
+<li>图例：蓝=存活节点，红=故障 router，红虚线=故障链路（本节不预判牺牲）</li>
 </ul>
+<p class="note">{gallery_note}</p>
 <div class="gallery">{''.join(gallery)}</div>
 
 <h2>2. PG 方案详解</h2>

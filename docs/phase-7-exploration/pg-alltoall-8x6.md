@@ -2,8 +2,10 @@
 
 **几何：** 8×6 mesh，H=7，V=9，RAMP=2，RAMP_BW=2  
 **流量：** 一次性 alltoall；m∈{1,5}；同源同目的 wormhole 保序  
-**故障模型：** ring_report 的 link + node（不含 quadrant）；corner 链路在 `(0,0)` 入射边  
-**产物：** `results/pg_alltoall_8x6.json`，`results/report_pg_alltoall_8x6.html`
+**故障模型（端到端）：** ≤4 router + ≤8 无向链路（双向算 1），分层随机抽样，
+router 与链路故障不重叠（`utils/pg_faults_budget_8x6.py` → `results/pg_faults_budget_8x6.json`）。
+固定 `link_*` / `node_*` 目录已退出 e2e 评估。  
+**产物：** `results/pg_e2e_pareto.json`，`results/report_pg_alltoall_8x6.html`
 
 ## 1. 硬约束
 
