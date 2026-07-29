@@ -53,9 +53,8 @@ SCHEMES = [
     "segment_lb",
     # ≤2 VC
     "super_turn",
-    "dual_updown",
-    "virtual_mesh",
     "fault_half_ring",
+    # M9 dual_updown / M10 virtual_mesh: descriptions kept; not in e2e.
 ]
 
 SEMANTICS = "dead"

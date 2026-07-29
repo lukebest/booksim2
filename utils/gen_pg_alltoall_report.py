@@ -59,12 +59,14 @@ EXCLUDED_SCHEMES = {
     "segment_lb": "同 M4 Segment",
 }
 
-# Higher-VC schemes: keep §2 descriptions, omit from e2e Pareto (VC≤2 only).
+# Keep §2 descriptions; omit from e2e Pareto / §3 per-scenario pick.
 E2E_DESC_ONLY = {
     "fault_ring_vc": "VC=4，超出本轮 e2e（仅评 VC≤2）",
     "lash": "VC 常 >2，超出本轮 e2e",
     "lash_tor": "同 LASH",
     "stripe_vc": "VC 可达 9，超出本轮 e2e",
+    "dual_updown": "M9：本轮不参与 e2e / §3 评测（描述保留）",
+    "virtual_mesh": "M10：本轮不参与 e2e / §3 评测（描述保留）",
 }
 
 SCHEME_LABELS = {
@@ -1222,22 +1224,23 @@ def exec_summary_html(excluded_labels: str) -> str:
     return f"""
 <div class="exec">
 <h2>仿真结论（先看这里）</h2>
-<p class="pick">推荐默认：<b>M10 虚拟规则网格（2 VC）</b>。
-面积受限选 <b>M3 Up*/Down*（1 VC）</b>；延迟硬指标选 <b>M7 Stripe（6 VC）</b>。</p>
+<p class="pick">本轮评测（预算故障 · VC≤2 · 不含 M9/M10）：
+推荐默认 <b>M0s Super-turn（≤2 VC）</b>；
+面积受限选 <b>M3 Up*/Down*（1 VC）</b>。
+更高 VC 的 M7 Stripe / M6 LASH 仅保留描述，不进本轮 e2e。</p>
 <ol>
-<li><b>端到端 Pareto 前沿只有三点：</b>M3（VC1）→ M10（VC2）→ M7（VC6）。
-M3→M10 多约 39% router 面积换 22–25% 最差端到端加速；
-M10→M7 再多约 111% 面积只多买 7–10%。M5 f-ring 被 M10 严格支配。</li>
+<li><b>端到端 Pareto（评测集）：</b>M3（VC1）→ M0s Super-turn（VC2）。
+同面积档上 Super-turn 最差端到端优于 Dual-UD / Virtual（后二者已退出评测）。
+M5h half-ring / M0s1（1VC）覆盖不全或牺牲过重，进不了全覆盖前沿。</li>
 <li><b>裸 makespan 会骗人：</b>M0/M1/M2/M4 常常「最快」，是因为牺牲把 A 裁小、流量按 A² 下降。
-端到端强扩展后它们垫底——已从 §3/§4 排除（{esc(excluded_labels)}）。
-M0 中位好于 XY，但最差与 XY 同（A=6）。</li>
-<li><b>硬性质：</b>目录 36 格上 M3/M6/M7/M9/M10 零牺牲可达；
-目录外连通残图上 M3/M6/M7 无 STRUCT 失败，M4/M5/M10 会（见 §2.3）。
-保序全员通过。</li>
-<li><b>按「先牺牲、再 makespan」：</b>M7 几乎通吃场景最优，代价是 5–6 VC。
-通信占端到端约 70–86%，花 router 面积买带宽划算。</li>
+端到端强扩展后它们垫底——已从 §3/§4 排除（{esc(excluded_labels)}）。</li>
+<li><b>硬性质 / 目录外：</b>预算模型三性质见 §2.5；
+目录外 STRUCT/disc 见 §2.3（已含 M0s / M0s1 / M5h）。
+保序为构造保证（唯一路径）。</li>
+<li><b>§3 每场景最优：</b>预算故障场景上，低牺牲时常落到 M0s / M3；
+通信占端到端约 70–86%，花 router 面积买带宽仍划算。</li>
 </ol>
-<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（makespan）、§6（端到端 Pareto）。</p>
+<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、§6（端到端 Pareto）。</p>
 </div>
 """
 
@@ -1254,8 +1257,11 @@ def beyond_catalog_html() -> str:
     # that only have a sample — show whichever key each scheme has)
     order = ["1_link", "1_node", "2_link", "2_node", "3_node_sample",
              "3_node_full", "mixed"]
-    sch_order = ["updown", "segment", "fault_ring_vc", "lash", "stripe_vc",
+    sch_order = ["super_turn", "super_turn_1vc", "updown", "segment",
+                 "fault_ring_vc", "fault_half_ring", "lash", "stripe_vc",
                  "virtual_mesh"]
+    # Skip schemes not yet present in the JSON (partial rescans).
+    sch_order = [s for s in sch_order if s in schemes]
 
     def cell(r: dict | None) -> str:
         if r is None:
@@ -1325,9 +1331,11 @@ def beyond_catalog_html() -> str:
 </table>
 {''.join(detail)}
 <p class="note"><b>一句话：</b>M3 / M6 / M7 在连通残图上<b>从不</b>结构性不可达
-（三节点全量 / 双故障全量 / 混合抽样 STRUCT=0）；
-M4 极常见、M5 在左右边中段块上会、M10 在散落 ≥3 死节点上会。
-M0 的东向盲区见 §2.1 M0 FAQ，机制不同，未并入上表。</p>
+（三节点全量 / 双故障全量 / 混合抽样 STRUCT=0）。
+M0s Super-turn（≤2 VC）在扫过的空间里同样以断连为主；
+M0s1（硬顶 1 VC）与 M5h half-ring 会 STRUCT 或大量 forced_sac（见上表）。
+M4 极常见、M5 全环在左右边中段块上会、M10 在散落 ≥3 死节点上会。
+M0 East-first 的东向盲区见 §2.4，机制不同。</p>
 """
 
 
@@ -1605,14 +1613,39 @@ def _e2e_pareto_front(pts: list[dict], xk: str, yk: str) -> list[dict]:
     return sorted(out, key=lambda p: p[xk])
 
 
+def _e2e_data_filtered() -> dict | None:
+    """Load e2e JSON and drop schemes that are description-only (M9/M10/…)."""
+    if not E2E_JSON_PATH.exists():
+        return None
+    data = json.loads(E2E_JSON_PATH.read_text())
+    skip = set(E2E_DESC_ONLY)
+    rows = [r for r in data["rows"] if r["scheme"] not in skip]
+    summary = [s for s in data["summary"] if s["scheme"] not in skip]
+    m0s = data["meta"]["m0_list"]
+    for m0 in m0s:
+        cand = [s for s in summary if s["m0"] == m0 and not s.get("partial")]
+        front_w = {s["scheme"] for s in
+                   _e2e_pareto_front(cand, "area", "t_e2e_ns_worst")}
+        front_m = {s["scheme"] for s in
+                   _e2e_pareto_front(cand, "area", "t_e2e_ns_med")}
+        for s in summary:
+            if s["m0"] != m0:
+                continue
+            s["pareto_worst"] = (not s.get("partial")
+                                 and s["scheme"] in front_w)
+            s["pareto_med"] = (not s.get("partial")
+                               and s["scheme"] in front_m)
+    return {"meta": data["meta"], "rows": rows, "summary": summary}
+
+
 def e2e_section_html() -> str:
     """Build §6 end-to-end time × area Pareto from pg_e2e_pareto.json."""
-    if not E2E_JSON_PATH.exists():
+    data = _e2e_data_filtered()
+    if data is None:
         return ("<h2>6. 端到端时间 × 面积 Pareto</h2>"
                 "<p class='note'>尚无 <code>results/pg_e2e_pareto.json</code>。"
                 "请先跑 <code>utils/dse_pg_e2e_pareto.py</code> 与 "
                 "<code>utils/gen_pg_e2e_pareto_plot.py</code>。</p>")
-    data = json.loads(E2E_JSON_PATH.read_text())
     meta, summary = data["meta"], data["summary"]
     m0s = meta["m0_list"]
     tokens = meta["total_tokens"]
@@ -1732,9 +1765,10 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 <p class="note">故障模型：≤4 router + ≤8 无向链路（双向算 1，与 router 不重叠），
 分层随机抽样 {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 场景
 （<b>不再使用</b>旧 link_/node_ corner/edge/center 目录）。
-评估范围：仅 <b>VC≤2</b> 方案（含 M0s1 Super-turn 1VC、M5h half-ring）；
-M5 f-ring 4VC / LASH / Stripe 等保留方案描述，不进本表。
-扫描：dead × {len(m0s)} 个 m₀ × {len(meta.get('schemes', []))} 方案 =
+评估范围：仅 <b>VC≤2</b> 且本轮入选的方案（含 M0s1 / M5h；
+<b>不含 M9 Dual-UD / M10 Virtual</b>——描述保留在 §2，不进 e2e / §3）。
+M5 f-ring 4VC / LASH / Stripe 等同理保留描述。
+扫描：dead × {len(m0s)} 个 m₀ × 评测方案 =
 {sum(1 for _ in data['rows'])} 行 DES；耗时 {meta.get('elapsed_s')}s。
 数据 <code>results/pg_e2e_pareto.json</code>。</p>
 
@@ -1759,31 +1793,23 @@ M5 f-ring 4VC / LASH / Stripe 等保留方案描述，不进本表。
 
 <h3>6.3 选型结论</h3>
 <ol>
-<li><b>排名翻转：</b>M1 XY / M2 Rect-XY 的裸 makespan 最快（中位 ~62 cy），
-端到端却被同为 VC1、面积相同的 <b>M3 Up*/Down*</b> 严格支配
-（最差 678 ns vs XY 的 820 ns）。原因全在牺牲：XY 最差场景只剩 6/48 PE，
-计算涨 8×、每对载荷涨 64×。M4 Segment 同理更糟。
-这一条正是 §2.5 把它们排除出 makespan 对比的量化依据。
-<b>M0 East-first</b> 是这一族里最好的一个——中位只牺牲 1 个节点、中位 A=44
-（XY 是 28 / 16），中位端到端也快过 XY；但设计点看最差场景时它同样掉到
-6/48 PE、和 XY 一样是 820 / 9845 ns。<b>转弯放宽只改善中位，不改善最差</b>，
-所以它照样进不了前沿、也照样被排除。</li>
-<li><b>通信占端到端 70–86%</b>（除重牺牲的 XY/Rect-XY）。即便配了
+<li><b>排名翻转仍成立：</b>M1/M2/M4（及覆盖不全的 M0 East-first）裸 makespan 好看，
+端到端被同为 VC1 的 <b>M3 Up*/Down*</b> 支配——牺牲把 A 裁小后，强扩展把计算与
+m<sub>eff</sub> 一起放大。§2.5 排除它们的量化依据不变。</li>
+<li><b>通信占端到端 70–86%</b>（除重牺牲方案）。即便配了
 {meta['pe_macs_per_cycle']} MAC/cy 的 PE，任务仍是通信瓶颈——
 花 router 面积买带宽划算。</li>
-<li><b>前沿只剩三点：M3（VC1）→ M10（VC2）→ M7（VC6）</b>，两个载荷尺寸一致。
-M3→M10 多 39% 面积换 22.5% / 25.2% 加速（回报 440 / 5155 ns/area）；
-M10→M7 再多 111% 面积只多买 10.4% / 7.3%（回报 39 / 281，低一个数量级）。
-<b>M5 f-ring 已被 M10 严格支配</b>（面积 1.937 vs 1.244、最差 555/5469 ns vs 525/5302 ns），
-不在严格前沿上——理性选择会跳过它。</li>
-<li><b>推荐：M10 虚拟规则网格（2 VC）</b>——拐点干净，两个载荷尺寸结论一致；
-上层软件仍见规则 8×6 mesh。若 router 面积在系统中占比很小、延迟是硬指标，
-直接上 <b>M7 Stripe（6 VC）</b>（两个载荷下都最快）。
-<strong>不要</strong>因裸 makespan 好看就选 M1 XY。</li>
+<li><b>本轮 VC≤2 前沿：M3（VC1）→ M0s Super-turn（VC2）</b>。
+M9 Dual-UD / M10 Virtual <b>不参与</b>本轮 e2e；描述留在 §2。
+M5h half-ring 与 M0s1 Super-turn 1VC 覆盖不全或中位牺牲过高，
+不进全覆盖 Pareto。更高 VC 的 M6/M7 本轮亦不扫。</li>
+<li><b>推荐：</b>默认 <b>M0s Super-turn（≤2 VC）</b>（预算故障下最差端到端更好）；
+router 面积紧则 <b>M3（1 VC）</b>。
+<strong>不要</strong>因裸 makespan 好看就选 M1 XY / M2 / M5h（重牺牲）。</li>
 </ol>
-<p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall（加 combine 更利好 M7）；
-面积不计牺牲的 PE tile（计入会进一步惩罚 M1/M2/M4）；
-control 面积按常数、未随 VC 增长（对 6 VC 的 M7 偏乐观，更利好 M10）。</p>
+<p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall；
+面积不计牺牲的 PE tile；control 面积按常数、未随 VC 增长；
+全量 176 场景扫完后数字以 <code>pg_e2e_pareto.json</code> 为准。</p>
 """
 
 
@@ -1914,115 +1940,139 @@ def main():
     for r in primary:
         by_key[(r["scenario"], r["semantics"], r["m"], r["Q"])].append(r)
 
-    scenarios = F.all_scenarios()
-    scen_map = {s["name"]: s for s in scenarios}
+    # §3/§4: budget fault model only (from e2e DES). Old link_/node_ rows
+    # in pg_alltoall_8x6.json are not shown.
+    e2e_pick = _e2e_data_filtered()
+    skip_pick = set(EXCLUDED_SCHEMES) | set(E2E_DESC_ONLY)
+    if e2e_pick is not None:
+        budget_rows = [r for r in e2e_pick["rows"]
+                       if r["scheme"] not in skip_pick]
+        budget_scens = sorted({r["scenario"] for r in budget_rows})
+        # Prefer catalog order when available.
+        if BUDGET_FAULTS_JSON.exists():
+            cat_names = [s["name"] for s in
+                         json.loads(BUDGET_FAULTS_JSON.read_text())["scenarios"]
+                         if s["name"] in set(budget_scens)]
+            if cat_names:
+                budget_scens = cat_names + [n for n in budget_scens
+                                            if n not in set(cat_names)]
+        budget_m0s = sorted({r["m0"] for r in budget_rows})
+    else:
+        budget_rows, budget_scens, budget_m0s = [], [], [1, 13]
 
-    def feasible_for(scen_name: str, sem: str, m: int) -> list[dict]:
-        return [r for r in primary
-                if r["scenario"] == scen_name and r["semantics"] == sem
-                and r["m"] == m and r["Q"] == 19
-                and r["scheme"] not in EXCLUDED_SCHEMES
-                and r.get("makespan") is not None]
-
-    def pareto(cands: list[dict]) -> list[dict]:
-        """Non-dominated on (n_sacrificed, makespan) — both minimised."""
+    def _sac_mk_pareto(cands: list[dict]) -> list[dict]:
+        """Non-dominated on (n_sacrificed, t_alltoall_cy)."""
         keep = []
         for r in cands:
             if not any(o is not r
                        and o["n_sacrificed"] <= r["n_sacrificed"]
-                       and o["makespan"] <= r["makespan"]
+                       and o["t_alltoall_cy"] <= r["t_alltoall_cy"]
                        and (o["n_sacrificed"] < r["n_sacrificed"]
-                            or o["makespan"] < r["makespan"])
+                            or o["t_alltoall_cy"] < r["t_alltoall_cy"])
                        for o in cands):
                 keep.append(r)
-        # one entry per (sac, mk) corner, cheapest scheme label wins
         seen, out = set(), []
-        for r in sorted(keep, key=lambda r: (r["n_sacrificed"], r["makespan"])):
-            k = (r["n_sacrificed"], r["makespan"])
+        for r in sorted(keep,
+                        key=lambda r: (r["n_sacrificed"], r["t_alltoall_cy"])):
+            k = (r["n_sacrificed"], r["t_alltoall_cy"])
             if k not in seen:
                 seen.add(k)
                 out.append(r)
         return out
 
-    def optimal_table(sem: str, m: int) -> str:
+    def optimal_table(m0: int) -> str:
         head = (
             "<tr>"
             "<th class='l'>场景</th>"
             "<th class='l'>推荐方案"
-            "<div class='sub'>牺牲最少 → 再快</div></th>"
-            "<th>牺牲</th><th>A</th><th>VC</th><th>makespan</th>"
-            "<th title='raw_slowdown = mk/mk_golden − 1'>"
-            "raw"
-            "<div class='sub'>相对健康 XY</div></th>"
-            "<th title='irregularity_penalty = mk/LB_same_A − 1'>"
-            "irreg"
-            "<div class='sub'>相对同 A 下界</div></th>"
-            "<th class='l'>Pareto 备选 方案(牺牲,makespan)</th>"
+            "<div class='sub'>牺牲最少 → 再 alltoall 快</div></th>"
+            "<th>牺牲</th><th>A</th><th>VC</th>"
+            "<th>alltoall"
+            "<div class='sub'>cy</div></th>"
+            "<th>T<sub>e2e</sub>"
+            "<div class='sub'>ns（强扩展）</div></th>"
+            "<th class='l'>Pareto 备选 方案(牺牲,alltoall)</th>"
             "</tr>")
         body = []
-        for scen in scenarios:
-            cands = feasible_for(scen["name"], sem, m)
+        for scen_name in budget_scens:
+            cands = [r for r in budget_rows
+                     if r["scenario"] == scen_name and r["m0"] == m0]
             if not cands:
-                body.append(f"<tr><td class='l'>{esc(scen['name'])}</td>"
-                            f"<td colspan='8' class='bad'>无可行方案</td></tr>")
+                body.append(f"<tr><td class='l'>{esc(scen_name)}</td>"
+                            f"<td colspan='7' class='bad'>无可行方案</td></tr>")
                 continue
-            best = min(cands, key=lambda r: (r["n_sacrificed"], r["makespan"]))
-            pf = pareto(cands)
+            best = min(cands,
+                       key=lambda r: (r["n_sacrificed"], r["t_alltoall_cy"]))
+            pf = _sac_mk_pareto(cands)
             alts = " · ".join(
                 f"{SCHEME_LABELS.get(r['scheme'], r['scheme']).split()[0]}"
-                f"({r['n_sacrificed']},{r['makespan']})"
+                f"({r['n_sacrificed']},{r['t_alltoall_cy']})"
                 for r in pf if r is not best)
             body.append(
                 "<tr>"
-                f"<td class='l'>{esc(scen['name'])}</td>"
+                f"<td class='l'>{esc(scen_name)}</td>"
                 f"<td class='l'><b>"
                 f"{esc(SCHEME_LABELS.get(best['scheme'], best['scheme']))}"
                 f"</b></td>"
                 f"<td>{best['n_sacrificed']}</td>"
-                f"<td>{best['n_compute_used']}</td>"
+                f"<td>{best['A']}</td>"
                 f"<td>{best.get('num_vc', 1)}</td>"
-                f"<td><b>{best['makespan']}</b></td>"
-                f"<td>{pct(best.get('raw_slowdown'))}</td>"
-                f"<td>{pct(best.get('irregularity_penalty'))}</td>"
+                f"<td><b>{best['t_alltoall_cy']}</b></td>"
+                f"<td>{best['t_e2e_ns']:.0f}</td>"
                 f"<td class='l sub'>{esc(alts) or '—（推荐方案同时最快）'}</td>"
                 "</tr>")
         return (f"<table><thead>{head}</thead>"
                 f"<tbody>{''.join(body)}</tbody></table>")
 
-    def scheme_matrix(sem: str, m: int) -> str:
+    def scheme_matrix(m0: int) -> str:
         schemes = []
-        for r in primary:
-            if r["scheme"] not in schemes and r["scheme"] not in EXCLUDED_SCHEMES:
+        for r in budget_rows:
+            if r["m0"] != m0:
+                continue
+            if r["scheme"] not in schemes:
                 schemes.append(r["scheme"])
+        if not schemes:
+            return "<p class='note bad'>无预算故障 DES 行可画矩阵。</p>"
         head = ("<tr><th>场景</th>" +
-                "".join(f"<th>{esc(SCHEME_LABELS.get(s, s))}</th>"
+                "".join(f"<th>{esc(E2E_SHORT.get(s, s))}</th>"
                         for s in schemes) + "</tr>")
         body = []
-        for scen in scenarios:
-            cells = [f"<td class='l'>{esc(scen['name'])}</td>"]
+        for scen_name in budget_scens:
+            cells = [f"<td class='l'>{esc(scen_name)}</td>"]
             for sch in schemes:
-                hit = next((r for r in primary
-                            if r["scenario"] == scen["name"]
-                            and r["semantics"] == sem
-                            and r["m"] == m and r["Q"] == 19
+                hit = next((r for r in budget_rows
+                            if r["scenario"] == scen_name
+                            and r["m0"] == m0
                             and r["scheme"] == sch), None)
-                if hit is None or hit.get("makespan") is None:
+                if hit is None:
                     cells.append("<td class='bad'>INF</td>")
                 else:
                     cells.append(
                         f"<td title='sac={hit['n_sacrificed']} "
-                        f"A={hit['n_compute_used']} "
-                        f"VC={hit.get('num_vc', 1)} "
-                        f"max_load={hit.get('max_load')} "
-                        f"raw={pct(hit.get('raw_slowdown'))}'>"
-                        f"{hit['makespan']}"
+                        f"A={hit['A']} VC={hit.get('num_vc', 1)} "
+                        f"T_e2e={hit['t_e2e_ns']:.0f}ns'>"
+                        f"{hit['t_alltoall_cy']}"
                         f"<div class='sub'>"
-                        f"{pct(hit.get('irregularity_penalty'))} "
-                        f"| sac {hit['n_sacrificed']}</div></td>"
+                        f"sac {hit['n_sacrificed']} | A={hit['A']}</div></td>"
                     )
             body.append("<tr>" + "".join(cells) + "</tr>")
         return (f"<table class='matrix'><thead>{head}</thead>"
                 f"<tbody>{''.join(body)}</tbody></table>")
+
+    def _m0_tables(fn) -> str:
+        if e2e_pick is None:
+            return ("<p class='note bad'>缺少 "
+                    "<code>results/pg_e2e_pareto.json</code>，"
+                    "请先跑 <code>utils/dse_pg_e2e_pareto.py</code>。</p>")
+        parts = []
+        for m0 in budget_m0s:
+            parts.append(f"<h3>dead · m<sub>0</sub>={m0} flit"
+                         f"（强扩展载荷）</h3>")
+            parts.append(fn(m0))
+        return "\n".join(parts)
+
+    optimal_tables_html = _m0_tables(optimal_table)
+    scheme_matrices_html = _m0_tables(scheme_matrix)
 
     # §1 SVG gallery: budget fault model (≤4R/≤8L, non-overlap).
     # One sample per (n_routers, n_links) cell (_0000) so the grid shows the
@@ -2099,21 +2149,8 @@ def main():
     ) + "</ul>"
 
     # ---- capability check: the three hard properties, measured ---------------
-    def capability_html() -> str:
-        if not CAP_JSON_PATH.exists():
-            return ("<p class='note bad'>缺少 <code>results/pg_capability.json"
-                    "</code>，请跑 <code>utils/pg_capability_probe.py</code>。</p>")
-        cap = json.loads(CAP_JSON_PATH.read_text())
-        n_cells = cap["meta"]["n_cells"]
-        # Ordering can only be seen in the DES → read it off the sweep rows.
-        ord_bad, ord_tot = defaultdict(int), defaultdict(int)
-        for r in primary:
-            if r.get("makespan") is None:
-                continue
-            ord_tot[r["scheme"]] += 1
-            if r.get("ordered_ok") is False:
-                ord_bad[r["scheme"]] += 1
-
+    def _cap_table(cap: dict, *, n_cells: int, ord_bad, ord_tot,
+                   order_fallback: str | None = None) -> str:
         def cell(good: bool, text: str) -> str:
             cls = "cap-ok" if good else "cap-bad"
             return f"<td class='l {cls}'>{text}</td>"
@@ -2122,43 +2159,156 @@ def main():
                 "<th class='l'>无死锁</th><th class='l'>保序</th>"
                 "<th class='l'>判定</th></tr>")
         body = []
+        schemes = cap.get("schemes", cap.get("summary", {}))
         for sch, lab in SCHEME_LABELS.items():
             base = "segment" if sch == "segment_lb" else (
                 "updown" if sch == "updown_lb" else sch)
-            c = cap["schemes"].get(base)
+            c = schemes.get(base)
             if c is None:
                 continue
-            # fault avoidance
-            if c["fail_path"]:
-                avoid = cell(False, f"<b>✗</b> {c['fail_path']}/{n_cells} 建不出路径")
-            elif c["sacrifice"]:
-                avoid = cell(True, f"△ 靠牺牲：{c['sacrifice']}/{n_cells} 场景，"
-                                   f"累计 {c['forced_nodes']} 节点")
+            # summary-only records (budget) flatten counts at top level
+            if "fail_path" not in c and base in cap.get("summary", {}):
+                c = {**cap["summary"][base], **c}
+            fp = c.get("fail_path", 0)
+            sac = c.get("sacrifice", 0)
+            fcdg = c.get("fail_cdg", 0)
+            ok_n = c.get("ok", 0)
+            forced = c.get("forced_nodes", 0)
+            # Avoidance: prefer a breakdown when outcomes are mixed.
+            if fp == 0 and sac == 0:
+                avoid = cell(True, f"✓ {ok_n}/{n_cells} 零牺牲绕开")
+            elif fp == 0 and sac:
+                avoid = cell(True, f"△ 靠牺牲：{sac}/{n_cells} 场景，"
+                                   f"累计 {forced} 节点"
+                                   + (f"；另 {ok_n} 零牺牲" if ok_n else ""))
+            elif fp and (ok_n or sac):
+                avoid = cell(False,
+                             f"<b>✗</b> path {fp}/{n_cells}；"
+                             f"ok {ok_n} / sac {sac}"
+                             + (f"（累计牺牲 {forced}）" if forced else ""))
             else:
-                avoid = cell(True, f"✓ {n_cells}/{n_cells} 零牺牲绕开")
-            # deadlock freedom — a ✓ from a constructive proof is not the same
-            # guarantee as a ✓ that merely survived the 36-scenario catalog.
-            if c["fail_cdg"]:
-                dl = cell(False, f"<b>✗</b> {c['fail_cdg']}/{n_cells} CDG 成环"
-                                 f"<div class='sub'>{DEADLOCK_BASIS[base]}</div>")
+                avoid = cell(False, f"<b>✗</b> {fp}/{n_cells} 建不出路径")
+            basis = DEADLOCK_BASIS.get(base, "")
+            n_cdg_ok = n_cells - fcdg
+            if fcdg:
+                dl = cell(False, f"<b>✗</b> {fcdg}/{n_cells} CDG 成环"
+                                 f"<div class='sub'>{basis}</div>")
             else:
-                good = base != "virtual_mesh"
-                dl = cell(good, f"{'✓' if good else '△'} {n_cells}/{n_cells} 无环"
-                                f"<div class='sub'>{DEADLOCK_BASIS[base]}</div>")
-            # ordering (DES-observed)
+                good = base not in ("virtual_mesh", "fault_half_ring")
+                dl = cell(good, f"{'✓' if good else '△'} "
+                                f"{n_cdg_ok}/{n_cells} 无环"
+                                f"<div class='sub'>{basis}</div>")
             nb, nt = ord_bad[sch], ord_tot[sch]
-            order = (cell(False, f"<b>✗</b> {nb}/{nt} 行乱序")
-                     if nb else cell(True, f"✓ {nt}/{nt} 行 ordered_ok"))
+            if nt:
+                order = (cell(False, f"<b>✗</b> {nb}/{nt} 行乱序")
+                         if nb else cell(True, f"✓ {nt}/{nt} 行 ordered_ok"))
+            elif order_fallback:
+                order = cell(True, order_fallback)
+            else:
+                order = cell(True, "✓ 构造（唯一路径）")
             if sch in EXCLUDED_SCHEMES:
                 mark = (f"<td class='l cap-bad'><b>排除</b>"
                         f"<div class='sub'>{esc(EXCLUDED_SCHEMES[sch])}</div></td>")
                 name = f"<td class='l cap-bad'><s>{esc(lab)}</s></td>"
+            elif sch in E2E_DESC_ONLY:
+                mark = (f"<td class='l'><b>描述保留</b>"
+                        f"<div class='sub'>{esc(E2E_DESC_ONLY[sch])}</div></td>")
+                name = f"<td class='l'>{esc(lab)}</td>"
             else:
-                mark = "<td class='l cap-ok'>纳入对比</td>"
+                mark = "<td class='l cap-ok'>e2e 评测</td>"
                 name = f"<td class='l'>{esc(lab)}</td>"
             body.append("<tr>" + name + avoid + dl + order + mark + "</tr>")
         return (f"<table class='cap'><thead>{head}</thead>"
                 f"<tbody>{''.join(body)}</tbody></table>")
+
+    def capability_html() -> str:
+        parts = []
+        # --- budget fault model (primary) ---
+        if BUDGET_CAP_JSON.exists():
+            bcap = json.loads(BUDGET_CAP_JSON.read_text())
+            bn = bcap["meta"].get("n_cells") or bcap["meta"].get(
+                "catalog", {}).get("n_scenarios", "?")
+            # Prefer DES ordered_ok from e2e rows when present
+            ord_bad, ord_tot = defaultdict(int), defaultdict(int)
+            e2e_path = E2E_JSON_PATH
+            if e2e_path.exists():
+                for r in json.loads(e2e_path.read_text()).get("rows", []):
+                    if r.get("makespan") is None and "t_e2e_cy" not in r:
+                        continue
+                    # e2e rows may omit ordered_ok; count only when present
+                    if "ordered_ok" not in r:
+                        continue
+                    ord_tot[r["scheme"]] += 1
+                    if r.get("ordered_ok") is False:
+                        ord_bad[r["scheme"]] += 1
+            parts.append(
+                f"<h4>预算故障模型（≤4R + ≤8L，{bn} 场景，dead）</h4>"
+                "<p class='note'>主评估故障集。数据 "
+                "<code>results/pg_budget_capability.json</code>"
+                "（<code>utils/pg_budget_probe.py</code>）。"
+                "零额外牺牲建表；保序为构造保证"
+                "（每对唯一路径 + 确定性 <code>vc_of</code>）。</p>")
+            # Normalize summary-only → schemes-shaped if needed
+            if "schemes" not in bcap and "summary" in bcap:
+                bcap = {
+                    **bcap,
+                    "schemes": {
+                        k: {
+                            "ok": v.get("ok", v.get("zero_sac_ok", 0)),
+                            "sacrifice": v.get("sacrifice", 0),
+                            "fail_path": v.get("fail_path", 0),
+                            "fail_cdg": v.get("fail_cdg", 0),
+                            "forced_nodes": v.get("forced_nodes", 0),
+                        }
+                        for k, v in bcap["summary"].items()
+                    },
+                }
+            try:
+                n_budget = int(bn)
+            except (TypeError, ValueError):
+                n_budget = int(bcap["meta"].get("catalog", {})
+                               .get("n_scenarios", 0) or 0)
+            parts.append(_cap_table(
+                bcap, n_cells=n_budget,
+                ord_bad=ord_bad, ord_tot=ord_tot,
+                order_fallback="✓ 构造（唯一路径）"))
+            # VC histogram note for adaptive schemes
+            summ = bcap.get("summary", {})
+            vc_notes = []
+            for sch in ("super_turn", "super_turn_1vc", "fault_half_ring",
+                        "lash", "stripe_vc"):
+                vh = (summ.get(sch) or {}).get("vc_hist") or (
+                    bcap.get("schemes", {}).get(sch, {}).get("vc_hist"))
+                if vh:
+                    vc_notes.append(
+                        f"{esc(SCHEME_LABELS.get(sch, sch))} VC 分布 "
+                        f"{esc(vh)}")
+            if vc_notes:
+                parts.append("<p class='note'>" + "；".join(vc_notes) + "。</p>")
+        else:
+            parts.append(
+                "<p class='note bad'>缺少 <code>results/pg_budget_capability.json"
+                "</code>，请跑 <code>utils/pg_budget_probe.py</code>。</p>")
+
+        # --- legacy fixed catalogue (reference) ---
+        if CAP_JSON_PATH.exists():
+            cap = json.loads(CAP_JSON_PATH.read_text())
+            n_cells = cap["meta"]["n_cells"]
+            ord_bad, ord_tot = defaultdict(int), defaultdict(int)
+            for r in primary:
+                if r.get("makespan") is None:
+                    continue
+                ord_tot[r["scheme"]] += 1
+                if r.get("ordered_ok") is False:
+                    ord_bad[r["scheme"]] += 1
+            parts.append(
+                f"<h4>旧固定目录（link_/node_ corner·edge·center，"
+                f"{n_cells} 格 = 场景×语义）</h4>"
+                "<p class='note'>历史对照，<b>不再用于 e2e</b>。"
+                "数据 <code>results/pg_capability.json</code>。</p>")
+            parts.append(_cap_table(
+                cap, n_cells=n_cells, ord_bad=ord_bad, ord_tot=ord_tot))
+        return "\n".join(parts)
 
     cap_html = capability_html()
     excluded_labels = "、".join(SCHEME_LABELS[s] for s in EXCLUDED_SCHEMES)
@@ -2831,78 +2981,50 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <tr><td>B</td><td class="l">M6 LASH</td><td class="l">最短路 + 贪心装层</td><td><b>1–2</b></td><td class="l">少 VC + 离线表</td><td>通常仅孤立点</td><td class="l">VC 性价比</td></tr>
 <tr><td>B</td><td class="l">M6b LASH-TOR</td><td class="l">LASH + 中途升层</td><td>1–2</td><td class="l">同 LASH</td><td>同 LASH</td><td class="l">再压层数（收益有限）</td></tr>
 <tr><td>B</td><td class="l">M7 Stripe</td><td class="l">最短/XY + 跨带 VC+1</td><td>5–6</td><td class="l">多 VC，逻辑简单</td><td>通常仅孤立点</td><td class="l">面积换极限性能</td></tr>
-<tr><td>B</td><td class="l">M9 Dual UD</td><td class="l">UD / DU 双层，按对选</td><td>2</td><td class="l">2 VC + 双规则</td><td>通常 0</td><td class="l">易实现的树路由增强</td></tr>
-<tr><td>B</td><td class="l">M10 Virtual mesh</td><td class="l">逻辑 XY + 物理绕路</td><td>2</td><td class="l">2 VC + 绕路表</td><td>链路友好</td><td class="l">保留规则映射</td></tr>
+<tr><td>B</td><td class="l">M9 Dual UD</td><td class="l">UD / DU 双层，按对选</td><td>2</td><td class="l">2 VC + 双规则</td><td>通常 0</td><td class="l">描述保留；<b>不进</b>本轮 e2e/§3</td></tr>
+<tr><td>B</td><td class="l">M10 Virtual mesh</td><td class="l">逻辑 XY + 物理绕路</td><td>2</td><td class="l">2 VC + 绕路表</td><td>链路友好</td><td class="l">描述保留；<b>不进</b>本轮 e2e/§3</td></tr>
 </tbody>
 </table>
 
 <h3>2.5 三性质核验与排除标记</h3>
-<p class="note">对每个 (故障场景 × 语义) 让方案在<b>零额外牺牲</b>下建全表
-（仅先剔除度为 0 的孤立点，那对谁都不可避免），看它能否自力满足三条硬性质。
-避障 / 无死锁来自 <code>utils/pg_capability_probe.py</code>
-（<code>results/pg_capability.json</code>）；
-保序只能在 DES 里观察，取自扫描结果的 <code>ordered_ok</code>。</p>
+<p class="note">对每个故障场景让方案在<b>零额外牺牲</b>下建全表
+（仅先剔除度为 0 的孤立点），看它能否自力满足三条硬性质。
+<b>主表 = 预算故障模型</b>（≤4R+≤8L）；旧 link_/node_ 目录仅作对照。
+避障 / 无死锁：<code>utils/pg_budget_probe.py</code> /
+<code>utils/pg_capability_probe.py</code>；
+保序：构造保证（唯一路径），旧目录另用 DES <code>ordered_ok</code> 交叉检查。</p>
 {cap_html}
 <p class="note"><b>读法：</b><b>✗</b> = 该性质<b>自力做不到</b>，只能靠牺牲恢复器兜底；
 避障列的 △ = 做得到，但方式是按构造牺牲好节点（不是绕行）；
-无死锁列的 △ = 36 个场景<b>实测</b>没成环，但<b>没有构造性证明</b>，
-换个故障形状就会失效（只有 M10 属此类，反例与穷举见 §2.2 的 M10 章 FAQ）。
-子行标出每个 ✓ 的依据——「构造性」与「实测通过」不是同一强度的保证。
-<b>保序全员通过</b>——882 行 DES 无一例乱序，这是「每对唯一路径 +
-<code>vc_of</code> 为纯函数」的必然结果。</p>
-<p class="note"><b>排除规则：</b>第 3–4 节的 makespan / irreg 对比<b>不含</b>
-{esc(excluded_labels)}。原因不是它们跑得慢，恰恰相反——它们在矩阵里常常「最快」，
-但那是<b>把一半阵列裁掉换来的</b>：参与者 A 变小，总流量按 A² 下降，
-makespan 自然虚低。既然它们连三条硬性质都要靠大规模牺牲才成立，
-放进同一张表比较只会误导。第 6 节的端到端评估仍保留它们，
-因为那里已经用强扩展把牺牲的代价折算回时间了。</p>
+无死锁列的 △ = 目录内实测无环，但<b>没有构造性证明</b>
+（M10、M5h half-ring）。
+「构造性」与「实测通过」不是同一强度的保证。</p>
+<p class="note"><b>排除规则：</b>第 3–4 节与 e2e <b>不含</b>
+{esc(excluded_labels)}（三性质/覆盖不足），也<b>不含 M9 Dual-UD / M10 Virtual</b>
+（本轮明确不参与评测，§2 描述保留）。
+被排除的「牺牲换 makespan」方案（M0/M1/M2/M4）在 §6 仍可出现，
+以便用强扩展量化它们到底差多少。</p>
 
 <h3>2.6 方案可行性与牺牲代价（m=1, Q=19，含被排除方案）</h3>
 {feas_html}
 
 <h2>3. 每场景最优方案选择</h2>
-<p class="note">判据按用户口径：<b>先看牺牲节点数，再看 makespan</b>。这也让比较更公平——
-牺牲数相同意味着参与 alltoall 的节点数 A 相同，makespan 才可直接对比。
-<b>已排除 {esc(excluded_labels)}</b>（见 §2.5）。
-「Pareto 备选」列出所有<b>非受支配</b>的 (牺牲, makespan) 组合：
-若愿意多牺牲若干节点换更快，就从这里挑。</p>
-<p class="note"><b>表头 raw / irreg 百分比含义：</b></p>
-<ul class="note">
-<li><b>raw</b>（<code>raw_slowdown = mk / mk_golden − 1</code>）：相对<strong>健康 8×6 XY</strong> golden 的变慢比例。
-例如 <code>+20.0%</code> 表示 makespan 比 golden 长 20%；
-<code>−30.0%</code> 表示比 golden 还短——通常因为牺牲后参与者 A 变少、总流量按 A² 下降，
-<strong>不是</strong>路由变好。跨场景比「路由质量」时不要只看 raw。</li>
-<li><b>irreg</b>（<code>irregularity_penalty = mk / LB_same_A − 1</code>）：相对<strong>同一存活集合 A</strong>
-上<strong>与路由无关的真下界</strong>（割下界带宽项 / 注入 / 延迟三者取 max）的额外开销。
-例如 <code>+9.8%</code> 表示在「这些节点无论怎么路由都至少要跑这么久」之上，又慢了约 10%——
-来自绕路、负载不均、死锁约束等。比 raw 更适合比较路由质量，且<b>恒 ≥ 0</b>。</li>
-<li>百分比由比值减 1 再 ×100 显示。raw 可能为负（牺牲后 A 变小所致）；irreg 不会为负。</li>
-</ul>
-<h3>3.1 dead · m=1 flit</h3>
-{optimal_table('dead', 1)}
-<h3>3.2 dead · m=5 flit（同源同目的保序 wormhole）</h3>
-{optimal_table('dead', 5)}
-<h3>3.3 transit · m=1 flit</h3>
-{optimal_table('transit', 1)}
-<h3>3.4 transit · m=5 flit</h3>
-{optimal_table('transit', 5)}
+<p class="note">故障集 = <b>预算模型</b>（≤4R+≤8L，
+<code>results/pg_faults_budget_8x6.json</code> /
+<code>results/pg_e2e_pareto.json</code>）。
+旧 link_/node_ corner·edge·center 目录<b>不再显示</b>。
+判据：<b>先牺牲节点数，再 alltoall makespan</b>（同牺牲 ⇒ A 相同才可比）。
+评测方案 = e2e 入选集（VC≤2，<b>不含 M9/M10</b>；亦不含
+{esc(excluded_labels)}）。
+「Pareto 备选」= 非受支配的 (牺牲, alltoall) 组合。
+载荷按 e2e 强扩展标定（m<sub>0</sub>∈{{1,13}}）；语义 = dead。</p>
+{optimal_tables_html}
 
-<h2>4. makespan 矩阵（已排除三性质不达标的方案）</h2>
-<p class="note">单元格主行：makespan（cy）；副行：<b>irreg</b>（相对同 A 下界的额外开销）
-| 牺牲节点数。这里用 irreg 而非 raw：不同方案牺牲数不同、参与者 A 不同，
-raw 会因 A 变小而虚低；irreg 以各自 A 的下界为分母，跨方案可比。
-<b>不含 {esc(excluded_labels)}</b>（见 §2.5；它们的原始数据仍在
-<code>results/pg_alltoall_8x6.json</code> 里）。
-raw 值仍保留在单元格 tooltip 里。
-INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
-<h3>4.1 dead · m=1</h3>
-{scheme_matrix('dead', 1)}
-<h3>4.2 transit · m=1</h3>
-{scheme_matrix('transit', 1)}
-<h3>4.3 dead · m=5</h3>
-{scheme_matrix('dead', 5)}
-<h3>4.4 transit · m=5</h3>
-{scheme_matrix('transit', 5)}
+<h2>4. alltoall 矩阵（预算故障 · 同 §3 方案集）</h2>
+<p class="note">单元格主行：alltoall makespan（cy）；副行：牺牲 | A。
+场景与 §3 相同（预算故障）；INF = 该方案在该场景建不出表 / 未覆盖。
+不含 M9/M10 与三性质排除方案。</p>
+{scheme_matrices_html}
 
 <h2>5. Q 敏感度（子集，m=1, dead）</h2>
 {q_table or '<p class="note">无 Q 敏感度数据</p>'}
@@ -2933,40 +3055,36 @@ INF = 牺牲预算内仍无可行无死锁保序路由，或 DES 死锁。</p>
 
 <h2>8. 主要观察</h2>
 <ol>
-<li><b>全 B 类就位后，按「牺牲→makespan」仍几乎全是 M7 Stripe</b>
-（约 70/72 场）。dead·m=1 中位 mk：Stripe 194 &lt; Virtual 239 &lt; f-ring 248
-&lt; LASH/TOR 257 &lt; Dual-UD 342 ≈ Up*/Down* 344。</li>
+<li><b>故障模型与评测范围已换挡：</b>主评估 = 预算故障（≤4R+≤8L）；
+e2e / §3 只评 VC≤2 且入选方案，<b>M9 / M10 不参与</b>；
+M5 f-ring / LASH / Stripe 保留 §2 描述。</li>
 
-<li><b>M6b LASH-TOR 与 M6 中位完全相同</b>（本网格 LASH 已是 1–2 层，升层无额外收益）。
-<strong>M9 Dual-UD</strong> 相对 M3 几乎无改善。
-<strong>M10 Virtual mesh</strong> 以 2 VC 夹在 f-ring 与 LASH 之间，适合要保留规则映射的场景。</li>
+<li><b>端到端前沿（评测集）：M3（VC1）→ M0s Super-turn（VC2）</b>。
+Super-turn 用有限转向模型换覆盖与最差端到端；
+M5h half-ring / M0s1 覆盖或牺牲不达标，进不了全覆盖前沿。</li>
 
-<li><b>链路故障：</b>M5 须退休端点；LASH/Stripe/Virtual 通常只需拿掉孤立点，
-且中心链路可零牺牲。</li>
+<li><b>目录外可达性（§2.3）：</b>M3/M6/M7 连通即达（STRUCT=0）；
+M0s Super-turn 在扫过的空间里同样以断连为主；
+M0s1 / M5h 会出现 STRUCT 或大量 forced_sac（半环链路端点退休）。
+M4 极常见 STRUCT；M10 在散落 ≥3 死节点上会。</li>
 
-<li><b>按「先牺牲、再 makespan」：M7 Stripe 几乎通吃</b>
-（dead/transit × m=1/5 合计约 70/72 场）。仅个别场次 M5/M6 并列或略胜。
-代价是 5–6 VC。若看 Pareto 上「同牺牲、更少 VC」，常落到 M6 LASH。</li>
+<li><b>§3 预算场景「先牺牲、再 alltoall」：</b>低牺牲档常是 M0s / M3；
+重牺牲方案（XY/Rect/half-ring 最坏 A→个位数）makespan 虚低，不进对比。</li>
 
-<li><b>M1 / M2 / M4 已被排除出 makespan 对比（§2.5）。</b>三性质核验显示：
-M1 有 27/36 场景建不出路径，M4 有 17/36 建不出、另有 7/36 CDG 成环，
-M2 则 36/36 都要靠裁行裁列（累计牺牲 1018 节点）。
-它们裸 makespan 好看纯粹是 A 变小的假象——端到端（§6）里全部垫底。</li>
+<li><b>M1 / M2 / M4（及 East-first）仍排除出 makespan 主表（§2.5）。</b>
+预算模型下避障失败或牺牲过重；端到端（§6）里它们垫底。</li>
 
-<li><b>保序全员通过</b>：882 行 DES 无一例 <code>ordered_ok=False</code>。
-本研究的三条硬性质里，真正区分方案的是避障与无死锁。</li>
+<li><b>保序</b>为构造保证（每对唯一路径 + 确定性 VC）；
+区分方案的是避障与无死锁。</li>
 
-<li><b>M3+LB / M4+LB 几乎无效</b>——想降负载应换 B 类。</li>
+<li><b>M3+LB 几乎无效</b>——想降负载应换转向更松或负载更好的方案（如 Super-turn），
+而非在 UD 树上局部重路由。</li>
 
-<li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 慢 3–4×。多 VC 独立缓冲面积随层数放大
-（Stripe 最贵，LASH 最省）；共享池可压低，需另评。</li>
+<li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 可慢数倍；
+VC 线性放大每端口缓冲（本轮封顶 VC≤2）。</li>
 
-<li>全部可行 DES 行 <code>ordered_ok=True</code>（含 LASH / Stripe / f-ring）。</li>
-
-<li><b>端到端时间×面积（第 6 节）翻转了 makespan 排名：</b>
-M1/M2 被同面积的 M3 严格支配；前沿为 <b>M3 → M10 → M7</b>，M5 f-ring 被 M10 支配。
-推荐默认选 <b>M10（2 VC）</b>；延迟硬指标再上 M7。
-通信占端到端 70–86%，花 router 面积买带宽划算。</li>
+<li><b>通信占端到端 70–86%</b>，花 router 面积买带宽划算。
+推荐默认 <b>M0s Super-turn</b>；面积紧选 <b>M3</b>。</li>
 </ol>
 </body></html>
 """

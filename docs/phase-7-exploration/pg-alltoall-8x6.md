@@ -29,42 +29,57 @@ M0 East-first · **M0s1 Super-turn 1VC** · M0s Super-turn（≤2）· M1 XY · 
 | M6 | LASH | 每对一层，层内 CDG 无环 | 1–2† | 最短路；层数可 >2 | 描述保留，**不评**† |
 | M6b | LASH-TOR | 允许中途升层 | 1–2† | 层数已很低时收益有限 | 不评† |
 | M7 | 条带 dateline | 跨竖带 VC+1 | 5–9 | 面积换极限性能 | 不评 |
-| M9 | 双向 Up\*/Down\* | VC0=UD，VC1=DU | 2 | 易实现 | **评** |
-| M10 | 虚拟规则网格 | 逻辑 XY；X/Y 两 VC | 2 | 上层仍见规则 mesh | **评** |
+| M9 | 双向 Up\*/Down\* | VC0=UD，VC1=DU | 2 | 易实现 | 描述保留，**不评** |
+| M10 | 虚拟规则网格 | 逻辑 XY；X/Y 两 VC | 2 | 上层仍见规则 mesh | 描述保留，**不评** |
 
 † LASH 族在预算故障下实测 VC 常冲到 3，故本轮 e2e 排除。  
-**本轮端到端只评 VC≤2**；故障一律用预算目录（不再用 link_/node_ corner/edge/center）。
+**本轮端到端只评 VC≤2 且入选方案**（含 M0s / M0s1 / M3 / M5h 等；**不含 M9/M10**）；
+故障一律用预算目录（不再用 link_/node_ corner/edge/center）。
 
-**M3 / M5 / M5h / M7 / M10 / Super-turn** 细节见 HTML 报告 §2 / §6。
+**M0s / M3 / M5h** 细节见 HTML 报告 §2 / §6；M5/M7/M10 描述保留。
 
-### 2.1 三性质核验与排除（`utils/pg_capability_probe.py`）
+### 2.1 三性质核验与排除
 
-对 36 个 (场景 × 语义)，在**零额外牺牲**下（仅先剔除孤立点）让每个方案自力建全表：
+**主评估故障集 = 预算模型**（≤4R+≤8L，`utils/pg_budget_probe.py` →
+`results/pg_budget_capability.json`）。旧固定目录核验仍保留作对照
+（`utils/pg_capability_probe.py`）。HTML 报告 §2.5 两表并陈。
 
-| 方案 | 避障 | 无死锁 | 结论 |
-|------|------|--------|------|
-| M0 East-first | ✗ 12/36 建不出路径 | ✓ 构造性（对任意残图成立） | **排除** |
-| M1 XY | ✗ 27/36 建不出路径 | ✓ | **排除** |
-| M2 Rect-XY | △ 36/36 靠裁行裁列，累计 1018 节点 | ✓ | **排除** |
-| M4 Segment（±LB） | ✗ 17/36 建不出路径 | ✗ 7/36 CDG 成环 | **排除** |
-| M5 f-ring | △ 16/36 靠退休端点，累计 28 节点 | ✓ 构造性（4 VC 相位×方向） | 保留（标注） |
-| M3 / M6 / M6b / M7 / M9 | ✓ 36/36 零牺牲绕开 | ✓ 构造性 | 保留 |
-| M10 Virtual | ✓ 36/36 零牺牲绕开 | △ 36/36 实测无环，**无构造性证明** | 保留（标注） |
+预算模型下（176 场景 dead，零额外牺牲建表；`python3 utils/pg_budget_probe.py`）：
 
-**保序全员通过**：882 行 DES 无一例 `ordered_ok=False`——每对唯一路径且 `vc_of` 为纯函数的必然结果。
-M4 CDG 成环的 7 例：`link_edge_2`、`link_center_2`（dead+transit）、`node_edge_1x1`、`node_center_2x2`、`node_center_3x3`（dead）。
+| 方案 | 避障（ok / sac / path） | 无死锁 | e2e |
+|------|------------------------|--------|-----|
+| M0 East-first | 3 / 0 / 173 | ✓ | 覆盖不全 |
+| M0s1 Super-turn 1VC | 14 / 20 / 142 | ✓ | 评（VC1） |
+| M0s Super-turn | 111 / 58 / 7 | ✓ | 评（≤2） |
+| M1 XY | 0 / 0 / 176 | — | 排除 |
+| M2 Rect-XY | 0 / 94 / 82（累计牺牲 3730） | ✓ | 排除 |
+| M3 Up\*/Down\* | 174 / 0 / 2 | ✓ | 评 |
+| M4 Segment | 1 / 0 / 170 | ✗ 5 CDG | 排除 |
+| M5 f-ring | 7 / 63 / 106 | ✓（4 VC） | 描述保留 |
+| M5h half-ring | 5 / 96 / 74 | △ 1 CDG | 评（2 VC） |
+| M6 / M6b LASH | 174 / 0 / 2 | ✓（VC 可到 3） | 描述保留 |
+| M7 Stripe | 174 / 0 / 2 | ✓（VC 5–9） | 描述保留 |
+| M9 Dual UD | 174 / 0 / 2 | ✓ | 描述保留（不进 e2e/§3） |
+| M10 Virtual | 155 / 0 / 2 | △ 19 CDG | 描述保留（不进 e2e/§3） |
+
+保序：构造保证（唯一路径）。旧目录 36×2 对照仍见 HTML §2.5 第二表。
 
 ### 2.2 目录外可达性（不限于 36 场景）
 
 区分 **STRUCT**（残图仍连通但方案建不出表）与 **disc**（图已断开）。
-数据见 `results/pg_beyond_catalog_reach.json`，HTML §2.3。
+数据见 `results/pg_beyond_catalog_reach.json`（`utils/pg_beyond_catalog_reach.py`），HTML §2.3。
 
 | 方案 | 会 STRUCT？ | 要点 | 补救 |
 |------|------------|------|------|
+| M0s Super-turn | **否*** | 单/双故障全量上连通即达（≤2 VC Glass–Ni） | 断连→牺牲；多故障走 2 VC |
+| M0s1 Super-turn 1VC | **会** | 1 VC 转向空间更窄，多故障 STRUCT / 重牺牲 | 抬到 M0s（2 VC）或牺牲 |
 | M3 / M6 / M7 | **否** | 双故障全量 + 三节点/混合抽样失败 = 断连 | 牺牲孤立点 |
 | M4 Segment | **会** | 单链 72/82、双链 3272/3321 STRUCT | 重牺牲或换方案 |
 | M5 f-ring | **会** | 链路 forced_sac；左右边中段块环绕失败 | 端点退休 / 多牺牲 1–2 |
+| M5h half-ring | **会** / 重 forced | 链路几乎全靠端点退休；半环失败→STRUCT | 端点退休；否则换 M0s/M3 |
 | M10 Virtual | **会** | ≤2 故障安全；≥3 散落洞 BOTH_CYCLIC | 牺牲（常 sac=1） |
+
+\*M0s 以扫过的目录外空间为准；预算模型上仍有少数 path 失败（见 §2.1）。
 
 ### 2.3 M10 的无死锁是「试出来的」（`utils/pg_m10_cycle_scan.py`）
 
@@ -244,64 +259,36 @@ M0 East-first 中位好得多（牺牲 1、A=44），但最差场景与 XY 逐�
 **通信占端到端 70–86%**（除了重牺牲的 XY/Rect-XY，它们计算占大头）。
 即便配了 8192 MAC/cy 的 PE，这个任务仍是通信瓶颈——**花 router 面积买带宽是划算的**。
 
-### 6.3 选型
+### 6.3 选型（本轮：预算故障 · VC≤2 · 不含 M9/M10）
 
-前沿上只有三点：**M3（VC1）→ M10（VC2）→ M7（VC6）**。边际回报：
+主 e2e 已切到预算故障目录；评测集不含 M9 Dual-UD / M10 Virtual（描述保留）。
+评测集前沿：**M3（VC1）→ M0s Super-turn（VC2）**。
 
-| 台阶 | Δarea | ΔT (m₀=1) | 回报 | ΔT (m₀=13) | 回报 |
-|------|-------|-----------|------|------------|------|
-| M3 → M10 | +38.7% | −22.5% | **440 ns/area** | −25.2% | **5155 ns/area** |
-| M10 → M7 | +111.5% | −10.4% | 39 ns/area | −7.3% | 281 ns/area |
+| 台阶 | 含义 |
+|------|------|
+| M3 | 1 VC、零/低牺牲、全覆盖；面积下限 |
+| M0s Super-turn | +39% router 面积（2 VC），最差端到端更好；预算故障下 VC2 默认拐点 |
+| M5h / M0s1 | 覆盖不全或中位牺牲过高 → 不进全覆盖 Pareto |
+| M6 / M7 | VC 常 >2，本轮不扫 |
 
-M5 f-ring **已被 M10 严格支配**（面积 1.937 vs 1.244，最差 555/5469 ns vs 525/5302 ns），
-不在严格前沿上。（M10 加上绕路去回环之前，M5 曾在 m₀=13 的严格前沿上。）
-
-> **推荐：M10 虚拟规则网格（2 VC）。**
-> 拐点非常干净，且两个载荷尺寸下结论一致：相对零-VC 的 M3 只多 39% router 面积，
-> 换来 22–25% 的端到端加速；再往上走到 M7 要多花 111% 面积，却只多买 7–10%。
-> 边际回报差一个数量级。附带好处是上层软件仍看到规则 8×6 mesh，映射不用改。
->
-> **例外：** 若 router 面积在系统里占比很小、延迟是硬指标，直接上 **M7 Stripe（6 VC）**，
-> 它在两个载荷下都是最快的（471 / 4913 ns）。
-> **不要**因为裸 makespan 好看就选 M1 XY —— 端到端它被同面积的 M3 严格支配。
+> **推荐：M0s Super-turn（≤2 VC）。**
+> 面积受限选 **M3 Up\*/Down\*（1 VC）**。
+> **不要**因裸 makespan 选 M1 XY / M2 / 重牺牲的 M5h。
 
 ### 6.4 已知局限
 
-- 只算了 dispatch 一次 alltoall。加上 combine 会让通信项翻倍，进一步利好高 VC 方案（M7）。
-- 面积只计 router。若把牺牲掉的 PE tile 也算作浪费面积，M1/M2/M4 会被进一步惩罚，结论不变。
-- control 面积按常数处理，未随 VC 数增长；真实 VC allocator 复杂度约 O(V²P²)，
-  这对 M7（6 VC）偏乐观，即 M7 的实际面积代价应更高，更利好 M10。
+- 只算了 dispatch 一次 alltoall。加上 combine 会让通信项翻倍。
+- 面积只计 router；牺牲的 PE tile 未计入面积。
+- control 面积按常数处理，未随 VC 数增长。
+- 全量 176 场景 DES 跑完后以 `results/pg_e2e_pareto.json` 数字为准。
 
-### 6.5 预算故障模型与 Super-turn（M0s）
+### 6.5 Super-turn / half-ring 能力摘要
 
-固定 36 目录偏「规整方块」。另开一条轨：8×6 上 **≤4 router + ≤8 无向链路**（双向算 1），
-按 `(n_R, n_L)` 分层抽样（默认每格 4 个，`--quick` 每格 1 个）。
+**M0s Super-turn**：Glass–Ni 四模型自适应，1→2 VC，再不行 forced-sacrifice。
+**M0s1**：硬顶 1 VC。**M5h**：半环 + X/Y 两 VC。
 
-**M0s Super-turn**（`gen_super_turn`）：在 Glass–Ni 四个最小转向模型上自适应，
-优先 1 VC 全局模型 → 否则 2 VC 双模型（互补对优先，其余对次之）→
-仍不够则对阻挡 OD 端点做小基数 forced-sacrifice 后重试。路径锁在单 VC 上 → 保序；
-每层 CDG 对任意残图构造性无环。VC 预算封顶 2（不升到 4 VC 换覆盖）。
-
-能力探针（full，176 场景 = 每格 4 样本，零额外牺牲建表）：
-
-| 方案 | 零牺牲可达 | VC | 备注 |
-|------|-----------|----|------|
-| M0 East-first | 3/176 (1.7%) | 1 | 73/176 连牺牲恢复也不可行 |
-| **M0s Super-turn** | **125/176 (71%)**；另 49 forced-sac + 2 牺牲恢复 | 1–2 | 无 `fail_cdg`；多为 east∪west |
-| M3 / M6 / M7 / M9 | 175/176 | 1 / ≤3 / ≤11 / 2 | 1 例需牺牲（同断连格） |
-| M10 Virtual | 161/176 (91.5%) | 2 | 15 例需牺牲恢复 |
-
-端到端 Pareto（同口径，full 176 场景，`results/pg_budget_e2e_pareto.*`）：
-
-![预算模型 Pareto](../../results/pg_budget_e2e_pareto.png)
-
-| 载荷 | 最差情形前沿 | VC2 槽位说明 |
-|------|-------------|-------------|
-| m₀=1 | **M3 → M0s Super-turn → M7**（Stripe VC11） | Super-turn 751 ns 严格优于同面积 M10 781 / M9 867 |
-| m₀=13 | **M3 → M10 Virtual → M7** | Super-turn 7207 ns，略慢于 M10 的 7118，掉出严格前沿 |
-
-M0 East-first（103/176）与 M5 f-ring（170/176）未全覆盖，不进汇总。
-相对 36 目录轨：预算模型下 Stripe 最坏需 **11 VC**（面积 4.364）；VC2 拐点在短载荷上由 **Super-turn** 占据，长载荷上仍是 **M10**。
+预算三性质（176 场景，见 §2.1）与目录外 STRUCT（§2.2）共同表明：
+M0s 在连通残图上可达性接近 M3；M0s1 / M5h 更常 STRUCT 或靠牺牲换通。
 
 ## 7. 文件
 
@@ -311,7 +298,8 @@ M0 East-first（103/176）与 M5 f-ring（170/176）未全覆盖，不进汇总�
 | `utils/pg_capability_probe.py` | 三性质核验（零牺牲下的避障 / 无死锁） |
 | `utils/pg_m10_cycle_scan.py` | M10 成环穷举（`--full` 含三死节点全枚举） |
 | `utils/pg_east_first_reach.py` | M0 可达性穷举 + 闭式判据交叉验证（`--full` 含双故障全枚举） |
-| `results/pg_beyond_catalog_reach.json` | M3–M10 目录外 STRUCT/disc 可达性扫描 |
+| `utils/pg_beyond_catalog_reach.py` | 目录外 STRUCT/disc 扫描（含 M0s/M0s1/M5h） |
+| `results/pg_beyond_catalog_reach.json` | 目录外 STRUCT/disc 可达性结果 |
 | `utils/dse_pg_alltoall_8x6.py` | DES + 扫描 |
 | `utils/gen_pg_alltoall_report.py` | HTML |
 | `utils/dse_pg_e2e_pareto.py` | 端到端时间 × 面积扫描 |

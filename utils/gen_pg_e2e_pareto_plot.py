@@ -69,8 +69,20 @@ def main() -> None:
         else OUT_PNG)
 
     data = json.loads(src.read_text())
-    summary, meta = data["summary"], data["meta"]
+    # M9/M10 (and other desc-only schemes) are not in the e2e evaluation set.
+    skip = {"dual_updown", "virtual_mesh", "fault_ring_vc", "lash",
+            "lash_tor", "stripe_vc"}
+    summary = [s for s in data["summary"] if s["scheme"] not in skip]
+    meta = data["meta"]
     m0s = meta["m0_list"]
+    # Recompute Pareto flags after filtering (JSON may still list M9/M10).
+    for m0 in m0s:
+        full = [s for s in summary if s["m0"] == m0 and not s.get("partial")]
+        fset = {s["scheme"] for s in pareto(full, "area", "t_e2e_ns_worst")}
+        for s in summary:
+            if s["m0"] == m0:
+                s["pareto_worst"] = (not s.get("partial")
+                                     and s["scheme"] in fset)
     n_scen = meta.get("catalog", {}).get("n_scenarios") or meta.get(
         "n_scenarios", "?")
     fault_note = meta.get("fault_model", "fixed catalogue")
