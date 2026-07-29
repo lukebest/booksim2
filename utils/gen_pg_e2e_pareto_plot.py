@@ -30,6 +30,7 @@ LABELS = {
     "segment": "M4 Segment",
     "segment_lb": "M4+LB",
     "fault_ring_vc": "M5 f-ring",
+    "fault_half_ring": "M5h half-ring",
     "lash": "M6 LASH",
     "lash_tor": "M6b LASH-TOR",
     "stripe_vc": "M7 Stripe",
@@ -37,6 +38,7 @@ LABELS = {
     "virtual_mesh": "M10 Virtual",
     "east_first": "M0 East-first",
     "super_turn": "M0s Super-turn",
+    "super_turn_1vc": "M0s1 Super-turn 1VC",
 }
 
 
@@ -78,7 +80,8 @@ def main() -> None:
         axes = [axes]
     for ax, m0 in zip(axes, m0s):
         cand = [s for s in summary if s["m0"] == m0]
-        front = pareto(cand, "area", "t_e2e_ns_worst")
+        full = [s for s in cand if not s.get("partial")]
+        front = pareto(full, "area", "t_e2e_ns_worst")
         fset = {s["scheme"] for s in front}
 
         # Schemes landing on the same (area, worst) share one label.

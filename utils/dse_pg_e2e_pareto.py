@@ -5,6 +5,10 @@ Fault model: stratified random ≤4 dead routers + ≤8 undirected links
 (bidirectional = 1), with no router–link endpoint overlap. Replaces the
 fixed link_*/node_* catalogue. See utils/pg_faults_budget_8x6.py.
 
+Evaluation: only schemes designed for ≤2 VC (VC=1 and VC=2). Higher-VC
+schemes (M5 f-ring 4VC, LASH, Stripe, …) keep their descriptions in the
+report but are not swept here.
+
 Workload: the dispatch half of a MoE expert-parallel FFN layer --
   alltoall dispatch -> expert FFN, run back to back (no overlap).
 
@@ -34,11 +38,26 @@ CYCLES_PER_TOKEN = (2 * D_MODEL * D_FF) / PE_MACS_PER_CYCLE
 
 A_FULL = 48
 M0_LIST = [1, 13]
-# All schemes under evaluation + super_turn. Cover-all-scenarios rule still
-# drops schemes that cannot recover every sample.
-SCHEMES = list(D.SCHEMES) + ["updown_lb", "segment_lb"]
-if "super_turn" not in SCHEMES:
-    SCHEMES = SCHEMES + ["super_turn"]
+
+# VC≤2 evaluation set only. Descriptions for excluded schemes remain in the
+# HTML report / pg_routing docstring.
+SCHEMES = [
+    # 1 VC
+    "east_first",
+    "super_turn_1vc",
+    "xy",
+    "rect_xy",
+    "updown",
+    "updown_lb",
+    "segment",
+    "segment_lb",
+    # ≤2 VC
+    "super_turn",
+    "dual_updown",
+    "virtual_mesh",
+    "fault_half_ring",
+]
+
 SEMANTICS = "dead"
 Q = D.DEFAULT_Q
 
@@ -80,8 +99,6 @@ def run(quick: bool = False, n_per_cell: int | None = None,
     n_per = n_per_cell if n_per_cell is not None else (1 if quick else 4)
     cat = B.write_catalog(n_per_cell=n_per, seed=seed)
     scenarios = cat["scenarios"]
-    if "super_turn" not in D.SCHEMES:
-        D.SCHEMES = list(D.SCHEMES) + ["super_turn"]
 
     rows = []
     t0 = time.time()
@@ -125,7 +142,8 @@ def run(quick: bool = False, n_per_cell: int | None = None,
                     "turn_mode": base.get("turn_mode"),
                     "turn_vc": base.get("turn_vc"),
                 })
-                if i % 20 == 0 or sch == "super_turn":
+                if (i % 20 == 0 or sch in ("super_turn", "super_turn_1vc",
+                                           "fault_half_ring")):
                     print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
                           f"m0={m0:2d} A={a:2d} vc={rec['num_vc']} "
                           f"e2e={t_tot / FREQ_GHZ:8.1f}ns", flush=True)
@@ -138,9 +156,18 @@ def run(quick: bool = False, n_per_cell: int | None = None,
     for m0 in M0_LIST:
         for sch in SCHEMES:
             sel = [r for r in rows if r["scheme"] == sch and r["m0"] == m0]
-            if len(sel) < len(scenarios):
-                print(f"  skip summary {sch} m0={m0}: "
+            if not sel:
+                print(f"  skip summary {sch} m0={m0}: 0/{len(scenarios)}",
+                      flush=True)
+                continue
+            partial = len(sel) < len(scenarios)
+            if partial:
+                print(f"  partial summary {sch} m0={m0}: "
                       f"{len(sel)}/{len(scenarios)} covered", flush=True)
+            # Soft guard: drop schemes that exceeded VC=2 on any scenario
+            if vc_req[sch] > 2:
+                print(f"  skip summary {sch} m0={m0}: "
+                      f"num_vc={vc_req[sch]} > 2", flush=True)
                 continue
             ts = sorted(r["t_e2e_ns"] for r in sel)
             summary.append({
@@ -149,6 +176,8 @@ def run(quick: bool = False, n_per_cell: int | None = None,
                 "num_vc": vc_req[sch],
                 "area": round(router_area(vc_req[sch]), 4),
                 "n_scen": len(sel),
+                "n_scen_total": len(scenarios),
+                "partial": partial,
                 "t_e2e_ns_med": round(ts[len(ts) // 2], 1),
                 "t_e2e_ns_worst": round(ts[-1], 1),
                 "t_e2e_ns_best": round(ts[0], 1),
@@ -161,12 +190,17 @@ def run(quick: bool = False, n_per_cell: int | None = None,
             })
 
     for m0 in M0_LIST:
-        cand = [s for s in summary if s["m0"] == m0]
+        # Pareto only among schemes that covered every scenario (apples-to-apples)
+        cand = [s for s in summary if s["m0"] == m0 and not s.get("partial")]
         front_w = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_worst")}
         front_m = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_med")}
-        for s in cand:
-            s["pareto_worst"] = s["scheme"] in front_w
-            s["pareto_med"] = s["scheme"] in front_m
+        for s in summary:
+            if s["m0"] != m0:
+                continue
+            s["pareto_worst"] = (not s.get("partial")
+                                 and s["scheme"] in front_w)
+            s["pareto_med"] = (not s.get("partial")
+                               and s["scheme"] in front_m)
 
     meta = {
         "fault_model": "budget_≤4R_≤8L_nonoverlap",
@@ -180,6 +214,7 @@ def run(quick: bool = False, n_per_cell: int | None = None,
         "semantics": SEMANTICS, "Q": Q,
         "m0_list": M0_LIST,
         "schemes": SCHEMES,
+        "vc_cap": 2,
         "total_tokens": {str(m): total_tokens(m) for m in M0_LIST},
         "area_model": {
             "a_flit": A_FLIT, "ports": PORTS,

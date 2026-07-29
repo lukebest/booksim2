@@ -7,13 +7,18 @@ Turn-restriction class (1 VC, deadlock freedom from forbidden turns):
   M3 updown        — Up*/Down* on a BFS spanning tree
   M4 segment       — simplified segment-based routing (turn restrictions)
 
+Turn-restriction (adaptive):
+  M0s  super_turn     — Glass–Ni, escalate 1→2 VC then sac
+  M0s1 super_turn_1vc — Glass–Ni hard-capped at 1 VC (sac, never dual)
+
 VC-layering class (deadlock freedom from ordered channel classes):
-  M5 fault_ring_vc — true f-ring (Boppana–Chalasani), 4 VCs
-  M6 lash          — shortest paths packed into acyclic VC layers
-  M6b lash_tor     — LASH with mid-path layer climb (TOR)
-  M7 stripe_vc     — shortest/XY paths; VC += 1 at each vertical dateline
-  M9 dual_updown   — VC0=Up*/Down*, VC1=Down*/Up*, pick shorter per pair
-  M10 virtual_mesh — logical XY on full mesh; physical detours; X/Y → 2 VCs
+  M5  fault_ring_vc   — true f-ring (Boppana–Chalasani), 4 VCs
+  M5h fault_half_ring — XY + one-sided half-ring detour, 2 VCs (X/Y phase)
+  M6  lash            — shortest paths packed into acyclic VC layers
+  M6b lash_tor        — LASH with mid-path layer climb (TOR)
+  M7  stripe_vc       — shortest/XY paths; VC += 1 at each vertical dateline
+  M9  dual_updown     — VC0=Up*/Down*, VC1=Down*/Up*, pick shorter per pair
+  M10 virtual_mesh    — logical XY on full mesh; physical detours; X/Y → 2 VCs
 
 Hard requirements for a usable table: CDG acyclic, compute pairwise reachable,
 exactly one path per (src,dst). On failure, a shared sacrifice recoverer disables
@@ -561,6 +566,73 @@ def gen_super_turn(pg: dict) -> dict[str, Any] | None:
     return None
 
 
+def gen_super_turn_1vc(pg: dict) -> dict[str, Any] | None:
+    """M0s1: Glass–Ni turn model hard-capped at 1 VC.
+
+    Same four minimal models as super_turn, but never opens a second VC layer:
+    if no single model covers all OD pairs, force-sacrifice miss endpoints and
+    retry. Prefer sacrifice over dual VC so silicon stays at 1 VC.
+    """
+    forced: set[int] = set()
+    view = pg
+    for _ in range(12):
+        adj_i = view["route_adj"]
+        compute_i = view["compute_nodes"]
+        if len(compute_i) < 2:
+            return None
+
+        best_1: tuple[int, str, dict] | None = None
+        miss_best: list[tuple[int, int]] | None = None
+        for name, banned in _TURN_MODELS.items():
+            okf = _turn_ok_factory(banned)
+            paths: dict[tuple[int, int], list[int]] = {}
+            miss: list[tuple[int, int]] = []
+            hops = 0
+            for s in compute_i:
+                for d in compute_i:
+                    if s == d:
+                        continue
+                    p = _pick_turn_path(s, d, adj_i, okf)
+                    if p is None:
+                        miss.append((s, d))
+                        continue
+                    paths[(s, d)] = p
+                    hops += len(p) - 1
+            if miss:
+                if miss_best is None or len(miss) < len(miss_best):
+                    miss_best = miss
+                continue
+            cand = (hops, name, paths)
+            if best_1 is None or cand < best_1:
+                best_1 = cand
+
+        if best_1 is not None:
+            hops, name, paths = best_1
+            ok, _ = validate_routing(paths, compute_i, adj_i, None)
+            if ok:
+                out: dict[str, Any] = {
+                    "paths": paths, "vc_of": None, "num_vc": 1,
+                    "scheme": "super_turn_1vc", "turn_mode": name,
+                    "turn_vc": 1, "total_hops": hops,
+                }
+                if forced:
+                    out["forced_sacrificed"] = sorted(forced)
+                    out["compute_nodes"] = compute_i
+                    out["route_adj"] = adj_i
+                return out
+
+        if not miss_best:
+            return None
+        hit = _hit_set_endpoints(miss_best, k_max=1)
+        if not hit:
+            hit = {miss_best[0][1]}
+        if hit & forced:
+            return None
+        forced |= hit
+        view = apply_sacrifice(pg, forced, remove_from_route=True)
+    return None
+
+
 def gen_xy(pg: dict) -> dict[str, Any] | None:
     adj = pg["route_adj"]
     compute = pg["compute_nodes"]
@@ -1048,6 +1120,186 @@ def gen_fault_ring_vc(pg: dict) -> dict[str, Any] | None:
         "route_adj": radj,
         "blocks": blocks,
     }
+
+
+# ---------------------------------------------------------------------------
+# M5h: fault half-ring — XY + one-sided detour, 2 VCs (X/Y phase)
+# ---------------------------------------------------------------------------
+#
+# Same rectangular fault blocks as M5, but each detour uses only the preferred
+# half of the ring (toward the destination row/col) — never the opposite side.
+# VC0 = X-phase hops, VC1 = Y-phase hops. Acyclicity is not purely constructive
+# under overlapping rings; every table is checked with validate_routing, and
+# the shared sacrifice recoverer expands blocks when the half-ring is blocked
+# or the CDG has a cycle.
+#
+FHRING_NUM_VC = 2
+
+
+def _x_detour_half(x, y, xdir, dx, blk, alive, avoid, prefer_up: bool):
+    """One-sided ring walk for X-phase (preferred half only)."""
+    x0, y0, x1, y1 = blk
+    inside = x0 <= dx <= x1
+    hstop = dx if inside else (x1 + 1 if xdir > 0 else x0 - 1)
+    side = 1 if prefer_up else -1
+    yring = y1 + 1 if side > 0 else y0 - 1
+    cells = [(x, yy) for yy in _between(y, yring)]
+    cells += [(xx, yring) for xx in _between(x, hstop)]
+    if not inside:
+        cells += [(hstop, yy) for yy in _between(yring, y)]
+    return cells if _leg_ok(cells, alive, avoid) else None
+
+
+def _y_detour_half(x, y, ydir, blk, alive, avoid, prefer_east: bool):
+    """One-sided ring walk for Y-phase (preferred half only)."""
+    x0, y0, x1, y1 = blk
+    far = y1 + 1 if ydir > 0 else y0 - 1
+    side = 1 if prefer_east else -1
+    xring = x1 + 1 if side > 0 else x0 - 1
+    cells = [(xx, y) for xx in _between(x, xring)]
+    cells += [(xring, yy) for yy in _between(y, far)]
+    cells += [(xx, far) for xx in _between(xring, x)]
+    return cells if _leg_ok(cells, alive, avoid) else None
+
+
+def _fhring_path(s: int, d: int, blocks, alive
+                 ) -> tuple[list[int], int] | None:
+    """XY with half-ring detours → (path, n_hops_in_X_phase)."""
+    sx, sy = coord(s)
+    dx, dy = coord(d)
+    xdir = (dx > sx) - (dx < sx)
+    path = [s]
+    x, y = sx, sy
+
+    def prev_cell():
+        return coord(path[-2]) if len(path) >= 2 else None
+
+    def emit(cells) -> bool:
+        nonlocal x, y
+        for cx, cy in cells:
+            n = nid(cx, cy)
+            if n not in alive or n == path[-1]:
+                return False
+            path.append(n)
+            x, y = cx, cy
+        return True
+
+    guard = 0
+    while x != dx:
+        guard += 1
+        if guard > MX * MY:
+            return None
+        blk = _block_at(x + xdir, y, blocks)
+        if blk is None:
+            if not emit([(x + xdir, y)]):
+                return None
+        else:
+            leg = _x_detour_half(x, y, xdir, dx, blk, alive, prev_cell(),
+                                 prefer_up=(dy >= y))
+            if leg is None or not emit(leg):
+                return None
+    x_hops = len(path) - 1
+
+    ydir = (dy > y) - (dy < y)
+    while y != dy:
+        guard += 1
+        if guard > 2 * MX * MY:
+            return None
+        blk = _block_at(x, y + ydir, blocks)
+        if blk is None:
+            if not emit([(x, y + ydir)]):
+                return None
+        else:
+            leg = _y_detour_half(x, y, ydir, blk, alive, prev_cell(),
+                                 prefer_east=(xdir >= 0))
+            if leg is None or not emit(leg):
+                return None
+    return path, x_hops
+
+
+def _inflate_blocks(blocks, grow: int) -> list[tuple[int, int, int, int]]:
+    if grow <= 0:
+        return list(blocks)
+    out = [(max(0, x0 - grow), max(0, y0 - grow),
+            min(MX - 1, x1 + grow), min(MY - 1, y1 + grow))
+           for x0, y0, x1, y1 in blocks]
+    merged = True
+    while merged and len(out) > 1:
+        merged = False
+        for i in range(len(out)):
+            for j in range(i + 1, len(out)):
+                ax0, ay0, ax1, ay1 = out[i]
+                bx0, by0, bx1, by1 = out[j]
+                if (ax0 <= bx1 + 1 and bx0 <= ax1 + 1
+                        and ay0 <= by1 + 1 and by0 <= ay1 + 1):
+                    out[i] = (min(ax0, bx0), min(ay0, by0),
+                              max(ax1, bx1), max(ay1, by1))
+                    out.pop(j)
+                    merged = True
+                    break
+            if merged:
+                break
+    return sorted(out)
+
+
+def _fhring_try(pg: dict, blocks) -> dict[str, Any] | None:
+    """Half-ring XY + X/Y-phase 2 VC on fixed blocks."""
+    deact = {nid(x, y)
+             for (x0, y0, x1, y1) in blocks
+             for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+    alive = set(range(N)) - deact
+    radj = {n: sorted(m for m in grid_neighbors(n) if m in alive)
+            for n in alive}
+    compute = [n for n in pg["compute_nodes"] if n in alive]
+    if len(compute) < 2:
+        return None
+
+    paths: dict[tuple[int, int], list[int]] = {}
+    x_hops_of: dict[tuple[int, int], int] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            r = _fhring_path(s, d, blocks, alive)
+            if r is None:
+                return None
+            p, x_hops = r
+            paths[(s, d)] = p
+            x_hops_of[(s, d)] = x_hops
+
+    def vc_of(path: list[int], i: int) -> int:
+        return 0 if i < x_hops_of[(path[0], path[-1])] else 1
+
+    ok, _ = validate_routing(paths, compute, radj, vc_of)
+    if not ok:
+        return None
+
+    forced = sorted(set(pg["compute_nodes"]) - set(compute))
+    return {
+        "paths": paths,
+        "vc_of": vc_of,
+        "num_vc": FHRING_NUM_VC,
+        "scheme": "fault_half_ring",
+        "forced_sacrificed": forced,
+        "compute_nodes": compute,
+        "route_adj": radj,
+        "blocks": blocks,
+    }
+
+
+def gen_fault_half_ring(pg: dict) -> dict[str, Any] | None:
+    """XY + one-sided fault half-ring with 2 VCs (X-phase / Y-phase).
+
+    Preferred half toward the destination. VC0 = X-phase hops, VC1 = Y-phase.
+    If the CDG is cyclic or a half-ring leg is blocked, inflate fault blocks
+    (grow≤3) then defer to the shared sacrifice recoverer.
+    """
+    base = _rect_blocks(pg)
+    for grow in range(0, 4):
+        built = _fhring_try(pg, _inflate_blocks(base, grow))
+        if built is not None:
+            return built
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1544,11 +1796,13 @@ def gen_virtual_mesh(pg: dict) -> dict[str, Any] | None:
 SCHEME_GENERATORS = {
     "east_first": gen_east_first,
     "super_turn": gen_super_turn,
+    "super_turn_1vc": gen_super_turn_1vc,
     "xy": gen_xy,
     "rect_xy": gen_rect_xy,
     "updown": gen_updown,
     "segment": gen_segment,
     "fault_ring_vc": gen_fault_ring_vc,
+    "fault_half_ring": gen_fault_half_ring,
     "lash": gen_lash,
     "lash_tor": gen_lash_tor,
     "stripe_vc": gen_stripe_vc,
@@ -1705,8 +1959,8 @@ def solve_scheme(pg: dict, scheme: str) -> dict[str, Any]:
     row/col wipe.
     """
     gen = SCHEME_GENERATORS[scheme]
-    # M2/M5 always remove sacrificed routers from route; others follow PG semantics
-    remove_route = (scheme in ("rect_xy", "fault_ring_vc")
+    # M2/M5/M5h always remove sacrificed routers from route; others follow PG
+    remove_route = (scheme in ("rect_xy", "fault_ring_vc", "fault_half_ring")
                     or pg["semantics"] == "dead")
 
     # Isolated compute nodes can never send/recv — drop them first.

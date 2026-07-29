@@ -35,11 +35,13 @@ HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 DEADLOCK_BASIS = {
     "east_first": "构造性：禁 N→E / S→E，两条抽象环各断一处",
     "super_turn": "构造性：每层一个 Glass–Ni 最小转向模型（≤2 VC）",
+    "super_turn_1vc": "构造性：单层 Glass–Ni（硬顶 1 VC，靠牺牲）",
     "xy": "构造性：只 X→Y 单向转弯",
     "rect_xy": "构造性：矩形内纯 XY",
     "updown": "构造性：不许 down→up",
     "segment": "构造性论证在残图上失效",
     "fault_ring_vc": "构造性：4 VC 相位×方向",
+    "fault_half_ring": "半环绕行 + X/Y 两 VC；重叠环靠事后 CDG 校验",
     "lash": "构造：逐层校验，不行就开新层（≤8）",
     "lash_tor": "同 LASH，允许中途升层",
     "stripe_vc": "构造性：跨 dateline 单调升 VC",
@@ -48,17 +50,27 @@ DEADLOCK_BASIS = {
                     "已知 8×6 反例（见 M10 章 FAQ）",
 }
 
+# Not in e2e makespan tables (reachability / sacrifice). Descriptions kept.
 EXCLUDED_SCHEMES = {
-    "east_first": "36 场景中 12 个建不出路径（东向不可绕行）",
-    "xy": "36 场景中 27 个建不出路径（避障失败）",
-    "rect_xy": "36/36 必须裁行裁列，累计牺牲 1018 节点（中位 31/48）",
-    "segment": "17 个场景建不出路径 + 7 个场景 CDG 成环",
+    "east_first": "预算故障下东向常不可绕行，覆盖不全",
+    "xy": "避障失败率高，覆盖不全",
+    "rect_xy": "裁行裁列牺牲过重",
+    "segment": "残图上建路/CDG 失败率高",
     "segment_lb": "同 M4 Segment",
+}
+
+# Higher-VC schemes: keep §2 descriptions, omit from e2e Pareto (VC≤2 only).
+E2E_DESC_ONLY = {
+    "fault_ring_vc": "VC=4，超出本轮 e2e（仅评 VC≤2）",
+    "lash": "VC 常 >2，超出本轮 e2e",
+    "lash_tor": "同 LASH",
+    "stripe_vc": "VC 可达 9，超出本轮 e2e",
 }
 
 SCHEME_LABELS = {
     "east_first": "M0 East-first",
     "super_turn": "M0s Super-turn",
+    "super_turn_1vc": "M0s1 Super-turn 1VC",
     "xy": "M1 XY (+sacrifice)",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -66,6 +78,7 @@ SCHEME_LABELS = {
     "segment": "M4 Segment",
     "segment_lb": "M4 Segment + LB",
     "fault_ring_vc": "M5 f-ring 4VC",
+    "fault_half_ring": "M5h fault half-ring 2VC",
     "lash": "M6 LASH",
     "lash_tor": "M6b LASH-TOR",
     "stripe_vc": "M7 Stripe dateline",
@@ -76,6 +89,7 @@ SCHEME_LABELS = {
 E2E_SHORT = {
     "east_first": "M0 East-first",
     "super_turn": "M0s Super-turn",
+    "super_turn_1vc": "M0s1 Super-turn 1VC",
     "xy": "M1 XY",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
@@ -83,6 +97,7 @@ E2E_SHORT = {
     "segment": "M4 Segment",
     "segment_lb": "M4+LB",
     "fault_ring_vc": "M5 f-ring",
+    "fault_half_ring": "M5h half-ring",
     "lash": "M6 LASH",
     "lash_tor": "M6b LASH-TOR",
     "stripe_vc": "M7 Stripe",
@@ -1605,8 +1620,10 @@ def e2e_section_html() -> str:
 
     def e2e_table(m0: int) -> str:
         cand = sorted((s for s in summary if s["m0"] == m0),
-                      key=lambda s: s["t_e2e_ns_worst"])
+                      key=lambda s: (s.get("partial", False),
+                                     s["t_e2e_ns_worst"]))
         head = ("<tr><th class='l'>方案</th><th>VC</th><th>area</th>"
+                "<th>覆盖</th>"
                 "<th>A 中位/最差</th><th>牺牲中位</th>"
                 "<th>T<sub>e2e</sub> 中位 (ns)</th>"
                 "<th>T<sub>e2e</sub> 最差 (ns)</th>"
@@ -1614,11 +1631,16 @@ def e2e_section_html() -> str:
         body = []
         for s in cand:
             mark = "<b>yes</b>" if s.get("pareto_worst") else ""
+            ntot = s.get("n_scen_total", meta.get("n_scenarios", "?"))
+            cover = f"{s['n_scen']}/{ntot}"
+            if s.get("partial"):
+                cover = f"<span title='未覆盖全部场景，不进 Pareto'>{cover}△</span>"
             body.append(
                 "<tr>"
                 f"<td class='l'>{esc(E2E_SHORT.get(s['scheme'], s['scheme']))}</td>"
                 f"<td>{s['num_vc']}</td>"
                 f"<td>{s['area']:.3f}</td>"
+                f"<td>{cover}</td>"
                 f"<td>{s['A_med']}/{s['A_worst']}</td>"
                 f"<td>{s['sac_med']}</td>"
                 f"<td>{s['t_e2e_ns_med']:.0f}</td>"
@@ -1708,7 +1730,10 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 每个方案按全部场景中需要的<b>最大 VC 数</b>定尺寸。</li>
 </ul>
 <p class="note">故障模型：≤4 router + ≤8 无向链路（双向算 1，与 router 不重叠），
-分层随机抽样 {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 场景。
+分层随机抽样 {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 场景
+（<b>不再使用</b>旧 link_/node_ corner/edge/center 目录）。
+评估范围：仅 <b>VC≤2</b> 方案（含 M0s1 Super-turn 1VC、M5h half-ring）；
+M5 f-ring 4VC / LASH / Stripe 等保留方案描述，不进本表。
 扫描：dead × {len(m0s)} 个 m₀ × {len(meta.get('schemes', []))} 方案 =
 {sum(1 for _ in data['rows'])} 行 DES；耗时 {meta.get('elapsed_s')}s。
 数据 <code>results/pg_e2e_pareto.json</code>。</p>
@@ -1854,7 +1879,8 @@ def main():
     meta = data["meta"]
     rows = data["rows"]
     golden = meta["golden"]
-    e2e_html = e2e_section_html() + budget_e2e_section_html()
+    # Primary e2e is already budget-fault + VC≤2 (pg_e2e_pareto.json).
+    e2e_html = e2e_section_html()
 
     # Index primary rows (not q_sensitivity)
     primary = [r for r in rows if not r.get("q_sensitivity")]
@@ -2796,9 +2822,12 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <tr><td>A</td><td class="l">M1 XY</td><td class="l">严格先 X 后 Y</td><td>1</td><td class="l">最小（原 XY）</td><td>高</td><td class="l">量化不改路由的代价</td></tr>
 <tr><td>A</td><td class="l">M2 Rect-XY</td><td class="l">裁矩形 + XY</td><td>1</td><td class="l">最小</td><td>固定偏高</td><td class="l">规整化、可预测</td></tr>
 <tr><td>A</td><td class="l">M0 East-first</td><td class="l">禁 N→E / S→E</td><td>1</td><td class="l">转向过滤</td><td>东向切断时高</td><td class="l">比 XY 宽、仍有东向盲区</td></tr>
+<tr><td>A</td><td class="l">M0s Super-turn</td><td class="l">Glass–Ni 自适应 1→2 VC</td><td>1–2</td><td class="l">转向过滤 + 可选第 2 VC</td><td>低</td><td class="l">e2e 评测（VC≤2）</td></tr>
+<tr><td>A</td><td class="l">M0s1 Super-turn 1VC</td><td class="l">Glass–Ni 硬顶 1 VC</td><td>1</td><td class="l">转向过滤</td><td>中（替 VC）</td><td class="l">e2e 评测；牺牲换 1 VC</td></tr>
 <tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">零 VC 成本保规模；连通即达（§2.3）</td></tr>
 <tr><td>A</td><td class="l">M3+LB / M4 / M4+LB</td><td class="l">转向限制 ± LB</td><td>1</td><td class="l">同左</td><td>中～高</td><td class="l">M4 目录外 STRUCT 极常见（§2.3）</td></tr>
-<tr><td>B</td><td class="l">M5 真 f-ring</td><td class="l">矩形块 + XY 环绕，相位×方向</td><td>4</td><td class="l">4 VC + 绕障</td><td>节点洞 0；链路 1–4</td><td class="l">保 XY 硬件语义</td></tr>
+<tr><td>B</td><td class="l">M5 真 f-ring</td><td class="l">矩形块 + XY 环绕，相位×方向</td><td>4</td><td class="l">4 VC + 绕障</td><td>节点洞 0；链路 1–4</td><td class="l">描述保留；<b>不进</b>本轮 e2e（VC&gt;2）</td></tr>
+<tr><td>B</td><td class="l">M5h half-ring</td><td class="l">半环绕行 + X/Y 两 VC</td><td>2</td><td class="l">2 VC + 半环</td><td>半环受阻时升</td><td class="l">e2e 评测（VC≤2）</td></tr>
 <tr><td>B</td><td class="l">M6 LASH</td><td class="l">最短路 + 贪心装层</td><td><b>1–2</b></td><td class="l">少 VC + 离线表</td><td>通常仅孤立点</td><td class="l">VC 性价比</td></tr>
 <tr><td>B</td><td class="l">M6b LASH-TOR</td><td class="l">LASH + 中途升层</td><td>1–2</td><td class="l">同 LASH</td><td>同 LASH</td><td class="l">再压层数（收益有限）</td></tr>
 <tr><td>B</td><td class="l">M7 Stripe</td><td class="l">最短/XY + 跨带 VC+1</td><td>5–6</td><td class="l">多 VC，逻辑简单</td><td>通常仅孤立点</td><td class="l">面积换极限性能</td></tr>

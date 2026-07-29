@@ -15,23 +15,27 @@ router 与链路故障不重叠（`utils/pg_faults_budget_8x6.py` → `results/p
 
 ### A 类 · 转向限制（1 VC）
 
-M0 East-first · M1 XY · M2 Rect-XY · M3 Up\*/Down\*（±LB）· M4 Segment（±LB）
+M0 East-first · **M0s1 Super-turn 1VC** · M0s Super-turn（≤2）· M1 XY · M2 Rect-XY · M3 Up\*/Down\*（±LB）· M4 Segment（±LB）
 
-同族里禁得越少、可用最短路越多：**M0 只禁 2 类转弯（N→E、S→E），XY 禁 4 类**，
-所以 M0 的合法路径集是 XY 的真超集（XY 折线本身合法，被堵时才退到转向 BFS）。
+- **M0s Super-turn**：四个 Glass–Ni 最小模型自适应；1 VC 盖不住再开互补第 2 VC，再不行才牺牲。
+- **M0s1 Super-turn 1VC**：同上但硬顶 1 VC（只牺牲、不开第 2 层）。
 
 ### B 类 · VC 分层
 
-| ID | 方案 | VC 用法 | 典型 VC | 特点 |
-|----|------|---------|---------|------|
-| M5 | 真 f-ring | 相位×方向（E/W/N/S） | 4 | 矩形块 + XY 环绕；链路须退休端点 |
-| M6 | LASH | 每对一层，层内 CDG 无环 | 1–2 | 最短路；VC 性价比高 |
-| M6b | LASH-TOR | 允许中途升层 | 1–2 | 层数已很低时收益有限 |
-| M7 | 条带 dateline | 跨竖带 VC+1 | 5–6 | 避障=存活图上 XY/最短路；破环=升 VC；面积换极限性能 |
-| M9 | 双向 Up\*/Down\* | VC0=UD，VC1=DU，按对选 | 2 | 易实现；路径短于单层 UD |
-| M10 | 虚拟规则网格 | 逻辑 XY；X 相 VC0 / Y 相 VC1 | 2 | 上层仍见规则 mesh；缺边固定绕路；绕路去回环后按 CDG 择版 |
+| ID | 方案 | VC 用法 | 典型 VC | 特点 | e2e（VC≤2） |
+|----|------|---------|---------|------|-------------|
+| M5 | 真 f-ring | 相位×方向（E/W/N/S） | 4 | 矩形块 + XY 全环绕 | 描述保留，**不评** |
+| **M5h** | **fault half-ring** | X 相 VC0 / Y 相 VC1 | **2** | 只走朝向目的侧的半环；CDG 靠校验+块膨胀/牺牲 | **评** |
+| M6 | LASH | 每对一层，层内 CDG 无环 | 1–2† | 最短路；层数可 >2 | 描述保留，**不评**† |
+| M6b | LASH-TOR | 允许中途升层 | 1–2† | 层数已很低时收益有限 | 不评† |
+| M7 | 条带 dateline | 跨竖带 VC+1 | 5–9 | 面积换极限性能 | 不评 |
+| M9 | 双向 Up\*/Down\* | VC0=UD，VC1=DU | 2 | 易实现 | **评** |
+| M10 | 虚拟规则网格 | 逻辑 XY；X/Y 两 VC | 2 | 上层仍见规则 mesh | **评** |
 
-**M3 / M5 / M7 / M10** 的逐步算法、无死锁论证、示意图与端到端角色见 HTML 报告 §2。
+† LASH 族在预算故障下实测 VC 常冲到 3，故本轮 e2e 排除。  
+**本轮端到端只评 VC≤2**；故障一律用预算目录（不再用 link_/node_ corner/edge/center）。
+
+**M3 / M5 / M5h / M7 / M10 / Super-turn** 细节见 HTML 报告 §2 / §6。
 
 ### 2.1 三性质核验与排除（`utils/pg_capability_probe.py`）
 
