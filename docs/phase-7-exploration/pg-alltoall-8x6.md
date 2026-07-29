@@ -282,11 +282,18 @@ M0 East-first 中位好得多（牺牲 1、A=44），但最差场景与 XY 逐�
 
 ### 6.5 Super-turn / half-ring 能力摘要
 
-**M0s Super-turn**：Glass–Ni 四模型自适应，1→2 VC，再不行 forced-sacrifice。
-**M0s1**：硬顶 1 VC。**M5h**：半环 + X/Y 两 VC。
+完整算法与避障/无死锁/牺牲数字见 HTML 报告 **§2.1 M0s**。
 
-预算三性质（176 场景，见 §2.1）与目录外 STRUCT（§2.2）共同表明：
-M0s 在连通残图上可达性接近 M3；M0s1 / M5h 更常 STRUCT 或靠牺牲换通。
+**M0s Super-turn**：四 Glass–Ni 模型自适应，1→2 VC，再不行 forced-sacrifice（每轮 1 点，≤8）。
+层内 CDG 构造性无环；≤2 故障 STRUCT=0，混合抽样偶发 STRUCT。
+预算目录最终覆盖 **176/176**；零额外牺牲口径为 ok/sac/path = 111/58/7；
+e2e 牺牲中位 1、p90=4、最大 8。
+
+**「覆盖 X/176」**：176 = 预算故障目录场景数；X = 经生成器 + `solve_scheme`
+仍能产出合法无死锁保序表的场景数。例：M0s1 **134/176**（另 42 INFEASIBLE）、
+M5h **166/176**。与 probe 的 ok/sac/path 拆分口径不同。
+
+**M0s1**：硬顶 1 VC。**M5h**：半环 + X/Y 两 VC。两者更常 STRUCT 或高牺牲。
 
 ## 7. 文件
 

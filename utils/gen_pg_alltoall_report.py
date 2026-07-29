@@ -1889,8 +1889,9 @@ def budget_e2e_section_html() -> str:
 <h3>6.5 预算故障模型与 Super-turn（M0s）</h3>
 <p class="note">固定 36 目录偏规整方块。本小节开：8×6 上 <b>≤4 router + ≤8 无向链路</b>
 （双向算 1），按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样。
-<b>M0s Super-turn</b>：Glass–Ni 四模型自适应，优先 1 VC → 2 VC 双模型 →
-小基数 forced-sac；路径锁单 VC（保序），每层 CDG 构造性无环，VC 封顶 2。</p>
+<b>M0s Super-turn</b> 算法、避障、无死锁与牺牲分布见 <b>§2.1 M0s</b>。
+「覆盖 X/176」= 176 个预算场景中经生成器 + <code>solve_scheme</code>
+仍能产出合法表的场景数（M0s 最终 176/176；M0s1 134/176；M5h 166/176）。</p>
 {cap_note}
 {png}
 <p class="note">最差情形前沿：{'；'.join(front_names)}。
@@ -2498,6 +2499,69 @@ XY 被堵死时它还有绕行余地。</p>
     '单 VC 无自适应 ⇒ 同一对的 flit 顺序经过同一串通道。'))}
 
 {ef_reach_html(diagrams.get("east_first_fail", ""))}
+
+{scheme_block("M0s — Super-turn（<code>super_turn</code>）", "east_first", '''
+<p><b>类别：</b>A 类 · 转向限制 · <b>≤2 VC</b>（本轮默认推荐）。
+不是固定路由，而是四个 Glass–Ni 最小转向模型上的自适应选择器。</p>
+<p><b>四个最小模型</b>（每个禁 2 个转向 + 全部 180° 掉头）：</p>
+<ul>
+<li><code>east_first</code>：禁 N→E、S→E</li>
+<li><code>west_first</code>：禁 N→W、S→W</li>
+<li><code>north_last</code>：禁 E→N、W→N</li>
+<li><code>south_last</code>：禁 E→S、W→S</li>
+</ul>
+<p><b>升级阶梯</b>（<code>gen_super_turn</code>，硬顶 2 VC）：</p>
+<ol>
+<li><b>1 VC</b>：四个模型各全局建一次表，取总跳数最少且验证通过的那个。</li>
+<li><b>2 VC</b>：不行则试 6 种双模型组合（互补优先：east+west / north+south，再交叉）。
+每个 <code>(s,d)</code> 独立选路径更短的那一层，端到端锁在该层 VC。</li>
+<li><b>牺牲</b>：最好的 dual 仍漏 OD 对时，对漏掉端点做贪心 hit-set，
+<strong>每轮强制退休 1 个节点</strong>，最多 8 轮后重建。
+宁可牺牲也不开第 3、4 个 VC，把硅上 VC 预算钉在 2。</li>
+</ol>
+''' + qa3(
+    '每个 OD 对先试 XY；XY 被故障打断或违反当前模型时，退到转向感知 BFS'
+    '（按 (节点, 来向) 去重）。'
+    '<b>四个模型的盲区互不重叠</b>——M0 East-first 的东向盲区，'
+    '换到 west-first / north-last 层即可重新打开绕行方向。'
+    '这是它相对单模型 M0 从预算目录 3/176 跳到大量零牺牲的全部原因。',
+    '<b>构造性，且对残图单调。</b>2D mesh CDG 只有两条抽象环；'
+    '每个最小模型从两条环各拆一个转向 ⇒ 层内无环。'
+    '删链路只会减少转弯、不会创造转弯，故障残图上同样成立。'
+    '两层用不相交 VC，跨层无依赖边。实现仍在 (channel, VC) 上硬校验。',
+    '每 (s,d) 单一路径 + 端到端锁定同一 VC'
+    '（<code>vc_of</code> 只看路径首尾）⇒ 保序。')
++ '''
+<div class="faq">
+<p><b class="q">会不会连通却建不出表（STRUCT）？</b><br/>
+<strong>偶发。</strong>目录外扫描（§2.3）：≤2 故障 STRUCT=0；
+混合多重故障抽样 1000 里仅 STRUCT 8 / disc 5。
+连通残图上双 VC 转向集几乎总够用。</p>
+<p><b class="q">「覆盖 134/176」是什么意思？</b><br/>
+分母 <b>176</b> = 预算故障目录场景数
+（≤4 router + ≤8 无向链路，按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样，
+<code>results/pg_faults_budget_8x6.json</code>）。
+分子 = 该方案经生成器（含自身 <code>forced_sacrificed</code>）
+再经统一 <code>solve_scheme</code> 牺牲恢复后，
+仍能产出<strong>合法无死锁保序路由表</strong>的场景数。
+例：M0s1 硬顶 1 VC 时 <b>134/176</b>（另 42 判 INFEASIBLE）；
+M5h half-ring <b>166/176</b>；M0s Super-turn 最终 <b>176/176</b>。
+这与「零额外牺牲建表」口径不同——后者把结果拆成
+ok / sacrifice / fail_path（M0s 为 111 / 58 / 7），
+其中 fail_path 再交给统一恢复器后仍可能通。</p>
+<p><b class="q">不可达时牺牲多少？</b></p>
+<ul>
+<li><b>预算 probe（零额外牺牲）</b>：ok 111、sacrifice 58、fail_path 7；
+需牺牲的 58 场景平均约 2.3 节点；最终经恢复 176/176 全通。</li>
+<li><b>e2e 评测集（m₀=1）</b>：零牺牲约 48%；牺牲中位 1、p90=4、最大 8
+（生成器自身 forced 上限为每轮 1 × 8 轮）。VC：约 42/44 用 2 VC，2/44 只需 1 VC。</li>
+<li><b>对照</b>：M0s1 覆盖 134/176、牺牲中位 11；
+M5h 覆盖 166/176、牺牲中位 31——同目录下 M0s 的牺牲代价低一个量级。</li>
+</ul>
+</div>
+<p class="note">右图借用 M0 转向示意；M0s 在此基础上按 OD 对切换模型 / VC 层。
+目录外 STRUCT/disc 见 §2.3；端到端选型见 §6.3。</p>
+''')}
 
 {scheme_block("M1 — XY（<code>xy</code>）", "xy", '''
 <p><b>思想：</b>坚持维序路由（DOR）：先走完 X，再走 Y；硬件几乎不用改路由逻辑。</p>
