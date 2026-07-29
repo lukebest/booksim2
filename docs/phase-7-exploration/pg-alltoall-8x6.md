@@ -71,15 +71,13 @@ M0 East-first · **M0s1 Super-turn 1VC** · M0s Super-turn（≤2）· M1 XY · 
 
 | 方案 | 会 STRUCT？ | 要点 | 补救 |
 |------|------------|------|------|
-| M0s Super-turn | **否*** | 单/双故障全量上连通即达（≤2 VC Glass–Ni） | 断连→牺牲；多故障走 2 VC |
-| M0s1 Super-turn 1VC | **会** | 1 VC 转向空间更窄，多故障 STRUCT / 重牺牲 | 抬到 M0s（2 VC）或牺牲 |
+| M0s Super-turn | **偶发** | ≤2 故障 STRUCT=0；混合抽样 8/1000 STRUCT | 断连→牺牲；偶发再牺牲 |
+| M0s1 Super-turn 1VC | **会** | 单点 6/48、双点 639/1128 STRUCT；常靠 forced_sac | 抬到 M0s（2 VC）或牺牲 |
 | M3 / M6 / M7 | **否** | 双故障全量 + 三节点/混合抽样失败 = 断连 | 牺牲孤立点 |
 | M4 Segment | **会** | 单链 72/82、双链 3272/3321 STRUCT | 重牺牲或换方案 |
 | M5 f-ring | **会** | 链路 forced_sac；左右边中段块环绕失败 | 端点退休 / 多牺牲 1–2 |
-| M5h half-ring | **会** / 重 forced | 链路几乎全靠端点退休；半环失败→STRUCT | 端点退休；否则换 M0s/M3 |
+| M5h half-ring | **会** | 单链 82/82 forced_sac；双点 STRUCT 62/1128 | 端点退休；否则换 M0s/M3 |
 | M10 Virtual | **会** | ≤2 故障安全；≥3 散落洞 BOTH_CYCLIC | 牺牲（常 sac=1） |
-
-\*M0s 以扫过的目录外空间为准；预算模型上仍有少数 path 失败（见 §2.1）。
 
 ### 2.3 M10 的无死锁是「试出来的」（`utils/pg_m10_cycle_scan.py`）
 

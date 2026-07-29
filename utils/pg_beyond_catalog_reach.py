@@ -175,8 +175,8 @@ def summarise(scheme: str, results: dict[str, dict]) -> tuple[bool, str]:
         if total_st == 0:
             return False, ("连通残图上 Glass–Ni（≤2 VC）实测 STRUCT=0；"
                            "失败集合与断连重合（或仅 forced 牺牲）。")
-        return True, (f"连通残图上仍有 STRUCT（合计 {total_st}）；"
-                      "多故障时双 VC 转向集不够用。")
+        return True, (f"≤2 故障几乎 STRUCT=0；混合/多重故障合计 STRUCT "
+                      f"{total_st}（双 VC 转向集偶发不够）。")
     if scheme == "super_turn_1vc":
         if total_st == 0:
             return False, ("硬顶 1 VC 在扫过的空间里 STRUCT=0，"
@@ -231,7 +231,8 @@ def main() -> None:
     t_all = time.time()
     for sch in schemes:
         print(f"=== {sch} ===", flush=True)
-        results = {}
+        prev = doc.get("schemes", {}).get(sch, {})
+        results = dict(prev.get("results", {}))  # merge: keep unscanned spaces
         for sk, cases in spaces.items():
             results[sk] = scan_space(sch, cases, sk)
         struct_possible, summary = summarise(sch, results)

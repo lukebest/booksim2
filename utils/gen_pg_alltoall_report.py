@@ -1285,8 +1285,13 @@ def beyond_catalog_html() -> str:
     rows = []
     for sid in sch_order:
         s = schemes[sid]
-        flag = ("<td class='cap-bad'>会</td>" if s["struct_possible"]
-                else "<td class='cap-ok'>否</td>")
+        if not s["struct_possible"]:
+            flag = "<td class='cap-ok'>否</td>"
+        elif sid == "super_turn":
+            # ≤2-fault STRUCT=0; only rare mixed STRUCT → 偶发, not 会
+            flag = "<td class='cap-warn'>偶发</td>"
+        else:
+            flag = "<td class='cap-bad'>会</td>"
         cells = "".join(cell(s["results"].get(k)) for k in used_spaces)
         rows.append(
             f"<tr><td class='l'>{esc(s['label'])}</td>{flag}{cells}"
@@ -1330,12 +1335,11 @@ def beyond_catalog_html() -> str:
 <tbody>{''.join(rows)}</tbody>
 </table>
 {''.join(detail)}
-<p class="note"><b>一句话：</b>M3 / M6 / M7 在连通残图上<b>从不</b>结构性不可达
-（三节点全量 / 双故障全量 / 混合抽样 STRUCT=0）。
-M0s Super-turn（≤2 VC）在扫过的空间里同样以断连为主；
-M0s1（硬顶 1 VC）与 M5h half-ring 会 STRUCT 或大量 forced_sac（见上表）。
-M4 极常见、M5 全环在左右边中段块上会、M10 在散落 ≥3 死节点上会。
-M0 East-first 的东向盲区见 §2.4，机制不同。</p>
+<p class="note"><b>一句话：</b>M3 / M6 / M7 在连通残图上<b>从不</b>结构性不可达。
+M0s Super-turn：≤2 故障 STRUCT=0，混合抽样偶发（8/1000）；
+M0s1 / M5h 会大量 STRUCT 或 forced_sac。
+M4 极常见、M5 全环在左右边中段会、M10 在散落 ≥3 死节点上会。
+M0 East-first 东向盲区见 §2.4。</p>
 """
 
 
