@@ -1835,6 +1835,13 @@ def full_cover_html() -> str:
                          "fault_half_ring"] if s in schemes]
     if not order:
         return ""
+    # Merge e2e m₀=1 sac / worst T_e2e (full-cover run).
+    e2e_by: dict[str, dict] = {}
+    e2e = _e2e_data_filtered()
+    if e2e is not None:
+        for s in e2e["summary"]:
+            if s["m0"] == 1 and s["scheme"] in order:
+                e2e_by[s["scheme"]] = s
     rows = []
     for sid in order:
         s = schemes[sid]
@@ -1845,37 +1852,58 @@ def full_cover_html() -> str:
                    else ("<td class='cap-warn'>升级后全覆盖</td>"
                          if s["infeasible"] == 0
                          else "<td class='cap-bad'>仍不全覆盖</td>"))
-        cost = ("—" if esc_n == 0 else
-                f"中位 {s['escalated_sac_med']} / 最大 {s['escalated_sac_max']}")
+        e = e2e_by.get(sid)
+        if e is not None:
+            sac = f"{e['sac_med']} / {e.get('sac_worst', '?')}"
+            te2e = f"<b>{e['t_e2e_ns_worst']:.0f}</b>"
+        else:
+            sac, te2e = "—", "—"
         rows.append(
             f"<tr><td class='l'>{esc(E2E_SHORT.get(sid, sid))}</td>"
             f"<td>{s['solve_scheme']}/{n}</td>"
             f"<td>{s['greedy_grow']}</td><td>{s['coarse']}</td>"
             f"<td>{s['infeasible']}</td>{verdict}"
-            f"<td class='l'>{cost}</td></tr>")
+            f"<td>{sac}</td><td>{te2e}</td></tr>")
+
+    def _e(sid: str, key: str, default: str = "?"):
+        e = e2e_by.get(sid)
+        if e is None:
+            return default
+        v = e.get(key, default)
+        return f"{v:.0f}" if isinstance(v, float) else str(v)
+
     return f"""
 <h3>6.4 放宽牺牲预算能否换来全覆盖？</h3>
 <p class="note"><code>solve_scheme</code> 只在小候选池里找<b>最小基数</b>恢复，
 所以对约束更紧的方案会直接判 INFEASIBLE。本小节问的是另一个问题：
 <b>如果允许牺牲更多好节点，合法表究竟存不存在</b>。
 升级阶梯（<code>solve_scheme_fc</code>）：
-① 原 <code>solve_scheme</code> → ② 沿「离故障最近」顺序逐点贪心增长（k≤24）→
+① 原 <code>solve_scheme</code> → ② 沿「离故障最近」顺序逐点贪心增长 →
 ③ 最大健康矩形 → ④ 单行 / 单列（线形拓扑对任何转向模型都合法）。
-数据 <code>results/pg_full_cover.json</code>（<code>utils/pg_full_cover_probe.py</code>）。</p>
+牺牲 / T<sub>e2e</sub> 取自全覆盖 e2e（m₀=1，quick 44）。
+数据 <code>results/pg_full_cover.json</code> +
+<code>results/pg_e2e_pareto.json</code>。</p>
 <table class="cap">
 <thead><tr><th class='l'>方案</th><th>原 solve_scheme</th>
 <th>贪心增长</th><th>矩形/整行整列</th><th>仍不可行</th>
-<th>结论</th><th class='l'>升级场景的牺牲代价</th></tr></thead>
+<th>结论</th>
+<th>牺牲中位/最差</th>
+<th>最差 T<sub>e2e</sub> (ns)</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
 </table>
-<p class="note"><b>结论（quick 44 场景）：</b>四个方案<b>都能全覆盖</b>。
-M3 / M0s：原 <code>solve_scheme</code> 即 44/44，无需升级。
-M0s1：把生成器内部 forced 轮数提到 40 后，<code>solve_scheme</code> 即 44/44
-（牺牲中位 ~20，最差 A 可到 6）。
-M5h：40/44 原求解可行，其余 4 个靠整行/整列（sac≈38–40，A=6–8）。
-<strong>强扩展下重牺牲反噬端到端</strong>（计算 ∝ 1/A，
-<code>m_eff</code> ∝ (48/A)²）——补齐覆盖后 M0s1 / M5h 最差 T<sub>e2e</sub>
-仍明显高于 M3 / M0s。「能全覆盖」≠「值得选」。</p>
+<p class="note"><b>结论（quick 44 场景，m₀=1）：</b>四个方案<b>都能全覆盖</b>。
+M3：牺牲中位/最差 <b>{_e('updown','sac_med')} / {_e('updown','sac_worst')}</b>，
+最差 T<sub>e2e</sub> <b>{_e('updown','t_e2e_ns_worst')}</b> ns。
+M0s：牺牲 <b>{_e('super_turn','sac_med')} / {_e('super_turn','sac_worst')}</b>，
+最差 T<sub>e2e</sub> <b>{_e('super_turn','t_e2e_ns_worst')}</b> ns（无需升级）。
+M0s1：forced≤40 后 <code>solve_scheme</code> 即 44/44；
+牺牲 <b>{_e('super_turn_1vc','sac_med')} / {_e('super_turn_1vc','sac_worst')}</b>，
+最差 T<sub>e2e</sub> <b>{_e('super_turn_1vc','t_e2e_ns_worst')}</b> ns。
+M5h：40/44 原求解可行，其余 4 个靠整行/整列；
+牺牲 <b>{_e('fault_half_ring','sac_med')} / {_e('fault_half_ring','sac_worst')}</b>，
+最差 T<sub>e2e</sub> <b>{_e('fault_half_ring','t_e2e_ns_worst')}</b> ns。
+<strong>强扩展下重牺牲反噬端到端</strong>——M0s1 / M5h 最差 T<sub>e2e</sub>
+明显高于 M3 / M0s。「能全覆盖」≠「值得选」。</p>
 """
 
 

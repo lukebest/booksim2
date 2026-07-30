@@ -829,23 +829,32 @@ router 面积紧则 <b>M3（1 VC）</b>。
 所以对约束更紧的方案会直接判 INFEASIBLE。本小节问的是另一个问题：
 <b>如果允许牺牲更多好节点，合法表究竟存不存在</b>。
 升级阶梯（<code>solve_scheme_fc</code>）：
-① 原 <code>solve_scheme</code> → ② 沿「离故障最近」顺序逐点贪心增长（k≤24）→
+① 原 <code>solve_scheme</code> → ② 沿「离故障最近」顺序逐点贪心增长 →
 ③ 最大健康矩形 → ④ 单行 / 单列（线形拓扑对任何转向模型都合法）。
-数据 <code>results/pg_full_cover.json</code>（<code>utils/pg_full_cover_probe.py</code>）。</p>
+牺牲 / T<sub>e2e</sub> 取自全覆盖 e2e（m₀=1，quick 44）。
+数据 <code>results/pg_full_cover.json</code> +
+<code>results/pg_e2e_pareto.json</code>。</p>
 <table class="cap">
 <thead><tr><th class='l'>方案</th><th>原 solve_scheme</th>
 <th>贪心增长</th><th>矩形/整行整列</th><th>仍不可行</th>
-<th>结论</th><th class='l'>升级场景的牺牲代价</th></tr></thead>
-<tbody><tr><td class='l'>M3 Up*/Down*</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td class='l'>—</td></tr><tr><td class='l'>M0s Super-turn</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td class='l'>—</td></tr><tr><td class='l'>M0s1 Super-turn 1VC</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td class='l'>—</td></tr><tr><td class='l'>M5h half-ring</td><td>40/44</td><td>0</td><td>4</td><td>0</td><td class='cap-warn'>升级后全覆盖</td><td class='l'>中位 38 / 最大 40</td></tr></tbody>
+<th>结论</th>
+<th>牺牲中位/最差</th>
+<th>最差 T<sub>e2e</sub> (ns)</th></tr></thead>
+<tbody><tr><td class='l'>M3 Up*/Down*</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td>0 / 4</td><td><b>893</b></td></tr><tr><td class='l'>M0s Super-turn</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td>1 / 8</td><td><b>635</b></td></tr><tr><td class='l'>M0s1 Super-turn 1VC</td><td>44/44</td><td>0</td><td>0</td><td>0</td><td class='cap-ok'>不需要升级</td><td>20 / 39</td><td><b>1145</b></td></tr><tr><td class='l'>M5h half-ring</td><td>40/44</td><td>0</td><td>4</td><td>0</td><td class='cap-warn'>升级后全覆盖</td><td>30 / 40</td><td><b>1137</b></td></tr></tbody>
 </table>
-<p class="note"><b>结论（quick 44 场景）：</b>四个方案<b>都能全覆盖</b>。
-M3 / M0s：原 <code>solve_scheme</code> 即 44/44，无需升级。
-M0s1：把生成器内部 forced 轮数提到 40 后，<code>solve_scheme</code> 即 44/44
-（牺牲中位 ~20，最差 A 可到 6）。
-M5h：40/44 原求解可行，其余 4 个靠整行/整列（sac≈38–40，A=6–8）。
-<strong>强扩展下重牺牲反噬端到端</strong>（计算 ∝ 1/A，
-<code>m_eff</code> ∝ (48/A)²）——补齐覆盖后 M0s1 / M5h 最差 T<sub>e2e</sub>
-仍明显高于 M3 / M0s。「能全覆盖」≠「值得选」。</p>
+<p class="note"><b>结论（quick 44 场景，m₀=1）：</b>四个方案<b>都能全覆盖</b>。
+M3：牺牲中位/最差 <b>0 / 4</b>，
+最差 T<sub>e2e</sub> <b>893</b> ns。
+M0s：牺牲 <b>1 / 8</b>，
+最差 T<sub>e2e</sub> <b>635</b> ns（无需升级）。
+M0s1：forced≤40 后 <code>solve_scheme</code> 即 44/44；
+牺牲 <b>20 / 39</b>，
+最差 T<sub>e2e</sub> <b>1145</b> ns。
+M5h：40/44 原求解可行，其余 4 个靠整行/整列；
+牺牲 <b>30 / 40</b>，
+最差 T<sub>e2e</sub> <b>1137</b> ns。
+<strong>强扩展下重牺牲反噬端到端</strong>——M0s1 / M5h 最差 T<sub>e2e</sub>
+明显高于 M3 / M0s。「能全覆盖」≠「值得选」。</p>
 
 
 
