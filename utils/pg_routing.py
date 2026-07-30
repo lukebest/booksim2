@@ -1990,21 +1990,15 @@ def solve_scheme_fc(pg: dict, scheme: str, k_max: int = 40) -> dict[str, Any]:
     Adds `fc_stage`. When stage is ``solve_scheme``, the result matches the
     ordinary solver (no extra sacrifice).
     """
-    # Cheap first try: isolation + generator (same as solve_scheme's opener).
-    iso = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
-    fin0 = _fc_attempt(pg, scheme, iso)
-    if fin0 is not None and fin0["feasible"]:
-        # Delegate to solve_scheme so we keep its min-sac / LB bookkeeping
-        # when the scheme already covers with ≤ its normal budget.
-        sol = solve_scheme(pg, scheme)
-        if sol["feasible"]:
-            sol["fc_stage"] = "solve_scheme"
-            return sol
-        fin0["fc_stage"] = "solve_scheme"
-        return fin0
+    # Prefer the ordinary minimum-cardinality solver. With gen_super_turn_1vc
+    # max_rounds raised, M0s1 now usually succeeds here; M3/M0s always do.
+    # Only M5h (and rare edge cases) fall through to the escalation below.
+    sol = solve_scheme(pg, scheme)
+    if sol["feasible"]:
+        sol["fc_stage"] = "solve_scheme"
+        return sol
 
-    # Prefix binary search — do NOT call the full solve_scheme failure path
-    # (it re-runs the generator dozens of times and is the FC bottleneck).
+    iso = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
     cands = [n for n in sacrifice_candidates(pg) if n not in iso]
     hi = min(k_max, len(cands))
     bound = None

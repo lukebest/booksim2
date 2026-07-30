@@ -1232,7 +1232,7 @@ def exec_summary_html(excluded_labels: str) -> str:
 <ol>
 <li><b>端到端 Pareto（评测集）：</b>M3（VC1）→ M0s Super-turn（VC2）。
 同面积档上 Super-turn 最差端到端优于 Dual-UD / Virtual（后二者已退出评测）。
-M5h half-ring / M0s1（1VC）覆盖不全或牺牲过重，进不了全覆盖前沿。</li>
+M5h / M0s1 放宽牺牲后可全覆盖，但中位牺牲过高，最差端到端仍被支配。</li>
 <li><b>裸 makespan 会骗人：</b>M0/M1/M2/M4 常常「最快」，是因为牺牲把 A 裁小、流量按 A² 下降。
 端到端强扩展后它们垫底——已从 §3/§4 排除（{esc(excluded_labels)}）。</li>
 <li><b>硬性质 / 目录外：</b>预算模型三性质见 §2.5；
@@ -1811,11 +1811,12 @@ m<sub>eff</sub> 一起放大。§2.5 排除它们的量化依据不变。</li>
 花 router 面积买带宽划算。</li>
 <li><b>本轮 VC≤2 前沿：M3（VC1）→ M0s Super-turn（VC2）</b>。
 M9 Dual-UD / M10 Virtual <b>不参与</b>本轮 e2e；描述留在 §2。
-M5h half-ring 与 M0s1 Super-turn 1VC 覆盖不全或中位牺牲过高，
-不进全覆盖 Pareto。更高 VC 的 M6/M7 本轮亦不扫。</li>
+M0s1 / M5h 经放宽牺牲（§6.4）后已 <b>44/44 全覆盖</b>，但中位牺牲
+20 / 30、最差端到端明显劣于 M3/M0s，故不进 Pareto。
+更高 VC 的 M6/M7 本轮亦不扫。</li>
 <li><b>推荐：</b>默认 <b>M0s Super-turn（≤2 VC）</b>（预算故障下最差端到端更好）；
 router 面积紧则 <b>M3（1 VC）</b>。
-<strong>不要</strong>因裸 makespan 好看就选 M1 XY / M2 / M5h（重牺牲）。</li>
+<strong>不要</strong>因「能全覆盖」就选 M0s1 / M5h——强扩展下重牺牲反噬端到端。</li>
 </ol>
 <p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall；
 面积不计牺牲的 PE tile；control 面积按常数、未随 VC 增长；
@@ -1867,12 +1868,14 @@ def full_cover_html() -> str:
 <th>结论</th><th class='l'>升级场景的牺牲代价</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
 </table>
-<p class="note"><b>结论：</b>四个方案<b>都存在</b>允许多牺牲的全覆盖解，
-但代价完全不同：M3 / M0s 根本不需要升级（原本就全覆盖）；
-M0s1（硬顶 1 VC）与 M5h（半环）要靠贪心增长或整行整列，
-A 从 ~46 掉到 8–20。<b>强扩展下这直接反噬端到端</b>——
-计算 ∝ 1/A、<code>m_eff</code> ∝ (48/A)²，所以补齐覆盖后它们在
-§6.2 表里仍被 M3 / M0s 支配。「能全覆盖」与「值得选」是两件事。</p>
+<p class="note"><b>结论（quick 44 场景）：</b>四个方案<b>都能全覆盖</b>。
+M3 / M0s：原 <code>solve_scheme</code> 即 44/44，无需升级。
+M0s1：把生成器内部 forced 轮数提到 40 后，<code>solve_scheme</code> 即 44/44
+（牺牲中位 ~20，最差 A 可到 6）。
+M5h：40/44 原求解可行，其余 4 个靠整行/整列（sac≈38–40，A=6–8）。
+<strong>强扩展下重牺牲反噬端到端</strong>（计算 ∝ 1/A，
+<code>m_eff</code> ∝ (48/A)²）——补齐覆盖后 M0s1 / M5h 最差 T<sub>e2e</sub>
+仍明显高于 M3 / M0s。「能全覆盖」≠「值得选」。</p>
 """
 
 
@@ -1949,8 +1952,8 @@ def budget_e2e_section_html() -> str:
 <p class="note">固定 36 目录偏规整方块。本小节开：8×6 上 <b>≤4 router + ≤8 无向链路</b>
 （双向算 1），按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样。
 <b>M0s Super-turn</b> 算法、避障、无死锁与牺牲分布见 <b>§2.1 M0s</b>。
-「覆盖 X/176」= 176 个预算场景中经生成器 + <code>solve_scheme</code>
-仍能产出合法表的场景数（M0s 最终 176/176；M0s1 134/176；M5h 166/176）。</p>
+本轮 e2e 默认 <code>full_cover</code>：M0s1 / M5h 在 quick 44 上已 44/44
+（见 §6.4）；旧口径「零额外牺牲 / 紧预算」下 M0s1、M5h 曾覆盖不全。</p>
 {cap_note}
 {png}
 <p class="note">最差情形前沿：{'；'.join(front_names)}。
@@ -2597,26 +2600,21 @@ XY 被堵死时它还有绕行余地。</p>
 <strong>偶发。</strong>目录外扫描（§2.3）：≤2 故障 STRUCT=0；
 混合多重故障抽样 1000 里仅 STRUCT 8 / disc 5。
 连通残图上双 VC 转向集几乎总够用。</p>
-<p><b class="q">「覆盖 134/176」是什么意思？</b><br/>
-分母 <b>176</b> = 预算故障目录场景数
-（≤4 router + ≤8 无向链路，按 (n<sub>R</sub>, n<sub>L</sub>) 分层抽样，
-<code>results/pg_faults_budget_8x6.json</code>）。
-分子 = 该方案经生成器（含自身 <code>forced_sacrificed</code>）
-再经统一 <code>solve_scheme</code> 牺牲恢复后，
-仍能产出<strong>合法无死锁保序路由表</strong>的场景数。
-例：M0s1 硬顶 1 VC 时 <b>134/176</b>（另 42 判 INFEASIBLE）；
-M5h half-ring <b>166/176</b>；M0s Super-turn 最终 <b>176/176</b>。
-这与「零额外牺牲建表」口径不同——后者把结果拆成
-ok / sacrifice / fail_path（M0s 为 111 / 58 / 7），
-其中 fail_path 再交给统一恢复器后仍可能通。</p>
+<p><b class="q">「覆盖 X/N」是什么意思？</b><br/>
+分母 = 预算故障目录场景数（quick N=44 或 full N=176）。
+分子 = 经生成器 + <code>solve_scheme</code>（e2e 默认再经
+<code>solve_scheme_fc</code>）后仍能产出合法无死锁保序表的场景数。
+<strong>放宽牺牲后</strong>（§6.4）：M3 / M0s / M0s1 / M5h 在 quick 44 上均为
+<b>44/44</b>。紧预算 / 少轮 forced 时 M0s1、M5h 会留下 INFEASIBLE——
+那是预算不够，不是图论上不存在解。</p>
 <p><b class="q">不可达时牺牲多少？</b></p>
 <ul>
-<li><b>预算 probe（零额外牺牲）</b>：ok 111、sacrifice 58、fail_path 7；
-需牺牲的 58 场景平均约 2.3 节点；最终经恢复 176/176 全通。</li>
-<li><b>e2e 评测集（m₀=1）</b>：零牺牲约 48%；牺牲中位 1、p90=4、最大 8
-（生成器自身 forced 上限为每轮 1 × 8 轮）。VC：约 42/44 用 2 VC，2/44 只需 1 VC。</li>
-<li><b>对照</b>：M0s1 覆盖 134/176、牺牲中位 11；
-M5h 覆盖 166/176、牺牲中位 31——同目录下 M0s 的牺牲代价低一个量级。</li>
+<li><b>M0s（m₀=1, quick 44）</b>：牺牲中位 1、最差 8；约半场景零牺牲；
+VC 多为 2。</li>
+<li><b>M0s1 全覆盖代价</b>：牺牲中位 20、最差 39（A 中位 26 / 最差 6）——
+硬顶 1 VC 用节点换转向空间。</li>
+<li><b>M5h 全覆盖代价</b>：牺牲中位 30、最差 40；其中 4 个场景靠整行/整列
+（A=6–8）。</li>
 </ul>
 </div>
 <p class="note">右图借用 M0 转向示意；M0s 在此基础上按 OD 对切换模型 / VC 层。
@@ -3189,7 +3187,7 @@ M5 f-ring / LASH / Stripe 保留 §2 描述。</li>
 
 <li><b>端到端前沿（评测集）：M3（VC1）→ M0s Super-turn（VC2）</b>。
 Super-turn 用有限转向模型换覆盖与最差端到端；
-M5h half-ring / M0s1 覆盖或牺牲不达标，进不了全覆盖前沿。</li>
+M5h / M0s1 放宽后可全覆盖，但牺牲过重，最差端到端仍进不了前沿。</li>
 
 <li><b>目录外可达性（§2.3）：</b>M3/M6/M7 连通即达（STRUCT=0）；
 M0s Super-turn 在扫过的空间里同样以断连为主；

@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "n_per_cell": 1,
+    "seed": 0,
+    "elapsed_s": 1975.2
+  },
+  "schemes": {
+    "updown": {
+      "n_scen": 44,
+      "solve_scheme": 44,
+      "greedy_grow": 0,
+      "coarse": 0,
+      "infeasible": 0,
+      "full_cover": true,
+      "escalated": {},
+      "escalated_sac_med": null,
+      "escalated_sac_max": null
+    },
+    "super_turn": {
+      "n_scen": 44,
+      "solve_scheme": 44,
+      "greedy_grow": 0,
+      "coarse": 0,
+      "infeasible": 0,
+      "full_cover": true,
+      "escalated": {},
+      "escalated_sac_med": null,
+      "escalated_sac_max": null
+    },
+    "super_turn_1vc": {
+      "n_scen": 44,
+      "solve_scheme": 44,
+      "greedy_grow": 0,
+      "coarse": 0,
+      "infeasible": 0,
+      "full_cover": true,
+      "escalated": {},
+      "escalated_sac_med": null,
+      "escalated_sac_max": null
+    },
+    "fault_half_ring": {
+      "n_scen": 44,
+      "solve_scheme": 40,
+      "greedy_grow": 0,
+      "coarse": 4,
+      "infeasible": 0,
+      "full_cover": true,
+      "escalated": {
+        "b_r0_l6_0000": {
+          "stage": "line",
+          "n_sacrificed": 40,
+          "A": 8,
+          "num_vc": 2
+        },
+        "b_r2_l6_0000": {
+          "stage": "line",
+          "n_sacrificed": 38,
+          "A": 8,
+          "num_vc": 2
+        },
+        "b_r4_l4_0000": {
+          "stage": "line",
+          "n_sacrificed": 38,
+          "A": 6,
+          "num_vc": 2
+        },
+        "b_r4_l7_0000": {
+          "stage": "line",
+          "n_sacrificed": 38,
+          "A": 6,
+          "num_vc": 2
+        }
+      },
+      "escalated_sac_med": 38,
+      "escalated_sac_max": 40
+    }
+  }
+}
