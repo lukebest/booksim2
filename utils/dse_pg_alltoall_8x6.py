@@ -327,14 +327,18 @@ def metrics(mk: int | None, golden_mk: int, lb: dict, n_flits: int,
 _SOL_CACHE: dict[tuple, dict] = {}
 
 
-def get_solution(pg: dict, scheme: str, do_balance: bool = True) -> dict:
-    key = (pg["name"], pg["semantics"], scheme,
+def get_solution(pg: dict, scheme: str, do_balance: bool = True,
+                 full_cover: bool = False) -> dict:
+    """full_cover: escalate sacrifice past the minimum-cardinality search so
+    every scenario gets a legal table (see R.solve_scheme_fc)."""
+    key = (pg["name"], pg["semantics"], scheme, full_cover,
            tuple(pg["dead_nodes"]), tuple(tuple(l) for l in pg["dead_links"]))
     if key in _SOL_CACHE:
         return _SOL_CACHE[key]
+    solve = R.solve_scheme_fc if full_cover else R.solve_scheme
     if scheme.endswith("_lb"):
         base_sch = scheme[:-3]
-        sol = R.solve_scheme(pg, base_sch)
+        sol = solve(pg, base_sch)
         if sol["feasible"] and do_balance:
             sol = R.load_balance_paths(sol, rounds=6)
             unb = R.unbound_minimax_load(sol["compute_nodes"], sol["route_adj"])
@@ -351,7 +355,7 @@ def get_solution(pg: dict, scheme: str, do_balance: bool = True) -> dict:
                 sol["compute_nodes"], sol["route_adj"])
             sol["max_load"] = R.max_link_load(sol["paths"])
     else:
-        sol = R.solve_scheme(pg, scheme)
+        sol = solve(pg, scheme)
         if sol["feasible"]:
             sol["unbound_max_load"] = R.unbound_minimax_load(
                 sol["compute_nodes"], sol["route_adj"])
@@ -361,8 +365,10 @@ def get_solution(pg: dict, scheme: str, do_balance: bool = True) -> dict:
 
 
 def run_one(pg: dict, scheme: str, m: int, Q: int,
-            do_balance: bool = True) -> dict[str, Any]:
-    sol = get_solution(pg, scheme, do_balance=do_balance)
+            do_balance: bool = True, full_cover: bool = False
+            ) -> dict[str, Any]:
+    sol = get_solution(pg, scheme, do_balance=do_balance,
+                       full_cover=full_cover)
 
     rec = {
         "scenario": pg["name"],
@@ -380,6 +386,7 @@ def run_one(pg: dict, scheme: str, m: int, Q: int,
         "n_originally_good": sol["n_originally_good"],
         "reason": sol.get("reason"),
         "num_vc": sol.get("num_vc", 1),
+        "fc_stage": sol.get("fc_stage"),
         "makespan": None,
         "ordered_ok": None,
         "max_load": sol.get("max_load"),

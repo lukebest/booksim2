@@ -94,7 +94,7 @@ def pareto(points: list[dict], xk: str, yk: str) -> list[dict]:
 
 
 def run(quick: bool = False, n_per_cell: int | None = None,
-        seed: int = 0) -> dict:
+        seed: int = 0, full_cover: bool = True) -> dict:
     n_per = n_per_cell if n_per_cell is not None else (1 if quick else 4)
     cat = B.write_catalog(n_per_cell=n_per, seed=seed)
     scenarios = cat["scenarios"]
@@ -108,14 +108,14 @@ def run(quick: bool = False, n_per_cell: int | None = None,
         for sch in SCHEMES:
             for m0 in M0_LIST:
                 i += 1
-                base = D.get_solution(pg, sch)
+                base = D.get_solution(pg, sch, full_cover=full_cover)
                 if not base["feasible"]:
                     print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
                           f"m0={m0:2d} -> INFEASIBLE", flush=True)
                     continue
                 a = base["n_compute_used"]
                 me = m_effective(a, m0)
-                rec = D.run_one(pg, sch, me, Q)
+                rec = D.run_one(pg, sch, me, Q, full_cover=full_cover)
                 if not rec["feasible"] or rec["makespan"] is None:
                     print(f"[{i}/{total}] {scen['name']:22s} {sch:16s} "
                           f"m0={m0:2d} -> {rec.get('reason')}", flush=True)
@@ -140,6 +140,7 @@ def run(quick: bool = False, n_per_cell: int | None = None,
                     "comm_frac": t_comm / t_tot,
                     "turn_mode": base.get("turn_mode"),
                     "turn_vc": base.get("turn_vc"),
+                    "fc_stage": base.get("fc_stage"),
                 })
                 if (i % 20 == 0 or sch in ("super_turn", "super_turn_1vc",
                                            "fault_half_ring")):
@@ -184,6 +185,9 @@ def run(quick: bool = False, n_per_cell: int | None = None,
                 "A_worst": min(r["A"] for r in sel),
                 "sac_med": sorted(r["n_sacrificed"]
                                   for r in sel)[len(sel) // 2],
+                "sac_worst": max(r["n_sacrificed"] for r in sel),
+                "n_fc": sum(1 for r in sel
+                            if r.get("fc_stage") not in (None, "solve_scheme")),
                 "comm_frac_med": round(
                     sorted(r["comm_frac"] for r in sel)[len(sel) // 2], 3),
             })
@@ -214,6 +218,7 @@ def run(quick: bool = False, n_per_cell: int | None = None,
         "m0_list": M0_LIST,
         "schemes": SCHEMES,
         "vc_cap": 2,
+        "full_cover": full_cover,
         "total_tokens": {str(m): total_tokens(m) for m in M0_LIST},
         "area_model": {
             "a_flit": A_FLIT, "ports": PORTS,
@@ -233,8 +238,11 @@ def main() -> None:
                     help="1 sample per (nr,nl) cell (~44 scenarios)")
     ap.add_argument("--n-per-cell", type=int, default=None)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--no-full-cover", action="store_true",
+                    help="stop at minimum-cardinality sacrifice (no escalation)")
     args = ap.parse_args()
-    out = run(quick=args.quick, n_per_cell=args.n_per_cell, seed=args.seed)
+    out = run(quick=args.quick, n_per_cell=args.n_per_cell, seed=args.seed,
+              full_cover=not args.no_full_cover)
     OUT.write_text(json.dumps(out, indent=1))
     print(f"Wrote {OUT}  ({len(out['rows'])} rows, {out['meta']['elapsed_s']}s)")
     for m0 in M0_LIST:

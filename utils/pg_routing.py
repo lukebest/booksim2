@@ -1951,6 +1951,77 @@ def _try_rect_recovery(pg: dict, scheme: str,
     return _finalize(view, raw, forced, remove_route)
 
 
+def _fc_attempt(pg: dict, scheme: str, sac: set[int]) -> dict[str, Any] | None:
+    remove_route = (scheme in ("rect_xy", "fault_ring_vc", "fault_half_ring")
+                    or pg["semantics"] == "dead")
+    view = apply_sacrifice(pg, sac, remove_route) if sac else pg
+    if view["n_compute"] < 2:
+        return None
+    raw = SCHEME_GENERATORS[scheme](view)
+    if raw is None:
+        return None
+    return _finalize(view, raw, set(sac), remove_route)
+
+
+def _fc_lines(pg: dict) -> list[list[int]]:
+    """Whole-row / whole-column keep-sets, largest first (last-resort coarse)."""
+    out = []
+    for y in range(MY):
+        keep = [n for n in pg["compute_nodes"] if coord(n)[1] == y]
+        if len(keep) >= 2:
+            out.append(keep)
+    for x in range(MX):
+        keep = [n for n in pg["compute_nodes"] if coord(n)[0] == x]
+        if len(keep) >= 2:
+            out.append(keep)
+    return sorted(out, key=len, reverse=True)
+
+
+def solve_scheme_fc(pg: dict, scheme: str, k_max: int = 24) -> dict[str, Any]:
+    """`solve_scheme`, then keep sacrificing until a legal table exists.
+
+    `solve_scheme` searches only a small candidate pool and stops at a
+    minimum-cardinality recovery, so it reports INFEASIBLE for schemes whose
+    constraints need a much larger sacrifice (M0s1 at 1 VC, M5h half-ring).
+    This wrapper answers the separate question "does full coverage exist if we
+    pay more good hardware?" by escalating: greedy grow along the fault-nearest
+    candidate order, then the largest healthy rectangle, then a single surviving
+    row / column (a line is legal under every turn model).
+
+    Adds `fc_stage` to the returned solution. Feasible results from
+    `solve_scheme` pass through untouched (`fc_stage = "solve_scheme"`).
+    """
+    sol = solve_scheme(pg, scheme)
+    if sol["feasible"]:
+        sol["fc_stage"] = "solve_scheme"
+        return sol
+
+    sac = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
+    for n in sacrifice_candidates(pg):
+        if n in sac:
+            continue
+        sac.add(n)
+        if len(sac) > k_max:
+            break
+        fin = _fc_attempt(pg, scheme, sac)
+        if fin is not None and fin["feasible"]:
+            fin["fc_stage"] = "greedy_grow"
+            return fin
+
+    fin = _try_rect_recovery(pg, scheme, True)
+    if fin is not None and fin["feasible"]:
+        fin["fc_stage"] = "rect"
+        return fin
+    for keep in _fc_lines(pg):
+        fin = _fc_attempt(pg, scheme, set(pg["compute_nodes"]) - set(keep))
+        if fin is not None and fin["feasible"]:
+            fin["fc_stage"] = "line"
+            return fin
+
+    sol["fc_stage"] = "none"
+    return sol
+
+
 def solve_scheme(pg: dict, scheme: str) -> dict[str, Any]:
     """Generate a deadlock-free order-preserving routing, sacrificing if needed.
 

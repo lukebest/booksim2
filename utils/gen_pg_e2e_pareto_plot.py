@@ -169,13 +169,14 @@ def main() -> None:
         tok = meta.get("total_tokens", {})
         tok_s = tok.get(str(m0), tok.get(m0, "?"))
         print(f"\n### m0 = {m0} flit  ({tok_s} tokens total)\n")
-        print("| scheme | VC | area | A med/worst | sac med | "
+        print("| scheme | VC | area | A med/worst | sac med/worst | FC | "
               "T_e2e med (ns) | T_e2e worst (ns) | comm frac | Pareto |")
-        print("|---|---|---|---|---|---|---|---|---|")
+        print("|---|---|---|---|---|---|---|---|---|---|")
         for s in cand:
             print(f"| {LABELS.get(s['scheme'], s['scheme'])} | {s['num_vc']} "
                   f"| {s['area']:.3f} | {s['A_med']}/{s['A_worst']} "
-                  f"| {s['sac_med']} | {s['t_e2e_ns_med']:.0f} "
+                  f"| {s['sac_med']}/{s.get('sac_worst', '?')} "
+                  f"| {s.get('n_fc', 0)} | {s['t_e2e_ns_med']:.0f} "
                   f"| **{s['t_e2e_ns_worst']:.0f}** "
                   f"| {s['comm_frac_med']:.2f} "
                   f"| {'**yes**' if s.get('pareto_worst') else ''} |")

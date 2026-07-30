@@ -29,7 +29,6 @@ from pathlib import Path
 
 import pg_faults_budget_8x6 as B
 import pg_routing as R
-from pg_routing import MX, MY, coord, nid
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "pg_full_cover.json"
@@ -37,68 +36,15 @@ OUT = ROOT / "results" / "pg_full_cover.json"
 SCHEMES = ["updown", "super_turn", "super_turn_1vc", "fault_half_ring"]
 
 
-def _attempt(pg: dict, scheme: str, sac: set[int]) -> dict | None:
-    """Run the generator on the sacrificed view and finalize/validate."""
-    remove_route = (scheme in ("rect_xy", "fault_ring_vc", "fault_half_ring")
-                    or pg["semantics"] == "dead")
-    view = R.apply_sacrifice(pg, sac, remove_route) if sac else pg
-    if view["n_compute"] < 2:
-        return None
-    raw = R.SCHEME_GENERATORS[scheme](view)
-    if raw is None:
-        return None
-    return R._finalize(view, raw, set(sac), remove_route)
-
-
-def _lines(pg: dict) -> list[list[int]]:
-    """Whole-row and whole-column keep-sets, largest first."""
-    out = []
-    for y in range(MY):
-        keep = [n for n in pg["compute_nodes"] if coord(n)[1] == y]
-        if len(keep) >= 2:
-            out.append(keep)
-    for x in range(MX):
-        keep = [n for n in pg["compute_nodes"] if coord(n)[0] == x]
-        if len(keep) >= 2:
-            out.append(keep)
-    return sorted(out, key=len, reverse=True)
-
-
 def full_cover(pg: dict, scheme: str, k_max: int = 24) -> dict:
     """Escalate sacrifice until a legal table exists; report cost and stage."""
-    base = R.solve_scheme(pg, scheme)
-    if base["feasible"]:
-        return {"stage": "solve_scheme", "n_sacrificed": base["n_sacrificed"],
-                "A": base["n_compute_used"], "num_vc": base["num_vc"]}
-
-    # 2. greedy grow over the ordered candidate pool
-    cands = R.sacrifice_candidates(pg)
-    sac: set[int] = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
-    for n in cands:
-        if n in sac:
-            continue
-        sac.add(n)
-        if len(sac) > k_max:
-            break
-        fin = _attempt(pg, scheme, sac)
-        if fin is not None and fin["feasible"]:
-            return {"stage": "greedy_grow", "n_sacrificed": fin["n_sacrificed"],
-                    "A": fin["n_compute_used"], "num_vc": fin["num_vc"]}
-
-    # 3. rect, then single rows / columns (largest that works)
-    for keep in ([None] + _lines(pg)):
-        if keep is None:
-            fin = R._try_rect_recovery(pg, scheme, True)
-            tag = "rect"
-        else:
-            drop = set(pg["compute_nodes"]) - set(keep)
-            fin = _attempt(pg, scheme, drop)
-            tag = "line"
-        if fin is not None and fin["feasible"]:
-            return {"stage": tag, "n_sacrificed": fin["n_sacrificed"],
-                    "A": fin["n_compute_used"], "num_vc": fin["num_vc"]}
-
-    return {"stage": "none", "n_sacrificed": None, "A": 0, "num_vc": 0}
+    sol = R.solve_scheme_fc(pg, scheme, k_max=k_max)
+    return {
+        "stage": sol["fc_stage"],
+        "n_sacrificed": sol["n_sacrificed"] if sol["feasible"] else None,
+        "A": sol["n_compute_used"],
+        "num_vc": sol.get("num_vc", 0),
+    }
 
 
 def run(n_per_cell: int, seed: int, schemes: list[str]) -> dict:

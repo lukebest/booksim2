@@ -17,6 +17,7 @@ JSON_PATH = ROOT / "results" / "pg_alltoall_8x6.json"
 E2E_JSON_PATH = ROOT / "results" / "pg_e2e_pareto.json"
 BUDGET_FAULTS_JSON = ROOT / "results" / "pg_faults_budget_8x6.json"
 BUDGET_E2E_JSON = ROOT / "results" / "pg_budget_e2e_pareto.json"
+FULL_COVER_JSON = ROOT / "results" / "pg_full_cover.json"
 BUDGET_CAP_JSON = ROOT / "results" / "pg_budget_capability.json"
 CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
@@ -1661,7 +1662,9 @@ def e2e_section_html() -> str:
                                      s["t_e2e_ns_worst"]))
         head = ("<tr><th class='l'>方案</th><th>VC</th><th>area</th>"
                 "<th>覆盖</th>"
-                "<th>A 中位/最差</th><th>牺牲中位</th>"
+                "<th>A 中位/最差</th><th>牺牲中位/最差</th>"
+                "<th title='需要放宽牺牲预算（solve_scheme_fc 升级）才可行的场景数'>"
+                "FC</th>"
                 "<th>T<sub>e2e</sub> 中位 (ns)</th>"
                 "<th>T<sub>e2e</sub> 最差 (ns)</th>"
                 "<th>通信占比</th><th>Pareto</th></tr>")
@@ -1672,6 +1675,8 @@ def e2e_section_html() -> str:
             cover = f"{s['n_scen']}/{ntot}"
             if s.get("partial"):
                 cover = f"<span title='未覆盖全部场景，不进 Pareto'>{cover}△</span>"
+            n_fc = s.get("n_fc", 0)
+            fc_cell = (f"<b>{n_fc}</b>" if n_fc else "0")
             body.append(
                 "<tr>"
                 f"<td class='l'>{esc(E2E_SHORT.get(s['scheme'], s['scheme']))}</td>"
@@ -1679,7 +1684,8 @@ def e2e_section_html() -> str:
                 f"<td>{s['area']:.3f}</td>"
                 f"<td>{cover}</td>"
                 f"<td>{s['A_med']}/{s['A_worst']}</td>"
-                f"<td>{s['sac_med']}</td>"
+                f"<td>{s['sac_med']}/{s.get('sac_worst', '?')}</td>"
+                f"<td>{fc_cell}</td>"
                 f"<td>{s['t_e2e_ns_med']:.0f}</td>"
                 f"<td><b>{s['t_e2e_ns_worst']:.0f}</b></td>"
                 f"<td>{s['comm_frac_med']:.2f}</td>"
@@ -1814,6 +1820,59 @@ router 面积紧则 <b>M3（1 VC）</b>。
 <p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall；
 面积不计牺牲的 PE tile；control 面积按常数、未随 VC 增长；
 全量 176 场景扫完后数字以 <code>pg_e2e_pareto.json</code> 为准。</p>
+{full_cover_html()}
+"""
+
+
+def full_cover_html() -> str:
+    """§6.4: does allowing more sacrifice buy full scenario coverage?"""
+    if not FULL_COVER_JSON.exists():
+        return ""
+    d = json.loads(FULL_COVER_JSON.read_text())
+    schemes = d["schemes"]
+    order = [s for s in ["updown", "super_turn", "super_turn_1vc",
+                         "fault_half_ring"] if s in schemes]
+    if not order:
+        return ""
+    rows = []
+    for sid in order:
+        s = schemes[sid]
+        n = s["n_scen"]
+        esc_n = s["greedy_grow"] + s["coarse"]
+        verdict = ("<td class='cap-ok'>不需要升级</td>" if esc_n == 0
+                   and s["infeasible"] == 0
+                   else ("<td class='cap-warn'>升级后全覆盖</td>"
+                         if s["infeasible"] == 0
+                         else "<td class='cap-bad'>仍不全覆盖</td>"))
+        cost = ("—" if esc_n == 0 else
+                f"中位 {s['escalated_sac_med']} / 最大 {s['escalated_sac_max']}")
+        rows.append(
+            f"<tr><td class='l'>{esc(E2E_SHORT.get(sid, sid))}</td>"
+            f"<td>{s['solve_scheme']}/{n}</td>"
+            f"<td>{s['greedy_grow']}</td><td>{s['coarse']}</td>"
+            f"<td>{s['infeasible']}</td>{verdict}"
+            f"<td class='l'>{cost}</td></tr>")
+    return f"""
+<h3>6.4 放宽牺牲预算能否换来全覆盖？</h3>
+<p class="note"><code>solve_scheme</code> 只在小候选池里找<b>最小基数</b>恢复，
+所以对约束更紧的方案会直接判 INFEASIBLE。本小节问的是另一个问题：
+<b>如果允许牺牲更多好节点，合法表究竟存不存在</b>。
+升级阶梯（<code>solve_scheme_fc</code>）：
+① 原 <code>solve_scheme</code> → ② 沿「离故障最近」顺序逐点贪心增长（k≤24）→
+③ 最大健康矩形 → ④ 单行 / 单列（线形拓扑对任何转向模型都合法）。
+数据 <code>results/pg_full_cover.json</code>（<code>utils/pg_full_cover_probe.py</code>）。</p>
+<table class="cap">
+<thead><tr><th class='l'>方案</th><th>原 solve_scheme</th>
+<th>贪心增长</th><th>矩形/整行整列</th><th>仍不可行</th>
+<th>结论</th><th class='l'>升级场景的牺牲代价</th></tr></thead>
+<tbody>{''.join(rows)}</tbody>
+</table>
+<p class="note"><b>结论：</b>四个方案<b>都存在</b>允许多牺牲的全覆盖解，
+但代价完全不同：M3 / M0s 根本不需要升级（原本就全覆盖）；
+M0s1（硬顶 1 VC）与 M5h（半环）要靠贪心增长或整行整列，
+A 从 ~46 掉到 8–20。<b>强扩展下这直接反噬端到端</b>——
+计算 ∝ 1/A、<code>m_eff</code> ∝ (48/A)²，所以补齐覆盖后它们在
+§6.2 表里仍被 M3 / M0s 支配。「能全覆盖」与「值得选」是两件事。</p>
 """
 
 
@@ -2352,6 +2411,7 @@ div.cycfig svg {{ background: #fff; border: 1px solid #e3e8ec;
                  border-radius: 4px; }}
 table.cap td.cap-ok {{ background: #f2faf5; }}
 table.cap td.cap-bad {{ background: #fdf1ef; color: #922b21; }}
+table.cap td.cap-warn {{ background: #fdf8ec; color: #8a6d1f; }}
 table.cap {{ max-width: 62rem; }}
 table.qa3 {{ font-size: 0.82rem; margin: 0.6rem 0 0.3rem; width: 100%; }}
 table.qa3 th {{ background: #f3ecf7; text-align: left; white-space: nowrap;
