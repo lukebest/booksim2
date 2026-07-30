@@ -566,7 +566,7 @@ def gen_super_turn(pg: dict) -> dict[str, Any] | None:
     return None
 
 
-def gen_super_turn_1vc(pg: dict) -> dict[str, Any] | None:
+def gen_super_turn_1vc(pg: dict, max_rounds: int = 40) -> dict[str, Any] | None:
     """M0s1: Glass–Ni turn model hard-capped at 1 VC.
 
     Same four minimal models as super_turn, but never opens a second VC layer:
@@ -575,7 +575,7 @@ def gen_super_turn_1vc(pg: dict) -> dict[str, Any] | None:
     """
     forced: set[int] = set()
     view = pg
-    for _ in range(12):
+    for _ in range(max_rounds):
         adj_i = view["route_adj"]
         compute_i = view["compute_nodes"]
         if len(compute_i) < 2:
@@ -1977,36 +1977,60 @@ def _fc_lines(pg: dict) -> list[list[int]]:
     return sorted(out, key=len, reverse=True)
 
 
-def solve_scheme_fc(pg: dict, scheme: str, k_max: int = 24) -> dict[str, Any]:
-    """`solve_scheme`, then keep sacrificing until a legal table exists.
+def solve_scheme_fc(pg: dict, scheme: str, k_max: int = 40) -> dict[str, Any]:
+    """Find a legal table, escalating sacrifice past `solve_scheme`'s budget.
 
-    `solve_scheme` searches only a small candidate pool and stops at a
-    minimum-cardinality recovery, so it reports INFEASIBLE for schemes whose
-    constraints need a much larger sacrifice (M0s1 at 1 VC, M5h half-ring).
-    This wrapper answers the separate question "does full coverage exist if we
-    pay more good hardware?" by escalating: greedy grow along the fault-nearest
-    candidate order, then the largest healthy rectangle, then a single surviving
-    row / column (a line is legal under every turn model).
+    Order:
+      1. `solve_scheme` (minimum-cardinality among its small candidate pool).
+         Skipped's expensive failure path is avoided: we only call it when the
+         zero-extra generator already succeeds, OR after a cheap iso-only try.
+      2. Prefix binary search over fault-nearest candidates (≈log k gen calls).
+      3. Largest healthy rectangle, then a single surviving row/column.
 
-    Adds `fc_stage` to the returned solution. Feasible results from
-    `solve_scheme` pass through untouched (`fc_stage = "solve_scheme"`).
+    Adds `fc_stage`. When stage is ``solve_scheme``, the result matches the
+    ordinary solver (no extra sacrifice).
     """
-    sol = solve_scheme(pg, scheme)
-    if sol["feasible"]:
-        sol["fc_stage"] = "solve_scheme"
-        return sol
+    # Cheap first try: isolation + generator (same as solve_scheme's opener).
+    iso = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
+    fin0 = _fc_attempt(pg, scheme, iso)
+    if fin0 is not None and fin0["feasible"]:
+        # Delegate to solve_scheme so we keep its min-sac / LB bookkeeping
+        # when the scheme already covers with ≤ its normal budget.
+        sol = solve_scheme(pg, scheme)
+        if sol["feasible"]:
+            sol["fc_stage"] = "solve_scheme"
+            return sol
+        fin0["fc_stage"] = "solve_scheme"
+        return fin0
 
-    sac = {n for n in pg["compute_nodes"] if not pg["route_adj"].get(n)}
-    for n in sacrifice_candidates(pg):
-        if n in sac:
-            continue
-        sac.add(n)
-        if len(sac) > k_max:
-            break
-        fin = _fc_attempt(pg, scheme, sac)
+    # Prefix binary search — do NOT call the full solve_scheme failure path
+    # (it re-runs the generator dozens of times and is the FC bottleneck).
+    cands = [n for n in sacrifice_candidates(pg) if n not in iso]
+    hi = min(k_max, len(cands))
+    bound = None
+    last_fail = 0
+    k = 1
+    while k <= hi:
+        fin = _fc_attempt(pg, scheme, iso | set(cands[:k]))
         if fin is not None and fin["feasible"]:
-            fin["fc_stage"] = "greedy_grow"
-            return fin
+            bound = (k, fin)
+            break
+        last_fail = k
+        if k == hi:
+            break
+        k = min(hi, k * 2)
+    if bound is not None:
+        lo = last_fail + 1
+        best_k, best = bound
+        while lo < best_k:
+            mid = (lo + best_k) // 2
+            fin = _fc_attempt(pg, scheme, iso | set(cands[:mid]))
+            if fin is not None and fin["feasible"]:
+                best_k, best = mid, fin
+            else:
+                lo = mid + 1
+        best["fc_stage"] = "greedy_grow"
+        return best
 
     fin = _try_rect_recovery(pg, scheme, True)
     if fin is not None and fin["feasible"]:
@@ -2018,8 +2042,13 @@ def solve_scheme_fc(pg: dict, scheme: str, k_max: int = 24) -> dict[str, Any]:
             fin["fc_stage"] = "line"
             return fin
 
-    sol["fc_stage"] = "none"
-    return sol
+    return {
+        "feasible": False, "scheme": scheme, "paths": {}, "vc_of": None,
+        "num_vc": 1, "compute_nodes": [], "route_adj": {},
+        "sacrificed": [], "n_sacrificed": 0, "n_compute_used": 0,
+        "n_originally_good": pg["n_originally_good"], "sacrifice_cost": 0.0,
+        "reason": "INFEASIBLE", "fc_stage": "none",
+    }
 
 
 def solve_scheme(pg: dict, scheme: str) -> dict[str, Any]:
