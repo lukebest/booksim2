@@ -48,12 +48,15 @@ SCHEMES = [
     "xy",
     "rect_xy",
     "updown",
+    "updown_best_root",  # M3′: same UD, load-optimal root
     "updown_lb",
     "segment",
     "segment_lb",
     # ≤2 VC
     "super_turn",
     "fault_half_ring",
+    # Phase-TDM (schedule-level, 1VC per wave): merge via
+    # utils/merge_vc1_explore_e2e.py — not a single path-table DES scheme.
     # M9 dual_updown / M10 virtual_mesh: descriptions kept; not in e2e.
 ]
 

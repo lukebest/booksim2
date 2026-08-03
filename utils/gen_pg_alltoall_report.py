@@ -40,6 +40,10 @@ DEADLOCK_BASIS = {
     "xy": "构造性：只 X→Y 单向转弯",
     "rect_xy": "构造性：矩形内纯 XY",
     "updown": "构造性：不许 down→up",
+    "updown_best_root": "构造性：同 M3，根选自负载搜索",
+    "phase_tdm_bal2": "调度层：多波 alltoall，每波仍是 1VC UD",
+    "phase_tdm_bal3": "调度层：三波 alltoall，每波仍是 1VC UD",
+    "phase_tdm_policy": "调度层：轻载荷 2 波 / 重载荷 3 波",
     "segment": "构造性论证在残图上失效",
     "fault_ring_vc": "构造性：4 VC 相位×方向",
     "fault_half_ring": "半环绕行 + X/Y 两 VC；重叠环靠事后 CDG 校验",
@@ -77,7 +81,11 @@ SCHEME_LABELS = {
     "xy": "M1 XY (+sacrifice)",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
+    "updown_best_root": "M3′ Up*/Down* best-root",
     "updown_lb": "M3 Up*/Down* + LB",
+    "phase_tdm_bal2": "Phase-TDM bal×2",
+    "phase_tdm_bal3": "Phase-TDM bal×3",
+    "phase_tdm_policy": "Phase-TDM m₀-policy",
     "segment": "M4 Segment",
     "segment_lb": "M4 Segment + LB",
     "fault_ring_vc": "M5 f-ring 4VC",
@@ -96,7 +104,11 @@ E2E_SHORT = {
     "xy": "M1 XY",
     "rect_xy": "M2 Rect-XY",
     "updown": "M3 Up*/Down*",
+    "updown_best_root": "M3′ best-root",
     "updown_lb": "M3+LB",
+    "phase_tdm_bal2": "TDM bal×2",
+    "phase_tdm_bal3": "TDM bal×3",
+    "phase_tdm_policy": "TDM m₀-policy",
     "segment": "M4 Segment",
     "segment_lb": "M4+LB",
     "fault_ring_vc": "M5 f-ring",
@@ -1226,19 +1238,22 @@ def exec_summary_html(excluded_labels: str) -> str:
 <div class="exec">
 <h2>仿真结论（先看这里）</h2>
 <p class="pick">本轮评测（预算故障 · VC≤2 · 不含 M9/M10）：
-推荐默认 <b>M0s Super-turn（≤2 VC）</b>；
-面积受限选 <b>M3 Up*/Down*（1 VC）</b>。
+能分波 alltoall 时优先 <b>Phase-TDM m₀-policy（1 VC）</b>
+（轻载荷 2 波 / 重载荷 3 波）；
+轻载荷若还要压中位延迟，可加钱上 <b>M0s Super-turn（2 VC）</b>。
+不能分波则退 <b>M3′</b> / 库存 M3。
 更高 VC 的 M7 Stripe / M6 LASH 仅保留描述，不进本轮 e2e。</p>
 <ol>
-<li><b>端到端 Pareto（评测集）：</b>M3（VC1）→ M0s Super-turn（VC2）。
-同面积档上 Super-turn 最差端到端优于 Dual-UD / Virtual（后二者已退出评测）。
-M5h / M0s1 放宽牺牲后可全覆盖，但中位牺牲过高，最差端到端仍被支配。</li>
+<li><b>端到端 Pareto（评测集）：</b>m₀=1 为 Phase-TDM（VC1）→ Super-turn（VC2）；
+m₀=13 上 TDM bal×3 最差 <b>6915 ns</b> 已严格支配 Super-turn（7234 ns）——
+前沿只剩 VC1 点。VC1 探索把调度层多波压到库存 M3 / M3′ 之下；
+M5h / M0s1 牺牲过重，仍被支配。</li>
 <li><b>裸 makespan 会骗人：</b>M0/M1/M2/M4 常常「最快」，是因为牺牲把 A 裁小、流量按 A² 下降。
 端到端强扩展后它们垫底——已从 §3/§4 排除（{esc(excluded_labels)}）。</li>
 <li><b>硬性质 / 目录外：</b>预算模型三性质见 §2.5；
 目录外 STRUCT/disc 见 §2.3（已含 M0s / M0s1 / M5h）。
-保序为构造保证（唯一路径）。</li>
-<li><b>§3 每场景最优：</b>预算故障场景上，低牺牲时常落到 M0s / M3；
+保序为构造保证（唯一路径；TDM 在波间屏障后仍按波内唯一路径保序）。</li>
+<li><b>§3 每场景最优：</b>预算故障场景上，低牺牲时常落到 M0s / M3 族；
 通信占端到端约 70–86%，花 router 面积买带宽仍划算。</li>
 </ol>
 <p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、§6（端到端 Pareto）。</p>
@@ -1775,11 +1790,15 @@ DES 中 Q 是<b>每 VC</b> 深度，故 VC 数线性放大缓冲。
 <p class="note">故障模型：≤4 router + ≤8 无向链路（双向算 1，与 router 不重叠），
 分层随机抽样 {meta.get('n_scenarios', meta.get('catalog', {}).get('n_scenarios', '?'))} 场景
 （<b>不再使用</b>旧 link_/node_ corner/edge/center 目录）。
-评估范围：仅 <b>VC≤2</b> 且本轮入选的方案（含 M0s1 / M5h；
+评估范围：仅 <b>VC≤2</b> 且本轮入选的方案（含 M0s1 / M5h / M3′ / Phase-TDM；
 <b>不含 M9 Dual-UD / M10 Virtual</b>——描述保留在 §2，不进 e2e / §3）。
 M5 f-ring 4VC / LASH / Stripe 等同理保留描述。
-扫描：dead × {len(m0s)} 个 m₀ × 评测方案 =
-{sum(1 for _ in data['rows'])} 行 DES；耗时 {meta.get('elapsed_s')}s。
+VC1 探索方案（M3′、Phase-TDM）由
+<code>utils/merge_vc1_explore_e2e.py</code> 并入同一 JSON
+（探测数据见 <code>pg_vc1_best_root_probe.json</code> /
+<code>pg_vc1_explore_tick3.json</code>）。
+主扫描 + 并入后共 {sum(1 for _ in data['rows'])} 行；
+主扫描耗时 {meta.get('elapsed_s')}s。
 数据 <code>results/pg_e2e_pareto.json</code>。</p>
 
 <h3>6.2 Pareto 图与结果表</h3>
@@ -1804,18 +1823,21 @@ M5 f-ring 4VC / LASH / Stripe 等同理保留描述。
 <h3>6.3 选型结论</h3>
 <ol>
 <li><b>排名翻转仍成立：</b>M1/M2/M4（及覆盖不全的 M0 East-first）裸 makespan 好看，
-端到端被同为 VC1 的 <b>M3 Up*/Down*</b> 支配——牺牲把 A 裁小后，强扩展把计算与
+端到端被同为 VC1 的 <b>M3 族 / Phase-TDM</b> 支配——牺牲把 A 裁小后，强扩展把计算与
 m<sub>eff</sub> 一起放大。§2.5 排除它们的量化依据不变。</li>
 <li><b>通信占端到端 70–86%</b>（除重牺牲方案）。即便配了
 {meta['pe_macs_per_cycle']} MAC/cy 的 PE，任务仍是通信瓶颈——
 花 router 面积买带宽划算。</li>
-<li><b>本轮 VC≤2 前沿：M3（VC1）→ M0s Super-turn（VC2）</b>。
+<li><b>本轮 VC≤2 前沿：</b>m₀=1 仍是 <b>Phase-TDM（VC1）→ Super-turn（VC2）</b>；
+m₀=13 上 <b>仅 Phase-TDM</b>（bal×3 / m₀-policy）——Super-turn 最差端到端更差且面积更大。
+库存 M3 / M3+LB 被 M3′ 与 TDM 支配。
 M9 Dual-UD / M10 Virtual <b>不参与</b>本轮 e2e；描述留在 §2。
 M0s1 / M5h 经放宽牺牲（§6.4）后已 <b>44/44 全覆盖</b>，但中位牺牲
-20 / 30、最差端到端明显劣于 M3/M0s，故不进 Pareto。
+20 / 30、最差端到端明显劣于 TDM，故不进 Pareto。
 更高 VC 的 M6/M7 本轮亦不扫。</li>
-<li><b>推荐：</b>默认 <b>M0s Super-turn（≤2 VC）</b>（预算故障下最差端到端更好）；
-router 面积紧则 <b>M3（1 VC）</b>。
+<li><b>推荐：</b>能分波则 <b>Phase-TDM m₀-policy（1 VC）</b>；
+轻载荷还要压中位时再上 Super-turn。
+不能分波：<b>M3′</b> → 库存 M3。
 <strong>不要</strong>因「能全覆盖」就选 M0s1 / M5h——强扩展下重牺牲反噬端到端。</li>
 </ol>
 <p class="note"><b>已知局限：</b>只算 dispatch 一次 alltoall；
@@ -2645,6 +2667,9 @@ VC 多为 2。</li>
 （A=6–8）。</li>
 </ul>
 </div>
+<p><b>端到端角色：</b>m₀=1 时仍是 Pareto 右端（最差 635 ns，压过 TDM 的 755）；
+m₀=13 上被 Phase-TDM bal×3（6915）严格支配（自身最差 7234、面积更大）。
+轻载荷压中位 / 最差时可上；重载荷优先分波 1VC。</p>
 <p class="note">右图借用 M0 转向示意；M0s 在此基础上按 OD 对切换模型 / VC 层。
 目录外 STRUCT/disc 见 §2.3；端到端选型见 §6.3。</p>
 ''')}
@@ -2739,16 +2764,40 @@ up/down 是否合法，取最短跳数路径。跳的方向可以是任意 mesh 
 <p><b>与本网格实测：</b>dead/transit 下几乎全部场景 <b>n_sacrificed = 0</b>（A≈39–48），
 是 1 VC 方案里规模保持最好的；但合法路径集合窄，负载集中在树的「脊」，
 alltoall makespan / irreg 明显高于最短路族（M6/M7/M10）。
-M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益几乎为零。</p>
-<p><b>端到端角色：</b>Pareto 前沿的左端点——面积最小（VC1≈0.90），
-作为「面积受限时的保底方案」。不要用它追极限延迟。</p>
+M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益几乎为零。
+换根搜索（M3′）与调度层多波（Phase-TDM）见下两节——它们才真正压低了 VC1 最差端到端。</p>
+<p><b>端到端角色：</b>库存「度最大根」基线。同面积上已被 <b>M3′</b> 与
+<b>Phase-TDM</b> 支配；仍可作为可部署的最简 1VC 保底，但不再是 Pareto 左端点。</p>
 ''', extra_key="updown_aux")}
+
+{scheme_block("M3′ — Up*/Down* best-root（<code>updown_best_root</code>）", "updown", '''
+<p><b>类别：</b>A 类 · 与 M3 同构的转向限制 · <b>1 VC</b>。</p>
+<p><b>思想：</b>Up*/Down* 的唯一自由参数是生成树根（高度坐标系原点）。
+库存 M3 取「度最大」启发式；M3′ 在<strong>全部存活 router</strong>上穷举根，
+对每张候选全表算 alltoall 最大链路负载，取
+<code>(max_link_load, total_hops, root_id)</code> 字典序最小者。
+死锁自由与避障论证与 M3 完全相同——只是换了一套标号。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li>对每个候选 root ∈ 存活邻接表，跑与 M3 相同的约束 BFS 建全表；CDG 校验失败则丢弃。</li>
+<li>在合法表上统计有向边 alltoall 对数负载，记录 <code>max_link_load</code> 与总跳数。</li>
+<li>选最优 root；运行时仍是<strong>单张静态路径表</strong>（每对唯一路径）。</li>
+</ol>
+<p><b>与本网格实测（预算故障 44 场景）：</b>相对库存 M3，
+最差端到端 m₀=1：<b>893→790 ns</b>（−11.6%）；m₀=13：<b>7678→7573 ns</b>（−1.4%）。
+中位收益更大（负载更均衡），但最差场景仍受「单高度函数」瓶颈限制。</p>
+<p><b>端到端角色：</b>「仍坚持单表、单波 alltoall」时的最佳 1VC 点。
+若允许调度层分波，则被 Phase-TDM 继续支配（见下）。</p>
+''' + qa3(
+    '与 M3 相同：只在 <code>route_adj</code> 上约束 BFS；根搜索不改变存活图。',
+    '每张候选表仍禁止 down→up，按构造 1VC 无死锁；实现仍硬校验。',
+    '选定根后全表唯一路径，与 M3 相同。'))}
 
 {scheme_block("M3+LB — Up*/Down* + 负载均衡（<code>updown_lb</code>）", "updown_lb", '''
 <p><b>在 M3 路径表上后处理：</b>统计有向边 alltoall 对数负载；每轮重排途经最热边的若干 (s,d)，
 用负载感知 Dijkstra（边权 ≈ 1+负载）换路；每轮后整表再校验 CDG。失败则回退。</p>
 <p><b>特征：</b>目标是压低最大链路负载；在本 8×6 上对 median makespan 改善通常很小
-（Up*/Down* 合法路径集合较窄）。</p>
+（Up*/Down* 合法路径集合较窄）。相对「换根」几乎无额外收益——合法集合已被根钉死。</p>
 ''' + qa3(
     '与 M3 完全相同——换路仍在同一张存活图、同一套合法转向集合内进行，'
     '不会新引入穿越故障的路径。',
@@ -2757,6 +2806,40 @@ M3+LB 试图在合法集合内做负载感知换路，本 8×6 上中位收益�
     '一旦 CDG 出环，立刻整体回退到上一个已验证的 best 并停止迭代。',
     'LB 是<strong>离线迭代</strong>：收敛后每对仍只有一条固定路径，'
     '运行时不会按实时负载改路 ⇒ 保序不受影响。'))}
+
+{scheme_block("Phase-TDM — 多波 Up*/Down*（<code>phase_tdm_*</code>）", "updown", '''
+<p><b>类别：</b>调度层方案 · 路由硬件仍是 <b>1 VC</b> Up*/Down* ·
+<strong>不是</strong>链路上的时分复用，而是把一次 alltoall 拆成多波串行阶段。</p>
+<p><b>动机：</b>单高度函数下合法路径挤在少数「脊」边上；多开几张不同根的 UD 表，
+把 (s,d) 对分到不同波次，每波只跑自己的子集，波间屏障排空网络。
+每波内部仍是构造性无死锁的 1VC 表；总 makespan = 各波 DES 之和
+（波间 drain 已含在各波 makespan 的串行相加里）。</p>
+<p><b>算法步骤：</b></p>
+<ol>
+<li><b>候选表：</b>在存活图上枚举 UD 表，按 <code>max_link_load</code> 排序，
+取前 R 张（R=2 或 3）作为波次路由表——通常对应负载最优的若干根。</li>
+<li><b>分波（bal）：</b>将全部 OD 对按 (s,d) 排序后 round-robin 赋给 R 张表；
+若首选表缺该对路径则顺延到下一张。另试过负载贪心装填（load），本网格上不如 bal 稳。</li>
+<li><b>仿真：</b>每波用该波路径子集跑 alltoall DES；端到端通信时间 = Σ 波 makespan。</li>
+<li><b>部署策略 <code>phase_tdm_policy</code>：</b>轻载荷（m₀=1）固定 R=2；
+重载荷（m₀=13）固定 R=3。无需 per-scene 选型启发式
+（廉价负载代理曾试过，命中 oracle 不稳定）。</li>
+</ol>
+<p><b>未奏效的变体（简述）：</b>真·多根装进<strong>一张</strong> 1VC 表（CDG 装箱）、
+链路 2-slot TDM + 最短路——覆盖差或端到端更慢，不进评测集。</p>
+<p><b>与本网格实测（同 44 场景）：</b></p>
+<ul>
+<li>TDM bal×2：最差 <b>755 / 7129 ns</b>（m₀=1 / 13）</li>
+<li>TDM bal×3：最差 <b>772 / 6915 ns</b></li>
+<li>m₀-aware 策略：最差 <b>755 / 6915 ns</b> —— 相对 M3′ 约 −4.4% / −8.7%</li>
+</ul>
+<p><b>代价与语义：</b>软件/固件需支持分波 alltoall + 波间屏障；
+路径表存储 ×R；router 面积仍按 1 VC 计（≈0.90）。
+保序：波内唯一路径；跨波消息本身属于不同调度阶段，不要求全局单次 alltoall 的同时注入语义。</p>
+''' + qa3(
+    '每波路径仍来自某张存活图上的 UD 表，与 M3/M3′ 相同避障。',
+    '每波独立满足「禁 down→up」；波间网络排空，不把多波依赖叠进同一 CDG。',
+    '波内每对唯一路径；波间由屏障分隔，不在同一注入波次内交叉。'))}
 
 {scheme_block("M4 — Segment / 奇偶转向（<code>segment</code>）", "segment", '''
 <p><b>思想：</b>简化 segment-based / odd-even 族：按列带施加不同转向禁令，打破 mesh 环依赖。</p>
@@ -3108,10 +3191,9 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <li>相对 M3：多 1 条 VC，换来接近最短路的路径质量和显著更低的 makespan /
 端到端时间；上层映射还保持规则网格。</li>
 </ul>
-<p><b>端到端角色：</b><b>推荐默认方案</b>。Pareto 拐点：
-相对 M3 只多 39% router 面积，换 22.5% / 25.2% 端到端加速
-（回报 440 / 5155 ns/area）；再往 M7 多花 111% 面积只多买 10.4% / 7.3%。
-两个载荷尺寸结论一致，且已严格支配 M5 f-ring。
+<p><b>端到端角色：</b><b>本轮不参与 e2e</b>（描述保留）。
+历史全方案扫中曾是相对 M3 的 Pareto 拐点（+39% 面积换约 22–25% 加速）；
+本轮评测集上 VC1 已换成 Phase-TDM / M3′，VC2 默认看 Super-turn。
 附带好处：软件仍看规则 8×6，映射 / 调度不用为 PG 改写。</p>
 <p class="note">右图：① 逻辑 XY + 物理展开 · ② 软件所见完整网格 ·
 ③ 单条逻辑边的 expand 表 · ④ VC 按逻辑相位（竖向绕路仍属 VC0）。</p>
@@ -3128,7 +3210,9 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <tr><td>A</td><td class="l">M0 East-first</td><td class="l">禁 N→E / S→E</td><td>1</td><td class="l">转向过滤</td><td>东向切断时高</td><td class="l">比 XY 宽、仍有东向盲区</td></tr>
 <tr><td>A</td><td class="l">M0s Super-turn</td><td class="l">Glass–Ni 自适应 1→2 VC</td><td>1–2</td><td class="l">转向过滤 + 可选第 2 VC</td><td>低</td><td class="l">e2e 评测（VC≤2）</td></tr>
 <tr><td>A</td><td class="l">M0s1 Super-turn 1VC</td><td class="l">Glass–Ni 硬顶 1 VC</td><td>1</td><td class="l">转向过滤</td><td>中（替 VC）</td><td class="l">e2e 评测；牺牲换 1 VC</td></tr>
-<tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">零 VC 成本保规模；连通即达（§2.3）</td></tr>
+<tr><td>A</td><td class="l">M3 Up*/Down*</td><td class="l">树标号 + 先上后下</td><td>1</td><td class="l">路由表/逻辑</td><td>通常 0</td><td class="l">库存度最大根；连通即达（§2.3）</td></tr>
+<tr><td>A</td><td class="l">M3′ best-root</td><td class="l">同 UD，穷举根降负载</td><td>1</td><td class="l">离线根搜索 + 单表</td><td>通常 0</td><td class="l">单波 1VC 最优；仍弱于 TDM</td></tr>
+<tr><td>A</td><td class="l">Phase-TDM</td><td class="l">多根 UD 分波 + 屏障</td><td>1</td><td class="l">调度分波；路由仍 1VC</td><td>通常 0</td><td class="l">VC1 Pareto 左端；需软件分波</td></tr>
 <tr><td>A</td><td class="l">M3+LB / M4 / M4+LB</td><td class="l">转向限制 ± LB</td><td>1</td><td class="l">同左</td><td>中～高</td><td class="l">M4 目录外 STRUCT 极常见（§2.3）</td></tr>
 <tr><td>B</td><td class="l">M5 真 f-ring</td><td class="l">矩形块 + XY 环绕，相位×方向</td><td>4</td><td class="l">4 VC + 绕障</td><td>节点洞 0；链路 1–4</td><td class="l">描述保留；<b>不进</b>本轮 e2e（VC&gt;2）</td></tr>
 <tr><td>B</td><td class="l">M5h half-ring</td><td class="l">半环绕行 + X/Y 两 VC</td><td>2</td><td class="l">2 VC + 半环</td><td>半环受阻时升</td><td class="l">e2e 评测（VC≤2）</td></tr>
@@ -3213,9 +3297,10 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 e2e / §3 只评 VC≤2 且入选方案，<b>M9 / M10 不参与</b>；
 M5 f-ring / LASH / Stripe 保留 §2 描述。</li>
 
-<li><b>端到端前沿（评测集）：M3（VC1）→ M0s Super-turn（VC2）</b>。
-Super-turn 用有限转向模型换覆盖与最差端到端；
-M5h / M0s1 放宽后可全覆盖，但牺牲过重，最差端到端仍进不了前沿。</li>
+<li><b>端到端前沿（评测集）：</b>m₀=1 为 Phase-TDM→Super-turn；
+m₀=13 仅 Phase-TDM（已支配 Super-turn）。
+VC1 探索：换根（M3′）与多波 UD（bal×2/×3，m₀-aware）压过库存 M3；
+真·单表多根装箱与链路 slot-TDM 未胜出。M5h / M0s1 进不了前沿。</li>
 
 <li><b>目录外可达性（§2.3）：</b>M3/M6/M7 连通即达（STRUCT=0）；
 M0s Super-turn 在扫过的空间里同样以断连为主；
@@ -3231,14 +3316,14 @@ M4 极常见 STRUCT；M10 在散落 ≥3 死节点上会。</li>
 <li><b>保序</b>为构造保证（每对唯一路径 + 确定性 VC）；
 区分方案的是避障与无死锁。</li>
 
-<li><b>M3+LB 几乎无效</b>——想降负载应换转向更松或负载更好的方案（如 Super-turn），
-而非在 UD 树上局部重路由。</li>
+<li><b>M3+LB 几乎无效</b>——同合法集合内局部换路不如换根（M3′）或分波（TDM）；
+再不够再上 Super-turn。</li>
 
 <li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 可慢数倍；
 VC 线性放大每端口缓冲（本轮封顶 VC≤2）。</li>
 
-<li><b>通信占端到端 70–86%</b>，花 router 面积买带宽划算。
-推荐默认 <b>M0s Super-turn</b>；面积紧选 <b>M3</b>。</li>
+<li><b>通信占端到端 70–86%</b>。能分波优先 <b>Phase-TDM</b>（重载荷甚至不必上 2VC）；
+否则 M3′ / M3；轻载荷压中位再考虑 Super-turn。</li>
 </ol>
 </body></html>
 """

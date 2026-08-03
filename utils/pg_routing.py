@@ -803,25 +803,68 @@ def _tree_path(s: int, d: int, adj: dict[int, list[int]],
     return out if out[0] == s and out[-1] == d else None
 
 
+def _updown_table(adj: dict[int, list[int]], compute: list[int],
+                  root: int, mode: str = "ud"
+                  ) -> dict[tuple[int, int], list[int]] | None:
+    labels = _updown_labels(adj, root)
+    if labels is None:
+        return None
+    paths: dict[tuple[int, int], list[int]] = {}
+    for s in compute:
+        for d in compute:
+            if s == d:
+                continue
+            p = _tree_path(s, d, adj, labels, mode)
+            if p is None:
+                return None
+            paths[(s, d)] = p
+    return paths
+
+
 def gen_updown(pg: dict) -> dict[str, Any] | None:
     adj = pg["route_adj"]
     compute = pg["compute_nodes"]
     if len(compute) < 2 or not adj:
         return None
     root = max(adj.keys(), key=lambda n: (len(adj[n]), -n))
-    labels = _updown_labels(adj, root)
-    if labels is None:
+    paths = _updown_table(adj, compute, root, "ud")
+    if paths is None:
         return None
-    paths = {}
-    for s in compute:
-        for d in compute:
-            if s == d:
-                continue
-            p = _tree_path(s, d, adj, labels, "ud")
-            if p is None:
-                return None
-            paths[(s, d)] = p
     return {"paths": paths, "vc_of": None, "scheme": "updown", "root": root}
+
+
+def gen_updown_best_root(pg: dict) -> dict[str, Any] | None:
+    """M3′: Up*/Down* with root chosen to minimise alltoall max-link load.
+
+    Same constructive 1-VC deadlock freedom as M3; only the free parameter
+    (BFS root / height function) is searched over all live routers.
+    Tie-break: total hop count, then smaller root id.
+    """
+    adj = pg["route_adj"]
+    compute = pg["compute_nodes"]
+    if len(compute) < 2 or not adj:
+        return None
+    best = None
+    best_key = None
+    for root in sorted(adj.keys()):
+        paths = _updown_table(adj, compute, root, "ud")
+        if paths is None:
+            continue
+        ok, _ = validate_routing(paths, compute, adj)
+        if not ok:
+            continue
+        hops = sum(len(p) - 1 for p in paths.values())
+        key = (max_link_load(paths), hops, root)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = (root, paths)
+    if best is None:
+        return None
+    root, paths = best
+    return {
+        "paths": paths, "vc_of": None, "num_vc": 1,
+        "scheme": "updown_best_root", "root": root,
+    }
 
 
 def gen_segment(pg: dict) -> dict[str, Any] | None:
@@ -1800,6 +1843,7 @@ SCHEME_GENERATORS = {
     "xy": gen_xy,
     "rect_xy": gen_rect_xy,
     "updown": gen_updown,
+    "updown_best_root": gen_updown_best_root,
     "segment": gen_segment,
     "fault_ring_vc": gen_fault_ring_vc,
     "fault_half_ring": gen_fault_half_ring,
