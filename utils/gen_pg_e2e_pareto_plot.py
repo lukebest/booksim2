@@ -28,9 +28,11 @@ LABELS = {
     "updown": "M3 Up*/Down*",
     "updown_best_root": "M3′ best-root",
     "updown_lb": "M3+LB",
-    "phase_tdm_bal2": "TDM bal×2",
-    "phase_tdm_bal3": "TDM bal×3",
-    "phase_tdm_policy": "TDM m₀-policy",
+    "bb_ud_bal2": "BB UD×2",
+    "bb_ud_bal3": "BB UD×3",
+    "bb_ud_policy": "BB UD policy",
+    "bb_lash": "BB LASH→1VC",
+    "bb_dual": "BB DualUD→1VC",
     "segment": "M4 Segment",
     "segment_lb": "M4+LB",
     "fault_ring_vc": "M5 f-ring",
@@ -73,9 +75,9 @@ def main() -> None:
         else OUT_PNG)
 
     data = json.loads(src.read_text())
-    # M9/M10 (and other desc-only schemes) are not in the e2e evaluation set.
-    skip = {"dual_updown", "virtual_mesh", "fault_ring_vc", "lash",
-            "lash_tor", "stripe_vc"}
+    # Physical multi-VC extremes (Stripe / Virtual / f-ring) out of scope;
+    # Dual-UD / LASH (≤3 VC) and batch-barrier 1VC stay when present.
+    skip = {"lash_tor", "stripe_vc", "virtual_mesh", "fault_ring_vc"}
     summary = [s for s in data["summary"] if s["scheme"] not in skip]
     meta = data["meta"]
     m0s = meta["m0_list"]
@@ -131,7 +133,7 @@ def main() -> None:
         hi = max(g["worst"] for g in merged.values())
         pad = (hi - lo) * 0.08 or 1.0
         ax.set_ylim(lo - pad, hi + pad * 2.2)
-        ax.set_xlim(0.75, max(3.45, xmax))
+        ax.set_xlim(0.75, max(3.45, xmax + 0.15))
 
         gap = (hi - lo + 2 * pad) * 0.058
         ly = -1e18
