@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>Request–Grant 分组交换 NoC 基线研究报告 · 8×6</title>
+<style>
+body { font-family: "Segoe UI", system-ui, sans-serif; margin: 24px 40px;
+       background: #0b1020; color: #e8ecf4; line-height: 1.55; }
+h1,h2,h3 { color: #f0f4ff; }
+h1 { font-size: 1.6rem; border-bottom: 1px solid #2a3555; padding-bottom: .4rem; }
+h2 { margin-top: 2rem; font-size: 1.25rem; }
+a { color: #7eb6ff; }
+.muted { color: #9aa3b5; font-size: .85rem; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr));
+          gap: 12px; margin: 1rem 0 1.5rem; }
+.card { background: #141b2f; border: 1px solid #2a3555; border-radius: 10px;
+         padding: 12px 14px; }
+.card.ok { border-color: #2d6a4f; }
+.card.bad { border-color: #9b2226; }
+.card .k { font-size: .8rem; color: #9aa3b5; }
+.card .v { font-size: 1.35rem; font-weight: 700; margin: .25rem 0; }
+.card .s { font-size: .8rem; color: #b8c0d0; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem;
+         margin: .6rem 0 1.2rem; }
+th, td { border: 1px solid #2a3555; padding: 5px 8px; text-align: left; }
+th { background: #1a2340; }
+tr:nth-child(even) { background: #12192c; }
+code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
+.pill { display: inline-block; background: #1a2340; border-radius: 999px;
+         padding: 2px 10px; font-size: .78rem; margin-right: 6px; }
+.eq { background: #141b2f; padding: 10px 14px; border-radius: 8px;
+       font-family: ui-monospace, monospace; margin: .6rem 0; }
+</style>
+</head>
+<body>
+<h1>Request–Grant 分组交换 NoC 基线 · 8×6 mesh / folded torus</h1>
+<p class="muted">生成于 2026-08-10T08:38:44.719115+00:00 · 179 行配置 ·
+数据 <code>results/rg_noc_8x6.json</code></p>
+
+<p>
+<span class="pill">H=7 / V=9</span>
+<span class="pill">RAMP=2 · RAMP_BW=2</span>
+<span class="pill">mesh σ=1 · torus σ=2</span>
+<span class="pill">对分带宽 = 6 flit/cy</span>
+</p>
+
+
+<div class="cards">
+  <div class="card bad">
+    <div class="k">CA alltoall 非聚合 · 控制收敛</div>
+    <div class="v">1136 cy</div>
+    <div class="s">2256 req → 解析下界 ⌈2256/4⌉=564；实测 1136（含控制面路径争用）· makespan=1360</div>
+  </div>
+  <div class="card ok">
+    <div class="k">CA alltoall 聚合 · m=1</div>
+    <div class="v">326 cy</div>
+    <div class="s">48 req · t_last_req=55 · vs FIFO 基线 192</div>
+  </div>
+  <div class="card">
+    <div class="k">FIFO 基线 alltoall m=1</div>
+    <div class="v">192 cy</div>
+    <div class="s">pg golden 参考 188 · 本 DES 192（+4）</div>
+  </div>
+  <div class="card ok">
+    <div class="k">DA broadcast bufferless</div>
+    <div class="v">mesh 97 / torus 58</div>
+    <div class="s">直径优势：torus 55 vs mesh 94 · σ=2 在单树小消息下未反噬</div>
+  </div>
+  <div class="card">
+    <div class="k">金属线比 · 对分带宽</div>
+    <div class="v">1.171×</div>
+    <div class="s">mesh 82 / torus 96 链路单位 · 对分均为 6.0 flit/cy ✓</div>
+  </div>
+  <div class="card ok">
+    <div class="k">验证清单</div>
+    <div class="v">CDG ✓ · σ ✓</div>
+    <div class="s">bufferless 零驻留 ✓ · 保序 ✓ · 对分相等 ✓</div>
+  </div>
+</div>
+
+
+<h2>1. 建模口径</h2>
+<ul>
+<li><b>拓扑</b>：8×6 mesh（82 无向链路）vs 折叠 2D torus（96 无向链路）。金属线恒定约束下 torus 每链路带宽减半（σ=2），对分带宽与 mesh 严格相等。</li>
+<li><b>金属线审计</b>：mesh=82 · torus=96 · 比=1.171（torus 多约 17% 链路单位；折叠线长×2 的物理偏差见敏感度 delay×2）。</li>
+<li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
+<li><b>仲裁器</b>：CA 集中式 @ nid=28；DA 目的端分布式。</li>
+<li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。</li>
+</ul>
+<div class="eq">T = T_bound + R_rg + W_grant(ρ) &nbsp;;&nbsp; R_rg = ℓ(src→arb) + T_sched + ℓ(arb→src)</div>
+
+<h2>2. 头条结论：控制平面才是 alltoall 的瓶颈</h2>
+<p>CA 下 alltoall 若对每条 (s,d) 流单独 request，共 48×47=<b>2256</b> 条控制消息挤入仲裁器 ≤4 个入端口。
+解析收敛下界 ⌈2256/4⌉=<b>564</b> cy；控制面 DES 实测 t_last_request=<b>1136</b> cy
+（额外来自控制路径争用）。而 m=1 数据面下界仅 ~98 cy、FIFO 基线 makespan=192 cy。</p>
+<p><b>两个有效缓解：</b></p>
+<ol>
+<li><b>Request 聚合</b>：每源一条 request 覆盖全部目的 → 48 条，t_last_req 降到线延迟量级（~55），makespan 回到与 FIFO 同量级。</li>
+<li><b>DA 分布式</b>：把收敛点打散到 48 个目的节点，消除单点 564 cy 税。</li>
+</ol>
+
+<h2>3. 主结果表（makespan，cycles）</h2>
+<p class="muted">CA alltoall 默认展示聚合配置；m=1 非聚合见头条卡片。allgather 为 sync barrier。</p>
+<table>
+<tr><th>topo</th><th>plane</th><th>arb</th><th>pattern</th>
+<th>m=1</th><th>m=4</th><th>m=16</th><th>ctrl (m=1)</th></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>alltoall</td><td>326</td><td>633</td><td>2505</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>allgather</td><td>292</td><td>799</td><td>2896</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>allreduce</td><td>168</td><td>200</td><td>522</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>broadcast</td><td>207</td><td>210</td><td>222</td><td class='muted'>req=1 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>reduce</td><td>175</td><td>220</td><td>697</td><td class='muted'>req=47 t_req=49</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>alltoall</td><td>518</td><td>608</td><td>2227</td><td class='muted'>req=2256 t_req=289</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>allgather</td><td>417</td><td>1098</td><td>3822</td><td class='muted'>req=48 t_req=94</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>allreduce</td><td>168</td><td>200</td><td>522</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>broadcast</td><td>97</td><td>100</td><td>112</td><td class='muted'>req=1 t_req=0</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>reduce</td><td>285</td><td>288</td><td>674</td><td class='muted'>req=47 t_req=94</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>alltoall</td><td>330</td><td>703</td><td>2569</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>allgather</td><td>230</td><td>496</td><td>1667</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>allreduce</td><td>168</td><td>198</td><td>471</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>broadcast</td><td>207</td><td>208</td><td>214</td><td class='muted'>req=1 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>reduce</td><td>175</td><td>227</td><td>689</td><td class='muted'>req=47 t_req=49</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>alltoall</td><td>518</td><td>636</td><td>2075</td><td class='muted'>req=2256 t_req=289</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>allgather</td><td>326</td><td>546</td><td>1594</td><td class='muted'>req=48 t_req=94</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>allreduce</td><td>168</td><td>198</td><td>471</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>broadcast</td><td>97</td><td>98</td><td>104</td><td class='muted'>req=1 t_req=0</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>reduce</td><td>285</td><td>286</td><td>666</td><td class='muted'>req=47 t_req=94</td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>alltoall</td><td>192</td><td>701</td><td>3238</td><td class='muted'></td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>allgather</td><td>362</td><td>1157</td><td>4337</td><td class='muted'></td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>allreduce</td><td>80</td><td>220</td><td>784</td><td class='muted'></td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>broadcast</td><td>139</td><td>280</td><td>844</td><td class='muted'></td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>reduce</td><td>98</td><td>175</td><td>652</td><td class='muted'></td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>alltoall</td><td>677</td><td>1513</td><td>4886</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>allgather</td><td>686</td><td>1883</td><td>6690</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>allreduce</td><td>168</td><td>288</td><td>862</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>broadcast</td><td>168</td><td>174</td><td>198</td><td class='muted'>req=1 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>reduce</td><td>110</td><td>248</td><td>824</td><td class='muted'>req=47 t_req=49</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>alltoall</td><td>908</td><td>1686</td><td>4697</td><td class='muted'>req=2256 t_req=267</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>allgather</td><td>628</td><td>1722</td><td>6252</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>allreduce</td><td>168</td><td>288</td><td>862</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>broadcast</td><td>58</td><td>64</td><td>88</td><td class='muted'>req=1 t_req=0</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>reduce</td><td>168</td><td>234</td><td>796</td><td class='muted'>req=47 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>alltoall</td><td>304</td><td>910</td><td>3484</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>allgather</td><td>239</td><td>718</td><td>1528</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>allreduce</td><td>168</td><td>285</td><td>839</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>broadcast</td><td>168</td><td>169</td><td>175</td><td class='muted'>req=1 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>reduce</td><td>110</td><td>243</td><td>801</td><td class='muted'>req=47 t_req=49</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>alltoall</td><td>398</td><td>817</td><td>2984</td><td class='muted'>req=2256 t_req=267</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>allgather</td><td>236</td><td>699</td><td>1617</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>allreduce</td><td>168</td><td>285</td><td>839</td><td class='muted'>req=48 t_req=55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>broadcast</td><td>58</td><td>59</td><td>65</td><td class='muted'>req=1 t_req=0</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>reduce</td><td>168</td><td>229</td><td>773</td><td class='muted'>req=47 t_req=55</td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>alltoall</td><td>206</td><td>1274</td><td>5649</td><td class='muted'></td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>allgather</td><td>755</td><td>2567</td><td>9815</td><td class='muted'></td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>allreduce</td><td>107</td><td>389</td><td>1517</td><td class='muted'></td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>broadcast</td><td>102</td><td>367</td><td>1495</td><td class='muted'></td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>reduce</td><td>65</td><td>203</td><td>779</td><td class='muted'></td></tr>
+</table>
+
+<h2>4. Allgather：同步 barrier vs 异步多播树</h2>
+<table>
+<tr><th>topo</th><th>plane</th><th>m</th><th>sync</th><th>async tree</th><th>Δ(sync−async)</th></tr>
+<tr><td>mesh</td><td>bufferable</td><td>1</td><td>292</td><td>271</td><td>21</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>4</td><td>799</td><td>691</td><td>108</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>16</td><td>2896</td><td>2548</td><td>348</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>1</td><td>230</td><td>208</td><td>22</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>4</td><td>496</td><td>469</td><td>27</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>16</td><td>1667</td><td>1357</td><td>310</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>1</td><td>686</td><td>599</td><td>87</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>4</td><td>1883</td><td>1760</td><td>123</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>16</td><td>6690</td><td>6404</td><td>286</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>1</td><td>239</td><td>184</td><td>55</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>4</td><td>718</td><td>687</td><td>31</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>16</td><td>1528</td><td>1634</td><td>-106</td></tr>
+</table>
+<p>异步树避免了「等最远节点」的 barrier 税，但树间冲突使数据面可能更长；同步把冲突集中到统一排程，大 m 时摊薄 R_rg。</p>
+
+<h2>5. Mesh vs Torus</h2>
+<ul>
+<li>对分带宽绑定的大消息 alltoall：二者数据下界相同（bisect 自检 ✓）。</li>
+<li>小消息 / 树形（broadcast、reduce）：torus 直径 55 vs mesh 94，DA bufferless broadcast m=1 为
+58
+vs mesh
+97。</li>
+<li>torus σ=2 的串行税在长消息聚合 alltoall 上可见（bufferable m=16 明显重于 mesh）。</li>
+<li>bufferable torus 需 <b>2 VC</b>（dateline）→ 缓冲面积约翻倍；bufferless 靠时隙预约无需 VC。</li>
+</ul>
+
+<h2>6. 面积（归一化 IQ-XY = 1.0）</h2>
+<table>
+<tr><th>topo</th><th>plane</th><th>arb</th><th>total</th><th>buffer</th><th>arbiter</th><th>ctrl_net</th></tr>
+<tr><td>mesh</td><td>bufferable</td><td>ca</td><td>0.967</td><td>0.347</td><td>0.050</td><td>0.020</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>da</td><td>0.947</td><td>0.347</td><td>0.030</td><td>0.020</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>ca</td><td>0.620</td><td>0.000</td><td>0.050</td><td>0.020</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>da</td><td>0.600</td><td>0.000</td><td>0.030</td><td>0.020</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>ca</td><td>1.314</td><td>0.694</td><td>0.050</td><td>0.020</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>da</td><td>1.294</td><td>0.694</td><td>0.030</td><td>0.020</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>ca</td><td>0.620</td><td>0.000</td><td>0.050</td><td>0.020</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>da</td><td>0.600</td><td>0.000</td><td>0.030</td><td>0.020</td></tr>
+<tr><td>mesh</td><td>fifo</td><td>none</td><td>0.947</td><td>0.347</td><td>0.030</td><td>0.020</td></tr>
+<tr><td>torus</td><td>fifo</td><td>none</td><td>1.294</td><td>0.694</td><td>0.030</td><td>0.020</td></tr>
+</table>
+<p class="muted">公式：crossbar(0.380)+control(0.170)+5·VC·Q·0.00365 + arbiter + ctrl_net。
+bufferless 扣掉 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03。</p>
+
+<h2>7. 敏感度</h2>
+
+<h3>W_out 敏感度（mesh · bufferable · CA · alltoall 聚合 · m=4）</h3>
+<table><tr><th>w_out</th><th>makespan</th></tr><tr><td>1</td><td>2702</td></tr><tr><td>4</td><td>806</td></tr><tr><td>16</td><td>633</td></tr><tr><td>∞</td><td>617</td></tr></table>
+<h3>T_sched 敏感度（mesh · bufferable · CA · allgather sync · m=4）</h3>
+<table><tr><th>t_sched</th><th>makespan</th></tr><tr><td>1</td><td>799</td></tr><tr><td>8</td><td>806</td></tr><tr><td>32</td><td>830</td></tr></table>
+<h3>Q 敏感度（mesh · bufferable · CA · alltoall 聚合 · m=4）</h3>
+<table><tr><th>Q</th><th>makespan</th></tr><tr><td>4</td><td>633</td></tr><tr><td>8</td><td>633</td></tr><tr><td>19</td><td>633</td></tr></table>
+<h3>Torus delay×2 对照（H=14/V=18）</h3>
+<table><tr><th>pattern</th><th>makespan</th><th>torus_delay_scale</th></tr><tr><td>alltoall</td><td>2001</td><td>2</td></tr><tr><td>broadcast</td><td>339</td><td>2</td></tr><tr><td>allgather</td><td>2057</td><td>2</td></tr></table>
+
+
+<h2>8. 验证清单</h2>
+<ul>
+<li>对分带宽相等：✓</li>
+<li>torus σ=0.5 flit/cy：✓</li>
+<li>Golden FIFO alltoall m=1 = 192（pg 参考 188）</li>
+<li>bufferless 零驻留（68 组）：✓</li>
+<li>保序：✓</li>
+<li>torus CDG 无环：✓</li>
+<li>控制收敛 alltoall 非聚合：t_last_req=1136 ≥ 500 ✓</li>
+<li>单播单调性 bufferable≲bufferless：⚠
+（树 pattern 的 bufferable 快速路径会展开为单播、高估共享前缀负载——见 mono_note）</li>
+</ul>
+<p class="muted">Tree patterns (allgather) use event-driven unicast expansion for bufferable, which over-counts shared multicast prefixes vs bufferless tree reservation — violations there are expected.</p>
+
+<h2>9. 已知局限</h2>
+<ul>
+<li>金属线：按链路计数 torus/mesh≈1.17，非严格恒定；折叠线长×2 用 <code>torus_delay_scale=2</code> 对照。</li>
+<li>同 hop 延迟 7/9 对 torus 有利（白拿减半跳数）。</li>
+<li>多树 bufferable（allgather）用事件驱动单播展开近似，共享树边被重复计数。</li>
+<li>reduce = gather + PE 本地归约（无网内算术），对齐 ADR-002/Arch-A2。</li>
+</ul>
+
+<h2>10. 文件</h2>
+<ul>
+<li><code>utils/rg_topo.py</code> · <code>rg_bounds.py</code> · <code>rg_collectives.py</code> · <code>rg_arbiter.py</code></li>
+<li><code>utils/dse_rg_noc_8x6.py</code> → <code>results/rg_noc_8x6.json</code></li>
+<li><code>docs/phase-7-exploration/rg-noc-8x6.md</code></li>
+</ul>
+</body></html>
