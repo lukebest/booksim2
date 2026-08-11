@@ -169,7 +169,12 @@ def r_rg_da(topo: Topology, src: int, dst: int) -> int:
 
 
 def ctrl_convergence_lb(n_requests: int, ingress_ports: int = 4) -> int:
-    """Arbiter ingress serialization: ceil(#req / #ports)."""
+    """Arbiter ingress serialization on the PRIVATE control NoC.
+
+    Control messages do not share data-plane links; the remaining bottleneck
+    at a centralized arbiter is its control-router ingress degree (≤4 on
+    a mesh/torus node).
+    """
     return math.ceil(n_requests / ingress_ports)
 
 

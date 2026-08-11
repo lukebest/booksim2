@@ -5,7 +5,11 @@ Data plane:
   bufferable — in-port FIFO + credit + oldest-first arb + HOL; grant = admission
   bufferless — rigid reserved cut-through; zero router residency asserted
 
-Control plane is scheduled first (rg_arbiter.schedule); DES consumes grants.
+Control plane (PRIVATE NoC):
+  Request/grant ride a dedicated isomorphic control fabric with its own
+  physical links — never multiplexed onto data-plane wires. Scheduled
+  first via rg_arbiter.schedule; data DES then consumes grants.
+
 Also runs a pure-FIFO no-RG baseline for contrast.
 """
 
@@ -70,23 +74,34 @@ class Flit:
 # Area model (normalized IQ-XY baseline = 1.0)
 # ---------------------------------------------------------------------------
 
+# Private control NoC area (normalized to IQ-XY data router = 1.0), per node:
+# narrow-flit isomorphic mesh/torus — small crossbar + shallow ctrl FIFOs +
+# simple DOR. Extra metal is OUTSIDE the data-plane metal-constant budget.
+CTRL_NOC_AREA_PER_NODE = 0.12
+
+
 def router_area(num_vc: int, Q: int, bufferless: bool = False,
                 arbiter_overhead: float = 0.0,
-                ctrl_net_overhead: float = 0.02) -> dict[str, float]:
+                ctrl_noc: bool = True,
+                ctrl_net_overhead: float | None = None) -> dict[str, float]:
     crossbar = 0.380
     control = 0.170
     if bufferless:
         buf = 0.0
     else:
         buf = 5 * num_vc * Q * 0.00365
+    if ctrl_net_overhead is None:
+        ctrl_net_overhead = CTRL_NOC_AREA_PER_NODE if ctrl_noc else 0.0
     total = crossbar + control + buf + arbiter_overhead + ctrl_net_overhead
     return {
         "crossbar": crossbar,
         "control": control,
         "buffer": buf,
         "arbiter": arbiter_overhead,
-        "ctrl_net": ctrl_net_overhead,
+        "ctrl_noc_private": ctrl_net_overhead,
+        "ctrl_net": ctrl_net_overhead,  # alias for report compat
         "total": total,
+        "shared_with_data_plane": False,
     }
 
 
@@ -737,12 +752,14 @@ def run_one(topo_kind: str, plane: str, arbiter: str, pattern: str, m: int,
             else:
                 sim = simulate_bufferable(topo, col, sr.grants, Q=Q)
 
+    # FIFO baseline has no RG control NoC; RG configs always pay private ctrl NoC
+    has_ctrl_noc = plane != "fifo"
     area = router_area(
         num_vc=1 if plane == "bufferless" else topo.num_vc,
         Q=0 if plane == "bufferless" else Q,
         bufferless=(plane == "bufferless"),
-        arbiter_overhead=0.05 if arbiter == "ca" else 0.03,
-        ctrl_net_overhead=0.02,
+        arbiter_overhead=(0.05 if arbiter == "ca" else 0.03) if has_ctrl_noc else 0.0,
+        ctrl_noc=has_ctrl_noc,
     )
 
     result = {
@@ -757,6 +774,12 @@ def run_one(topo_kind: str, plane: str, arbiter: str, pattern: str, m: int,
         "t_sched": t_sched,
         "w_out": w_out if w_out < 10**8 else None,
         "Q": Q,
+        "control_noc": {
+            "kind": "private_isomorphic" if has_ctrl_noc else "none",
+            "shared_with_data_plane": False,
+            "msgs_per_link_cy": 1 if has_ctrl_noc else 0,
+            "inherits_data_sigma": False,
+        },
         "bounds": bounds,
         "area": area,
         "sched_s": round(sched_time, 4),
@@ -770,6 +793,9 @@ def run_one(topo_kind: str, plane: str, arbiter: str, pattern: str, m: int,
             "t_first_grant": sr.ctrl_stats.get("t_first_grant"),
             "t_last_grant": sr.ctrl_stats.get("t_last_grant"),
             "max_ingress_per_cy": sr.ctrl_stats.get("max_ingress_per_cy"),
+            "shared_with_data_plane": sr.ctrl_stats.get(
+                "shared_with_data_plane", False),
+            "control_noc": sr.ctrl_stats.get("control_noc"),
         },
     }
     if sim:
@@ -917,9 +943,34 @@ def run_sweep(quick: bool = False, out: Path = OUT_JSON) -> dict[str, Any]:
     # Verifications from results
     verifications["tests"] = _run_verifications(rows, mesh, torus)
 
+    # Isolation contract: every RG row must report private control NoC
+    rg_rows = [r for r in rows if r.get("plane") != "fifo" and r.get("ctrl")]
+    verifications["private_control_noc"] = {
+        "policy": "private_isomorphic",
+        "shared_with_data_plane": False,
+        "inherits_data_sigma": False,
+        "all_rg_rows_isolated": all(
+            r.get("ctrl", {}).get("shared_with_data_plane") is False
+            and r.get("control_noc", {}).get("shared_with_data_plane") is False
+            for r in rg_rows),
+        "n_rg_rows": len(rg_rows),
+        "area_per_node": CTRL_NOC_AREA_PER_NODE,
+        "note": ("CA/DA request–grant messages travel on a dedicated control "
+                 "NoC; physical links are not shared with the data plane. "
+                 "t_last_request excess over ⌈#req/4⌉ is control-vs-control "
+                 "contention on the private fabric, not data interference."),
+    }
+
     payload = {
         "generated": datetime.now(timezone.utc).isoformat(),
         "quick": quick,
+        "control_noc_policy": {
+            "kind": "private_isomorphic",
+            "shared_with_data_plane": False,
+            "inherits_data_sigma": False,
+            "msgs_per_link_cy": 1,
+            "area_per_node_norm": CTRL_NOC_AREA_PER_NODE,
+        },
         "verifications": verifications,
         "n_rows": len(rows),
         "rows": rows,

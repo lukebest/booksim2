@@ -32,9 +32,14 @@ def coord(n: int, mx: int = MX) -> tuple[int, int]:
     return n % mx, n // mx
 
 
+# Central scheduler placement: (x=4, y=0) — origin at TOP-LEFT, x first then y,
+# i.e. the 5th column of the FIRST row. nid(4,0) = 4.
+CA_X, CA_Y = 4, 0
+
+
 def central_arbiter_node(mx: int = MX, my: int = MY) -> int:
-    """CA placement: near geometric center (4,3) on 8x6."""
-    return nid(mx // 2, my // 2, mx)
+    """CA placement: (4,0) — first row, 5th column (origin top-left)."""
+    return nid(CA_X, CA_Y, mx)
 
 
 class Topology:

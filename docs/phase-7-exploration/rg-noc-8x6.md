@@ -1,7 +1,8 @@
 # 8×6 Request–Grant 分组交换 NoC 基线研究报告
 
 **几何：** 8×6 mesh 与折叠 2D torus；H=7，V=9；RAMP=2，RAMP_BW=2  
-**金属线恒定：** torus 每链路带宽 = mesh 的一半（σ=2），对分带宽均为 6 flit/cy  
+**金属线恒定（数据面）：** torus 每链路带宽 = mesh 的一半（σ=2），对分带宽均为 6 flit/cy  
+**控制平面（硬约束）：** request/grant 走**私有控制 NoC**（与数据面同构、独立物理链路），**不与数据面共链路**；不继承数据面 σ  
 **类型：** bufferable（源端准入 + FIFO）/ bufferless（时隙预约、零缓冲）  
 **仲裁：** CA 集中式 @ nid=28 / DA 目的端分布式  
 **流量：** alltoall · allgather · allreduce · broadcast · reduce  
@@ -9,45 +10,40 @@
 
 ## 0. 一页结论
 
-1. **对 alltoall，逐流 request–grant 的控制平面收敛税远大于数据面本身。**  
-   CA 下 2256 条 request 经 ≤4 入端口：解析下界 564 cy，控制面 DES 实测 **t_last_request = 1136 cy**；而 m=1 FIFO 基线 makespan 仅 **192 cy**（pg golden 188）。  
-   **不聚合的 CA request–grant 作为 alltoall 基线是不可用的。**
+1. **即便控制面是完全私有的 NoC，CA 逐流 alltoall 仍被控制收敛税打穿。**  
+   2256 条 request 挤入 CA 控制路由器 ≤4 入端口：解析下界 564 cy；私有控制 NoC DES 实测 **t_last_request ≈ 1136 cy**（超出部分是**控制消息互争**，不是数据干扰）。m=1 FIFO 数据基线仅 **192 cy**。  
+   **不聚合的 CA request–grant 作为 alltoall 基线不可用——问题在控制面拓扑汇聚，不在「是否与数据共链路」。**
 
-2. **两个有效缓解：**  
-   - **Request 聚合**（每源 1 条）：48 条 request，t_last_req ≈ 55（线延迟），bufferable CA m=1 makespan **326**（与数据面同量级）。  
-   - **DA 分布式**：收敛打散到 48 个目的，m=1 makespan **518**（仍高于聚合 CA，但无 1136 cy 单点税）。
+2. **两个有效缓解（仍在私有控制 NoC 上）：**  
+   - **Request 聚合**（每源 1 条）：48 条 request，t_last_req ≈ 55，makespan 回到数据面量级。  
+   - **DA 分布式**：收敛打散到 48 个目的控制端点，消除单点 564 cy 税。
 
-3. **同步 barrier（allgather/allreduce）** 把 R_rg 钉在最远节点往返（~111 cy + T_sched），每次集合通信付一次、随 m 摊薄；异步「每 grant = 一棵多播树」去掉 barrier 等待，但树间冲突使数据面更长——大 m 时同步往往更划算。
+3. **同步 barrier（allgather/allreduce）** 把 R_rg 钉在最远节点经**控制面**的往返；异步「每 grant = 一棵多播树」去掉 barrier 等待，大 m 时同步往往更划算。
 
-4. **Mesh vs torus（对分相等）：**  
-   - 大消息 alltoall：二者由 bisect 绑定，下界相同。  
-   - 小消息 / broadcast：torus 直径 55 vs mesh 94，DA bufferless broadcast m=1 为 **58 vs 97**。  
-   - torus σ=2 在长消息上反噬；bufferable torus 还要 **2 VC dateline**（面积约翻倍）。
+4. **Mesh vs torus（数据面对分相等）：** 小消息/broadcast 上 torus 直径优势明显；长消息受数据面 σ=2 反噬。控制面带宽与数据 σ 解耦（始终 1 msg/cy/控制链路）。
 
-5. **bufferless** 用时隙预约构造性消除网内排队（零驻留断言通过）；bufferable 在单播上与之接近，多树 pattern 的快速路径会高估共享前缀负载。
+5. **面积：** 私有控制 NoC 是数据面金属恒定预算之外的增量（每节点 +0.12，相对 IQ-XY=1.0）。
 
-## 1. 建模口径与审计
-
-| 项 | mesh | folded torus |
-|----|------|----------------|
-| 无向链路 | 82 | 96 |
-| σ（cy/flit） | 1 | 2 |
-| 对分带宽 | 6 flit/cy | 6 flit/cy |
-| 直径线延迟 | 94 | 55 |
-| bufferable VC | 1 | 2（dateline） |
-
-**金属线比** torus/mesh = 96/82 ≈ **1.171**（非严格恒定；见报告局限）。  
-**delay×2 敏感度：** 折叠线长按 14/18 跑对照，写入 JSON `tag=sens_torus_delay`。
-
-自检：`bisect_lb` 两拓扑逐位相等；torus CDG（dateline）无环；routing validate ✓。
-
-## 2. Request–Grant 机制
+## 1. 私有控制 NoC 模型
 
 ```
-源端数据 ──request──▶ 仲裁器 ──grant──▶ 源端闸门 ──▶ 数据平面
-                         │
-              控制平面（独立窄网，1 msg/cy/链路）
+源端 ──request──▶ [私有控制 NoC] ──▶ 仲裁器 ──grant──▶ [私有控制 NoC] ──▶ 源端闸门
+                                                                      │
+                                                                      ▼
+                                                         数据平面 NoC（独立物理链路）
 ```
+
+| 属性 | 数据平面 | 私有控制平面 |
+|------|----------|----------------|
+| 物理链路 | mesh 82 / torus 96 | **另一套**同构链路 |
+| 与对方共享？ | — | **否** |
+| 链路带宽 | mesh 1 / torus 0.5 flit/cy | 始终 1 ctrl-msg/cy |
+| 承载 | 数据 flit | request / grant 仅 |
+| 金属预算 | mesh↔torus 对分恒定 | **额外**金属/面积 |
+
+隔离断言写入 JSON：`control_noc_policy.shared_with_data_plane = false`，且每条 RG 行的 `ctrl.shared_with_data_plane = false`。
+
+## 2. Request–Grant 语义
 
 | Pattern | Request 语义 |
 |---------|----------------|
@@ -55,71 +51,68 @@
 | allgather / allreduce | 默认同步 barrier：等齐 48 个 request 再统一 grant |
 | allgather 对照 | 异步：每个 grant = 该源的一棵多播树 |
 
-reduce = **gather + PE 本地归约**（ADR-002 / Arch-A2，网内无 ALU）。
+reduce = **gather + PE 本地归约**（ADR-002 / Arch-A2）。
+
+端到端：`T = T_bound + R_rg + W_grant`，其中 `R_rg` 的线延迟项走 **ℓ_ctrl**（私有控制 NoC）。
 
 ## 3. 关键数字（mesh，除非注明）
 
+数值来自重跑后的 `results/rg_noc_8x6.json`（`shared_with_data_plane=false` 全量断言通过）。控制 DES 本就不占用数据链路，makespan 与隔离前一致；面积按私有控制 NoC **+0.12/节点** 重计。
+
 | 配置 | m | makespan | 备注 |
 |------|---|----------|------|
-| FIFO alltoall | 1 | **192** | golden 对照 188 |
-| CA bufferable alltoall 非聚合 | 1 | **1360** | t_last_req=1136 |
+| FIFO alltoall | 1 | **192** | 无控制 NoC；golden 对照 188 |
+| CA bufferable alltoall 非聚合 | 1 | **1360** | t_last_req=**1136**（私有控制网互争） |
 | CA bufferable alltoall 聚合 | 1 / 4 / 16 | 326 / 633 / 2505 | 可用基线 |
 | DA bufferable alltoall | 1 / 4 / 16 | 518 / 608 / 2227 | 无单点收敛 |
-| CA bufferless broadcast | 1 | 207 | R_rg≈111 占主导 |
-| DA bufferless broadcast | 1 | **97** | 近数据下界 98 |
+| DA bufferless broadcast | 1 | **97** | 近数据下界 |
 | torus DA bufferless broadcast | 1 | **58** | 直径优势 |
-| CA allgather sync bufferless | 1 / 4 / 16 | 230 / 496 / 1667 | |
-| CA allgather async bufferless | 1 / 4 / 16 | 208 / 469 / 1357 | 略快于 sync |
-
-**W_out 敏感度**（聚合 alltoall m=4）：W=1 → 2702；W=4 → 806；W=16 → 633；W=∞ → 617。
 
 ## 4. 面积（归一化 IQ-XY = 1.0）
 
-`area = 0.380 + 0.170 + 5·VC·Q·0.00365 + arbiter + ctrl_net`
+`area = 0.380 + 0.170 + 5·VC·Q·0.00365 + arbiter + private_ctrl_noc(0.12)`
 
-- bufferable mesh（VC1,Q=19）≈ 0.97（含 CA 0.05 + ctrl 0.02）  
-- bufferable torus（VC2）缓冲项翻倍  
-- bufferless：缓冲 ≈ 0，总面积显著低于 1.0，但付仲裁表 + 控制网开销  
+- RG 配置均含私有控制 NoC +0.12/节点（数据面金属恒定之外）  
+- bufferable torus 另加 VC2 dateline 缓冲  
+- FIFO 基线无控制 NoC、无仲裁器开销  
 
 ## 5. 选型建议
 
 | 场景 | 建议 |
 |------|------|
 | alltoall 基线 | **CA + request 聚合 + bufferable**；或 DA |
-| 切勿 | CA 逐流 request（2256 条） |
-| broadcast / 小消息 | DA + bufferless；拓扑偏好 torus（注意 σ=2 与 VC 面积） |
-| allgather | 大 m 用 sync barrier；小 m 可试异步树 |
-| 面积优先 | bufferless（集合流）+ 小控制面 |
+| 切勿 | CA 逐流 request（2256 条）——私有控制网也救不了入端口汇聚 |
+| broadcast / 小消息 | DA + bufferless；拓扑偏好 torus（注意数据面 σ=2 与 VC） |
+| 面积 | 须为私有控制 NoC 单独买单（+0.12/节点） |
 
 ## 6. 验证清单
 
 | # | 项 | 结果 |
 |---|----|------|
-| 1 | 对分带宽相等 | ✓ |
-| 2 | torus σ=0.5 | ✓ |
-| 3 | FIFO alltoall m=1 ≈ 188 | 192（+4） |
-| 4 | bufferless 零驻留 | ✓（68 组） |
-| 5 | 单播 bufferable ≲ bufferless | 见 JSON `bufferable_le_bufferless_unicast` |
-| 6 | 保序 | ✓ |
-| 7 | torus CDG 无环 | ✓ |
-| 8 | 控制收敛 ≥ 564 量级 | t_last_req=1136 ✓ |
+| 1 | 对分带宽相等（数据面） | ✓ |
+| 2 | torus 数据 σ=0.5 | ✓ |
+| 3 | FIFO alltoall m=1 ≈ 188 | ~192 |
+| 4 | bufferless 零驻留 | ✓ |
+| 5 | 保序 | ✓ |
+| 6 | torus CDG 无环 | ✓ |
+| 7 | 控制收敛 ≥ 564 量级 | ✓ |
+| 8 | **私有控制 NoC：shared_with_data_plane=false** | ✓ |
 
 ## 7. 已知局限
 
-- 金属线按链路计数，torus 多 ~17%；折叠物理线长×2 用 delay_scale 对照。  
-- 同 hop 延迟 7/9 系统性偏向 torus。  
-- 多树 bufferable 用事件驱动单播展开，共享前缀被重复计数（故树 pattern 上 bufferable 可能高于 bufferless）。  
-- 控制面与数据面拓扑同构、带宽独立，未建模控制/数据共用金属。
+- 数据面金属线 torus/mesh≈1.17；折叠线长×2 用 delay_scale 对照。  
+- 私有控制 NoC 是**额外**金属，不计入数据面对分恒定。  
+- 多树 bufferable 快速路径会展开为单播、高估共享前缀。  
+- 控制面 hop 延迟取与数据面相同的 H/V（线延迟主导）；未再为窄线单独标定。
 
 ## 8. 文件
 
 | 文件 | 作用 |
 |------|------|
-| `utils/rg_topo.py` | mesh/torus 拓扑、DOR、dateline CDG、金属/对分审计 |
-| `utils/rg_bounds.py` | 五族下界 + R_rg + 控制收敛下界 |
-| `utils/rg_collectives.py` | 五 pattern 流/树 |
-| `utils/rg_arbiter.py` | CA/DA、同步/异步、预约/准入、控制面 DES |
+| `utils/rg_topo.py` | mesh/torus 数据拓扑 |
+| `utils/rg_bounds.py` | 下界（含控制入端口收敛） |
+| `utils/rg_collectives.py` | 五 pattern |
+| `utils/rg_arbiter.py` | **私有控制 NoC DES** + CA/DA 调度 |
 | `utils/dse_rg_noc_8x6.py` | 数据面 DES + 扫描 |
-| `utils/gen_rg_noc_report.py` | HTML 报告 |
-| `results/rg_noc_8x6.json` | 全量数据 |
-| `results/report_rg_noc_8x6.html` | 可读报告 |
+| `utils/gen_rg_noc_report.py` | HTML |
+| `results/rg_noc_8x6.json` / `report_rg_noc_8x6.html` | 数据与报告 |

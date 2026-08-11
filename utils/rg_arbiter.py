@@ -11,8 +11,13 @@ Grant semantics:
   bufferless — cycle-exact slot reservation on every link along the path
                (first-fit); routers must be zero-buffer
 
-Also includes a lightweight control-plane DES that measures R_rg and
-arbiter ingress convergence under independent 1-msg/cy control links.
+Control plane (PRIVATE NoC):
+  Request/grant messages travel on a dedicated control NoC that is
+  topologically isomorphic to the data plane but owns its own physical
+  links — NEVER multiplexed onto data-plane wires. Data flits and control
+  messages therefore have zero link-level interference. Contension that
+  remains is purely among control messages on the private control fabric
+  (plus the CA node's ingress serialization).
 """
 
 from __future__ import annotations
@@ -271,6 +276,12 @@ class CtrlMsg:
     meta: dict = field(default_factory=dict)
 
 
+# Private control NoC: 1 control message / cycle / directed control link.
+# Independent of data-plane sigma (torus data σ=2 does NOT apply here —
+# control metal is a separate budget from the mesh/torus data metal-constant).
+CTRL_MSGS_PER_LINK_CY = 1
+
+
 def simulate_control_plane(
     topo: Topology,
     requests: list[tuple[int, int, int]],  # (src, dst_arb, flow_id)
@@ -281,12 +292,16 @@ def simulate_control_plane(
     sync_barrier: bool = False,
     n_barrier_requests: int = 0,
 ) -> dict[str, Any]:
-    """Cycle-accurate control-plane: 1 msg/cy per directed link, no data
-    interference. Returns per-flow request-arrive / grant-arrive times.
+    """Cycle-accurate PRIVATE control NoC DES.
+
+    Physical isolation: control links are a separate resource from the data
+    NoC (``shared_with_data_plane=False``). Only control-vs-control contention
+    exists. Hop latency mirrors the data geometry (H/V) but occupancy is
+    always ``CTRL_MSGS_PER_LINK_CY`` (not data-plane sigma).
     """
     # Link pipelines: arrive[t] -> list of CtrlMsg arriving at a node
     arrive: dict[int, list[CtrlMsg]] = defaultdict(list)
-    # Per directed edge: busy until (exclusive)
+    # Per directed CONTROL edge: busy until (exclusive) — NOT data links
     link_free: dict[tuple[int, int], int] = defaultdict(int)
 
     # Arbiter inbox queues (CA: one node; DA: many)
@@ -298,7 +313,8 @@ def simulate_control_plane(
     # Schedule initial requests at t=0 from each src
     pending_inject: list[CtrlMsg] = []
     for src, dst, fid in requests:
-        path = shortest_path_bfs(topo, src, dst) if src != dst else [src]
+        # Control plane uses XY (dimension-order) routing, same as data plane
+        path = topo.dor_path(src, dst) if src != dst else [src]
         pending_inject.append(CtrlMsg("request", src, dst, fid, path, 0, 0))
         req_arrive_src_send[fid] = 0
 
@@ -339,7 +355,8 @@ def simulate_control_plane(
         if link_free[(u, v)] > t_now:
             return False
         lat = topo.link_lat(u, v)
-        link_free[(u, v)] = t_now + 1  # 1 msg/cy
+        # Private control link occupancy (independent of data-plane sigma)
+        link_free[(u, v)] = t_now + CTRL_MSGS_PER_LINK_CY
         nxt = CtrlMsg(msg.kind, msg.src, msg.dst, msg.flow_id, msg.path,
                       msg.hop + 1, msg.inject_t, msg.meta)
         arrive[t_now + lat].append(nxt)
@@ -410,7 +427,7 @@ def simulate_control_plane(
             if src == arb:
                 grant_arrive[fid] = t
             else:
-                path = shortest_path_bfs(topo, arb, src)
+                path = topo.dor_path(arb, src)
                 waiting[arb].append(
                     CtrlMsg("grant", arb, src, fid, path, 0, t))
 
@@ -460,6 +477,13 @@ def simulate_control_plane(
         "t_last_request": max(received_req.values()) if received_req else 0,
         "t_first_grant": min(grant_arrive.values()) if grant_arrive else None,
         "t_last_grant": max(grant_arrive.values()) if grant_arrive else None,
+        # Explicit isolation contract
+        "shared_with_data_plane": False,
+        "control_noc": "private_isomorphic",
+        "ctrl_msgs_per_link_cy": CTRL_MSGS_PER_LINK_CY,
+        "note": ("request/grant on private control NoC; zero physical-link "
+                 "sharing with data plane; remaining contention is "
+                 "control-vs-control + CA ingress only"),
     }
 
 

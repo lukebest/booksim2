@@ -122,12 +122,18 @@ def headline_cards(data) -> str:
                           if r["topo"] == "torus" and r["plane"] == "bufferless"
                           and r["arbiter"] == "da" and r["pattern"] == "broadcast"
                           and r["m"] == 1)
+    pol = data.get("control_noc_policy", {})
     return f"""
 <div class="cards">
+  <div class="card ok">
+    <div class="k">控制平面 = 私有 NoC</div>
+    <div class="v">与数据面零共享</div>
+    <div class="s">kind={pol.get('kind','private_isomorphic')} · 不继承 data σ · 面积/节点 +{pol.get('area_per_node_norm', 0.12)}</div>
+  </div>
   <div class="card bad">
     <div class="k">CA alltoall 非聚合 · 控制收敛</div>
     <div class="v">{mesh_a2a_raw['ctrl']['t_last_request']} cy</div>
-    <div class="s">2256 req → 解析下界 ⌈2256/4⌉=564；实测 {mesh_a2a_raw['ctrl']['t_last_request']}（含控制面路径争用）· makespan={mesh_a2a_raw['makespan']}</div>
+    <div class="s">2256 req → 入端口下界 ⌈2256/4⌉=564；实测 {mesh_a2a_raw['ctrl']['t_last_request']}（<b>私有控制网上</b>控制消息互争，非数据干扰）· mk={mesh_a2a_raw['makespan']}</div>
   </div>
   <div class="card ok">
     <div class="k">CA alltoall 聚合 · m=1</div>
@@ -294,16 +300,18 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 <ul>
 <li><b>拓扑</b>：8×6 mesh（82 无向链路）vs 折叠 2D torus（96 无向链路）。金属线恒定约束下 torus 每链路带宽减半（σ=2），对分带宽与 mesh 严格相等。</li>
 <li><b>金属线审计</b>：mesh={v['metal']['mesh_metal']:.0f} · torus={v['metal']['torus_metal']:.0f} · 比={v['metal']['ratio_torus_over_mesh']:.3f}（torus 多约 17% 链路单位；折叠线长×2 的物理偏差见敏感度 delay×2）。</li>
+<li><b>控制平面（硬约束）</b>：集中式/分布式 request–grant 消息走<b>私有控制 NoC</b>（与数据面同构的独立物理网络），<b>不与数据面共物理链路</b>。控制面不继承数据面 σ；剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
 <li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
 <li><b>仲裁器</b>：CA 集中式 @ nid=28；DA 目的端分布式。</li>
 <li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。</li>
 </ul>
-<div class="eq">T = T_bound + R_rg + W_grant(ρ) &nbsp;;&nbsp; R_rg = ℓ(src→arb) + T_sched + ℓ(arb→src)</div>
+<div class="eq">T = T_bound + R_rg + W_grant(ρ) &nbsp;;&nbsp; R_rg = ℓ_ctrl(src→arb) + T_sched + ℓ_ctrl(arb→src)
+<br/><span style="font-size:.85rem;color:#9aa3b5">ℓ_ctrl 走私有控制 NoC，与数据面链路资源正交</span></div>
 
-<h2>2. 头条结论：控制平面才是 alltoall 的瓶颈</h2>
-<p>CA 下 alltoall 若对每条 (s,d) 流单独 request，共 48×47=<b>2256</b> 条控制消息挤入仲裁器 ≤4 个入端口。
-解析收敛下界 ⌈2256/4⌉=<b>564</b> cy；控制面 DES 实测 t_last_request=<b>{v['tests']['ctrl_convergence_alltoall']['t_last_request']}</b> cy
-（额外来自控制路径争用）。而 m=1 数据面下界仅 ~98 cy、FIFO 基线 makespan={next(r['makespan'] for r in data['rows'] if r['plane']=='fifo' and r['pattern']=='alltoall' and r['m']==1 and r['topo']=='mesh')} cy。</p>
+<h2>2. 头条结论：私有控制 NoC 上的收敛税仍是 alltoall 瓶颈</h2>
+<p>即便 request/grant <b>完全不占用数据链路</b>，CA 下 alltoall 若对每条 (s,d) 流单独 request，共 48×47=<b>2256</b> 条控制消息仍须挤入仲裁器控制路由器的 ≤4 个入端口。
+入端口收敛下界 ⌈2256/4⌉=<b>564</b> cy；私有控制 NoC DES 实测 t_last_request=<b>{v['tests']['ctrl_convergence_alltoall']['t_last_request']}</b> cy
+（超出部分 = 控制消息在私有网上的路径争用，<b>不是</b>数据干扰）。而 m=1 数据面下界仅 ~98 cy、FIFO 基线 makespan={next(r['makespan'] for r in data['rows'] if r['plane']=='fifo' and r['pattern']=='alltoall' and r['m']==1 and r['topo']=='mesh')} cy。</p>
 <p><b>两个有效缓解：</b></p>
 <ol>
 <li><b>Request 聚合</b>：每源一条 request 覆盖全部目的 → 48 条，t_last_req 降到线延迟量级（~55），makespan 回到与 FIFO 同量级。</li>
@@ -338,11 +346,12 @@ vs mesh
 
 <h2>6. 面积（归一化 IQ-XY = 1.0）</h2>
 <table>
-<tr><th>topo</th><th>plane</th><th>arb</th><th>total</th><th>buffer</th><th>arbiter</th><th>ctrl_net</th></tr>
+<tr><th>topo</th><th>plane</th><th>arb</th><th>total</th><th>buffer</th><th>arbiter</th><th>private_ctrl_noc</th></tr>
 {area_table(data)}
 </table>
-<p class="muted">公式：crossbar(0.380)+control(0.170)+5·VC·Q·0.00365 + arbiter + ctrl_net。
-bufferless 扣掉 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03。</p>
+<p class="muted">公式：crossbar(0.380)+control(0.170)+5·VC·Q·0.00365 + arbiter + <b>private_ctrl_noc(0.12)</b>。
+私有控制 NoC 面积按窄 flit 同构网络摊到每节点 0.12（相对 IQ-XY=1.0），属数据面金属恒定预算之外的增量。
+bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基线无控制 NoC。</p>
 
 <h2>7. 敏感度</h2>
 {sens_tables(data)}
@@ -356,6 +365,8 @@ bufferless 扣掉 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03。</p>
 <li>保序：{'✓' if v['tests']['all_ordered'] else '✗'}</li>
 <li>torus CDG 无环：{'✓' if v['tests']['torus_cdg_acyclic'] else '✗'}</li>
 <li>控制收敛 alltoall 非聚合：t_last_req={v['tests']['ctrl_convergence_alltoall']['t_last_request']} ≥ 500 ✓</li>
+<li>私有控制 NoC 隔离：{'✓' if v.get('private_control_noc',{}).get('all_rg_rows_isolated') else '✗'}
+（shared_with_data_plane=False，不继承 data σ）</li>
 <li>单播单调性 bufferable≲bufferless：{'✓' if v['tests'].get('bufferable_le_bufferless_unicast') else '⚠'}
 （树 pattern 的 bufferable 快速路径会展开为单播、高估共享前缀负载——见 mono_note）</li>
 </ul>
@@ -363,7 +374,8 @@ bufferless 扣掉 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03。</p>
 
 <h2>9. 已知局限</h2>
 <ul>
-<li>金属线：按链路计数 torus/mesh≈1.17，非严格恒定；折叠线长×2 用 <code>torus_delay_scale=2</code> 对照。</li>
+<li>数据面金属线：按链路计数 torus/mesh≈1.17，非严格恒定；折叠线长×2 用 <code>torus_delay_scale=2</code> 对照。</li>
+<li>私有控制 NoC 是<b>额外</b>金属/面积（每节点 +0.12），不计入 mesh/torus 数据面对分带宽恒定约束。</li>
 <li>同 hop 延迟 7/9 对 torus 有利（白拿减半跳数）。</li>
 <li>多树 bufferable（allgather）用事件驱动单播展开近似，共享树边被重复计数。</li>
 <li>reduce = gather + PE 本地归约（无网内算术），对齐 ADR-002/Arch-A2。</li>
