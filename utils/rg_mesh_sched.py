@@ -46,6 +46,7 @@ independent ``verify_conflict_free`` checker apply unchanged.
 
 from __future__ import annotations
 
+import copy
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -60,14 +61,15 @@ from rg_batch_sched import (
 )
 
 Algo = Literal["bvn_mesh", "mwm_mesh", "latin_mesh", "bcfs",
-               "islip_mesh", "pim_mesh", "greedy_ff"]
+               "islip_mesh", "pim_mesh", "greedy_ff", "islip2d_mesh"]
 
 SLOT_ALGOS: tuple[Algo, ...] = ("bvn_mesh", "mwm_mesh", "latin_mesh",
                                 "islip_mesh", "pim_mesh")
 BATCH_ALGOS: tuple[Algo, ...] = ("bvn_mesh", "mwm_mesh", "latin_mesh", "bcfs")
 INCREMENTAL_ALGOS: tuple[Algo, ...] = ("islip_mesh", "pim_mesh", "greedy_ff")
 ALL_ALGOS: tuple[Algo, ...] = ("bvn_mesh", "mwm_mesh", "latin_mesh", "bcfs",
-                               "islip_mesh", "pim_mesh", "greedy_ff")
+                               "islip_mesh", "pim_mesh", "greedy_ff",
+                               "islip2d_mesh")
 
 ALGO_CLASS: dict[str, str] = {
     "bvn_mesh": "batch/slot",
@@ -77,6 +79,7 @@ ALGO_CLASS: dict[str, str] = {
     "islip_mesh": "incremental/slot",
     "pim_mesh": "incremental/slot",
     "greedy_ff": "incremental/pipelined",
+    "islip2d_mesh": "slotted-rg/two-level",
 }
 
 ALGO_SELECT: dict[str, str] = {
@@ -85,6 +88,7 @@ ALGO_SELECT: dict[str, str] = {
     "latin_mesh": "algebraic",
     "islip_mesh": "rr_pointer",
     "pim_mesh": "random",
+    "islip2d_mesh": "two_level_rr",
 }
 
 
@@ -184,6 +188,9 @@ class SlotState:
     rng: random.Random = field(default_factory=random.Random)
     n_grant_ops: int = 0     # arbitration work counter (for the cost model)
     n_iter_ops: int = 0
+    # islip2d two-level pointers: g_e ranges over SOURCES, a_s over DESTS
+    gptr: dict[tuple[int, int], int] = field(default_factory=dict)
+    aptr: dict[int, int] = field(default_factory=dict)
 
 
 def _priority_key(select: str, st: SlotState):
@@ -207,10 +214,17 @@ _MOD = 1 << 30
 
 
 class _RoundBuilder:
-    """Accumulates one LDPS: link-disjoint, ramp-bandwidth respecting."""
+    """Accumulates one LDPS: link-disjoint, ramp-bandwidth respecting.
 
-    def __init__(self, ramp_cap: int):
+    `src_cap` additionally caps grants per source per round, which is what
+    `grants_per_src` means in the islip2d discipline: one request carries a
+    whole residual VOQ bitmap, but the CA hands back only a bounded number of
+    grants and the rest must be re-requested next round.
+    """
+
+    def __init__(self, ramp_cap: int, src_cap: int | None = None):
         self.ramp_cap = ramp_cap
+        self.src_cap = ramp_cap if src_cap is None else src_cap
         self.links: set[tuple[int, int]] = set()
         self.inj: dict[int, int] = defaultdict(int)
         self.ej: dict[int, int] = defaultdict(int)
@@ -219,7 +233,7 @@ class _RoundBuilder:
     def feasible(self, mf: MeshFlow) -> bool:
         if mf.links & self.links:
             return False
-        if self.inj[mf.fp.src] >= self.ramp_cap:
+        if self.inj[mf.fp.src] >= min(self.ramp_cap, self.src_cap):
             return False
         return all(self.ej[d] < self.ramp_cap for d in mf.dsts)
 
@@ -460,6 +474,321 @@ def slot_schedule(topo: Topology, mfs: list[MeshFlow], *,
 
 
 # ---------------------------------------------------------------------------
+# 2b. islip2d_mesh: synchronous slotted request-grant under definition D-M
+# ---------------------------------------------------------------------------
+#
+# What changes versus the literal `islip_mesh` transplant:
+#
+#   request unit   one message per SOURCE carrying its residual VOQ bitmap,
+#                  not one message per VOQ. Ungranted VOQs stay set and are
+#                  re-offered next round, so the control plane cost is
+#                  2*48 messages per round instead of 2256 once.
+#   grant pointer  g_e ranges over the 48 SOURCES (6 bit x 164 links), not over
+#                  flow ids: a link grants "this source may use me this round".
+#   accept pointer a_s ranges over the 48 DESTINATIONS (6 bit x 48), and a
+#                  source accepts at most `grants_per_src` of the VOQs that
+#                  were granted unanimously along their whole path.
+#   pointer update only on accept, only in the first iteration (iSLIP's
+#                  desynchronization rule).
+#
+# Unanimity is still required -- that is a property of the fabric, not of the
+# algorithm: a mesh path needs every link on it, whereas a crossbar needs one
+# output. The sequential hop-descending completion pass is what keeps a round
+# maximal despite unanimity being rare at high load.
+
+FILL_ORDERS: tuple[str, ...] = ("hops_desc", "hops_asc", "pressure",
+                                "random", "flowid")
+
+
+def _fill_key(fill: str, st: SlotState):
+    if fill == "hops_desc":
+        return lambda mf: (-len(mf.links), mf.fp.flow_id)
+    if fill == "hops_asc":
+        return lambda mf: (len(mf.links), mf.fp.flow_id)
+    if fill == "pressure":
+        return lambda mf: (-mf.pressure, -len(mf.links), mf.fp.flow_id)
+    if fill == "random":
+        return lambda mf: (st.rng.random(),)
+    if fill == "flowid":
+        return lambda mf: (mf.fp.flow_id,)
+    raise ValueError(f"unknown fill order: {fill}")
+
+
+def _islip2d_round(topo: Topology, cands: list[MeshFlow], st: SlotState, *,
+                   iters: int, ramp_cap: int, src_cap: int, fill: str
+                   ) -> tuple[list[MeshFlow], int]:
+    """One round: per-link source grants, per-source dest accepts, then fill."""
+    n = topo.n
+    rb = _RoundBuilder(ramp_cap, src_cap=src_cap)
+    n_unan = 0
+
+    # iters=0 deliberately SKIPS the distributed grant/accept phase, leaving
+    # only the centralized ordered fill. That is the control experiment for
+    # "what does keeping iSLIP's pointer discipline actually cost on a mesh".
+    for it in range(max(0, iters)):
+        elig: list[MeshFlow] = [mf for mf in cands if rb.feasible(mf)]
+        if not elig:
+            break
+        st.n_iter_ops += 1
+        # --- request: a link hears from every source with a VOQ crossing it
+        req: dict[tuple[int, int], set[int]] = defaultdict(set)
+        for mf in elig:
+            for e in mf.links:
+                req[e].add(mf.fp.src)
+        # --- grant: each link picks one source, round robin over sources
+        granted_src: dict[tuple[int, int], int] = {}
+        for e, srcs in req.items():
+            st.n_grant_ops += len(srcs)
+            p = st.gptr.get(e, 0)
+            granted_src[e] = min(srcs, key=lambda s: ((s - p) % n, s))
+        # --- accept: a VOQ needs the whole path; source picks by a_s over dsts
+        by_src: dict[int, list[MeshFlow]] = defaultdict(list)
+        for mf in elig:
+            if all(granted_src.get(e) == mf.fp.src for e in mf.links):
+                by_src[mf.fp.src].append(mf)
+        took: list[MeshFlow] = []
+        for s, lst in by_src.items():
+            a = st.aptr.get(s, 0)
+            lst.sort(key=lambda mf: (((mf.dsts[0] - a) % n) if len(mf.dsts) == 1
+                                     else 0, mf.fp.flow_id))
+            for mf in lst:
+                if not rb.feasible(mf):
+                    continue
+                rb.add(mf)
+                took.append(mf)
+                n_unan += 1
+                if it == 0:
+                    if len(mf.dsts) == 1:
+                        st.aptr[s] = (mf.dsts[0] + 1) % n
+                    for e in mf.links:
+                        st.gptr[e] = (s + 1) % n
+        if not took:
+            break
+
+    # --- sequential completion so the round is maximal (see module docstring)
+    done = {mf.fp.flow_id for mf in rb.acc}
+    rest = [mf for mf in cands if mf.fp.flow_id not in done]
+    st.n_grant_ops += len(rest)
+    for mf in sorted(rest, key=_fill_key(fill, st)):
+        if rb.feasible(mf):
+            rb.add(mf)
+    return rb.acc, n_unan
+
+
+def _earliest_interval(mf: MeshFlow, link: CapMap, inj: CapMap, ej: CapMap,
+                       voq: CapMap, t_min: int, max_iter: int = 2000) -> int:
+    """Earliest t0 with FULL interval tables (conflict_domain="interval").
+
+    This is what cashes in the freedom M1 allows and a phase model throws away:
+    two paths may cross one link at different times, so a later flow can be
+    back-filled into a hole rather than pushed behind the whole round.
+    """
+    fp = mf.fp
+    key = (fp.src, mf.dsts[0]) if len(mf.dsts) == 1 else ("tree", fp.flow_id)
+    t = t_min
+    for _ in range(max_iter):
+        cand = max(t, inj.earliest(fp.src, fp.ramp_dur, t),
+                   voq.earliest(key, fp.ramp_dur, t))
+        for e, pref in fp.edges:
+            s = t + pref
+            got = link.earliest(e, fp.link_dur, s)
+            if got > s:
+                cand = max(cand, got - pref)
+        for d, off in fp.dst_offsets:
+            s = t + off
+            got = ej.earliest(d, fp.ramp_dur, s)
+            if got > s:
+                cand = max(cand, got - off)
+        if cand <= t:
+            return t
+        t = cand
+    return t
+
+
+def islip2d_schedule(topo: Topology, mfs: list[MeshFlow], *,
+                     grants_per_src: int = 1,
+                     conflict_domain: str = "free_at",
+                     iters: int = 1, fill: str = "hops_desc",
+                     t_rtt: int = 16, pipeline_depth: int = 1,
+                     seed: int = 0) -> dict[str, Any]:
+    """Synchronous slotted request-grant loop; one wide grant per source.
+
+    Timing model (uniform RTT, idealized 1-cycle control messages): round r's
+    data may not start before its grant has come back. With a credit-style
+    control pipeline of depth P, round r's request goes out as soon as round
+    r-P's data has started, so
+
+        ctrl_floor(r) = t_rtt                       for r < P
+                      = data_start(r - P) + t_rtt   otherwise
+
+    P=1 therefore serializes an entire RTT per round (that is the regime where
+    RTT eats the whole benefit), while large P makes the schedule purely
+    resource bound. That is the sensitivity the plan asks for.
+    """
+    if conflict_domain not in ("free_at", "interval"):
+        raise ValueError(conflict_domain)
+    ramp_cap = max(1, RAMP_BW * topo.sigma)
+    src_cap = max(1, grants_per_src)
+    st = SlotState(rng=random.Random(seed))
+
+    link_f = _FreeAt(1)
+    inj_f = _FreeAt(ramp_cap)
+    ej_f = _FreeAt(ramp_cap)
+    voq_f = _FreeAt(1)
+    link_c, inj_c, ej_c, voq_c = (CapMap(1), CapMap(ramp_cap),
+                                  CapMap(ramp_cap), CapMap(1))
+
+    residual = list(mfs)
+    starts: dict[int, int] = {}
+    resv: dict[int, dict[tuple[int, int], tuple[int, int]]] = {}
+    round_of: dict[int, int] = {}
+    rounds: list[dict[str, Any]] = []
+    round_start: list[int] = []
+    makespan = 0
+    convoy = 0
+    n_unan_total = 0
+    ctrl_msgs = 0
+    bitmap_ok = True
+    req_per_round: list[int] = []
+    grant_wait_total = 0
+
+    P = max(1, pipeline_depth)
+    guard = 0
+    while residual:
+        guard += 1
+        if guard > 20000:
+            raise RuntimeError("islip2d_schedule did not converge")
+        r = len(rounds)
+        before = {mf.fp.flow_id for mf in residual}
+        srcs_requesting = len({mf.fp.src for mf in residual})
+        req_per_round.append(srcs_requesting)
+        ctrl_msgs += 2 * srcs_requesting        # one request + one grant / src
+
+        acc, n_unan = _islip2d_round(topo, residual, st, iters=iters,
+                                     ramp_cap=ramp_cap, src_cap=src_cap,
+                                     fill=fill)
+        if not acc:
+            raise RuntimeError("empty round with VOQs still pending")
+        n_unan_total += n_unan
+
+        ctrl_floor = t_rtt if r < P else round_start[r - P] + t_rtt
+
+        if conflict_domain == "free_at":
+            # phase semantics: the whole round shares one start time
+            t0 = ctrl_floor
+            inj_slot: dict[int, int] = defaultdict(int)
+            ej_slot: dict[int, int] = defaultdict(int)
+            for mf in acc:
+                for e, pref in mf.fp.edges:
+                    t0 = max(t0, link_f.ready(e, 0) - pref)
+                k = inj_slot[mf.fp.src]
+                t0 = max(t0, inj_f.ready(mf.fp.src, k))
+                inj_slot[mf.fp.src] = k + 1
+                if len(mf.dsts) == 1:
+                    t0 = max(t0, voq_f.ready((mf.fp.src, mf.dsts[0]), 0))
+                for d, off in mf.fp.dst_offsets:
+                    j = ej_slot[d]
+                    t0 = max(t0, ej_f.ready(d, j) - off)
+                    ej_slot[d] = j + 1
+            inj_slot.clear()
+            ej_slot.clear()
+            for mf in acc:
+                starts[mf.fp.flow_id] = t0
+                res: dict[tuple[int, int], tuple[int, int]] = {}
+                for e, pref in mf.fp.edges:
+                    s = t0 + pref
+                    res[e] = (s, s + mf.fp.link_dur)
+                    link_f.take(e, 0, s + mf.fp.link_dur)
+                resv[mf.fp.flow_id] = res
+                k = inj_slot[mf.fp.src]
+                inj_f.take(mf.fp.src, k, t0 + mf.fp.ramp_dur)
+                inj_slot[mf.fp.src] = k + 1
+                if len(mf.dsts) == 1:
+                    voq_f.take((mf.fp.src, mf.dsts[0]), 0,
+                               t0 + mf.fp.ramp_dur)
+                for d, off in mf.fp.dst_offsets:
+                    j = ej_slot[d]
+                    ej_f.take(d, j, t0 + off + mf.fp.ramp_dur)
+                    ej_slot[d] = j + 1
+            t_round = t0
+            dur = max(mf.tail for mf in acc)
+        else:
+            # interval: each member takes its own earliest feasible hole
+            t_first = None
+            for mf in sorted(acc, key=_fill_key(fill, st)):
+                t0 = _earliest_interval(mf, link_c, inj_c, ej_c, voq_c,
+                                        ctrl_floor)
+                starts[mf.fp.flow_id] = t0
+                res = {}
+                fp = mf.fp
+                inj_c.reserve(fp.src, t0, t0 + fp.ramp_dur)
+                if len(mf.dsts) == 1:
+                    voq_c.reserve((fp.src, mf.dsts[0]), t0, t0 + fp.ramp_dur)
+                for e, pref in fp.edges:
+                    s = t0 + pref
+                    link_c.reserve(e, s, s + fp.link_dur)
+                    res[e] = (s, s + fp.link_dur)
+                for d, off in fp.dst_offsets:
+                    ej_c.reserve(d, t0 + off, t0 + off + fp.ramp_dur)
+                resv[fp.flow_id] = res
+                t_first = t0 if t_first is None else min(t_first, t0)
+            t_round = t_first if t_first is not None else ctrl_floor
+            dur = max(starts[mf.fp.flow_id] + mf.tail
+                      for mf in acc) - t_round
+
+        for mf in acc:
+            round_of[mf.fp.flow_id] = r
+            makespan = max(makespan, starts[mf.fp.flow_id] + mf.eject)
+            grant_wait_total += starts[mf.fp.flow_id] - ctrl_floor + t_rtt
+        round_start.append(t_round)
+        rounds.append({"round": r, "start": t_round, "dur": dur,
+                       "n_flows": len(acc), "n_unanimous": n_unan,
+                       "ctrl_floor": ctrl_floor,
+                       "n_requesting_srcs": srcs_requesting})
+        convoy += dur
+
+        acc_ids = {mf.fp.flow_id for mf in acc}
+        residual = [mf for mf in residual if mf.fp.flow_id not in acc_ids]
+        # residual-bitmap discipline: exactly the ungranted VOQs carry over
+        if {mf.fp.flow_id for mf in residual} != before - acc_ids:
+            bitmap_ok = False
+
+    lb = max_link_load(mfs)
+    n_rounds = len(rounds)
+    t_first = min(starts.values()) if starts else 0
+    return {
+        "starts": starts,
+        "resv": resv,
+        "round_of": round_of,
+        "n_rounds": n_rounds,
+        "round_lb": lb,
+        "round_ratio": (round(n_rounds / lb, 3) if lb else None),
+        "rounds": rounds[:32],
+        "makespan_sched": makespan,
+        "convoy_span": convoy,
+        "grant_ops": st.n_grant_ops,
+        "iter_ops": st.n_iter_ops,
+        "n_unanimous": n_unan_total,
+        "unanimous_frac": (round(n_unan_total / len(mfs), 4) if mfs else None),
+        "mean_flows_per_round": (round(len(mfs) / n_rounds, 2)
+                                 if n_rounds else None),
+        "grants_per_src": grants_per_src,
+        "conflict_domain": conflict_domain,
+        "fill": fill,
+        "t_rtt": t_rtt,
+        "pipeline_depth": pipeline_depth,
+        "ctrl_msgs_total": ctrl_msgs,
+        "ctrl_msgs_per_round": 2 * topo.n,
+        "residual_bitmap_ok": bitmap_ok,
+        "requests_per_round": req_per_round[:32],
+        "mean_grant_wait": (round(grant_wait_total / len(mfs), 1)
+                            if mfs else None),
+        "data_span": makespan - t_first,
+        "t_first_data_start": t_first,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 3. Pipelined reference members (interval packing, no convoy effect)
 # ---------------------------------------------------------------------------
 
@@ -503,6 +832,43 @@ def pipelined_schedule(topo: Topology, mfs: list[MeshFlow], *,
 # ---------------------------------------------------------------------------
 # 4. Control plane (private NoC, XY, half-Manhattan latency)
 # ---------------------------------------------------------------------------
+
+def control_phase_voq_bitmap(topo: Topology, col: Collective, *,
+                             uniform_rtt: int
+                             ) -> tuple[dict[int, int], dict[str, Any]]:
+    """The islip2d control discipline: per-source residual bitmap, uniform RTT.
+
+    Every request/grant pair costs exactly `uniform_rtt` cycles regardless of
+    where the source sits, which is the "all request-grant delays are equal"
+    assumption. One request per source per round carries the residual VOQ
+    bitmap (N-1 bits), so a round costs 2*48 control messages instead of the
+    2256-message one-shot aggregation of the per-VOQ discipline. The per-round
+    accounting is finished by `islip2d_schedule`, which is the only place that
+    knows how many rounds there were.
+    """
+    voq_per_src: dict[int, int] = defaultdict(int)
+    for f in col.flows:
+        voq_per_src[f.src] += 1
+    n_src = len(voq_per_src)
+    release = {f.flow_id: uniform_rtt for f in col.flows}
+    bitmap_bits = max(voq_per_src.values()) if voq_per_src else 0
+    stats = {
+        "ca_node": central_arbiter_node(),
+        "routing": "uniform_rtt",
+        "ctrl_delay_policy": f"uniform_rtt={uniform_rtt}",
+        "shared_with_data_plane": False,
+        "request_unit": "voq_bitmap",
+        "aggregate": True,
+        "uniform_rtt": uniform_rtt,
+        "n_voqs": len(col.flows),
+        "n_voq_per_src_max": bitmap_bits,
+        "request_bitmap_bits": bitmap_bits,
+        "n_request_units_per_round": n_src,
+        "n_ctrl_msgs_per_round": 2 * n_src,
+        "R_rg": uniform_rtt,
+    }
+    return release, stats
+
 
 def control_phase(topo: Topology, col: Collective, *,
                   incremental: bool, window: int, t_sched: int,
@@ -602,25 +968,64 @@ def control_phase(topo: Topology, col: Collective, *,
 # 5. Top-level entry
 # ---------------------------------------------------------------------------
 
+def apply_path_mode(topo: Topology, col: Collective, path_mode: str,
+                    *, seed: int = 0) -> tuple[Collective, dict[str, Any]]:
+    """Reroute unicast flows per `path_mode`, on a COPY of the collective.
+
+    Returns (collective, plan_info). "xy" is a no-op passthrough.
+    """
+    if path_mode == "xy":
+        return col, {"path_mode": "xy"}
+    from rg_mesh_paths import build_plan, pairs_of, apply_plan
+    out = copy.deepcopy(col)
+    prs = pairs_of(out)
+    plan = build_plan(prs, path_mode, seed=seed)
+    n = apply_plan(out, plan)
+    info = {"path_mode": path_mode, "n_rerouted": n}
+    info.update(plan.summary())
+    return out, info
+
+
 def schedule_mesh(topo: Topology, col: Collective, algo: Algo, *,
                   iters: int = 1, window: int = 64, t_sched: int = 8,
                   aggregate: bool = False,
                   gen_model: str = "uniform_jitter", jitter: int = 64,
-                  seed: int = 0) -> dict[str, Any]:
+                  seed: int = 0,
+                  path_mode: str = "xy",
+                  grants_per_src: int = 1,
+                  conflict_domain: str = "free_at",
+                  fill: str = "hops_desc",
+                  t_rtt: int = 16,
+                  pipeline_depth: int = 1) -> dict[str, Any]:
     """Run one member of the family end to end; returns grants + stats.
 
     By default each request is one VOQ (``aggregate=False``): alltoall has
     N·(N−1) request units. Set ``aggregate=True`` only for sensitivity.
+    ``islip2d_mesh`` ignores the staggered/windowed control model and uses the
+    synchronous per-source residual-bitmap loop with a uniform RTT instead.
     """
     if algo not in ALL_ALGOS:
         raise ValueError(f"unknown algo: {algo}")
+    col, path_info = apply_path_mode(topo, col, path_mode, seed=seed)
     incremental = algo in INCREMENTAL_ALGOS
-    release, ctrl = control_phase(
-        topo, col, incremental=incremental, window=window, t_sched=t_sched,
-        aggregate=aggregate, gen_model=gen_model, jitter=jitter, seed=seed)
+
+    if algo == "islip2d_mesh":
+        release, ctrl = control_phase_voq_bitmap(topo, col,
+                                                uniform_rtt=t_rtt)
+    else:
+        release, ctrl = control_phase(
+            topo, col, incremental=incremental, window=window,
+            t_sched=t_sched, aggregate=aggregate, gen_model=gen_model,
+            jitter=jitter, seed=seed)
     mfs = build_mesh_flows(topo, col, release)
 
-    if algo in SLOT_ALGOS:
+    if algo == "islip2d_mesh":
+        res = islip2d_schedule(topo, mfs, grants_per_src=grants_per_src,
+                               conflict_domain=conflict_domain, iters=iters,
+                               fill=fill, t_rtt=t_rtt,
+                               pipeline_depth=pipeline_depth, seed=seed)
+        ctrl["ctrl_msgs_total"] = res["ctrl_msgs_total"]
+    elif algo in SLOT_ALGOS:
         res = slot_schedule(topo, mfs, select=ALGO_SELECT[algo], iters=iters,
                             seed=seed, incremental=incremental)
     elif algo == "bcfs":
@@ -666,6 +1071,15 @@ def schedule_mesh(topo: Topology, col: Collective, algo: Algo, *,
         "round_of": res["round_of"],
         "verify": verify,
         "ctrl": ctrl,
+        "path": path_info,
+        "grants_per_src": res.get("grants_per_src"),
+        "conflict_domain": res.get("conflict_domain"),
+        "fill": res.get("fill"),
+        "t_rtt": res.get("t_rtt"),
+        "pipeline_depth": res.get("pipeline_depth"),
+        "residual_bitmap_ok": res.get("residual_bitmap_ok"),
+        "mean_grant_wait": res.get("mean_grant_wait"),
+        "ctrl_msgs_total": res.get("ctrl_msgs_total"),
     }
 
 
@@ -713,19 +1127,46 @@ if __name__ == "__main__":
     from rg_collectives import build_collective
     import time
 
-    for kind in ("mesh",):
-        topo = Topology(kind)
-        for pat in ("alltoall", "reduce", "allgather", "broadcast"):
-            col = build_collective(topo, pat, m=4,
-                                   sync=pat in ("allgather", "allreduce"))
-            print(f"--- {kind} {pat} (flows={len(col.flows)}) ---")
-            for algo in ALL_ALGOS:
-                t0 = time.time()
-                r = schedule_mesh(topo, col, algo, iters=1)
-                print(f"  {algo:12} {ALGO_CLASS[algo]:22} "
-                      f"mk={r['makespan_sched']:6} "
-                      f"rounds={str(r['n_rounds']):>5}/lb={r['round_lb']:<4} "
-                      f"cvy={str(r['convoy_ratio']):>6} "
-                      f"un={str(r['unanimous_frac']):>7} "
-                      f"cf={int(r['verify']['conflict_free'])} "
-                      f"{time.time()-t0:.2f}s")
+    topo = Topology("mesh")
+    col = build_collective(topo, "alltoall", m=1)
+    print(f"=== alltoall m=1, flows={len(col.flows)} ===")
+    print("--- family baseline ---")
+    for algo in ALL_ALGOS:
+        t0 = time.time()
+        r = schedule_mesh(topo, col, algo, iters=1)
+        print(f"  {algo:13} {ALGO_CLASS[algo]:22} "
+              f"rounds={str(r['n_rounds']):>5}/lb={r['round_lb']:<4} "
+              f"ratio={str(r['round_ratio']):>6} "
+              f"un={str(r['unanimous_frac']):>7} "
+              f"cf={int(r['verify']['conflict_free'])} "
+              f"{time.time()-t0:.2f}s")
+
+    print("\n--- islip2d: grants_per_src x conflict_domain ---")
+    for g in (1, 2):
+        for cd in ("free_at", "interval"):
+            t0 = time.time()
+            r = schedule_mesh(topo, col, "islip2d_mesh", grants_per_src=g,
+                              conflict_domain=cd, t_rtt=16,
+                              pipeline_depth=1 << 20)
+            print(f"  g={g} {cd:9} rounds={r['n_rounds']:>4}/lb="
+                  f"{r['round_lb']:<4} span={r['data_span']:>6} "
+                  f"bitmap_ok={r['residual_bitmap_ok']} "
+                  f"cf={int(r['verify']['conflict_free'])} "
+                  f"msgs={r['ctrl_msgs_total']:>6} {time.time()-t0:.2f}s")
+
+    print("\n--- islip2d: iters x fill (g=2, free_at); iters=0 = no iSLIP phase")
+    print(f"  {'fill':10} " + " ".join(f"it={i}" for i in (0, 1, 2, 3)))
+    for fill in FILL_ORDERS:
+        row = []
+        for it in (0, 1, 2, 3):
+            r = schedule_mesh(topo, col, "islip2d_mesh", grants_per_src=2,
+                              fill=fill, iters=it, pipeline_depth=1 << 20)
+            row.append(r["n_rounds"])
+        print(f"  {fill:10} " + " ".join(f"{v:4}" for v in row))
+
+    print("\n--- islip2d: path mode (g=2) ---")
+    for pm in ("xy", "romm_static", "romm_dyn"):
+        r = schedule_mesh(topo, col, "islip2d_mesh", grants_per_src=2,
+                          path_mode=pm, pipeline_depth=1 << 20)
+        print(f"  {pm:12} rounds={r['n_rounds']:>4}/lb={r['round_lb']:<4} "
+              f"cf={int(r['verify']['conflict_free'])}")

@@ -1,0 +1,477 @@
+{
+ "rows": [
+  {
+   "group": "common",
+   "check": "mesh_conflict_free",
+   "ok": true,
+   "violations": 0
+  },
+  {
+   "group": "common",
+   "check": "mesh_rounds_disjoint_recheck",
+   "ok": true,
+   "overlaps": 0,
+   "ramp": 0
+  },
+  {
+   "group": "common",
+   "check": "mesh_rounds_ge_lb",
+   "ok": true,
+   "rounds": 110,
+   "lb": 96,
+   "ratio": 1.146
+  },
+  {
+   "group": "common",
+   "check": "mesh_residual_bitmap_discipline",
+   "ok": true,
+   "reported": true
+  },
+  {
+   "group": "common",
+   "check": "mesh_ctrl_msgs_per_round",
+   "ok": true,
+   "per_round": 82.3,
+   "bound": 96,
+   "total": 9050,
+   "one_shot_reference": 4512
+  },
+  {
+   "group": "common",
+   "check": "ring_conflict_free",
+   "ok": true,
+   "violations": 0
+  },
+  {
+   "group": "common",
+   "check": "ring_rounds_ge_lb",
+   "ok": true,
+   "rounds": 69,
+   "lb": 60,
+   "ratio": 1.15
+  },
+  {
+   "group": "common",
+   "check": "ring_residual_bitmap_discipline",
+   "ok": true,
+   "reported": true
+  },
+  {
+   "group": "common",
+   "check": "ring_bufferless_zero_residency",
+   "ok": true,
+   "max_turn_residency": 0
+  },
+  {
+   "group": "D-M",
+   "check": "cut_bound_is_96",
+   "ok": true,
+   "cut_bound": 96,
+   "witness": {
+    "cut": "x=4",
+    "dir": "E",
+    "flows": 576,
+    "links": 6,
+    "lb": 96
+   },
+   "n_pairs": 2256
+  },
+  {
+   "group": "D-M",
+   "check": "xy_meets_cut_bound",
+   "ok": true,
+   "max_load": 96,
+   "cut_bound": 96
+  },
+  {
+   "group": "D-M",
+   "check": "romm_latency_invariant",
+   "ok": true,
+   "n_checked": 14560,
+   "mismatch_hops": 0,
+   "mismatch_wire": 0
+  },
+  {
+   "group": "D-M",
+   "check": "romm_cannot_reduce_load_without_headroom",
+   "ok": true,
+   "offenders": [],
+   "detail": {
+    "alltoall": {
+     "xy_load": 96,
+     "cut_bound": 96,
+     "romm_has_headroom": false,
+     "romm_load": 96,
+     "load_gain": 0,
+     "rounds_xy": 110,
+     "rounds_romm": 110,
+     "round_gain": 0.0
+    },
+    "transpose": {
+     "xy_load": 7,
+     "cut_bound": 3,
+     "romm_has_headroom": true,
+     "romm_load": 3,
+     "load_gain": 4,
+     "rounds_xy": 7,
+     "rounds_romm": 4,
+     "round_gain": 0.429
+    },
+    "hotspot_any": {
+     "xy_load": 40,
+     "cut_bound": 7,
+     "romm_has_headroom": true,
+     "romm_load": 24,
+     "load_gain": 16,
+     "rounds_xy": 40,
+     "rounds_romm": 27,
+     "round_gain": 0.325
+    },
+    "cornerAtoB": {
+     "xy_load": 8,
+     "cut_bound": 3,
+     "romm_has_headroom": true,
+     "romm_load": 4,
+     "load_gain": 4,
+     "rounds_xy": 8,
+     "rounds_romm": 6,
+     "round_gain": 0.25
+    },
+    "halfxhalf": {
+     "xy_load": 96,
+     "cut_bound": 96,
+     "romm_has_headroom": false,
+     "romm_load": 96,
+     "load_gain": 0,
+     "rounds_xy": 100,
+     "rounds_romm": 100,
+     "round_gain": 0.0
+    },
+    "permutation": {
+     "xy_load": 3,
+     "cut_bound": 3,
+     "romm_has_headroom": false,
+     "romm_load": 3,
+     "load_gain": 0,
+     "rounds_xy": 4,
+     "rounds_romm": 3,
+     "round_gain": 0.25
+    }
+   }
+  },
+  {
+   "group": "D-M",
+   "check": "round_gain_without_load_gain_is_a_packing_effect",
+   "ok": true,
+   "patterns": [
+    "permutation"
+   ],
+   "detail": {
+    "permutation": {
+     "xy_load": 3,
+     "cut_bound": 3,
+     "romm_has_headroom": false,
+     "romm_load": 3,
+     "load_gain": 0,
+     "rounds_xy": 4,
+     "rounds_romm": 3,
+     "round_gain": 0.25
+    }
+   }
+  },
+  {
+   "group": "D-M",
+   "check": "in_order_xy",
+   "ok": true,
+   "out_of_order": 0
+  },
+  {
+   "group": "D-M",
+   "check": "in_order_romm_static",
+   "ok": true,
+   "out_of_order": 0
+  },
+  {
+   "group": "D-M",
+   "check": "in_order_romm_dyn",
+   "ok": true,
+   "out_of_order": 0
+  },
+  {
+   "group": "D-R",
+   "check": "192_directed_links",
+   "ok": true,
+   "directed": 192,
+   "undirected": 96
+  },
+  {
+   "group": "D-R",
+   "check": "metal_ratio_1_17",
+   "ok": true,
+   "ratio": 1.1707,
+   "mesh_undirected": 82
+  },
+  {
+   "group": "D-R",
+   "check": "link_set_equals_folded_torus",
+   "ok": true,
+   "equal": true,
+   "n_mine": 96,
+   "n_torus": 96,
+   "only_mine": 0,
+   "only_torus": 0
+  },
+  {
+   "group": "D-R",
+   "check": "every_node_is_a_bridge",
+   "ok": true,
+   "bridges": 48
+  },
+  {
+   "group": "D-R",
+   "check": "link_bound_fixed",
+   "ok": true,
+   "measured": 60,
+   "expected": 60,
+   "round_lb": 60
+  },
+  {
+   "group": "D-R",
+   "check": "link_bound_balanced",
+   "ok": true,
+   "measured": 49,
+   "expected": 49,
+   "round_lb": 49
+  },
+  {
+   "group": "D-R",
+   "check": "minimal_routes_are_latency_invariant",
+   "ok": true,
+   "n_pairs": 2256,
+   "pairs_with_hop_spread": 0,
+   "pairs_with_wire_spread": 0,
+   "max_wire_spread": 0
+  },
+  {
+   "group": "D-R",
+   "check": "pure_link_predicate_is_unsafe",
+   "ok": true,
+   "rate": 0.0108,
+   "kinds": {
+    "board_leave": 0.088,
+    "board_board": 0.795,
+    "leave_leave": 0.116
+   }
+  },
+  {
+   "group": "D-R",
+   "check": "pure_link_predicate_overstates_concurrency",
+   "ok": true,
+   "r1_only_mean": 93.8,
+   "r1r2r3_mean": 61.8,
+   "overstatement": 1.52
+  },
+  {
+   "group": "D-R",
+   "check": "whole_ring_costs_multiple_x",
+   "ok": true,
+   "arc_rounds": 69,
+   "whole_rounds": 195,
+   "factor": 2.83,
+   "mesh_reference": 110
+  },
+  {
+   "group": "D-R",
+   "check": "clauses_hold_ports1",
+   "ok": true,
+   "rounds": 69,
+   "by_clause": {
+    "R1_link_violations": 0,
+    "R2_board_violations": 0,
+    "R3_leave_violations": 0,
+    "R4_turn_violations": 0,
+    "R5_voq_violations": 0
+   }
+  },
+  {
+   "group": "D-R",
+   "check": "clauses_hold_ports2",
+   "ok": true,
+   "rounds": 65,
+   "by_clause": {
+    "R1_link_violations": 0,
+    "R2_board_violations": 0,
+    "R3_leave_violations": 0,
+    "R4_turn_violations": 0,
+    "R5_voq_violations": 0
+   }
+  },
+  {
+   "group": "base",
+   "check": "swap_rule_unreachable_under_fixed_dim_order",
+   "ok": true,
+   "swaps": 0,
+   "completed": true
+  },
+  {
+   "group": "base",
+   "check": "swap_rule_fires_under_mixed_dim_order",
+   "ok": true,
+   "swaps": 74
+  },
+  {
+   "group": "base",
+   "check": "no_deadlock_even_without_swap_rule",
+   "ok": true,
+   "completed_slot": true,
+   "completed_pipelined": true,
+   "note": "deviates from plan: deflection is always available"
+  },
+  {
+   "group": "base",
+   "check": "no_flit_ever_blocked_in_ring",
+   "ok": true,
+   "blocked": {
+    "swap1_slot1": 0,
+    "swap1_slot0": 0,
+    "swap0_slot1": 0,
+    "swap0_slot0": 0
+   }
+  },
+  {
+   "group": "base",
+   "check": "starvation_bounded_and_tracks_threshold",
+   "ok": true,
+   "max_inj_starve": {
+    "8": 119,
+    "16": 56,
+    "64": 112
+   }
+  },
+  {
+   "group": "base",
+   "check": "deflection_causes_reordering_so_reassembly_is_required",
+   "ok": true,
+   "out_of_order": 165,
+   "max_reasm": 58,
+   "deflections": 880
+  },
+  {
+   "group": "steady",
+   "check": "mesh_base_lam_star_within_anchor",
+   "ok": true,
+   "lam_star": 0.4,
+   "anchor": 0.49,
+   "peak_accepted": 0.399
+  },
+  {
+   "group": "steady",
+   "check": "mesh_islip2d_lam_star_within_anchor",
+   "ok": true,
+   "lam_star": 0.45,
+   "anchor": 0.49,
+   "peak_accepted": 0.52493
+  },
+  {
+   "group": "steady",
+   "check": "ring_base_lam_star_within_anchor",
+   "ok": true,
+   "lam_star": 0.55,
+   "anchor": 0.783,
+   "peak_accepted": 0.55191
+  },
+  {
+   "group": "steady",
+   "check": "ring_islip2d_lam_star_within_anchor",
+   "ok": true,
+   "lam_star": 0.75,
+   "anchor": 0.783,
+   "peak_accepted": 0.77132
+  },
+  {
+   "group": "steady",
+   "check": "mesh_islip2d_zero_in_network_residency",
+   "ok": true,
+   "max_residency": 0
+  },
+  {
+   "group": "steady",
+   "check": "ring_islip2d_zero_in_network_residency",
+   "ok": true,
+   "max_residency": 0
+  },
+  {
+   "group": "steady",
+   "check": "credit_buffer_must_cover_rtt",
+   "ok": true,
+   "peak_accepted_by_buf_depth": {
+    "4": 0.0776,
+    "8": 0.1991,
+    "20": 0.3962
+   },
+   "anchor": 0.49
+  },
+  {
+   "group": "steady",
+   "check": "mesh_base_plateaus_past_saturation",
+   "ok": true,
+   "peak": 0.399,
+   "at_highest_lam": 0.2908,
+   "falls_back": 0.1082
+  },
+  {
+   "group": "steady",
+   "check": "ring_base_plateaus_past_saturation",
+   "ok": true,
+   "peak": 0.5519,
+   "at_highest_lam": 0.5288,
+   "falls_back": 0.0232
+  },
+  {
+   "group": "steady",
+   "check": "mesh_islip2d_plateaus_past_saturation",
+   "ok": true,
+   "peak": 0.5249,
+   "at_highest_lam": 0.5249,
+   "falls_back": 0.0
+  },
+  {
+   "group": "steady",
+   "check": "ring_islip2d_plateaus_past_saturation",
+   "ok": true,
+   "peak": 0.7713,
+   "at_highest_lam": 0.7713,
+   "falls_back": 0.0
+  },
+  {
+   "group": "steady",
+   "check": "mesh_islip2d_interval_beats_free_at",
+   "ok": true,
+   "interval": 0.48597,
+   "free_at": 0.10908,
+   "factor": 4.46
+  },
+  {
+   "group": "steady",
+   "check": "ring_islip2d_interval_beats_free_at",
+   "ok": true,
+   "interval": 0.4963,
+   "free_at": 0.14542,
+   "factor": 3.41
+  },
+  {
+   "group": "steady",
+   "check": "rg_pays_rtt_at_low_load",
+   "ok": true,
+   "p50": {
+    "mesh_base": 38.0,
+    "mesh_islip2d": 54.0,
+    "ring_base": 27.0,
+    "ring_islip2d": 46.0
+   }
+  }
+ ],
+ "n_checks": 49,
+ "n_fail": 0,
+ "wall_secs": 304.1
+}

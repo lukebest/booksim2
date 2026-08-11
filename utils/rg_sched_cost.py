@@ -38,6 +38,7 @@ from typing import Any
 W_T = 12         # time stamp, enough for a few thousand cycles
 W_D = 6          # per-link demand / load counter
 DEPTH = 16       # intervals retained per resource in an interval map
+W_FLIT = 128     # payload flit width, for pricing distributed buffering
 
 # --- technology-ish coefficients ------------------------------------------
 FLOP_BIT = 1.0            # a sequential state bit  (unit)
@@ -57,18 +58,54 @@ def _ceil_log2(x: int) -> int:
 
 
 def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
-               n_rounds: int | None, iters: int) -> dict[str, float]:
-    """Bit-equivalent breakdown of the centralized scheduler's state."""
+               n_rounds: int | None, iters: int,
+               n_ports: int = 0, n_rings: int = 0,
+               conflict_domain: str = "free_at") -> dict[str, float]:
+    """Bit-equivalent breakdown of the centralized scheduler's state.
+
+    `n_ports` and `n_rings` are the ring fabric's extra resource classes: D-R
+    arbitrates board and leave points, which do not exist on the mesh, and its
+    grant pointers live per ring-direction rather than per link.
+    """
     L, N, F = n_links, n_nodes, max(1, n_flows)
     W_f = _ceil_log2(F)
     ramps = 2 * N                       # inject + eject ramp resources
-    interval_tbl = (L + ramps) * DEPTH * 2 * W_T
-    free_at_reg = (L + ramps) * W_T     # one register per resource
+    R = L + ramps + n_ports
+    interval_tbl = R * DEPTH * 2 * W_T
+    free_at_reg = R * W_T               # one register per resource
     link_bitmap = L                     # "used in this round"
     cand_list = F * W_f                 # residual / eligible flow set
     R_max = max(1, n_rounds or 1)
 
     b: dict[str, float] = {}
+    if algo in ("islip2d_mesh", "islip2d_ring"):
+        # The residual VOQ bitmap is the request format: one bit per (source,
+        # destination), re-sent every round until granted. It is the single
+        # largest block and it is what buys "one request per source per round"
+        # instead of one request per VOQ.
+        b["residual_voq_bitmap"] = N * (N - 1)
+        b["accept_pointers"] = N * _ceil_log2(N)
+        if algo == "islip2d_mesh":
+            b["grant_pointers"] = L * _ceil_log2(N)
+            b["round_link_bitmap"] = link_bitmap
+        else:
+            # one grant pointer per ring-direction, not per link: a ring's arcs
+            # are arbitrated as a unit, which is far fewer pointers than the
+            # mesh needs (2*n_rings vs L)
+            b["grant_pointers"] = 2 * max(1, n_rings) * _ceil_log2(N)
+            b["arc_tables"] = 2 * max(1, n_rings) * N     # occupied-arc bitmap
+            b["port_counters"] = n_ports * W_D
+        if conflict_domain == "interval":
+            # Priced as DEPTH retained (start, end) pairs per resource, the same
+            # convention the rest of this module uses. `rg_steady_des._SlotMap`
+            # implements it instead as a sliding occupancy bitmap about 340 bits
+            # wide per server, which lands within a few percent of this and is
+            # the cheaper structure to build, so the number below is not
+            # flattering the interval domain.
+            b["interval_tables"] = interval_tbl
+        else:
+            b["free_at_registers"] = free_at_reg
+        return b
     if algo == "greedy_ff":
         b["interval_tables"] = interval_tbl
         b["candidate_list"] = cand_list
@@ -113,11 +150,25 @@ def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
 
 
 def comparators(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
-                iters: int) -> dict[str, int]:
+                iters: int, n_ports: int = 0, n_rings: int = 0,
+                conflict_domain: str = "free_at") -> dict[str, int]:
     """Parallel comparator slices instantiated (counted in bits of width)."""
     L, N, F = n_links, n_nodes, max(1, n_flows)
     ramps = 2 * N
     c: dict[str, int] = {}
+    if algo in ("islip2d_mesh", "islip2d_ring"):
+        R = L + ramps + n_ports
+        if conflict_domain == "interval":
+            c["interval_compare"] = R * DEPTH * W_T
+        c["free_at_compare"] = R * W_T
+        n_arb = L if algo == "islip2d_mesh" else 2 * max(1, n_rings)
+        c["grant_arbiters"] = n_arb * max(1, iters) * _ceil_log2(N)
+        c["accept_arbiters"] = N * max(1, iters) * _ceil_log2(N)
+        if algo == "islip2d_ring":
+            # R4 pins the two phases together, so every candidate needs its
+            # leave offset and board offset checked against one another
+            c["turn_align_compare"] = N * 2 * W_T
+        return c
     if algo in ("greedy_ff", "bcfs"):
         # every retained interval on every resource is compared in parallel
         c["interval_compare"] = (L + ramps) * DEPTH * W_T
@@ -138,9 +189,19 @@ def comparators(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
 
 
 def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
-                mean_hops: float = 6.0) -> int:
+                mean_hops: float = 6.0, conflict_domain: str = "free_at",
+                n_nodes: int = 48) -> int:
     """Combinational depth of ONE arbitration decision."""
     F = max(2, n_flows)
+    if algo in ("islip2d_mesh", "islip2d_ring"):
+        # grant RR tree over sources, then the path-wide AND that makes an
+        # accept, then (interval domain) the DEPTH-way interval compare
+        d = _ceil_log2(n_nodes) + _ceil_log2(int(mean_hops) + 1)
+        if algo == "islip2d_ring":
+            d += 2                     # two-phase alignment on top of the AND
+        if conflict_domain == "interval":
+            d += _ceil_log2(DEPTH)
+        return max(1, iters) * d
     if algo == "islip_mesh":
         # per-link RR tree + the path-wide AND reduce that makes a mesh accept
         req_per_link = max(2, int(F * mean_hops / max(1, n_links)))
@@ -168,9 +229,9 @@ def dependent_steps(algo: str, *, n_flows: int, n_rounds: int | None,
     if algo in ("greedy_ff", "bcfs"):
         mult = 5 if algo == "bcfs" else 1     # bcfs re-runs multi-start
         return max(1, n_flows) * mult
-    return max(1, n_rounds or 1) * (max(1, iters)
-                                    if algo in ("islip_mesh", "pim_mesh")
-                                    else 1)
+    return max(1, n_rounds or 1) * (
+        max(1, iters) if algo in ("islip_mesh", "pim_mesh", "islip2d_mesh",
+                                  "islip2d_ring") else 1)
 
 
 def _bit_equiv(bits: dict[str, float], cmps: dict[str, int]) -> float:
@@ -190,19 +251,28 @@ def _calibrate(n_links: int, n_nodes: int) -> float:
 
 def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
                n_rounds: int | None = None, mean_hops: float = 6.0,
-               lam: float = 1.0) -> dict[str, Any]:
+               lam: float = 1.0,
+               conflict_domain: str = "free_at") -> dict[str, Any]:
     """Area + timing cost of the centralized scheduler for one workload."""
     L = len(topo.directed_links)
     N = topo.n
+    rings = getattr(topo, "rings", None)
+    n_rings = len(rings) if rings else 0
+    # every node sits on one row ring and one column ring, each with its own
+    # insertion and extraction point
+    n_ports = 2 * 2 * N if n_rings else 0
+    kw = {"n_ports": n_ports, "n_rings": n_rings,
+          "conflict_domain": conflict_domain}
     bits = state_bits(algo, n_links=L, n_nodes=N, n_flows=n_flows,
-                      n_rounds=n_rounds, iters=iters)
+                      n_rounds=n_rounds, iters=iters, **kw)
     cmps = comparators(algo, n_links=L, n_nodes=N, n_flows=n_flows,
-                       iters=iters)
+                       iters=iters, **kw)
     coeff = _calibrate(L, N)
     eq = _bit_equiv(bits, cmps)
     area = coeff * eq / N
     lv = gate_levels(algo, n_links=L, n_flows=n_flows, iters=iters,
-                     mean_hops=mean_hops)
+                     mean_hops=mean_hops, conflict_domain=conflict_domain,
+                     n_nodes=N)
     steps = dependent_steps(algo, n_flows=n_flows, n_rounds=n_rounds,
                             iters=iters)
     cyc_per_step = max(1, math.ceil(lv / LEVELS_PER_CYCLE))
@@ -223,6 +293,105 @@ def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
         "t_sched_cycles": steps * cyc_per_step,
         "lam": lam,
     }
+
+
+# ---------------------------------------------------------------------------
+# What centralization removes: the distributed hardware, in the same currency
+# ---------------------------------------------------------------------------
+
+def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
+                     num_vc: int = 1, n_ports_per_node: int = 5,
+                     fifo_depth: int = 4, resv_tx: int = 1,
+                     eject_depth: int = 4, reasm_depth: int = 16
+                     ) -> dict[str, Any]:
+    """Per-node storage and control the distributed baselines need.
+
+    Priced in the same bit currency as `sched_cost` so the two sides of the
+    argument are comparable. The point of the comparison is not that the
+    arbiter is small -- it is that the distributed schemes pay for their
+    autonomy in FLIT-width storage, which is one to two orders of magnitude
+    more expensive per bit of decision-making.
+
+    `mesh_base` pays the credit round trip: to keep a link busy, each input VC
+    needs about as many flit slots as the credit RTT, which on H=7/V=9 links is
+    15-19 cycles. That is a buffer sized by WIRE DELAY, not by traffic, and it
+    is exactly what a reservation-based scheme does not need.
+
+    `ring_base` pays per BRIDGE, and in a dimension-sliced 2D ring every one of
+    the 48 nodes is a bridge between its row ring and its column ring. HiRD
+    places these structures on a handful of bridge routers; here the count is
+    48, so the baseline's overhead is amplified relative to the original
+    proposal. That difference is a property of the topology, not of the
+    mechanism, and it must be stated when quoting these numbers.
+    """
+    b: dict[str, float] = {}
+    if config == "mesh_base":
+        b["input_buffers"] = (n_nodes * n_ports_per_node * num_vc
+                              * buf_depth * W_FLIT)
+        b["credit_counters"] = n_nodes * n_ports_per_node * num_vc * W_D
+        b["switch_alloc_pointers"] = (n_nodes * n_ports_per_node
+                                      * _ceil_log2(n_ports_per_node))
+    elif config == "ring_base":
+        # 2 target rings per bridge
+        b["transfer_fifos"] = n_nodes * 2 * fifo_depth * W_FLIT
+        b["reserved_tx_buffers"] = n_nodes * 2 * resv_tx * W_FLIT
+        b["eject_queues"] = n_nodes * eject_depth * W_FLIT
+        b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT
+        # I-tag injection guarantee + E-tag transfer guarantee + deadlock timer
+        b["starvation_counters"] = n_nodes * 3 * W_T
+        b["itag_etag_state"] = n_nodes * 2 * 2       # per ring-direction flags
+        b["swap_bypass_muxes"] = n_nodes * 2 * W_FLIT
+    elif config in ("mesh_islip2d", "ring_islip2d"):
+        # Zero station storage by construction: a granted transfer is rigid, so
+        # nothing is ever held anywhere in the fabric. Sources hold packets in
+        # queues they need anyway.
+        pass
+    else:
+        raise ValueError(config)
+    return {"config": config, "bits": round(sum(b.values())),
+            "breakdown": {k: round(v) for k, v in b.items()},
+            "bits_per_node": round(sum(b.values()) / n_nodes, 1)}
+
+
+def centralization_ledger(*, buf_depth: int = 20, fifo_depth: int = 4,
+                          n_rounds_mesh: int = 110, n_rounds_ring: int = 69,
+                          n_flows: int = 2256) -> dict[str, Any]:
+    """Side-by-side: what each configuration spends, and on what."""
+    from rg_topo import Topology
+    from rg_ring_topo import RingTopology
+    mesh, ring = Topology("mesh"), RingTopology()
+    out: dict[str, Any] = {}
+    for cfg, topo, algo, nr in (
+            ("mesh_base", mesh, None, None),
+            ("ring_base", ring, None, None),
+            ("mesh_islip2d", mesh, "islip2d_mesh", n_rounds_mesh),
+            ("ring_islip2d", ring, "islip2d_ring", n_rounds_ring)):
+        d = distributed_cost(cfg, buf_depth=buf_depth, fifo_depth=fifo_depth)
+        row: dict[str, Any] = {"distributed_bits": d["bits"],
+                               "distributed_breakdown": d["breakdown"]}
+        if algo:
+            for dom in ("free_at", "interval"):
+                c = sched_cost(algo, topo, n_flows, iters=1, n_rounds=nr,
+                               conflict_domain=dom)
+                row[f"arbiter_bits_{dom}"] = c["bits"]
+                row[f"arbiter_breakdown_{dom}"] = c["bits_breakdown"]
+                row[f"gate_levels_{dom}"] = c["gate_levels"]
+                row[f"t_sched_{dom}"] = c["t_sched_cycles"]
+            row["total_bits"] = row["distributed_bits"] + \
+                row["arbiter_bits_interval"]
+        else:
+            row["total_bits"] = row["distributed_bits"]
+        out[cfg] = row
+    for pair in (("mesh_base", "mesh_islip2d"), ("ring_base", "ring_islip2d")):
+        a, b = pair
+        out[f"{b}_vs_{a}"] = {
+            "storage_removed_bits": out[a]["distributed_bits"],
+            "arbiter_added_bits": out[b]["arbiter_bits_interval"],
+            "net_bits": (out[b]["total_bits"] - out[a]["total_bits"]),
+            "ratio": (round(out[a]["total_bits"] / out[b]["total_bits"], 2)
+                      if out[b]["total_bits"] else None),
+        }
+    return out
 
 
 def pareto_front(points: list[tuple[float, float, Any]]
@@ -258,7 +427,10 @@ def lam_winner(rows: list[dict[str, Any]], lam: float, *,
 
 
 if __name__ == "__main__":
+    import json
+
     from rg_topo import Topology
+    from rg_ring_topo import RingTopology
     from rg_mesh_sched import ALL_ALGOS
 
     for kind in ("mesh", "torus"):
@@ -271,3 +443,30 @@ if __name__ == "__main__":
             print(f"{algo:12} {c['bits']:>8} {c['comparator_bits']:>7} "
                   f"{c['area_norm']:>7.4f} {c['gate_levels']:>3} "
                   f"{c['dependent_steps']:>6} {c['t_sched_cycles']:>8}")
+
+    print("\n=== the two iSLIP-2D arbiters ===")
+    print(f"{'algo':14} {'domain':9} {'bits':>8} {'cmp':>8} {'area':>7} "
+          f"{'lv':>4} {'T_sched':>8}")
+    for algo, topo, nr in (("islip2d_mesh", Topology("mesh"), 110),
+                           ("islip2d_ring", RingTopology(), 69)):
+        for dom in ("free_at", "interval"):
+            c = sched_cost(algo, topo, 2256, iters=1, n_rounds=nr,
+                           conflict_domain=dom)
+            print(f"{algo:14} {dom:9} {c['bits']:>8} "
+                  f"{c['comparator_bits']:>8} {c['area_norm']:>7.4f} "
+                  f"{c['gate_levels']:>4} {c['t_sched_cycles']:>8}")
+        c = sched_cost(algo, topo, 2256, iters=1, n_rounds=nr,
+                       conflict_domain="interval")
+        for k, v in c["bits_breakdown"].items():
+            print(f"    {k:24} {v:>8}")
+
+    print("\n=== centralization ledger (bits) ===")
+    led = centralization_ledger()
+    for cfg in ("mesh_base", "ring_base", "mesh_islip2d", "ring_islip2d"):
+        r = led[cfg]
+        print(f"  {cfg:13} distributed={r['distributed_bits']:>8} "
+              f"total={r['total_bits']:>8}")
+        for k, v in r["distributed_breakdown"].items():
+            print(f"      {k:24} {v:>8}")
+    for k in ("mesh_islip2d_vs_mesh_base", "ring_islip2d_vs_ring_base"):
+        print(f"  {k}: {json.dumps(led[k])}")
