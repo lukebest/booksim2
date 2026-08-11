@@ -52,6 +52,60 @@ INF = 1 << 20
 rows: list[dict[str, Any]] = []
 
 
+def mesh_misuse(paths: dict, n_samples: int, seed: int) -> dict[str, Any]:
+    """How badly the crossbar predicate misjudges D-M, both directions.
+
+    The crossbar predicate is "distinct sources and distinct destinations".
+    On a mesh it fails both ways, and the two failures need separate samples
+    because they are conditioned on disjoint events: the unsafe rate is
+    measured over pairs the predicate CLEARS, the over-strict rate over pairs
+    it REJECTS for sharing a source.
+    """
+    import random as _r
+    rng = _r.Random(seed)
+    keys = list(paths)
+
+    def links(k):
+        p = paths[k]
+        return {(p[i], p[i + 1]) for i in range(len(p) - 1)}
+
+    n_clear = n_unsafe = n_same = n_same_free = 0
+    for _ in range(n_samples):
+        a, b = rng.choice(keys), rng.choice(keys)
+        if a == b:
+            continue
+        if a[0] != b[0] and a[1] != b[1]:
+            n_clear += 1
+            if links(a) & links(b):
+                n_unsafe += 1
+        if a[0] == b[0] and a[1] != b[1]:
+            n_same += 1
+            if not (links(a) & links(b)):
+                n_same_free += 1
+    # Greedy maximum conflict-free set under M1, to compare against the 48 a
+    # crossbar permutation would allow.
+    sizes = []
+    for t in range(20):
+        r2 = _r.Random(1000 + t)
+        order = keys[:]
+        r2.shuffle(order)
+        used: set = set()
+        n = 0
+        for k in order:
+            le = links(k)
+            if not (le & used):
+                used |= le
+                n += 1
+        sizes.append(n)
+    return {
+        "n_samples": n_samples,
+        "unsafe_rate": round(n_unsafe / max(1, n_clear), 4),
+        "same_src_actually_free_rate": round(n_same_free / max(1, n_same), 4),
+        "greedy_mean": round(sum(sizes) / len(sizes), 1),
+        "greedy_max": max(sizes),
+    }
+
+
 def check(group: str, name: str, ok: bool, **detail: Any) -> None:
     rows.append({"group": group, "check": name, "ok": bool(ok)} | detail)
     flag = "ok  " if ok else "FAIL"
@@ -121,6 +175,16 @@ def dm() -> None:
           inv["mismatch_hops"] == 0 and inv["mismatch_wire"] == 0,
           n_checked=inv["n_checked"], mismatch_hops=inv["mismatch_hops"],
           mismatch_wire=inv["mismatch_wire"])
+    mm = mesh_misuse(xy.paths, n_samples=40_000, seed=0)
+    # Both directions of the crossbar predicate's failure, on the same sample.
+    # Unsafe: it clears pairs that share a link. Over-strict: it rejects
+    # same-source pairs that the mesh can actually run together.
+    check("D-M", "crossbar_predicate_fails_both_ways",
+          mm["unsafe_rate"] > 0 and mm["same_src_actually_free_rate"] > 0,
+          unsafe_rate=mm["unsafe_rate"],
+          same_src_actually_free_rate=mm["same_src_actually_free_rate"],
+          n_samples=mm["n_samples"], greedy_mean=mm["greedy_mean"],
+          greedy_max=mm["greedy_max"], crossbar_permutation=48)
 
     topo = Topology("mesh")
     gains: dict[str, Any] = {}
@@ -207,6 +271,17 @@ def dr() -> None:
               k: spread[k] for k in ("n_pairs", "pairs_with_hop_spread",
                                      "pairs_with_wire_spread",
                                      "max_wire_spread")})
+    # The plan attributed R5's static-route requirement to the ring as a fabric.
+    # It actually belongs to non-minimal routing: inside the minimal candidate
+    # set the ring is latency invariant exactly like mesh ROMM (check above),
+    # and only opening up the long way round breaks it.
+    wide = route_delay_spread(topo, A2A, minimal_only=False)
+    check("D-R", "non_minimal_routes_break_latency_invariance",
+          not wide["latency_invariant"] and wide["frac_wire_spread"] > 0.9,
+          frac_with_spread=wide["frac_wire_spread"],
+          pairs_with_spread=wide["pairs_with_wire_spread"],
+          max_wire_spread=wide["max_wire_spread"],
+          minimal_set_spread=spread["max_wire_spread"])
 
     plan = fixed_plan(topo, A2A)
     mis = misuse_stats(topo, plan.paths, n_samples=40_000, seed=0)

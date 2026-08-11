@@ -570,17 +570,21 @@ def build_ring_plan(topo: RingTopology, pairs: Iterable[Pair], mode: str, *,
     raise ValueError(f"unknown ring path mode: {mode}")
 
 
-def route_delay_spread(topo: RingTopology, pairs: Iterable[Pair]
-                       ) -> dict[str, Any]:
+def route_delay_spread(topo: RingTopology, pairs: Iterable[Pair], *,
+                       minimal_only: bool = True) -> dict[str, Any]:
     """How badly candidate routes differ -- why R5 needs a static route.
 
     Any nonzero wire-delay spread means an in-flight route change can reorder,
     which is exactly what mesh ROMM avoids by latency invariance.
+
+    Run it both ways: the minimal candidate set turns out to be latency
+    invariant just like mesh ROMM, so the dividing line for R5 is not
+    ring-versus-mesh but minimal-versus-non-minimal routing.
     """
     n_pairs = n_hop = n_wire = worst = 0
     for k in pairs:
         n_pairs += 1
-        cands = topo.candidates(k[0], k[1])
+        cands = topo.candidates(k[0], k[1], minimal_only=minimal_only)
         if len(cands) < 2:
             continue
         wires = {topo.footprint(0, p, 1).wire for p in cands}

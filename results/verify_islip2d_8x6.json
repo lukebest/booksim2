@@ -93,6 +93,17 @@
   },
   {
    "group": "D-M",
+   "check": "crossbar_predicate_fails_both_ways",
+   "ok": true,
+   "unsafe_rate": 0.0499,
+   "same_src_actually_free_rate": 0.4448,
+   "n_samples": 40000,
+   "greedy_mean": 75.1,
+   "greedy_max": 85,
+   "crossbar_permutation": 48
+  },
+  {
+   "group": "D-M",
    "check": "romm_cannot_reduce_load_without_headroom",
    "ok": true,
    "offenders": [],
@@ -471,7 +482,7 @@
    }
   }
  ],
- "n_checks": 49,
+ "n_checks": 50,
  "n_fail": 0,
- "wall_secs": 304.1
+ "wall_secs": 222.2
 }

@@ -53,6 +53,76 @@ MESH_PATTERNS = ("alltoall", "permutation", "k_permutation", "transpose",
                  "cluster", "hotspot_any", "halfxhalf", "cornerAtoB")
 
 
+def _xy_links(topo: Topology) -> dict[tuple[int, int], frozenset]:
+    out = {}
+    for s, d in A2A:
+        p = topo.dor_path(s, d)
+        out[(s, d)] = frozenset(zip(p, p[1:]))
+    return out
+
+
+def mesh_misuse(*, n_samples: int = 40_000, seed: int = 0) -> dict[str, Any]:
+    """The mesh-side counterpart of `rg_ring_topo.misuse_stats`.
+
+    Same sampling methodology and same two rates, so §2 and §3 of the report
+    can be read side by side: how often the crossbar predicate ("different
+    source AND different destination") is unsafe on a mesh, and how often the
+    pairs it always rejects ("same source, different destination") are in fact
+    free. Simultaneous release (shared t0) is assumed, which is the strictest
+    reading and the one a round/phase scheduler actually implements.
+    """
+    import random
+    topo = Topology("mesh")
+    ls = _xy_links(topo)
+    rng = random.Random(seed)
+    keys = list(ls.keys())
+    n_dd = n_dd_conf = n_ss = n_ss_free = 0
+    for _ in range(n_samples):
+        a, b = rng.choice(keys), rng.choice(keys)
+        if a == b:
+            continue
+        conf = bool(ls[a] & ls[b])
+        if a[0] != b[0] and a[1] != b[1]:
+            n_dd += 1
+            n_dd_conf += conf
+        if a[0] == b[0] and a[1] != b[1]:
+            n_ss += 1
+            n_ss_free += not conf
+    return {
+        "n_samples": n_samples,
+        "diff_src_diff_dst_pairs": n_dd,
+        "crossbar_predicate_unsafe_rate": round(n_dd_conf / max(1, n_dd), 4),
+        "same_src_pairs": n_ss,
+        "same_src_actually_free_rate": round(n_ss_free / max(1, n_ss), 4),
+    }
+
+
+def mesh_greedy_max_set(*, trials: int = 20, seed: int = 0) -> dict[str, Any]:
+    """Greedy maximum simultaneous conflict-free set under M1, vs the crossbar
+    bound of 48 (one permutation). Mirrors `greedy_max_set` on the ring."""
+    import random
+    topo = Topology("mesh")
+    ls = _xy_links(topo)
+    rng = random.Random(seed)
+    keys = list(ls.keys())
+    sizes = []
+    for _ in range(trials):
+        order = keys[:]
+        rng.shuffle(order)
+        used, n = set(), 0
+        for k in order:
+            e = ls[k]
+            if used & e:
+                continue
+            used |= e
+            n += 1
+        sizes.append(n)
+    return {"clauses": "M1", "trials": trials,
+            "mean": round(sum(sizes) / len(sizes), 1),
+            "max": max(sizes), "min": min(sizes),
+            "crossbar_permutation_reference": 48}
+
+
 def _mesh_row(pattern: str, m: int, sigma: int, **kw) -> dict[str, Any]:
     topo = Topology("mesh")
     topo.sigma = sigma
@@ -216,6 +286,8 @@ def sweep() -> dict[str, Any]:
     }
     return {"rows": rows, "pipeline": pipe, "rtt_crossover": cross,
             "ring_misuse": misuse, "ring_greedy_max_set": gms,
+            "mesh_misuse": mesh_misuse(n_samples=40_000, seed=0),
+            "mesh_greedy_max_set": mesh_greedy_max_set(trials=20, seed=0),
             "audit": topo.audit()}
 
 
