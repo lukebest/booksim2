@@ -114,7 +114,8 @@ def deliver_control(topo: Topology,
     """Deliver control messages on the private control NoC.
 
     msgs: list of (t_inject, src, dst, msg_id). XY route, per-directed-link
-    occupancy 1 msg/cycle, per-hop latency = data geometry H/V.
+    occupancy 1 msg/cycle. Per-hop latency is half the data-plane link-delay
+    Manhattan (path total = ⌊wire_distance/2⌋).
     Returns ({msg_id: t_arrive}, stats).
     """
     inject_ev: dict[int, list] = defaultdict(list)
@@ -136,8 +137,9 @@ def deliver_control(topo: Topology,
                 ingress_hist[t] += 1
                 remaining -= 1
             else:
-                queue[s].append({"path": topo.dor_path(s, d), "hop": 0,
-                                 "mid": mid})
+                path = topo.dor_path(s, d)
+                queue[s].append({"path": path, "hop": 0, "mid": mid,
+                                 "hop_lats": topo.ctrl_path_hop_lats(path)})
         for node, msg in arrive_ev.pop(t, ()):
             if msg["hop"] >= len(msg["path"]) - 1:
                 result[msg["mid"]] = t
@@ -163,9 +165,10 @@ def deliver_control(topo: Topology,
                     continue
                 link_free[e] = t + 1
                 used.add(e)
-                arrive_ev[t + topo.link_lat(u, v)].append(
+                lat = msg["hop_lats"][msg["hop"]]
+                arrive_ev[t + lat].append(
                     (v, {"path": msg["path"], "hop": msg["hop"] + 1,
-                         "mid": msg["mid"]}))
+                         "mid": msg["mid"], "hop_lats": msg["hop_lats"]}))
             queue[node] = keep
         t += 1
 
@@ -176,6 +179,7 @@ def deliver_control(topo: Topology,
         "max_queue": max_q,
         "max_ingress_per_cy": max(ingress_hist.values()) if ingress_hist else 0,
         "routing": "xy",
+        "ctrl_delay_policy": "half_manhattan_linkdelay",
         "shared_with_data_plane": False,
     }
     return result, stats

@@ -137,9 +137,12 @@ def data_bounds(topo: Topology, m: int, pattern: str = "allgather",
 # ---------------------------------------------------------------------------
 
 def path_control_delay(topo: Topology, src: int, dst: int) -> int:
-    """Wire delay of a control message (1 flit, sigma irrelevant — ctrl net
-    has its own 1 msg/cy links, same hop latency)."""
-    return topo.wire_distance(src, dst)
+    """One-way control-message delay = ⌊link-delay Manhattan / 2⌋.
+
+    Control plane is a private NoC (1 msg/cy/link); hop latency is half the
+    data-plane H/V Manhattan distance, not the full data wire delay.
+    """
+    return topo.ctrl_wire_distance(src, dst)
 
 
 def r_rg_async_min(topo: Topology, arb: int | None = None) -> int:
@@ -232,7 +235,7 @@ def rg_bounds(topo: Topology, m: int, pattern: str,
             # root requests to... itself for tree grant? model as local
             r_rg = t_sched
         else:
-            r_rg = max(2 * topo.wire_distance(s, d)
+            r_rg = max(2 * topo.ctrl_wire_distance(s, d)
                        for s in range(topo.n) for d in range(topo.n)
                        if s != d) + t_sched
 

@@ -822,6 +822,8 @@ def run_one(topo_kind: str, plane: str, arbiter: str, pattern: str, m: int,
             "shared_with_data_plane": False,
             "msgs_per_link_cy": 1 if has_ctrl_noc else 0,
             "inherits_data_sigma": False,
+            "ctrl_delay_policy": ("half_manhattan_linkdelay" if has_ctrl_noc
+                                 else None),
         },
         "bounds": bounds,
         "area": area,
@@ -1064,6 +1066,9 @@ def run_sweep(quick: bool = False, out: Path = OUT_JSON) -> dict[str, Any]:
             "shared_with_data_plane": False,
             "inherits_data_sigma": False,
             "msgs_per_link_cy": 1,
+            "ctrl_delay_policy": "half_manhattan_linkdelay",
+            "ctrl_delay_note": ("one-way request/grant latency = "
+                               "⌊(hx·H + hy·V) / 2⌋ along XY route"),
             "area_per_node_norm": CTRL_NOC_AREA_PER_NODE,
         },
         "verifications": verifications,

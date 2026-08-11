@@ -297,7 +297,7 @@ def headline_cards(data) -> str:
   <div class="card ok">
     <div class="k">中心调度器位置</div>
     <div class="v">(4, 0) · nid 4</div>
-    <div class="s">第 1 行第 5 列 · XY 路由 · mesh 最远 73 cy / torus 最远 55 cy</div>
+    <div class="s">第 1 行第 5 列 · XY 路由 · 控制时延=⌊曼哈顿/2⌋ · mesh 最远 36 cy / torus 最远 27 cy</div>
   </div>
   <div class="card {'ok' if all_cf else 'bad'}">
     <div class="k">全局无冲突排程 BCFS</div>
@@ -480,6 +480,7 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 <span class="pill">RAMP=2 · RAMP_BW=2</span>
 <span class="pill">mesh σ=1 · torus σ=2</span>
 <span class="pill">对分带宽 = 6 flit/cy</span>
+<span class="pill">控制时延 = ⌊曼哈顿/2⌋</span>
 </p>
 
 {headline_cards(data)}
@@ -488,17 +489,19 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 <ul>
 <li><b>拓扑</b>：8×6 mesh（82 无向链路）vs 折叠 2D torus（96 无向链路）。金属线恒定约束下 torus 每链路带宽减半（σ=2），对分带宽与 mesh 严格相等。</li>
 <li><b>金属线审计</b>：mesh={v['metal']['mesh_metal']:.0f} · torus={v['metal']['torus_metal']:.0f} · 比={v['metal']['ratio_torus_over_mesh']:.3f}（torus 多约 17% 链路单位；折叠线长×2 的物理偏差见敏感度 delay×2）。</li>
-<li><b>控制平面（硬约束）</b>：集中式/分布式 request–grant 消息走<b>私有控制 NoC</b>（与数据面同构的独立物理网络），<b>不与数据面共物理链路</b>。控制面不继承数据面 σ；剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
+<li><b>控制平面（硬约束）</b>：集中式/分布式 request–grant 消息走<b>私有控制 NoC</b>（与数据面同构的独立物理网络），<b>不与数据面共物理链路</b>。
+控制面不继承数据面 σ；单向时延 = <b>⌊含 link delay 的曼哈顿距离 / 2⌋</b>（XY 路径）；
+剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
 <li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
 <li><b>仲裁器</b>：<code>CA</code> 集中式 @ <b>(x=4,y=0) = nid 4</b>（原点左上、先 x 后 y，即第 1 行第 5 列）；
 <code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。</li>
 <li><b>Request 产生时刻</b>：各节点<b>不同时</b>产生 request（默认每节点 U[0,64) 随机起跳，同一节点内多条 request 逐拍发出）。
-到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>逐跳线延迟 + 私有控制网争用，因此天然离散。</li>
+到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>上 ⌊曼哈顿线延迟/2⌋ + 私有控制网争用，因此天然离散。</li>
 <li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。
 CA-batch 的 W=∞ 即等价于「等齐再仲裁」的同步纪律。</li>
 </ul>
 <div class="eq">T = T_bound + R_rg + W_grant(ρ) &nbsp;;&nbsp; R_rg = ℓ_ctrl(src→arb) + T_sched + ℓ_ctrl(arb→src)
-<br/><span style="font-size:.85rem;color:#9aa3b5">ℓ_ctrl 走私有控制 NoC，与数据面链路资源正交</span></div>
+<br/><span style="font-size:.85rem;color:#9aa3b5">ℓ_ctrl = ⌊曼哈顿线延迟/2⌋，走私有控制 NoC，与数据面链路资源正交</span></div>
 
 <h2>2. 头条结论：私有控制 NoC 上的收敛税仍是 alltoall 瓶颈</h2>
 <p>即便 request/grant <b>完全不占用数据链路</b>，CA 下 alltoall 若对每条 (s,d) 流单独 request，共 48×47=<b>2256</b> 条控制消息仍须挤入仲裁器控制路由器的 ≤4 个入端口。
@@ -514,16 +517,17 @@ CA-batch 的 W=∞ 即等价于「等齐再仲裁」的同步纪律。</li>
 
 <h3>3.1 流水线</h3>
 <p>中心调度器固定在 <b>(x=4, y=0)</b>（原点左上、先 x 后 y，即第 1 行第 5 列，<code>nid=4</code>）。
-控制消息在<b>私有控制 NoC</b> 上走 <b>XY 维序路由</b>，逐跳付 H=7 / V=9。</p>
+控制消息在<b>私有控制 NoC</b> 上走 <b>XY 维序路由</b>；
+单向时延取<b>含 link delay 的曼哈顿距离的一半</b>
+<code>ℓ_ctrl = ⌊(h<sub>x</sub>·H + h<sub>y</sub>·V) / 2⌋</code>（数据面仍用满 H=7 / V=9）。</p>
 <div class="eq">
 ① 节点 i 在 t_gen(i) 产生 request（<b>各节点不同时</b>）
-<br/>② request 经 XY 路由到 CA(4,0)：t_arr(i) = t_gen(i) + ℓ_xy(i→CA) + 控制网争用
+<br/>② request 经 XY 路由到 CA(4,0)：t_arr(i) = t_gen(i) + ℓ_ctrl(i→CA) + 控制网争用
 <br/>③ CA 关闭长度 W 的滚动时间窗，取窗内到达的一批 request，于 t_decide = max(窗尾, 批内最晚到达) + T_sched 起仲裁
-<br/>④ grant 经 XY 路由回源：release(i) = t_decide + ℓ_xy(CA→i) + 争用
+<br/>④ grant 经 XY 路由回源：release(i) = t_decide + ℓ_ctrl(CA→i) + 争用
 <br/>⑤ 数据面起始时刻 t0(i) ≥ release(i)，由 BCFS 决定
 </div>
-<p class="muted">因为 (4,0) 在上边缘，CA 到最远角 (0,5) 的线延迟为 4·7+5·9=<b>73</b> cy（mesh），
-而 folded torus 顶点传递、最远仍是 4·7+3·9=<b>55</b> cy —— 这是 torus 在控制平面上的额外结构优势。</p>
+<p class="muted">CA(4,0)→最远角：数据曼哈顿 mesh 73 / torus 55；控制面各取其半 → mesh <b>36</b> cy / torus <b>27</b> cy。</p>
 
 <h3>3.2 BCFS：点对点请求的全局无冲突排程算法</h3>
 <p>单条被授权的点对点流是一个<b>刚性时空印记</b>（wormhole、无缓冲）：给定起始 t0、XY 路径 P、m 个 flit，
@@ -558,7 +562,7 @@ alltoall 上 mesh 约 5%、torus 约 15%（torus σ=2 使印记更长、装箱�
 <p><b>W 的取舍</b>：W→0 退化成逐条即时仲裁（R_rg 最短，但 BCFS 只能看到一两条流，增益≈0）；
 W→∞ 退化成同步 barrier（视野最全、增益最高，但要付「等最晚 request」的税）。
 中间存在最优点：mesh alltoall 聚合 m=4 在 W≈16–64 取到最小 makespan。</p>
-<p><b>产生时刻错峰的影响</b>：J=0（所有节点同时产生）时到达离散度仅来自线延迟差（mesh 上 73−7=66 cy 量级）；
+<p><b>产生时刻错峰的影响</b>：J=0（所有节点同时产生）时到达离散度仅来自控制半曼哈顿差（mesh 上 ⌊73/2⌋−⌊7/2⌋ ≈ 36−3 = 33 cy 量级）；
 J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降</b>——因为 release 时刻本身已经把流拉开了，
 排程器可优化的重叠变少。<code>distance_skew</code>（远节点提前发）能显著压缩到达离散度，是低成本的工程手段。</p>
 

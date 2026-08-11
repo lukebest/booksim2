@@ -40,7 +40,7 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 </head>
 <body>
 <h1>Request–Grant 分组交换 NoC 基线 · 8×6 mesh / folded torus</h1>
-<p class="muted">生成于 2026-08-11T03:18:54.388403+00:00 · 258 行配置 ·
+<p class="muted">生成于 2026-08-11T03:59:57.169352+00:00 · 258 行配置 ·
 数据 <code>results/rg_noc_8x6.json</code></p>
 
 <p>
@@ -48,6 +48,7 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 <span class="pill">RAMP=2 · RAMP_BW=2</span>
 <span class="pill">mesh σ=1 · torus σ=2</span>
 <span class="pill">对分带宽 = 6 flit/cy</span>
+<span class="pill">控制时延 = ⌊曼哈顿/2⌋</span>
 </p>
 
 
@@ -55,14 +56,14 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
   <div class="card ok">
     <div class="k">中心调度器位置</div>
     <div class="v">(4, 0) · nid 4</div>
-    <div class="s">第 1 行第 5 列 · XY 路由 · mesh 最远 73 cy / torus 最远 55 cy</div>
+    <div class="s">第 1 行第 5 列 · XY 路由 · 控制时延=⌊曼哈顿/2⌋ · mesh 最远 36 cy / torus 最远 27 cy</div>
   </div>
   <div class="card ok">
     <div class="k">全局无冲突排程 BCFS</div>
     <div class="v">79 组 · 无冲突 ✓</div>
     <div class="s">独立检查器逐链路复核 · bufferless DES max_residency=0 ·
-    相对 FCFS 最高增益 <b>23%</b>
-    · mesh alltoall m=4 → 616 cy</div>
+    相对 FCFS 最高增益 <b>18%</b>
+    · mesh alltoall m=4 → 564 cy</div>
   </div>
   <div class="card ok">
     <div class="k">控制平面 = 私有 NoC</div>
@@ -71,13 +72,13 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
   </div>
   <div class="card bad">
     <div class="k">CA alltoall 非聚合 · 控制收敛</div>
-    <div class="v">1888 cy</div>
-    <div class="s">2256 req → 入端口下界 ⌈2256/4⌉=564；实测 1888（<b>私有控制网上</b>控制消息互争，非数据干扰）· mk=2105</div>
+    <div class="v">1887 cy</div>
+    <div class="s">2256 req → 入端口下界 ⌈2256/4⌉=564；实测 1887（<b>私有控制网上</b>控制消息互争，非数据干扰）· mk=2067</div>
   </div>
   <div class="card ok">
     <div class="k">CA alltoall 聚合 · m=1</div>
-    <div class="v">336 cy</div>
-    <div class="s">48 req · t_last_req=73 · vs FIFO 基线 192</div>
+    <div class="v">275 cy</div>
+    <div class="s">48 req · t_last_req=49 · vs FIFO 基线 192</div>
   </div>
   <div class="card">
     <div class="k">FIFO 基线 alltoall m=1</div>
@@ -106,21 +107,23 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 <ul>
 <li><b>拓扑</b>：8×6 mesh（82 无向链路）vs 折叠 2D torus（96 无向链路）。金属线恒定约束下 torus 每链路带宽减半（σ=2），对分带宽与 mesh 严格相等。</li>
 <li><b>金属线审计</b>：mesh=82 · torus=96 · 比=1.171（torus 多约 17% 链路单位；折叠线长×2 的物理偏差见敏感度 delay×2）。</li>
-<li><b>控制平面（硬约束）</b>：集中式/分布式 request–grant 消息走<b>私有控制 NoC</b>（与数据面同构的独立物理网络），<b>不与数据面共物理链路</b>。控制面不继承数据面 σ；剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
+<li><b>控制平面（硬约束）</b>：集中式/分布式 request–grant 消息走<b>私有控制 NoC</b>（与数据面同构的独立物理网络），<b>不与数据面共物理链路</b>。
+控制面不继承数据面 σ；单向时延 = <b>⌊含 link delay 的曼哈顿距离 / 2⌋</b>（XY 路径）；
+剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
 <li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
 <li><b>仲裁器</b>：<code>CA</code> 集中式 @ <b>(x=4,y=0) = nid 4</b>（原点左上、先 x 后 y，即第 1 行第 5 列）；
 <code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。</li>
 <li><b>Request 产生时刻</b>：各节点<b>不同时</b>产生 request（默认每节点 U[0,64) 随机起跳，同一节点内多条 request 逐拍发出）。
-到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>逐跳线延迟 + 私有控制网争用，因此天然离散。</li>
+到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>上 ⌊曼哈顿线延迟/2⌋ + 私有控制网争用，因此天然离散。</li>
 <li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。
 CA-batch 的 W=∞ 即等价于「等齐再仲裁」的同步纪律。</li>
 </ul>
 <div class="eq">T = T_bound + R_rg + W_grant(ρ) &nbsp;;&nbsp; R_rg = ℓ_ctrl(src→arb) + T_sched + ℓ_ctrl(arb→src)
-<br/><span style="font-size:.85rem;color:#9aa3b5">ℓ_ctrl 走私有控制 NoC，与数据面链路资源正交</span></div>
+<br/><span style="font-size:.85rem;color:#9aa3b5">ℓ_ctrl = ⌊曼哈顿线延迟/2⌋，走私有控制 NoC，与数据面链路资源正交</span></div>
 
 <h2>2. 头条结论：私有控制 NoC 上的收敛税仍是 alltoall 瓶颈</h2>
 <p>即便 request/grant <b>完全不占用数据链路</b>，CA 下 alltoall 若对每条 (s,d) 流单独 request，共 48×47=<b>2256</b> 条控制消息仍须挤入仲裁器控制路由器的 ≤4 个入端口。
-入端口收敛下界 ⌈2256/4⌉=<b>564</b> cy；私有控制 NoC DES 实测 t_last_request=<b>1888</b> cy
+入端口收敛下界 ⌈2256/4⌉=<b>564</b> cy；私有控制 NoC DES 实测 t_last_request=<b>1887</b> cy
 （超出部分 = 控制消息在私有网上的路径争用，<b>不是</b>数据干扰）。而 m=1 数据面下界仅 ~98 cy、FIFO 基线 makespan=192 cy。</p>
 <p><b>两个有效缓解：</b></p>
 <ol>
@@ -132,16 +135,17 @@ CA-batch 的 W=∞ 即等价于「等齐再仲裁」的同步纪律。</li>
 
 <h3>3.1 流水线</h3>
 <p>中心调度器固定在 <b>(x=4, y=0)</b>（原点左上、先 x 后 y，即第 1 行第 5 列，<code>nid=4</code>）。
-控制消息在<b>私有控制 NoC</b> 上走 <b>XY 维序路由</b>，逐跳付 H=7 / V=9。</p>
+控制消息在<b>私有控制 NoC</b> 上走 <b>XY 维序路由</b>；
+单向时延取<b>含 link delay 的曼哈顿距离的一半</b>
+<code>ℓ_ctrl = ⌊(h<sub>x</sub>·H + h<sub>y</sub>·V) / 2⌋</code>（数据面仍用满 H=7 / V=9）。</p>
 <div class="eq">
 ① 节点 i 在 t_gen(i) 产生 request（<b>各节点不同时</b>）
-<br/>② request 经 XY 路由到 CA(4,0)：t_arr(i) = t_gen(i) + ℓ_xy(i→CA) + 控制网争用
+<br/>② request 经 XY 路由到 CA(4,0)：t_arr(i) = t_gen(i) + ℓ_ctrl(i→CA) + 控制网争用
 <br/>③ CA 关闭长度 W 的滚动时间窗，取窗内到达的一批 request，于 t_decide = max(窗尾, 批内最晚到达) + T_sched 起仲裁
-<br/>④ grant 经 XY 路由回源：release(i) = t_decide + ℓ_xy(CA→i) + 争用
+<br/>④ grant 经 XY 路由回源：release(i) = t_decide + ℓ_ctrl(CA→i) + 争用
 <br/>⑤ 数据面起始时刻 t0(i) ≥ release(i)，由 BCFS 决定
 </div>
-<p class="muted">因为 (4,0) 在上边缘，CA 到最远角 (0,5) 的线延迟为 4·7+5·9=<b>73</b> cy（mesh），
-而 folded torus 顶点传递、最远仍是 4·7+3·9=<b>55</b> cy —— 这是 torus 在控制平面上的额外结构优势。</p>
+<p class="muted">CA(4,0)→最远角：数据曼哈顿 mesh 73 / torus 55；控制面各取其半 → mesh <b>36</b> cy / torus <b>27</b> cy。</p>
 
 <h3>3.2 BCFS：点对点请求的全局无冲突排程算法</h3>
 <p>单条被授权的点对点流是一个<b>刚性时空印记</b>（wormhole、无缓冲）：给定起始 t0、XY 路径 P、m 个 flit，
@@ -165,25 +169,25 @@ CA-batch 的 W=∞ 即等价于「等齐再仲裁」的同步纪律。</li>
 
 <h3>3.3 BCFS 结果（按 pattern × m 归类，含 FIFO 基线）</h3>
 <h3>alltoall</h3>
-<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>192</b></td><td>362</td><td>1.89×</td><td>362</td><td>362</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>192</b></td><td>372</td><td>1.94×</td><td>362</td><td>362</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>206</b></td><td>312</td><td>1.51×</td><td>312</td><td>353</td><td>13.1%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>206</b></td><td>748</td><td>3.63×</td><td>312</td><td>353</td><td>13.1%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>701</b></td><td>616</td><td>0.88×</td><td>618</td><td>647</td><td>4.7%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>701</b></td><td>681</td><td>0.97×</td><td>618</td><td>647</td><td>4.7%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1274</b></td><td>731</td><td>0.57×</td><td>736</td><td>845</td><td>14.8%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1274</b></td><td>1271</td><td>1.00×</td><td>736</td><td>845</td><td>14.8%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>3238</b></td><td>1906</td><td>0.59×</td><td>1914</td><td>2071</td><td>8.2%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>3238</b></td><td>1983</td><td>0.61×</td><td>1914</td><td>2071</td><td>8.2%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>5649</b></td><td>2658</td><td>0.47×</td><td>2681</td><td>3021</td><td>12.7%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>5649</b></td><td>2689</td><td>0.48×</td><td>2681</td><td>3021</td><td>12.7%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>192</b></td><td>270</td><td>1.41×</td><td>270</td><td>291</td><td>7.8%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>192</b></td><td>298</td><td>1.55×</td><td>270</td><td>291</td><td>7.8%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>206</b></td><td>280</td><td>1.36×</td><td>280</td><td>318</td><td>13.6%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>206</b></td><td>807</td><td>3.92×</td><td>280</td><td>318</td><td>13.6%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>701</b></td><td>564</td><td>0.80×</td><td>566</td><td>609</td><td>7.6%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>701</b></td><td>612</td><td>0.87×</td><td>566</td><td>609</td><td>7.6%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1274</b></td><td>736</td><td>0.58×</td><td>741</td><td>798</td><td>7.7%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1274</b></td><td>1162</td><td>0.91×</td><td>741</td><td>798</td><td>7.7%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>3238</b></td><td>1935</td><td>0.60×</td><td>1943</td><td>2053</td><td>5.7%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>3238</b></td><td>1973</td><td>0.61×</td><td>1943</td><td>2053</td><td>5.7%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>5649</b></td><td>2781</td><td>0.49×</td><td>2804</td><td>2886</td><td>2.9%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>5649</b></td><td>2828</td><td>0.50×</td><td>2804</td><td>2886</td><td>2.9%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
 <h3>allgather</h3>
-<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>362</b></td><td>362</td><td>1.00×</td><td>362</td><td>362</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>362</b></td><td>396</td><td>1.09×</td><td>362</td><td>362</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>755</b></td><td>263</td><td>0.35×</td><td>263</td><td>270</td><td>2.7%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>755</b></td><td>719</td><td>0.95×</td><td>263</td><td>270</td><td>2.7%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>1157</b></td><td>523</td><td>0.45×</td><td>525</td><td>529</td><td>0.8%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>1157</b></td><td>1002</td><td>0.87×</td><td>525</td><td>529</td><td>0.8%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>2567</b></td><td>765</td><td>0.30×</td><td>770</td><td>781</td><td>1.4%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>2567</b></td><td>1509</td><td>0.59×</td><td>770</td><td>781</td><td>1.4%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>4337</b></td><td>1490</td><td>0.34×</td><td>1498</td><td>1432</td><td>-4.4%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>4337</b></td><td>2875</td><td>0.66×</td><td>1498</td><td>1432</td><td>-4.4%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>9815</b></td><td>1399</td><td>0.14×</td><td>1422</td><td>1664</td><td>17.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>9815</b></td><td>6074</td><td>0.62×</td><td>1422</td><td>1664</td><td>17.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>362</b></td><td>270</td><td>0.75×</td><td>270</td><td>270</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>362</b></td><td>343</td><td>0.95×</td><td>270</td><td>270</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>755</b></td><td>244</td><td>0.32×</td><td>244</td><td>252</td><td>3.3%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>755</b></td><td>624</td><td>0.83×</td><td>244</td><td>252</td><td>3.3%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>1157</b></td><td>480</td><td>0.41×</td><td>482</td><td>512</td><td>6.2%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>1157</b></td><td>881</td><td>0.76×</td><td>482</td><td>512</td><td>6.2%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>2567</b></td><td>717</td><td>0.28×</td><td>722</td><td>740</td><td>2.5%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>2567</b></td><td>1908</td><td>0.74×</td><td>722</td><td>740</td><td>2.5%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>4337</b></td><td>1409</td><td>0.32×</td><td>1417</td><td>1456</td><td>2.8%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>4337</b></td><td>2830</td><td>0.65×</td><td>1417</td><td>1456</td><td>2.8%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>9815</b></td><td>1379</td><td>0.14×</td><td>1402</td><td>1628</td><td>16.1%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>9815</b></td><td>6643</td><td>0.68×</td><td>1402</td><td>1628</td><td>16.1%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
 <h3>allreduce</h3>
-<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>107</b></td><td>334</td><td>3.12×</td><td>334</td><td>334</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>107</b></td><td>334</td><td>3.12×</td><td>334</td><td>334</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>98</b></td><td>258</td><td>2.63×</td><td>258</td><td>258</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>98</b></td><td>258</td><td>2.63×</td><td>258</td><td>258</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>247</b></td><td>335</td><td>1.36×</td><td>337</td><td>337</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>247</b></td><td>337</td><td>1.36×</td><td>337</td><td>337</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>380</b></td><td>290</td><td>0.76×</td><td>295</td><td>295</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>380</b></td><td>295</td><td>0.78×</td><td>295</td><td>295</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>811</b></td><td>737</td><td>0.91×</td><td>745</td><td>745</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>811</b></td><td>745</td><td>0.92×</td><td>745</td><td>745</td><td>0.0%</td><td>109</td><td>266</td><td>3</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1508</b></td><td>835</td><td>0.55×</td><td>858</td><td>858</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1508</b></td><td>858</td><td>0.57×</td><td>858</td><td>858</td><td>0.0%</td><td>83</td><td>201</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>107</b></td><td>249</td><td>2.33×</td><td>249</td><td>249</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>107</b></td><td>249</td><td>2.33×</td><td>249</td><td>249</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>98</b></td><td>220</td><td>2.24×</td><td>220</td><td>220</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>98</b></td><td>220</td><td>2.24×</td><td>220</td><td>220</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>247</b></td><td>256</td><td>1.04×</td><td>258</td><td>258</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>247</b></td><td>258</td><td>1.04×</td><td>258</td><td>258</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>380</b></td><td>276</td><td>0.73×</td><td>281</td><td>281</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>380</b></td><td>281</td><td>0.74×</td><td>281</td><td>281</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>811</b></td><td>726</td><td>0.90×</td><td>734</td><td>734</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>811</b></td><td>734</td><td>0.91×</td><td>734</td><td>734</td><td>0.0%</td><td>83</td><td>175</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1508</b></td><td>830</td><td>0.55×</td><td>853</td><td>853</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1508</b></td><td>853</td><td>0.57×</td><td>853</td><td>853</td><td>0.0%</td><td>69</td><td>163</td><td>2</td><td>✓</td></tr></table>
 <h3>broadcast</h3>
-<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>139</b></td><td>260</td><td>1.87×</td><td>260</td><td>260</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>139</b></td><td>260</td><td>1.87×</td><td>260</td><td>260</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>102</b></td><td>221</td><td>2.17×</td><td>221</td><td>221</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>102</b></td><td>221</td><td>2.17×</td><td>221</td><td>221</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr></table>
-<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>280</b></td><td>261</td><td>0.93×</td><td>263</td><td>263</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>280</b></td><td>263</td><td>0.94×</td><td>263</td><td>263</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>367</b></td><td>222</td><td>0.60×</td><td>227</td><td>227</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>367</b></td><td>227</td><td>0.62×</td><td>227</td><td>227</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr></table>
-<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>844</b></td><td>267</td><td>0.32×</td><td>275</td><td>275</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>844</b></td><td>275</td><td>0.33×</td><td>275</td><td>275</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1495</b></td><td>228</td><td>0.15×</td><td>251</td><td>251</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1495</b></td><td>251</td><td>0.17×</td><td>251</td><td>251</td><td>0.0%</td><td>0</td><td>115</td><td>1</td><td>✓</td></tr></table>
+<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>139</b></td><td>182</td><td>1.31×</td><td>182</td><td>182</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>139</b></td><td>182</td><td>1.31×</td><td>182</td><td>182</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>102</b></td><td>143</td><td>1.40×</td><td>143</td><td>143</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>102</b></td><td>143</td><td>1.40×</td><td>143</td><td>143</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr></table>
+<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>280</b></td><td>183</td><td>0.65×</td><td>185</td><td>185</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>280</b></td><td>185</td><td>0.66×</td><td>185</td><td>185</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>367</b></td><td>144</td><td>0.39×</td><td>149</td><td>149</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>367</b></td><td>149</td><td>0.41×</td><td>149</td><td>149</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr></table>
+<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>844</b></td><td>189</td><td>0.22×</td><td>197</td><td>197</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>844</b></td><td>197</td><td>0.23×</td><td>197</td><td>197</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>1495</b></td><td>150</td><td>0.10×</td><td>173</td><td>173</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>1495</b></td><td>173</td><td>0.12×</td><td>173</td><td>173</td><td>0.0%</td><td>0</td><td>37</td><td>1</td><td>✓</td></tr></table>
 <h3>reduce</h3>
-<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>98</b></td><td>307</td><td>3.13×</td><td>307</td><td>307</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>98</b></td><td>307</td><td>3.13×</td><td>307</td><td>307</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>65</b></td><td>230</td><td>3.54×</td><td>230</td><td>230</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>65</b></td><td>230</td><td>3.54×</td><td>230</td><td>230</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>175</b></td><td>316</td><td>1.81×</td><td>318</td><td>318</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>175</b></td><td>318</td><td>1.82×</td><td>318</td><td>318</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>203</b></td><td>307</td><td>1.51×</td><td>312</td><td>312</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>203</b></td><td>312</td><td>1.54×</td><td>312</td><td>312</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr></table>
-<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>652</b></td><td>751</td><td>1.15×</td><td>759</td><td>759</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>652</b></td><td>759</td><td>1.16×</td><td>759</td><td>759</td><td>0.0%</td><td>98</td><td>221</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>779</b></td><td>863</td><td>1.11×</td><td>886</td><td>886</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>779</b></td><td>886</td><td>1.14×</td><td>886</td><td>886</td><td>0.0%</td><td>98</td><td>200</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 1</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>98</b></td><td>269</td><td>2.74×</td><td>269</td><td>269</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>98</b></td><td>269</td><td>2.74×</td><td>269</td><td>269</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>65</b></td><td>208</td><td>3.20×</td><td>208</td><td>208</td><td>0.0%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>65</b></td><td>208</td><td>3.20×</td><td>208</td><td>208</td><td>0.0%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 4</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>175</b></td><td>277</td><td>1.58×</td><td>279</td><td>279</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>175</b></td><td>279</td><td>1.59×</td><td>279</td><td>279</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>203</b></td><td>301</td><td>1.48×</td><td>306</td><td>306</td><td>0.0%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>203</b></td><td>306</td><td>1.51×</td><td>306</td><td>306</td><td>0.0%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr></table>
+<h4>m = 16</h4><table><tr><th>topo</th><th>plane</th><th>FIFO 基线</th><th>DES makespan</th><th>vs 基线</th><th>BCFS 排程</th><th>FCFS 排程</th><th>BCFS 增益</th><th>到达离散度</th><th>R_rg</th><th>#窗口</th><th>无冲突</th></tr><tr><td>mesh</td><td>bufferless</td><td><b>652</b></td><td>746</td><td>1.14×</td><td>754</td><td>754</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>mesh</td><td>bufferable</td><td><b>652</b></td><td>754</td><td>1.16×</td><td>754</td><td>754</td><td>0.0%</td><td>76</td><td>173</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferless</td><td><b>779</b></td><td>858</td><td>1.10×</td><td>881</td><td>882</td><td>0.1%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr><tr><td>torus</td><td>bufferable</td><td><b>779</b></td><td>881</td><td>1.13×</td><td>881</td><td>882</td><td>0.1%</td><td>74</td><td>167</td><td>2</td><td>✓</td></tr></table>
 <p><b>读法</b>：「BCFS 增益」= FCFS 排程 makespan / BCFS 排程 makespan − 1，即关键度排序 + backfill 相对纯到达序贪心的收益。
 alltoall 上 mesh 约 5%、torus 约 15%（torus σ=2 使印记更长、装箱更紧张，全局视野更值钱）。
 <b>reduce / broadcast / allreduce 增益为 0</b>：这些 pattern 的瓶颈是根节点 eject 端口或树直径，
@@ -194,19 +198,19 @@ alltoall 上 mesh 约 5%、torus 约 15%（torus σ=2 使印记更长、装箱�
 
 <h3>时间窗 W 敏感度（bufferless · CA-batch · alltoall 聚合 · m=4）</h3>
 <p class="muted">W 小 = 频繁小批，R_rg 短但全局视野窄；W 大 = 批量大、BCFS 增益高但等窗代价上升。W=∞ 表示等所有 request 到齐（同步纪律）。</p>
-<table><tr><th>topo</th><th>W</th><th>#窗口</th><th>DES makespan</th><th>FCFS makespan</th><th>BCFS 增益</th><th>R_rg</th><th>数据面跨度</th></tr><tr><td>mesh</td><td>16</td><td>8</td><td>582</td><td>621</td><td>6.3%</td><td>218</td><td>535</td></tr><tr><td>torus</td><td>16</td><td>6</td><td>777</td><td>837</td><td>7.0%</td><td>166</td><td>733</td></tr><tr><td>mesh</td><td>64</td><td>3</td><td>616</td><td>647</td><td>4.7%</td><td>266</td><td>546</td></tr><tr><td>torus</td><td>64</td><td>2</td><td>731</td><td>845</td><td>14.8%</td><td>201</td><td>664</td></tr><tr><td>mesh</td><td>256</td><td>1</td><td>740</td><td>817</td><td>10.1%</td><td>356</td><td>478</td></tr><tr><td>torus</td><td>256</td><td>1</td><td>871</td><td>1039</td><td>18.6%</td><td>341</td><td>612</td></tr><tr><td>mesh</td><td>∞ (等齐)</td><td>1</td><td>612</td><td>689</td><td>12.2%</td><td>228</td><td>478</td></tr><tr><td>torus</td><td>∞ (等齐)</td><td>1</td><td>717</td><td>885</td><td>22.6%</td><td>187</td><td>612</td></tr></table>
+<table><tr><th>topo</th><th>W</th><th>#窗口</th><th>DES makespan</th><th>FCFS makespan</th><th>BCFS 增益</th><th>R_rg</th><th>数据面跨度</th></tr><tr><td>mesh</td><td>16</td><td>6</td><td>544</td><td>578</td><td>5.9%</td><td>137</td><td>515</td></tr><tr><td>torus</td><td>16</td><td>6</td><td>745</td><td>784</td><td>4.5%</td><td>124</td><td>722</td></tr><tr><td>mesh</td><td>64</td><td>2</td><td>564</td><td>609</td><td>7.6%</td><td>175</td><td>494</td></tr><tr><td>torus</td><td>64</td><td>2</td><td>736</td><td>798</td><td>7.7%</td><td>163</td><td>669</td></tr><tr><td>mesh</td><td>256</td><td>1</td><td>722</td><td>795</td><td>9.8%</td><td>317</td><td>460</td></tr><tr><td>torus</td><td>256</td><td>1</td><td>862</td><td>992</td><td>14.4%</td><td>310</td><td>603</td></tr><tr><td>mesh</td><td>∞ (等齐)</td><td>1</td><td>561</td><td>634</td><td>12.6%</td><td>156</td><td>460</td></tr><tr><td>torus</td><td>∞ (等齐)</td><td>1</td><td>687</td><td>817</td><td>18.1%</td><td>135</td><td>603</td></tr></table>
 
 <h3>Request 产生时刻模型敏感度（mesh · bufferless · alltoall 聚合 · m=4 · W=64）</h3>
 <p class="muted">uniform_jitter=每节点 U[0,J) 随机起跳；distance_skew=离 CA 远的节点提前发（补偿线延迟）；burst=半数节点同时、半数延后 J。</p>
-<table><tr><th>产生模型</th><th>J</th><th>到达离散度</th><th>R_rg</th><th>DES makespan</th><th>BCFS 增益</th></tr><tr><td>uniform_jitter</td><td>0</td><td>73</td><td>211</td><td>584</td><td>11.1%</td></tr><tr><td>uniform_jitter</td><td>64</td><td>109</td><td>266</td><td>616</td><td>4.7%</td></tr><tr><td>uniform_jitter</td><td>256</td><td>282</td><td>396</td><td>694</td><td>7.6%</td></tr><tr><td>distance_skew</td><td>0</td><td>46</td><td>219</td><td>609</td><td>9.5%</td></tr><tr><td>distance_skew</td><td>64</td><td>46</td><td>219</td><td>609</td><td>9.5%</td></tr><tr><td>distance_skew</td><td>256</td><td>46</td><td>219</td><td>609</td><td>9.5%</td></tr><tr><td>burst</td><td>0</td><td>73</td><td>211</td><td>584</td><td>11.1%</td></tr><tr><td>burst</td><td>64</td><td>131</td><td>266</td><td>586</td><td>6.6%</td></tr><tr><td>burst</td><td>256</td><td>323</td><td>458</td><td>657</td><td>2.0%</td></tr></table>
+<table><tr><th>产生模型</th><th>J</th><th>到达离散度</th><th>R_rg</th><th>DES makespan</th><th>BCFS 增益</th></tr><tr><td>uniform_jitter</td><td>0</td><td>49</td><td>131</td><td>528</td><td>17.2%</td></tr><tr><td>uniform_jitter</td><td>64</td><td>83</td><td>175</td><td>564</td><td>7.6%</td></tr><tr><td>uniform_jitter</td><td>256</td><td>256</td><td>361</td><td>659</td><td>10.4%</td></tr><tr><td>distance_skew</td><td>0</td><td>39</td><td>169</td><td>594</td><td>8.1%</td></tr><tr><td>distance_skew</td><td>64</td><td>39</td><td>169</td><td>594</td><td>8.1%</td></tr><tr><td>distance_skew</td><td>256</td><td>39</td><td>169</td><td>594</td><td>8.1%</td></tr><tr><td>burst</td><td>0</td><td>49</td><td>131</td><td>528</td><td>17.2%</td></tr><tr><td>burst</td><td>64</td><td>98</td><td>180</td><td>541</td><td>8.8%</td></tr><tr><td>burst</td><td>256</td><td>290</td><td>372</td><td>620</td><td>4.0%</td></tr></table>
 
 <h3>非聚合对照（每流一条 request · mesh · bufferless · m=4 · W=64）</h3>
-<table><tr><th>pattern</th><th>#request</th><th>到达离散度</th><th>R_rg</th><th>DES makespan</th><th>数据面跨度</th></tr><tr><td>alltoall</td><td>2256</td><td>1886</td><td>2050</td><td>2186</td><td>2116</td></tr><tr><td>reduce</td><td>47</td><td>98</td><td>221</td><td>316</td><td>246</td></tr></table>
+<table><tr><th>pattern</th><th>#request</th><th>到达离散度</th><th>R_rg</th><th>DES makespan</th><th>数据面跨度</th></tr><tr><td>alltoall</td><td>2256</td><td>1890</td><td>2010</td><td>2147</td><td>2077</td></tr><tr><td>reduce</td><td>47</td><td>76</td><td>173</td><td>277</td><td>207</td></tr></table>
 
 <p><b>W 的取舍</b>：W→0 退化成逐条即时仲裁（R_rg 最短，但 BCFS 只能看到一两条流，增益≈0）；
 W→∞ 退化成同步 barrier（视野最全、增益最高，但要付「等最晚 request」的税）。
 中间存在最优点：mesh alltoall 聚合 m=4 在 W≈16–64 取到最小 makespan。</p>
-<p><b>产生时刻错峰的影响</b>：J=0（所有节点同时产生）时到达离散度仅来自线延迟差（mesh 上 73−7=66 cy 量级）；
+<p><b>产生时刻错峰的影响</b>：J=0（所有节点同时产生）时到达离散度仅来自控制半曼哈顿差（mesh 上 ⌊73/2⌋−⌊7/2⌋ ≈ 36−3 = 33 cy 量级）；
 J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降</b>——因为 release 时刻本身已经把流拉开了，
 排程器可优化的重叠变少。<code>distance_skew</code>（远节点提前发）能显著压缩到达离散度，是低成本的工程手段。</p>
 
@@ -222,126 +226,126 @@ CA / CA-batch 的 alltoall 展示聚合配置；allgather 展示 sync barrier。
 <h4>m = 1</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>192</b></td><td>1.00×</td><td><b>206</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='lose'>336</span></td><td>1.75×</td><td><span class='lose'>718</span></td><td>3.49×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='lose'>334</span></td><td>1.74×</td><td><span class='lose'>310</span></td><td>1.50×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>372</span></td><td>1.94×</td><td><span class='lose'>748</span></td><td>3.63×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>362</span></td><td>1.89×</td><td><span class='lose'>312</span></td><td>1.51×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>395</span></td><td>2.06×</td><td><span class='lose'>1151</span></td><td>5.59×</td><td class='muted'>req=2256 · t_req=204</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>395</span></td><td>2.06×</td><td>269</td><td>1.31×</td><td class='muted'>req=2256 · t_req=204</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td>275</td><td>1.43×</td><td><span class='lose'>857</span></td><td>4.16×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td>273</td><td>1.42×</td><td>281</td><td>1.36×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>298</span></td><td>1.55×</td><td><span class='lose'>807</span></td><td>3.92×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+8%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>270</td><td>1.41×</td><td>280</td><td>1.36×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+8%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>349</span></td><td>1.82×</td><td><span class='lose'>1100</span></td><td>5.34×</td><td class='muted'>req=2256 · t_req=175</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>347</span></td><td>1.81×</td><td>246</td><td>1.19×</td><td class='muted'>req=2256 · t_req=175</td></tr>
 </table>
 <h4>m = 4</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>701</b></td><td>1.00×</td><td><b>1274</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td>711</td><td>1.01×</td><td>1569</td><td>1.23×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td>748</td><td>1.07×</td><td><span class='win'>921</span></td><td>0.72×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>681</span></td><td>0.97×</td><td><span class='win'>1271</span></td><td>1.00×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+5%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>616</span></td><td>0.88×</td><td><span class='win'>731</span></td><td>0.57×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+5%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>565</span></td><td>0.81×</td><td>1822</td><td>1.43×</td><td class='muted'>req=2256 · t_req=204</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>592</span></td><td>0.84×</td><td><span class='win'>764</span></td><td>0.60×</td><td class='muted'>req=2256 · t_req=204</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td>709</td><td>1.01×</td><td>1516</td><td>1.19×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td>742</td><td>1.06×</td><td><span class='win'>911</span></td><td>0.72×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>612</span></td><td>0.87×</td><td><span class='win'>1162</span></td><td>0.91×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+8%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>564</span></td><td>0.80×</td><td><span class='win'>736</span></td><td>0.58×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+8%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>589</span></td><td>0.84×</td><td>1872</td><td>1.47×</td><td class='muted'>req=2256 · t_req=175</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>586</span></td><td>0.84×</td><td><span class='win'>754</span></td><td>0.59×</td><td class='muted'>req=2256 · t_req=175</td></tr>
 </table>
 <h4>m = 16</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>3238</b></td><td>1.00×</td><td><b>5649</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>2633</span></td><td>0.81×</td><td><span class='win'>4822</span></td><td>0.85×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>2698</span></td><td>0.83×</td><td><span class='win'>3497</span></td><td>0.62×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>1983</span></td><td>0.61×</td><td><span class='win'>2689</span></td><td>0.48×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+8%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>1906</span></td><td>0.59×</td><td><span class='win'>2658</span></td><td>0.47×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+8%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>2323</span></td><td>0.72×</td><td>5683</td><td>1.01×</td><td class='muted'>req=2256 · t_req=204</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>2048</span></td><td>0.63×</td><td><span class='win'>2912</span></td><td>0.52×</td><td class='muted'>req=2256 · t_req=204</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>2701</span></td><td>0.83×</td><td>5679</td><td>1.01×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>2670</span></td><td>0.82×</td><td><span class='win'>3415</span></td><td>0.60×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>1973</span></td><td>0.61×</td><td><span class='win'>2828</span></td><td>0.50×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+6%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>1935</span></td><td>0.60×</td><td><span class='win'>2781</span></td><td>0.49×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+6%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>2330</span></td><td>0.72×</td><td><span class='win'>5404</span></td><td>0.96×</td><td class='muted'>req=2256 · t_req=175</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>2047</span></td><td>0.63×</td><td><span class='win'>2891</span></td><td>0.51×</td><td class='muted'>req=2256 · t_req=175</td></tr>
 </table>
 <h3>allgather</h3>
 <p class='muted'>每源一棵多播树（48 棵）。sync=等齐 48 个 request 后统一 grant；async=每 grant 一棵树。</p>
 <h4>m = 1</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>362</b></td><td>1.00×</td><td><b>755</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>340</span></td><td>0.94×</td><td><span class='win'>664</span></td><td>0.88×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>277</span></td><td>0.77×</td><td><span class='win'>241</span></td><td>0.32×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>396</td><td>1.09×</td><td><span class='win'>719</span></td><td>0.95×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>362</td><td>1.00×</td><td><span class='win'>263</span></td><td>0.35×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td>417</td><td>1.15×</td><td><span class='win'>628</span></td><td>0.83×</td><td class='muted'>req=48 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>326</span></td><td>0.90×</td><td><span class='win'>236</span></td><td>0.31×</td><td class='muted'>req=48 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>318</span></td><td>0.88×</td><td><span class='win'>554</span></td><td>0.73×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>238</span></td><td>0.66×</td><td><span class='win'>224</span></td><td>0.30×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>343</span></td><td>0.95×</td><td><span class='win'>624</span></td><td>0.83×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>270</span></td><td>0.75×</td><td><span class='win'>244</span></td><td>0.32×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td>377</td><td>1.04×</td><td><span class='win'>539</span></td><td>0.71×</td><td class='muted'>req=48 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>246</span></td><td>0.68×</td><td><span class='win'>216</span></td><td>0.29×</td><td class='muted'>req=48 · t_req=52</td></tr>
 </table>
 <h4>m = 4</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>1157</b></td><td>1.00×</td><td><b>2567</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>916</span></td><td>0.79×</td><td><span class='win'>1795</span></td><td>0.70×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>585</span></td><td>0.51×</td><td><span class='win'>758</span></td><td>0.30×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>1002</span></td><td>0.87×</td><td><span class='win'>1509</span></td><td>0.59×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+1%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>523</span></td><td>0.45×</td><td><span class='win'>765</span></td><td>0.30×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS+1%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>1098</span></td><td>0.95×</td><td><span class='win'>1722</span></td><td>0.67×</td><td class='muted'>req=48 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>546</span></td><td>0.47×</td><td><span class='win'>699</span></td><td>0.27×</td><td class='muted'>req=48 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>900</span></td><td>0.78×</td><td><span class='win'>1744</span></td><td>0.68×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>532</span></td><td>0.46×</td><td><span class='win'>689</span></td><td>0.27×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>881</span></td><td>0.76×</td><td><span class='win'>1908</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+6%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>480</span></td><td>0.41×</td><td><span class='win'>717</span></td><td>0.28×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+6%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>1064</span></td><td>0.92×</td><td><span class='win'>1689</span></td><td>0.66×</td><td class='muted'>req=48 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>490</span></td><td>0.42×</td><td><span class='win'>696</span></td><td>0.27×</td><td class='muted'>req=48 · t_req=52</td></tr>
 </table>
 <h4>m = 16</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>4337</b></td><td>1.00×</td><td><b>9815</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>3229</span></td><td>0.74×</td><td><span class='win'>6451</span></td><td>0.66×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>1810</span></td><td>0.42×</td><td><span class='win'>1649</span></td><td>0.17×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>2875</span></td><td>0.66×</td><td><span class='win'>6074</span></td><td>0.62×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS-4%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>1490</span></td><td>0.34×</td><td><span class='win'>1399</span></td><td>0.14×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS-4%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>3822</span></td><td>0.88×</td><td><span class='win'>6252</span></td><td>0.64×</td><td class='muted'>req=48 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>1594</span></td><td>0.37×</td><td><span class='win'>1617</span></td><td>0.16×</td><td class='muted'>req=48 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>3228</span></td><td>0.74×</td><td><span class='win'>6520</span></td><td>0.66×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>1788</span></td><td>0.41×</td><td><span class='win'>1447</span></td><td>0.15×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>2830</span></td><td>0.65×</td><td><span class='win'>6643</span></td><td>0.68×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+3%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>1409</span></td><td>0.32×</td><td><span class='win'>1379</span></td><td>0.14×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS+3%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>3812</span></td><td>0.88×</td><td><span class='win'>6321</span></td><td>0.64×</td><td class='muted'>req=48 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>1574</span></td><td>0.36×</td><td><span class='win'>1561</span></td><td>0.16×</td><td class='muted'>req=48 · t_req=52</td></tr>
 </table>
 <h3>allreduce</h3>
 <p class='muted'>reduce-tree + broadcast-tree 两相，默认 sync barrier。</p>
 <h4>m = 1</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>107</b></td><td>1.00×</td><td><b>98</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='lose'>235</span></td><td>2.20×</td><td><span class='lose'>173</span></td><td>1.77×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='lose'>235</span></td><td>2.20×</td><td><span class='lose'>173</span></td><td>1.77×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>334</span></td><td>3.12×</td><td><span class='lose'>258</span></td><td>2.63×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>334</span></td><td>3.12×</td><td><span class='lose'>258</span></td><td>2.63×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>235</span></td><td>2.20×</td><td><span class='lose'>173</span></td><td>1.77×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>235</span></td><td>2.20×</td><td><span class='lose'>173</span></td><td>1.77×</td><td class='muted'>req=48 · t_req=73</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='lose'>175</span></td><td>1.64×</td><td>128</td><td>1.31×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='lose'>175</span></td><td>1.64×</td><td>128</td><td>1.31×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>249</span></td><td>2.33×</td><td><span class='lose'>220</span></td><td>2.24×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>249</span></td><td>2.33×</td><td><span class='lose'>220</span></td><td>2.24×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>175</span></td><td>1.64×</td><td>128</td><td>1.31×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>175</span></td><td>1.64×</td><td>128</td><td>1.31×</td><td class='muted'>req=48 · t_req=49</td></tr>
 </table>
 <h4>m = 4</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>247</b></td><td>1.00×</td><td><b>380</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td>269</td><td>1.09×</td><td><span class='win'>282</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td>270</td><td>1.09×</td><td><span class='win'>282</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>337</td><td>1.36×</td><td><span class='win'>295</span></td><td>0.78×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>335</td><td>1.36×</td><td><span class='win'>290</span></td><td>0.76×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td>269</td><td>1.09×</td><td><span class='win'>282</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td>270</td><td>1.09×</td><td><span class='win'>282</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=73</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>236</span></td><td>0.96×</td><td><span class='win'>251</span></td><td>0.66×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>238</span></td><td>0.96×</td><td><span class='win'>253</span></td><td>0.67×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>258</td><td>1.04×</td><td><span class='win'>281</span></td><td>0.74×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>256</td><td>1.04×</td><td><span class='win'>276</span></td><td>0.73×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>236</span></td><td>0.96×</td><td><span class='win'>251</span></td><td>0.66×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>238</span></td><td>0.96×</td><td><span class='win'>253</span></td><td>0.67×</td><td class='muted'>req=48 · t_req=49</td></tr>
 </table>
 <h4>m = 16</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>811</b></td><td>1.00×</td><td><b>1508</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>769</span></td><td>0.95×</td><td><span class='win'>850</span></td><td>0.56×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>733</span></td><td>0.90×</td><td><span class='win'>827</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>745</span></td><td>0.92×</td><td><span class='win'>858</span></td><td>0.57×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>737</span></td><td>0.91×</td><td><span class='win'>835</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=128 · W=64 · R_rg=266 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>769</span></td><td>0.95×</td><td><span class='win'>850</span></td><td>0.56×</td><td class='muted'>req=48 · t_req=73</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>733</span></td><td>0.90×</td><td><span class='win'>827</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=73</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>745</span></td><td>0.92×</td><td><span class='win'>822</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>703</span></td><td>0.87×</td><td><span class='win'>799</span></td><td>0.53×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>734</span></td><td>0.91×</td><td><span class='win'>853</span></td><td>0.57×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>726</span></td><td>0.90×</td><td><span class='win'>830</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=95 · W=64 · R_rg=175 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>745</span></td><td>0.92×</td><td><span class='win'>822</span></td><td>0.55×</td><td class='muted'>req=48 · t_req=49</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>703</span></td><td>0.87×</td><td><span class='win'>799</span></td><td>0.53×</td><td class='muted'>req=48 · t_req=49</td></tr>
 </table>
 <h3>broadcast</h3>
 <p class='muted'>单根多播树，控制消息最少（1 或 48），直径主导。</p>
 <h4>m = 1</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>139</b></td><td>1.00×</td><td><b>102</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td>153</td><td>1.10×</td><td>114</td><td>1.12×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td>153</td><td>1.10×</td><td>114</td><td>1.12×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>260</span></td><td>1.87×</td><td><span class='lose'>221</span></td><td>2.17×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>260</span></td><td>1.87×</td><td><span class='lose'>221</span></td><td>2.17×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>125</span></td><td>0.90×</td><td><span class='win'>86</span></td><td>0.84×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>125</span></td><td>0.90×</td><td><span class='win'>86</span></td><td>0.84×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>182</td><td>1.31×</td><td>143</td><td>1.40×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>182</td><td>1.31×</td><td>143</td><td>1.40×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
 <tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>97</span></td><td>0.70×</td><td><span class='win'>58</span></td><td>0.57×</td><td class='muted'>req=1 · t_req=0</td></tr>
 <tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>97</span></td><td>0.70×</td><td><span class='win'>58</span></td><td>0.57×</td><td class='muted'>req=1 · t_req=0</td></tr>
 </table>
 <h4>m = 4</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>280</b></td><td>1.00×</td><td><b>367</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>156</span></td><td>0.56×</td><td><span class='win'>120</span></td><td>0.33×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>154</span></td><td>0.55×</td><td><span class='win'>115</span></td><td>0.31×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>263</span></td><td>0.94×</td><td><span class='win'>227</span></td><td>0.62×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>261</span></td><td>0.93×</td><td><span class='win'>222</span></td><td>0.60×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>128</span></td><td>0.46×</td><td><span class='win'>92</span></td><td>0.25×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>126</span></td><td>0.45×</td><td><span class='win'>87</span></td><td>0.24×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>185</span></td><td>0.66×</td><td><span class='win'>149</span></td><td>0.41×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>183</span></td><td>0.65×</td><td><span class='win'>144</span></td><td>0.39×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
 <tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>100</span></td><td>0.36×</td><td><span class='win'>64</span></td><td>0.17×</td><td class='muted'>req=1 · t_req=0</td></tr>
 <tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>98</span></td><td>0.35×</td><td><span class='win'>59</span></td><td>0.16×</td><td class='muted'>req=1 · t_req=0</td></tr>
 </table>
 <h4>m = 16</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>844</b></td><td>1.00×</td><td><b>1495</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>168</span></td><td>0.20×</td><td><span class='win'>144</span></td><td>0.10×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>160</span></td><td>0.19×</td><td><span class='win'>121</span></td><td>0.08×</td><td class='muted'>req=1 · t_req=28</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>275</span></td><td>0.33×</td><td><span class='win'>251</span></td><td>0.17×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>267</span></td><td>0.32×</td><td><span class='win'>228</span></td><td>0.15×</td><td class='muted'>req=1 · t_req=77 · W=64 · R_rg=115 · BCFS0%</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='win'>140</span></td><td>0.17×</td><td><span class='win'>116</span></td><td>0.08×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='win'>132</span></td><td>0.16×</td><td><span class='win'>93</span></td><td>0.06×</td><td class='muted'>req=1 · t_req=14</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='win'>197</span></td><td>0.23×</td><td><span class='win'>173</span></td><td>0.12×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='win'>189</span></td><td>0.22×</td><td><span class='win'>150</span></td><td>0.10×</td><td class='muted'>req=1 · t_req=63 · W=64 · R_rg=37 · BCFS0%</td></tr>
 <tr><td>DA（分布式）</td><td>bufferable</td><td><span class='win'>112</span></td><td>0.13×</td><td><span class='win'>88</span></td><td>0.06×</td><td class='muted'>req=1 · t_req=0</td></tr>
 <tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>104</span></td><td>0.12×</td><td><span class='win'>65</span></td><td>0.04×</td><td class='muted'>req=1 · t_req=0</td></tr>
 </table>
@@ -350,49 +354,49 @@ CA / CA-batch 的 alltoall 展示聚合配置；allgather 展示 sync barrier。
 <h4>m = 1</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>98</b></td><td>1.00×</td><td><b>65</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='lose'>230</span></td><td>2.35×</td><td><span class='lose'>140</span></td><td>2.15×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='lose'>230</span></td><td>2.35×</td><td><span class='lose'>140</span></td><td>2.15×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>307</span></td><td>3.13×</td><td><span class='lose'>230</span></td><td>3.54×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>307</span></td><td>3.13×</td><td><span class='lose'>230</span></td><td>3.54×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>285</span></td><td>2.91×</td><td><span class='lose'>168</span></td><td>2.58×</td><td class='muted'>req=47 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>285</span></td><td>2.91×</td><td><span class='lose'>168</span></td><td>2.58×</td><td class='muted'>req=47 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td><span class='lose'>178</span></td><td>1.82×</td><td><span class='lose'>101</span></td><td>1.55×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td><span class='lose'>178</span></td><td>1.82×</td><td><span class='lose'>102</span></td><td>1.57×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>269</span></td><td>2.74×</td><td><span class='lose'>208</span></td><td>3.20×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>269</span></td><td>2.74×</td><td><span class='lose'>208</span></td><td>3.20×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>196</span></td><td>2.00×</td><td><span class='lose'>117</span></td><td>1.80×</td><td class='muted'>req=47 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>196</span></td><td>2.00×</td><td><span class='lose'>117</span></td><td>1.80×</td><td class='muted'>req=47 · t_req=52</td></tr>
 </table>
 <h4>m = 4</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>175</b></td><td>1.00×</td><td><b>203</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td>233</td><td>1.33×</td><td>248</td><td>1.22×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td>237</td><td>1.35×</td><td>246</td><td>1.21×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>318</span></td><td>1.82×</td><td><span class='lose'>312</span></td><td>1.54×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>316</span></td><td>1.81×</td><td><span class='lose'>307</span></td><td>1.51×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td><span class='lose'>288</span></td><td>1.65×</td><td>234</td><td>1.15×</td><td class='muted'>req=47 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='lose'>286</span></td><td>1.63×</td><td>229</td><td>1.13×</td><td class='muted'>req=47 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td>207</td><td>1.18×</td><td>238</td><td>1.17×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td>208</td><td>1.19×</td><td>233</td><td>1.15×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td><span class='lose'>279</span></td><td>1.59×</td><td><span class='lose'>306</span></td><td>1.51×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td><span class='lose'>277</span></td><td>1.58×</td><td>301</td><td>1.48×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td>199</td><td>1.14×</td><td>218</td><td>1.07×</td><td class='muted'>req=47 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td>197</td><td>1.13×</td><td>213</td><td>1.05×</td><td class='muted'>req=47 · t_req=52</td></tr>
 </table>
 <h4>m = 16</h4>
 <table><tr><th>scheme</th><th>plane</th><th>mesh makespan</th><th>vs 基线</th><th>torus makespan</th><th>vs 基线</th><th>ctrl</th></tr>
 <tr class='base'><td><b>分组交换基线（FIFO，无 RG）</b></td><td>fifo</td><td><b>652</b></td><td>1.00×</td><td><b>779</b></td><td>1.00×</td><td class='muted'>无控制平面 · 源端自由注入</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferable</td><td>697</td><td>1.07×</td><td>824</td><td>1.06×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr><td>CA（集中·即时）</td><td>bufferless</td><td>689</td><td>1.06×</td><td>801</td><td>1.03×</td><td class='muted'>req=47 · t_req=73</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>759</td><td>1.16×</td><td>886</td><td>1.14×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>751</td><td>1.15×</td><td>863</td><td>1.11×</td><td class='muted'>req=47 · t_req=110 · W=64 · R_rg=221 · BCFS0%</td></tr>
-<tr><td>DA（分布式）</td><td>bufferable</td><td>674</td><td>1.03×</td><td>796</td><td>1.02×</td><td class='muted'>req=47 · t_req=94</td></tr>
-<tr><td>DA（分布式）</td><td>bufferless</td><td>666</td><td>1.02×</td><td><span class='win'>773</span></td><td>0.99×</td><td class='muted'>req=47 · t_req=94</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferable</td><td>687</td><td>1.05×</td><td>814</td><td>1.04×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr><td>CA（集中·即时）</td><td>bufferless</td><td>679</td><td>1.04×</td><td>791</td><td>1.02×</td><td class='muted'>req=47 · t_req=49</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferable</td><td>754</td><td>1.16×</td><td>881</td><td>1.13×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr class='hl'><td>CA-batch（错峰+时间窗+BCFS）</td><td>bufferless</td><td>746</td><td>1.14×</td><td>858</td><td>1.10×</td><td class='muted'>req=47 · t_req=84 · W=64 · R_rg=173 · BCFS0%</td></tr>
+<tr><td>DA（分布式）</td><td>bufferable</td><td>659</td><td>1.01×</td><td>786</td><td>1.01×</td><td class='muted'>req=47 · t_req=52</td></tr>
+<tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>651</span></td><td>1.00×</td><td><span class='win'>763</span></td><td>0.98×</td><td class='muted'>req=47 · t_req=52</td></tr>
 </table>
 
 <h2>5. Allgather：同步 barrier vs 异步多播树</h2>
 <table>
 <tr><th>topo</th><th>plane</th><th>m</th><th>sync</th><th>async tree</th><th>Δ(sync−async)</th></tr>
-<tr><td>mesh</td><td>bufferable</td><td>1</td><td>340</td><td>284</td><td>56</td></tr>
-<tr><td>mesh</td><td>bufferable</td><td>4</td><td>916</td><td>783</td><td>133</td></tr>
-<tr><td>mesh</td><td>bufferable</td><td>16</td><td>3229</td><td>2916</td><td>313</td></tr>
-<tr><td>mesh</td><td>bufferless</td><td>1</td><td>277</td><td>243</td><td>34</td></tr>
-<tr><td>mesh</td><td>bufferless</td><td>4</td><td>585</td><td>525</td><td>60</td></tr>
-<tr><td>mesh</td><td>bufferless</td><td>16</td><td>1810</td><td>1745</td><td>65</td></tr>
-<tr><td>torus</td><td>bufferable</td><td>1</td><td>664</td><td>529</td><td>135</td></tr>
-<tr><td>torus</td><td>bufferable</td><td>4</td><td>1795</td><td>1638</td><td>157</td></tr>
-<tr><td>torus</td><td>bufferable</td><td>16</td><td>6451</td><td>6101</td><td>350</td></tr>
-<tr><td>torus</td><td>bufferless</td><td>1</td><td>241</td><td>184</td><td>57</td></tr>
-<tr><td>torus</td><td>bufferless</td><td>4</td><td>758</td><td>688</td><td>70</td></tr>
-<tr><td>torus</td><td>bufferless</td><td>16</td><td>1649</td><td>1586</td><td>63</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>1</td><td>318</td><td>252</td><td>66</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>4</td><td>900</td><td>783</td><td>117</td></tr>
+<tr><td>mesh</td><td>bufferable</td><td>16</td><td>3228</td><td>2916</td><td>312</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>1</td><td>238</td><td>197</td><td>41</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>4</td><td>532</td><td>491</td><td>41</td></tr>
+<tr><td>mesh</td><td>bufferless</td><td>16</td><td>1788</td><td>1798</td><td>-10</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>1</td><td>554</td><td>517</td><td>37</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>4</td><td>1744</td><td>1590</td><td>154</td></tr>
+<tr><td>torus</td><td>bufferable</td><td>16</td><td>6520</td><td>5926</td><td>594</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>1</td><td>224</td><td>182</td><td>42</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>4</td><td>689</td><td>659</td><td>30</td></tr>
+<tr><td>torus</td><td>bufferless</td><td>16</td><td>1447</td><td>1586</td><td>-139</td></tr>
 </table>
 <p>异步树避免了「等最远节点」的 barrier 税，但树间冲突使数据面可能更长；同步把冲突集中到统一排程，大 m 时摊薄 R_rg。</p>
 
@@ -428,13 +432,13 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <h2>8. 其他敏感度</h2>
 
 <h3>W_out 敏感度（mesh · bufferable · CA · alltoall 聚合 · m=4）</h3>
-<table><tr><th>w_out</th><th>makespan</th></tr><tr><td>1</td><td>2730</td></tr><tr><td>4</td><td>815</td></tr><tr><td>16</td><td>711</td></tr><tr><td>∞</td><td>733</td></tr></table>
+<table><tr><th>w_out</th><th>makespan</th></tr><tr><td>1</td><td>2669</td></tr><tr><td>4</td><td>754</td></tr><tr><td>16</td><td>709</td></tr><tr><td>∞</td><td>713</td></tr></table>
 <h3>T_sched 敏感度（mesh · bufferable · CA · allgather sync · m=4）</h3>
-<table><tr><th>t_sched</th><th>makespan</th></tr><tr><td>1</td><td>916</td></tr><tr><td>8</td><td>923</td></tr><tr><td>32</td><td>947</td></tr></table>
+<table><tr><th>t_sched</th><th>makespan</th></tr><tr><td>1</td><td>900</td></tr><tr><td>8</td><td>907</td></tr><tr><td>32</td><td>931</td></tr></table>
 <h3>Q 敏感度（mesh · bufferable · CA · alltoall 聚合 · m=4）</h3>
-<table><tr><th>Q</th><th>makespan</th></tr><tr><td>4</td><td>711</td></tr><tr><td>8</td><td>711</td></tr><tr><td>19</td><td>711</td></tr></table>
+<table><tr><th>Q</th><th>makespan</th></tr><tr><td>4</td><td>709</td></tr><tr><td>8</td><td>709</td></tr><tr><td>19</td><td>709</td></tr></table>
 <h3>Torus delay×2 对照（H=14/V=18）</h3>
-<table><tr><th>pattern</th><th>makespan</th><th>torus_delay_scale</th></tr><tr><td>alltoall</td><td>1945</td><td>2</td></tr><tr><td>broadcast</td><td>231</td><td>2</td></tr><tr><td>allgather</td><td>1895</td><td>2</td></tr></table>
+<table><tr><th>pattern</th><th>makespan</th><th>torus_delay_scale</th></tr><tr><td>alltoall</td><td>2169</td><td>2</td></tr><tr><td>broadcast</td><td>175</td><td>2</td></tr><tr><td>allgather</td><td>2022</td><td>2</td></tr></table>
 
 
 <h2>9. 验证清单</h2>
@@ -445,12 +449,12 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <li>bufferless 零驻留（117 组）：✓</li>
 <li>保序：✓</li>
 <li>torus CDG 无环：✓</li>
-<li>控制收敛 alltoall 非聚合：t_last_req=1888 ≥ 500 ✓</li>
+<li>控制收敛 alltoall 非聚合：t_last_req=1887 ≥ 500 ✓</li>
 <li>私有控制 NoC 隔离：✓
 （shared_with_data_plane=False，不继承 data σ）</li>
 <li>单播单调性 bufferable≲bufferless（仅周期级精确行，18 组）：
 ✓
-· 事件驱动近似行的偏差 30 组（保守上界，见下注）</li>
+· 事件驱动近似行的偏差 32 组（保守上界，见下注）</li>
 </ul>
 
 <h3>9.1 CA-batch / BCFS 专项验证</h3>
@@ -465,9 +469,9 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <li>bufferless 回放零驻留（49 组）：✓
 ——零缓冲路由器成立的直接证据</li>
 <li><b>点对点（alltoall/reduce）BCFS 从不劣于 FCFS</b>（43 组）：
-✓ · 平均增益 6.4%</li>
-<li>全体平均增益 4.0% · 最大 22.6%；
-多树 pattern 有 2 组反向（最差 +4.6%）——
+✓ · 平均增益 6.1%</li>
+<li>全体平均增益 4.1% · 最大 18.1%；
+多树 pattern 有 0 组反向（最差 +0.0%）——
 在线窗口局部最优的固有代价，见 §10。</li>
 </ul>
 <p class="muted">The strict check covers only pairs whose bufferable side ran the cycle-accurate DES. Rows marked approx='event_driven_fast' (48-tree allgather, and 2256-flow alltoall) expand trees into per-destination unicast and admit flits greedily per link, which over-counts shared prefixes and head-of-line stalls; on torus (sigma=2) that inflation is largest. Those rows are conservative upper bounds, not monotonicity failures.</p>
@@ -479,7 +483,7 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <li>同 hop 延迟 7/9 对 torus 有利（白拿减半跳数）。</li>
 <li>多树 bufferable（allgather）与 2256 流 alltoall 用事件驱动单播展开近似，共享树边被重复计数（保守上界）。</li>
 <li><b>BCFS 是在线窗口局部最优</b>：CA 只能给眼前这一批打分，无法预知后续窗口。
-多树 pattern（mesh allgather m=16）上出现 2 组「本批更紧、全局更慢」的反向案例（最差 +4.6%）。
+多树 pattern（mesh allgather m=16）上出现 0 组「本批更紧、全局更慢」的反向案例（最差 +0.0%）。
 点对点 pattern 上未出现。若允许离线全局排程（所有 request 先到齐，即 W=∞）可消除此效应。</li>
 <li>BCFS 的路径是 XY 维序固定的；允许自适应路由会扩大可行域，但需重做 CDG 无环性论证。</li>
 <li>reduce = gather + PE 本地归约（无网内算术），对齐 ADR-002/Arch-A2。</li>

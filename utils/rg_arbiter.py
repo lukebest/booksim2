@@ -296,8 +296,9 @@ def simulate_control_plane(
 
     Physical isolation: control links are a separate resource from the data
     NoC (``shared_with_data_plane=False``). Only control-vs-control contention
-    exists. Hop latency mirrors the data geometry (H/V) but occupancy is
-    always ``CTRL_MSGS_PER_LINK_CY`` (not data-plane sigma).
+    exists. Hop latency is **half** the data-plane link-delay Manhattan
+    (⌊H/2⌋ / ⌊V/2⌋ with last-hop correction so path total =
+    ⌊wire_distance/2⌋). Occupancy is always ``CTRL_MSGS_PER_LINK_CY``.
     """
     # Link pipelines: arrive[t] -> list of CtrlMsg arriving at a node
     arrive: dict[int, list[CtrlMsg]] = defaultdict(list)
@@ -315,7 +316,9 @@ def simulate_control_plane(
     for src, dst, fid in requests:
         # Control plane uses XY (dimension-order) routing, same as data plane
         path = topo.dor_path(src, dst) if src != dst else [src]
-        pending_inject.append(CtrlMsg("request", src, dst, fid, path, 0, 0))
+        pending_inject.append(CtrlMsg(
+            "request", src, dst, fid, path, 0, 0,
+            meta={"hop_lats": topo.ctrl_path_hop_lats(path)}))
         req_arrive_src_send[fid] = 0
 
     # Grant issue plan built dynamically for sync; for async we issue after
@@ -354,7 +357,8 @@ def simulate_control_plane(
         v = msg.path[msg.hop + 1]
         if link_free[(u, v)] > t_now:
             return False
-        lat = topo.link_lat(u, v)
+        lats = msg.meta.get("hop_lats") or topo.ctrl_path_hop_lats(msg.path)
+        lat = lats[msg.hop] if msg.hop < len(lats) else topo.ctrl_link_lat(u, v)
         # Private control link occupancy (independent of data-plane sigma)
         link_free[(u, v)] = t_now + CTRL_MSGS_PER_LINK_CY
         nxt = CtrlMsg(msg.kind, msg.src, msg.dst, msg.flow_id, msg.path,
@@ -428,8 +432,9 @@ def simulate_control_plane(
                 grant_arrive[fid] = t
             else:
                 path = topo.dor_path(arb, src)
-                waiting[arb].append(
-                    CtrlMsg("grant", arb, src, fid, path, 0, t))
+                waiting[arb].append(CtrlMsg(
+                    "grant", arb, src, fid, path, 0, t,
+                    meta={"hop_lats": topo.ctrl_path_hop_lats(path)}))
 
         # Advance waiting msgs (one per out-edge per cycle, oldest first)
         for node in list(waiting.keys()):
@@ -481,8 +486,10 @@ def simulate_control_plane(
         "shared_with_data_plane": False,
         "control_noc": "private_isomorphic",
         "ctrl_msgs_per_link_cy": CTRL_MSGS_PER_LINK_CY,
+        "ctrl_delay_policy": "half_manhattan_linkdelay",
         "note": ("request/grant on private control NoC; zero physical-link "
-                 "sharing with data plane; remaining contention is "
+                 "sharing with data plane; one-way latency = ⌊Manhattan "
+                 "wire delay / 2⌋; remaining contention is "
                  "control-vs-control + CA ingress only"),
     }
 

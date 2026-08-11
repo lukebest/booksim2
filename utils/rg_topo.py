@@ -161,6 +161,48 @@ class Topology:
         hx, hy = self.hop_distance(a, b)
         return hx * self.H + hy * self.V
 
+    # ------------------------------------------------------------------
+    # Control-plane latency: HALF the link-delay Manhattan distance.
+    # Data plane keeps full H/V; request/grant pay ⌊wire/2⌋ end-to-end,
+    # implemented hop-wise as ⌊link_lat/2⌋ (min 1) with a last-hop
+    # correction so the path total equals exactly ⌊Σ link_lat / 2⌋.
+    # ------------------------------------------------------------------
+
+    def ctrl_wire_distance(self, a: int, b: int) -> int:
+        """One-way control latency = ⌊Manhattan wire delay / 2⌋."""
+        return self.wire_distance(a, b) // 2
+
+    def ctrl_link_lat(self, a: int, b: int) -> int:
+        """Per-hop control latency (⌊data link_lat / 2⌋, at least 1)."""
+        return max(1, self.link_lat(a, b) // 2)
+
+    def ctrl_path_hop_lats(self, path: list[int]) -> list[int]:
+        """Per-hop control delays along `path`, summing to ctrl_wire_distance."""
+        n = len(path) - 1
+        if n <= 0:
+            return []
+        full = [self.link_lat(path[i], path[i + 1]) for i in range(n)]
+        target = sum(full) // 2
+        if target <= 0:
+            return [0] * n
+        # Start with floor-half; keep at least 1 when target allows.
+        hops = [max(1, x // 2) for x in full]
+        if sum(hops) > target:
+            hops = [x // 2 for x in full]  # allow 0 on short hops
+        diff = target - sum(hops)
+        # Push remainder onto the last hop (can be negative → borrow).
+        hops[-1] += diff
+        if hops[-1] < 0:
+            need = -hops[-1]
+            hops[-1] = 0
+            for i in range(n - 2, -1, -1):
+                take = min(hops[i], need)
+                hops[i] -= take
+                need -= take
+                if need == 0:
+                    break
+        return hops
+
     def diameter_wire(self) -> int:
         """Max pairwise wire delay."""
         best = 0
@@ -439,6 +481,10 @@ class Topology:
             "ca_node": central_arbiter_node(),
             "ca_max_wire": max(self.wire_distance(central_arbiter_node(), n)
                                for n in range(self.n)),
+            "ca_max_ctrl_wire": max(
+                self.ctrl_wire_distance(central_arbiter_node(), n)
+                for n in range(self.n)),
+            "ctrl_delay_policy": "half_manhattan_linkdelay",
         }
 
 

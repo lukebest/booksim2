@@ -2,7 +2,7 @@
 
 **几何：** 8×6 mesh 与折叠 2D torus；H=7，V=9；RAMP=2，RAMP_BW=2  
 **金属线恒定（数据面）：** torus 每链路带宽 = mesh 的一半（σ=2），对分带宽均为 6 flit/cy  
-**控制平面（硬约束）：** request/grant 走**私有控制 NoC**（与数据面同构、独立物理链路），**不与数据面共链路**；不继承数据面 σ；走 **XY 维序路由**  
+**控制平面（硬约束）：** request/grant 走**私有控制 NoC**（与数据面同构、独立物理链路），**不与数据面共链路**；不继承数据面 σ；走 **XY 维序路由**；单向时延 = **⌊含 link delay 的曼哈顿距离 / 2⌋**（数据面仍用满 H/V）  
 **类型：** bufferable（源端准入 + FIFO）/ bufferless（时隙预约、零缓冲）  
 **仲裁：** `CA` 集中式 @ **(x=4, y=0) = nid 4**（原点左上、先 x 后 y，即第 1 行第 5 列）/ `DA` 目的端分布式 / `CA-batch` = CA + 错峰 request + 时间窗批量仲裁 + **全局无冲突排程 BCFS**  
 **流量：** alltoall · allgather · allreduce · broadcast · reduce  
@@ -11,8 +11,8 @@
 ## 0. 一页结论
 
 1. **错峰 + 时间窗 + 全局无冲突排程（CA-batch）在长消息 alltoall 上是最好的 request–grant 基线。**
-   mesh bufferless alltoall m=16：CA-batch **1906 cy** vs 即时 CA 2698 vs DA 2048 vs FIFO 基线 3238。
-   收益来自 BCFS 的关键度排序 + 空洞回填：相对纯到达序（FCFS）贪心，mesh 上 +4.7…8.2%，torus 上 +12.7…14.8%。
+   控制时延改为 ⌊曼哈顿/2⌋ 后，mesh bufferless alltoall m=16：CA-batch **1935 cy** vs 即时 CA 聚合 ~2701 vs FIFO 基线 3238。
+   收益来自 BCFS 关键度排序 + 空洞回填（相对 FCFS：mesh 数个百分点、torus 十余百分点）。
 
 2. **BCFS 的价值只在「多对多、链路争用型」流量上。** reduce / broadcast / allreduce 的增益恒为 0——
    它们的 makespan 由根节点 eject 端口或树直径这类**容量下界**决定，不是装箱质量决定，任何排序都打到同一下界。
@@ -23,12 +23,12 @@
 4. **时间窗 W 存在最优点。** mesh alltoall 聚合 m=4：W=16 → 582 cy，W=64 → 616，W=256 → 740，W=∞（等齐）→ 612。
    W→0 退化成逐条即时仲裁（R_rg 最短但 BCFS 无视野）；W→∞ 退化成同步 barrier（视野最全但付「等最晚 request」税）。
 
-5. **即便控制面完全私有，CA 逐流 alltoall 仍被控制收敛税打穿。**
-   2256 条 request 挤入 CA 控制路由器 ≤4 入端口：解析下界 564 cy，DES 实测 t_last_request ≈ **1888 cy**，makespan 2105。
-   缓解仍是那两条：**request 聚合**（每源 1 条 → 48 条，t_last_req=73）或 **DA 分布式**。
+5. **即便控制面完全私有、时延减半，CA 逐流 alltoall 仍被控制收敛税打穿。**
+   2256 条 request 挤入 CA 控制路由器 ≤4 入端口：解析下界 564 cy，DES 实测 t_last_request ≈ **1887 cy**（路径争用主导，半曼哈顿几乎不改汇聚税）。
+   缓解仍是那两条：**request 聚合**（每源 1 条 → 48 条，t_last_req≈49）或 **DA 分布式**。
 
-6. **中心调度器放在 (4,0) 使 mesh 付出边缘代价，torus 不付。** CA 到最远角的控制线延迟：mesh (0,5) → 4·7+5·9=**73 cy**；
-   folded torus 顶点传递，最远仍 4·7+3·9=**55 cy**。这是 torus 在**控制平面**上的额外结构优势，与数据面 σ=2 的劣势无关。
+6. **中心调度器放在 (4,0) 使 mesh 付出边缘代价，torus 不付。** 控制面时延 = ⌊曼哈顿/2⌋：
+   mesh 最远 ⌊73/2⌋=**36 cy**，torus 最远 ⌊55/2⌋=**27 cy**。这是 torus 在**控制平面**上的额外结构优势，与数据面 σ=2 的劣势无关。
 
 7. **面积：** 私有控制 NoC 是数据面金属恒定预算之外的增量（每节点 +0.12，相对 IQ-XY=1.0）；CA-batch 的仲裁逻辑再 +0.07。
 
@@ -47,6 +47,7 @@
 | 与对方共享？ | — | **否** |
 | 链路带宽 | mesh 1 / torus 0.5 flit/cy | 始终 1 ctrl-msg/cy |
 | 路由 | XY 维序（torus 走 dateline VC） | XY 维序 |
+| 单向时延 | hx·H + hy·V（满 H/V） | **⌊(hx·H + hy·V)/2⌋** |
 | 承载 | 数据 flit | request / grant 仅 |
 | 金属预算 | mesh↔torus 对分恒定 | **额外**金属/面积 |
 
@@ -57,19 +58,19 @@
 ### 2.1 流水线
 
 各节点**不同时**产生 request（默认每节点 U[0,64) 随机起跳，同一节点内多条 request 逐拍发出），
-因此到达中心调度器的时刻天然离散：
+因此到达中心调度器的时刻天然离散。控制面单向时延取 ⌊曼哈顿线延迟/2⌋：
 
 ```
 ① t_gen(i)                      节点 i 产生 request（各节点不同）
-② t_arr(i) = t_gen(i) + ℓ_xy(i→CA) + 控制网争用      XY 路由、逐跳 H=7/V=9
+② t_arr(i) = t_gen(i) + ℓ_ctrl(i→CA) + 控制网争用     ℓ_ctrl=⌊(hx·H+hy·V)/2⌋
 ③ CA 关闭长度 W 的滚动时间窗，取窗内到达的一批 request
    t_decide = max(窗尾, 批内最晚到达) + T_sched
-④ release(i) = t_decide + ℓ_xy(CA→i) + 争用           grant 同样付线延迟
+④ release(i) = t_decide + ℓ_ctrl(CA→i) + 争用         grant 同样付半曼哈顿
 ⑤ t0(i) ≥ release(i)，由 BCFS 决定                     数据面起始时刻
 ```
 
-实测（mesh alltoall 聚合）：到达时刻离散度 109 cy，t_last_request_arrive=128，
-t_last_grant_arrive=266，即 R_rg=**266 cy**。
+实测（mesh alltoall 聚合 m=4）：到达离散度 **83 cy**，t_last_request_arrive=**95**，
+t_last_grant / R_rg=**175 cy**（此前满 H/V 口径约为 109 / 128 / 266）。
 
 ### 2.2 BCFS：点对点请求的全局无冲突排程算法
 
@@ -112,19 +113,19 @@ torus 增益更大：σ=2 使印记长一倍、装箱更紧张，全局视野更
 | 仲裁 | plane | m=1 | m=4 | m=16 | ctrl (m=1) |
 |------|-------|-----|-----|------|------------|
 | FIFO 基线 | fifo | **192** | 701 | 3238 | — |
-| CA 即时（聚合） | bufferable | 336 | 711 | 2633 | 48 req, t_req=73 |
-| CA 即时（聚合） | bufferless | 334 | 748 | 2698 | 48 req, t_req=73 |
-| **CA-batch** | bufferless | 362 | **616** | **1906** | 48 req, t_req=128 |
-| DA | bufferable | 395 | 565 | 2323 | 2256 req, t_req=204 |
-| CA 即时（**非聚合**） | bufferable | **2105** | — | — | 2256 req, t_req=**1888** |
+| CA 即时（聚合） | bufferable | 275 | 709 | 2701 | 48 req, t_req=49 |
+| CA 即时（聚合） | bufferless | 273 | 742 | 2670 | 48 req, t_req=49 |
+| **CA-batch** | bufferless | **270** | **564** | **1935** | 48 req, t_req=95 |
+| DA | bufferable | 349 | 589 | 2330 | 2256 req, t_req=175 |
+| CA 即时（**非聚合**） | bufferable | **2067** | — | — | 2256 req, t_req=**1887** |
 
-m=1 时 CA-batch 略逊于即时 CA（362 vs 334）：数据面本就只有 ~98 cy，等窗的 R_rg 增量（266 vs 73）盖过了排程收益。
-**m 越大 BCFS 越划算**——m=16 时反超 792 cy（-29%）。
+半曼哈顿控制时延下，m=1 时 CA-batch 已与即时 CA 持平（270 vs 273）；
+**m 越大 BCFS 越划算**——m=16 时相对即时 CA 约 −28%。
 
 ### reduce
 
 根节点 eject 端口是硬瓶颈，所有仲裁方案打到同一下界；BCFS 增益恒 0。
-mesh：FIFO 98 / CA 230 / CA-batch 307 / DA 285（m=1）。请求-授权往返在这种「本来就很快」的 pattern 上纯属开销。
+mesh：FIFO 98 / CA 178 / CA-batch 269 / DA 196（m=1）。请求-授权往返在这种「本来就很快」的 pattern 上纯属开销。
 
 ### broadcast
 
@@ -142,10 +143,10 @@ mesh DA bufferless m=1 = **97 cy**（近数据下界）；torus = **58 cy**（�
 
 | W | makespan | R_rg |
 |---|----------|------|
-| 16 | **582** | 218 |
-| 64 | 616 | 266 |
-| 256 | 740 | 356 |
-| ∞（等齐） | 612 | 228 |
+| 16 | **544** | 137 |
+| 64 | 564 | 175 |
+| 256 | 722 | 317 |
+| ∞（等齐） | 561 | 156 |
 
 ### Request 产生时刻模型（mesh bufferless alltoall 聚合 m=4, W=64）
 
@@ -196,7 +197,7 @@ J=0（所有节点同时产生）时离散度仅来自线延迟差（73 cy）；
 | 4 | bufferless 零驻留（117 组） | ✓ |
 | 5 | 保序 | ✓ |
 | 6 | torus CDG 无环 | ✓ |
-| 7 | 控制收敛 ≥ 564 量级 | ✓（1888） |
+| 7 | 控制收敛 ≥ 564 量级 | ✓（1887） |
 | 8 | 私有控制 NoC `shared_with_data_plane=false` | ✓ |
 | 9 | 中心调度器坐标一致为 (4,0)，nid=4 | ✓ |
 | 10 | 控制平面 XY 维序路由 | ✓ |
@@ -217,7 +218,7 @@ J=0（所有节点同时产生）时离散度仅来自线延迟差（73 cy）；
 - 多树 bufferable（48 棵树 allgather）与 2256 流 alltoall 用事件驱动单播展开近似，
   共享树边被重复计数、head-of-line 停顿被高估，是**保守上界**（torus σ=2 上偏差最大）。
   严格单调性验证只覆盖周期级精确的 18 组。
-- 控制面 hop 延迟取与数据面相同的 H/V（线延迟主导）；未再为窄线单独标定。
+- 控制面单向时延 = ⌊曼哈顿线延迟/2⌋；未再为窄线单独标定电气参数。
 - reduce = **gather + PE 本地归约**（ADR-002 / Arch-A2），无网内算术。
 
 ## 9. 文件
