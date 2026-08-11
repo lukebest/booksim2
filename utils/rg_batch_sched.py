@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from rg_topo import RAMP, RAMP_BW, Topology, central_arbiter_node, coord
@@ -313,8 +313,8 @@ def _commit(fp: Footprint, t0: int, link: CapMap, inj: CapMap, ej: CapMap
     return res
 
 
-def _order(fps: list[Footprint], mode: Priority, rng: random.Random,
-           edge_load: dict[tuple[int, int], int]) -> list[Footprint]:
+def _order(fps: list[Footprint], mode: Priority, rng: random.Random
+           ) -> list[Footprint]:
     if mode == "fcfs":
         return sorted(fps, key=lambda f: (f.release, f.flow_id))
     if mode == "longest":
@@ -372,13 +372,15 @@ def bcfs_schedule(topo: Topology, fps: list[Footprint], *,
         starts: dict[int, int] = {}
         resv: dict[int, dict] = {}
         finish = 0
-        for fp in _order(fps, mode, rng, edge_load):
+        for fp in _order(fps, mode, rng):
             t0 = _earliest_start(fp, tl, ti, te, fp.release)
             starts[fp.flow_id] = t0
             resv[fp.flow_id] = _commit(fp, t0, tl, ti, te)
             done = max((t0 + off + (fp.m - 1) * topo.sigma + RAMP)
                        for _, off in fp.dst_offsets)
             finish = max(finish, done)
+        # The CA is online: it can only score the window in front of it, so a
+        # locally best batch may leave worse residue for the next window.
         if best is None or finish < best["makespan"]:
             best = {"makespan": finish, "starts": starts, "resv": resv,
                     "order": mode, "trial": mi,
@@ -427,6 +429,7 @@ def verify_conflict_free(reservations: dict[int, dict[tuple[int, int],
 def schedule_batched(topo: Topology, col: Collective, *,
                      window: int = 64,
                      t_sched: int = 8,
+                     aggregate: bool = False,
                      gen_model: GenModel = "uniform_jitter",
                      jitter: int = 64,
                      spacing: int = 1,
@@ -434,89 +437,112 @@ def schedule_batched(topo: Topology, col: Collective, *,
                      orders: tuple[Priority, ...] = ("criticality", "longest",
                                                      "fcfs"),
                      n_random: int = 2) -> dict[str, Any]:
-    """Staggered requests -> XY control NoC -> CA window batches -> BCFS."""
+    """Staggered requests -> XY control NoC -> CA window batches -> BCFS.
+
+    window <= 0 means "one batch": the CA waits until every request has
+    arrived before arbitrating (the synchronous / barrier discipline).
+    aggregate=True: a source sends ONE request covering all its flows
+    (48 control messages instead of one per flow).
+    """
     ca = central_arbiter_node()
+    flow_by_id = {f.flow_id: f for f in col.flows}
 
     # (1) staggered generation
     gen = generate_request_times(col, model=gen_model, jitter=jitter,
                                  spacing=spacing, seed=seed)
 
-    # (2) requests to CA over private control NoC (XY)
-    req_msgs = [(gen[f.flow_id], f.src, ca, f.flow_id) for f in col.flows]
+    # (2) request units -> CA over the private control NoC (XY routing)
+    units: dict[int, list[int]] = {}      # unit_id -> flow ids
+    unit_src: dict[int, int] = {}
+    if aggregate:
+        by_src: dict[int, list[int]] = defaultdict(list)
+        for f in col.flows:
+            by_src[f.src].append(f.flow_id)
+        for s, fids in by_src.items():
+            uid = s
+            units[uid] = sorted(fids)
+            unit_src[uid] = s
+    else:
+        for f in col.flows:
+            units[f.flow_id] = [f.flow_id]
+            unit_src[f.flow_id] = f.src
+    unit_gen = {u: min(gen[f] for f in fids) for u, fids in units.items()}
+
+    req_msgs = [(unit_gen[u], unit_src[u], ca, u) for u in units]
     req_arrive, req_stats = deliver_control(topo, req_msgs)
 
     # (3) window batching (tumbling windows aligned to absolute time)
+    single_batch = window <= 0
     batches: dict[int, list[int]] = defaultdict(list)
-    for fid, ta in req_arrive.items():
-        k = ta // window if window > 0 else 0
-        batches[k].append(fid)
-
-    flow_by_id = {f.flow_id: f for f in col.flows}
+    for u, ta in req_arrive.items():
+        batches[0 if single_batch else ta // window].append(u)
 
     # (4) grants: each batch decided at window close + t_sched
     grant_msgs = []
     decide_t: dict[int, int] = {}
-    for k, fids in batches.items():
-        t_close = (k + 1) * window if window > 0 else (
-            max(req_arrive.values()) + 1)
-        t_decide = max(t_close, max(req_arrive[f] for f in fids)) + t_sched
+    for k, uids in batches.items():
+        last_arr = max(req_arrive[u] for u in uids)
+        t_close = last_arr if single_batch else (k + 1) * window
+        t_decide = max(t_close, last_arr) + t_sched
         decide_t[k] = t_decide
-        for fid in fids:
-            grant_msgs.append((t_decide, ca, flow_by_id[fid].src, fid))
+        for u in uids:
+            grant_msgs.append((t_decide, ca, unit_src[u], u))
     grant_arrive, grant_stats = deliver_control(topo, grant_msgs)
 
     # (5) BCFS per batch, in window order; reservations persist across batches
-    link, inj = CapMap(1), CapMap(max(1, RAMP_BW * topo.sigma))
-    ej = CapMap(max(1, RAMP_BW * topo.sigma))
-    all_starts: dict[int, int] = {}
-    all_resv: dict[int, dict] = {}
-    batch_info = []
-    for k in sorted(batches):
-        fids = batches[k]
-        fps = [build_footprint(topo, flow_by_id[fid],
-                               release=grant_arrive.get(fid, decide_t[k]))
-               for fid in fids]
-        res = bcfs_schedule(topo, fps, link=link, inj=inj, ej=ej,
-                            orders=orders, n_random=n_random, seed=seed + k)
-        all_starts.update(res["starts"])
-        all_resv.update(res["resv"])
-        batch_info.append({
-            "window": k,
-            "n_requests": len(fids),
-            "t_decide": decide_t[k],
-            "batch_makespan": res["makespan"],
-            "winning_order": res["order"],
-        })
+    def _run(orders_: tuple[Priority, ...], n_rand: int) -> tuple[int, dict, dict, list]:
+        link = CapMap(1)
+        inj = CapMap(max(1, RAMP_BW * topo.sigma))
+        ej = CapMap(max(1, RAMP_BW * topo.sigma))
+        starts: dict[int, int] = {}
+        resv: dict[int, dict] = {}
+        info = []
+        mk = 0
+        for k in sorted(batches):
+            fps = []
+            for u in batches[k]:
+                rel = grant_arrive.get(u, decide_t[k])
+                for fid in units[u]:
+                    fps.append(build_footprint(topo, flow_by_id[fid], rel))
+            res = bcfs_schedule(topo, fps, link=link, inj=inj, ej=ej,
+                                orders=orders_, n_random=n_rand, seed=seed + k)
+            starts.update(res["starts"])
+            resv.update(res["resv"])
+            mk = max(mk, res["makespan"])
+            info.append({
+                "window": k,
+                "n_requests": len(batches[k]),
+                "n_flows": len(fps),
+                "t_decide": decide_t[k],
+                "batch_makespan": res["makespan"],
+                "winning_order": res["order"],
+            })
+        return mk, starts, resv, info
+
+    sched_mk, all_starts, all_resv, batch_info = _run(orders, n_random)
+    fcfs_mk, _, _, _ = _run(("fcfs",), 0)
 
     grants = [
         Grant(flow_id=fid, src=flow_by_id[fid].src,
-              t_grant_arrive=grant_arrive.get(fid, 0),
+              t_grant_arrive=grant_arrive.get(
+                  fid if not aggregate else flow_by_id[fid].src, 0),
               t_data_start=all_starts[fid],
               reservations=all_resv[fid])
         for fid in sorted(all_starts)
     ]
 
     verify = verify_conflict_free(all_resv)
-
-    # FCFS-only baseline for algorithm comparison (same releases, one order)
-    link_f, inj_f = CapMap(1), CapMap(max(1, RAMP_BW * topo.sigma))
-    ej_f = CapMap(max(1, RAMP_BW * topo.sigma))
-    fcfs_mk = 0
-    for k in sorted(batches):
-        fps = [build_footprint(topo, flow_by_id[fid],
-                               release=grant_arrive.get(fid, decide_t[k]))
-               for fid in batches[k]]
-        r = bcfs_schedule(topo, fps, link=link_f, inj=inj_f, ej=ej_f,
-                          orders=("fcfs",), n_random=0, seed=0)
-        fcfs_mk = max(fcfs_mk, r["makespan"])
-
-    sched_mk = max((b["batch_makespan"] for b in batch_info), default=0)
+    t_first_start = min(all_starts.values()) if all_starts else 0
     return {
         "grants": grants,
         "makespan_sched": sched_mk,
         "makespan_fcfs": fcfs_mk,
         "bcfs_gain": (fcfs_mk / sched_mk - 1.0) if sched_mk else None,
+        "data_span": sched_mk - t_first_start,
+        "t_first_data_start": t_first_start,
         "n_batches": len(batches),
+        "n_request_units": len(units),
+        "aggregate": aggregate,
         "window": window,
         "t_sched": t_sched,
         "gen_model": gen_model,
@@ -530,13 +556,15 @@ def schedule_batched(topo: Topology, col: Collective, *,
             "shared_with_data_plane": False,
             "req": req_stats,
             "grant": grant_stats,
-            "t_first_request_gen": min(gen.values()) if gen else 0,
-            "t_last_request_gen": max(gen.values()) if gen else 0,
+            "t_first_request_gen": min(unit_gen.values()) if unit_gen else 0,
+            "t_last_request_gen": max(unit_gen.values()) if unit_gen else 0,
             "t_first_request_arrive": min(req_arrive.values()) if req_arrive else 0,
             "t_last_request_arrive": max(req_arrive.values()) if req_arrive else 0,
             "t_last_grant_arrive": max(grant_arrive.values()) if grant_arrive else 0,
             "arrival_spread": (max(req_arrive.values()) - min(req_arrive.values())
                                if req_arrive else 0),
+            "R_rg": (max(grant_arrive.values()) - min(unit_gen.values())
+                     if grant_arrive and unit_gen else 0),
         },
     }
 
@@ -548,10 +576,16 @@ if __name__ == "__main__":
     for kind in ("mesh", "torus"):
         topo = Topology(kind)
         for pat in ("alltoall", "reduce"):
-            col = build_collective(topo, pat, m=1)
-            r = schedule_batched(topo, col, window=64, t_sched=8)
-            print(f"{kind:6} {pat:9} n_flow={len(col.flows):5} "
-                  f"batches={r['n_batches']:3} sched={r['makespan_sched']:6} "
-                  f"fcfs={r['makespan_fcfs']:6} gain={r['bcfs_gain']:.3f} "
-                  f"cf={r['verify']['conflict_free']} "
-                  f"spread={r['ctrl']['arrival_spread']}")
+            col = build_collective(topo, pat, m=4)
+            for agg in (False, True):
+                for W in (16, 64, 256, 0):
+                    r = schedule_batched(topo, col, window=W, t_sched=8,
+                                         aggregate=agg)
+                    print(f"{kind:6} {pat:9} agg={int(agg)} W={W:<5} "
+                          f"units={r['n_request_units']:5} b={r['n_batches']:3} "
+                          f"sched={r['makespan_sched']:6} "
+                          f"fcfs={r['makespan_fcfs']:6} "
+                          f"gain={r['bcfs_gain']:+.3f} "
+                          f"cf={int(r['verify']['conflict_free'])} "
+                          f"R_rg={r['ctrl']['R_rg']:5} "
+                          f"span={r['data_span']:6}")

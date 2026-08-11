@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from rg_topo import (
-    N, RAMP, RAMP_BW, Topology, central_arbiter_node, shortest_path_bfs,
+    N, RAMP, RAMP_BW, Topology, central_arbiter_node,
 )
 from rg_collectives import Collective, Flow, tree_link_schedule
 
