@@ -9,11 +9,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "results" / "rg_noc_8x6.json"
+SCHED_JSON = ROOT / "results" / "mesh_sched_pareto.json"
 OUT_HTML = ROOT / "results" / "report_rg_noc_8x6.html"
 
 
 def load():
     with open(JSON_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_sched():
+    if not SCHED_JSON.exists():
+        return None
+    with open(SCHED_JSON, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -427,7 +435,318 @@ def area_table(data) -> str:
     return "\n".join(rows)
 
 
-def build_html(data) -> str:
+# ---------------------------------------------------------------------------
+# Mesh scheduler family (results/mesh_sched_pareto.json)
+# ---------------------------------------------------------------------------
+
+ALGO_LABEL = {
+    "bvn_mesh": "bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span>",
+    "mwm_mesh": "mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span>",
+    "latin_mesh": "latin_mesh<br/><span class='muted'>代数 ROM 轮次</span>",
+    "bcfs": "bcfs<br/><span class='muted'>区间装箱 + 多起点</span>",
+    "islip_mesh": "islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span>",
+    "pim_mesh": "pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span>",
+    "greedy_ff": "greedy_ff<br/><span class='muted'>到达序最早可行</span>",
+}
+ALGO_ORDER = ["bvn_mesh", "mwm_mesh", "latin_mesh", "bcfs",
+              "islip_mesh", "pim_mesh", "greedy_ff"]
+
+
+def s_rows(sd, **filt):
+    out = []
+    for r in sd["rows"]:
+        if all(r.get(k) == v for k, v in filt.items()):
+            out.append(r)
+    return out
+
+
+def sched_pattern_m_table(sd, pat: str, m: int, topo="mesh",
+                          plane="bufferless") -> str:
+    sel = s_rows(sd, topo=topo, plane=plane, pattern=pat, m=m)
+    if not sel:
+        return "<p class='muted'>无数据</p>"
+    fifo = sel[0]["fifo_baseline"]
+    front = {(f["tag"].split("/")[0],) for f in
+             sd["pareto"][f"{topo}|{plane}|{pat}|m{m}"]["front"]}
+    front_algos = {t[0] for t in front}
+    body = [f"<tr class='base'><td><b>FIFO 基线</b><br/>"
+            f"<span class='muted'>无 request–grant</span></td>"
+            f"<td>—</td><td>—</td><td>—</td><td>—</td>"
+            f"<td><b>{fifo}</b></td><td>1.00×</td><td>—</td></tr>"]
+    for algo in ALGO_ORDER:
+        for r in sorted([x for x in sel if x["algo"] == algo],
+                        key=lambda x: x["iters"]):
+            on = algo in front_algos
+            it = f" · I={r['iters']}" if algo in ("islip_mesh",
+                                                  "pim_mesh") else ""
+            rounds = ("—" if r["n_rounds"] is None
+                      else f"{r['n_rounds']} / {r['round_lb']}"
+                           f" = {r['round_ratio']:.2f}×")
+            cvy = ("—" if r["convoy_ratio"] is None
+                   else f"{r['convoy_ratio']:.2f}×")
+            ratio = r["makespan"] / fifo if fifo else None
+            cls = "win" if ratio and ratio < 1 else (
+                "lose" if ratio and ratio > 1.5 else "")
+            body.append(
+                f"<tr{' class=hl' if on else ''}>"
+                f"<td>{ALGO_LABEL[algo]}{it}{' 🏅' if on else ''}</td>"
+                f"<td>{r['algo_class']}</td>"
+                f"<td>{rounds}</td><td>{cvy}</td>"
+                f"<td>{r['makespan_des']} + {r['t_sched_cycles']}</td>"
+                f"<td><b>{r['makespan']}</b></td>"
+                f"<td class='{cls}'>{ratio:.2f}×</td>"
+                f"<td>{r['area_norm']:.4f}</td></tr>")
+    return f"""<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+{chr(10).join(body)}
+</table>"""
+
+
+def sched_sections(sd, topo="mesh", plane="bufferless") -> str:
+    out = []
+    for pat in PATS:
+        if not s_rows(sd, topo=topo, plane=plane, pattern=pat):
+            continue
+        out.append(f"<h3>{pat}</h3>")
+        out.append(f"<p class='muted'>{PAT_NOTE[pat]}</p>")
+        for m in sd["meta"]["ms"]:
+            key = f"{topo}|{plane}|{pat}|m{m}"
+            p = sd["pareto"].get(key, {})
+            tags = " · ".join(f["tag"] for f in p.get("front", []))
+            out.append(f"<h4>m = {m} <span class='muted'>"
+                       f"（Pareto 前沿：{tags}）</span></h4>")
+            out.append(sched_pattern_m_table(sd, pat, m, topo, plane))
+        out.append(f"<p class='muted'>大图："
+                   f"<code>results/mesh_sched_pareto_{pat}.png</code></p>")
+    return "\n".join(out)
+
+
+def sched_resource_table(sd) -> str:
+    """State bits / comparators / depth at the alltoall reference point."""
+    sel = s_rows(sd, topo="mesh", plane="bufferless", pattern="alltoall",
+                 m=4)
+    body = []
+    for algo in ALGO_ORDER:
+        r = next((x for x in sel if x["algo"] == algo and x["iters"] == 1),
+                 None)
+        if not r:
+            continue
+        bd = " + ".join(f"{k}:{v}" for k, v in
+                        sorted(r["bits_breakdown"].items(),
+                               key=lambda kv: -kv[1]))
+        body.append(
+            f"<tr><td>{ALGO_LABEL[algo]}</td><td>{r['algo_class']}</td>"
+            f"<td>{r['bits']:,}</td><td>{r['comparator_bits']:,}</td>"
+            f"<td>{r['gate_levels']}</td><td>{r['dependent_steps']:,}</td>"
+            f"<td>{r['t_sched_cycles']:,}</td>"
+            f"<td><b>{r['area_norm']:.4f}</b></td></tr>"
+            f"<tr><td colspan='8' class='muted' style='font-size:.78rem'>"
+            f"状态分项：{bd}</td></tr>")
+    return "\n".join(body)
+
+
+def sched_lambda_table(sd, topo="mesh", plane="bufferless") -> str:
+    lams = [str(x) for x in sd["meta"]["lambdas"]]
+    head = "".join(f"<th>λ={l}</th>" for l in lams)
+    body = []
+    for pat in PATS:
+        for m in sd["meta"]["ms"]:
+            rec = sd["lambda_sensitivity"].get(f"{topo}|{plane}|{pat}|m{m}")
+            if not rec:
+                continue
+            cells = "".join(f"<td>{rec[l]['algo'].replace('_mesh','')}</td>"
+                            for l in lams)
+            body.append(f"<tr><td>{pat}</td><td>{m}</td>{cells}</tr>")
+    return f"""<table>
+<tr><th>pattern</th><th>m</th>{head}</tr>
+{chr(10).join(body)}
+</table>"""
+
+
+def sched_torus_table(sd) -> str:
+    body = []
+    for pat in PATS:
+        for m in sd["meta"]["ms"]:
+            me = s_rows(sd, topo="mesh", plane="bufferless", pattern=pat,
+                        m=m, iters=1)
+            to = s_rows(sd, topo="torus", plane="bufferless", pattern=pat,
+                        m=m, iters=1)
+            if not me or not to:
+                continue
+            bm = min(me, key=lambda r: r["makespan"])
+            bt = min(to, key=lambda r: r["makespan"])
+            rl_m = max(r["round_lb"] for r in me)
+            rl_t = max(r["round_lb"] for r in to)
+            body.append(
+                f"<tr><td>{pat}</td><td>{m}</td>"
+                f"<td>{bm['algo']}<br/><b>{bm['makespan']}</b></td>"
+                f"<td>{bt['algo']}<br/><b>{bt['makespan']}</b></td>"
+                f"<td>{bt['makespan']/bm['makespan']:.2f}×</td>"
+                f"<td>{rl_m} → {rl_t}</td></tr>")
+    return "\n".join(body)
+
+
+def sched_verify_list(sd) -> str:
+    return "\n".join(
+        f"<li>{v['name']}：{'✓' if v['ok'] else '✗'} "
+        f"<span class='muted'>{v['detail']}</span></li>"
+        for v in sd["verifications"])
+
+
+def sched_section(sd) -> str:
+    if sd is None:
+        return ("<h2>4. 2D mesh 链路带宽与空间调度算法族</h2>"
+                "<p class='muted'>缺少 <code>results/mesh_sched_pareto.json</code>，"
+                "请先运行 <code>python3 utils/dse_mesh_sched_pareto.py</code>。</p>")
+    a4 = next(r for r in s_rows(sd, topo="mesh", plane="bufferless",
+                               pattern="alltoall", m=4)
+              if r["algo"] == "islip_mesh" and r["iters"] == 1)
+    gff = next(r for r in s_rows(sd, topo="mesh", plane="bufferless",
+                                 pattern="alltoall", m=4)
+               if r["algo"] == "greedy_ff")
+    lat = next(r for r in s_rows(sd, topo="mesh", plane="bufferless",
+                                 pattern="alltoall", m=4)
+               if r["algo"] == "latin_mesh")
+    bcf = next(r for r in s_rows(sd, topo="mesh", plane="bufferless",
+                                 pattern="alltoall", m=4)
+               if r["algo"] == "bcfs")
+    voq_note = ""
+    if a4.get("request_unit") == "voq":
+        voq_note = (
+            f"<p><b>Request 口径（硬约束）</b>：<b>一条 request = 一条 VOQ</b>。"
+            f"单播 alltoall 下每个源节点持有 <code>N−1={a4['n_voq_per_src_max']}</code> 条 "
+            f"<code>VOQ[s→d]</code>，全网 "
+            f"<code>N·(N−1)={a4['n_voqs']}</code> 条控制消息"
+            f"（实测 <code>n_request_units={a4['n_request_units']}</code>，"
+            f"<code>aggregate=False</code>）。"
+            f"调度与授权均以 VOQ 为粒度；不做「每源聚合一条」。</p>"
+        )
+    return f"""
+<h2>4. 2D mesh 链路带宽与空间调度算法族（类 iSLIP / BvN）</h2>
+<p class="muted">数据 <code>results/mesh_sched_pareto.json</code> · {sd['n_rows']} 行 ·
+生成于 {sd['meta']['generated']}</p>
+{voq_note}
+
+<h3>4.1 从交叉开关到 mesh：VOQ → LDPS</h3>
+<p>交叉开关的 IQ 模型里，输入端口 <i>i</i> 对每个输出 <i>j</i> 有一条
+<code>VOQ[i][j]</code>；iSLIP / BvN 分配的是这些 VOQ 对交叉开关端口的占用
+（资源是二部匹配，单位是<b>置换矩阵</b>）。2D mesh 上对应物是：节点 <i>s</i>
+对每个目的 <i>d≠s</i> 有一条 <code>VOQ[s→d]</code>（共 N−1 条），但一条 VOQ
+吃掉整条 XY 路径而不是一个输出端口。因此分配单位换成</p>
+<div class="eq">LDPS（Link-Disjoint Path Set）= 一组 VOQ，其 XY 路径（树流为树边集）两两<b>链路不相交</b>，
+且源/目的 ramp 用量 ≤ RAMP_BW·σ</div>
+<p>做了这个替换，经典算法一一对应搬得过来：</p>
+<table>
+<tr><th>交叉开关</th><th>2D mesh 对应物</th><th>本报告的量化</th></tr>
+<tr><td>VOQ[i][j] 举手 request</td><td>VOQ[s→d] 举手 request</td>
+<td>alltoall：每源 N−1 条、全网 N·(N−1)={a4.get('n_voqs','2256')} 条 ✓</td></tr>
+<tr><td>置换矩阵（一个时隙配置）</td><td>一个 LDPS（一轮）</td>
+<td>轮内链路不相交 → <b>按构造无冲突</b>，独立复核 ✓</td></tr>
+<tr><td>BvN 分解为最少置换数</td><td>把 VOQ 集划分为最少 LDPS 轮次</td>
+<td>下界 = <code>max_e (#VOQs on e)</code>（Birkhoff 置换数界类比）；实测轮次/下界
+= {lat['round_ratio']:.2f}×（latin）～{a4['round_ratio']:.2f}×（islip）</td></tr>
+<tr><td>iSLIP：输出 grant + 输入 accept</td>
+<td>逐链路 RR grant + <b>全路径一致</b>才 accept</td>
+<td>这是 mesh 新增的硬约束：交叉开关只要 1 个输出同意，mesh 要路径上<b>全部</b>链路同意</td></tr>
+</table>
+
+<h3>4.2 头条结论：全路径一致 accept 在 mesh 上会塌陷</h3>
+<p>一条流有 <i>h</i> 条链路，每条链路有 <i>k</i> 个竞争者，逐链路独立 RR 授权下它拿到<b>全部</b>
+授权的概率约 <i>k</i><sup>−(h−1)</sup>。alltoall 下 h≈6、k≈80，概率实际为零：实测
+<code>islip_mesh</code> 在 alltoall 上靠一致性通过的流只有
+<b>{(a4['unanimous_frac'] or 0)*100:.1f}%</b>（broadcast/reduce 这类低竞争 pattern 可达 90%+）。</p>
+<p><b>推论：纯链路局部的仲裁器在 mesh 上会活锁，任何 mesh 调度器都必须补一个「路径级顺序分配」步。</b>
+本族的 5 个相位型成员因此统一为「I 轮分布式一致性匹配 + 按优先级顺序补齐该轮 LDPS」，
+成员之间的差别落在<b>优先级规则</b>（flow_id / pressure / ROM / RR 指针 / 随机）上。
+这也正面回答了「为什么 mesh 需要集中调度器」——不是工程偷懒，是分布式匹配在路径资源上不收敛。</p>
+<p>连带结果：迭代轮数 <code>I</code> 的<b>边际收益为负</b>。I 从 1 → 4 几乎不改变轮次数，
+却把 <code>T_sched</code> 乘上 4（alltoall m=4：makespan {a4['makespan']} → 4886），
+所以 I=1 在所有 (pattern, m) 上都不劣。</p>
+
+<h3>4.3 护航效应 vs 区间装箱：Pareto 的主轴</h3>
+<p>相位型（bvn / mwm / latin / islip / pim）一轮共享一个起始时刻，只需一张
+<b>链路占用位图</b> + 每链路一个 <code>free_at</code> 寄存器，无冲突按构造成立；
+代价是<b>护航效应</b>——一轮的时长由最慢成员决定，而在 7/9 拍长线下「最慢成员」由<b>线延迟</b>
+（≈98 cy）而不是消息长度（m·σ）决定。表中「护航比」= Σ轮时长 ÷ 实际 span，
+量化了 <code>free_at</code> 轮间流水相对硬 barrier 挽回了多少。</p>
+<p>流水型（bcfs / greedy_ff）允许任意起始偏移、把刚性印记装进每链路区间表的空洞里，
+没有护航效应，数据面 span 小一个数量级（alltoall m=4：{gff['data_span']} vs
+{lat['data_span']} cy）；代价是<b>面积</b>（区间表 {gff['bits']:,} bit vs
+{lat['bits']:,} bit，{gff['area_norm']/lat['area_norm']:.0f}×）与
+<b>相关仲裁步数</b>（Θ(流数) vs Θ(轮次数)）。</p>
+
+<h3>4.4 时序可行性：T_sched 回灌 makespan</h3>
+<p>只比数据面 span 会奖励「跑得快但造不出来」的算法，所以本节把仲裁关键路径折算成周期数
+并<b>加回 makespan</b>：<code>T_sched = 相关仲裁步数 × ⌈门级深度 / 12⌉</code>。
+「相关」= 不能重叠：相位型每轮一步（≈轮次数，几十步），流水型第 k 条流的最早可行位置依赖前 k−1 条
+的落位（≈流数，几千步）。这一项决定了整张 Pareto 图的形状：</p>
+<ul>
+<li><code>bcfs</code> 的多起点（3 个固定序 + 2 个随机序，串行重跑）换来的 makespan 增益只有
+~2%，却付 5×流数 = {bcf['t_sched_cycles']:,} cy 的调度延迟 → <b>在全部 15 个 (pattern, m) 上都被
+<code>greedy_ff</code> 支配，从未进入 Pareto 前沿</b>。</li>
+<li><code>mwm_mesh</code> 用 N²·W_d 需求矩阵换来更少轮次（alltoall 101 vs bvn 114），
+但每轮更长、面积更大 → <b>同样从未进入前沿</b>。「最大权重」在交叉开关上的优势在
+mesh 上被轮时长的线延迟主导抹掉。</li>
+<li><code>latin_mesh</code> 只需一张只读 ROM（{lat['bits']:,} bit，面积
+{lat['area_norm']:.4f}）却拿到与 bvn 相当的轮次数 → alltoall 上的<b>最小面积端点</b>。</li>
+</ul>
+<p><b>顺带证否一个直觉</b>：交叉开关上最优的 Latin 方阵 / 固定 BvN 表在 mesh 上<b>不</b>是
+N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测需
+{lat['n_rounds']} 轮（下界 {lat['round_lb']}）。这正是「拓扑空间」这一维带来的额外代价。</p>
+
+<h3>4.5 Pareto 图（makespan × 调度器面积）</h3>
+<p><img src="mesh_sched_pareto.png" alt="Pareto panels" style="width:100%;max-width:1100px"/></p>
+<p class="muted">5 pattern × 3 m 面板；x = 归一化调度器面积（摊到每节点，标定
+<code>greedy_ff</code> = 现有 <code>ARB_AREA['ca']</code> = 0.05），y = makespan（含 T_sched，对数轴）；
+黑虚线 = Pareto 前沿，灰点线 = FIFO 基线，绿点划线 = 该格最好的纯数据面 span。
+每 pattern 的大图见 <code>results/mesh_sched_pareto_&lt;pattern&gt;.png</code>。</p>
+
+<h3>4.6 按 pattern × m 归类的对照表</h3>
+<p>每格首行是<strong>分组交换 FIFO 基线</strong>（无 request–grant）。
+「DES + T_sched」列显式拆开数据面仿真结果与调度器自身延迟，两者之和即 makespan。
+🏅 = 该 (pattern, m) 的 Pareto 前沿成员。</p>
+{sched_sections(sd)}
+
+<h3>4.7 集中调度器资源表（alltoall m=4 为参考点）</h3>
+<table>
+<tr><th>算法</th><th>类别</th><th>状态比特</th><th>比较器位宽和</th>
+<th>门级深度</th><th>相关步数</th><th>T_sched (cy)</th><th>面积/节点</th></tr>
+{sched_resource_table(sd)}
+</table>
+<p class="muted">面积 = (状态比特 + 0.6×比较器位) × 标定系数 ÷ 48；ROM 位按 0.15 折算。
+标定点：<code>greedy_ff</code> @ 2256 流 = 0.0500，与既有 <code>ARB_AREA['ca']</code> 一致 ✓。
+门级深度按 12 级/周期折算为「每步周期数」。</p>
+
+<h3>4.8 λ 敏感度：谁在哪个权重区间夺走前沿</h3>
+<p>把两轴合成一个标量目标 <code>makespan / makespan* + λ · 面积</code>（λ = 每单位面积愿意付的归一周期数），
+扫 λ 看冠军如何换手：</p>
+{sched_lambda_table(sd)}
+<p><img src="mesh_sched_lambda.png" alt="lambda sensitivity" style="width:100%;max-width:1100px"/></p>
+<p>λ ≲ 2（时间优先）时 <code>greedy_ff</code> 通吃；λ ≳ 8（面积优先）时
+alltoall 换手给 <code>latin_mesh</code>、树形 collective 换手给 <code>bvn_mesh</code>；
+broadcast 全程由 <code>islip_mesh</code> 持有（只有 1 条流，一致性 accept 100% 成功，
+调度器退化成一次查表）。<code>bcfs</code> 与 <code>mwm_mesh</code> 在<b>任何</b> λ 下都不是冠军。</p>
+
+<h3>4.9 Torus 对照（σ=2 的影响）</h3>
+<table>
+<tr><th>pattern</th><th>m</th><th>mesh 最优</th><th>torus 最优</th><th>torus/mesh</th>
+<th>轮次下界 max_e load(e)</th></tr>
+{sched_torus_table(sd)}
+</table>
+<p>torus 跳数少（直径 55 vs 94）压低轮时长，但 σ=2 使每轮链路占用翻倍；
+轮次<b>下界</b>由链路负载决定，torus 链路多 17% 故下界略降。两个效应在树形 pattern 上
+torus 占优，在对分带宽绑定的长消息 alltoall 上被 σ=2 抵消。</p>
+
+<h3>4.10 本节验证清单</h3>
+<ul>
+{sched_verify_list(sd)}
+</ul>
+"""
+
+
+def build_html(data, sd=None) -> str:
     v = data["verifications"]
     bs = v["tests"].get("batch_sched", {})
     return f"""<!DOCTYPE html>
@@ -494,7 +813,9 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
 <li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
 <li><b>仲裁器</b>：<code>CA</code> 集中式 @ <b>(x=4,y=0) = nid 4</b>（原点左上、先 x 后 y，即第 1 行第 5 列）；
-<code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。</li>
+<code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。
+§4 在同一控制平面口径下横向比较 <b>7 个类 iSLIP / BvN 排程算法</b>（<b>一 request = 一 VOQ</b>，
+alltoall 每源 N−1=47 条、全网 2256 条），并把调度器面积与仲裁关键路径一起计价。</li>
 <li><b>Request 产生时刻</b>：各节点<b>不同时</b>产生 request（默认每节点 U[0,64) 随机起跳，同一节点内多条 request 逐拍发出）。
 到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>上 ⌊曼哈顿线延迟/2⌋ + 私有控制网争用，因此天然离散。</li>
 <li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。
@@ -566,7 +887,9 @@ W→∞ 退化成同步 barrier（视野最全、增益最高，但要付「等�
 J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降</b>——因为 release 时刻本身已经把流拉开了，
 排程器可优化的重叠变少。<code>distance_skew</code>（远节点提前发）能显著压缩到达离散度，是低成本的工程手段。</p>
 
-<h2>4. 按 pattern × m 归类的主结果（makespan，cycles）</h2>
+{sched_section(sd)}
+
+<h2>5. 按 pattern × m 归类的主结果（makespan，cycles）</h2>
 <p>每个 pattern 下按消息大小 <code>m ∈ {{1, 4, 16}}</code> 各一张表；
 表首行是<strong>分组交换基线</strong>（FIFO、无 request–grant、源端自由注入），其后纵向排列 CA / CA-batch / DA。
 「vs 基线」= 该配置 makespan ÷ 同拓扑、同 pattern、同 m 的 FIFO 基线；
@@ -575,14 +898,14 @@ J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降<
 CA / CA-batch 的 alltoall 展示聚合配置；allgather 展示 sync barrier。</p>
 {per_pattern_sections(data)}
 
-<h2>5. Allgather：同步 barrier vs 异步多播树</h2>
+<h2>6. Allgather：同步 barrier vs 异步多播树</h2>
 <table>
 <tr><th>topo</th><th>plane</th><th>m</th><th>sync</th><th>async tree</th><th>Δ(sync−async)</th></tr>
 {sync_async_table(data)}
 </table>
 <p>异步树避免了「等最远节点」的 barrier 税，但树间冲突使数据面可能更长；同步把冲突集中到统一排程，大 m 时摊薄 R_rg。</p>
 
-<h2>6. Mesh vs Torus</h2>
+<h2>7. Mesh vs Torus</h2>
 <ul>
 <li>对分带宽绑定的大消息 alltoall：二者数据下界相同（bisect 自检 ✓）。</li>
 <li>小消息 / 树形（broadcast、reduce）：torus 直径 55 vs mesh 94，DA bufferless broadcast m=1 为
@@ -593,7 +916,7 @@ vs mesh
 <li>bufferable torus 需 <b>2 VC</b>（dateline）→ 缓冲面积约翻倍；bufferless 靠时隙预约无需 VC。</li>
 </ul>
 
-<h2>7. 面积（归一化 IQ-XY = 1.0）</h2>
+<h2>8. 面积（归一化 IQ-XY = 1.0）</h2>
 <table>
 <tr><th>topo</th><th>plane</th><th>arb</th><th>total</th><th>buffer</th><th>arbiter</th><th>private_ctrl_noc</th></tr>
 {area_table(data)}
@@ -602,10 +925,10 @@ vs mesh
 私有控制 NoC 面积按窄 flit 同构网络摊到每节点 0.12（相对 IQ-XY=1.0），属数据面金属恒定预算之外的增量。
 bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基线无控制 NoC。</p>
 
-<h2>8. 其他敏感度</h2>
+<h2>9. 其他敏感度</h2>
 {sens_tables(data)}
 
-<h2>9. 验证清单</h2>
+<h2>10. 验证清单</h2>
 <ul>
 <li>对分带宽相等：{'✓' if v['tests']['bisection_equal'] else '✗'}</li>
 <li>torus σ=0.5 flit/cy：{'✓' if v['tests']['torus_bw_half'] else '✗'}</li>
@@ -621,7 +944,7 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 · 事件驱动近似行的偏差 {v['tests'].get('mono_approx_violations')} 组（保守上界，见下注）</li>
 </ul>
 
-<h3>9.1 CA-batch / BCFS 专项验证</h3>
+<h3>10.1 CA-batch / BCFS 专项验证</h3>
 <ul>
 <li>中心调度器坐标一致为 (4,0)：{'✓' if bs.get('ca_coord_consistent') else '✗'}（nid={bs.get('ca_node')}）</li>
 <li>控制平面 XY 维序路由：{'✓' if bs.get('ctrl_routing_xy') else '✗'}</li>
@@ -636,11 +959,11 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 {'✓' if bs.get('p2p_never_worse_than_fcfs') else '✗'} · 平均增益 {(bs.get('p2p_gain_mean') or 0)*100:.1f}%</li>
 <li>全体平均增益 {(bs.get('bcfs_gain_mean') or 0)*100:.1f}% · 最大 {(bs.get('bcfs_gain_max') or 0)*100:.1f}%；
 多树 pattern 有 {bs.get('tree_regressions')} 组反向（最差 {(bs.get('tree_regression_worst') or 0)*100:+.1f}%）——
-在线窗口局部最优的固有代价，见 §10。</li>
+在线窗口局部最优的固有代价，见 §11。</li>
 </ul>
 <p class="muted">{v['tests'].get('mono_note','')}</p>
 
-<h2>10. 已知局限</h2>
+<h2>11. 已知局限</h2>
 <ul>
 <li>数据面金属线：按链路计数 torus/mesh≈1.17，非严格恒定；折叠线长×2 用 <code>torus_delay_scale=2</code> 对照。</li>
 <li>私有控制 NoC 是<b>额外</b>金属/面积（每节点 +0.12），不计入 mesh/torus 数据面对分带宽恒定约束。</li>
@@ -649,14 +972,28 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <li><b>BCFS 是在线窗口局部最优</b>：CA 只能给眼前这一批打分，无法预知后续窗口。
 多树 pattern（mesh allgather m=16）上出现 {bs.get('tree_regressions')} 组「本批更紧、全局更慢」的反向案例（最差 {(bs.get('tree_regression_worst') or 0)*100:+.1f}%）。
 点对点 pattern 上未出现。若允许离线全局排程（所有 request 先到齐，即 W=∞）可消除此效应。</li>
-<li>BCFS 的路径是 XY 维序固定的；允许自适应路由会扩大可行域，但需重做 CDG 无环性论证。</li>
+<li>BCFS 的路径是 XY 维序固定的；允许自适应路由会扩大可行域，但需重做 CDG 无环性论证。
+§4 的全部 7 个成员同样固定 XY，因此 LDPS 的「链路不相交」判定不含路由自由度。</li>
+<li><b>§4 的相关仲裁步数是结构性计数，不是综合结果</b>：门级深度按 12 级/周期折算，
+比较器面积按 0.6 flop-bit/位估。绝对值有系数不确定性，但两类算法 Θ(轮次数) vs Θ(流数) 的
+数量级差异不依赖标定，λ 敏感度表给出了系数偏差下的冠军换手边界。</li>
+<li><b>§4 的相位型成员含一个「路径级顺序补齐」步</b>：纯逐链路 RR 的全路径一致 accept 在 mesh 上
+成功率趋零（§4.2），若严格只保留分布式一致性会活锁，因此实现里补了按优先级的顺序首次适配。
+这使 <code>I</code> 的收益被压平——是 mesh 的结构性结论，而非实现取舍。</li>
+<li><b><code>bcfs</code> 的多起点按串行重跑计价</b>（5×流数步）。若改为 5 份硬件并行，
+时间回到 1×而面积升到约 5×，在 Pareto 图上是沿前沿平移而非跨越，结论（被 <code>greedy_ff</code> 支配）不变。</li>
 <li>reduce = gather + PE 本地归约（无网内算术），对齐 ADR-002/Arch-A2。</li>
 </ul>
 
-<h2>11. 文件</h2>
+<h2>12. 文件</h2>
 <ul>
 <li><code>utils/rg_topo.py</code> · <code>rg_bounds.py</code> · <code>rg_collectives.py</code> · <code>rg_arbiter.py</code> · <code>rg_batch_sched.py</code>（错峰+时间窗+BCFS）</li>
 <li><code>utils/dse_rg_noc_8x6.py</code> → <code>results/rg_noc_8x6.json</code></li>
+<li><b>§4 算法族</b>：<code>utils/rg_mesh_sched.py</code>（LDPS 原语 + 7 个成员）·
+<code>rg_sched_cost.py</code>（解析面积 + T_sched）·
+<code>dse_mesh_sched_pareto.py</code> → <code>results/mesh_sched_pareto.json</code> ·
+<code>gen_mesh_sched_pareto_plot.py</code> → <code>results/mesh_sched_pareto*.png</code>、
+<code>mesh_sched_lambda.png</code></li>
 <li><code>docs/phase-7-exploration/rg-noc-8x6.md</code></li>
 </ul>
 </body></html>
@@ -665,7 +1002,7 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 
 def main():
     data = load()
-    html = build_html(data)
+    html = build_html(data, load_sched())
     OUT_HTML.write_text(html, encoding="utf-8")
     print(f"Wrote {OUT_HTML} ({len(html)} bytes)")
 

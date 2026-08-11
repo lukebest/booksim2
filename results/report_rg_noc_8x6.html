@@ -112,7 +112,9 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 剩余争用仅来自控制消息互争 + CA 入端口汇聚。</li>
 <li><b>类型</b>：bufferable = 源端 grant 准入 + 路由器 FIFO/credit；bufferless = grant 逐拍预约路径、路由器零缓冲。</li>
 <li><b>仲裁器</b>：<code>CA</code> 集中式 @ <b>(x=4,y=0) = nid 4</b>（原点左上、先 x 后 y，即第 1 行第 5 列）；
-<code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。</li>
+<code>DA</code> 目的端分布式；<code>CA-batch</code> = CA + <b>错峰 request + 时间窗批量仲裁 + 全局无冲突排程 BCFS</b>（见 §3）。
+§4 在同一控制平面口径下横向比较 <b>7 个类 iSLIP / BvN 排程算法</b>（<b>一 request = 一 VOQ</b>，
+alltoall 每源 N−1=47 条、全网 2256 条），并把调度器面积与仲裁关键路径一起计价。</li>
 <li><b>Request 产生时刻</b>：各节点<b>不同时</b>产生 request（默认每节点 U[0,64) 随机起跳，同一节点内多条 request 逐拍发出）。
 到达 CA 的时刻 = 产生时刻 + <b>XY 路由</b>上 ⌊曼哈顿线延迟/2⌋ + 私有控制网争用，因此天然离散。</li>
 <li><b>同步</b>：allgather/allreduce 默认 sync barrier（等齐 48 个 request 再统一 grant）；allgather 另做异步「每 grant = 一棵多播树」对照。
@@ -214,7 +216,457 @@ W→∞ 退化成同步 barrier（视野最全、增益最高，但要付「等�
 J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降</b>——因为 release 时刻本身已经把流拉开了，
 排程器可优化的重叠变少。<code>distance_skew</code>（远节点提前发）能显著压缩到达离散度，是低成本的工程手段。</p>
 
-<h2>4. 按 pattern × m 归类的主结果（makespan，cycles）</h2>
+
+<h2>4. 2D mesh 链路带宽与空间调度算法族（类 iSLIP / BvN）</h2>
+<p class="muted">数据 <code>results/mesh_sched_pareto.json</code> · 660 行 ·
+生成于 2026-08-11 15:22:21</p>
+<p><b>Request 口径（硬约束）</b>：<b>一条 request = 一条 VOQ</b>。单播 alltoall 下每个源节点持有 <code>N−1=47</code> 条 <code>VOQ[s→d]</code>，全网 <code>N·(N−1)=2256</code> 条控制消息（实测 <code>n_request_units=2256</code>，<code>aggregate=False</code>）。调度与授权均以 VOQ 为粒度；不做「每源聚合一条」。</p>
+
+<h3>4.1 从交叉开关到 mesh：VOQ → LDPS</h3>
+<p>交叉开关的 IQ 模型里，输入端口 <i>i</i> 对每个输出 <i>j</i> 有一条
+<code>VOQ[i][j]</code>；iSLIP / BvN 分配的是这些 VOQ 对交叉开关端口的占用
+（资源是二部匹配，单位是<b>置换矩阵</b>）。2D mesh 上对应物是：节点 <i>s</i>
+对每个目的 <i>d≠s</i> 有一条 <code>VOQ[s→d]</code>（共 N−1 条），但一条 VOQ
+吃掉整条 XY 路径而不是一个输出端口。因此分配单位换成</p>
+<div class="eq">LDPS（Link-Disjoint Path Set）= 一组 VOQ，其 XY 路径（树流为树边集）两两<b>链路不相交</b>，
+且源/目的 ramp 用量 ≤ RAMP_BW·σ</div>
+<p>做了这个替换，经典算法一一对应搬得过来：</p>
+<table>
+<tr><th>交叉开关</th><th>2D mesh 对应物</th><th>本报告的量化</th></tr>
+<tr><td>VOQ[i][j] 举手 request</td><td>VOQ[s→d] 举手 request</td>
+<td>alltoall：每源 N−1 条、全网 N·(N−1)=2256 条 ✓</td></tr>
+<tr><td>置换矩阵（一个时隙配置）</td><td>一个 LDPS（一轮）</td>
+<td>轮内链路不相交 → <b>按构造无冲突</b>，独立复核 ✓</td></tr>
+<tr><td>BvN 分解为最少置换数</td><td>把 VOQ 集划分为最少 LDPS 轮次</td>
+<td>下界 = <code>max_e (#VOQs on e)</code>（Birkhoff 置换数界类比）；实测轮次/下界
+= 1.03×（latin）～1.49×（islip）</td></tr>
+<tr><td>iSLIP：输出 grant + 输入 accept</td>
+<td>逐链路 RR grant + <b>全路径一致</b>才 accept</td>
+<td>这是 mesh 新增的硬约束：交叉开关只要 1 个输出同意，mesh 要路径上<b>全部</b>链路同意</td></tr>
+</table>
+
+<h3>4.2 头条结论：全路径一致 accept 在 mesh 上会塌陷</h3>
+<p>一条流有 <i>h</i> 条链路，每条链路有 <i>k</i> 个竞争者，逐链路独立 RR 授权下它拿到<b>全部</b>
+授权的概率约 <i>k</i><sup>−(h−1)</sup>。alltoall 下 h≈6、k≈80，概率实际为零：实测
+<code>islip_mesh</code> 在 alltoall 上靠一致性通过的流只有
+<b>17.8%</b>（broadcast/reduce 这类低竞争 pattern 可达 90%+）。</p>
+<p><b>推论：纯链路局部的仲裁器在 mesh 上会活锁，任何 mesh 调度器都必须补一个「路径级顺序分配」步。</b>
+本族的 5 个相位型成员因此统一为「I 轮分布式一致性匹配 + 按优先级顺序补齐该轮 LDPS」，
+成员之间的差别落在<b>优先级规则</b>（flow_id / pressure / ROM / RR 指针 / 随机）上。
+这也正面回答了「为什么 mesh 需要集中调度器」——不是工程偷懒，是分布式匹配在路径资源上不收敛。</p>
+<p>连带结果：迭代轮数 <code>I</code> 的<b>边际收益为负</b>。I 从 1 → 4 几乎不改变轮次数，
+却把 <code>T_sched</code> 乘上 4（alltoall m=4：makespan 4576 → 4886），
+所以 I=1 在所有 (pattern, m) 上都不劣。</p>
+
+<h3>4.3 护航效应 vs 区间装箱：Pareto 的主轴</h3>
+<p>相位型（bvn / mwm / latin / islip / pim）一轮共享一个起始时刻，只需一张
+<b>链路占用位图</b> + 每链路一个 <code>free_at</code> 寄存器，无冲突按构造成立；
+代价是<b>护航效应</b>——一轮的时长由最慢成员决定，而在 7/9 拍长线下「最慢成员」由<b>线延迟</b>
+（≈98 cy）而不是消息长度（m·σ）决定。表中「护航比」= Σ轮时长 ÷ 实际 span，
+量化了 <code>free_at</code> 轮间流水相对硬 barrier 挽回了多少。</p>
+<p>流水型（bcfs / greedy_ff）允许任意起始偏移、把刚性印记装进每链路区间表的空洞里，
+没有护航效应，数据面 span 小一个数量级（alltoall m=4：2105 vs
+3430 cy）；代价是<b>面积</b>（区间表 126,912 bit vs
+5,314 bit，22×）与
+<b>相关仲裁步数</b>（Θ(流数) vs Θ(轮次数)）。</p>
+
+<h3>4.4 时序可行性：T_sched 回灌 makespan</h3>
+<p>只比数据面 span 会奖励「跑得快但造不出来」的算法，所以本节把仲裁关键路径折算成周期数
+并<b>加回 makespan</b>：<code>T_sched = 相关仲裁步数 × ⌈门级深度 / 12⌉</code>。
+「相关」= 不能重叠：相位型每轮一步（≈轮次数，几十步），流水型第 k 条流的最早可行位置依赖前 k−1 条
+的落位（≈流数，几千步）。这一项决定了整张 Pareto 图的形状：</p>
+<ul>
+<li><code>bcfs</code> 的多起点（3 个固定序 + 2 个随机序，串行重跑）换来的 makespan 增益只有
+~2%，却付 5×流数 = 11,280 cy 的调度延迟 → <b>在全部 15 个 (pattern, m) 上都被
+<code>greedy_ff</code> 支配，从未进入 Pareto 前沿</b>。</li>
+<li><code>mwm_mesh</code> 用 N²·W_d 需求矩阵换来更少轮次（alltoall 101 vs bvn 114），
+但每轮更长、面积更大 → <b>同样从未进入前沿</b>。「最大权重」在交叉开关上的优势在
+mesh 上被轮时长的线延迟主导抹掉。</li>
+<li><code>latin_mesh</code> 只需一张只读 ROM（5,314 bit，面积
+0.0023）却拿到与 bvn 相当的轮次数 → alltoall 上的<b>最小面积端点</b>。</li>
+</ul>
+<p><b>顺带证否一个直觉</b>：交叉开关上最优的 Latin 方阵 / 固定 BvN 表在 mesh 上<b>不</b>是
+N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测需
+99 轮（下界 96）。这正是「拓扑空间」这一维带来的额外代价。</p>
+
+<h3>4.5 Pareto 图（makespan × 调度器面积）</h3>
+<p><img src="mesh_sched_pareto.png" alt="Pareto panels" style="width:100%;max-width:1100px"/></p>
+<p class="muted">5 pattern × 3 m 面板；x = 归一化调度器面积（摊到每节点，标定
+<code>greedy_ff</code> = 现有 <code>ARB_AREA['ca']</code> = 0.05），y = makespan（含 T_sched，对数轴）；
+黑虚线 = Pareto 前沿，灰点线 = FIFO 基线，绿点划线 = 该格最好的纯数据面 span。
+每 pattern 的大图见 <code>results/mesh_sched_pareto_&lt;pattern&gt;.png</code>。</p>
+
+<h3>4.6 按 pattern × m 归类的对照表</h3>
+<p>每格首行是<strong>分组交换 FIFO 基线</strong>（无 request–grant）。
+「DES + T_sched」列显式拆开数据面仿真结果与调度器自身延迟，两者之和即 makespan。
+🏅 = 该 (pattern, m) 的 Pareto 前沿成员。</p>
+<h3>alltoall</h3>
+<p class='muted'>48×47=2256 条单播流，对分带宽绑定。CA 非聚合是最坏控制税案例；ca_batch 用全局无冲突排程压缩数据面。</p>
+<h4>m = 1 <span class='muted'>（Pareto 前沿：latin_mesh · bvn_mesh · pim_mesh/I1 · islip_mesh/I1）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>192</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>114 / 96 = 1.19×</td><td>2.58×</td><td>5107 + 114</td><td><b>5221</b></td><td class='lose'>27.19×</td><td>0.0106</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>101 / 96 = 1.05×</td><td>1.68×</td><td>5224 + 202</td><td><b>5426</b></td><td class='lose'>28.26×</td><td>0.0178</td></tr>
+<tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>2.38×</td><td>5134 + 99</td><td><b>5233</b></td><td class='lose'>27.26×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>2061 + 11280</td><td><b>13341</b></td><td class='lose'>69.48×</td><td>0.0883</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>156 / 96 = 1.62×</td><td>2.45×</td><td>4082 + 156</td><td><b>4238</b></td><td class='lose'>22.07×</td><td>0.0178</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>158 / 96 = 1.65×</td><td>2.52×</td><td>3964 + 632</td><td><b>4596</b></td><td class='lose'>23.94×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>156 / 96 = 1.62×</td><td>2.44×</td><td>4022 + 1872</td><td><b>5894</b></td><td class='lose'>30.70×</td><td>0.0189</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>150 / 96 = 1.56×</td><td>2.36×</td><td>4196 + 150</td><td><b>4346</b></td><td class='lose'>22.64×</td><td>0.0172</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.42×</td><td>4164 + 608</td><td><b>4772</b></td><td class='lose'>24.85×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.50×</td><td>4079 + 2432</td><td><b>6511</b></td><td class='lose'>33.91×</td><td>0.0183</td></tr>
+<tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>1997 + 2256</td><td><b>4253</b></td><td class='lose'>22.15×</td><td>0.0500</td></tr>
+</table>
+<h4>m = 4 <span class='muted'>（Pareto 前沿：latin_mesh · pim_mesh/I1 · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>701</b></td><td>1.00×</td><td>—</td></tr>
+<tr><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span></td><td>batch/slot</td><td>114 / 96 = 1.19×</td><td>2.44×</td><td>5427 + 114</td><td><b>5541</b></td><td class='lose'>7.90×</td><td>0.0106</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>101 / 96 = 1.05×</td><td>1.62×</td><td>5519 + 202</td><td><b>5721</b></td><td class='lose'>8.16×</td><td>0.0178</td></tr>
+<tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>2.26×</td><td>5426 + 99</td><td><b>5525</b></td><td class='lose'>7.88×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>2135 + 11280</td><td><b>13415</b></td><td class='lose'>19.14×</td><td>0.0883</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.26×</td><td>4433 + 143</td><td><b>4576</b></td><td class='lose'>6.53×</td><td>0.0178</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>142 / 96 = 1.48×</td><td>2.25×</td><td>4331 + 568</td><td><b>4899</b></td><td class='lose'>6.99×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>144 / 96 = 1.50×</td><td>2.28×</td><td>4325 + 1728</td><td><b>6053</b></td><td class='lose'>8.63×</td><td>0.0189</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.24×</td><td>4578 + 143</td><td><b>4721</b></td><td class='lose'>6.73×</td><td>0.0172</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>141 / 96 = 1.47×</td><td>2.21×</td><td>4585 + 564</td><td><b>5149</b></td><td class='lose'>7.35×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.27×</td><td>4514 + 2288</td><td><b>6802</b></td><td class='lose'>9.70×</td><td>0.0183</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>2129 + 2256</td><td><b>4385</b></td><td class='lose'>6.26×</td><td>0.0500</td></tr>
+</table>
+<h4>m = 16 <span class='muted'>（Pareto 前沿：latin_mesh · pim_mesh/I1 · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>3238</b></td><td>1.00×</td><td>—</td></tr>
+<tr><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span></td><td>batch/slot</td><td>114 / 96 = 1.19×</td><td>2.03×</td><td>6771 + 114</td><td><b>6885</b></td><td class='lose'>2.13×</td><td>0.0106</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>101 / 96 = 1.05×</td><td>1.47×</td><td>6724 + 202</td><td><b>6926</b></td><td class='lose'>2.14×</td><td>0.0178</td></tr>
+<tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>1.94×</td><td>6596 + 99</td><td><b>6695</b></td><td class='lose'>2.07×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>3122 + 11280</td><td><b>14402</b></td><td class='lose'>4.45×</td><td>0.0883</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>133 / 96 = 1.39×</td><td>1.93×</td><td>5702 + 133</td><td><b>5835</b></td><td class='lose'>1.80×</td><td>0.0178</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>131 / 96 = 1.36×</td><td>1.94×</td><td>5625 + 524</td><td><b>6149</b></td><td class='lose'>1.90×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>128 / 96 = 1.33×</td><td>1.89×</td><td>5690 + 1536</td><td><b>7226</b></td><td class='lose'>2.23×</td><td>0.0189</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>131 / 96 = 1.36×</td><td>1.88×</td><td>5980 + 131</td><td><b>6111</b></td><td class='lose'>1.89×</td><td>0.0172</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>127 / 96 = 1.32×</td><td>1.82×</td><td>5985 + 508</td><td><b>6493</b></td><td class='lose'>2.01×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>126 / 96 = 1.31×</td><td>1.85×</td><td>5870 + 2016</td><td><b>7886</b></td><td class='lose'>2.44×</td><td>0.0183</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>3142 + 2256</td><td><b>5398</b></td><td class='lose'>1.67×</td><td>0.0500</td></tr>
+</table>
+<p class='muted'>大图：<code>results/mesh_sched_pareto_alltoall.png</code></p>
+<h3>allgather</h3>
+<p class='muted'>每源一棵多播树（48 棵）。sync=等齐 48 个 request 后统一 grant；async=每 grant 一棵树。</p>
+<h4>m = 1 <span class='muted'>（Pareto 前沿：bvn_mesh · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>362</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.48×</td><td>1021 + 40</td><td><b>1061</b></td><td class='lose'>2.93×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>1.84×</td><td>1694 + 80</td><td><b>1774</b></td><td class='lose'>4.90×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.48×</td><td>1021 + 40</td><td><b>1061</b></td><td class='lose'>2.93×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>270 + 480</td><td><b>750</b></td><td class='lose'>2.07×</td><td>0.0732</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 41</td><td><b>1077</b></td><td class='lose'>2.98×</td><td>0.0047</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 164</td><td><b>1200</b></td><td class='lose'>3.31×</td><td>0.0049</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 656</td><td><b>1692</b></td><td class='lose'>4.67×</td><td>0.0053</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 42</td><td><b>1702</b></td><td class='lose'>4.70×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 168</td><td><b>1828</b></td><td class='lose'>5.05×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 672</td><td><b>2332</b></td><td class='lose'>6.44×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>232 + 96</td><td><b>328</b></td><td class='win'>0.91×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>1157</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.17×</td><td>1139 + 40</td><td><b>1179</b></td><td class=''>1.02×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>1.79×</td><td>1809 + 80</td><td><b>1889</b></td><td class='lose'>1.63×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.17×</td><td>1139 + 40</td><td><b>1179</b></td><td class=''>1.02×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>467 + 480</td><td><b>947</b></td><td class='win'>0.82×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 41</td><td><b>1156</b></td><td class='win'>1.00×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 164</td><td><b>1279</b></td><td class=''>1.11×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 656</td><td><b>1771</b></td><td class='lose'>1.53×</td><td>0.0053</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 42</td><td><b>1745</b></td><td class='lose'>1.51×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 168</td><td><b>1871</b></td><td class='lose'>1.62×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 672</td><td><b>2375</b></td><td class='lose'>2.05×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>514 + 96</td><td><b>610</b></td><td class='win'>0.53×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>4337</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>2.45×</td><td>1613 + 40</td><td><b>1653</b></td><td class='win'>0.38×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>1.62×</td><td>2271 + 80</td><td><b>2351</b></td><td class='win'>0.54×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>2.45×</td><td>1613 + 40</td><td><b>1653</b></td><td class='win'>0.38×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>1392 + 480</td><td><b>1872</b></td><td class='win'>0.43×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 41</td><td><b>1614</b></td><td class='win'>0.37×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 164</td><td><b>1737</b></td><td class='win'>0.40×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 656</td><td><b>2229</b></td><td class='win'>0.51×</td><td>0.0053</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 41</td><td><b>2288</b></td><td class='win'>0.53×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 164</td><td><b>2411</b></td><td class='win'>0.56×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 656</td><td><b>2903</b></td><td class='win'>0.67×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>1415 + 96</td><td><b>1511</b></td><td class='win'>0.35×</td><td>0.0416</td></tr>
+</table>
+<p class='muted'>大图：<code>results/mesh_sched_pareto_allgather.png</code></p>
+<h3>allreduce</h3>
+<p class='muted'>reduce-tree + broadcast-tree 两相，默认 sync barrier。</p>
+<h4>m = 1 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>107</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>43 / 40 = 1.07×</td><td>6.26×</td><td>384 + 43</td><td><b>427</b></td><td class='lose'>3.99×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>7.85×</td><td>387 + 40</td><td><b>427</b></td><td class='lose'>3.99×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>6.27×</td><td>441 + 40</td><td><b>481</b></td><td class='lose'>4.50×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>249 + 240</td><td><b>489</b></td><td class='lose'>4.57×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 42</td><td><b>350</b></td><td class='lose'>3.27×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 84</td><td><b>392</b></td><td class='lose'>3.66×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 336</td><td><b>644</b></td><td class='lose'>6.02×</td><td>0.0053</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.14×</td><td>451 + 42</td><td><b>493</b></td><td class='lose'>4.61×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.11×</td><td>455 + 84</td><td><b>539</b></td><td class='lose'>5.04×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.11×</td><td>455 + 336</td><td><b>791</b></td><td class='lose'>7.39×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>204 + 48</td><td><b>252</b></td><td class='lose'>2.36×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>247</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>43 / 40 = 1.07×</td><td>5.46×</td><td>448 + 43</td><td><b>491</b></td><td class='lose'>1.99×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>5.92×</td><td>475 + 40</td><td><b>515</b></td><td class='lose'>2.09×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>5.35×</td><td>508 + 40</td><td><b>548</b></td><td class='lose'>2.22×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>256 + 240</td><td><b>496</b></td><td class='lose'>2.01×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 42</td><td><b>406</b></td><td class='lose'>1.64×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 84</td><td><b>448</b></td><td class='lose'>1.81×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 336</td><td><b>700</b></td><td class='lose'>2.83×</td><td>0.0053</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>3.94×</td><td>499 + 42</td><td><b>541</b></td><td class='lose'>2.19×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>43 / 40 = 1.07×</td><td>4.71×</td><td>427 + 86</td><td><b>513</b></td><td class='lose'>2.08×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>43 / 40 = 1.07×</td><td>4.71×</td><td>427 + 344</td><td><b>771</b></td><td class='lose'>3.12×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>228 + 48</td><td><b>276</b></td><td class=''>1.12×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · pim_mesh/I1 · pim_mesh/I2 · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>811</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>43 / 40 = 1.07×</td><td>3.25×</td><td>841 + 43</td><td><b>884</b></td><td class=''>1.09×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.15×</td><td>889 + 40</td><td><b>929</b></td><td class=''>1.15×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>2.98×</td><td>931 + 40</td><td><b>971</b></td><td class=''>1.20×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>726 + 240</td><td><b>966</b></td><td class=''>1.19×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 41</td><td><b>794</b></td><td class='win'>0.98×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 82</td><td><b>835</b></td><td class=''>1.03×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 328</td><td><b>1081</b></td><td class=''>1.33×</td><td>0.0053</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.89×</td><td>839 + 41</td><td><b>880</b></td><td class=''>1.09×</td><td>0.0044</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.21×</td><td>752 + 82</td><td><b>834</b></td><td class=''>1.03×</td><td>0.0046</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.21×</td><td>752 + 328</td><td><b>1080</b></td><td class=''>1.33×</td><td>0.0050</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>675 + 48</td><td><b>723</b></td><td class='win'>0.89×</td><td>0.0416</td></tr>
+</table>
+<p class='muted'>大图：<code>results/mesh_sched_pareto_allreduce.png</code></p>
+<h3>broadcast</h3>
+<p class='muted'>单根多播树，控制消息最少（1 或 48），直径主导。</p>
+<h4>m = 1 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>139</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0016</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0063</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>182 + 10</td><td><b>192</b></td><td class=''>1.38×</td><td>0.0729</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 1</td><td><b>182</b></td><td class=''>1.31×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 12</td><td><b>193</b></td><td class=''>1.39×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 1</td><td><b>182</b></td><td class=''>1.31×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 12</td><td><b>193</b></td><td class=''>1.39×</td><td>0.0019</td></tr>
+<tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>181 + 2</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0415</td></tr>
+</table>
+<h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>280</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>183 + 1</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0016</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>183 + 1</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0063</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>183 + 1</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>183 + 10</td><td><b>193</b></td><td class='win'>0.69×</td><td>0.0729</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class='win'>0.65×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 12</td><td><b>194</b></td><td class='win'>0.69×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class='win'>0.65×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 12</td><td><b>194</b></td><td class='win'>0.69×</td><td>0.0019</td></tr>
+<tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>182 + 2</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0415</td></tr>
+</table>
+<h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>844</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>189 + 1</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0016</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>189 + 1</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0063</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>189 + 1</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>189 + 10</td><td><b>199</b></td><td class='win'>0.24×</td><td>0.0729</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 1</td><td><b>189</b></td><td class='win'>0.22×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 12</td><td><b>200</b></td><td class='win'>0.24×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 1</td><td><b>189</b></td><td class='win'>0.22×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 12</td><td><b>200</b></td><td class='win'>0.24×</td><td>0.0019</td></tr>
+<tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>188 + 2</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0415</td></tr>
+</table>
+<p class='muted'>大图：<code>results/mesh_sched_pareto_broadcast.png</code></p>
+<h3>reduce</h3>
+<p class='muted'>48→1 汇聚树，根节点 eject 端口是硬瓶颈（任何排程顺序都同样受限）。</p>
+<h4>m = 1 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>98</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>8.05×</td><td>418 + 40</td><td><b>458</b></td><td class='lose'>4.67×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>7.29×</td><td>460 + 40</td><td><b>500</b></td><td class='lose'>5.10×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>7.19×</td><td>464 + 40</td><td><b>504</b></td><td class='lose'>5.14×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>269 + 235</td><td><b>504</b></td><td class='lose'>5.14×</td><td>0.0732</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 41</td><td><b>435</b></td><td class='lose'>4.44×</td><td>0.0047</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 82</td><td><b>476</b></td><td class='lose'>4.86×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 328</td><td><b>722</b></td><td class='lose'>7.37×</td><td>0.0052</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.42×</td><td>649 + 41</td><td><b>690</b></td><td class='lose'>7.04×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.95×</td><td>563 + 82</td><td><b>645</b></td><td class='lose'>6.58×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.95×</td><td>563 + 328</td><td><b>891</b></td><td class='lose'>9.09×</td><td>0.0049</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>210 + 47</td><td><b>257</b></td><td class='lose'>2.62×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>175</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>8.04×</td><td>431 + 40</td><td><b>471</b></td><td class='lose'>2.69×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>5.74×</td><td>557 + 40</td><td><b>597</b></td><td class='lose'>3.41×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>5.55×</td><td>570 + 40</td><td><b>610</b></td><td class='lose'>3.49×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>277 + 235</td><td><b>512</b></td><td class='lose'>2.93×</td><td>0.0732</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 41</td><td><b>478</b></td><td class='lose'>2.73×</td><td>0.0047</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 82</td><td><b>519</b></td><td class='lose'>2.97×</td><td>0.0049</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 328</td><td><b>765</b></td><td class='lose'>4.37×</td><td>0.0052</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.43×</td><td>687 + 41</td><td><b>728</b></td><td class='lose'>4.16×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.40×</td><td>682 + 82</td><td><b>764</b></td><td class='lose'>4.37×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.40×</td><td>682 + 328</td><td><b>1010</b></td><td class='lose'>5.77×</td><td>0.0049</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>250 + 47</td><td><b>297</b></td><td class='lose'>1.70×</td><td>0.0416</td></tr>
+</table>
+<h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · greedy_ff）</span></h4>
+<table>
+<tr><th>算法</th><th>类别</th><th>轮次 / 下界</th><th>护航比<br/>
+<span class='muted'>Σ轮时长 ÷ 实际 span</span></th>
+<th>DES + T_sched</th><th>makespan</th><th>vs 基线</th><th>面积/节点</th></tr>
+<tr class='base'><td><b>FIFO 基线</b><br/><span class='muted'>无 request–grant</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><b>652</b></td><td>1.00×</td><td>—</td></tr>
+<tr class=hl><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span> 🏅</td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>4.15×</td><td>800 + 40</td><td><b>840</b></td><td class=''>1.29×</td><td>0.0018</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.34×</td><td>973 + 40</td><td><b>1013</b></td><td class='lose'>1.55×</td><td>0.0065</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.25×</td><td>996 + 40</td><td><b>1036</b></td><td class='lose'>1.59×</td><td>0.0023</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>746 + 235</td><td><b>981</b></td><td class='lose'>1.50×</td><td>0.0732</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 41</td><td><b>840</b></td><td class=''>1.29×</td><td>0.0047</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 82</td><td><b>881</b></td><td class=''>1.35×</td><td>0.0049</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 328</td><td><b>1127</b></td><td class='lose'>1.73×</td><td>0.0052</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.70×</td><td>1026 + 41</td><td><b>1067</b></td><td class='lose'>1.64×</td><td>0.0044</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.68×</td><td>1042 + 82</td><td><b>1124</b></td><td class='lose'>1.72×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.68×</td><td>1042 + 328</td><td><b>1370</b></td><td class='lose'>2.10×</td><td>0.0049</td></tr>
+<tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>713 + 47</td><td><b>760</b></td><td class=''>1.17×</td><td>0.0416</td></tr>
+</table>
+<p class='muted'>大图：<code>results/mesh_sched_pareto_reduce.png</code></p>
+
+<h3>4.7 集中调度器资源表（alltoall m=4 为参考点）</h3>
+<table>
+<tr><th>算法</th><th>类别</th><th>状态比特</th><th>比较器位宽和</th>
+<th>门级深度</th><th>相关步数</th><th>T_sched (cy)</th><th>面积/节点</th></tr>
+<tr><td>bvn_mesh<br/><span class='muted'>LDPS 轮次划分 (first-fit)</span></td><td>batch/slot</td><td>31,724</td><td>3,120</td><td>5</td><td>114</td><td>114</td><td><b>0.0106</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：residual_set:27072 + free_at_registers:3120 + round_table:1368 + round_link_bitmap:164</td></tr>
+<tr><td>mwm_mesh<br/><span class='muted'>最大权重轮次 (pressure)</span></td><td>batch/slot</td><td>46,376</td><td>16,656</td><td>17</td><td>101</td><td>202</td><td><b>0.0178</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：residual_set:27072 + demand_matrix:13824 + free_at_registers:3120 + round_table:1212 + link_load_counters:984 + round_link_bitmap:164</td></tr>
+<tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>5,314</td><td>3,120</td><td>2</td><td>99</td><td>99</td><td><b>0.0023</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：free_at_registers:3120 + rom_rounds:2030 + round_link_bitmap:164</td></tr>
+<tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>240,288</td><td>66,576</td><td>11</td><td>11,280</td><td>11,280</td><td><b>0.0883</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：interval_tables:199680 + candidate_list:27072 + pressure_weights:13536</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span></td><td>incremental/slot</td><td>53,480</td><td>5,088</td><td>9</td><td>143</td><td>143</td><td><b>0.0178</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：residual_set:27072 + request_bitmap:20992 + free_at_registers:3120 + rr_pointers:1968 + round_link_bitmap:164 + grant_vector:164</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span></td><td>incremental/slot</td><td>51,544</td><td>5,088</td><td>11</td><td>143</td><td>143</td><td><b>0.0172</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：residual_set:27072 + request_bitmap:20992 + free_at_registers:3120 + round_link_bitmap:164 + grant_vector:164 + lfsr:32</td></tr>
+<tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>126,912</td><td>53,040</td><td>11</td><td>2,256</td><td>2,256</td><td><b>0.0500</b></td></tr><tr><td colspan='8' class='muted' style='font-size:.78rem'>状态分项：interval_tables:99840 + candidate_list:27072</td></tr>
+</table>
+<p class="muted">面积 = (状态比特 + 0.6×比较器位) × 标定系数 ÷ 48；ROM 位按 0.15 折算。
+标定点：<code>greedy_ff</code> @ 2256 流 = 0.0500，与既有 <code>ARB_AREA['ca']</code> 一致 ✓。
+门级深度按 12 级/周期折算为「每步周期数」。</p>
+
+<h3>4.8 λ 敏感度：谁在哪个权重区间夺走前沿</h3>
+<p>把两轴合成一个标量目标 <code>makespan / makespan* + λ · 面积</code>（λ = 每单位面积愿意付的归一周期数），
+扫 λ 看冠军如何换手：</p>
+<table>
+<tr><th>pattern</th><th>m</th><th>λ=0.0</th><th>λ=0.25</th><th>λ=0.5</th><th>λ=1.0</th><th>λ=2.0</th><th>λ=4.0</th><th>λ=8.0</th><th>λ=16.0</th></tr>
+<tr><td>alltoall</td><td>1</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>latin</td></tr>
+<tr><td>alltoall</td><td>4</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td><td>islip</td><td>islip</td><td>latin</td></tr>
+<tr><td>alltoall</td><td>16</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td><td>islip</td><td>latin</td></tr>
+<tr><td>allgather</td><td>1</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td></tr>
+<tr><td>allgather</td><td>4</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td></tr>
+<tr><td>allgather</td><td>16</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td><td>islip</td><td>islip</td><td>bvn</td></tr>
+<tr><td>allreduce</td><td>1</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td></tr>
+<tr><td>allreduce</td><td>4</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td></tr>
+<tr><td>allreduce</td><td>16</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>islip</td><td>islip</td><td>islip</td></tr>
+<tr><td>broadcast</td><td>1</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td></tr>
+<tr><td>broadcast</td><td>4</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td></tr>
+<tr><td>broadcast</td><td>16</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td><td>islip</td></tr>
+<tr><td>reduce</td><td>1</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td></tr>
+<tr><td>reduce</td><td>4</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>bvn</td></tr>
+<tr><td>reduce</td><td>16</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>greedy_ff</td><td>bvn</td><td>bvn</td><td>bvn</td></tr>
+</table>
+<p><img src="mesh_sched_lambda.png" alt="lambda sensitivity" style="width:100%;max-width:1100px"/></p>
+<p>λ ≲ 2（时间优先）时 <code>greedy_ff</code> 通吃；λ ≳ 8（面积优先）时
+alltoall 换手给 <code>latin_mesh</code>、树形 collective 换手给 <code>bvn_mesh</code>；
+broadcast 全程由 <code>islip_mesh</code> 持有（只有 1 条流，一致性 accept 100% 成功，
+调度器退化成一次查表）。<code>bcfs</code> 与 <code>mwm_mesh</code> 在<b>任何</b> λ 下都不是冠军。</p>
+
+<h3>4.9 Torus 对照（σ=2 的影响）</h3>
+<table>
+<tr><th>pattern</th><th>m</th><th>mesh 最优</th><th>torus 最优</th><th>torus/mesh</th>
+<th>轮次下界 max_e load(e)</th></tr>
+<tr><td>alltoall</td><td>1</td><td>islip_mesh<br/><b>4238</b></td><td>islip_mesh<br/><b>2328</b></td><td>0.55×</td><td>96 → 60</td></tr>
+<tr><td>alltoall</td><td>4</td><td>greedy_ff<br/><b>4385</b></td><td>islip_mesh<br/><b>2773</b></td><td>0.63×</td><td>96 → 60</td></tr>
+<tr><td>alltoall</td><td>16</td><td>greedy_ff<br/><b>5398</b></td><td>mwm_mesh<br/><b>4516</b></td><td>0.84×</td><td>96 → 60</td></tr>
+<tr><td>allgather</td><td>1</td><td>greedy_ff<br/><b>328</b></td><td>greedy_ff<br/><b>298</b></td><td>0.91×</td><td>40 → 24</td></tr>
+<tr><td>allgather</td><td>4</td><td>greedy_ff<br/><b>610</b></td><td>islip_mesh<br/><b>601</b></td><td>0.99×</td><td>40 → 24</td></tr>
+<tr><td>allgather</td><td>16</td><td>greedy_ff<br/><b>1511</b></td><td>bvn_mesh<br/><b>1166</b></td><td>0.77×</td><td>40 → 24</td></tr>
+<tr><td>allreduce</td><td>1</td><td>greedy_ff<br/><b>252</b></td><td>greedy_ff<br/><b>207</b></td><td>0.82×</td><td>40 → 24</td></tr>
+<tr><td>allreduce</td><td>4</td><td>greedy_ff<br/><b>276</b></td><td>greedy_ff<br/><b>296</b></td><td>1.07×</td><td>40 → 24</td></tr>
+<tr><td>allreduce</td><td>16</td><td>greedy_ff<br/><b>723</b></td><td>greedy_ff<br/><b>829</b></td><td>1.15×</td><td>40 → 24</td></tr>
+<tr><td>broadcast</td><td>1</td><td>islip_mesh<br/><b>182</b></td><td>islip_mesh<br/><b>143</b></td><td>0.79×</td><td>1 → 1</td></tr>
+<tr><td>broadcast</td><td>4</td><td>islip_mesh<br/><b>183</b></td><td>islip_mesh<br/><b>144</b></td><td>0.79×</td><td>1 → 1</td></tr>
+<tr><td>broadcast</td><td>16</td><td>islip_mesh<br/><b>189</b></td><td>islip_mesh<br/><b>150</b></td><td>0.79×</td><td>1 → 1</td></tr>
+<tr><td>reduce</td><td>1</td><td>greedy_ff<br/><b>257</b></td><td>greedy_ff<br/><b>200</b></td><td>0.78×</td><td>40 → 24</td></tr>
+<tr><td>reduce</td><td>4</td><td>greedy_ff<br/><b>297</b></td><td>greedy_ff<br/><b>299</b></td><td>1.01×</td><td>40 → 24</td></tr>
+<tr><td>reduce</td><td>16</td><td>greedy_ff<br/><b>760</b></td><td>greedy_ff<br/><b>857</b></td><td>1.13×</td><td>40 → 24</td></tr>
+</table>
+<p>torus 跳数少（直径 55 vs 94）压低轮时长，但 σ=2 使每轮链路占用翻倍；
+轮次<b>下界</b>由链路负载决定，torus 链路多 17% 故下界略降。两个效应在树形 pattern 上
+torus 占优，在对分带宽绑定的长消息 alltoall 上被 σ=2 抵消。</p>
+
+<h3>4.10 本节验证清单</h3>
+<ul>
+<li>all_schedules_conflict_free：✓ <span class='muted'>660/660 行 reservation 无重叠</span></li>
+<li>bufferless_zero_residency：✓ <span class='muted'>330 个 bufferless 回放全部 max_residency=0 且预约窗口自洽</span></li>
+<li>rounds_ge_max_link_load：✓ <span class='muted'>LDPS 轮次数 ≥ max_e load(e)（Birkhoff 置换数界类比）：540/540</span></li>
+<li>phase_rounds_link_disjoint：✓ <span class='muted'>相位型算法同轮流的链路集独立复核两两不相交：540/540</span></li>
+<li>area_model_calibrated：✓ <span class='muted'>greedy_ff 在标定点（alltoall, 2256 流）归一面积 = ARB_AREA['ca']=0.05（实测 [0.05]）</span></li>
+<li>slot_class_cheaper_in_time：✓ <span class='muted'>同一工作负载下（I=1），相位型的相关仲裁步数（≈轮次数）严格少于流水型（≈流数）：60/60</span></li>
+<li>path_unanimity_collapses_on_alltoall：✓ <span class='muted'>alltoall 下逐链路 RR 的「全路径一致 accept」成功率 最高仅 0.1862，故 mesh 必须补一个路径级顺序分配步（否则活锁）</span></li>
+<li>voq_request_discipline：✓ <span class='muted'>alltoall 严格一 request = 一 VOQ：每源 N−1=47 条、全网 N·(N−1)=2256 条控制消息（实测 n_req=2256）</span></li>
+</ul>
+
+
+<h2>5. 按 pattern × m 归类的主结果（makespan，cycles）</h2>
 <p>每个 pattern 下按消息大小 <code>m ∈ {1, 4, 16}</code> 各一张表；
 表首行是<strong>分组交换基线</strong>（FIFO、无 request–grant、源端自由注入），其后纵向排列 CA / CA-batch / DA。
 「vs 基线」= 该配置 makespan ÷ 同拓扑、同 pattern、同 m 的 FIFO 基线；
@@ -382,7 +834,7 @@ CA / CA-batch 的 alltoall 展示聚合配置；allgather 展示 sync barrier。
 <tr><td>DA（分布式）</td><td>bufferless</td><td><span class='win'>651</span></td><td>1.00×</td><td><span class='win'>763</span></td><td>0.98×</td><td class='muted'>req=47 · t_req=52</td></tr>
 </table>
 
-<h2>5. Allgather：同步 barrier vs 异步多播树</h2>
+<h2>6. Allgather：同步 barrier vs 异步多播树</h2>
 <table>
 <tr><th>topo</th><th>plane</th><th>m</th><th>sync</th><th>async tree</th><th>Δ(sync−async)</th></tr>
 <tr><td>mesh</td><td>bufferable</td><td>1</td><td>318</td><td>252</td><td>66</td></tr>
@@ -400,7 +852,7 @@ CA / CA-batch 的 alltoall 展示聚合配置；allgather 展示 sync barrier。
 </table>
 <p>异步树避免了「等最远节点」的 barrier 税，但树间冲突使数据面可能更长；同步把冲突集中到统一排程，大 m 时摊薄 R_rg。</p>
 
-<h2>6. Mesh vs Torus</h2>
+<h2>7. Mesh vs Torus</h2>
 <ul>
 <li>对分带宽绑定的大消息 alltoall：二者数据下界相同（bisect 自检 ✓）。</li>
 <li>小消息 / 树形（broadcast、reduce）：torus 直径 55 vs mesh 94，DA bufferless broadcast m=1 为
@@ -411,7 +863,7 @@ vs mesh
 <li>bufferable torus 需 <b>2 VC</b>（dateline）→ 缓冲面积约翻倍；bufferless 靠时隙预约无需 VC。</li>
 </ul>
 
-<h2>7. 面积（归一化 IQ-XY = 1.0）</h2>
+<h2>8. 面积（归一化 IQ-XY = 1.0）</h2>
 <table>
 <tr><th>topo</th><th>plane</th><th>arb</th><th>total</th><th>buffer</th><th>arbiter</th><th>private_ctrl_noc</th></tr>
 <tr><td>mesh</td><td>bufferable</td><td>ca</td><td>1.067</td><td>0.347</td><td>0.050</td><td>0.120</td></tr>
@@ -429,7 +881,7 @@ vs mesh
 私有控制 NoC 面积按窄 flit 同构网络摊到每节点 0.12（相对 IQ-XY=1.0），属数据面金属恒定预算之外的增量。
 bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基线无控制 NoC。</p>
 
-<h2>8. 其他敏感度</h2>
+<h2>9. 其他敏感度</h2>
 
 <h3>W_out 敏感度（mesh · bufferable · CA · alltoall 聚合 · m=4）</h3>
 <table><tr><th>w_out</th><th>makespan</th></tr><tr><td>1</td><td>2669</td></tr><tr><td>4</td><td>754</td></tr><tr><td>16</td><td>709</td></tr><tr><td>∞</td><td>713</td></tr></table>
@@ -441,7 +893,7 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <table><tr><th>pattern</th><th>makespan</th><th>torus_delay_scale</th></tr><tr><td>alltoall</td><td>2169</td><td>2</td></tr><tr><td>broadcast</td><td>175</td><td>2</td></tr><tr><td>allgather</td><td>2022</td><td>2</td></tr></table>
 
 
-<h2>9. 验证清单</h2>
+<h2>10. 验证清单</h2>
 <ul>
 <li>对分带宽相等：✓</li>
 <li>torus σ=0.5 flit/cy：✓</li>
@@ -457,7 +909,7 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 · 事件驱动近似行的偏差 32 组（保守上界，见下注）</li>
 </ul>
 
-<h3>9.1 CA-batch / BCFS 专项验证</h3>
+<h3>10.1 CA-batch / BCFS 专项验证</h3>
 <ul>
 <li>中心调度器坐标一致为 (4,0)：✓（nid=4）</li>
 <li>控制平面 XY 维序路由：✓</li>
@@ -472,11 +924,11 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 ✓ · 平均增益 6.1%</li>
 <li>全体平均增益 4.1% · 最大 18.1%；
 多树 pattern 有 0 组反向（最差 +0.0%）——
-在线窗口局部最优的固有代价，见 §10。</li>
+在线窗口局部最优的固有代价，见 §11。</li>
 </ul>
 <p class="muted">The strict check covers only pairs whose bufferable side ran the cycle-accurate DES. Rows marked approx='event_driven_fast' (48-tree allgather, and 2256-flow alltoall) expand trees into per-destination unicast and admit flits greedily per link, which over-counts shared prefixes and head-of-line stalls; on torus (sigma=2) that inflation is largest. Those rows are conservative upper bounds, not monotonicity failures.</p>
 
-<h2>10. 已知局限</h2>
+<h2>11. 已知局限</h2>
 <ul>
 <li>数据面金属线：按链路计数 torus/mesh≈1.17，非严格恒定；折叠线长×2 用 <code>torus_delay_scale=2</code> 对照。</li>
 <li>私有控制 NoC 是<b>额外</b>金属/面积（每节点 +0.12），不计入 mesh/torus 数据面对分带宽恒定约束。</li>
@@ -485,14 +937,28 @@ bufferless 扣掉数据 VC 缓冲；CA 仲裁器开销 0.05，DA 0.03；FIFO 基
 <li><b>BCFS 是在线窗口局部最优</b>：CA 只能给眼前这一批打分，无法预知后续窗口。
 多树 pattern（mesh allgather m=16）上出现 0 组「本批更紧、全局更慢」的反向案例（最差 +0.0%）。
 点对点 pattern 上未出现。若允许离线全局排程（所有 request 先到齐，即 W=∞）可消除此效应。</li>
-<li>BCFS 的路径是 XY 维序固定的；允许自适应路由会扩大可行域，但需重做 CDG 无环性论证。</li>
+<li>BCFS 的路径是 XY 维序固定的；允许自适应路由会扩大可行域，但需重做 CDG 无环性论证。
+§4 的全部 7 个成员同样固定 XY，因此 LDPS 的「链路不相交」判定不含路由自由度。</li>
+<li><b>§4 的相关仲裁步数是结构性计数，不是综合结果</b>：门级深度按 12 级/周期折算，
+比较器面积按 0.6 flop-bit/位估。绝对值有系数不确定性，但两类算法 Θ(轮次数) vs Θ(流数) 的
+数量级差异不依赖标定，λ 敏感度表给出了系数偏差下的冠军换手边界。</li>
+<li><b>§4 的相位型成员含一个「路径级顺序补齐」步</b>：纯逐链路 RR 的全路径一致 accept 在 mesh 上
+成功率趋零（§4.2），若严格只保留分布式一致性会活锁，因此实现里补了按优先级的顺序首次适配。
+这使 <code>I</code> 的收益被压平——是 mesh 的结构性结论，而非实现取舍。</li>
+<li><b><code>bcfs</code> 的多起点按串行重跑计价</b>（5×流数步）。若改为 5 份硬件并行，
+时间回到 1×而面积升到约 5×，在 Pareto 图上是沿前沿平移而非跨越，结论（被 <code>greedy_ff</code> 支配）不变。</li>
 <li>reduce = gather + PE 本地归约（无网内算术），对齐 ADR-002/Arch-A2。</li>
 </ul>
 
-<h2>11. 文件</h2>
+<h2>12. 文件</h2>
 <ul>
 <li><code>utils/rg_topo.py</code> · <code>rg_bounds.py</code> · <code>rg_collectives.py</code> · <code>rg_arbiter.py</code> · <code>rg_batch_sched.py</code>（错峰+时间窗+BCFS）</li>
 <li><code>utils/dse_rg_noc_8x6.py</code> → <code>results/rg_noc_8x6.json</code></li>
+<li><b>§4 算法族</b>：<code>utils/rg_mesh_sched.py</code>（LDPS 原语 + 7 个成员）·
+<code>rg_sched_cost.py</code>（解析面积 + T_sched）·
+<code>dse_mesh_sched_pareto.py</code> → <code>results/mesh_sched_pareto.json</code> ·
+<code>gen_mesh_sched_pareto_plot.py</code> → <code>results/mesh_sched_pareto*.png</code>、
+<code>mesh_sched_lambda.png</code></li>
 <li><code>docs/phase-7-exploration/rg-noc-8x6.md</code></li>
 </ul>
 </body></html>
