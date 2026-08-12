@@ -191,7 +191,16 @@ def comparators(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
 def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
                 mean_hops: float = 6.0, conflict_domain: str = "free_at",
                 n_nodes: int = 48) -> int:
-    """Combinational depth of ONE arbitration decision."""
+    """Combinational depth of ONE arbitration decision.
+
+    For the iterative matchers this is the depth of ONE iteration, not of all
+    `iters` of them: an iteration reads the previous iteration's pointers, so
+    iterations are dependent steps and `dependent_steps()` is where they are
+    charged. Multiplying here as well would price them quadratically. `iters`
+    stays in the signature because a caller passing it is asking about a
+    specific configuration, and because the non-iterative algorithms below
+    document by their absence that they ignore it.
+    """
     F = max(2, n_flows)
     if algo in ("islip2d_mesh", "islip2d_ring"):
         # grant RR tree over sources, then the path-wide AND that makes an
@@ -201,16 +210,15 @@ def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
             d += 2                     # two-phase alignment on top of the AND
         if conflict_domain == "interval":
             d += _ceil_log2(DEPTH)
-        return max(1, iters) * d
+        return d
     if algo == "islip_mesh":
         # per-link RR tree + the path-wide AND reduce that makes a mesh accept
         req_per_link = max(2, int(F * mean_hops / max(1, n_links)))
-        return max(1, iters) * (_ceil_log2(req_per_link)
-                                + _ceil_log2(int(mean_hops) + 1))
+        return _ceil_log2(req_per_link) + _ceil_log2(int(mean_hops) + 1)
     if algo == "pim_mesh":
         req_per_link = max(2, int(F * mean_hops / max(1, n_links)))
-        return max(1, iters) * (_ceil_log2(req_per_link) + 2
-                                + _ceil_log2(int(mean_hops) + 1))
+        return (_ceil_log2(req_per_link) + 2
+                + _ceil_log2(int(mean_hops) + 1))
     if algo in ("bvn_mesh", "mwm_mesh"):
         # link-bitmap AND over the path + (mwm) a weight argmax tree
         d = _ceil_log2(int(mean_hops) + 1) + 2

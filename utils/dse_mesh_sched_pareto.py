@@ -40,6 +40,12 @@ PLANES = ("bufferless", "bufferable")
 ITER_SWEEP = (1, 2, 4)
 LAMBDAS = (0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)
 
+# This study fixes the request discipline at one request = one VOQ (see `meta`
+# below and the `voq_request_discipline` check), so it cannot host algorithms
+# that redefine the request. `islip2d_mesh` sends one residual bitmap per
+# source instead, and lives in dse_islip2d_8x6.py with its own baselines.
+SWEEP_ALGOS = tuple(a for a in ALL_ALGOS if a != "islip2d_mesh")
+
 OUT = Path(__file__).resolve().parent.parent / "results" / "mesh_sched_pareto.json"
 
 
@@ -174,7 +180,7 @@ def run_sweep(quick: bool = False) -> dict[str, Any]:
             for pattern in patterns:
                 for m in ms:
                     fifo_mk = fifo_cache[(topo_kind, pattern, m)]
-                    for algo in ALL_ALGOS:
+                    for algo in SWEEP_ALGOS:
                         it_list = (ITER_SWEEP
                                    if algo in ("islip_mesh", "pim_mesh")
                                    else (1,))
@@ -199,7 +205,7 @@ def run_sweep(quick: bool = False) -> dict[str, Any]:
             "generated": time.strftime("%Y-%m-%d %H:%M:%S"),
             "patterns": list(patterns), "ms": list(ms),
             "topos": list(topos), "planes": list(planes),
-            "algos": list(ALL_ALGOS), "iter_sweep": list(ITER_SWEEP),
+            "algos": list(SWEEP_ALGOS), "iter_sweep": list(ITER_SWEEP),
             "lambdas": list(LAMBDAS),
             "theory": {
                 "request_unit": "one request = one VOQ; each source holds "

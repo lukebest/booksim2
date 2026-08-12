@@ -219,7 +219,7 @@ J 增大时离散度线性增长，R_rg 随之上升，但 BCFS 增益<b>下降<
 
 <h2>4. 2D mesh 链路带宽与空间调度算法族（类 iSLIP / BvN）</h2>
 <p class="muted">数据 <code>results/mesh_sched_pareto.json</code> · 660 行 ·
-生成于 2026-08-11 15:22:21</p>
+生成于 2026-08-12 10:02:58</p>
 <p><b>Request 口径（硬约束）</b>：<b>一条 request = 一条 VOQ</b>。单播 alltoall 下每个源节点持有 <code>N−1=47</code> 条 <code>VOQ[s→d]</code>，全网 <code>N·(N−1)=2256</code> 条控制消息（实测 <code>n_request_units=2256</code>，<code>aggregate=False</code>）。调度与授权均以 VOQ 为粒度；不做「每源聚合一条」。</p>
 
 <h3>4.1 从交叉开关到 mesh：VOQ → LDPS</h3>
@@ -313,11 +313,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>2.38×</td><td>5134 + 99</td><td><b>5233</b></td><td class='lose'>27.26×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>2061 + 11280</td><td><b>13341</b></td><td class='lose'>69.48×</td><td>0.0883</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>156 / 96 = 1.62×</td><td>2.45×</td><td>4082 + 156</td><td><b>4238</b></td><td class='lose'>22.07×</td><td>0.0178</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>158 / 96 = 1.65×</td><td>2.52×</td><td>3964 + 632</td><td><b>4596</b></td><td class='lose'>23.94×</td><td>0.0182</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>156 / 96 = 1.62×</td><td>2.44×</td><td>4022 + 1872</td><td><b>5894</b></td><td class='lose'>30.70×</td><td>0.0189</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>158 / 96 = 1.65×</td><td>2.52×</td><td>3964 + 316</td><td><b>4280</b></td><td class='lose'>22.29×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>156 / 96 = 1.62×</td><td>2.44×</td><td>4022 + 624</td><td><b>4646</b></td><td class='lose'>24.20×</td><td>0.0189</td></tr>
 <tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>150 / 96 = 1.56×</td><td>2.36×</td><td>4196 + 150</td><td><b>4346</b></td><td class='lose'>22.64×</td><td>0.0172</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.42×</td><td>4164 + 608</td><td><b>4772</b></td><td class='lose'>24.85×</td><td>0.0176</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.50×</td><td>4079 + 2432</td><td><b>6511</b></td><td class='lose'>33.91×</td><td>0.0183</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.42×</td><td>4164 + 304</td><td><b>4468</b></td><td class='lose'>23.27×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>152 / 96 = 1.58×</td><td>2.50×</td><td>4079 + 608</td><td><b>4687</b></td><td class='lose'>24.41×</td><td>0.0183</td></tr>
 <tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>1997 + 2256</td><td><b>4253</b></td><td class='lose'>22.15×</td><td>0.0500</td></tr>
 </table>
 <h4>m = 4 <span class='muted'>（Pareto 前沿：latin_mesh · pim_mesh/I1 · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -331,11 +331,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>2.26×</td><td>5426 + 99</td><td><b>5525</b></td><td class='lose'>7.88×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>2135 + 11280</td><td><b>13415</b></td><td class='lose'>19.14×</td><td>0.0883</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.26×</td><td>4433 + 143</td><td><b>4576</b></td><td class='lose'>6.53×</td><td>0.0178</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>142 / 96 = 1.48×</td><td>2.25×</td><td>4331 + 568</td><td><b>4899</b></td><td class='lose'>6.99×</td><td>0.0182</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>144 / 96 = 1.50×</td><td>2.28×</td><td>4325 + 1728</td><td><b>6053</b></td><td class='lose'>8.63×</td><td>0.0189</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>142 / 96 = 1.48×</td><td>2.25×</td><td>4331 + 284</td><td><b>4615</b></td><td class='lose'>6.58×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>144 / 96 = 1.50×</td><td>2.28×</td><td>4325 + 576</td><td><b>4901</b></td><td class='lose'>6.99×</td><td>0.0189</td></tr>
 <tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.24×</td><td>4578 + 143</td><td><b>4721</b></td><td class='lose'>6.73×</td><td>0.0172</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>141 / 96 = 1.47×</td><td>2.21×</td><td>4585 + 564</td><td><b>5149</b></td><td class='lose'>7.35×</td><td>0.0176</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.27×</td><td>4514 + 2288</td><td><b>6802</b></td><td class='lose'>9.70×</td><td>0.0183</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>141 / 96 = 1.47×</td><td>2.21×</td><td>4585 + 282</td><td><b>4867</b></td><td class='lose'>6.94×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>143 / 96 = 1.49×</td><td>2.27×</td><td>4514 + 572</td><td><b>5086</b></td><td class='lose'>7.26×</td><td>0.0183</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>2129 + 2256</td><td><b>4385</b></td><td class='lose'>6.26×</td><td>0.0500</td></tr>
 </table>
 <h4>m = 16 <span class='muted'>（Pareto 前沿：latin_mesh · pim_mesh/I1 · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -349,11 +349,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr class=hl><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span> 🏅</td><td>batch/slot</td><td>99 / 96 = 1.03×</td><td>1.94×</td><td>6596 + 99</td><td><b>6695</b></td><td class='lose'>2.07×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>3122 + 11280</td><td><b>14402</b></td><td class='lose'>4.45×</td><td>0.0883</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>133 / 96 = 1.39×</td><td>1.93×</td><td>5702 + 133</td><td><b>5835</b></td><td class='lose'>1.80×</td><td>0.0178</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>131 / 96 = 1.36×</td><td>1.94×</td><td>5625 + 524</td><td><b>6149</b></td><td class='lose'>1.90×</td><td>0.0182</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>128 / 96 = 1.33×</td><td>1.89×</td><td>5690 + 1536</td><td><b>7226</b></td><td class='lose'>2.23×</td><td>0.0189</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>131 / 96 = 1.36×</td><td>1.94×</td><td>5625 + 262</td><td><b>5887</b></td><td class='lose'>1.82×</td><td>0.0182</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>128 / 96 = 1.33×</td><td>1.89×</td><td>5690 + 512</td><td><b>6202</b></td><td class='lose'>1.92×</td><td>0.0189</td></tr>
 <tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>131 / 96 = 1.36×</td><td>1.88×</td><td>5980 + 131</td><td><b>6111</b></td><td class='lose'>1.89×</td><td>0.0172</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>127 / 96 = 1.32×</td><td>1.82×</td><td>5985 + 508</td><td><b>6493</b></td><td class='lose'>2.01×</td><td>0.0176</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>126 / 96 = 1.31×</td><td>1.85×</td><td>5870 + 2016</td><td><b>7886</b></td><td class='lose'>2.44×</td><td>0.0183</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>127 / 96 = 1.32×</td><td>1.82×</td><td>5985 + 254</td><td><b>6239</b></td><td class='lose'>1.93×</td><td>0.0176</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>126 / 96 = 1.31×</td><td>1.85×</td><td>5870 + 504</td><td><b>6374</b></td><td class='lose'>1.97×</td><td>0.0183</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>3142 + 2256</td><td><b>5398</b></td><td class='lose'>1.67×</td><td>0.0500</td></tr>
 </table>
 <p class='muted'>大图：<code>results/mesh_sched_pareto_alltoall.png</code></p>
@@ -370,11 +370,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.48×</td><td>1021 + 40</td><td><b>1061</b></td><td class='lose'>2.93×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>270 + 480</td><td><b>750</b></td><td class='lose'>2.07×</td><td>0.0732</td></tr>
 <tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 41</td><td><b>1077</b></td><td class='lose'>2.98×</td><td>0.0047</td></tr>
-<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 164</td><td><b>1200</b></td><td class='lose'>3.31×</td><td>0.0049</td></tr>
-<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 656</td><td><b>1692</b></td><td class='lose'>4.67×</td><td>0.0053</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 82</td><td><b>1118</b></td><td class='lose'>3.09×</td><td>0.0049</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.02×</td><td>1036 + 164</td><td><b>1200</b></td><td class='lose'>3.31×</td><td>0.0053</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 42</td><td><b>1702</b></td><td class='lose'>4.70×</td><td>0.0044</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 168</td><td><b>1828</b></td><td class='lose'>5.05×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 672</td><td><b>2332</b></td><td class='lose'>6.44×</td><td>0.0050</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 84</td><td><b>1744</b></td><td class='lose'>4.82×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.92×</td><td>1660 + 168</td><td><b>1828</b></td><td class='lose'>5.05×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>232 + 96</td><td><b>328</b></td><td class='win'>0.91×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -388,11 +388,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>3.17×</td><td>1139 + 40</td><td><b>1179</b></td><td class=''>1.02×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>467 + 480</td><td><b>947</b></td><td class='win'>0.82×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 41</td><td><b>1156</b></td><td class='win'>1.00×</td><td>0.0047</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 164</td><td><b>1279</b></td><td class=''>1.11×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 656</td><td><b>1771</b></td><td class='lose'>1.53×</td><td>0.0053</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 82</td><td><b>1197</b></td><td class=''>1.03×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.91×</td><td>1115 + 164</td><td><b>1279</b></td><td class=''>1.11×</td><td>0.0053</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 42</td><td><b>1745</b></td><td class='lose'>1.51×</td><td>0.0044</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 168</td><td><b>1871</b></td><td class='lose'>1.62×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 672</td><td><b>2375</b></td><td class='lose'>2.05×</td><td>0.0050</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 84</td><td><b>1787</b></td><td class='lose'>1.54×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>1.95×</td><td>1703 + 168</td><td><b>1871</b></td><td class='lose'>1.62×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>514 + 96</td><td><b>610</b></td><td class='win'>0.53×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -406,11 +406,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>40 / 40 = 1.00×</td><td>2.45×</td><td>1613 + 40</td><td><b>1653</b></td><td class='win'>0.38×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>1392 + 480</td><td><b>1872</b></td><td class='win'>0.43×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 41</td><td><b>1614</b></td><td class='win'>0.37×</td><td>0.0047</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 164</td><td><b>1737</b></td><td class='win'>0.40×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 656</td><td><b>2229</b></td><td class='win'>0.51×</td><td>0.0053</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 82</td><td><b>1655</b></td><td class='win'>0.38×</td><td>0.0049</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.36×</td><td>1573 + 164</td><td><b>1737</b></td><td class='win'>0.40×</td><td>0.0053</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 41</td><td><b>2288</b></td><td class='win'>0.53×</td><td>0.0044</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 164</td><td><b>2411</b></td><td class='win'>0.56×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 656</td><td><b>2903</b></td><td class='win'>0.67×</td><td>0.0050</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 82</td><td><b>2329</b></td><td class='win'>0.54×</td><td>0.0046</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>1.65×</td><td>2247 + 164</td><td><b>2411</b></td><td class='win'>0.56×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>1415 + 96</td><td><b>1511</b></td><td class='win'>0.35×</td><td>0.0416</td></tr>
 </table>
 <p class='muted'>大图：<code>results/mesh_sched_pareto_allgather.png</code></p>
@@ -428,10 +428,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>249 + 240</td><td><b>489</b></td><td class='lose'>4.57×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 42</td><td><b>350</b></td><td class='lose'>3.27×</td><td>0.0047</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 84</td><td><b>392</b></td><td class='lose'>3.66×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 336</td><td><b>644</b></td><td class='lose'>6.02×</td><td>0.0053</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>6.25×</td><td>308 + 168</td><td><b>476</b></td><td class='lose'>4.45×</td><td>0.0053</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.14×</td><td>451 + 42</td><td><b>493</b></td><td class='lose'>4.61×</td><td>0.0044</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.11×</td><td>455 + 84</td><td><b>539</b></td><td class='lose'>5.04×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.11×</td><td>455 + 336</td><td><b>791</b></td><td class='lose'>7.39×</td><td>0.0050</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>4.11×</td><td>455 + 168</td><td><b>623</b></td><td class='lose'>5.82×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>204 + 48</td><td><b>252</b></td><td class='lose'>2.36×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -446,10 +446,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>256 + 240</td><td><b>496</b></td><td class='lose'>2.01×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 42</td><td><b>406</b></td><td class='lose'>1.64×</td><td>0.0047</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 84</td><td><b>448</b></td><td class='lose'>1.81×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 336</td><td><b>700</b></td><td class='lose'>2.83×</td><td>0.0053</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>5.56×</td><td>364 + 168</td><td><b>532</b></td><td class='lose'>2.15×</td><td>0.0053</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>42 / 40 = 1.05×</td><td>3.94×</td><td>499 + 42</td><td><b>541</b></td><td class='lose'>2.19×</td><td>0.0044</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>43 / 40 = 1.07×</td><td>4.71×</td><td>427 + 86</td><td><b>513</b></td><td class='lose'>2.08×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>43 / 40 = 1.07×</td><td>4.71×</td><td>427 + 344</td><td><b>771</b></td><td class='lose'>3.12×</td><td>0.0050</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>43 / 40 = 1.07×</td><td>4.71×</td><td>427 + 172</td><td><b>599</b></td><td class='lose'>2.43×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>228 + 48</td><td><b>276</b></td><td class=''>1.12×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · pim_mesh/I1 · pim_mesh/I2 · islip_mesh/I1 · greedy_ff）</span></h4>
@@ -464,10 +464,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>726 + 240</td><td><b>966</b></td><td class=''>1.19×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 41</td><td><b>794</b></td><td class='win'>0.98×</td><td>0.0047</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 82</td><td><b>835</b></td><td class=''>1.03×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 328</td><td><b>1081</b></td><td class=''>1.33×</td><td>0.0053</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.19×</td><td>753 + 164</td><td><b>917</b></td><td class=''>1.13×</td><td>0.0053</td></tr>
 <tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.89×</td><td>839 + 41</td><td><b>880</b></td><td class=''>1.09×</td><td>0.0044</td></tr>
 <tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.21×</td><td>752 + 82</td><td><b>834</b></td><td class=''>1.03×</td><td>0.0046</td></tr>
-<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.21×</td><td>752 + 328</td><td><b>1080</b></td><td class=''>1.33×</td><td>0.0050</td></tr>
+<tr class=hl><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.21×</td><td>752 + 164</td><td><b>916</b></td><td class=''>1.13×</td><td>0.0050</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>675 + 48</td><td><b>723</b></td><td class='win'>0.89×</td><td>0.0416</td></tr>
 </table>
 <p class='muted'>大图：<code>results/mesh_sched_pareto_allreduce.png</code></p>
@@ -484,11 +484,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>182 + 10</td><td><b>192</b></td><td class=''>1.38×</td><td>0.0729</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 1</td><td><b>182</b></td><td class=''>1.31×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 12</td><td><b>193</b></td><td class=''>1.39×</td><td>0.0019</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 2</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0019</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 1</td><td><b>182</b></td><td class=''>1.31×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 12</td><td><b>193</b></td><td class=''>1.39×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 2</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>181 + 4</td><td><b>185</b></td><td class=''>1.33×</td><td>0.0019</td></tr>
 <tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>181 + 2</td><td><b>183</b></td><td class=''>1.32×</td><td>0.0415</td></tr>
 </table>
 <h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1）</span></h4>
@@ -502,11 +502,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>183 + 1</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>183 + 10</td><td><b>193</b></td><td class='win'>0.69×</td><td>0.0729</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class='win'>0.65×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 12</td><td><b>194</b></td><td class='win'>0.69×</td><td>0.0019</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 2</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0019</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 1</td><td><b>183</b></td><td class='win'>0.65×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 12</td><td><b>194</b></td><td class='win'>0.69×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 2</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>182 + 4</td><td><b>186</b></td><td class='win'>0.66×</td><td>0.0019</td></tr>
 <tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>182 + 2</td><td><b>184</b></td><td class='win'>0.66×</td><td>0.0415</td></tr>
 </table>
 <h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · islip_mesh/I1）</span></h4>
@@ -520,11 +520,11 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>latin_mesh<br/><span class='muted'>代数 ROM 轮次</span></td><td>batch/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>189 + 1</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0023</td></tr>
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>189 + 10</td><td><b>199</b></td><td class='win'>0.24×</td><td>0.0729</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 1</td><td><b>189</b></td><td class='win'>0.22×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 12</td><td><b>200</b></td><td class='win'>0.24×</td><td>0.0019</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 2</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0019</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 1</td><td><b>189</b></td><td class='win'>0.22×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 12</td><td><b>200</b></td><td class='win'>0.24×</td><td>0.0019</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 2</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0018</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>1 / 1 = 1.00×</td><td>0.98×</td><td>188 + 4</td><td><b>192</b></td><td class='win'>0.23×</td><td>0.0019</td></tr>
 <tr><td>greedy_ff<br/><span class='muted'>到达序最早可行</span></td><td>incremental/pipelined</td><td>—</td><td>—</td><td>188 + 2</td><td><b>190</b></td><td class='win'>0.23×</td><td>0.0415</td></tr>
 </table>
 <p class='muted'>大图：<code>results/mesh_sched_pareto_broadcast.png</code></p>
@@ -542,10 +542,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>269 + 235</td><td><b>504</b></td><td class='lose'>5.14×</td><td>0.0732</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 41</td><td><b>435</b></td><td class='lose'>4.44×</td><td>0.0047</td></tr>
 <tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 82</td><td><b>476</b></td><td class='lose'>4.86×</td><td>0.0049</td></tr>
-<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 328</td><td><b>722</b></td><td class='lose'>7.37×</td><td>0.0052</td></tr>
+<tr class=hl><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4 🏅</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.69×</td><td>394 + 164</td><td><b>558</b></td><td class='lose'>5.69×</td><td>0.0052</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.42×</td><td>649 + 41</td><td><b>690</b></td><td class='lose'>7.04×</td><td>0.0044</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.95×</td><td>563 + 82</td><td><b>645</b></td><td class='lose'>6.58×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.95×</td><td>563 + 328</td><td><b>891</b></td><td class='lose'>9.09×</td><td>0.0049</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.95×</td><td>563 + 164</td><td><b>727</b></td><td class='lose'>7.42×</td><td>0.0049</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>210 + 47</td><td><b>257</b></td><td class='lose'>2.62×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 4 <span class='muted'>（Pareto 前沿：bvn_mesh · greedy_ff）</span></h4>
@@ -560,10 +560,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>277 + 235</td><td><b>512</b></td><td class='lose'>2.93×</td><td>0.0732</td></tr>
 <tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 41</td><td><b>478</b></td><td class='lose'>2.73×</td><td>0.0047</td></tr>
 <tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 82</td><td><b>519</b></td><td class='lose'>2.97×</td><td>0.0049</td></tr>
-<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 328</td><td><b>765</b></td><td class='lose'>4.37×</td><td>0.0052</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>5.44×</td><td>437 + 164</td><td><b>601</b></td><td class='lose'>3.43×</td><td>0.0052</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.43×</td><td>687 + 41</td><td><b>728</b></td><td class='lose'>4.16×</td><td>0.0044</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.40×</td><td>682 + 82</td><td><b>764</b></td><td class='lose'>4.37×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.40×</td><td>682 + 328</td><td><b>1010</b></td><td class='lose'>5.77×</td><td>0.0049</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.40×</td><td>682 + 164</td><td><b>846</b></td><td class='lose'>4.83×</td><td>0.0049</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>250 + 47</td><td><b>297</b></td><td class='lose'>1.70×</td><td>0.0416</td></tr>
 </table>
 <h4>m = 16 <span class='muted'>（Pareto 前沿：bvn_mesh · greedy_ff）</span></h4>
@@ -578,10 +578,10 @@ N−1 轮就够——一个置换在 XY 路由下并不链路不相交，实测�
 <tr><td>bcfs<br/><span class='muted'>区间装箱 + 多起点</span></td><td>batch/pipelined</td><td>—</td><td>—</td><td>746 + 235</td><td><b>981</b></td><td class='lose'>1.50×</td><td>0.0732</td></tr>
 <tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 41</td><td><b>840</b></td><td class=''>1.29×</td><td>0.0047</td></tr>
 <tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 82</td><td><b>881</b></td><td class=''>1.35×</td><td>0.0049</td></tr>
-<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 328</td><td><b>1127</b></td><td class='lose'>1.73×</td><td>0.0052</td></tr>
+<tr><td>islip_mesh<br/><span class='muted'>逐链路 RR + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>3.53×</td><td>799 + 164</td><td><b>963</b></td><td class=''>1.48×</td><td>0.0052</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=1</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.70×</td><td>1026 + 41</td><td><b>1067</b></td><td class='lose'>1.64×</td><td>0.0044</td></tr>
 <tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=2</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.68×</td><td>1042 + 82</td><td><b>1124</b></td><td class='lose'>1.72×</td><td>0.0046</td></tr>
-<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.68×</td><td>1042 + 328</td><td><b>1370</b></td><td class='lose'>2.10×</td><td>0.0049</td></tr>
+<tr><td>pim_mesh<br/><span class='muted'>随机选择 + 全路径 accept</span> · I=4</td><td>incremental/slot</td><td>41 / 40 = 1.02×</td><td>2.68×</td><td>1042 + 164</td><td><b>1206</b></td><td class='lose'>1.85×</td><td>0.0049</td></tr>
 <tr class=hl><td>greedy_ff<br/><span class='muted'>到达序最早可行</span> 🏅</td><td>incremental/pipelined</td><td>—</td><td>—</td><td>713 + 47</td><td><b>760</b></td><td class=''>1.17×</td><td>0.0416</td></tr>
 </table>
 <p class='muted'>大图：<code>results/mesh_sched_pareto_reduce.png</code></p>
