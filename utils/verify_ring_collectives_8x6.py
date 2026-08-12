@@ -26,7 +26,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
-from dse_ring_collectives_8x6 import bisection_bound, ramp_eject_bound
+from dse_ring_collectives_8x6 import (
+    bisection_bound, ramp_eject_bound, run_base_phase,
+)
 from export_ring_calendars import (
     EXPORTS, PORT, OP_ADD, check_output_ports, check_ramp, station_records,
 )
@@ -39,11 +41,14 @@ from rg_ring_collectives import (
     ALGOS, PATTERNS, all_configs, build_ring_collective, hamilton_cycle,
     mcast_applicable, multiround, replay,
 )
-from rg_ring_topo import RingMcastFootprint, RingTopology, verify_dr
-from rg_topo import RAMP_BW, coord, nid
+from rg_ring_topo import (
+    RingMcastFootprint, RingTopology, build_ring_plan, verify_dr,
+)
+from rg_topo import RAMP, RAMP_BW, coord, nid
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 OUT = ROOT_DIR / "results" / "verify_ring_collectives_8x6.json"
+COLL = ROOT_DIR / "results" / "ring_collectives_8x6.json"
 ROOT_NODE = 27
 
 RESULTS: list[dict[str, Any]] = []
@@ -238,8 +243,90 @@ def group_bounds(topo: RingTopology, cals: list[tuple[str, Any, Any]]) -> None:
                      ("bisection", "vertical bisection bound"),
                      ("arc", "busiest-segment bound"),
                      ("port", "insert/extract port bound")):
-        check(f"every makespan is at or above the {label}",
+        check(f"every calendar makespan is at or above the {label}",
               not fails[k], f"{len(fails[k])} below {fails[k][:2]}")
+
+
+def load_json(p: Path) -> dict[str, Any] | None:
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def group_base_bounds() -> None:
+    """`ring_base` against a bound valid in ring_base's OWN machine model.
+
+    The suite used to check only the calendar against the bounds, which is how
+    ring_base came to be printed at 0.73x of a "lower bound" without anything
+    failing. Both halves are asserted here: base never beats its own model's
+    bound, and the cross-model comparison that produced the nonsense ratio is
+    pinned to its three named causes so it cannot be mistaken for physics again.
+    """
+    c = load_json(COLL)
+    if not c:
+        check("ring_collectives_8x6.json is present for the base-bound check",
+              False, "missing")
+        return
+    rows = [r for r in c["rows"] if r["tier"] == "T0" and r["bidir"]
+            and (r.get("ring_base") or {}).get("makespan")]
+    below = [(r["pattern"], r["algo"], r["m"],
+              r["ring_base"]["makespan"], r["bounds_base"]["makespan_lb"])
+             for r in rows
+             if r["ring_base"]["makespan"] < r["bounds_base"]["makespan_lb"]]
+    check("ring_base never finishes below its OWN model's lower bound",
+          not below, f"{len(below)} below over {len(rows)} rows {below[:2]}")
+
+    rot = [r for r in rows if r["algo"] == "ring_rotate"]
+    tight = [r for r in rot
+             if r["ring_base"]["makespan"] == r["bounds_base"]["makespan_lb"]]
+    check("ring_base on rotation is EXACTLY tight in its own model",
+          len(tight) == len(rot),
+          f"{len(tight)}/{len(rot)} rows at ratio 1.000")
+
+    cross = [r for r in rows
+             if r["ring_base"]["makespan"] < r["bounds"]["makespan_lb"]]
+    worst = min(cross, key=lambda r: r["ratios"]["base_over_cal_model_lb"],
+                default=None)
+    check("the calendar-model bound is NOT a bound on ring_base "
+          "(documented cross-model artefact, not a violation)",
+          bool(cross),
+          f"{len(cross)}/{len(rows)} rows appear below it, worst "
+          f"{worst['pattern']}/{worst['algo']} m={worst['m']} at "
+          f"{worst['ratios']['base_over_cal_model_lb']}x"
+          if worst else "none",
+          prediction="reporting one bound for both legs: REFUTED")
+
+    # cause 1: station exit 1 flit/cycle vs node ejection RAMP_BW per cycle
+    g = next((r for r in rows if r["pattern"] == "gather"
+              and r["algo"] == "dim_2phase" and r["m"] == 13), None)
+    if g:
+        check("cause 1 -- the fan-in gap is the station-exit port model",
+              g["bounds"]["port_lb"] > g["bounds_base"]["ramp_lb"]
+              and g["bounds"]["binding_lb"] == "port",
+              f"port_lb={g['bounds']['port_lb']} (leave_ports=1) vs "
+              f"eject bound {g['bounds_base']['ramp_lb']} "
+              f"(RAMP_BW={g['bounds']['ramp_bw']}/cycle), base="
+              f"{g['ring_base']['makespan']} sits between")
+
+    # cause 2: +RAMP per phase, which multiplies by the phase count
+    rr = next((r for r in rot if r["pattern"] == "allgather" and r["m"] == 1),
+              None)
+    if rr:
+        gap = rr["bounds"]["latency_lb"] - rr["bounds_base"]["latency_lb"]
+        n_ph = rr["shape"]["n_phases"]
+        check("cause 2 -- the latency floor charges +RAMP per phase, "
+              "so a 47-phase schedule inherits 47 of them",
+              gap == RAMP * n_ph,
+              f"gap={gap} = RAMP({RAMP}) x {n_ph} phases")
+
+    # cause 3: the bridge turn
+    topo = RingTopology()
+    plan = build_ring_plan(topo, [(0, 9)], "balanced")
+    fp = topo.footprint(0, plan.paths[(0, 9)], 1)
+    sim = run_base_phase(topo, [(0, 9, 1)], None, 0)
+    check("cause 3 -- the calendar charges t_turn to cross a bridge, "
+          "the sim crosses free",
+          fp.wire + fp.dur - sim["makespan"] == topo.t_turn,
+          f"calendar {fp.wire + fp.dur} vs sim {sim['makespan']} "
+          f"on a turning route, t_turn={topo.t_turn}")
 
 
 def group_rotation(topo: RingTopology) -> None:
@@ -464,6 +551,8 @@ def main() -> None:
     group_dr(topo, cals)
     print("\n-- lower bounds --")
     group_bounds(topo, cals)
+    print("\n-- ring_base against its own model's bounds --")
+    group_base_bounds()
     print("\n-- rotation and utilization --")
     group_rotation(topo)
     print("\n-- faults --")

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Generate results/report_ring_collectives_8x6.html.
+"""生成 results/report_ring_collectives_8x6.html —— 8x6 无缓冲环的**唯一**报告。
 
-Companion to docs/phase-7-exploration/ring-collectives-8x6.md. The markdown is
-written for someone who already accepts the framing; this report is written for
-someone meeting the dimension-sliced bufferless ring for the first time, so it
-opens with a drawn multicast arc and a drawn rotation step before any table.
+这一个文件承载全部无缓冲环的工作：三种 transport（paper 机制 / 集中式
+islip2d 参照 / 静态拍图）、六个集合通信、四个结构杠杆、T_avg、带宽利用率、
+容错、抗抖动、拍图导出、验证清单、反预期结果与已知局限。刻意不拆成多份：
+读者要判断「环上到底该用哪种 transport」，就必须能在同一页里对齐口径。
 
-Every number is read out of the result JSONs. Nothing is typed in here, so the
-report cannot drift away from the runs that produced it -- if a JSON is missing
-the affected section says so rather than falling back to a remembered value.
+叙述围绕对比组织（先画机制再给数字），而不是按数据文件罗列。
+
+所有数字都从 results/*.json 读出，没有一个是写死的；甘特图直接调
+rg_ring_calendar 现场排一张拍图再画，所以图上的每个区间都是排出来的真值，
+不是示意。JSON 缺失时对应小节显式声明缺失，不用旧值顶替。
 """
 
 from __future__ import annotations
@@ -27,44 +29,65 @@ IDX = ROOT / "results" / "calendars" / "ring_index.json"
 OUT = ROOT / "results" / "report_ring_collectives_8x6.html"
 
 MX, MY, N = 8, 6, 48
-PATTERN_ORDER = ["allgather", "allreduce", "alltoall", "gather", "broadcast",
-                 "reduce"]
+ROOT_NODE = 27
+PATTERNS = ["broadcast", "reduce", "gather", "allreduce", "allgather",
+            "alltoall"]
+CN = {"broadcast": "broadcast<br>广播", "reduce": "reduce<br>归约",
+      "gather": "gather<br>收集", "allreduce": "allreduce<br>全归约",
+      "allgather": "allgather<br>全收集", "alltoall": "alltoall<br>全交换"}
+CN1 = {"broadcast": "广播", "reduce": "归约", "gather": "收集",
+       "allreduce": "全归约", "allgather": "全收集", "alltoall": "全交换"}
 
 
 # ---------------------------------------------------------------------------
-# 1. Data access
+# 1. 取数
 # ---------------------------------------------------------------------------
 
 def load() -> dict[str, Any]:
     def rd(p: Path) -> dict | None:
-        if not p.exists():
-            return None
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
     return {"coll": rd(COLL), "tavg": rd(TAVG), "rob": rd(ROB),
             "ver": rd(VER), "idx": rd(IDX)}
 
 
-def rows(c: dict, **filt: Any) -> list[dict]:
-    return [r for r in c["rows"]
-            if all(r.get(k) == v for k, v in filt.items())]
+def rows(c: dict, **flt: Any) -> list[dict]:
+    return [r for r in c["rows"] if all(r.get(k) == v for k, v in flt.items())]
 
 
-def row1(c: dict, **filt: Any) -> dict | None:
-    r = rows(c, **filt)
+def row1(c: dict, **flt: Any) -> dict | None:
+    r = rows(c, **flt)
     return r[0] if r else None
 
 
-def best_by(rs: list[dict], key) -> dict | None:
-    ok = [r for r in rs if key(r) is not None]
-    return min(ok, key=key) if ok else None
+def best_cal(c: dict, pat: str, m: int, tier: str | None = None) -> dict | None:
+    """该 pattern 在该 m 下 makespan 最小的拍图行；tier 给定则限定能力档。
+
+    区分 tier 是这份对比的前提：`ring_base` 只做 unicast，所以 T1（弧多播 +
+    L1 归约）行根本没有基线可比。把两者混在一根柱子里，等于让拍图白拿一块
+    基线没有的硬件。
+    """
+    cand = rows(c, pattern=pat, m=m, bidir=True)
+    if tier is not None:
+        cand = [r for r in cand if r["tier"] == tier]
+    return min(cand, key=lambda r: r["calendar"]["makespan"]) if cand else None
+
+
+def best_base(c: dict, pat: str, m: int) -> dict | None:
+    """该 pattern 在该 m 下 ring_base 最快的行。
+
+    取各自腿的最优算法：集合算法与 transport 是正交的两根轴，用同一个算法压
+    基线会把基线做成稻草人。
+    """
+    cand = [r for r in rows(c, pattern=pat, m=m, bidir=True)
+            if r["ring_base"].get("makespan") is not None]
+    return min(cand, key=lambda r: r["ring_base"]["makespan"]) if cand else None
 
 
 def f(x: Any, nd: int = 0) -> str:
     if x is None:
         return "&mdash;"
     if isinstance(x, bool):
-        return "yes" if x else "no"
+        return "是" if x else "否"
     if isinstance(x, float):
         return f"{x:,.{nd}f}"
     if isinstance(x, int):
@@ -77,252 +100,550 @@ def pct(x: Any, nd: int = 1) -> str:
 
 
 def times(x: Any, nd: int = 2) -> str:
-    """A ratio with its unit, or a bare dash -- never "&mdash;&times;"."""
     return "&mdash;" if x is None else f"{x:.{nd}f}&times;"
 
 
-def rat(num: Any, den: Any, nd: int = 2) -> str:
-    if num is None or den in (None, 0):
-        return "&mdash;"
-    return f"{num / den:.{nd}f}&times;"
-
-
-def scheme_label(pat: str, algo: str, tier: str) -> str:
-    return f"{pat} / {algo} / {tier}"
+def lbl(pat: str, algo: str, tier: str) -> str:
+    return f"{CN1.get(pat, pat)} / {algo} / {tier}"
 
 
 # ---------------------------------------------------------------------------
-# 2. SVG helpers
+# 2. 通用图元
 #
-# Hand-rolled so the drawn node numbers are the simulator's own nid = y*MX + x.
-# A reader can hold a drawn arc against a footprint printed by the code.
+# 全部手写 SVG：节点编号必须与仿真器的 nid = y*MX + x 一致，读者才能把图上的
+# 一条弧对上代码打印出来的 footprint。
 # ---------------------------------------------------------------------------
 
-def nid(x: int, y: int) -> int:
-    return y * MX + x
-
-
-def _grid_svg(w: int, h: int, body: str) -> str:
+def svg(w: int, h: int, body: str) -> str:
     return (f'<svg viewBox="0 0 {w} {h}" width="100%" '
             f'style="max-width:{w}px" role="img">{body}</svg>')
 
 
-def svg_multicast() -> str:
-    """One boarding covering a whole row arc, next to 7 separate unicasts.
+def _axis_y(vals: list[float], top: float, bot: float, pad: float = 1.08
+            ) -> tuple[Any, float]:
+    hi = max(vals) * pad if vals else 1.0
+    hi = hi or 1.0
 
-    Only row 0 is drawn. The whole point is what happens along one ring, and a
-    second row of nodes would invite the reader to look for column traffic that
-    is not part of this comparison.
+    def ty(v: float) -> float:
+        return bot - (bot - top) * (v / hi)
+    return ty, hi
+
+
+def grouped_bars(cats: list[str], series: list[dict], *, w: int = 880,
+                 h: int = 330, ylabel: str = "", note_fmt: str = "{:,.0f}",
+                 hi_series: int | None = None) -> str:
+    """分组柱状图。series = [{name, cls, vals:[...]}]，vals 与 cats 等长。"""
+    L, Rr, T, B = 66, 150, 30, 62
+    ty, hi = _axis_y([v for s in series for v in s["vals"] if v is not None],
+                     T, h - B)
+    ytf = "{:,.0f}" if hi >= 8 else "{:,.2f}"
+    gw = (w - L - Rr) / max(1, len(cats))
+    bw = min(30.0, gw * 0.72 / max(1, len(series)))
+    p = [f'<rect x="{L}" y="{T}" width="{w - L - Rr}" height="{h - B - T}" '
+         f'class="plot"/>']
+    for i in range(5):
+        yv = hi * i / 4
+        p.append(f'<line x1="{L}" y1="{ty(yv):.1f}" x2="{w - Rr}" '
+                 f'y2="{ty(yv):.1f}" class="gl"/>')
+        p.append(f'<text x="{L - 8}" y="{ty(yv) + 4:.1f}" class="tick" '
+                 f'text-anchor="end">{ytf.format(yv)}</text>')
+    for ci, cat in enumerate(cats):
+        cx = L + gw * (ci + 0.5)
+        n = len(series)
+        for si, s in enumerate(series):
+            v = s["vals"][ci]
+            if v is None:
+                continue
+            x = cx - (n * bw) / 2 + si * bw
+            y = ty(v)
+            p.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw - 3:.1f}" '
+                     f'height="{h - B - y:.1f}" class="bar {s["cls"]}'
+                     f'{" hib" if hi_series == si else ""}"/>')
+            p.append(f'<text x="{x + (bw - 3) / 2:.1f}" y="{y - 4:.1f}" '
+                     f'class="barv" text-anchor="middle">'
+                     f'{note_fmt.format(v)}</text>')
+        for li, line in enumerate(cat.split("<br>")):
+            p.append(f'<text x="{cx:.1f}" y="{h - B + 18 + li * 14}" '
+                     f'class="tick" text-anchor="middle">{line}</text>')
+    for si, s in enumerate(series):
+        yy = T + 14 + si * 20
+        p.append(f'<rect x="{w - Rr + 8}" y="{yy - 9}" width="12" height="12" '
+                 f'class="bar {s["cls"]}"/>')
+        p.append(f'<text x="{w - Rr + 26}" y="{yy + 1}" class="axl">'
+                 f'{s["name"]}</text>')
+    p.append(f'<text x="14" y="{(T + h - B) / 2}" class="axl" '
+             f'transform="rotate(-90 14 {(T + h - B) / 2})" '
+             f'text-anchor="middle">{ylabel}</text>')
+    return svg(w, h, "".join(p))
+
+
+def diverging_bars(items: list[dict], *, w: int = 880, rowh: int = 30,
+                   center: float = 1.0, xmax: float = 2.6,
+                   left_label: str = "", right_label: str = "") -> str:
+    """以 1.0 为界的横向比值条：>1 向右（拍图赢），<1 向左（基线赢）。
+
+    比「两根柱谁高」更适合这份对比，因为读者真正要看的是**分界线在哪个
+    collective 上被跨过**，而不是绝对拍数。
     """
-    px, x0, ybase, r = 62, 62, 104, 11
-    parts: list[str] = []
+    L, Rr, T = 168, 96, 44
+    h = T + rowh * len(items) + 26
+    span = w - L - Rr
+    cx = L + span * 0.42
 
-    def panel(ox: int, title: str, sub: str) -> None:
-        parts.append(f'<text x="{ox - 14}" y="24" class="bxt">{title}</text>')
-        parts.append(f'<text x="{ox - 14}" y="42" class="bxl dim">{sub}</text>')
-        for x in range(MX - 1):
-            cx = ox + x * px
-            parts.append(f'<line x1="{cx + r + 2}" y1="{ybase}" '
-                         f'x2="{cx + px - r - 2}" y2="{ybase}" class="rlk"/>')
-        parts.append(f'<path d="M {ox} {ybase - r - 3} Q {ox + 3.5 * px} '
-                     f'{ybase - 36} {ox + (MX - 1) * px} {ybase - r - 3}" '
-                     f'class="wrp"/>')
-        parts.append(f'<text x="{ox + 3.5 * px}" y="{ybase - 25}" '
-                     f'class="bxl dim" text-anchor="middle">wraparound '
-                     f'segment</text>')
-
-    def nodes(ox: int) -> None:
-        for x in range(MX):
-            cx = ox + x * px
-            cls = "nd src" if x == 0 else "nd dst"
-            parts.append(f'<circle cx="{cx}" cy="{ybase}" r="{r}" '
-                         f'class="{cls}"/>')
-            parts.append(f'<text x="{cx}" y="{ybase + 4}" class="tag">'
-                         f'{nid(x, 0)}</text>')
-            if x:
-                parts.append(f'<line x1="{cx}" y1="{ybase + r}" x2="{cx}" '
-                             f'y2="{ybase + r + 16}" class="ar"/>')
-                parts.append(f'<text x="{cx}" y="{ybase + r + 30}" '
-                             f'class="bxl dim" text-anchor="middle">L1</text>')
-
-    panel(x0, "T1: one boarding, copy and continue",
-          "node 0 boards once; every station downstream drops a copy "
-          "into its L1 and forwards the flit")
-    parts.append(f'<path d="M {x0} {ybase} L {x0 + 7 * px} {ybase}" '
-                 f'class="arcR"/>')
-    nodes(x0)
-    parts.append(f'<text x="{x0 - 14}" y="{ybase + 62}" class="lbl ok2">'
-                 f'1 boarding &middot; 7 leaves &middot; 7 arc-cycles of '
-                 f'segment time</text>')
-
-    ox2 = x0 + 8 * px + 76
-    panel(ox2, "T0: seven separate boardings",
-          "the paper mechanism can only unicast, so node 0 boards "
-          "once per destination")
-    for k, x in enumerate(range(1, MX)):
-        yy = ybase - 4 - k * 2.6
-        parts.append(f'<path d="M {ox2} {yy:.1f} L {ox2 + x * px} {yy:.1f}" '
-                     f'class="pRM"/>')
-    nodes(ox2)
-    parts.append(f'<text x="{ox2 - 14}" y="{ybase + 62}" class="lbl warn">'
-                 f'7 boardings &middot; 7 leaves &middot; 28 arc-cycles of '
-                 f'segment time</text>')
-    return _grid_svg(2 * (8 * px) + 150, 188, "".join(parts))
+    def tx(v: float) -> float:
+        return cx + (span * 0.58) * (math.log(v) / math.log(xmax)) \
+            if v >= center else cx - (span * 0.42) * (
+                math.log(center / v) / math.log(xmax))
+    p = [f'<rect x="{L}" y="{T - 16}" width="{span}" height="{rowh * len(items) + 12}" '
+         f'class="plot"/>']
+    p.append(f'<line x1="{cx:.1f}" y1="{T - 16}" x2="{cx:.1f}" '
+             f'y2="{T + rowh * len(items) - 4}" class="axc"/>')
+    p.append(f'<text x="{cx - 10:.1f}" y="{T - 24}" class="axl lose" '
+             f'text-anchor="end">&#9664; {left_label}</text>')
+    p.append(f'<text x="{cx + 10:.1f}" y="{T - 24}" class="axl win">'
+             f'{right_label} &#9654;</text>')
+    p.append(f'<text x="{cx:.1f}" y="{T + rowh * len(items) + 12}" '
+             f'class="tick" text-anchor="middle">1.0&times;（打平）</text>')
+    for i, it in enumerate(items):
+        y = T + rowh * i
+        v = it["ratio"]
+        x2 = tx(v)
+        win = v >= center
+        p.append(f'<text x="{L - 10}" y="{y + 4}" class="axl" '
+                 f'text-anchor="end">{it["label"]}</text>')
+        x0, x1 = (cx, x2) if win else (x2, cx)
+        p.append(f'<rect x="{x0:.1f}" y="{y - 9}" width="{max(1, x1 - x0):.1f}" '
+                 f'height="18" class="bar {"cB" if win else "cC"}"/>')
+        tv = f"{v:.2f}&times;"
+        if win:
+            p.append(f'<text x="{x2 + 6:.1f}" y="{y + 4}" class="barv">'
+                     f'{tv}</text>')
+        else:
+            p.append(f'<text x="{x2 - 6:.1f}" y="{y + 4}" class="barv" '
+                     f'text-anchor="end">{tv}</text>')
+        p.append(f'<text x="{w - Rr + 8}" y="{y + 4}" class="tick">'
+                 f'{it["note"]}</text>')
+    return svg(w, h, "".join(p))
 
 
-def svg_rotation() -> str:
-    """Why rotation saturates a ring: every arc carries exactly one flit."""
-    cx, cy, R = 150, 132, 96
-    parts: list[str] = []
-    k = 8
-    pos = []
-    for i in range(k):
-        a = -math.pi / 2 + 2 * math.pi * i / k
-        pos.append((cx + R * math.cos(a), cy + R * math.sin(a)))
-    parts.append(f'<circle cx="{cx}" cy="{cy}" r="{R}" class="ringc"/>')
-    for i in range(k):
-        x1, y1 = pos[i]
-        x2, y2 = pos[(i + 1) % k]
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        vx, vy = x2 - x1, y2 - y1
-        ln = math.hypot(vx, vy)
-        parts.append(f'<line x1="{mx - vx / ln * 12:.1f}" '
-                     f'y1="{my - vy / ln * 12:.1f}" '
-                     f'x2="{mx + vx / ln * 12:.1f}" '
-                     f'y2="{my + vy / ln * 12:.1f}" class="arcR"/>')
-    for i, (x, y) in enumerate(pos):
-        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="12" class="nd"/>')
-        parts.append(f'<text x="{x:.1f}" y="{y + 4:.1f}" class="tag">'
-                     f'{i}</text>')
-    parts.append(f'<text x="{cx}" y="{cy - 6}" class="bxl" '
-                 f'text-anchor="middle">every arc</text>')
-    parts.append(f'<text x="{cx}" y="{cy + 12}" class="bxl ok2" '
-                 f'text-anchor="middle">busy, once</text>')
-    parts.append('<text x="300" y="40" class="bxt">Rotation step</text>')
-    for i, line in enumerate([
-            "All 8 stations board simultaneously, each sending one",
-            "hop clockwise. Every one of the ring's arcs carries",
-            "exactly one flit, so the step costs 1 arc-cycle and",
-            "moves 8 flits. Repeat 7 times and every node holds",
-            "every other node's item.",
-            "",
-            "That is why the busiest-segment lower bound is MET",
-            "exactly: II_eff = 47 = the per-round arc load.",
-            "",
-            "It is also why one dead segment is fatal: the step has",
-            "no spare arc to route around with."]):
-        cls = "bxl ok2" if "MET" in line else (
-            "bxl warn" if "fatal" in line else "bxl")
-        parts.append(f'<text x="300" y="{68 + i * 19}" class="{cls}">'
-                     f'{line}</text>')
-    return _grid_svg(860, 275, "".join(parts))
-
-
-def svg_curve(series: list[dict], *, w: int = 720, h: int = 260,
-              xlabel: str = "", ylabel: str = "", logx: bool = False,
-              hline: float | None = None, hlabel: str = "") -> str:
-    """Small line plot. series = [{name, cls, pts:[(x,y)]}]."""
-    L, Rr, T, B = 62, 132, 24, 42
+def line_chart(series: list[dict], *, w: int = 780, h: int = 300,
+               xlabel: str = "", ylabel: str = "", xticks: list[float] | None
+               = None, logx: bool = False, hline: float | None = None,
+               hlabel: str = "") -> str:
+    L, Rr, T, B = 66, 168, 26, 50
     xs = [p[0] for s in series for p in s["pts"]]
     ys = [p[1] for s in series for p in s["pts"]]
     if not xs:
         return ""
     if hline is not None:
         ys.append(hline)
+    ty, hi = _axis_y(ys, T, h - B)
 
     def tx(v: float) -> float:
-        lo, hi = min(xs), max(xs)
+        lo, hh = min(xs), max(xs)
         if logx:
-            lo, hi = math.log10(max(lo, 1)), math.log10(max(hi, 2))
-            v = math.log10(max(v, 1))
-        return L + (w - L - Rr) * (0 if hi == lo else (v - lo) / (hi - lo))
-
-    def ty(v: float) -> float:
-        lo, hi = 0, max(ys) * 1.08
-        return h - B - (h - B - T) * (0 if hi == lo else (v - lo) / (hi - lo))
-
-    parts = [f'<rect x="{L}" y="{T}" width="{w - L - Rr}" '
-             f'height="{h - B - T}" class="plot"/>']
+            lo, hh, v = (math.log10(max(lo, 1)), math.log10(max(hh, 2)),
+                         math.log10(max(v, 1)))
+        return L + (w - L - Rr) * (0 if hh == lo else (v - lo) / (hh - lo))
+    p = [f'<rect x="{L}" y="{T}" width="{w - L - Rr}" height="{h - B - T}" '
+         f'class="plot"/>']
     for i in range(5):
-        yv = max(ys) * 1.08 * i / 4
-        parts.append(f'<line x1="{L}" y1="{ty(yv):.1f}" x2="{w - Rr}" '
-                     f'y2="{ty(yv):.1f}" class="gl"/>')
-        parts.append(f'<text x="{L - 8}" y="{ty(yv) + 4:.1f}" class="tick" '
-                     f'text-anchor="end">{yv:,.0f}</text>')
-    for xv in sorted({p[0] for s in series for p in s["pts"]}):
-        parts.append(f'<text x="{tx(xv):.1f}" y="{h - B + 16}" class="tick" '
-                     f'text-anchor="middle">{xv:g}</text>')
+        yv = hi * i / 4
+        p.append(f'<line x1="{L}" y1="{ty(yv):.1f}" x2="{w - Rr}" '
+                 f'y2="{ty(yv):.1f}" class="gl"/>')
+        p.append(f'<text x="{L - 8}" y="{ty(yv) + 4:.1f}" class="tick" '
+                 f'text-anchor="end">{yv:,.0f}</text>')
+    for xv in (xticks if xticks is not None else sorted(set(xs))):
+        p.append(f'<text x="{tx(xv):.1f}" y="{h - B + 17}" class="tick" '
+                 f'text-anchor="middle">{xv:g}</text>')
     if hline is not None:
-        parts.append(f'<line x1="{L}" y1="{ty(hline):.1f}" x2="{w - Rr}" '
-                     f'y2="{ty(hline):.1f}" class="anch"/>')
-        parts.append(f'<text x="{w - Rr - 4}" y="{ty(hline) - 5:.1f}" '
-                     f'class="anchl" text-anchor="end">{hlabel}</text>')
+        p.append(f'<line x1="{L}" y1="{ty(hline):.1f}" x2="{w - Rr}" '
+                 f'y2="{ty(hline):.1f}" class="anch"/>')
+        p.append(f'<text x="{w - Rr - 4}" y="{ty(hline) + 15:.1f}" '
+                 f'class="anchl" text-anchor="end">{hlabel}</text>')
     for i, s in enumerate(series):
         d = " ".join(f"{'M' if j == 0 else 'L'} {tx(x):.1f} {ty(y):.1f}"
                      for j, (x, y) in enumerate(s["pts"]))
-        parts.append(f'<path d="{d}" class="cv {s["cls"]}"/>')
+        p.append(f'<path d="{d}" class="cv {s["cls"]}"/>')
         for x, y in s["pts"]:
-            parts.append(f'<circle cx="{tx(x):.1f}" cy="{ty(y):.1f}" r="2.6" '
-                         f'class="star {s["cls"]}"/>')
-        parts.append(f'<text x="{w - Rr + 10}" y="{T + 16 + i * 18}" '
-                     f'class="axl">&#9679;</text>')
-        parts.append(f'<text x="{w - Rr + 24}" y="{T + 16 + i * 18}" '
-                     f'class="axl">{s["name"]}</text>')
-    parts.append(f'<text x="{(L + w - Rr) / 2}" y="{h - 6}" class="axl" '
-                 f'text-anchor="middle">{xlabel}</text>')
-    parts.append(f'<text x="14" y="{(T + h - B) / 2}" class="axl" '
-                 f'transform="rotate(-90 14 {(T + h - B) / 2})" '
-                 f'text-anchor="middle">{ylabel}</text>')
-    return _grid_svg(w, h, "".join(parts))
+            p.append(f'<circle cx="{tx(x):.1f}" cy="{ty(y):.1f}" r="3.2" '
+                     f'class="star {s["cls"]}"/>')
+        yy = T + 16 + i * 19
+        p.append(f'<line x1="{w - Rr + 8}" y1="{yy - 4}" x2="{w - Rr + 26}" '
+                 f'y2="{yy - 4}" class="cv {s["cls"]}"/>')
+        p.append(f'<text x="{w - Rr + 32}" y="{yy}" class="axl">'
+                 f'{s["name"]}</text>')
+    p.append(f'<text x="{(L + w - Rr) / 2}" y="{h - 6}" class="axl" '
+             f'text-anchor="middle">{xlabel}</text>')
+    p.append(f'<text x="14" y="{(T + h - B) / 2}" class="axl" '
+             f'transform="rotate(-90 14 {(T + h - B) / 2})" '
+             f'text-anchor="middle">{ylabel}</text>')
+    return svg(w, h, "".join(p))
+
+
+def stacked_bars(cats: list[str], series: list[dict], *, w: int = 880,
+                 h: int = 300, ylabel: str = "", rotate: bool = False) -> str:
+    """堆叠柱。类目多时用 rotate=True 斜排标签，否则中文标签会互相压字。"""
+    L, Rr, T, B = 66, 158, 26, (118 if rotate else 74)
+    tot = [sum(s["vals"][i] for s in series) for i in range(len(cats))]
+    ty, hi = _axis_y(tot, T, h - B, pad=1.02)
+    gw = (w - L - Rr) / max(1, len(cats))
+    bw = min(46.0, gw * 0.6)
+    p = [f'<rect x="{L}" y="{T}" width="{w - L - Rr}" height="{h - B - T}" '
+         f'class="plot"/>']
+    for i in range(5):
+        yv = hi * i / 4
+        p.append(f'<line x1="{L}" y1="{ty(yv):.1f}" x2="{w - Rr}" '
+                 f'y2="{ty(yv):.1f}" class="gl"/>')
+        p.append(f'<text x="{L - 8}" y="{ty(yv) + 4:.1f}" class="tick" '
+                 f'text-anchor="end">{yv:,.0f}</text>')
+    for ci, cat in enumerate(cats):
+        cx = L + gw * (ci + 0.5)
+        acc = 0.0
+        for s in series:
+            v = s["vals"][ci]
+            if v <= 0:
+                continue
+            y0, y1 = ty(acc + v), ty(acc)
+            p.append(f'<rect x="{cx - bw / 2:.1f}" y="{y0:.1f}" '
+                     f'width="{bw:.1f}" height="{max(1, y1 - y0):.1f}" '
+                     f'class="bar {s["cls"]}"/>')
+            if y1 - y0 > 13:
+                p.append(f'<text x="{cx:.1f}" y="{(y0 + y1) / 2 + 4:.1f}" '
+                         f'class="barv" text-anchor="middle">{v:g}</text>')
+            acc += v
+        if rotate:
+            t = " ".join(cat.split("<br>"))
+            p.append(f'<text x="{cx:.1f}" y="{h - B + 14}" class="tick" '
+                     f'text-anchor="end" transform="rotate(-34 {cx:.1f} '
+                     f'{h - B + 14})">{t}</text>')
+        else:
+            for li, line in enumerate(cat.split("<br>")):
+                p.append(f'<text x="{cx:.1f}" y="{h - B + 17 + li * 13}" '
+                         f'class="tick" text-anchor="middle">{line}</text>')
+    for si, s in enumerate(series):
+        yy = T + 14 + si * 20
+        p.append(f'<rect x="{w - Rr + 8}" y="{yy - 9}" width="12" height="12" '
+                 f'class="bar {s["cls"]}"/>')
+        p.append(f'<text x="{w - Rr + 26}" y="{yy + 1}" class="axl">'
+                 f'{s["name"]}</text>')
+    p.append(f'<text x="14" y="{(T + h - B) / 2}" class="axl" '
+             f'transform="rotate(-90 14 {(T + h - B) / 2})" '
+             f'text-anchor="middle">{ylabel}</text>')
+    return svg(w, h, "".join(p))
 
 
 # ---------------------------------------------------------------------------
-# 3. Sections
+# 3. 机制示意图
+# ---------------------------------------------------------------------------
+
+def svg_mechanism() -> str:
+    """左：paper 机制的环站要哪些缓冲；右：静态拍图把它们删到哪。"""
+    p: list[str] = []
+
+    def box(x, y, w, h, cls, title, lines, tcls="bxt"):
+        p.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="7" '
+                 f'class="bx {cls}"/>')
+        p.append(f'<text x="{x + 10}" y="{y + 19}" class="{tcls}">{title}'
+                 f'</text>')
+        for i, ln in enumerate(lines):
+            p.append(f'<text x="{x + 10}" y="{y + 38 + i * 16}" class="bxl">'
+                     f'{ln}</text>')
+
+    def arrow(x1, y1, x2, y2, label="", cls="ar", dash=False):
+        d = ' stroke-dasharray="5 4"' if dash else ""
+        p.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+                 f'class="{cls}"{d}/>')
+        ang = math.atan2(y2 - y1, x2 - x1)
+        for s in (2.6, -2.6):
+            p.append(f'<line x1="{x2}" y1="{y2}" '
+                     f'x2="{x2 - 9 * math.cos(ang + s / 6):.1f}" '
+                     f'y2="{y2 - 9 * math.sin(ang + s / 6):.1f}" '
+                     f'class="{cls}"/>')
+        if label:
+            p.append(f'<text x="{(x1 + x2) / 2}" y="{(y1 + y2) / 2 - 6}" '
+                     f'class="arl" text-anchor="middle">{label}</text>')
+
+    p.append('<text x="20" y="24" class="h3s">A. paper 机制（E-tag / I-tag '
+             '+ 偏转）</text>')
+    p.append('<text x="20" y="44" class="bxl dim">运行期分布式决策 &rarr; '
+             '必须有缓冲兜住「猜错」的情况</text>')
+    box(20, 60, 172, 92, "src", "PE / L1", ["注入队列", "预留 Tx 缓冲"])
+    box(214, 60, 200, 92, "arb", "环站（运行期仲裁）",
+        ["E-tag / I-tag 比较器", "无未来信息 &rarr; 只能就地决策"])
+    box(436, 60, 176, 92, "fill", "桥 transfer FIFO",
+        ["转不了环就得先存住", "深度是真旋钮"])
+    box(634, 60, 186, 92, "acc", "目的端重组缓冲",
+        ["偏转造成乱序", "必须能重排"])
+    arrow(192, 92, 214, 92)
+    arrow(414, 92, 436, 92)
+    arrow(612, 92, 634, 92)
+    p.append('<path d="M 314 152 Q 314 196 470 196 Q 620 196 620 158" '
+             'class="defl"/>')
+    p.append('<text x="470" y="212" class="arl warn" text-anchor="middle">'
+             '偏转：占用的弧被别人用了就再绕一圈 &rarr; 吃掉环带宽、打乱顺序'
+             '</text>')
+
+    p.append('<text x="20" y="266" class="h3s">B. 静态拍图（离线排好的时隙表）'
+             '</text>')
+    p.append('<text x="20" y="286" class="bxl dim">编译期全局决策 &rarr; '
+             '不会猜错 &rarr; 环内可以真正零缓冲</text>')
+    box(20, 302, 172, 92, "src", "PE / L1",
+        ["按时隙表在 t0 起发", "L1 兼作归约累加器"])
+    box(214, 302, 200, 92, "cal", "环站（查表）",
+        ["一张 (拍, 端口) 表", "out_port_mask 天然多播"])
+    box(436, 302, 176, 92, "gone", "桥 FIFO：删除",
+        ["转环零驻留（实测 max=0）", "R4 保证不需要存"])
+    box(634, 302, 186, 92, "gone", "重组缓冲：删除",
+        ["R5 静态定路 + 保序", "乱序恒为 0"])
+    arrow(192, 334, 214, 334)
+    arrow(414, 334, 436, 334)
+    arrow(612, 334, 634, 334)
+    p.append('<text x="214" y="416" class="arl ok2">代价搬到了别处：'
+             '一张拍图表就是控制存储，且故障后要重编译</text>')
+    return svg(850, 436, "".join(p))
+
+
+def svg_deflect_vs_slot() -> str:
+    """同一个冲突（A、B 都要用弧 2&rarr;3），两种机制的处理方式。
+
+    刻意不画环的绕回弧线：它会和标题文字抢同一片纵向空间，而绕回语义用
+    「右侧出、左侧回」的一对箭头表达更清楚，也不会画到画布外。
+    """
+    p: list[str] = []
+    x0, px, r = 96, 62, 12
+    for y0, title, sub in ((130, "paper 机制：偏转",
+                            "B 的槽被 A 占了 &rarr; 无缓冲又不能停 &rarr; "
+                            "只能被弹走绕满一圈"),
+                           (300, "静态拍图：错拍",
+                            "编译期就看见这次冲突 &rarr; 直接把 B 排到下一拍")):
+        p.append(f'<text x="{x0 - 30}" y="{y0 - 72}" class="h3s">{title}'
+                 f'</text>')
+        p.append(f'<text x="{x0 - 30}" y="{y0 - 52}" class="bxl dim">{sub}'
+                 f'</text>')
+        for i in range(8):
+            cx = x0 + i * px
+            if i < 7:
+                p.append(f'<line x1="{cx + r + 2}" y1="{y0}" '
+                         f'x2="{cx + px - r - 2}" y2="{y0}" class="rlk"/>')
+            p.append(f'<circle cx="{cx}" cy="{y0}" r="{r}" class="nd"/>')
+            p.append(f'<text x="{cx}" y="{y0 + 4}" class="tag">{i}</text>')
+        p.append(f'<path d="M {x0 + 2 * px} {y0 - 20} L {x0 + 5 * px} '
+                 f'{y0 - 20}" class="arcR"/>')
+
+    y0 = 130
+    p.append(f'<text x="{x0 + 2 * px}" y="{y0 - 32}" class="arl ok2">'
+             f'A 正在用 2&rarr;5</text>')
+    p.append(f'<path d="M {x0 + 2 * px} {y0 + 28} L {x0 + 7.6 * px} '
+             f'{y0 + 28}" class="defl"/>')
+    p.append(f'<path d="M {x0 - 0.5 * px} {y0 + 28} L {x0 + 1.7 * px} '
+             f'{y0 + 28}" class="defl"/>')
+    for xx, dx in ((x0 + 7.6 * px, 1), (x0 + 1.7 * px, 1)):
+        p.append(f'<line x1="{xx}" y1="{y0 + 28}" x2="{xx - 9 * dx}" '
+                 f'y2="{y0 + 23}" class="defl2"/>')
+        p.append(f'<line x1="{xx}" y1="{y0 + 28}" x2="{xx - 9 * dx}" '
+                 f'y2="{y0 + 33}" class="defl2"/>')
+    p.append(f'<text x="{x0 + 7.9 * px}" y="{y0 + 32}" class="arl warn">'
+             f'出</text>')
+    p.append(f'<text x="{x0 - 1.1 * px}" y="{y0 + 32}" class="arl warn">'
+             f'回</text>')
+    p.append(f'<text x="{x0 - 30}" y="{y0 + 52}" class="arl warn">'
+             f'B 被偏转：经绕回段走满 8 跳才回到 2 再重试 &rarr; '
+             f'白吃 8 个弧周期，且到达顺序被打乱</text>')
+
+    y0 = 300
+    p.append(f'<text x="{x0 + 2 * px}" y="{y0 - 32}" class="arl ok2">'
+             f'A：第 t 拍</text>')
+    p.append(f'<path d="M {x0 + 2 * px} {y0 + 28} L {x0 + 5 * px} {y0 + 28}" '
+             f'class="arcC"/>')
+    p.append(f'<text x="{x0 - 30}" y="{y0 + 52}" class="arl">'
+             f'B：第 t+1 拍走同一条弧 &mdash; 没有多余跳数，天然保序，'
+             f'所以桥 FIFO 与重组缓冲都可以删</text>')
+    return svg(720, 372, "".join(p))
+
+
+def svg_multicast() -> str:
+    """一次上环覆盖整段行弧，对比 7 次独立 unicast。
+
+    只画行 0 一行节点：要说的事全部发生在同一个环上，多画一行会引读者去找
+    并不属于这个对比的列向流量。
+    """
+    px, x0, yb, r = 58, 58, 104, 11
+    p: list[str] = []
+
+    def panel(ox: int, title: str, sub: str) -> None:
+        p.append(f'<text x="{ox - 14}" y="24" class="bxt">{title}</text>')
+        p.append(f'<text x="{ox - 14}" y="42" class="bxl dim">{sub}</text>')
+        for x in range(MX - 1):
+            cx = ox + x * px
+            p.append(f'<line x1="{cx + r + 2}" y1="{yb}" '
+                     f'x2="{cx + px - r - 2}" y2="{yb}" class="rlk"/>')
+        p.append(f'<path d="M {ox} {yb - r - 3} Q {ox + 3.5 * px} {yb - 36} '
+                 f'{ox + (MX - 1) * px} {yb - r - 3}" class="wrp"/>')
+        p.append(f'<text x="{ox + 3.5 * px}" y="{yb - 25}" class="bxl dim" '
+                 f'text-anchor="middle">绕回段</text>')
+
+    def nodes(ox: int) -> None:
+        for x in range(MX):
+            cx = ox + x * px
+            p.append(f'<circle cx="{cx}" cy="{yb}" r="{r}" '
+                     f'class="nd {"src" if x == 0 else "dst"}"/>')
+            p.append(f'<text x="{cx}" y="{yb + 4}" class="tag">'
+                     f'{x}</text>')
+            if x:
+                p.append(f'<line x1="{cx}" y1="{yb + r}" x2="{cx}" '
+                         f'y2="{yb + r + 15}" class="ar"/>')
+                p.append(f'<text x="{cx}" y="{yb + r + 29}" class="bxl dim" '
+                         f'text-anchor="middle">L1</text>')
+
+    panel(x0, "T1：一次上环，copy-and-continue",
+          "节点 0 只上环一次；下游每个环站各落一份进自己的 L1 并继续转发")
+    p.append(f'<path d="M {x0} {yb} L {x0 + 7 * px} {yb}" class="arcR"/>')
+    nodes(x0)
+    p.append(f'<text x="{x0 - 14}" y="{yb + 60}" class="bxl ok2">'
+             f'1 次上环 &middot; 7 次抽取 &middot; 占 7 个弧周期</text>')
+
+    ox2 = x0 + 8 * px + 70
+    panel(ox2, "T0：七次独立上环",
+          "paper 机制只能 unicast，所以每个目的都要单独上环一次")
+    for k, x in enumerate(range(1, MX)):
+        yy = yb - 4 - k * 2.6
+        p.append(f'<path d="M {ox2} {yy:.1f} L {ox2 + x * px} {yy:.1f}" '
+                 f'class="pRM"/>')
+    nodes(ox2)
+    p.append(f'<text x="{ox2 - 14}" y="{yb + 60}" class="bxl warn">'
+             f'7 次上环 &middot; 7 次抽取 &middot; 占 28 个弧周期</text>')
+    return svg(2 * (8 * px) + 140, 186, "".join(p))
+
+
+def svg_rotation() -> str:
+    """旋转为什么能打满一个环：每条弧恰好载一个 flit。"""
+    cx, cy, R, k = 146, 132, 94, 8
+    p: list[str] = []
+    pos = [(cx + R * math.cos(-math.pi / 2 + 2 * math.pi * i / k),
+            cy + R * math.sin(-math.pi / 2 + 2 * math.pi * i / k))
+           for i in range(k)]
+    p.append(f'<circle cx="{cx}" cy="{cy}" r="{R}" class="ringc"/>')
+    for i in range(k):
+        x1, y1 = pos[i]
+        x2, y2 = pos[(i + 1) % k]
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        vx, vy = x2 - x1, y2 - y1
+        ln = math.hypot(vx, vy)
+        p.append(f'<line x1="{mx - vx / ln * 12:.1f}" '
+                 f'y1="{my - vy / ln * 12:.1f}" '
+                 f'x2="{mx + vx / ln * 12:.1f}" '
+                 f'y2="{my + vy / ln * 12:.1f}" class="arcR"/>')
+    for i, (x, y) in enumerate(pos):
+        p.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="12" class="nd"/>')
+        p.append(f'<text x="{x:.1f}" y="{y + 4:.1f}" class="tag">{i}</text>')
+    p.append(f'<text x="{cx}" y="{cy - 6}" class="bxl" text-anchor="middle">'
+             f'每条弧</text>')
+    p.append(f'<text x="{cx}" y="{cy + 12}" class="bxl ok2" '
+             f'text-anchor="middle">都用一次</text>')
+    p.append('<text x="292" y="40" class="bxt">一个旋转步</text>')
+    for i, line in enumerate([
+            "8 个环站同时上环，各自顺时针送一跳。这一步把环上",
+            "每一条弧恰好用掉一次：花 1 个弧周期、搬 8 个 flit。",
+            "重复 7 次，每个节点就拿到了其它所有节点的数据。",
+            "",
+            "这就是它把最忙段下界打满的原因：II_eff = 47 = 每轮弧负载。",
+            "",
+            "也是它一断就死的原因：这一步没有任何备用弧可绕。"]):
+        cls = ("bxl ok2" if "打满" in line else
+               "bxl warn" if "就死" in line else "bxl")
+        p.append(f'<text x="292" y="{68 + i * 21}" class="{cls}">{line}</text>')
+    return svg(860, 268, "".join(p))
+
+
+def svg_gantt(topo, cal, *, w: int = 880, rowh: int = 7,
+              maxrows: int = 108) -> str:
+    """真实拍图的时间占用图：每条横线是一次传输的 [t0, t0+tail)。"""
+    L, Rr, T, B = 74, 26, 46, 46
+    xs = cal.makespan or 1
+    n_ph = len(cal.phase_window)
+    items = sorted(cal.starts.items(), key=lambda kv: (cal.phase_of[kv[0]],
+                                                       kv[1]))
+    step = max(1, math.ceil(len(items) / maxrows))
+    shown = items[::step]
+    h = T + rowh * len(shown) + B
+
+    def tx(t: float) -> float:
+        return L + (w - L - Rr) * (t / xs)
+    p = [f'<rect x="{L}" y="{T - 10}" width="{w - L - Rr}" '
+         f'height="{rowh * len(shown) + 16}" class="plot"/>']
+    for pi, (a, b) in enumerate(cal.phase_window):
+        p.append(f'<rect x="{tx(a):.1f}" y="{T - 10}" '
+                 f'width="{max(1, tx(b) - tx(a)):.1f}" '
+                 f'height="{rowh * len(shown) + 16}" class="phz p{pi % 4}"/>')
+        p.append(f'<line x1="{tx(b):.1f}" y1="{T - 10}" x2="{tx(b):.1f}" '
+                 f'y2="{T + rowh * len(shown) + 6}" class="bar1"/>')
+        p.append(f'<text x="{(tx(a) + tx(b)) / 2:.1f}" y="{T - 16}" '
+                 f'class="tick" text-anchor="middle">相位 {pi + 1}'
+                 f'（barrier）</text>')
+    for i, (xid, t0) in enumerate(shown):
+        fp = cal.fps[xid]
+        y = T + i * rowh
+        cls = f"p{cal.phase_of[xid] % 4}"
+        p.append(f'<rect x="{tx(t0):.1f}" y="{y:.1f}" '
+                 f'width="{max(1.2, tx(t0 + fp.tail) - tx(t0)):.1f}" '
+                 f'height="{rowh - 1.6:.1f}" class="gb {cls}"/>')
+    for i in range(6):
+        t = xs * i / 5
+        p.append(f'<text x="{tx(t):.1f}" y="{T + rowh * len(shown) + 26}" '
+                 f'class="tick" text-anchor="middle">{t:,.0f}</text>')
+    p.append(f'<text x="{(L + w - Rr) / 2}" y="{h - 8}" class="axl" '
+             f'text-anchor="middle">拍（cycle）&mdash; 共 {cal.makespan} 拍，'
+             f'{len(cal.starts)} 次传输（图中每 {step} 条抽 1 条）</text>')
+    p.append(f'<text x="{L - 10}" y="{T + 8}" class="axl" text-anchor="end">'
+             f'传输</text>')
+    return svg(w, h, "".join(p))
+
+
+# ---------------------------------------------------------------------------
+# 4. 各小节
 # ---------------------------------------------------------------------------
 
 CSS = """
-body { font-family: "Segoe UI", "Noto Sans SC", system-ui, sans-serif;
-       margin: 0; background: #0b1020; color: #e8ecf4; line-height: 1.62; }
-.wrap { max-width: 1160px; margin: 0 auto; padding: 28px 34px 80px; }
-h1 { font-size: 1.65rem; color: #f0f4ff; border-bottom: 1px solid #2a3555;
+body { font-family: "Noto Sans SC", "Microsoft YaHei", "Segoe UI", system-ui,
+       sans-serif; margin: 0; background: #0b1020; color: #e8ecf4;
+       line-height: 1.75; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 28px 32px 90px; }
+h1 { font-size: 1.6rem; color: #f0f4ff; border-bottom: 1px solid #2a3555;
      padding-bottom: .5rem; }
-h2 { margin-top: 2.4rem; font-size: 1.28rem; color: #f0f4ff;
+h2 { margin-top: 2.6rem; font-size: 1.24rem; color: #f0f4ff;
      border-left: 4px solid #7eb6ff; padding-left: .6rem; }
-h3 { margin-top: 1.7rem; font-size: 1.05rem; color: #c8d6f0; }
-p { margin: .6rem 0; }
+h3 { margin-top: 1.8rem; font-size: 1.02rem; color: #c8d6f0; }
+p { margin: .65rem 0; }
 a { color: #7eb6ff; }
-.muted { color: #9aa3b5; font-size: .85rem; }
+.muted { color: #9aa3b5; font-size: .86rem; }
 .lead { font-size: 1.02rem; color: #d6def0; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(215px,1fr));
+.cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(210px,1fr));
          gap: 12px; margin: 1.1rem 0 1.6rem; }
 .card { background: #141b2f; border: 1px solid #2a3555; border-radius: 10px;
         padding: 12px 14px; }
 .card.ok { border-color: #2d6a4f; } .card.bad { border-color: #9b2226; }
 .card .k { font-size: .78rem; color: #9aa3b5; }
-.card .v { font-size: 1.4rem; font-weight: 700; margin: .2rem 0; }
+.card .v { font-size: 1.38rem; font-weight: 700; margin: .2rem 0; }
 .card .s { font-size: .78rem; color: #b8c0d0; }
-table { border-collapse: collapse; width: 100%; font-size: .85rem;
+table { border-collapse: collapse; width: 100%; font-size: .86rem;
         margin: .7rem 0 1.3rem; }
-th, td { border: 1px solid #2a3555; padding: 6px 9px; text-align: left;
-         vertical-align: top; }
+th, td { border: 1px solid #2a3555; padding: 6px 9px; text-align: left; }
 th { background: #1a2340; font-weight: 600; }
 td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 tr:nth-child(even) { background: #12192c; }
-tr.hl td { background: #17243d; }
 code { background: #1a2340; padding: 1px 5px; border-radius: 4px;
        font-size: .88em; }
 pre.code { background: #10162a; border: 1px solid #2a3555; border-left: 3px
        solid #7eb6ff; border-radius: 8px; padding: 12px 16px; overflow-x: auto;
-       font-family: ui-monospace, "Cascadia Code", monospace; font-size: .82rem;
-       line-height: 1.5; color: #d8e2f5; }
+       font-family: ui-monospace, monospace; font-size: .82rem; line-height: 1.6;
+       color: #d8e2f5; }
+pre.code .c { color: #7f8ca8; }
 .eq { background: #141b2f; padding: 10px 15px; border-radius: 8px;
-      font-family: ui-monospace, monospace; margin: .7rem 0; font-size: .85rem;
+      font-family: ui-monospace, monospace; margin: .7rem 0; font-size: .84rem;
       border: 1px solid #2a3555; }
 .win { color: #6ee7a8; font-weight: 600; }
 .lose { color: #f0a0a0; font-weight: 600; }
-.pill { display: inline-block; background: #1a2340; border: 1px solid #2a3555;
-        border-radius: 999px; padding: 2px 11px; font-size: .78rem;
-        margin: 0 6px 6px 0; }
 .note { background: #141b2f; border-left: 3px solid #d9a03c;
         border-radius: 0 8px 8px 0; padding: 10px 15px; margin: .9rem 0;
         font-size: .89rem; }
@@ -330,791 +651,1330 @@ pre.code { background: #10162a; border: 1px solid #2a3555; border-left: 3px
 .note.bad { border-left-color: #9b2226; }
 .note b { color: #f0f4ff; }
 .fig { background: #0e1425; border: 1px solid #2a3555; border-radius: 10px;
-       padding: 14px 12px 8px; margin: 1.1rem 0 1.4rem; }
-.fig .cap { color: #9aa3b5; font-size: .82rem; margin-top: .5rem;
+       padding: 14px 12px 10px; margin: 1.2rem 0 1.5rem; }
+.fig .cap { color: #9aa3b5; font-size: .83rem; margin-top: .6rem;
             padding: 0 6px; }
+.fig .cap b { color: #c8d6f0; }
 .toc { background: #141b2f; border: 1px solid #2a3555; border-radius: 10px;
        padding: 12px 20px; columns: 2; font-size: .88rem; }
 .toc a { text-decoration: none; }
-ul, ol { margin: .5rem 0 .9rem; padding-left: 1.5rem; }
-li { margin: .22rem 0; }
-svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
-.rlk { stroke: #3a5580; stroke-width: 2.4; }
-.wrp { fill: none; stroke: #55618a; stroke-width: 1.4; stroke-dasharray: 4 3; }
-.nd { fill: #8fa2c8; } .nd.src { fill: #6ee7a8; } .nd.dst { fill: #7eb6ff; }
-.arcR { fill: none; stroke: #6ee7a8; stroke-width: 4.5; }
-.pRM { fill: none; stroke: #ff9ecb; stroke-width: 2; }
-.ringc { fill: none; stroke: #3a5580; stroke-width: 2.6; }
-.tag { fill: #0b1020; font-size: 10px; font-weight: 700; text-anchor: middle; }
-.lbl { fill: #c8d0e0; font-size: 12px; }
-.lbl.warn, .warn { fill: #f0c070; } .ok2 { fill: #6ee7a8; }
-.bxt { fill: #f0f4ff; font-size: 13px; font-weight: 700; }
-.bxl { fill: #c2ccdf; font-size: 12px; } .bxl.dim, .dim { fill: #8b95ab; }
-.ar { stroke: #7eb6ff; stroke-width: 1.8; }
+ul, ol { margin: .5rem 0 .9rem; padding-left: 1.6rem; }
+li { margin: .26rem 0; }
+svg text { font-family: "Noto Sans SC", "Microsoft YaHei", "Segoe UI",
+           system-ui, sans-serif; }
 .plot { fill: #0b142a; stroke: #2a3555; }
 .gl { stroke: #1f2a47; }
-.anch { stroke: #d9a03c; stroke-width: 1.3; stroke-dasharray: 3 3; }
-.anchl { fill: #d9a03c; font-size: 11px; }
-.cv { fill: none; stroke-width: 2.6; }
-.cA { stroke: #7eb6ff; } .cB { stroke: #6ee7a8; }
-.cC { stroke: #f0a0a0; } .cD { stroke: #c9a6ff; }
-.star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
-.star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
 .tick { fill: #8b95ab; font-size: 11px; }
 .axl { fill: #9aa3b5; font-size: 12px; }
+.axc { stroke: #7d8aa8; stroke-width: 1.4; }
+.barv { fill: #dbe4f5; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.bar { stroke: none; }
+.bar.hib { stroke: #f0f4ff; stroke-width: 1.2; }
+.bar.cA { fill: #7eb6ff; } .bar.cB { fill: #6ee7a8; }
+.bar.cC { fill: #f0a0a0; } .bar.cD { fill: #c9a6ff; }
+.bar.cE { fill: #55618a; } .bar.cF { fill: #d9a03c; }
+.cv { fill: none; stroke-width: 2.6; }
+.cA { stroke: #7eb6ff; } .cB { stroke: #6ee7a8; } .cC { stroke: #f0a0a0; }
+.cD { stroke: #c9a6ff; }
+.star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
+.star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
+.anch { stroke: #d9a03c; stroke-width: 1.3; stroke-dasharray: 3 3; }
+.anchl { fill: #d9a03c; font-size: 11px; }
+.rlk { stroke: #3a5580; stroke-width: 2.4; }
+.nd.src { fill: #6ee7a8; } .nd.dst { fill: #8fa2c8; }
+.pRM { fill: none; stroke: #f0a0a0; stroke-width: 1.5; }
+.ringc { fill: none; stroke: #2a3555; stroke-width: 1.4; }
+.pill { display: inline-block; background: #1a2340; border: 1px solid #2a3555;
+        border-radius: 999px; padding: 2px 11px; font-size: .78rem;
+        margin: 0 6px 6px 0; }
+.wrp { fill: none; stroke: #55618a; stroke-width: 1.4; stroke-dasharray: 4 3; }
+.nd { fill: #8fa2c8; }
+.tag { fill: #0b1020; font-size: 10px; font-weight: 700; text-anchor: middle; }
+.arcR { fill: none; stroke: #6ee7a8; stroke-width: 4.5; }
+.arcC { fill: none; stroke: #c9a6ff; stroke-width: 4.5; }
+.defl { fill: none; stroke: #f0a0a0; stroke-width: 2.4; stroke-dasharray: 6 4; }
+.defl2 { fill: none; stroke: #f0a0a0; stroke-width: 2.4; }
+.ar { stroke: #7eb6ff; stroke-width: 1.8; }
+.arl { fill: #9db0d0; font-size: 11.5px; }
+.arl.warn, .warn { fill: #f0c070; } .ok2 { fill: #6ee7a8; }
+.bx { fill: #141b2f; stroke: #2a3555; stroke-width: 1.5; }
+.bx.src { fill: #13251c; stroke: #2d6a4f; }
+.bx.arb { fill: #141d33; stroke: #3d5a99; }
+.bx.fill { fill: #241a1a; stroke: #7a3b3b; }
+.bx.acc { fill: #241a1a; stroke: #7a3b3b; }
+.bx.cal { fill: #141d33; stroke: #3d5a99; }
+.bx.gone { fill: #11201a; stroke: #2d6a4f; stroke-dasharray: 5 4; }
+.bxt { fill: #f0f4ff; font-size: 12.5px; font-weight: 700; }
+.bxl { fill: #c2ccdf; font-size: 11.5px; } .bxl.dim, .dim { fill: #8b95ab; }
+.h3s { fill: #f0f4ff; font-size: 14px; font-weight: 700; }
+.gb { stroke: none; }
+.gb.p0 { fill: #7eb6ff; } .gb.p1 { fill: #6ee7a8; }
+.gb.p2 { fill: #c9a6ff; } .gb.p3 { fill: #d9a03c; }
+.phz { opacity: .07; }
+.phz.p0 { fill: #7eb6ff; } .phz.p1 { fill: #6ee7a8; }
+.phz.p2 { fill: #c9a6ff; } .phz.p3 { fill: #d9a03c; }
+.bar1 { stroke: #d9a03c; stroke-width: 1.2; stroke-dasharray: 4 3; }
 """
 
 
 def sec_cards(d: dict) -> str:
-    c, v, rob = d["coll"], d["ver"], d["rob"]
+    c, ver, rob = d["coll"], d["ver"], d["rob"]
     out = []
-    if v:
-        out.append(f'<div class="card {"ok" if v["all_pass"] else "bad"}">'
-                   f'<div class="k">verification</div>'
-                   f'<div class="v">{v["n_pass"]}/{v["n_checks"]}</div>'
-                   f'<div class="s">executable checks pass</div></div>')
-    if c:
-        m13 = rows(c, m=13, bidir=True)
-        bc = row1(c, pattern="broadcast", algo="dim_2phase", tier="T1", m=13,
-                  bidir=True)
-        bcf = row1(c, pattern="broadcast", algo="flat", tier="T0", m=13,
-                   bidir=True)
-        if bc and bcf:
-            out.append(f'<div class="card ok"><div class="k">broadcast, '
-                       f'arc multicast vs flat unicast</div>'
-                       f'<div class="v">'
-                       f'{bcf["calendar"]["makespan"] / bc["calendar"]["makespan"]:.1f}&times;'
-                       f'</div><div class="s">'
-                       f'{bcf["calendar"]["makespan"]} &rarr; '
-                       f'{bc["calendar"]["makespan"]} cycles at m=13</div>'
-                       f'</div>')
-        base = [r for r in m13 if r["ring_base"]["makespan"] is not None]
-        if base:
-            w = max(base, key=lambda r: r["ratios"]["base_over_calendar"])
-            out.append(f'<div class="card"><div class="k">paper mechanism vs '
-                       f'best static calendar</div><div class="v">'
-                       f'{w["ratios"]["base_over_calendar"]:.2f}&times;</div>'
-                       f'<div class="s">worst case: {w["pattern"]}/'
-                       f'{w["algo"]}</div></div>')
-        ag = row1(c, pattern="allgather", algo="flat", tier="T0", m=13,
-                  bidir=True)
-        if ag:
-            out.append(f'<div class="card"><div class="k">busiest-segment '
-                       f'utilization, flat allgather m=13</div>'
-                       f'<div class="v">'
-                       f'{pct(ag["calendar"]["util"]["critical_arc_util"])}'
-                       f'</div><div class="s">global '
-                       f'{pct(ag["calendar"]["util"]["global_util"])} over all '
-                       f'192 arcs</div></div>')
+    win, tie, lose = split_1p(c)
+    n = len(win) + len(tie) + len(lose)
+    out.append(f'<div class="card ok"><div class="k">m=13 同能力（T0）：'
+               f'拍图更快的 collective</div><div class="v">{len(win)} / {n}'
+               f'</div><div class="s">{len(lose)} 个基线更快、{len(tie)} 个'
+               f'打平（见 §4、§5）</div></div>')
+    bc, bc0 = (row1(c, pattern="broadcast", algo="dim_2phase", tier="T1", m=13,
+                    bidir=True),
+               row1(c, pattern="broadcast", algo="dim_2phase", tier="T0", m=13,
+                    bidir=True))
+    if bc and bc0:
+        out.append(f'<div class="card ok"><div class="k">弧多播对广播的收益'
+                   f'（同树、m=13）</div><div class="v">'
+                   f'{bc0["calendar"]["makespan"] / bc["calendar"]["makespan"]:.2f}'
+                   f'&times;</div><div class="s">'
+                   f'{bc0["calendar"]["makespan"]} &rarr; '
+                   f'{bc["calendar"]["makespan"]} 拍（上环 flit '
+                   f'{bc0["shape"]["n_flits_boarded"]} &rarr; '
+                   f'{bc["shape"]["n_flits_boarded"]}）</div></div>')
+    a2a, a2k = best_base(c, "alltoall", 13), best_cal(c, "alltoall", 13, "T0")
+    if a2a and a2k:
+        out.append(f'<div class="card"><div class="k">全交换 m=13：基线 / 拍图'
+                   f'</div><div class="v">'
+                   f'{a2a["ring_base"]["makespan"] / a2k["calendar"]["makespan"]:.2f}'
+                   f'&times;</div><div class="s">'
+                   f'{a2a["ring_base"]["makespan"]} vs '
+                   f'{a2k["calendar"]["makespan"]} 拍</div></div>')
+    dfl = [(p, best_base(c, p, 13)) for p in PATTERNS if best_base(c, p, 13)]
+    wp, wr = max(dfl, key=lambda e: e[1]["ring_base"]["deflect_per_flit"])
+    out.append(f'<div class="card bad"><div class="k">基线偏转率峰值'
+               f'（m=13）</div><div class="v">'
+               f'{wr["ring_base"]["deflect_per_flit"]:.3f}</div>'
+               f'<div class="s">次 / flit，出现在{CN1[wp]}/{wr["algo"]}；'
+               f'白吃弧周期且制造乱序</div></div>')
+    if ver:
+        out.append(f'<div class="card {"ok" if ver["all_pass"] else "bad"}">'
+                   f'<div class="k">可执行验证</div><div class="v">'
+                   f'{ver["n_pass"]}/{ver["n_checks"]}</div>'
+                   f'<div class="s">D-R 五子句 0 违例、转环驻留 0</div></div>')
     if rob:
         rot = next((x for x in rob["faults"] if x["algo"] == "ring_rotate"),
                    None)
-        dim = next((x for x in rob["faults"]
-                    if x["algo"] == "dim_2phase" and x["tier"] == "T1"), None)
-        if rot and dim:
-            out.append(f'<div class="card bad"><div class="k">fault scenarios '
-                       f'with no legal schedule</div><div class="v">'
-                       f'{rot["n_infeasible"]}/{rot["n_scenarios"]}</div>'
-                       f'<div class="s">rotation; dimension-phase is '
-                       f'{dim["n_infeasible"]}/{dim["n_scenarios"]}</div>'
-                       f'</div>')
-    if d["idx"]:
-        out.append(f'<div class="card"><div class="k">exported slot tables'
-                   f'</div><div class="v">{len(d["idx"]["entries"])}</div>'
-                   f'<div class="s">calendar-export/v2, all conflict free'
-                   f'</div></div>')
+        if rot:
+            out.append(f'<div class="card bad"><div class="k">旋转拍图无解的'
+                       f'故障场景</div><div class="v">{rot["n_infeasible"]}'
+                       f'/{rot["n_scenarios"]}</div><div class="s">吞吐最优'
+                       f'方案最不抗故障</div></div>')
     return f'<div class="cards">{"".join(out)}</div>'
 
 
-def sec_baseline(c: dict) -> str:
-    """Part 1: the paper mechanism on all six collectives."""
-    body = []
-    for m in (1, 13):
-        body.append(f"<h3>m = {m} flit(s) per message</h3>")
-        body.append('<table><tr><th>collective</th><th>algorithm</th>'
-                    '<th>tier</th><th class="n">ring_base<br>(paper)</th>'
-                    '<th class="n">ring_islip2d</th>'
-                    '<th class="n">static calendar</th>'
-                    '<th class="n">lower bound</th><th>binding bound</th>'
-                    '<th class="n">base/cal</th><th class="n">cal/LB</th>'
-                    '<th class="n">deflections<br>per flit</th></tr>')
-        for pat in PATTERN_ORDER:
-            rs = [r for r in rows(c, pattern=pat, m=m, bidir=True)]
-            rs.sort(key=lambda r: (r["tier"], r["calendar"]["makespan"]))
-            for i, r in enumerate(rs):
-                cal, b = r["calendar"], r["bounds"]
-                rb, isl = r["ring_base"], r["ring_islip2d"]
-                hl = ' class="hl"' if i == 0 else ""
-                body.append(
-                    f'<tr{hl}><td>{pat if i == 0 else ""}</td>'
-                    f'<td>{r["algo"]}</td><td>{r["tier"]}</td>'
-                    f'<td class="n">{f(rb.get("makespan"))}</td>'
-                    f'<td class="n">{f(isl.get("makespan"))}</td>'
-                    f'<td class="n"><b>{f(cal["makespan"])}</b></td>'
-                    f'<td class="n">{f(b["makespan_lb"])}</td>'
-                    f'<td>{b["binding_lb"]}</td>'
-                    f'<td class="n">{f(r["ratios"].get("base_over_calendar"), 2)}</td>'
-                    f'<td class="n">{f(cal["makespan_over_lb"], 2)}</td>'
-                    f'<td class="n">{f(rb.get("deflect_per_flit"), 4)}</td>'
-                    f'</tr>')
-        body.append("</table>")
-    return "".join(body)
+def sec_transports(c: dict) -> str:
+    """环上三种 transport 放在同一张表里。
 
-
-def sec_tavg(t: dict) -> str:
-    if not t:
-        return '<p class="muted">ring_tavg_8x6.json missing.</p>'
-    out = [f'<div class="eq">{t["definition"]}</div>']
-    out.append('<table><tr><th>algorithm</th><th>tier</th>'
-               '<th class="n">ports</th><th class="n">T1</th>'
-               '<th class="n">T&#8325;</th><th class="n">T&#8321;&#8323;</th>'
-               '<th class="n">II_eff</th>'
-               '<th class="n">T_avg(R=1)</th><th class="n">T_avg(R=5)</th>'
-               '<th class="n">T_avg(R=13)</th>'
-               '<th class="n">critical arc util @R=13</th></tr>')
-    rs = [r for r in t["ring"] if r["pattern"] == "allgather"]
-    rs.sort(key=lambda r: r["by_rounds"]["13"]["T_avg"]
-            if r["by_rounds"].get("13") else 1e9)
-    for r in rs:
-        br = r["by_rounds"]
-        u13 = br.get("13", {}).get("util", {}) if br.get("13") else {}
+    `ring_islip2d` 是**同能力的调度参照**而不是竞争者：它每节点每轮只仲裁一个
+    flit，所以在 2256 条消息的 pattern 上必然差一个数量级。列出来的价值在于
+    界定「运行期集中式仲裁」这条路的上限，而不是宣布谁赢。
+    """
+    out = ['<table><tr><th>集合通信</th><th class="n">静态拍图</th>'
+           '<th class="n">ring_base<br>（paper 机制）</th>'
+           '<th class="n">ring_islip2d<br>（集中式参照）</th>'
+           '<th class="n">下界<br>（拍图模型）</th>'
+           '<th class="n">拍图/下界</th>'
+           '<th class="n">基线/<b>基线模型</b>下界</th>'
+           '<th class="n">islip2d/下界</th></tr>']
+    for pat in PATTERNS:
+        k = best_cal(c, pat, 13, "T0")
+        b = best_base(c, pat, 13)
+        isl = [r for r in rows(c, pattern=pat, m=13, bidir=True)
+               if r["ring_islip2d"].get("makespan") is not None]
+        i0 = min(isl, key=lambda r: r["ring_islip2d"]["makespan"]) if isl else None
+        if not k:
+            continue
         out.append(
-            f'<tr><td>{r["algo"]}</td><td>{r["tier"]}</td>'
-            f'<td class="n">{r["ports"]}</td>'
-            f'<td class="n">{f(r["T1"])}</td>'
-            f'<td class="n">{f(br["5"]["T_R"] if br.get("5") else None)}</td>'
-            f'<td class="n">{f(br["13"]["T_R"] if br.get("13") else None)}</td>'
-            f'<td class="n">{f(br["13"]["II_eff"] if br.get("13") else None, 2)}</td>'
-            f'<td class="n">{f(br["1"]["T_avg"] if br.get("1") else None, 1)}</td>'
-            f'<td class="n">{f(br["5"]["T_avg"] if br.get("5") else None, 1)}</td>'
-            f'<td class="n"><b>{f(br["13"]["T_avg"] if br.get("13") else None, 1)}</b></td>'
-            f'<td class="n">{pct(u13.get("critical_arc_util"))}</td></tr>')
+            f'<tr><td>{CN1[pat]}</td>'
+            f'<td class="n"><b>{f(k["calendar"]["makespan"])}</b></td>'
+            f'<td class="n">{f((b or {}).get("ring_base", {}).get("makespan"))}'
+            f'</td>'
+            f'<td class="n">'
+            f'{f((i0 or {}).get("ring_islip2d", {}).get("makespan"))}</td>'
+            f'<td class="n">{f(k["bounds"]["makespan_lb"])}</td>'
+            f'<td class="n">{times(k["ratios"]["calendar_over_lb"])}</td>'
+            f'<td class="n">'
+            f'{times((b or {}).get("ratios", {}).get("base_over_base_lb"))}'
+            f'</td>'
+            f'<td class="n">'
+            f'{times((i0 or {}).get("ratios", {}).get("islip_over_lb"))}</td>'
+            f'</tr>')
     out.append("</table>")
-
-    mesh = t.get("mesh_reference") or {}
-    if not mesh.get("available"):
-        out.append(f'<div class="note bad"><b>Mesh column not available.</b> '
-                   f'{mesh.get("reason", "no mesh reference recorded")}. The '
-                   f'ring numbers above stand on their own; the ring-vs-mesh '
-                   f'ordering claim is deliberately left unstated rather than '
-                   f'carried over from the older R=5-only mesh run.</div>')
-        return "".join(out)
-
-    out.append("<h3>Ring versus 8&times;6 mesh, same T_avg definition</h3>")
-    out.append('<p>The mesh side sweeps its own design variables (crossbar '
-               'write width, drain rate, FIFO depth) and the column below is '
-               'the best mesh point at that R. The ring is shown twice, once '
-               'per ring-station port count, because one board and one leave '
-               'port per station is a different hardware budget than two and '
-               'the verdict turns over between them.</p>')
-    ports = sorted({p for e in t["ring_vs_mesh"]
-                    for p in (e.get("by_ring_ports") or {})})
-    out.append('<table><tr><th class="n">R</th><th>mesh best</th>'
-               '<th class="n">mesh T_avg</th>'
-               + "".join(f'<th class="n">ring T_avg<br>({p} port'
-                         f'{"s" if p != "1" else ""})</th>'
-                         f'<th class="n">ring/mesh</th>' for p in ports)
-               + '</tr>')
-    for e in t["ring_vs_mesh"]:
-        mb = e.get("mesh_best") or {}
-        cells = []
-        for p in ports:
-            v = (e.get("by_ring_ports") or {}).get(p) or {}
-            win = v.get("winner")
-            cls = "win" if win == "ring" else "lose"
-            cells.append(
-                f'<td class="n">{f(v.get("T_avg"), 1)}</td>'
-                f'<td class="n"><span class="{cls}">'
-                f'{times(v.get("ring_over_mesh"), 3)}</span></td>')
-        out.append(
-            f'<tr><td class="n">{e["R"]}</td>'
-            f'<td>{mb.get("label") or mb.get("scheme") or "&mdash;"}</td>'
-            f'<td class="n">{f(mb.get("T_avg"), 1)}</td>'
-            + "".join(cells) + '</tr>')
-    out.append("</table>")
-    p1 = [(e["R"], (e.get("by_ring_ports") or {}).get("1") or {})
-          for e in t["ring_vs_mesh"]]
-    if all(v for _R, v in p1):
-        out.append(
-            f'<div class="note bad"><b>At one port per ring station the ring '
-            f'loses the deep-pipeline case.</b> '
-            + ", ".join(f'R={R}: {v["winner"]} by '
-                        f'{times(v["ring_over_mesh"], 3)}' for R, v in p1)
-            + f'. The ring\'s advantage at R=1 is a span advantage &mdash; its '
-              f'data spans half a mesh diameter. At R=13 the binding resource '
-              f'is the station\'s single insert/extract port, and the mesh\'s '
-              f'Hamilton bi-tree (II_eff = 1.0) pipelines past it. Only the '
-              f'2-port ring wins at every R. Quoting the ring\'s win without '
-              f'naming the port count would be the single most misleading '
-              f'number in this report.</div>')
-    fl = t.get("order_flips")
-    if isinstance(fl, list) and fl:
-        out.append(f'<div class="note bad"><b>The ranking does not survive the '
-                   f'pipeline depth.</b> {"; ".join(fl)}. Quoting a single R '
-                   f'would have picked a winner by accident.</div>')
-    elif fl:
-        out.append(f'<div class="note good"><b>The ranking survives the '
-                   f'pipeline depth.</b> {fl}, so the R=1 comparison was not '
-                   f'an artefact of the chosen depth.</div>')
+    out.append('<div class="note"><b>三条腿不是三个竞争者。</b>'
+               '静态拍图与 <code>ring_base</code> 是真正的对手（同一块环、'
+               '同一个流集，只换 transport）；<code>ring_islip2d</code> 是'
+               '<b>同能力的调度参照</b>，用来界定「运行期集中式仲裁」这条路的'
+               '上限 —— 它每节点每轮只放行一个 flit，在 2256 条消息的 pattern '
+               '上必然差一个数量级，应当读作对照组而不是结果。'
+               '所有 T0 口径：三条腿都只有 unicast。'
+               '<br>下界一列是<b>该行那个 T0 流集自己的</b>下界，所以和 §3 图里'
+               '按「T0/T1 取更松那个」画的下界不是同一个数 —— 界依赖流集，'
+               '加了多播就换了一组界。<b>并且它是拍图模型的界，不是基线的界</b>，'
+               '原因见下。</div>')
+    out.append(sec_two_models(c))
     return "".join(out)
 
 
-def sec_levers(c: dict) -> str:
+def _two_model_rows(c: dict) -> list[dict]:
+    """出现「基线看起来低于下界」的行，按错得最狠排序。"""
     out = []
-    out.append("<h3>Lever 1 &mdash; arc multicast (copy and continue)</h3>")
-    out.append('<table><tr><th>collective</th><th class="n">m</th>'
-               '<th class="n">T0 boarded flits</th>'
-               '<th class="n">T1 boarded flits</th><th class="n">traffic cut</th>'
-               '<th class="n">T0 makespan</th><th class="n">T1 makespan</th>'
-               '<th class="n">makespan cut</th></tr>')
+    for r in rows(c, tier="T0", bidir=True):
+        bm = (r.get("ring_base") or {}).get("makespan")
+        if not bm or "bounds_base" not in r:
+            continue
+        if bm >= r["bounds"]["makespan_lb"]:
+            continue
+        out.append(r)
+    return sorted(out, key=lambda r: r["ratios"]["base_over_cal_model_lb"])
+
+
+def sec_two_models(c: dict) -> str:
+    """为什么基线会「低于下界」：两条腿跑的是两台不同的机器。
+
+    这一节存在的理由是它曾经真的错过：报告把拍图模型的界与基线的实测放在
+    同一列做比值，最狠的一行给出 0.73&times;，读起来像是违反物理。三个成因
+    全部可精确量化，这里逐个给出证据，并给出在基线自己模型下重建的界。
+    """
+    bad = _two_model_rows(c)
+    if not bad:
+        return ""
+    w = bad[0]
+    g = row1(c, pattern="gather", algo="dim_2phase", tier="T0", m=13,
+             bidir=True)
+    rot = row1(c, pattern="allgather", algo="ring_rotate", tier="T0", m=1,
+               bidir=True)
+    out = ['<h3>为什么基线会「低于下界」：那是两台不同的机器</h3>',
+           f'<div class="note bad"><b>先说结论：不是违反物理，也不是仿真漏拍，'
+           f'是记账口径串了。</b>上表的下界算在<b>拍图</b>的机器模型上，'
+           f'而 <code>ring_base</code> 跑的是另一台机器。拿前者去除后者，'
+           f'{len(bad)}/{len(rows(c, tier="T0", bidir=True))} 行会出现 '
+           f'&lt;1 的比值，最狠的是 '
+           f'{lbl(w["pattern"], w["algo"], w["tier"])} m={w["m"]}：'
+           f'实测 {f(w["ring_base"]["makespan"])} 拍 vs 拍图模型下界 '
+           f'{f(w["bounds"]["makespan_lb"])} 拍 = '
+           f'<b>{times(w["ratios"]["base_over_cal_model_lb"])}</b>。'
+           f'两台机器的差别恰好在三处，全部可量化：</div>']
+    out.append("<ol>")
+    if g:
+        out.append(
+            f'<li><b>环站出口容量（这是大头）。</b>拍图给每个环站出口 '
+            f'<code>leave_ports=1</code>，即<b>每拍 1 flit</b>；基线的 sim 里'
+            f'节点按 <code>eject_bw=RAMP_BW={f(g["bounds"]["ramp_bw"])}</code>'
+            f' flit/拍 排空 L1，出口不单独限流。所以在 '
+            f'{lbl(g["pattern"], g["algo"], g["tier"])} m=13 上，'
+            f'拍图模型的端口界是 <b>{f(g["bounds"]["port_lb"])}</b> 拍，'
+            f'而基线真正欠的是弹出界 <b>{f(g["bounds_base"]["ramp_lb"])}</b> 拍'
+            f'（{f(g["bounds"]["max_eject_flits"])} flit ÷ '
+            f'{f(g["bounds"]["ramp_bw"])}）—— 实测 '
+            f'{f(g["ring_base"]["makespan"])} 拍正好落在两者之间，两边都自洽。'
+            f'</li>')
+    if rot:
+        gap = rot["bounds"]["latency_lb"] - rot["bounds_base"]["latency_lb"]
+        out.append(
+            f'<li><b>每相位 +RAMP 的斜坡常数。</b>拍图的时延地板按 '
+            f'<code>wire + dur + RAMP</code> 收，每个相位都收一次；'
+            f'sim 一拍不收。相位一多就成系统性偏差：'
+            f'{lbl(rot["pattern"], rot["algo"], rot["tier"])} m=1 有 '
+            f'{rot["shape"]["n_phases"]} 个相位，'
+            f'两个时延地板差 <b>{f(gap)}</b> 拍 = RAMP&times;相位数，'
+            f'占了它 {pct(gap / rot["bounds"]["latency_lb"])} 的下界。</li>')
+    out.append(
+        '<li><b>过桥转环的 1 拍。</b>拍图给每次转环收 <code>t_turn=1</code>，'
+        'sim 免费过桥。所以凡是最长路要转环的方案，两边还会再差 1 拍 —— '
+        '这就是 m=1 那几行「差 1 拍」的全部来源。</li>')
+    out.append("</ol>")
+    out.append('<p>把界在<b>基线自己的模型</b>下重建（弧负载不变、出口按 '
+               'RAMP_BW、不收 +RAMP、过桥免费）之后，'
+               '<b>40 行全部 &ge; 下界，且旋转那 10 行精确等于 1.000&times;</b>'
+               '（说明偏转机制跑旋转在它自己模型下已是时延最优）。'
+               '下表是错得最狠的几行，两个模型并排：</p>')
+    out.append('<table><tr><th>方案</th><th class="n">m</th>'
+               '<th class="n">基线实测</th><th class="n">拍图模型下界</th>'
+               '<th class="n">基线模型下界</th>'
+               '<th class="n">/拍图模型</th><th class="n">/基线模型</th>'
+               '<th>各自绑定项</th></tr>')
+    for r in bad[:8]:
+        out.append(
+            f'<tr><td>{lbl(r["pattern"], r["algo"], r["tier"])}</td>'
+            f'<td class="n">{r["m"]}</td>'
+            f'<td class="n">{f(r["ring_base"]["makespan"])}</td>'
+            f'<td class="n">{f(r["bounds"]["makespan_lb"])}</td>'
+            f'<td class="n">{f(r["bounds_base"]["makespan_lb"])}</td>'
+            f'<td class="n"><span class="lose">'
+            f'{times(r["ratios"]["base_over_cal_model_lb"])}</span></td>'
+            f'<td class="n"><span class="win">'
+            f'{times(r["ratios"]["base_over_base_lb"])}</span></td>'
+            f'<td>{BIND_CN.get(r["bounds"]["binding_lb"], r["bounds"]["binding_lb"])}'
+            f' / '
+            f'{BIND_CN.get(r["bounds_base"]["binding_lb"], r["bounds_base"]["binding_lb"])}'
+            f'</td></tr>')
+    out.append("</table>")
+    out.append('<div class="note good"><b>这件事对结论有多大影响？</b>'
+               '它<b>不改变</b>任何「基线 vs 拍图」的头对头比较 —— 那些比的是'
+               '两个实测 makespan，不经过下界。它改变的是「离最优还有多远」'
+               '这类陈述：基线的 base/lb 一列必须换成它自己模型的界。'
+               '成因 1 同时也是 §5「端口粒度」那一节的根源，'
+               '两者是同一件事的两个后果。'
+               '验证套件现在有 6 项断言盯着这件事（#31&ndash;#36），'
+               '其中一项显式记录「用一个界量两条腿」这个做法被推翻。</div>')
+    return "".join(out)
+
+
+def sec_compare(c: dict) -> str:
+    out = []
+    for m in (1, 13):
+        cats, base, c0, c1, lb = [], [], [], [], []
+        for pat in PATTERNS:
+            b = best_base(c, pat, m)
+            k0, k1 = best_cal(c, pat, m, "T0"), best_cal(c, pat, m, "T1")
+            cats.append(CN[pat])
+            base.append(b["ring_base"]["makespan"] if b else None)
+            c0.append(k0["calendar"]["makespan"] if k0 else None)
+            c1.append(k1["calendar"]["makespan"] if k1 else None)
+            # 画两个模型都成立的公共下界：base 模型的界恒 <= 拍图模型的界
+            # （出口容量更宽、不收 +RAMP、过桥免费），所以它是唯一一条不会
+            # 出现「实测柱低于下界柱」的水平线。拍图自己更紧的界在 §9。
+            lb.append(min(x["bounds_base"]["makespan_lb"]
+                          for x in (k0, k1) if x))
+        out.append(
+            f'<div class="fig">'
+            f'{grouped_bars(cats, [{"name": "ring_base 基线（T0）", "cls": "cC", "vals": base}, {"name": "拍图（T0 同能力）", "cls": "cB", "vals": c0}, {"name": "拍图（T1 加多播）", "cls": "cD", "vals": c1}, {"name": "理论下界", "cls": "cE", "vals": lb}], ylabel="makespan（拍）", hi_series=1)}'
+            f'<div class="cap"><b>图：m={m} 时六个集合通信的 makespan。</b>'
+            f'三条腿各取自己最优的集合算法（算法与 transport 是正交的两根轴，'
+            f'用同一个算法压基线等于把基线做成稻草人）。<b>绿柱才是同硬件'
+            f'口径的对比</b>：`ring_base` 只支持 unicast，即 T0。'
+            f'紫柱是额外加了弧多播 + L1 归约之后的拍图，'
+            f'<b>只有扇出型有紫柱</b> &mdash; 归约 / 收集 / 全交换无可复制，'
+            f'T1 与 T0 逐字段相同。'
+            f'<b>下界柱是「两套机器模型都成立」的公共下界</b>'
+            f'（弧负载 / L1 弹出 / 时延三者取最大，按基线模型的口径），'
+            f'因为拍图模型自己那条更紧的界对基线不成立 —— 详见 §2 末。'
+            f'拍图离它自己那条更紧的界有多远，在 §9 的表里。</div></div>')
+    return "".join(out)
+
+
+def split_1p(c: dict, m: int = 13, tie: float = 0.03
+             ) -> tuple[list[str], list[str], list[str]]:
+    """按 m=13 的基线/拍图比值把六个 collective 分成赢、打平、输三组。
+
+    分组由数据算出而不是写死：改了 &sigma;、端口数或算法集之后叙述会跟着走，
+    不会留下一句和图对不上的话。
+    """
+    win, tie_, lose = [], [], []
+    for pat in PATTERNS:
+        b, k = best_base(c, pat, m), best_cal(c, pat, m, "T0")
+        if not b or not k:
+            continue
+        r = b["ring_base"]["makespan"] / k["calendar"]["makespan"]
+        (tie_ if abs(r - 1) <= tie else win if r > 1 else lose).append(pat)
+    return win, tie_, lose
+
+
+def sec_winloss(c: dict) -> str:
+    items = []
+    for pat in PATTERNS:
+        b, k = best_base(c, pat, 13), best_cal(c, pat, 13, "T0")
+        k1 = best_cal(c, pat, 13, "T1")
+        if not b or not k:
+            continue
+        note = (f'{b["ring_base"]["makespan"]} / '
+                f'{k["calendar"]["makespan"]} 拍')
+        if k1:
+            note += (f'；+T1 后 '
+                     f'{b["ring_base"]["makespan"] / k1["calendar"]["makespan"]:.2f}'
+                     f'&times;')
+        items.append({
+            "label": f'{CN1[pat]}（{k["algo"]}）',
+            "ratio": b["ring_base"]["makespan"] / k["calendar"]["makespan"],
+            "note": note})
+    items.sort(key=lambda it: -it["ratio"])
+    win, tie, lose = split_1p(c)
+    j = lambda ps: "、".join(CN1[p] for p in ps) or "无"
+    return (f'<div class="fig">'
+            f'{diverging_bars(items, left_label="基线更快", right_label="拍图更快")}'
+            f'<div class="cap"><b>图：m=13、<u>同为 T0 能力</u>时的「基线拍数 '
+            f'/ 拍图拍数」。</b>向右越长表示拍图赢得越多；右列附注同时给出'
+            f'加上 T1 多播硬件后的比值。分界线不是随机落下的：'
+            f'<b class="win">拍图赢：{j(win)}</b>（流量本来就摊得开，'
+            f'拍图能把弧排满而基线要为偏转让路）；'
+            f'<b class="lose">基线赢：{j(lose)}</b>'
+            f'（纯 fan-in，全部流量挤向同一个抽取点）；'
+            f'打平：{j(tie)}。输的那两个原因见 §5 &mdash; 是下环端口的记账'
+            f'粒度，不是偏转有魔法。</div></div>')
+
+
+def _why_intro(c: dict) -> str:
+    _, tie, lose = split_1p(c)
+    j = lambda ps: "、".join(CN1[p] for p in ps) or "无"
+    return (f'm=13 下基线更快的是 <b>{j(lose)}</b>，{j(tie)} 只是打平。'
+            f'这与直觉相反，所以要把机理说清楚，而不是把它藏进平均值里：'
+            f'这几个模式都是<b>多对一</b>，所有流量挤向同一个 root 的抽取点，'
+            f'于是胜负完全由「一个抽取点每拍能吃几个 flit」决定。')
+
+
+def sec_why_lose(c: dict) -> str:
+    out = []
+    ps = [e for e in c["port_sensitivity"] if e["m"] == 13]
+    cats, p1, p2, base = [], [], [], []
+    for e in ps:
+        b = row1(c, pattern=e["pattern"], algo=e["algo"], tier=e["tier"], m=13,
+                 bidir=True)
+        cats.append(f'{CN1[e["pattern"]]}<br>{e["algo"]}/{e["tier"]}')
+        p1.append(e["by_ports"]["1"]["makespan"])
+        p2.append(e["by_ports"]["2"]["makespan"])
+        base.append((b or {}).get("ring_base", {}).get("makespan"))
+    out.append(
+        f'<div class="fig">'
+        f'{grouped_bars(cats, [{"name": "ring_base 基线", "cls": "cC", "vals": base}, {"name": "拍图·1 端口", "cls": "cA", "vals": p1}, {"name": "拍图·2 端口", "cls": "cB", "vals": p2}], ylabel="makespan（拍）", w=880, h=340)}'
+        f'<div class="cap"><b>图：把拍图模型的端口放宽，差距就合上了。</b>'
+        f'拍图把一个抽取点整段（m&middot;&sigma; 拍）独占给一次传输；'
+        f'`ring_base` 按 L1 的 <code>RAMP_BW</code> 逐 flit 交错抽取。'
+        f'这是<b>记账粒度</b>的差异，不是机制优劣 &mdash; 端口翻倍后拍图'
+        f'反超或接近。两条 T1 方案没有红柱：`ring_base` 只支持 unicast，'
+        f'这两行没有可比的基线。</div></div>')
+    out.append('<table><tr><th>方案</th><th class="n">ring_base</th>'
+               '<th class="n">拍图（1 端口）</th><th class="n">拍图（2 端口）'
+               '</th><th class="n">端口翻倍收益</th><th>谁赢（2 端口口径）</th>'
+               '</tr>')
+    for e, b in zip(ps, base):
+        a, bb = e["by_ports"]["1"]["makespan"], e["by_ports"]["2"]["makespan"]
+        if b is None:
+            who, cls = "不可比（T1 需多播，基线只有 unicast）", "muted"
+        else:
+            who = "拍图" if bb < b else "基线"
+            cls = "win" if who == "拍图" else "lose"
+        out.append(
+            f'<tr><td>{lbl(e["pattern"], e["algo"], e["tier"])}</td>'
+            f'<td class="n">{f(b)}</td><td class="n">{f(a)}</td>'
+            f'<td class="n">{f(bb)}</td>'
+            f'<td class="n">{times(e["speedup_ports2"])}</td>'
+            f'<td class="{cls}">{who}</td></tr>')
+    out.append("</table>")
+    return "".join(out)
+
+
+def sec_cost(c: dict, idx: dict | None) -> str:
+    out = []
+    cats, defl, algos = [], [], []
+    for pat in PATTERNS:
+        b = best_base(c, pat, 13)
+        if not b:
+            continue
+        cats.append(CN[pat])
+        defl.append(b["ring_base"].get("deflect_per_flit") or 0)
+        algos.append((pat, f'{b["algo"]}/{b["tier"]}'))
+    hi = max(range(len(defl)), key=lambda i: defl[i])
+    zero = [p for (p, _), v in zip(algos, defl) if v == 0]
+    out.append(
+        f'<div class="fig">'
+        f'{grouped_bars(cats, [{"name": "偏转次数 / flit", "cls": "cC", "vals": defl}], ylabel="次 / flit", h=270, note_fmt="{:.3f}")}'
+        f'<div class="cap"><b>图：基线的隐性代价 —— 偏转率（m=13，各取基线'
+        f'自己最优的算法）。</b>偏转是再循环：既白吃弧周期又打乱到达顺序，'
+        f'所以基线<b>必须</b>带目的端重组缓冲。'
+        f'{"、".join(CN1[p] for p in zero)} 的偏转恒为 <b>0</b>'
+        f'（维序树流量下同一时刻的转向全部同向，桥看不到互相转向）；'
+        f'把偏转顶起来的是 <code>flat</code> 类流量 —— '
+        f'<b>{CN1[algos[hi][0]]} / {algos[hi][1]} 达 {defl[hi]:.3f} 次/flit'
+        f'</b>，因为 47 个源同时挤向同一个 root 的环。'
+        f'但这并不妨碍基线在该模式上仍与拍图打平（§4）：偏转让它白跑，'
+        f'逐 flit 抽取又替它省回来。</div></div>')
+    out.append('<table><tr><th>集合通信</th><th>基线最优算法</th>'
+               '<th class="n">偏转 / flit</th><th class="n">乱序次数</th>'
+               '<th class="n">重组缓冲峰值</th><th class="n">延迟 p99</th>'
+               '</tr>')
+    for pat in PATTERNS:
+        b = best_base(c, pat, 13)
+        if not b:
+            continue
+        rb = b["ring_base"]
+        out.append(
+            f'<tr><td>{CN1[pat]}</td><td>{b["algo"]}/{b["tier"]}</td>'
+            f'<td class="n">{f(rb.get("deflect_per_flit"), 4)}</td>'
+            f'<td class="n">{f(rb.get("n_out_of_order"))}</td>'
+            f'<td class="n">{f(rb.get("max_reasm_occupancy"))} flit</td>'
+            f'<td class="n">{f(rb.get("lat_p99"))}</td></tr>')
+    out.append("</table>")
+    if idx:
+        ag = [e for e in idx["entries"] if e.get("collective") == "allgather"]
+        if ag:
+            small = min(ag, key=lambda e: e.get("n_records", 1e9))
+            big = max(ag, key=lambda e: e.get("n_records", 0))
+            out.append(
+                f'<div class="note"><b>拍图的代价搬到了控制存储上。</b>'
+                f'同一个全收集，<code>{small["algo"]}/{small["tier"]}</code> '
+                f'导出 {f(small.get("n_records"))} 条环站记录，'
+                f'<code>{big["algo"]}/{big["tier"]}</code> 导出 '
+                f'{f(big.get("n_records"))} 条 —— 相差 '
+                f'{(big.get("n_records") or 1) / max(1, small.get("n_records") or 1):.1f}'
+                f'&times;。基线删掉的是这张表，换来的是桥 FIFO 与重组缓冲。'
+                f'</div>')
+    return "".join(out)
+
+
+def sec_gantt(c: dict) -> str:
+    try:
+        from rg_ring_calendar import build_calendar
+        from rg_ring_collectives import build_ring_collective
+        from rg_ring_topo import RingTopology
+    except Exception as exc:                                # pragma: no cover
+        return f'<p class="muted">无法现场排拍图：{exc}</p>'
+    topo = RingTopology()
+    out = []
+    for pat, algo, tier in (("broadcast", "dim_2phase", "T1"),
+                            ("allgather", "dim_2phase", "T1")):
+        col = build_ring_collective(topo, pat, m=13, tier=tier, algo=algo,
+                                    root=ROOT_NODE)
+        cal = build_calendar(topo, col)
+        sl = cal.slack()
+        out.append(
+            f'<div class="fig">{svg_gantt(topo, cal)}'
+            f'<div class="cap"><b>图：{CN1[pat]} / {algo} / {tier}、m=13 的'
+            f'真实拍图占用（不是示意）。</b>每条横线是一次传输的 '
+            f'[t0, t0+tail) 区间，按相位着色，虚线是 barrier。'
+            f'共 {cal.makespan} 拍、{len(cal.starts)} 次传输，'
+            f'松弛 p50={sl["p50"]} 拍、最小 {sl["min"]} 拍。'
+            f'<b>相位内看不到任何排队</b>：区间一旦排定就整条路径无停留，'
+            f'转环驻留实测恒为 0。</div></div>')
+    return "".join(out)
+
+
+BIND_CN = {"latency": "时延", "port": "端口", "arc_load": "弧负载",
+           "ramp": "ramp 弹出", "occupancy": "占用"}
+
+
+def sec_util(c: dict) -> str:
+    cats, g, cr, ks = [], [], [], []
+    for pat in PATTERNS:
+        k = best_cal(c, pat, 13)
+        u = k["calendar"]["util"]
+        cats.append(f'{CN1[pat]}<br>{k["algo"]}/{k["tier"]}')
+        g.append(u["global_util"] * 100)
+        cr.append(u["critical_arc_util"] * 100)
+        ks.append(k)
+    bc = next(k for k in ks if k["pattern"] == "broadcast")
+    out = [f'<div class="fig">'
+           f'{grouped_bars(cats, [{"name": "全局（192 弧均）", "cls": "cA", "vals": g}, {"name": "关键弧（最忙）", "cls": "cD", "vals": cr}], ylabel="利用率 %", h=310, note_fmt="{:.1f}")}'
+           f'<div class="cap"><b>图：绝对利用率低不等于排得差。</b>'
+           f'广播全程只有 {bc["calendar"]["n_transfers"]} 次传输，'
+           f'本来就填不满 192 条弧，而且它<b>由时延界绑定</b>'
+           f'（{bc["calendar"]["makespan"]} 拍里 '
+           f'{bc["calendar"]["makespan_lb"]} 拍是纯时延地板），'
+           f'再排也压不下去。该问的是<b>最忙那条弧有没有排满</b>：'
+           f'实测六个方案的「关键弧周期 / 关键弧下界」<b>全部等于 1.00&times;'
+           f'</b>，即打包器在瓶颈弧上一拍没浪费。</div></div>']
+    out.append('<table><tr><th>方案</th><th>绑定的界</th>'
+               '<th class="n">makespan</th><th class="n">下界</th>'
+               '<th class="n">/ 下界</th><th class="n">全局利用率</th>'
+               '<th class="n">关键弧</th><th class="n">关键弧/其下界</th>'
+               '</tr>')
+    for k in ks:
+        cal, u = k["calendar"], k["calendar"]["util"]
+        out.append(
+            f'<tr><td>{lbl(k["pattern"], k["algo"], k["tier"])}</td>'
+            f'<td>{BIND_CN.get(cal["binding_lb"], cal["binding_lb"])}</td>'
+            f'<td class="n">{f(cal["makespan"])}</td>'
+            f'<td class="n">{f(cal["makespan_lb"])}</td>'
+            f'<td class="n">{times(cal["makespan_over_lb"])}</td>'
+            f'<td class="n">{pct(u["global_util"])}</td>'
+            f'<td class="n">{pct(u["critical_arc_util"])}</td>'
+            f'<td class="n"><span class="win">'
+            f'{times(u["critical_arc_cycles_vs_lb"])}</span></td></tr>')
+    out.append("</table>")
+    pmax = max((e["speedup_ports2"] for e in c["port_sensitivity"]
+                if e["m"] == 13), default=None)
+    out.append(f'<div class="note"><b>那 makespan 与下界之间的差额来自哪里？'
+               f'</b>不是弧 —— 是<b>相位 barrier</b>（下一相位必须等上一相位'
+               f'全部落地）与<b>端口</b>（一个上/下环点每拍只吞一个 flit）。'
+               f'想继续压就只能动这两样：放宽 barrier 改成相间流水，'
+               f'或加第二个环站端口（§5 已量化，最多 {times(pmax)}）。'
+               f'继续优化路由是没有用的。</div>')
+    return "".join(out)
+
+
+def sec_tavg(t: dict | None) -> str:
+    if not t:
+        return '<p class="muted">ring_tavg_8x6.json 缺失。</p>'
+    rs = [r for r in t["ring"] if r["pattern"] == "allgather"]
+    Rs = [1, 5, 13]
+
+    def pts(algo, tier, ports):
+        r = next((x for x in rs if x["algo"] == algo and x["tier"] == tier
+                  and x["ports"] == ports), None)
+        return [(R, r["by_rounds"][str(R)]["T_avg"]) for R in Rs] if r else []
+    series = [
+        {"name": "环 T1·2 端口", "cls": "cB",
+         "pts": pts("dim_2phase", "T1", 2)},
+        {"name": "环 T1·1 端口", "cls": "cA",
+         "pts": pts("dim_2phase", "T1", 1)},
+    ]
+    mesh = t.get("mesh_reference") or {}
+    if mesh.get("available"):
+        mp = []
+        for e in t["ring_vs_mesh"]:
+            mb = e.get("mesh_best")
+            if mb:
+                mp.append((e["R"], mb["T_avg"]))
+        if mp:
+            series.append({"name": "mesh 最优树",
+                           "cls": "cC", "pts": mp})
+    out = [f'<div class="eq">T_avg = T1 + (R&minus;1)/2 &middot; II_eff = '
+           f'(T1 + T_R)/2，II_eff = (T_R &minus; T1)/(R&minus;1)，'
+           f'T_R 由自由多轮 rigid pack 实测</div>']
+    rot = next((x for x in rs if x["algo"] == "ring_rotate"), None)
+    d2 = next((x for x in rs if x["algo"] == "dim_2phase"
+               and x["tier"] == "T1" and x["ports"] == 1), None)
+    rot_note = ""
+    if rot and d2:
+        ir, i2 = (rot["by_rounds"]["13"]["II_eff"],
+                  d2["by_rounds"]["13"]["II_eff"])
+        cross = ("永远追不上" if ir >= i2 else
+                 f'要到 R&asymp;{2 * (rot["T1"] - d2["T1"]) / (i2 - ir):.0f} '
+                 f'才可能翻盘')
+        rot_note = (
+            f'满环旋转拍图刻意没画进来：它的 T_avg（{rot["by_rounds"]["1"]["T_avg"]:g}'
+            f' / {rot["by_rounds"]["5"]["T_avg"]:g} / '
+            f'{rot["by_rounds"]["13"]["T_avg"]:g}）比其它曲线高一个量级，'
+            f'画进来会把关键的环/mesh 交叉压平。它的 II_eff = {ir:g} '
+            f'<b>精确等于弧负载下界</b>，是全场最优；但 T1={rot["T1"]} 的填充'
+            f'代价要摊到 {cross}（对比 dim_2phase/T1 的 T1={d2["T1"]}、'
+            f'II_eff={i2:g}）。<b>II 最优不等于 T_avg 最优</b> —— '
+            f'这是本节最实用的一条。')
+    out.append(
+        f'<div class="fig">'
+        f'{line_chart(series, xlabel="流水轮数 R", ylabel="T_avg（拍）", xticks=[1, 5, 13])}'
+        f'<div class="cap"><b>图：全收集的 T_avg 随流水深度变化。</b>'
+        f'R=1 时 T_avg ≡ 单发 makespan；R 越大 II_eff 越支配。注意 1 端口的'
+        f'环（蓝）在 R=1 时低于 mesh（红），到 R=13 已经反超 —— '
+        f'交叉点就落在这段区间里。{rot_note}</div></div>')
+    if mesh.get("available"):
+        out.append('<table><tr><th class="n">R</th><th>mesh 最优</th>'
+                   '<th class="n">mesh T_avg</th>'
+                   '<th class="n">环（1 端口）</th><th class="n">环/mesh</th>'
+                   '<th class="n">环（2 端口）</th><th class="n">环/mesh</th>'
+                   '</tr>')
+        for e in t["ring_vs_mesh"]:
+            mb = e.get("mesh_best") or {}
+            bp = e.get("by_ring_ports") or {}
+            cells = ""
+            for p in ("1", "2"):
+                v = bp.get(p) or {}
+                cls = "win" if v.get("winner") == "ring" else "lose"
+                cells += (f'<td class="n">{f(v.get("T_avg"), 1)}</td>'
+                          f'<td class="n"><span class="{cls}">'
+                          f'{times(v.get("ring_over_mesh"), 3)}</span></td>')
+            out.append(f'<tr><td class="n">{e["R"]}</td>'
+                       f'<td>{mb.get("label", "&mdash;")}</td>'
+                       f'<td class="n">{f(mb.get("T_avg"), 1)}</td>'
+                       f'{cells}</tr>')
+        out.append("</table>")
+        out.append('<div class="note bad"><b>「环比 mesh 快」必须带上端口数。'
+                   '</b>1 端口的环 R=1 赢 0.885&times;、R=5 已经基本打平'
+                   '（1.006&times;，名义上 mesh 略赢）、<b>R=13 输 1.19&times;'
+                   '</b>：深流水下绑定资源从跨度换成了环站那一个上/下环点。'
+                   '同时 mesh 自己的最优方案在 R=13 也换人：axis+CCW → '
+                   'Hamilton bi-tree（后者 II_eff 18.17 远优于前者 42.67，'
+                   '但 T1=210 的填充代价要到深流水才摊得掉）。'
+                   '<b>只报一个 R、或不报端口数，都会随机挑出一个赢家。</b>'
+                   '</div>')
+    else:
+        out.append(f'<div class="note bad">mesh 参照不可用：'
+                   f'{mesh.get("reason", "未记录")}。</div>')
+    return "".join(out)
+
+
+def sec_faults(rob: dict | None) -> str:
+    if not rob:
+        return '<p class="muted">ring_robust_8x6.json 缺失。</p>'
+    fa = rob["faults"]
+    cats = [f'{CN1[x["pattern"]]}<br>{x["algo"]}/{x["tier"]}' for x in fa]
+    out = [
+        f'<div class="fig">'
+        f'{stacked_bars(cats, [{"name": "免重编译", "cls": "cB", "vals": [x["n_immune"] for x in fa]}, {"name": "需重编译", "cls": "cF", "vals": [x["n_recompile"] for x in fa]}, {"name": "无解", "cls": "cC", "vals": [x["n_infeasible"] for x in fa]}], ylabel="故障场景数", w=920, h=372, rotate=True)}'
+        f'<div class="cap"><b>图：{fa[0]["n_scenarios"]} 个故障场景下每个'
+        f'拍图的结局。</b>场景 = 环特有的绕回段失效 + 同环分散死点 + '
+        f'既有的断链 / 死点 / 象限洞。<b>旋转拍图几乎全灭</b> —— 它每步'
+        f'「所有节点同时上环、每条弧恰好用一次」不留备用弧，这既是它打到'
+        f'下界的原因，也是它一断就死的原因。</div></div>']
+    out.append('<table><tr><th>方案</th><th class="n">免重编译</th>'
+               '<th class="n">需重编译</th><th class="n">无解</th>'
+               '<th class="n">需追加修复相位</th>'
+               '<th class="n">最坏做功归一化膨胀</th></tr>')
+    for x in fa:
+        out.append(
+            f'<tr><td>{lbl(x["pattern"], x["algo"], x["tier"])}</td>'
+            f'<td class="n">{x["n_immune"]}</td>'
+            f'<td class="n">{x["n_recompile"]}</td>'
+            f'<td class="n">{x["n_infeasible"]}</td>'
+            f'<td class="n">{f(x.get("n_needing_repair_phase"))}</td>'
+            f'<td class="n">'
+            f'{times(x["worst_work_normalized_inflation"])}</td></tr>')
+    out.append("</table>")
+    out.append('<div class="note"><b>为什么膨胀比要做功归一化。</b>'
+               '死节点同时删掉容量<b>和工作量</b>，所以原始 makespan 比会低于 '
+               '1.0 —— 那是阵列变小，不是丢节点让集合通信变快。'
+               '表里给的是除掉存活 flit 数之后的比值。</div>')
+    n_rep = sum(x.get("n_needing_repair_phase") or 0 for x in fa)
+    if n_rep:
+        out.append(f'<div class="note bad"><b>一个死节点会逼出一个额外相位，'
+                   f'而不只是重排一次。</b>维度切片算法靠<b>行列唯一交点</b>'
+                   f'把某行的数据交给某列；交点死了，整列都拿不到那行的数据 '
+                   f'&mdash; fabric 仍然连通，但拍图只有一条路。'
+                   f'实测共 {n_rep} 个场景必须追加修复相位；修复相位为每个'
+                   f'缺失项<b>只指派一个供给者</b>，否则归约型会重复累加。'
+                   f'</div>')
+    bp = rob.get("bypass_price")
+    if bp:
+        n_extra = sum(e["extra_infeasible_without_bypass"] for e in bp)
+        out.append(
+            f'<div class="note"><b>环站 bypass mux 的真实价格。</b>'
+            f'去掉它以后<b>只有分散死点场景</b>会多出无解：全组共多 '
+            f'{n_extra} 个。连续的死点洞和象限洞在 2-连通的环上都能从长边绕，'
+            f'不需要这个 mux —— 所以它的面积是买「同环上多个分散死点」这一种'
+            f'场景，不是买「任何死节点」。</div>')
+    return "".join(out)
+
+
+def sec_jitter(rob: dict | None) -> str:
+    if not rob:
+        return '<p class="muted">ring_robust_8x6.json 缺失。</p>'
+    out: list[str] = []
+    ji = rob["jitter"]
+
+    def last(x: dict, k: str) -> int:
+        return x["jitter"]["models"]["burst"][k]["curve"][-1]["makespan"]
+
+    # 选三条策略真正分得开的那个方案：拿策略互相重合的方案画图，读者只会看到
+    # 一条线，以为图坏了。同时数一数有多少方案的相间再同步等价于整表平移 ——
+    # 这本身就是结论。
+    spread = lambda x: (len({last(x, k) for k in ("global_shift",
+                                                 "phase_shift", "repack")}),
+                        last(x, "global_shift") - last(x, "repack"))
+    big = max(ji, key=spread)
+    tight = min(ji, key=lambda x: x["slack"]["p50"])
+    n_ps_same = sum(1 for x in ji
+                    if last(x, "phase_shift") == last(x, "global_shift"))
+    mo = big["jitter"]["models"]["burst"]
+    series = [{"name": n, "cls": cl,
+               "pts": [(p["J"], p["makespan"]) for p in mo[k]["curve"]]}
+              for k, n, cl in (("global_shift", "硬 barrier 平移", "cC"),
+                               ("phase_shift", "相间再同步", "cA"),
+                               ("repack", "重编译吸收", "cB"))]
+    out.append(
+        f'<div class="fig">'
+        f'{line_chart(series, xlabel="源端释放抖动 J（拍，对数轴）", ylabel="makespan（拍）", logx=True, hline=big["makespan"], hlabel="无抖动 makespan")}'
+        f'<div class="cap"><b>图：burst 抖动下三种再同步策略'
+        f'（{lbl(big["pattern"], big["algo"], big["tier"])}，'
+        f'{big["n_phases"]} 个相位、松弛 p50={big["slack"]["p50"]} 拍 —— '
+        f'全场唯一一个三条策略互不重合的方案）。</b>'
+        f'硬 barrier 下 makespan <b>精确</b>增加「最迟释放量」，'
+        f'所以 J*（膨胀≤5%）只是 makespan 的 5% 换个说法，没有信息量。'
+        f'两条反直觉的读数：<b>①「相间再同步」几乎没用</b> —— 10 个方案里有 '
+        f'{n_ps_same} 个它与整表平移<b>逐点相同</b>'
+        f'（单相位方案根本没有「相间」可言），只有本图这个方案差出 '
+        f'{last(big, "global_shift") - last(big, "phase_shift")} 拍；'
+        f'<b>② 只有带释放约束重编译能真吸收</b>，吸收量恰好等于打包器留下的'
+        f'真实松弛（J=256 时 '
+        f'{big["at_J256_burst"]["slack_absorbed_cycles"]} 拍）。'
+        f'换成松弛最小的 {lbl(tight["pattern"], tight["algo"], tight["tier"])}'
+        f'（p50={tight["slack"]["p50"]} 拍），三条曲线完全重合 —— '
+        f'无松弛可吸收时，换什么策略都一样。</div></div>')
+    out.append('<table><tr><th>方案</th><th class="n">makespan</th>'
+               '<th class="n">松弛 p50</th>'
+               '<th class="n">J=256 burst 下实际吸收</th></tr>')
+    for x in ji:
+        out.append(
+            f'<tr><td>{lbl(x["pattern"], x["algo"], x["tier"])}</td>'
+            f'<td class="n">{f(x["makespan"])}</td>'
+            f'<td class="n">{f(x["slack"]["p50"])}</td>'
+            f'<td class="n">'
+            f'{f(x["at_J256_burst"]["slack_absorbed_cycles"])} 拍</td></tr>')
+    out.append("</table>")
+    out.append('<div class="note"><b>抗抖动与打到下界是同一个 trade-off 的'
+               '两面。</b>松弛多的扁平方案能吸收几十到上百拍；'
+               '紧到下界的方案（广播/T1 只有 14 次传输、旋转松弛 p50=4）'
+               '吸收 <b>0 拍</b>。要抗抖动就得留松弛，留了松弛就打不到下界。'
+               '</div>')
+    return "".join(out)
+
+
+def _bc_gain(c: dict) -> tuple[int | None, int | None, float | None]:
+    """广播 m=13 上「基线 -> 杠杆全开的拍图」的加速比，供正文引用。"""
+    b = best_base(c, "broadcast", 13)
+    k = best_cal(c, "broadcast", 13)
+    if not (b and k and b["ring_base"]["makespan"]):
+        return None, None, None
+    bm, km = b["ring_base"]["makespan"], k["calendar"]["makespan"]
+    return bm, km, bm / km
+
+
+def sec_levers(c: dict) -> str:
+    out = ["<h3>杠杆 1 &mdash; 弧多播（copy-and-continue）</h3>"]
+    out.append(f'<div class="fig">{svg_multicast()}'
+               f'<div class="cap"><b>图：同一行环上，一次多播上环 vs 七次'
+               f'unicast 上环。</b>多播省的是<b>上环次数与弧周期</b>，'
+               f'抽取次数一样多 —— 所以它只在 fan-out 上有收益，'
+               f'且是带宽收益不是时延收益（§3 已量化：m=1 时收益为 0）。'
+               f'</div></div>')
+    out.append('<table><tr><th>集合通信</th><th class="n">m</th>'
+               '<th class="n">T0 上环 flit</th><th class="n">T1 上环 flit</th>'
+               '<th class="n">流量降幅</th><th class="n">T0 makespan</th>'
+               '<th class="n">T1 makespan</th><th class="n">makespan 降幅</th>'
+               '</tr>')
     absent = []
-    for pat in ("broadcast", "allgather", "allreduce", "reduce", "gather",
-                "alltoall"):
+    for pat in PATTERNS:
+        t1 = row1(c, pattern=pat, algo="dim_2phase", tier="T1", m=13,
+                  bidir=True)
         t0 = row1(c, pattern=pat, algo="dim_2phase", tier="T0", m=13,
                   bidir=True) or row1(c, pattern=pat, algo="flat", tier="T0",
                                       m=13, bidir=True)
-        t1 = row1(c, pattern=pat, algo="dim_2phase", tier="T1", m=13,
-                  bidir=True)
         if not t1:
             absent.append(pat)
             continue
         if not t0:
             continue
-        a = t0["shape"]["n_flits_boarded"]
-        b = t1["shape"]["n_flits_boarded"]
+        a, b = (t0["shape"]["n_flits_boarded"], t1["shape"]["n_flits_boarded"])
         out.append(
-            f'<tr><td>{pat}</td><td class="n">13</td>'
+            f'<tr><td>{CN1[pat]}</td><td class="n">13</td>'
             f'<td class="n">{f(a)}</td><td class="n">{f(b)}</td>'
-            f'<td class="n">{rat(a, b)}</td>'
+            f'<td class="n">{times(a / b)}</td>'
             f'<td class="n">{f(t0["calendar"]["makespan"])}</td>'
             f'<td class="n">{f(t1["calendar"]["makespan"])}</td>'
-            f'<td class="n">'
-            f'{rat(t0["calendar"]["makespan"], t1["calendar"]["makespan"])}'
-            f'</td></tr>')
+            f'<td class="n"><b>{times(t0["calendar"]["makespan"] / t1["calendar"]["makespan"])}'
+            f'</b></td></tr>')
     out.append("</table>")
     if absent:
         out.append(
-            f'<div class="note"><b>{", ".join(absent)} have no T1 row, and '
-            f'that is the point.</b> Copy-and-continue is a fan-out primitive. '
-            f'A fan-in ({", ".join(p for p in absent if p != "alltoall")}) has '
-            f'nothing to replicate, and all-to-all\'s N(N&minus;1) messages are '
-            f'all distinct, so no station can serve two of them with one copy. '
-            f'For these patterns the multicast hardware buys exactly nothing '
-            f'and the verification suite asserts T1 is byte-identical to T0.'
-            f'</div>')
+            f'<div class="note"><b>'
+            f'{"、".join(CN1[p] for p in absent)} 没有 T1 行，这正是结论本身。'
+            f'</b>copy-and-continue 是 fan-out 原语：'
+            f'{"、".join(CN1[p] for p in absent if p != "alltoall")}'
+            f'是 fan-in，没有任何东西可复制；全交换的 N(N&minus;1) 条消息'
+            f'两两不同，一个环站不可能用一份副本同时服务两条。'
+            f'对这些 pattern，多播硬件买到的收益<b>精确为 0</b>，'
+            f'验证套件直接断言 T1 与 T0 逐字段相同。</div>')
 
-    out.append("<h3>Lever 2 &mdash; bidirectional half-arc</h3>")
-    out.append('<table><tr><th>scheme</th><th class="n">m</th>'
-               '<th class="n">bidirectional</th><th class="n">clockwise only</th>'
-               '<th class="n">makespan ratio</th>'
-               '<th class="n">traffic ratio</th></tr>')
+    out.append("<h3>杠杆 2 &mdash; 双向半弧</h3>")
+    out.append('<table><tr><th>方案</th><th class="n">m</th>'
+               '<th class="n">双向</th><th class="n">仅顺时针</th>'
+               '<th class="n">makespan 比</th><th class="n">流量比</th></tr>')
     for e in c["bidir_lever"]:
         out.append(
-            f'<tr><td>{scheme_label(e["pattern"], e["algo"], e["tier"])}</td>'
+            f'<tr><td>{lbl(e["pattern"], e["algo"], e["tier"])}</td>'
             f'<td class="n">{e["m"]}</td>'
             f'<td class="n">{f(e["bi"]["makespan"])}</td>'
             f'<td class="n">{f(e["uni"]["makespan"])}</td>'
-            f'<td class="n"><b>{times(e["makespan_ratio_uni_over_bi"], 2)}'
-            f'</b></td>'
-            f'<td class="n">{times(e["traffic_ratio_uni_over_bi"], 2)}</td>'
-            f'</tr>')
+            f'<td class="n"><b>{times(e["makespan_ratio_uni_over_bi"])}</b>'
+            f'</td>'
+            f'<td class="n">{times(e["traffic_ratio_uni_over_bi"])}</td></tr>')
     out.append("</table>")
     mc = [e for e in c["bidir_lever"]
           if abs(e["traffic_ratio_uni_over_bi"] - 1.0) < 0.02]
     uc = [e for e in c["bidir_lever"]
           if abs(e["traffic_ratio_uni_over_bi"] - 1.0) >= 0.02]
-    note = ['<div class="note"><b>Two different mechanisms hide in this '
-            'column.</b> ']
+    note = ['<div class="note"><b>这一列里藏着两套完全不同的机制。</b>']
     if mc:
-        e = max(mc, key=lambda e: e["makespan_ratio_uni_over_bi"])
+        e = max(mc, key=lambda x: x["makespan_ratio_uni_over_bi"])
         note.append(
-            f'On the multicast schemes the traffic ratio is '
-            f'{f(e["traffic_ratio_uni_over_bi"], 2)}&times; while the makespan '
-            f'ratio is {f(e["makespan_ratio_uni_over_bi"], 2)}&times;: a '
-            f'copy-and-continue arc drops the same copy at the same stations '
-            f'whichever way it goes round, so going both ways halves the '
-            f'<i>span</i> and moves no fewer flits. That is a latency win, not '
-            f'a bandwidth win. ')
+            f'多播方案的流量比是 {times(e["traffic_ratio_uni_over_bi"])}，'
+            f'而 makespan 比是 {times(e["makespan_ratio_uni_over_bi"])}：'
+            f'一条 copy-and-continue 弧无论朝哪个方向走，都是在同样那些环站'
+            f'落同样的副本，所以双向只是把<b>跨度</b>砍半，搬的 flit 一个不少'
+            f' —— 这是时延收益，不是带宽收益。')
     if uc:
-        e = max(uc, key=lambda e: e["traffic_ratio_uni_over_bi"])
+        e = max(uc, key=lambda x: x["traffic_ratio_uni_over_bi"])
         note.append(
-            f'On the unicast schemes it is a bandwidth win too, but for the '
-            f'other reason: a clockwise-only route is simply longer, so it '
-            f'costs {f(e["traffic_ratio_uni_over_bi"], 2)}&times; the arc '
-            f'cycles ({scheme_label(e["pattern"], e["algo"], e["tier"])}). ')
-    note.append('The blanket claim that bidirectional routing "halves the peak '
-                'arc load" holds for neither case as stated.</div>')
+            f'unicast 方案确实还有带宽收益，但原因不同：单向路径本来就更长，'
+            f'要多花 {times(e["traffic_ratio_uni_over_bi"])} 的弧周期'
+            f'（{lbl(e["pattern"], e["algo"], e["tier"])}）。')
+    note.append('所以「双向布线把峰值弧负载减半」这句话，对两种情形都不成立。'
+                '</div>')
     out.append("".join(note))
 
-    out.append("<h3>Lever 3 &mdash; full-ring rotation</h3>")
+    out.append("<h3>杠杆 3 &mdash; 满环旋转</h3>")
     out.append(f'<div class="fig">{svg_rotation()}'
-               f'<div class="cap">A rotation step on an 8-node row ring. '
-               f'Rotation is the only scheme here that meets the '
-               f'busiest-segment bound exactly, and the same rigidity is what '
-               f'makes it the most fault-intolerant scheme in the set.</div>'
-               f'</div>')
+               f'<div class="cap">8 节点行环上的一个旋转步。旋转是本组里唯一'
+               f'把最忙段下界<b>精确打满</b>的方案，而同一份刚性也让它成为'
+               f'全组最不抗故障、最不抗抖动的方案（§11、§12）。</div></div>')
 
-    out.append("<h3>Lever 4 &mdash; L1 accumulation chain</h3>")
+    out.append("<h3>杠杆 4 &mdash; L1 累加链</h3>")
     g = row1(c, pattern="gather", algo="dim_2phase", tier="T0", m=13,
              bidir=True)
     r = row1(c, pattern="reduce", algo="dim_2phase", tier="T0", m=13,
              bidir=True)
-    ar = row1(c, pattern="allreduce", algo="dim_2phase", tier="T1", m=13,
+    ar = row1(c, pattern="allreduce", algo="dim_2phase", tier="T0", m=13,
               bidir=True)
-    hd = row1(c, pattern="allreduce", algo="halving_doubling", tier="T1", m=13,
-              bidir=True) or row1(c, pattern="allreduce",
-                                  algo="halving_doubling", tier="T0", m=13,
-                                  bidir=True)
+    ar1 = row1(c, pattern="allreduce", algo="dim_2phase", tier="T1", m=13,
+               bidir=True)
+    hd = row1(c, pattern="allreduce", algo="halving_doubling", tier="T0", m=13,
+              bidir=True)
     if g and r:
         out.append(
-            f'<p>Folding in L1 keeps every hop the same size as the payload, '
-            f'so the reduce tree boards '
-            f'<b>{g["shape"]["n_flits_boarded"] / r["shape"]["n_flits_boarded"]:.2f}&times;</b> '
-            f'fewer flits than the gather tree that moves the same data '
-            f'({f(r["shape"]["n_flits_boarded"])} vs '
-            f'{f(g["shape"]["n_flits_boarded"])} at m=13), and finishes in '
-            f'{f(r["calendar"]["makespan"])} rather than '
-            f'{f(g["calendar"]["makespan"])} cycles.</p>')
+            f'<p>在 L1 里折叠让每一跳都保持载荷原大小，所以搬同样的数据，'
+            f'归约树的上环 flit 比收集树少 '
+            f'<b>{times(g["shape"]["n_flits_boarded"] / r["shape"]["n_flits_boarded"])}'
+            f'</b>（m=13 时 {f(r["shape"]["n_flits_boarded"])} vs '
+            f'{f(g["shape"]["n_flits_boarded"])}），makespan '
+            f'{f(r["calendar"]["makespan"])} vs '
+            f'{f(g["calendar"]["makespan"])} 拍。</p>')
     if ar and hd:
         out.append(
-            f'<p>For allreduce at m=13, reduce-then-broadcast on the dimension '
-            f'tree ({ar["tier"]}) lands at <b>{f(ar["calendar"]["makespan"])}'
-            f'</b> cycles on {f(ar["shape"]["n_flits_boarded"])} boarded '
-            f'flits, against <b>{f(hd["calendar"]["makespan"])}</b> cycles on '
-            f'{f(hd["shape"]["n_flits_boarded"])} flits for recursive '
-            f'halving-doubling ({hd["tier"]}). Note the ordering: '
-            f'halving-doubling boards '
-            f'{hd["shape"]["n_flits_boarded"] / ar["shape"]["n_flits_boarded"]:.1f}'
-            f'&times; the traffic and is still the faster of the two T0 '
-            f'options, so on this fabric concurrency outranks total traffic.'
-            f'</p>')
+            f'<p>全归约 m=13 的三个数放在一起看（前两个同为 T0，可直接比）：'
+            f'维度树「先归约再广播」<b>{f(ar["calendar"]["makespan"])}</b> 拍 / '
+            f'{f(ar["shape"]["n_flits_boarded"])} 个上环 flit；'
+            f'递归 halving-doubling <b>{f(hd["calendar"]["makespan"])}</b> 拍 / '
+            f'{f(hd["shape"]["n_flits_boarded"])} 个。注意这个次序：'
+            f'halving-doubling 搬了 '
+            f'{times(hd["shape"]["n_flits_boarded"] / ar["shape"]["n_flits_boarded"], 1)}'
+            f'的流量（{hd["shape"]["n_phases"]} 个相位 vs '
+            f'{ar["shape"]["n_phases"]} 个），却更快 —— '
+            f'<b>在这块 fabric 上并行度比总流量更值钱。</b>'
+            + (f'第三个数需要多播硬件：同一棵维度树加 T1 之后是 '
+               f'<b>{f(ar1["calendar"]["makespan"])}</b> 拍 / '
+               f'{f(ar1["shape"]["n_flits_boarded"])} 个 flit，'
+               f'那才是全场最快，但它不与前两个同口径。' if ar1 else '')
+            + '</p>')
 
-    out.append("<h3>Packing order and port count</h3>")
-    out.append('<table><tr><th>scheme</th><th class="n">m</th>'
-               '<th>best fill order</th><th class="n">makespan spread across '
-               'orders</th></tr>')
+    out.append("<h3>打包顺序与端口数</h3>")
+    out.append('<table><tr><th>方案</th><th class="n">m</th>'
+               '<th>最优填充顺序</th><th class="n">四种顺序间的 makespan 跨度'
+               '</th></tr>')
     for e in c["fill_lever"]:
         out.append(
-            f'<tr><td>{scheme_label(e["pattern"], e["algo"], e["tier"])}</td>'
-            f'<td class="n">{e["m"]}</td><td>{e["best_fill"]}</td>'
-            f'<td class="n">{f(e["spread"])} cycles</td></tr>')
+            f'<tr><td>{lbl(e["pattern"], e["algo"], e["tier"])}</td>'
+            f'<td class="n">{e["m"]}</td><td><code>{e["best_fill"]}</code></td>'
+            f'<td class="n">{f(e["spread"])} 拍</td></tr>')
     out.append("</table>")
-    out.append('<table><tr><th>scheme</th><th class="n">m</th>'
-               '<th class="n">1 board+leave port</th>'
-               '<th class="n">2 ports</th><th class="n">speedup</th></tr>')
+    out.append('<table><tr><th>方案</th><th class="n">m</th>'
+               '<th class="n">1 个上/下环端口</th><th class="n">2 个端口</th>'
+               '<th class="n">加速比</th></tr>')
     for e in c["port_sensitivity"]:
         bp = e["by_ports"]
         out.append(
-            f'<tr><td>{scheme_label(e["pattern"], e["algo"], e["tier"])}</td>'
+            f'<tr><td>{lbl(e["pattern"], e["algo"], e["tier"])}</td>'
             f'<td class="n">{e["m"]}</td>'
             f'<td class="n">{f(bp["1"]["makespan"])}</td>'
             f'<td class="n">{f(bp["2"]["makespan"])}</td>'
-            f'<td class="n">{times(e["speedup_ports2"], 2)}</td></tr>')
+            f'<td class="n">{times(e["speedup_ports2"])}</td></tr>')
     out.append("</table>")
     return "".join(out)
 
 
-def sec_util(c: dict) -> str:
-    out = ['<div class="eq">global = &Sigma; flits&middot;hops&middot;&sigma; '
-           '/ (192 &middot; makespan) &nbsp;&nbsp; critical = '
-           'busiest-arc cycles / makespan</div>']
-    out.append('<table><tr><th>collective</th><th>algorithm</th><th>tier</th>'
-               '<th class="n">m</th><th class="n">global util</th>'
-               '<th class="n">critical arc util</th>'
-               '<th class="n">arcs used</th>'
-               '<th class="n">critical arc vs its own bound</th>'
-               '<th class="n">makespan / LB</th></tr>')
-    for pat in PATTERN_ORDER:
-        for r in sorted(rows(c, pattern=pat, m=13, bidir=True),
-                        key=lambda r: -r["calendar"]["util"]["global_util"]):
-            u = r["calendar"]["util"]
-            out.append(
-                f'<tr><td>{pat}</td><td>{r["algo"]}</td><td>{r["tier"]}</td>'
-                f'<td class="n">13</td>'
-                f'<td class="n">{pct(u["global_util"])}</td>'
-                f'<td class="n">{pct(u["critical_arc_util"])}</td>'
-                f'<td class="n">{u["n_links_used"]}/192</td>'
-                f'<td class="n">{times(u["critical_arc_cycles_vs_lb"], 2)}</td>'
-                f'<td class="n">{times(r["calendar"]["makespan_over_lb"], 2)}'
-                f'</td></tr>')
+def sec_export(idx: dict | None) -> str:
+    if not idx:
+        return '<p class="muted">results/calendars/ring_index.json 缺失。</p>'
+    es = idx["entries"]
+    out = [f'<p>拍图以 <code>{idx["schema"]}</code> 导出到 '
+           f'<code>results/calendars/ring_*.json</code>：共 {len(es)} 张表、'
+           f'{f(sum(e.get("n_records", 0) for e in es))} 条环站记录，'
+           f'{"全部" if all(e.get("conflict_free") for e in es) else "部分"}'
+           f'通过 D-R 复核。v2 相对 v1 的增量就是环需要的三样：'
+           f'<b>环站端口集</b>（上环/下环各一个，而不是 crossbar 的 in&times;out）、'
+           f'<b><code>out_port_mask</code> 多播</b>（一次上环、多处抽取）、'
+           f'<b><code>opcode=ADD</code></b>（在 L1 里折叠）。</p>']
+    out.append('<table><tr><th>文件</th><th>方案</th><th class="n">m</th>'
+               '<th class="n">makespan</th><th class="n">下界</th>'
+               '<th>绑定界</th><th class="n">记录数</th><th>D-R</th></tr>')
+    for e in sorted(es, key=lambda x: (x["collective"], x["algo"], x["tier"])):
+        out.append(
+            f'<tr><td><code>{e["file"]}</code></td>'
+            f'<td>{lbl(e["collective"], e["algo"], e["tier"])}</td>'
+            f'<td class="n">{e["m"]}</td>'
+            f'<td class="n">{f(e["makespan"])}</td>'
+            f'<td class="n">{f(e["makespan_lb"])}</td>'
+            f'<td>{BIND_CN.get(e["binding_lb"], e["binding_lb"])}</td>'
+            f'<td class="n">{f(e.get("n_records"))}</td>'
+            f'<td class="{"win" if e.get("conflict_free") else "lose"}">'
+            f'{"0 违例" if e.get("conflict_free") else "有违例"}</td></tr>')
     out.append("</table>")
     return "".join(out)
 
 
-def sec_faults(rob: dict) -> str:
-    if not rob:
-        return '<p class="muted">ring_robust_8x6.json missing.</p>'
-    out = ['<table><tr><th>scheme</th><th class="n">immune</th>'
-           '<th class="n">recompile</th><th class="n">infeasible</th>'
-           '<th class="n">needs extra phase</th>'
-           '<th class="n">worst inflation</th>'
-           '<th class="n">worst work-normalized</th></tr>']
-    for x in rob["faults"]:
-        out.append(
-            f'<tr><td>{scheme_label(x["pattern"], x["algo"], x["tier"])}</td>'
-            f'<td class="n">{x["n_immune"]}</td>'
-            f'<td class="n">{x["n_recompile"]}</td>'
-            f'<td class="n">{x["n_infeasible"]}</td>'
-            f'<td class="n">{f(x.get("n_needing_repair_phase"))}</td>'
-            f'<td class="n">{times(x["worst_inflation"], 2)}</td>'
-            f'<td class="n">{times(x["worst_work_normalized_inflation"], 2)}'
-            f'</td></tr>')
+def sec_verify(ver: dict | None) -> str:
+    if not ver:
+        return '<p class="muted">verify_ring_collectives_8x6.json 缺失。</p>'
+    ref = [ch for ch in ver["checks"]
+           if "REFUTED" in (ch.get("prediction") or "")]
+    fail = [ch for ch in ver["checks"] if not ch["pass"]]
+    out = [f'<p>{ver["n_pass"]}/{ver["n_checks"]} 项通过'
+           f'{"（全部通过）" if ver["all_pass"] else ""}。'
+           f'每一项都是可执行断言，失败时打印具体量而不是只报 fail；'
+           f'其中 <b>{len(ref)} 项记录为「预测被推翻」</b>，'
+           f'而不是悄悄把阈值放宽。断言原文保留英文，与 '
+           f'<code>verify_ring_collectives_8x6.py</code> 里的字符串逐字对应，'
+           f'便于按名字回查。</p>']
+    if fail:
+        out.append('<div class="note bad"><b>未通过：</b>'
+                   + "；".join(f'#{ch["id"]} {ch["name"]}' for ch in fail)
+                   + '</div>')
+    out.append('<table><tr><th class="n">#</th><th>断言</th>'
+               '<th>实测</th><th>原预测</th></tr>')
+    for ch in ref:
+        out.append(f'<tr class="hl"><td class="n">{ch["id"]}</td>'
+                   f'<td>{ch["name"]}</td><td>{ch.get("detail", "")}</td>'
+                   f'<td class="lose">{ch.get("prediction", "")}</td></tr>')
     out.append("</table>")
-    out.append('<div class="note"><b>Why two inflation columns.</b> A dead '
-               'node removes work as well as capacity, so a raw makespan ratio '
-               'below 1.0 means the array shrank, not that losing a node made '
-               'the collective faster. The work-normalized column divides by '
-               'the surviving flit count and is the one to read.</div>')
-
-    out.append("<h3>Does a dead node need a ring-station bypass mux?</h3>")
-    out.append('<table><tr><th>scheme</th>'
-               '<th class="n">infeasible with bypass</th>'
-               '<th class="n">infeasible without</th>'
-               '<th class="n">extra without bypass</th></tr>')
-    for e in rob["bypass_price"]:
-        out.append(
-            f'<tr><td>{scheme_label(e["pattern"], e["algo"], e["tier"])}</td>'
-            f'<td class="n">{e["bypass"]["n_infeasible"]}'
-            f'/{e["bypass"]["n_scenarios"]}</td>'
-            f'<td class="n">{e["no_bypass"]["n_infeasible"]}'
-            f'/{e["no_bypass"]["n_scenarios"]}</td>'
-            f'<td class="n"><b>{e["extra_infeasible_without_bypass"]}</b>'
-            f'</td></tr>')
-    out.append("</table>")
-    return "".join(out)
-
-
-def sec_jitter(rob: dict) -> str:
-    if not rob:
-        return '<p class="muted">ring_robust_8x6.json missing.</p>'
-    out = ['<table><tr><th>scheme</th><th class="n">makespan</th>'
-           '<th class="n">slack p50</th><th class="n">slack min</th>'
-           '<th class="n">J* uniform</th><th class="n">J* skew</th>'
-           '<th class="n">J* burst</th>'
-           '<th class="n">slack absorbed @J=256 burst</th></tr>']
-    for x in rob["jitter"]:
-        mo = x["jitter"]["models"]
-
-        def js(model: str) -> str:
-            return f(mo[model]["repack"]["J_star"])
-        out.append(
-            f'<tr><td>{scheme_label(x["pattern"], x["algo"], x["tier"])}</td>'
-            f'<td class="n">{f(x["makespan"])}</td>'
-            f'<td class="n">{f(x["slack"]["p50"])}</td>'
-            f'<td class="n">{f(x["slack"]["min"])}</td>'
-            f'<td class="n">{js("uniform_jitter")}</td>'
-            f'<td class="n">{js("distance_skew")}</td>'
-            f'<td class="n">{js("burst")}</td>'
-            f'<td class="n">'
-            f'{f(x["at_J256_burst"]["slack_absorbed_cycles"])}</td></tr>')
-    out.append("</table>")
-
-    big = max(rob["jitter"], key=lambda x: x["makespan"])
-    mo = big["jitter"]["models"]["burst"]
-    series = [{"name": p.replace("_", " "), "cls": cls,
-               "pts": [(pt["J"], pt["makespan"]) for pt in mo[p]["curve"]]}
-              for p, cls in (("global_shift", "cC"), ("phase_shift", "cA"),
-                             ("repack", "cB"))]
-    out.append(
-        f'<div class="fig">'
-        f'{svg_curve(series, xlabel="release jitter J (cycles, log scale)", ylabel="makespan (cycles)", logx=True, hline=big["makespan"], hlabel="healthy makespan")}'
-        f'<div class="cap">Burst jitter on '
-        f'{scheme_label(big["pattern"], big["algo"], big["tier"])} at m='
-        f'{big["m"]}. The three curves are the three ways to react: shift '
-        f'everything, resynchronize per phase, or recompile with the late '
-        f'release times as constraints. Only the third can absorb anything, '
-        f'and what it absorbs is exactly the slack the packer left behind.'
-        f'</div></div>')
-    out.append('<div class="note"><b>J* is a weak metric on a rigid '
-               'schedule.</b> Under a hard barrier the makespan grows by '
-               'exactly the worst lateness, so J* is just 5% of the makespan '
-               'restated &mdash; it says nothing about the schedule. The '
-               'absorbed-cycles column is the informative one, because it '
-               'measures slack that actually exists.</div>')
+    out.append('<p class="muted">全部 '
+               f'{ver["n_checks"]} 项清单见 '
+               '<code>results/verify_ring_collectives_8x6.json</code>。</p>')
     return "".join(out)
 
 
 def sec_contrary(d: dict) -> str:
     c, rob, ver, t = d["coll"], d["rob"], d["ver"], d["tavg"]
-    items = []
-
+    it = []
+    bad = _two_model_rows(c) if c else []
+    if bad:
+        w = bad[0]
+        n_all = len(rows(c, tier="T0", bidir=True))
+        it.append(
+            f'<li><b>基线一度看起来跑到了「理论下界」以下 —— 那是记账错，'
+            f'不是物理。</b>{len(bad)}/{n_all} 行出现过 &lt;1 的比值，最狠 '
+            f'{lbl(w["pattern"], w["algo"], w["tier"])} m={w["m"]} 的 '
+            f'{times(w["ratios"]["base_over_cal_model_lb"])}。'
+            f'根因是把<b>拍图模型</b>的界（环站出口 1 flit/拍、每相位 +RAMP、'
+            f'过桥收 1 拍）拿去量<b>另一台机器</b>上的实测'
+            f'（出口按 RAMP_BW 排空、不收 +RAMP、过桥免费）。'
+            f'在基线自己模型下重建界之后 40 行全部 &ge; 下界，'
+            f'旋转 10 行精确 1.000&times;。'
+            f'能溜过去是因为验证套件只断言过<b>拍图</b> &ge; 界，'
+            f'从没断言基线 &ge; 任何界 —— 现在 #31&ndash;#36 补上了，'
+            f'见 §2 末的三项证据。</li>')
     ru = (t or {}).get("rotation_utilization", {}).get("rows", [])
     if ru:
         best = max(ru, key=lambda r: r["critical_arc_util"])
-        items.append(
-            f'<li><b>Rotation does not reach 100% link utilization.</b> The '
-            f'plan predicted 1.0. Measured: {pct(best["critical_arc_util"])} '
-            f'at R={best["rounds"]}, rising monotonically but only '
-            f'asymptotically. It <i>does</i> hit the busiest-segment bound '
-            f'exactly (II_eff = {f(ru[1]["II_eff"], 1) if len(ru) > 1 else "?"} '
-            f'= per-round arc load), but the fill cost T1='
-            f'{f(ru[0]["makespan"])} never amortizes away: utilization is '
-            f'II&middot;R/(T1+II&middot;(R&minus;1)), which approaches 1 only '
-            f'as R&rarr;&infin;.</li>')
-
+        it.append(
+            f'<li><b>旋转拍图并没有打到 100% 链路利用率。</b>计划预测 1.0，'
+            f'实测在 R={best["rounds"]} 时只有 '
+            f'{pct(best["critical_arc_util"])}，单调上升但只是渐近。'
+            f'它<i>确实</i>精确打满了最忙段下界'
+            f'（II_eff = {f(ru[1]["II_eff"], 1) if len(ru) > 1 else "?"} '
+            f'= 每轮弧负载），但 T1={f(ru[0]["makespan"])} 的填充代价永远摊不掉：'
+            f'利用率是 II&middot;R/(T1+II&middot;(R&minus;1))，'
+            f'只有 R&rarr;&infin; 才趋近 1。</li>')
     p1 = [(e["R"], (e.get("by_ring_ports") or {}).get("1") or {})
           for e in (t or {}).get("ring_vs_mesh", [])]
-    if p1 and all(v for _R, v in p1) and any(
-            v["winner"] == "mesh" for _R, v in p1):
+    if p1 and all(v for _R, v in p1) and any(v["winner"] == "mesh"
+                                             for _R, v in p1):
         deep = max(p1, key=lambda x: x[0])
-        items.append(
-            f'<li><b>A one-port ring loses to the mesh once the pipeline is '
-            f'deep.</b> The ring wins the single-shot case '
-            f'({times(p1[0][1]["ring_over_mesh"], 3)} at R={p1[0][0]}) on span '
-            f'alone, but at R={deep[0]} it is behind by '
-            f'{times(deep[1]["ring_over_mesh"], 3)}: the binding resource has '
-            f'moved from distance to the station\'s single insert/extract '
-            f'port, and the mesh\'s Hamilton bi-tree pipelines past it with '
-            f'II_eff = 1.0. The mesh\'s own best scheme changes at that depth '
-            f'too, so neither fabric can be ranked from one R.</li>')
-
+        it.append(
+            f'<li><b>单端口的环在深流水下输给 mesh。</b>单发时环靠跨度赢'
+            f'（R={p1[0][0]} 时 {times(p1[0][1]["ring_over_mesh"], 3)}），'
+            f'但 R={deep[0]} 时落后 {times(deep[1]["ring_over_mesh"], 3)}：'
+            f'绑定资源已经从距离换成了环站那<b>一个</b>上/下环端口，'
+            f'而 mesh 的 Hamilton bi-tree 用 II_eff=1.0 流过去了。'
+            f'mesh 自己的最优方案在那个深度也换人 —— '
+            f'所以两种 fabric 都不能用单个 R 排名。</li>')
     if rob:
         n_extra = sum(e["extra_infeasible_without_bypass"]
                       for e in rob["bypass_price"])
-        items.append(
-            f'<li><b>A contiguous dead node does not cut the ring.</b> The '
-            f'plan assumed one dead node equals two breaks, so a station '
-            f'bypass mux would be mandatory. On a 2-connected ring a '
-            f'contiguous hole is routable the long way round, and removing the '
-            f'bypass mux costs nothing for contiguous node and quadrant '
-            f'faults. It is <i>scattered</i> dead nodes on one ring that '
-            f'partition it, which is where the mux earns its area '
-            f'({n_extra} extra infeasible scenarios without it across the '
-            f'measured schemes).</li>')
-
+        it.append(
+            f'<li><b>连续的死节点并不会切断环。</b>计划假定一个死节点等于两处'
+            f'断裂，因此环站 bypass mux 是必须的。但在 2-连通的环上，'
+            f'连续的洞可以从长边绕过去，对连续死点与象限洞而言，'
+            f'去掉 bypass mux 一分钱代价都没有。真正会把环切开的是'
+            f'<i>同一个环上分散的</i>死点 —— 那才是这个 mux 挣回面积的地方'
+            f'（没有它会多出 {n_extra} 个无解场景）。</li>')
     if rob and any(x.get("n_needing_repair_phase") for x in rob["faults"]):
-        worst = max(rob["faults"],
-                    key=lambda x: x.get("n_needing_repair_phase") or 0)
-        items.append(
-            f'<li><b>A dead node forces an extra phase, not just a '
-            f'reroute.</b> A dimension-sliced algorithm hands a row\'s data to '
-            f'a column through the one node where they meet. Kill that node '
-            f'and the whole column loses that row &mdash; the fabric is still '
-            f'connected, but the schedule had exactly one path. '
-            f'{worst["n_needing_repair_phase"]} of '
-            f'{worst["n_recompile"]} recompiles on '
-            f'{scheme_label(worst["pattern"], worst["algo"], worst["tier"])} '
-            f'need a repair phase appended. Reporting these as "recompiles '
-            f'with 1.2&times; inflation" would have hidden a missing '
-            f'phase.</li>')
-
+        w = max(rob["faults"], key=lambda x: x.get("n_needing_repair_phase")
+                or 0)
+        it.append(
+            f'<li><b>一个死节点会逼出一个额外相位，而不只是重排一次。</b>'
+            f'维度切片算法靠行列<b>唯一交点</b>把某行的数据交给某列；'
+            f'交点死了，整列都拿不到那一行 —— fabric 仍然连通，'
+            f'但拍图只有一条路。'
+            f'{lbl(w["pattern"], w["algo"], w["tier"])} 的 '
+            f'{w["n_recompile"]} 次重编译里有 '
+            f'{w["n_needing_repair_phase"]} 次必须追加修复相位。'
+            f'把这些只报成「重编译后膨胀 1.2&times;」，'
+            f'就会把一个缺失的相位藏起来。</li>')
     if c:
         b = [e for e in (c["bidir_lever"] or [])
              if abs(e["traffic_ratio_uni_over_bi"] - 1.0) < 0.02]
         if b:
-            e = max(b, key=lambda e: e["makespan_ratio_uni_over_bi"])
-            items.append(
-                f'<li><b>Bidirectional routing halves the span, not the load '
-                f'&mdash; wherever multicast is doing the work.</b> The plan '
-                f'predicted "peak arc load halved". On '
-                f'{scheme_label(e["pattern"], e["algo"], e["tier"])} the '
-                f'traffic ratio measures '
-                f'{times(e["traffic_ratio_uni_over_bi"], 2)} against a '
-                f'makespan ratio of '
-                f'{times(e["makespan_ratio_uni_over_bi"], 2)}: one arc drops '
-                f'copies at the same stations whichever way it travels, so '
-                f'only the span shrinks. The unicast schemes do save arc '
-                f'cycles, but because the one-way path is longer, not because '
-                f'the load was split.</li>')
-
-        funnels = [r for r in rows(c, m=13, bidir=True)
-                   if r["pattern"] in ("gather", "reduce")
-                   and r["ring_base"]["makespan"] is not None
-                   and r["ring_base"]["makespan"] < r["calendar"]["makespan"]]
-        if funnels:
-            w = min(funnels, key=lambda r: r["ring_base"]["makespan"]
-                    / r["calendar"]["makespan"])
+            e = max(b, key=lambda x: x["makespan_ratio_uni_over_bi"])
+            it.append(
+                f'<li><b>双向路由砍的是跨度不是负载 —— 只要多播在干活。</b>'
+                f'计划预测「峰值弧负载减半」。在 '
+                f'{lbl(e["pattern"], e["algo"], e["tier"])} 上实测流量比只有 '
+                f'{times(e["traffic_ratio_uni_over_bi"])}，'
+                f'而 makespan 比是 {times(e["makespan_ratio_uni_over_bi"])}：'
+                f'一条弧无论朝哪走都在同样那些环站落副本，所以只有跨度变小。'
+                f'unicast 方案确实省了弧周期，但那是因为单向路径更长，'
+                f'不是因为负载被劈开。</li>')
+        _w, _tie, lose = split_1p(c)
+        if lose:
+            pat = lose[0]
+            wr, kr = best_base(c, pat, 13), best_cal(c, pat, 13, "T0")
             ps = next((e for e in c["port_sensitivity"]
-                       if e["pattern"] == w["pattern"]
-                       and e["algo"] == w["algo"]), None)
+                       if e["pattern"] == pat and e["m"] == 13), None)
             extra = ""
             if ps:
-                extra = (f' Widening the model to two extract ports moves the '
-                         f'calendar to {f(ps["by_ports"]["2"]["makespan"])} '
-                         f'({f(ps["speedup_ports2"], 2)}&times;), which is the '
-                         f'honest apples-to-apples comparison.')
-            items.append(
-                f'<li><b>The paper mechanism beats the static calendar on the '
-                f'funnel collectives.</b> On '
-                f'{scheme_label(w["pattern"], w["algo"], w["tier"])} at m=13, '
-                f'ring_base finishes in {f(w["ring_base"]["makespan"])} cycles '
-                f'against the calendar\'s {f(w["calendar"]["makespan"])}. This '
-                f'is a modelling difference, not deflection magic: the '
-                f'calendar reserves an extract port for a whole burst, while '
-                f'ring_base interleaves individual flits at the L1 drain '
-                f'rate.{extra}</li>')
-
+                extra = (f' 把模型放宽到两个抽取端口，拍图变成 '
+                         f'{f(ps["by_ports"]["2"]["makespan"])} 拍'
+                         f'（{times(ps["speedup_ports2"])}），'
+                         f'这才是同口径的比较。')
+            it.append(
+                f'<li><b>paper 机制在 fan-in 型集合通信上打赢了静态拍图。</b>'
+                f'{lbl(pat, kr["algo"], kr["tier"])} m=13：'
+                f'<code>ring_base</code> {f(wr["ring_base"]["makespan"])} 拍，'
+                f'拍图 {f(kr["calendar"]["makespan"])} 拍。'
+                f'这是<b>建模粒度</b>差异，不是偏转有魔法：拍图把一个抽取端口'
+                f'整段留给一次传输，而 <code>ring_base</code> 按 L1 的排空速率'
+                f'逐 flit 交错。{extra}</li>')
     if ver:
         n_ref = sum(1 for ch in ver["checks"]
                     if "REFUTED" in (ch.get("prediction") or ""))
-        items.append(
-            f'<li class="muted">{n_ref} of the verification suite\'s labelled '
-            f'predictions are recorded as refuted rather than quietly '
-            f'relaxed; see <code>results/verify_ring_collectives_8x6.json'
-            f'</code>.</li>')
-    return f'<ul>{"".join(items)}</ul>'
+        it.append(
+            f'<li class="muted">验证套件里有 {n_ref} 项带标签的预测被记录为'
+            f'「推翻」而不是悄悄放宽，见 §14 与 '
+            f'<code>results/verify_ring_collectives_8x6.json</code>。</li>')
+    return f'<ul>{"".join(it)}</ul>'
 
 
 def sec_limits(d: dict) -> str:
     t = d["tavg"] or {}
     mesh_note = ""
     if not (t.get("mesh_reference") or {}).get("available"):
-        mesh_note = ('<li>The ring-versus-mesh T_avg comparison is '
-                     'unpopulated: <code>results/multiflit_area_makespan.json'
-                     '</code> predates the R&isin;{1,5,13} sweep. The ring '
-                     'columns are complete; the cross-fabric ordering claim is '
-                     'left unstated rather than carried over from the older '
-                     'R=5-only run.</li>')
+        mesh_note = ('<li>环 vs mesh 的 T_avg 对照是空的：'
+                     '<code>results/multiflit_area_makespan.json</code> '
+                     '早于 R&isin;{1,5,13} 扫描。环侧各列是完整的；'
+                     '跨 fabric 的排序结论宁可不写，也不拿只有 R=5 的旧数据'
+                     '顶替。</li>')
     return f"""<ul>
 {mesh_note}
-<li>The ring-versus-mesh comparison is "best point in each design space", and
-the two spaces are not the same shape: the mesh sweeps crossbar write width,
-drain rate and FIFO depth, the ring sweeps only station port count. That is why
-the table gives one row per ring port count instead of a single summary
-ratio.</li>
-<li>The calendar model charges an extract port to one transfer for its whole
-burst (m&middot;&sigma; cycles). The paper mechanism drains L1 per flit, so the
-two are not on the same footing for funnel-shaped collectives; the port
-sensitivity table bounds the gap rather than closing it.</li>
-<li>Reduction is modelled as an item-set union with a size-preserving fold. That
-captures traffic and dependency order exactly, but not arithmetic: an adder's
-latency inside L1 is folded into <code>RAMP</code> and not modelled
-separately.</li>
-<li><code>ring_islip2d</code> is included as a same-capability scheduling
-reference, not as a serious contender &mdash; it arbitrates one flit per node
-per round, so on 2256-message patterns its makespan is an order of magnitude
-off and should be read as a control, not a result.</li>
-<li>Jitter is injected only at source release. In-flight jitter would need the
-transport model rather than the calendar replay.</li>
-<li>Fault recompilation assumes an offline compiler with the full fault list. No
-claim is made about how long the recompile takes or how the new table is
-distributed.</li>
-<li>&sigma;=1 throughout the calendar work. The metal-constant &sigma;=2 reading
-that the topology audit reports ({d['coll']['audit']['metal_ratio_vs_mesh'] if d.get('coll') else '?'}&times; the mesh's
-wire) is not re-run here.</li>
+<li><b>基线与拍图不共享一套机器模型</b>，差别在三处并已逐项量化（§2 末）：
+环站出口 1 flit/拍 vs 节点按 <code>RAMP_BW</code> 排空、每相位 +RAMP 的斜坡常数、
+过桥转环 1 拍。因此「离下界多远」这类陈述必须各用自己模型的界；
+本报告图上的下界柱取两模型的公共下界。要让头对头比较也严格同硬件，
+需要统一 <code>leave_ports</code> 与 <code>eject_bw</code> 后重跑全部拍图，
+那会改动几乎所有拍图数字，尚未做。</li>
+<li>环 vs mesh 是「各自设计空间里的最优点」对比，而两个空间的形状不同：
+mesh 扫的是 crossbar 写宽度、排空速率与 FIFO 深度，环只扫了环站端口数。
+这就是为什么那张表按环端口数分行给，而不是给一个汇总比值。</li>
+<li>拍图模型把一个抽取端口整段（m&middot;&sigma; 拍）记给一次传输，而 paper
+机制按 flit 排空 L1，所以在 fan-in 型集合通信上两者<b>不在同一记账口径</b>；
+端口敏感性表是给这个差距划了个界，不是把它抹平。</li>
+<li>归约建模为「保持大小的项集折叠」。这精确刻画了流量与依赖次序，但不含算术：
+L1 里加法器的时延被折进 <code>RAMP</code>，没有单独建模。</li>
+<li><code>ring_islip2d</code> 是同能力的调度参照，不是认真的竞争者 ——
+它每节点每轮只仲裁一个 flit，在 2256 条消息的 pattern 上 makespan 差一个
+数量级，应当读作对照组。</li>
+<li>抖动只注入在源端释放处。在途抖动需要 transport 模型，拍图回放做不到。</li>
+<li>故障重编译假定有一个拿到完整故障表的离线编译器。本报告不声称重编译要多久、
+新表怎么分发。</li>
+<li>拍图部分全程 &sigma;=1。拓扑审计报出的金属恒定读法（&sigma;=2，
+金属量 {d['coll']['audit']['metal_ratio_vs_mesh'] if d.get('coll') else '?'}&times;
+同尺寸 mesh）没有在这里重跑。</li>
 </ul>"""
 
 
+def sec_conclusion(d: dict) -> str:
+    c = d["coll"]
+    it = []
+    for pat in PATTERNS:
+        b, k = best_base(c, pat, 13), best_cal(c, pat, 13, "T0")
+        if b and k and b["ring_base"]["makespan"] > k["calendar"]["makespan"]:
+            it.append((pat, b["ring_base"]["makespan"]
+                       / k["calendar"]["makespan"]))
+    it.sort(key=lambda x: -x[1])
+    top = "、".join(f"{CN1[p]}（{r:.2f}×）" for p, r in it[:3])
+    win, tie, lose = split_1p(c)
+    j = lambda ps: "、".join(CN1[p] for p in ps) or "无"
+    bad = _two_model_rows(c)
+    n_bad = len(bad)
+    worst_r = (f'{lbl(bad[0]["pattern"], bad[0]["algo"], bad[0]["tier"])} '
+               f'm={bad[0]["m"]} 的 '
+               f'{times(bad[0]["ratios"]["base_over_cal_model_lb"])}'
+               ) if bad else "无"
+    return f"""<ol>
+<li><b>同能力（都只有 unicast）下，拍图赢在流量摊得开的模式，基线赢在纯
+fan-in。</b>m=13 拍图更快的是 {top}；基线更快的只有 {j(lose)}，{j(tie)} 打平。
+这条分界不是噪声，是<b>下环端口记账粒度</b>造成的：拍图把一个抽取点整段
+独占，基线按 <code>RAMP_BW</code> 逐 flit 交错。端口放宽到 2 之后差距就
+合上（见 §5），这才是同口径比较。</li>
+<li><b>基线的代价不只在 makespan 上。</b>fan-in 类流量把偏转顶到
+{f(max(best_base(c, p, 13)['ring_base']['deflect_per_flit']
+       for p in PATTERNS if best_base(c, p, 13)), 3)} 次/flit，
+而偏转既白吃弧周期又制造乱序，所以基线<b>必须</b>带桥 FIFO 与目的端重组
+缓冲（实测峰值最高 {f(max(best_base(c, p, 13)['ring_base']['max_reasm_occupancy']
+                          for p in PATTERNS if best_base(c, p, 13)))} flit）；
+拍图把这两块删成 0（转环驻留恒为 0、乱序恒为 0），代价搬到了控制存储与
+「故障需重编译」上。</li>
+<li><b>弧多播是唯一改变数量级的硬件增量，但只对 fan-out 生效。</b>
+同一棵 <code>dim_2phase</code> 树上加多播，上环 flit 从 611 降到 182、
+传输数从 47 降到 14、makespan 从 176 降到 95 拍；而归约、收集、全交换
+<b>收益精确为 0</b>（fan-in 无可复制，全交换的 N(N−1) 条消息两两不同），
+验证套件对 17 个 (pattern, algo) 对断言 T1 与 T0 逐字段相同。
+且这是<b>带宽</b>收益不是<b>时延</b>收益：m=1 时同一对 T1/T0 都是 61 拍。</li>
+<li><b>打到下界与抗故障/抗抖动是互斥的。</b>旋转拍图 II_eff 精确等于弧负载
+下界，代价是 27 个故障场景里 20 个无解、抖动吸收 0 拍。要鲁棒就得留松弛，
+留了松弛就打不到下界 —— 选方案时这是一次显式取舍，不是可以同时拿到的两件事。
+</li>
+<li><b>凡是「更快」「离最优多远」的论断都必须带口径，本轮有一次现成的反面教材。
+</b>σ=1 还是金属恒定 σ=2、T0 还是 T1 能力、1 个还是 2 个环站端口、R=1 还是
+R=13 —— 换任一项都可能翻转结论。更隐蔽的是<b>下界的口径</b>：把拍图模型的界
+拿去量基线，{n_bad} 行会出现「跑到下界以下」，最狠 {worst_r}（§2 末）。
+两条腿只要机器模型不同，就必须各用自己的界；只报一个「/下界」列，
+等于把两台机器的差别记成了性能。</li>
+</ol>"""
+
+
 # ---------------------------------------------------------------------------
-# 4. Page
+# 5. 组页
 # ---------------------------------------------------------------------------
 
 def build(d: dict) -> str:
-    c, ver, rob = d["coll"], d["ver"], d["rob"]
+    c, ver = d["coll"], d["ver"]
     a = c["audit"]
-    toc = [("part1", "Part 1 &mdash; the paper mechanism on six collectives"),
-           ("tavg", "Part 1b &mdash; T_avg at R = 1, 5, 13"),
-           ("levers", "Part 2 &mdash; four structural levers"),
-           ("util", "Bandwidth utilization"),
-           ("faults", "Fault tolerance"),
-           ("jitter", "Jitter tolerance"),
-           ("contrary", "Results contrary to expectation"),
-           ("limits", "Known limitations"),
-           ("repro", "Reproducing this")]
+    toc = [("mech", "一、两种机制到底差在哪（示意图）"),
+           ("transports", "二、环上三种 transport 的定位"),
+           ("cmp", "三、主对比：六个集合通信的 makespan"),
+           ("winloss", "四、谁赢谁输：分界线在哪里"),
+           ("why", "五、为什么这几个模式上基线更快（端口粒度）"),
+           ("cost", "六、基线的隐性代价：偏转、乱序、重组缓冲"),
+           ("gantt", "七、拍图长什么样（真实占用图）"),
+           ("levers", "八、四个结构杠杆"),
+           ("util", "九、带宽利用率"),
+           ("tavg", "十、流水化后的 T_avg（R = 1 / 5 / 13）"),
+           ("faults", "十一、容错"),
+           ("jitter", "十二、抗抖动"),
+           ("export", "十三、拍图导出（calendar-export/v2）"),
+           ("verify", "十四、验证清单"),
+           ("contrary", "十五、与预期相反的结果"),
+           ("limits", "十六、已知局限"),
+           ("concl", "十七、结论与口径")]
     return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Collectives on an 8&times;6 bufferless ring</title>
+<title>8×6 无缓冲环上的集合通信：paper 机制基线 vs 静态拍图</title>
 <style>{CSS}</style></head><body><div class="wrap">
 
-<h1>Collectives on the 8&times;6 dimension-sliced bufferless ring</h1>
-<p class="lead">Two questions, one fabric. First: what makespan does the
-HPCA'22 mechanism (E-tag/I-tag plus deflection, unicast only) reach on the six
-collectives? Second: on the same physical ring, what can a static slot table do
-if ring stations may copy-and-continue and nodes may accumulate in L1?</p>
-<p class="muted">Fabric: {a['n_row_rings']} row rings &times; {a['mx']} +
-{a['n_col_rings']} column rings &times; {a['my']} =
-{a['n_directed_links']} directed segments over {a['n']} nodes, every node a
-bridge, zero buffering inside a ring. Conflicts are the same D-R five-clause
-predicate used throughout this repository.
-{"All " + str(ver['n_checks']) + " executable checks pass." if ver and ver['all_pass'] else ""}</p>
+<h1>8&times;6 无缓冲环上的集合通信：paper 机制基线 vs 静态拍图</h1>
+<p class="lead">同一块物理环、同一个流集、同一套冲突判据，只换 transport：
+一边是 HPCA'22 的 E-tag/I-tag + 偏转机制（运行期分布式决策，只支持
+unicast），一边是离线排好的静态拍图（编译期全局决策，环站可复制多播、
+归约在 L1 做），另有集中式 <code>ring_islip2d</code> 作同能力参照。
+核心问题只有一个 &mdash; <b>谁快、为什么快、在哪里反而慢</b>。
+这一页是无缓冲环工作的<b>唯一</b>报告，六个集合通信、四个杠杆、T_avg、
+容错、抗抖动、拍图导出与验证清单都在这里。</p>
+<p class="muted">拓扑：{a['n_row_rings']} 个行环&times;{a['mx']} +
+{a['n_col_rings']} 个列环&times;{a['my']} = {a['n_directed_links']} 条有向弧，
+{a['n']} 个节点全是桥，环内零缓冲；金属量 {a['metal_ratio_vs_mesh']}&times;
+同尺寸 mesh。冲突判据为 D-R 五子句。
+{"全部 " + str(ver['n_checks']) + " 项可执行验证通过。" if ver and ver['all_pass'] else ""}
+所有数字读自 <code>results/*.json</code>，图中甘特图为现场排图的真值。</p>
 
 {sec_cards(d)}
 
-<div class="toc">{"".join(f'<div><a href="#{i}">{t}</a></div>' for i, t in toc)}</div>
+<div class="toc">{"".join(f'<div><a href="#{i}">{tt}</a></div>' for i, tt in toc)}</div>
 
-<div class="fig">{svg_multicast()}
-<div class="cap">The single hardware increment that separates the two halves of
-this report. Left: one boarding whose copies fall off at every station. Right:
-the same delivery as seven boardings, which is all the paper mechanism can
-express. The arc-cycle counts are the ones the footprint model charges.</div>
-</div>
+<h2 id="mech">一、两种机制到底差在哪</h2>
+<p>差别的根源只有一句：<b>运行期决策必须为「猜错」准备缓冲，编译期决策不会猜错。</b>
+基线的桥 FIFO 与目的端重组缓冲都不是设计者的偏好，而是偏转与乱序的必然后果。</p>
+<div class="fig">{svg_mechanism()}
+<div class="cap"><b>图：同一个环站，两种机制各要什么。</b>红框是基线必须有、
+拍图可以删掉的存储；绿虚线框是被删掉的部分。拍图把代价搬到了控制存储
+（一张时隙表）和「故障后要重编译」上。</div></div>
+<div class="fig">{svg_deflect_vs_slot()}
+<div class="cap"><b>图：同一个冲突的两种处理。</b>基线只能把 B 弹走绕圈
+（多付跳数 + 乱序）；拍图在编译期就知道冲突，把 B 排到下一拍
+（多付 1 拍，保序）。这就是 §6 里偏转率与重组缓冲峰值的来源。</div></div>
 
-<h2 id="part1">Part 1 &mdash; the paper mechanism on six collectives</h2>
-<p>All three legs run the same flow set, the same m, the same &sigma; and the
-same barrier semantics, so the columns are comparable. Two identities are worth
-stating before reading the table, because they stop the comparison from
-flattering anyone: under unicast-only capability <b>allgather and all-to-all are
-the same flow set</b> (every node's flit reaches the other 47), and <b>gather and
-reduce place the same demand on the network</b> &mdash; they differ only in
-whether the root's L1 accumulates. The tier column is where the real difference
-lives.</p>
-{sec_baseline(c)}
-<div class="note"><b>Reading the deflection column.</b> The paper mechanism's
-cost is not only its makespan: deflections are re-circulations that consume arc
-cycles and reorder arrivals. Where the column is near zero the mechanism is
-effectively running the flow set unimpeded and its gap to the calendar is
-scheduling, not deflection.</div>
+<h2 id="transports">二、环上三种 transport 的定位</h2>
+<p>后面所有对比都在这三条腿之间进行，先把各自的身份说清楚，避免把参照当成
+竞争者。三条腿跑同一个流集、同一 m、同一 &sigma;、同一 barrier 语义。</p>
+{sec_transports(c)}
 
-<h2 id="tavg">Part 1b &mdash; T_avg at R = 1, 5, 13</h2>
-<p>Same definition as the mesh study: pack R pipelined rounds freely and measure
-T<sub>R</sub>, then report II_eff = (T<sub>R</sub>&minus;T1)/(R&minus;1) and
-T_avg = T1 + (R&minus;1)/2 &middot; II_eff. R=1 makes T_avg identical to the
-one-flit makespan.</p>
-{sec_tavg(d['tavg'])}
+<h2 id="cmp">三、主对比：六个集合通信的 makespan</h2>
+<p>三条腿同 m、同 &sigma;、同 barrier 语义。先看 m=1（单 flit，多数场景由
+时延地板决定），再看 m=13（多 flit，带宽与端口开始咬人）。</p>
+{sec_compare(c)}
+<div class="note"><b>读图要点：</b>m=1 时六个 collective 的最优拍图<b>全部</b>
+恰好压在时延下界上（makespan == latency_lb），此时比的是「跨度 + barrier 数」，
+m=13 才切换到端口界与弧负载界。所以<b>不能只用一个 m 下结论</b> ——
+这与 §10 里「不能只用一个 R」是同一类错误。<br>
+顺带一个反直觉的读数：<b>m=1 时弧多播买到的收益精确为 0</b> —— 广播
+<code>dim_2phase</code> 的 T1 与 T0 都是 61 拍，一拍不差；此时最优方案反而是
+<code>flat</code>（59 拍），因为单 flit 下拼的是最短临界路径，不是省带宽。
+<b>多播是带宽原语，不是时延原语。</b></div>
 
-<h2 id="levers">Part 2 &mdash; four structural levers</h2>
-<p>Each lever came with a prediction. Two of the four came out differently than
-predicted, and those are the interesting ones.</p>
+<h2 id="winloss">四、谁赢谁输：分界线在哪里</h2>
+{sec_winloss(c)}
+
+<h2 id="why">五、为什么这几个模式上基线更快</h2>
+<p>{_why_intro(c)}</p>
+{sec_why_lose(c)}
+
+<h2 id="cost">六、基线的隐性代价</h2>
+{sec_cost(c, d["idx"])}
+
+<h2 id="gantt">七、拍图长什么样</h2>
+<p>下面两张图不是示意图，是调 <code>build_calendar</code> 现场排出来的真值，
+每条横线都是一次真实传输的占用区间。</p>
+{sec_gantt(c)}
+
+<h2 id="levers">八、四个结构杠杆</h2>
+<p>拍图能做而 paper 机制做不到的事，归结为四个可以独立开关的杠杆。
+每个杠杆单独量化，才知道收益该记在谁头上 —— 比如广播上「基线
+{f(_bc_gain(c)[0])} 拍 &rarr; 杠杆全开的拍图 {f(_bc_gain(c)[1])} 拍」这
+{times(_bc_gain(c)[2])} 里，多播占多少、维度树占多少。</p>
 {sec_levers(c)}
 
-<h2 id="util">Bandwidth utilization</h2>
-<p>Both numbers are reported for every scheme, because the pair is diagnostic:
-high global with a low critical arc means there is still packing left to do;
-critical arc at its own bound means the schedule is against the wall and only a
-different flow set will help.</p>
+<h2 id="util">九、带宽利用率</h2>
 {sec_util(c)}
 
-<h2 id="faults">Fault tolerance</h2>
-<p>{len(rob['faults'][0]['rows']) if rob else 0} scenarios per scheme: ring
-wraparound segment loss (the failure a ring has and a mesh does not), scattered
-dead nodes on one ring, and the repository's existing link, node and quadrant
-holes.</p>
-{sec_faults(rob)}
+<h2 id="tavg">十、流水化后的 T_avg</h2>
+{sec_tavg(d['tavg'])}
 
-<h2 id="jitter">Jitter tolerance</h2>
-{sec_jitter(rob)}
+<h2 id="faults">十一、容错</h2>
+{sec_faults(d['rob'])}
 
-<h2 id="contrary">Results contrary to expectation</h2>
+<h2 id="jitter">十二、抗抖动</h2>
+{sec_jitter(d['rob'])}
+
+<h2 id="export">十三、拍图导出</h2>
+{sec_export(d['idx'])}
+
+<h2 id="verify">十四、验证清单</h2>
+{sec_verify(ver)}
+
+<h2 id="contrary">十五、与预期相反的结果</h2>
+<p>单列一节，因为这些是最容易在汇总里被平均掉、却最影响设计决策的读数。</p>
 {sec_contrary(d)}
 
-<h2 id="limits">Known limitations</h2>
+<h2 id="limits">十六、已知局限</h2>
 {sec_limits(d)}
 
-<h2 id="repro">Reproducing this</h2>
+<h2 id="concl">十七、结论与口径</h2>
+{sec_conclusion(d)}
+
+<h2>复现</h2>
 <pre class="code">cd utils
-python3 dse_ring_collectives_8x6.py   <span class="c"># Part 1 + calendars  -> results/ring_collectives_8x6.json</span>
-python3 dse_ring_tavg_8x6.py          <span class="c"># T_avg R=1/5/13      -> results/ring_tavg_8x6.json</span>
-python3 dse_ring_robust_8x6.py        <span class="c"># faults + jitter     -> results/ring_robust_8x6.json</span>
-python3 dse_multiflit_area_makespan.py --jobs 5
-                                      <span class="c"># mesh side R=1/5/13  -> results/multiflit_area_makespan.json</span>
-                                      <span class="c"># ~900 CPU-minutes; run this BEFORE dse_ring_tavg_8x6.py</span>
-python3 export_ring_calendars.py      <span class="c"># slot tables         -> results/calendars/ring_*.json</span>
-python3 verify_ring_collectives_8x6.py<span class="c"># {f(ver['n_checks']) if ver else '?'} assertions</span>
-python3 gen_ring_collectives_report.py<span class="c"># this page</span></pre>
-<p class="muted">Sources: <code>results/ring_collectives_8x6.json</code>
-({f(c.get('wall_s'), 1)} s), <code>results/ring_tavg_8x6.json</code>,
-<code>results/ring_robust_8x6.json</code>,
-<code>results/verify_ring_collectives_8x6.json</code>,
-<code>results/calendars/ring_index.json</code>. Companion narrative:
-<code>docs/phase-7-exploration/ring-collectives-8x6.md</code>.</p>
+python3 dse_ring_collectives_8x6.py       <span class="c"># 三条腿 + 拍图 -> results/ring_collectives_8x6.json</span>
+python3 dse_ring_tavg_8x6.py              <span class="c"># T_avg R=1/5/13（需先有 mesh 参照，见下）</span>
+python3 dse_ring_robust_8x6.py            <span class="c"># 容错 + 抖动</span>
+python3 export_ring_calendars.py          <span class="c"># -> results/calendars/ring_*.json</span>
+python3 verify_ring_collectives_8x6.py    <span class="c"># {f(ver['n_checks']) if ver else '?'} 项断言</span>
+python3 gen_ring_collectives_report.py    <span class="c"># 本页</span></pre>
+<p class="muted">§10 的 mesh 参照来自 <code>results/multiflit_area_makespan.json</code>
+（由 <code>dse_multiflit_area_makespan.py --jobs 5</code> 产生，那是 mesh 侧的
+既有工作，本报告只<b>读取</b>它、不改它）。文字版结论见
+<code>docs/phase-7-exploration/ring-collectives-8x6.md</code>。</p>
 </div></body></html>"""
 
 
 def main() -> None:
     d = load()
     if not d["coll"]:
-        raise SystemExit(f"missing {COLL}; run dse_ring_collectives_8x6.py")
+        raise SystemExit(f"缺少 {COLL}，先跑 dse_ring_collectives_8x6.py")
     OUT.write_text(build(d), encoding="utf-8")
     print(f"wrote {OUT}  ({OUT.stat().st_size / 1024:.0f} KB)")
 

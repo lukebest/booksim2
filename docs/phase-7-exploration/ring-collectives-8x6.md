@@ -6,8 +6,8 @@
 **静态拍图（Part 2）：** 环站支持 **copy-and-continue 弧多播**，归约在**节点 L1 buffer** 内做；环内仍严格零缓冲、零转环驻留
 **能力分层：** T0 = 纯 unicast（paper 机制可达）；T1 = 弧多播 + L1 归约
 **数据：** `results/ring_collectives_8x6.json`、`results/ring_tavg_8x6.json`、`results/ring_robust_8x6.json`、`results/calendars/ring_*.json`；mesh 参照 `results/multiflit_area_makespan.json`（本轮补齐 R=1/13）
-**验证：** `results/verify_ring_collectives_8x6.json`，**56/56 通过**，全部可执行、失败即命名具体量；其中 **3 项记录为「预测被推翻」**而不是悄悄放宽
-**报告：** `results/report_ring_collectives_8x6.html`；mesh 侧的 R=1/5/13 深度扫描补在 `results/report_multi_area_makespan.html` §5.5
+**验证：** `results/verify_ring_collectives_8x6.json`，**62/62 通过**，全部可执行、失败即命名具体量；其中 **4 项记录为「预测被推翻」**而不是悄悄放宽（第 4 项是本轮自查出的记账错误，见第 7 节第 7 条）
+**报告：** `results/report_ring_collectives_8x6.html` —— 无缓冲环工作的**唯一**报告（中文，围绕「基线 vs 拍图」对比组织，含机制示意图、胜负图、真实拍图甘特图、四个杠杆、T_avg、容错、抗抖动、拍图导出与验证清单）。mesh 侧的 R=1/5/13 深度扫描属于 mesh 既有工作，留在 `results/report_multi_area_makespan.html` §5.5；本报告 §10 只**读取**它的 JSON 作参照，不改那份报告的结论。
 
 ## 0. 一页结论
 
@@ -77,6 +77,8 @@
 三条腿跑同一个流集、同一 m、同一 σ、同一 barrier 语义。完整表在 `report_ring_collectives_8x6.html`，此处摘每个 pattern 的最优行。
 
 两列都取**各自腿的最优算法**（集合算法与 transport 是正交轴，拿同一个算法压基线会把基线做成稻草人），所以同一行的两个数字可能来自不同算法；逐算法的完整表见 HTML 报告。
+
+**下界那一列算在拍图的机器模型上，不能拿去除 `ring_base`。** 两条腿跑的是两台机器，差别恰好三处：环站出口 1 flit/拍 vs 节点按 `RAMP_BW=2` 排空、拍图每相位多收 `+RAMP=2`、拍图过桥转环收 `t_turn=1` 而 sim 免费。用拍图的界去量基线，40 行里有 **18 行**会出现 <1 的比值（最狠 gather/dim_2phase m=13 的 **0.73×**），下表 `allreduce`/`gather`/`reduce` 那几个 0.89~0.95× 就是这么来的——那是记账口径串了，不是基线跑赢了物理。在基线自己模型下重建的界（`bounds_base`）**40 行全部成立，旋转 10 行精确 1.000×**；口径三项证据与并排表见报告 §2 末与验证第 31–36 项。
 
 **m = 1**（全部由 latency floor 绑定）
 
@@ -190,11 +192,12 @@ mesh 侧扫自己的设计变量（crossbar 写宽度 W、抽取率 E、FIFO 深
 4. **双向半弧不减负载**（预测峰值弧负载减半）。多播弧无论朝哪边走都在同样站点丢副本，省的是 span。
 5. **paper 机制在漏斗型集合通信上打赢静态拍图**（reduce m=13：107 vs 189 拍）。原因是下环端口的记账粒度而非偏转，端口敏感性一列量化了这个差距（放宽到 2 端口后 189 → 124 拍）。
 6. **T1 硬件对 alltoall / gather / reduce 的收益精确为 0**。这不是负面结果的粉饰：验证套件对 17 个 (pattern, algo) 对断言 T1 与 T0 逐字段相同。
-7. **1 端口的环在深流水下打不过 mesh**（R=13 输 1.19×），尽管它在单发时延上赢 0.885×。计划隐含假设环的优势会随 R 保持；实际是**绑定资源从跨度换成了环站端口**。同时 mesh 的最优方案自己也在 R=13 换人（axis+CCW → Hamilton bi-tree，II_eff 从 42.25 掉到 1.0），所以两边的排序都不能只在一个 R 上量。
+7. **`ring_base` 一度看起来跑到了「理论下界」以下（最狠 0.73×），而这是本轮最严重的一处自身错误。** 40 行里 18 行受影响。根因是把**拍图模型**的界（环站出口 1 flit/拍、每相位 +RAMP、过桥 1 拍）拿去除**另一台机器**上的实测（出口按 `RAMP_BW=2` 排空、不收 +RAMP、过桥免费）。三处口径都可精确量化：gather/dim_2phase m=13 的 `port_lb=520` vs 基线真正欠的弹出界 `306`，实测 380 落在两者之间；旋转 47 个相位的两个时延地板差 **94 = RAMP×47**；转环那条恒差 `t_turn=1`。在基线自己模型下重建界后 **40 行全部成立、旋转 10 行精确 1.000×**（说明偏转机制跑旋转在它自己模型下已是时延最优）。**能溜过去的原因是验证套件只断言了拍图 ≥ 界，从未断言基线 ≥ 任何界** —— 现补入第 31–36 项，其中一项显式记录「用一个界量两条腿」这个做法被推翻。
+8. **1 端口的环在深流水下打不过 mesh**（R=13 输 1.19×），尽管它在单发时延上赢 0.885×。计划隐含假设环的优势会随 R 保持；实际是**绑定资源从跨度换成了环站端口**。同时 mesh 的最优方案自己也在 R=13 换人（axis+CCW → Hamilton bi-tree，II_eff 从 42.25 掉到 1.0），所以两边的排序都不能只在一个 R 上量。
 
 ## 8. 已知局限
 
-1. **拍图模型的下环端口记账比 `ring_base` 粗。** 拍图把抽取点整段（m·σ 拍）独占给一次传输，`ring_base` 按 `RAMP_BW` 逐 flit 交错。端口敏感性一列**给出了差距的界，没有关上它**——要关上就得把拍图的资源粒度改成逐 flit，那是另一套打包器。
+1. **拍图与 `ring_base` 不共享一套机器模型（三处，已逐项量化）。** 环站出口 1 flit/拍 vs 节点按 `RAMP_BW=2` 排空；拍图每相位多收 `+RAMP=2`；拍图过桥收 `t_turn=1` 而 sim 免费。因此「离下界多远」必须各用自己模型的界（`bounds` / `bounds_base`），报告图上的下界柱取两模型的**公共**下界。第一处同时也是端口粒度那条结论的根源：拍图把抽取点整段（m·σ 拍）独占给一次传输，端口敏感性一列**给出了差距的界，没有关上它**。要让头对头 makespan 也严格同硬件，得统一 `leave_ports` 与 `eject_bw` 后重跑全部拍图（几乎所有拍图数字都会变），本轮未做。
 2. **归约建模为 item-set 并集 + 尺寸守恒折叠。** 流量与依赖序精确，但**不含算术**：L1 内加法器的时延折进 `RAMP`，没有单独建模。
 3. **`ring_islip2d` 是 control 不是竞争者。** 它每节点每轮授一条 flit，2256 条消息要 63 轮，makespan 差一个数量级，读作同能力调度对照。
 4. **抖动只注入在源端释放时刻。** 飞行中抖动需要 transport 模型，拍图 replay 做不到。
@@ -210,11 +213,13 @@ python3 dse_ring_collectives_8x6.py            # Part 1 + 拍图  -> results/rin
 python3 dse_ring_tavg_8x6.py                   # T_avg R=1/5/13 -> results/ring_tavg_8x6.json
 python3 dse_ring_robust_8x6.py                 # 容错 + 抖动    -> results/ring_robust_8x6.json
 python3 export_ring_calendars.py               # 拍图导出       -> results/calendars/ring_*.json
-python3 verify_ring_collectives_8x6.py         # 56 项断言
+python3 verify_ring_collectives_8x6.py         # 62 项断言（含 #31–36：基线 vs 其自身模型的界）
 python3 dse_multiflit_area_makespan.py --jobs 5 # mesh 侧 R=1/5/13（约 900 CPU-分钟，5 进程约 2.5 小时）
                                                # 必须在 dse_ring_tavg_8x6.py 之前跑，否则环 vs mesh 一列会显式标注缺失
-python3 gen_ring_collectives_report.py         # -> results/report_ring_collectives_8x6.html
-python3 gen_multi_area_report.py               # -> results/report_multi_area_makespan.html（§5.5 深度扫描）
+python3 gen_ring_collectives_report.py         # -> results/report_ring_collectives_8x6.html（环的唯一报告）
+python3 gen_multi_area_report.py               # -> results/report_multi_area_makespan.html（mesh 侧，§5.5 深度扫描）
 ```
+
+环的全部结果只落在一个 HTML（`report_ring_collectives_8x6.html`）里：判断「环上该用哪种 transport」必须能在同一页对齐口径，拆成多份会让口径漂移。`dse_multiflit_area_makespan.py` 与 `gen_multi_area_report.py` 属于 mesh 侧工作，这里只是因为环需要 R=1/13 的 mesh 参照才一并列出。
 
 新增代码：`utils/rg_ring_collectives.py`、`utils/rg_ring_calendar.py`、`utils/dse_ring_collectives_8x6.py`、`utils/dse_ring_tavg_8x6.py`、`utils/dse_ring_robust_8x6.py`、`utils/export_ring_calendars.py`、`utils/verify_ring_collectives_8x6.py`、`utils/gen_ring_collectives_report.py`；扩展：`utils/rg_ring_topo.py`（多播 footprint + `verify_dr` 多播分支）、`utils/dse_multiflit_area_makespan.py`（R 列表 + 多进程）。

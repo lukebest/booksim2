@@ -1,6 +1,6 @@
 {
- "n_checks": 56,
- "n_pass": 56,
+ "n_checks": 62,
+ "n_pass": 62,
  "all_pass": true,
  "audit": {
   "mx": 8,
@@ -195,223 +195,265 @@
   },
   {
    "id": 25,
-   "name": "every makespan is at or above the combined makespan bound",
+   "name": "every calendar makespan is at or above the combined makespan bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 26,
-   "name": "every makespan is at or above the zero-contention latency bound",
+   "name": "every calendar makespan is at or above the zero-contention latency bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 27,
-   "name": "every makespan is at or above the L1 ramp ejection bound",
+   "name": "every calendar makespan is at or above the L1 ramp ejection bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 28,
-   "name": "every makespan is at or above the vertical bisection bound",
+   "name": "every calendar makespan is at or above the vertical bisection bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 29,
-   "name": "every makespan is at or above the busiest-segment bound",
+   "name": "every calendar makespan is at or above the busiest-segment bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 30,
-   "name": "every makespan is at or above the insert/extract port bound",
+   "name": "every calendar makespan is at or above the insert/extract port bound",
    "pass": true,
    "detail": "0 below []",
    "prediction": ""
   },
   {
    "id": 31,
+   "name": "ring_base never finishes below its OWN model's lower bound",
+   "pass": true,
+   "detail": "0 below over 40 rows []",
+   "prediction": ""
+  },
+  {
+   "id": 32,
+   "name": "ring_base on rotation is EXACTLY tight in its own model",
+   "pass": true,
+   "detail": "10/10 rows at ratio 1.000",
+   "prediction": ""
+  },
+  {
+   "id": 33,
+   "name": "the calendar-model bound is NOT a bound on ring_base (documented cross-model artefact, not a violation)",
+   "pass": true,
+   "detail": "18/40 rows appear below it, worst gather/dim_2phase m=13 at 0.731x",
+   "prediction": "reporting one bound for both legs: REFUTED"
+  },
+  {
+   "id": 34,
+   "name": "cause 1 -- the fan-in gap is the station-exit port model",
+   "pass": true,
+   "detail": "port_lb=520 (leave_ports=1) vs eject bound 306 (RAMP_BW=2/cycle), base=380 sits between",
+   "prediction": ""
+  },
+  {
+   "id": 35,
+   "name": "cause 2 -- the latency floor charges +RAMP per phase, so a 47-phase schedule inherits 47 of them",
+   "pass": true,
+   "detail": "gap=94 = RAMP(2) x 47 phases",
+   "prediction": ""
+  },
+  {
+   "id": 36,
+   "name": "cause 3 -- the calendar charges t_turn to cross a bridge, the sim crosses free",
+   "pass": true,
+   "detail": "calendar 18 vs sim 17 on a turning route, t_turn=1",
+   "prediction": ""
+  },
+  {
+   "id": 37,
    "name": "rotation II_eff is constant across R",
    "pass": true,
    "detail": "[47.0]",
    "prediction": ""
   },
   {
-   "id": 32,
+   "id": 38,
    "name": "rotation II_eff equals the per-round busiest-segment load",
    "pass": true,
    "detail": "II_eff=47.0 arc load per round=47.0",
    "prediction": "rotation is throughput-optimal: CONFIRMED"
   },
   {
-   "id": 33,
+   "id": 39,
    "name": "rotation utilization rises monotonically with R",
    "pass": true,
    "detail": "[0.1538, 0.3125, 0.5417, 0.7027, 0.8103]",
    "prediction": ""
   },
   {
-   "id": 34,
+   "id": 40,
    "name": "rotation utilization does NOT reach 1.0 at any practical R",
    "pass": true,
    "detail": "best=0.8103 at R=47; the fill T1=564 dilutes it",
    "prediction": "plan predicted util=1.0: REFUTED"
   },
   {
-   "id": 35,
+   "id": 41,
    "name": "utilization matches II*R/(T1+II*(R-1)) closed form",
    "pass": true,
    "detail": "measured=[0.1538, 0.3125, 0.5417, 0.7027, 0.8103] closed_form=[0.1538, 0.3125, 0.5417, 0.7027, 0.8103]",
    "prediction": ""
   },
   {
-   "id": 36,
+   "id": 42,
    "name": "fault scenario set covers wrap, scattered, link, node, quadrant",
    "pass": true,
    "detail": "27 scenarios",
    "prediction": ""
   },
   {
-   "id": 37,
+   "id": 43,
    "name": "every immune scenario is genuinely recompile free",
    "pass": true,
    "detail": "9 immune of 27",
    "prediction": ""
   },
   {
-   "id": 38,
+   "id": 44,
    "name": "a recompiled calendar is D-R legal and avoids the dead segments",
    "pass": true,
    "detail": "wrap_row0_1: cf=True dead_used=0",
    "prediction": ""
   },
   {
-   "id": 39,
+   "id": 45,
    "name": "every recompiled calendar still delivers the survivor goal",
    "pass": true,
    "detail": "4 schemes x all scenarios",
    "prediction": ""
   },
   {
-   "id": 40,
+   "id": 46,
    "name": "a dead node forces an EXTRA phase, not just a reschedule",
    "pass": true,
    "detail": "16 of 81 recompiles need a repair phase: the dead node was the only row-column meeting point feeding a whole ring",
    "prediction": "plan assumed rerouting suffices: REFUTED"
   },
   {
-   "id": 41,
+   "id": 47,
    "name": "rotation is infeasible under most faults, dimension-phase is not",
    "pass": true,
    "detail": "rotation 20/27 infeasible, dim_2phase 1/27",
    "prediction": "rotation trades fault tolerance for throughput"
   },
   {
-   "id": 42,
+   "id": 48,
    "name": "a contiguous node hole needs NO ring-station bypass mux",
    "pass": true,
    "detail": "extra infeasible without bypass = 0",
    "prediction": "plan assumed a dead node always cuts the ring: REFUTED for contiguous holes"
   },
   {
-   "id": 43,
+   "id": 49,
    "name": "scattered dead nodes DO need a bypass mux",
    "pass": true,
    "detail": "extra infeasible without bypass = 3 of 4 scenarios",
    "prediction": ""
   },
   {
-   "id": 44,
+   "id": 50,
    "name": "a global shift inflates the makespan by exactly the worst lateness",
    "pass": true,
    "detail": "3 models x 3 jitter levels",
    "prediction": "a rigid replay absorbs nothing"
   },
   {
-   "id": 45,
+   "id": 51,
    "name": "per-phase resynchronization is never worse than a global shift",
    "pass": true,
    "detail": "3 models x 3 jitter levels",
    "prediction": ""
   },
   {
-   "id": 46,
+   "id": 52,
    "name": "a jitter-aware repack is still D-R legal",
    "pass": true,
    "detail": "makespan 815 -> 981",
    "prediction": ""
   },
   {
-   "id": 47,
+   "id": 53,
    "name": "repacking beats both rigid replays, so the slack is real",
    "pass": true,
    "detail": "repack=981 vs rigid=1071 (absorbed 90)",
    "prediction": ""
   },
   {
-   "id": 48,
+   "id": 54,
    "name": "the set of nodes that receive data is unchanged under jitter",
    "pass": true,
    "detail": "48 nodes both ways",
    "prediction": ""
   },
   {
-   "id": 49,
+   "id": 55,
    "name": "exported calendar index exists",
    "pass": true,
    "detail": "ring_index.json",
    "prediction": ""
   },
   {
-   "id": 50,
+   "id": 56,
    "name": "every exported calendar is marked conflict free",
    "pass": true,
    "detail": "16 files",
    "prediction": ""
   },
   {
-   "id": 51,
+   "id": 57,
    "name": "every exported makespan is at or above its own bound",
    "pass": true,
    "detail": "16 files",
    "prediction": ""
   },
   {
-   "id": 52,
+   "id": 58,
    "name": "no exported calendar drives one output port twice in a cycle",
    "pass": true,
    "detail": "0 collisions",
    "prediction": ""
   },
   {
-   "id": 53,
+   "id": 59,
    "name": "no exported calendar overruns the L1 ramp",
    "pass": true,
    "detail": "0 overruns (ramp_bw=2)",
    "prediction": ""
   },
   {
-   "id": 54,
+   "id": 60,
    "name": "copy-and-continue appears as ring_out + leave in one mask",
    "pass": true,
    "detail": "at least one multicast station record",
    "prediction": ""
   },
   {
-   "id": 55,
+   "id": 61,
    "name": "OP_ADD appears only on reducing collectives",
    "pass": true,
    "detail": "reduce/allreduce only",
    "prediction": ""
   },
   {
-   "id": 56,
+   "id": 62,
    "name": "the multicast calendar is far smaller in slot-table entries",
    "pass": true,
    "detail": "dim_2phase/T1=768 records vs flat/T0=10320 (13.4x smaller)",

@@ -107,6 +107,14 @@
     "makespan_lb": 59,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 49,
+    "ramp_lb": 24,
+    "latency_lb": 56,
+    "makespan_lb": 56,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 163,
@@ -137,11 +145,12 @@
     "per_phase_makespan": [
      1968
     ],
-    "wall_s": 0.99
+    "wall_s": 1.09
    },
    "ratios": {
     "calendar_over_lb": 1.458,
-    "base_over_lb": 2.763,
+    "base_over_base_lb": 2.911,
+    "base_over_cal_model_lb": 2.763,
     "islip_over_lb": 33.356,
     "base_over_calendar": 1.895
    }
@@ -265,6 +274,14 @@
     "makespan_lb": 73,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 60,
+    "ramp_lb": 41,
+    "latency_lb": 69,
+    "makespan_lb": 69,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 205,
@@ -286,7 +303,7 @@
     "max_reasm_occupancy": 15,
     "max_deflections": 0,
     "deflect_per_flit": 0.0,
-    "wall_s": 0.04
+    "wall_s": 0.05
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -301,7 +318,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.877,
-    "base_over_lb": 2.808,
+    "base_over_base_lb": 2.971,
+    "base_over_cal_model_lb": 2.808,
     "islip_over_lb": 5.205,
     "base_over_calendar": 1.496
    }
@@ -413,6 +431,14 @@
     "makespan_lb": 59,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 49,
+    "ramp_lb": 24,
+    "latency_lb": 56,
+    "makespan_lb": 56,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 163,
@@ -443,11 +469,12 @@
     "per_phase_makespan": [
      1968
     ],
-    "wall_s": 1.02
+    "wall_s": 1.04
    },
    "ratios": {
     "calendar_over_lb": 1.458,
-    "base_over_lb": 2.763,
+    "base_over_base_lb": 2.911,
+    "base_over_cal_model_lb": 2.763,
     "islip_over_lb": 33.356,
     "base_over_calendar": 1.895
    }
@@ -1111,6 +1138,14 @@
     "makespan_lb": 564,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 47,
+    "ramp_lb": 24,
+    "latency_lb": 470,
+    "makespan_lb": 470,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 470,
@@ -1233,11 +1268,12 @@
      28,
      28
     ],
-    "wall_s": 0.15
+    "wall_s": 0.16
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.833,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.833,
     "islip_over_lb": 2.333,
     "base_over_calendar": 0.833
    }
@@ -1361,6 +1397,14 @@
     "makespan_lb": 68,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 48,
+    "ramp_lb": 24,
+    "latency_lb": 64,
+    "makespan_lb": 64,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 126,
@@ -1397,7 +1441,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.368,
-    "base_over_lb": 1.853,
+    "base_over_base_lb": 1.969,
+    "base_over_cal_model_lb": 1.853,
     "islip_over_lb": 4.853,
     "base_over_calendar": 1.355
    }
@@ -1521,6 +1566,14 @@
     "makespan_lb": 68,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 24,
+    "ramp_lb": 24,
+    "latency_lb": 64,
+    "makespan_lb": 64,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -1533,7 +1586,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.25,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -1706,6 +1760,14 @@
     "makespan_lb": 169,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 64,
+    "ramp_lb": 32,
+    "latency_lb": 157,
+    "makespan_lb": 157,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 193,
@@ -1750,7 +1812,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.42,
-    "base_over_lb": 1.142,
+    "base_over_base_lb": 1.229,
+    "base_over_cal_model_lb": 1.142,
     "islip_over_lb": 2.266,
     "base_over_calendar": 0.804
    }
@@ -1876,6 +1939,14 @@
     "makespan_lb": 118,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 12,
+    "ramp_lb": 24,
+    "latency_lb": 112,
+    "makespan_lb": 112,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 149,
@@ -1912,7 +1983,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 1.263,
+    "base_over_base_lb": 1.33,
+    "base_over_cal_model_lb": 1.263,
     "islip_over_lb": 2.805,
     "base_over_calendar": 1.263
    }
@@ -3140,6 +3212,14 @@
     "makespan_lb": 1128,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 94,
+    "ramp_lb": 47,
+    "latency_lb": 940,
+    "makespan_lb": 940,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 940,
@@ -3356,11 +3436,12 @@
      28,
      28
     ],
-    "wall_s": 0.29
+    "wall_s": 0.33
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.833,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.833,
     "islip_over_lb": 2.333,
     "base_over_calendar": 0.833
    }
@@ -3509,6 +3590,14 @@
     "makespan_lb": 122,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 4,
+    "ramp_lb": 6,
+    "latency_lb": 114,
+    "makespan_lb": 114,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 120,
@@ -3549,7 +3638,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.984,
+    "base_over_base_lb": 1.053,
+    "base_over_cal_model_lb": 0.984,
     "islip_over_lb": 1.607,
     "base_over_calendar": 0.984
    }
@@ -3698,6 +3788,14 @@
     "makespan_lb": 122,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 4,
+    "ramp_lb": 6,
+    "latency_lb": 114,
+    "makespan_lb": 114,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -3710,7 +3808,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -3884,6 +3983,14 @@
     "makespan_lb": 112,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 7,
+    "ramp_lb": 3,
+    "latency_lb": 100,
+    "makespan_lb": 100,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 100,
@@ -3928,7 +4035,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.893,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.893,
     "islip_over_lb": 2.438,
     "base_over_calendar": 0.893
    }
@@ -4040,6 +4148,14 @@
     "makespan_lb": 59,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 12,
+    "ramp_lb": 24,
+    "latency_lb": 56,
+    "makespan_lb": 56,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 56,
@@ -4074,7 +4190,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.949,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.949,
     "islip_over_lb": 4.22,
     "base_over_calendar": 0.949
    }
@@ -4738,6 +4855,14 @@
     "makespan_lb": 1563,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 47,
+    "ramp_lb": 24,
+    "latency_lb": 1469,
+    "makespan_lb": 1469,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1469,
@@ -4864,7 +4989,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.94,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.94,
     "islip_over_lb": 1.481,
     "base_over_calendar": 0.94
    }
@@ -4988,6 +5114,14 @@
     "makespan_lb": 68,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 24,
+    "ramp_lb": 24,
+    "latency_lb": 64,
+    "makespan_lb": 64,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 64,
@@ -5020,11 +5154,12 @@
      47,
      85
     ],
-    "wall_s": 0.0
+    "wall_s": 0.01
    },
    "ratios": {
     "calendar_over_lb": 1.235,
-    "base_over_lb": 0.941,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.941,
     "islip_over_lb": 1.941,
     "base_over_calendar": 0.762
    }
@@ -5136,6 +5271,14 @@
     "makespan_lb": 59,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 12,
+    "ramp_lb": 24,
+    "latency_lb": 56,
+    "makespan_lb": 56,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 93,
@@ -5170,7 +5313,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 1.576,
+    "base_over_base_lb": 1.661,
+    "base_over_cal_model_lb": 1.576,
     "islip_over_lb": 1.39,
     "base_over_calendar": 1.576
    }
@@ -5834,6 +5978,14 @@
     "makespan_lb": 482,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 1,
+    "ramp_lb": 1,
+    "latency_lb": 388,
+    "makespan_lb": 388,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 388,
@@ -5960,7 +6112,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.805,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.805,
     "islip_over_lb": 2.56,
     "base_over_calendar": 0.805
    }
@@ -6082,6 +6235,14 @@
     "makespan_lb": 61,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 4,
+    "ramp_lb": 6,
+    "latency_lb": 57,
+    "makespan_lb": 57,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 63,
@@ -6118,7 +6279,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 1.033,
+    "base_over_base_lb": 1.105,
+    "base_over_cal_model_lb": 1.033,
     "islip_over_lb": 1.623,
     "base_over_calendar": 1.033
    }
@@ -6240,6 +6402,14 @@
     "makespan_lb": 61,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 1,
+    "ramp_lb": 2,
+    "latency_lb": 57,
+    "makespan_lb": 57,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -6252,7 +6422,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -6424,6 +6595,14 @@
     "makespan_lb": 128,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 4,
+    "ramp_lb": 3,
+    "latency_lb": 116,
+    "makespan_lb": 116,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 116,
@@ -6464,11 +6643,12 @@
      28,
      37
     ],
-    "wall_s": 0.0
+    "wall_s": 0.01
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.906,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.906,
     "islip_over_lb": 1.812,
     "base_over_calendar": 0.906
    }
@@ -6580,6 +6760,14 @@
     "makespan_lb": 59,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 12,
+    "ramp_lb": 24,
+    "latency_lb": 56,
+    "makespan_lb": 56,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 56,
@@ -6614,7 +6802,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.949,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.949,
     "islip_over_lb": 4.22,
     "base_over_calendar": 0.949
    }
@@ -7278,6 +7467,14 @@
     "makespan_lb": 482,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 1,
+    "ramp_lb": 1,
+    "latency_lb": 388,
+    "makespan_lb": 388,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 388,
@@ -7404,7 +7601,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.805,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.805,
     "islip_over_lb": 2.56,
     "base_over_calendar": 0.805
    }
@@ -7528,6 +7726,14 @@
     "makespan_lb": 61,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 4,
+    "ramp_lb": 6,
+    "latency_lb": 57,
+    "makespan_lb": 57,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 57,
@@ -7564,7 +7770,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.934,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.934,
     "islip_over_lb": 1.59,
     "base_over_calendar": 0.934
    }
@@ -7676,6 +7883,14 @@
     "makespan_lb": 637,
     "binding_lb": "arc_load"
    },
+   "bounds_base": {
+    "arc_load_lb": 637,
+    "ramp_lb": 306,
+    "latency_lb": 68,
+    "makespan_lb": 637,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1912,
@@ -7696,7 +7911,7 @@
     "max_reasm_occupancy": 161,
     "max_deflections": 6,
     "deflect_per_flit": 0.19804,
-    "wall_s": 0.63
+    "wall_s": 0.64
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -7706,11 +7921,12 @@
     "per_phase_makespan": [
      2717
     ],
-    "wall_s": 1.11
+    "wall_s": 1.03
    },
    "ratios": {
     "calendar_over_lb": 1.639,
-    "base_over_lb": 3.002,
+    "base_over_base_lb": 3.002,
+    "base_over_cal_model_lb": 3.002,
     "islip_over_lb": 4.265,
     "base_over_calendar": 1.831
    }
@@ -7834,6 +8050,14 @@
     "makespan_lb": 780,
     "binding_lb": "arc_load"
    },
+   "bounds_base": {
+    "arc_load_lb": 780,
+    "ramp_lb": 533,
+    "latency_lb": 237,
+    "makespan_lb": 780,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 2322,
@@ -7855,7 +8079,7 @@
     "max_reasm_occupancy": 351,
     "max_deflections": 0,
     "deflect_per_flit": 0.0,
-    "wall_s": 0.52
+    "wall_s": 0.53
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -7870,7 +8094,8 @@
    },
    "ratios": {
     "calendar_over_lb": 2.167,
-    "base_over_lb": 2.977,
+    "base_over_base_lb": 2.977,
+    "base_over_cal_model_lb": 2.977,
     "islip_over_lb": 2.363,
     "base_over_calendar": 1.374
    }
@@ -7982,6 +8207,14 @@
     "makespan_lb": 637,
     "binding_lb": "arc_load"
    },
+   "bounds_base": {
+    "arc_load_lb": 637,
+    "ramp_lb": 306,
+    "latency_lb": 68,
+    "makespan_lb": 637,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1912,
@@ -8012,11 +8245,12 @@
     "per_phase_makespan": [
      2717
     ],
-    "wall_s": 1.03
+    "wall_s": 1.12
    },
    "ratios": {
     "calendar_over_lb": 1.639,
-    "base_over_lb": 3.002,
+    "base_over_base_lb": 3.002,
+    "base_over_cal_model_lb": 3.002,
     "islip_over_lb": 4.265,
     "base_over_calendar": 1.831
    }
@@ -8680,6 +8914,14 @@
     "makespan_lb": 1128,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 611,
+    "ramp_lb": 306,
+    "latency_lb": 1034,
+    "makespan_lb": 1034,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1034,
@@ -8746,7 +8988,7 @@
     "max_reasm_occupancy": 13,
     "max_deflections": 0,
     "deflect_per_flit": 0.0,
-    "wall_s": 0.22
+    "wall_s": 0.23
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -8806,7 +9048,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.917,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.917,
     "islip_over_lb": 1.667,
     "base_over_calendar": 0.917
    }
@@ -8930,6 +9173,14 @@
     "makespan_lb": 624,
     "binding_lb": "arc_load"
    },
+   "bounds_base": {
+    "arc_load_lb": 624,
+    "ramp_lb": 306,
+    "latency_lb": 172,
+    "makespan_lb": 624,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1211,
@@ -8951,7 +9202,7 @@
     "max_reasm_occupancy": 351,
     "max_deflections": 0,
     "deflect_per_flit": 0.0,
-    "wall_s": 0.27
+    "wall_s": 0.28
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -8966,7 +9217,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.385,
-    "base_over_lb": 1.941,
+    "base_over_base_lb": 1.941,
+    "base_over_cal_model_lb": 1.941,
     "islip_over_lb": 1.808,
     "base_over_calendar": 1.402
    }
@@ -9090,6 +9342,14 @@
     "makespan_lb": 520,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 312,
+    "ramp_lb": 306,
+    "latency_lb": 172,
+    "makespan_lb": 312,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -9102,7 +9362,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.567,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -9275,6 +9536,14 @@
     "makespan_lb": 925,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 832,
+    "ramp_lb": 410,
+    "latency_lb": 913,
+    "makespan_lb": 913,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 1702,
@@ -9319,7 +9588,8 @@
    },
    "ratios": {
     "calendar_over_lb": 2.342,
-    "base_over_lb": 1.84,
+    "base_over_base_lb": 1.864,
+    "base_over_cal_model_lb": 1.84,
     "islip_over_lb": 1.984,
     "base_over_calendar": 0.786
    }
@@ -9445,6 +9715,14 @@
     "makespan_lb": 312,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 156,
+    "ramp_lb": 306,
+    "latency_lb": 136,
+    "makespan_lb": 306,
+    "binding_lb": "ramp",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 992,
@@ -9481,7 +9759,8 @@
    },
    "ratios": {
     "calendar_over_lb": 2.096,
-    "base_over_lb": 3.179,
+    "base_over_base_lb": 3.242,
+    "base_over_cal_model_lb": 3.179,
     "islip_over_lb": 2.862,
     "base_over_calendar": 1.517
    }
@@ -10709,6 +10988,14 @@
     "makespan_lb": 1128,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 94,
+    "ramp_lb": 47,
+    "latency_lb": 940,
+    "makespan_lb": 940,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 940,
@@ -10929,7 +11216,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.833,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.833,
     "islip_over_lb": 2.333,
     "base_over_calendar": 0.833
    }
@@ -11078,6 +11366,14 @@
     "makespan_lb": 170,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 52,
+    "ramp_lb": 78,
+    "latency_lb": 162,
+    "makespan_lb": 162,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 309,
@@ -11118,7 +11414,8 @@
    },
    "ratios": {
     "calendar_over_lb": 2.147,
-    "base_over_lb": 1.818,
+    "base_over_base_lb": 1.907,
+    "base_over_cal_model_lb": 1.818,
     "islip_over_lb": 2.812,
     "base_over_calendar": 0.847
    }
@@ -11267,6 +11564,14 @@
     "makespan_lb": 170,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 52,
+    "ramp_lb": 78,
+    "latency_lb": 162,
+    "makespan_lb": 162,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -11279,7 +11584,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.671,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -11453,6 +11759,14 @@
     "makespan_lb": 184,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 91,
+    "ramp_lb": 39,
+    "latency_lb": 172,
+    "makespan_lb": 172,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 218,
@@ -11497,7 +11811,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.679,
-    "base_over_lb": 1.185,
+    "base_over_base_lb": 1.267,
+    "base_over_cal_model_lb": 1.185,
     "islip_over_lb": 2.201,
     "base_over_calendar": 0.706
    }
@@ -11609,6 +11924,14 @@
     "makespan_lb": 312,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 156,
+    "ramp_lb": 306,
+    "latency_lb": 68,
+    "makespan_lb": 306,
+    "binding_lb": "ramp",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 335,
@@ -11639,11 +11962,12 @@
     "per_phase_makespan": [
      525
     ],
-    "wall_s": 0.01
+    "wall_s": 0.02
    },
    "ratios": {
     "calendar_over_lb": 1.061,
-    "base_over_lb": 1.074,
+    "base_over_base_lb": 1.095,
+    "base_over_cal_model_lb": 1.074,
     "islip_over_lb": 1.683,
     "base_over_calendar": 1.012
    }
@@ -12307,6 +12631,14 @@
     "makespan_lb": 15099,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 611,
+    "ramp_lb": 306,
+    "latency_lb": 15005,
+    "makespan_lb": 15005,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 15005,
@@ -12373,7 +12705,7 @@
     "max_reasm_occupancy": 611,
     "max_deflections": 0,
     "deflect_per_flit": 0.0,
-    "wall_s": 0.13
+    "wall_s": 0.14
    },
    "ring_islip2d": {
     "leg": "ring_islip2d",
@@ -12433,7 +12765,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.994,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.994,
     "islip_over_lb": 1.05,
     "base_over_calendar": 0.994
    }
@@ -12557,6 +12890,14 @@
     "makespan_lb": 520,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 312,
+    "ramp_lb": 306,
+    "latency_lb": 172,
+    "makespan_lb": 312,
+    "binding_lb": "arc_load",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 380,
@@ -12593,7 +12934,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.263,
-    "base_over_lb": 0.731,
+    "base_over_base_lb": 1.218,
+    "base_over_cal_model_lb": 0.731,
     "islip_over_lb": 1.337,
     "base_over_calendar": 0.578
    }
@@ -12705,6 +13047,14 @@
     "makespan_lb": 312,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 156,
+    "ramp_lb": 306,
+    "latency_lb": 68,
+    "makespan_lb": 306,
+    "binding_lb": "ramp",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 657,
@@ -12739,7 +13089,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.035,
-    "base_over_lb": 2.106,
+    "base_over_base_lb": 2.147,
+    "base_over_cal_model_lb": 2.106,
     "islip_over_lb": 1.179,
     "base_over_calendar": 2.034
    }
@@ -13403,6 +13754,14 @@
     "makespan_lb": 1046,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 13,
+    "ramp_lb": 7,
+    "latency_lb": 952,
+    "makespan_lb": 952,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 952,
@@ -13529,7 +13888,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.91,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.91,
     "islip_over_lb": 1.719,
     "base_over_calendar": 0.91
    }
@@ -13651,6 +14011,14 @@
     "makespan_lb": 91,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 52,
+    "ramp_lb": 78,
+    "latency_lb": 81,
+    "makespan_lb": 81,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 202,
@@ -13687,7 +14055,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.934,
-    "base_over_lb": 2.22,
+    "base_over_base_lb": 2.494,
+    "base_over_cal_model_lb": 2.22,
     "islip_over_lb": 2.615,
     "base_over_calendar": 1.148
    }
@@ -13809,6 +14178,14 @@
     "makespan_lb": 85,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 13,
+    "ramp_lb": 26,
+    "latency_lb": 81,
+    "makespan_lb": 81,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": null,
@@ -13821,7 +14198,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.118,
-    "base_over_lb": null,
+    "base_over_base_lb": null,
+    "base_over_cal_model_lb": null,
     "islip_over_lb": null,
     "base_over_calendar": null
    }
@@ -13993,6 +14371,14 @@
     "makespan_lb": 200,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 52,
+    "ramp_lb": 33,
+    "latency_lb": 188,
+    "makespan_lb": 188,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 240,
@@ -14037,7 +14423,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.255,
-    "base_over_lb": 1.2,
+    "base_over_base_lb": 1.277,
+    "base_over_cal_model_lb": 1.2,
     "islip_over_lb": 1.6,
     "base_over_calendar": 0.956
    }
@@ -14149,6 +14536,14 @@
     "makespan_lb": 312,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 156,
+    "ramp_lb": 306,
+    "latency_lb": 68,
+    "makespan_lb": 306,
+    "binding_lb": "ramp",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 335,
@@ -14183,7 +14578,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.061,
-    "base_over_lb": 1.074,
+    "base_over_base_lb": 1.095,
+    "base_over_cal_model_lb": 1.074,
     "islip_over_lb": 1.683,
     "base_over_calendar": 1.012
    }
@@ -14847,6 +15243,14 @@
     "makespan_lb": 1046,
     "binding_lb": "latency"
    },
+   "bounds_base": {
+    "arc_load_lb": 13,
+    "ramp_lb": 7,
+    "latency_lb": 952,
+    "makespan_lb": 952,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 952,
@@ -14973,7 +15377,8 @@
    },
    "ratios": {
     "calendar_over_lb": 1.0,
-    "base_over_lb": 0.91,
+    "base_over_base_lb": 1.0,
+    "base_over_cal_model_lb": 0.91,
     "islip_over_lb": 1.719,
     "base_over_calendar": 0.91
    }
@@ -15097,6 +15502,14 @@
     "makespan_lb": 91,
     "binding_lb": "port"
    },
+   "bounds_base": {
+    "arc_load_lb": 52,
+    "ramp_lb": 78,
+    "latency_lb": 81,
+    "makespan_lb": 81,
+    "binding_lb": "latency",
+    "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, free bridge turn"
+   },
    "ring_base": {
     "leg": "ring_base",
     "makespan": 107,
@@ -15133,7 +15546,8 @@
    },
    "ratios": {
     "calendar_over_lb": 2.077,
-    "base_over_lb": 1.176,
+    "base_over_base_lb": 1.321,
+    "base_over_cal_model_lb": 1.176,
     "islip_over_lb": 2.637,
     "base_over_calendar": 0.566
    }
@@ -15625,5 +16039,5 @@
   1,
   13
  ],
- "wall_s": 26.0
+ "wall_s": 26.5
 }

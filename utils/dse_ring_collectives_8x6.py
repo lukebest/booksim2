@@ -28,6 +28,16 @@ Four lower bounds are reported for every row, with the binding one named:
 The last one matters more than expected here. At m=1 nearly every collective on
 this fabric is latency bound, not bandwidth bound, so quoting only the traffic
 bounds would make a schedule that is provably optimal look 30x off.
+
+Those four are bounds on the CALENDAR's machine model and are not valid for
+`ring_base`, which runs a different machine: its node absorbs RAMP_BW flits per
+cycle where a calendar station's exit passes one, it pays no `+RAMP` per phase,
+and it crosses a bridge for free. Judged against the calendar's bound,
+ring_base appears to finish below it (down to 0.73x on fan-in at m=13) -- an
+accounting artefact, not a physical one. `base_model_bounds` therefore rebuilds
+the bound in ring_base's own model; `ratios.base_over_base_lb` is the honest
+number and `ratios.base_over_cal_model_lb` is kept only to size the three
+deltas.
 """
 
 from __future__ import annotations
@@ -213,6 +223,55 @@ def bisection_bound(topo: RingTopology, col: RingCollective) -> dict[str, Any]:
     }
 
 
+def base_model_bounds(topo: RingTopology, col: RingCollective,
+                      cal: Any) -> dict[str, Any]:
+    """Lower bound for `ring_base` **in ring_base's own machine model**.
+
+    The calendar's `makespan_lb` is not a bound on this leg, and pretending it
+    is makes ring_base look like it beats a lower bound. The two models differ
+    in exactly three places, all of which have to be undone here:
+
+    * a ring station's exit passes ONE flit per cycle in the calendar
+      (`leave_ports=1`), while the sim's node absorbs `RAMP_BW` per cycle, so
+      the calendar's `port_lb` can be ~2x what the sim actually owes; the
+      matching term here is the ramp/eject bound;
+    * `latency_floor` charges `+RAMP` per phase for the L1 ramp; the sim
+      charges nothing, so the constant has to come off;
+    * the calendar charges `t_turn` to cross a bridge; the sim crosses for
+      free, so the surcharge comes off each turning route.
+
+    The arc-load term is the one thing both models agree on: a segment carries
+    one flit per cycle either way.
+
+    Verified in verify_ring_collectives_8x6.py: ring_base is >= this bound on
+    every measured row, and exactly equal on the rotation schedules.
+    """
+    per: list[int] = []
+    for ph in col.phases:
+        spans: list[int] = []
+        for x in ph.xfers:
+            fp = cal.fps.get(x.xid)
+            if fp is None:
+                continue
+            n_turn = max(0, len(fp.rings) - 1)
+            spans.append(fp.wire - topo.t_turn * n_turn + fp.dur)
+        per.append(max(spans, default=0))
+    lat = 0
+    for pi, ph in enumerate(col.phases):
+        if ph.barrier or pi == 0:
+            lat += per[pi]
+        else:
+            lat = max(lat, per[pi])
+    arc = cal.bounds["arc_load_lb"]
+    ramp = cal.bounds["ramp_lb"]
+    cands = {"arc_load": arc, "ramp": ramp, "latency": lat}
+    return {"arc_load_lb": arc, "ramp_lb": ramp, "latency_lb": lat,
+            "makespan_lb": max(cands.values()),
+            "binding_lb": max(cands, key=lambda k: cands[k]),
+            "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, "
+                     "free bridge turn"}
+
+
 def ramp_eject_bound(topo: RingTopology, col: RingCollective) -> dict[str, Any]:
     """The hard floor multicast cannot touch.
 
@@ -269,6 +328,7 @@ def one_config(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
                    "latency_lb": cs["latency_lb"],
                    "makespan_lb": cs["makespan_lb"],
                    "binding_lb": cs["binding_lb"]},
+        "bounds_base": base_model_bounds(topo, col, cal),
     }
     if do_base:
         if tier == "T1":
@@ -290,10 +350,18 @@ def one_config(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
             row["ring_islip2d"]["wall_s"] = round(time.perf_counter() - t0, 2)
 
     lb = row["bounds"]["makespan_lb"]
+    blb = row["bounds_base"]["makespan_lb"]
     row["ratios"] = {
         "calendar_over_lb": round(cs["makespan"] / max(1, lb), 3),
-        "base_over_lb": (round(row["ring_base"]["makespan"] / max(1, lb), 3)
-                         if row.get("ring_base", {}).get("makespan") else None),
+        # judged against the bound of the machine each leg actually runs on
+        "base_over_base_lb": (
+            round(row["ring_base"]["makespan"] / max(1, blb), 3)
+            if row.get("ring_base", {}).get("makespan") else None),
+        # cross-model, kept only to quantify the three accounting deltas; it
+        # can be < 1 and that is not a physical claim
+        "base_over_cal_model_lb": (
+            round(row["ring_base"]["makespan"] / max(1, lb), 3)
+            if row.get("ring_base", {}).get("makespan") else None),
         "islip_over_lb": (round(row["ring_islip2d"]["makespan"] / max(1, lb), 3)
                           if row.get("ring_islip2d", {}).get("makespan")
                           else None),
@@ -320,6 +388,7 @@ def sweep(topo: RingTopology, rounds: Iterable[int] = ROUNDS) -> dict[str, Any]:
                   f"islip={i if i is not None else '-':>7} "
                   f"lb={row['bounds']['makespan_lb']:>6} "
                   f"({row['bounds']['binding_lb']:>8}) "
+                  f"blb={row['bounds_base']['makespan_lb']:>6} "
                   f"{time.perf_counter()-t0:.1f}s", flush=True)
     return {"rows": rows}
 
