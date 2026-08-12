@@ -952,9 +952,12 @@ mesh 那边同时省掉 {f(b['audit']['n_bridges'])} 个节点的输入缓冲
 本文两套判据能存在，全靠这一点。</p>
 
 <h3>1.3 半开区间记法</h3>
-<div class="eq">资源 x 的占用区间 = [ t₀ + pre(x) , t₀ + pre(x) + dur(x) )</div>
-<p><code>pre(x)</code> 是从注入到抵达该资源的累计线延迟，
-<code>dur(x)</code> 是占用拍数（单 flit 包 σ 拍，m flit 包 m·σ 拍）。
+<p>全文统一：<code>r</code> 指一次被授权的传输，<code>u</code> 指它要独占的
+任一<b>资源</b>（mesh 上是有向链路或坡道口，环上是环链路、上/下环口、转环点）。
+传输 <code>r</code> 对资源 <code>u</code> 的占用区间是</p>
+<div class="eq">occ_r(u) = [ t₀ + pre_r(u) , t₀ + pre_r(u) + dur(u) )</div>
+<p><code>pre_r(u)</code> 是从注入到该传输抵达 <code>u</code> 的累计线延迟，
+<code>dur(u)</code> 是占用拍数（单 flit 包 σ 拍，m flit 包 m·σ 拍）。
 左闭右开：相邻两次传输可以在同一拍首尾相接而不算冲突，
 判定统一写成 <code>a1 &lt; b2 且 b1 &lt; a2</code>。
 8×6 的线延迟取 H={H}（水平）与 V={V}（垂直），
@@ -1004,12 +1007,25 @@ def s_dm(b: dict) -> str:
                   conflict_domain="interval")
     return f"""
 <h2 id="s3">3 · D-M：2D mesh 的冲突定义</h2>
-<p>一次授权 x 在 mesh 上要独占的东西只有两类：路径上的每条<b>有向</b>链路，
+<p>一次授权在 mesh 上要独占的东西只有两类：路径上的每条<b>有向</b>链路，
 以及两端的坡道口。三条子句合起来就是 D-M。</p>
+<p class="muted">记号沿用 §1：<code>r</code> 表示一次被授权的传输
+<code>(VOQ(s,d), t₀, route, m, σ)</code>，下面用 <code>r₁ / r₂</code>
+指两次不同的传输；<code>e</code> 表示一条<b>有向链路</b>（资源）；
+<code>path(r)</code> 是该传输经过的有向链路集合；
+<code>pre_r(e)</code> 是从 <code>t₀</code> 到该传输抵达 <code>e</code>
+的累计线延迟。</p>
 
 <h3>M1 · 有向链路互斥</h3>
-<div class="eq">∀ e ∈ path(x) ∩ path(y)：[t₀ˣ+pre_x(e), …) ∩ [t₀ʸ+pre_y(e), …) = ∅</div>
-<p>注意是<b>有向</b>链路：东行与西行是两个独立资源，
+<div class="eq">∀ e ∈ path(r₁) ∩ path(r₂)：<br/>
+[ t₀¹ + pre_r₁(e) , t₀¹ + pre_r₁(e) + m·σ ) ∩
+[ t₀² + pre_r₂(e) , t₀² + pre_r₂(e) + m·σ ) = ∅</div>
+<p>读作：<b>两次传输若共用某条有向链路 e，它们在 e 上的占用区间必须不相交。</b>
+它禁止的是「同一拍占同一条 e」，而不是「共用 e」——
+<code>pre</code> 逐链路不同，两次传输完全可以错时穿过同一条 e。
+能否兑现这条自由度，就是 §6 两种冲突域的全部差别。</p>
+<p>资源共 164 条有向链路：横向 (8−1)×6×2 = 84，纵向 (6−1)×8×2 = 80。
+<b>有向</b>是关键——同一对相邻节点之间东行与西行是两个独立资源，
 所以对向流互不干扰。这一条是主力约束，也是 all-to-all 下界的来源。</p>
 
 <h3>M2 · 坡道口（注入 / 弹出）互斥</h3>
