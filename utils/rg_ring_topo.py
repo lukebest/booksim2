@@ -50,7 +50,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, Sequence
 
-from rg_topo import H_BASE, MX, MY, RAMP, V_BASE, coord, nid
+from rg_topo import H_BASE, MX, MY, RAMP, RAMP_BW, V_BASE, coord, nid
 
 RingId = tuple[str, int]          # ("row", y) | ("col", x)
 Edge = tuple[int, int]            # directed segment, by node ids
@@ -171,6 +171,87 @@ class RingFootprint:
     @property
     def hops(self) -> int:
         return self.path.hops
+
+    @property
+    def voq_key(self) -> tuple:
+        return (self.src, self.dst)
+
+    @property
+    def arrivals(self) -> dict[int, int]:
+        return {self.dst: self.wire}
+
+
+@dataclass
+class RingMcastFootprint:
+    """One boarding that serves several leave points on a SINGLE ring.
+
+    This is the copy-and-continue primitive: the flit rides one arc and every
+    node in `dsts` takes a copy as it passes, so the arc is paid for once no
+    matter how many members read it. Two consequences that the unicast
+    footprint does not have:
+
+      * R3 is charged once per member, not once per transfer, because every
+        copy consumes that node's extract point for `dur` cycles.
+      * there is no turn, so R4 is vacuous. A multicast that must change rings
+        is expressed as two phases, one arc each, because a bufferless station
+        cannot fan out across rings without a copy sitting somewhere.
+
+    `op="ADD"` marks a transfer whose payload the receiving PE accumulates into
+    its L1 rather than storing beside its own copy. It changes nothing about
+    the network occupancy -- it is recorded here only so the calendar exporter
+    can emit the right opcode and the data-semantics checker can fold items.
+    """
+    flow_id: int
+    src: int
+    dsts: tuple[int, ...]
+    arc: Arc
+    m: int
+    sigma: int
+    op: str = "FWD"
+    links: list[tuple[Edge, int]] = field(default_factory=list)
+    boards: list[tuple[tuple[str, int, RingId], int]] = field(
+        default_factory=list)
+    leaves: list[tuple[tuple[str, int, RingId], int]] = field(
+        default_factory=list)
+    rings: list[tuple[tuple[RingId, int], int, int]] = field(
+        default_factory=list)
+    turn: tuple[int, int] | None = None
+    dur: int = 0
+    wire: int = 0                 # t0 -> head reaches the FARTHEST member
+    release: int = 0
+    pressure: int = 0
+    arrive: dict[int, int] = field(default_factory=dict)
+
+    # -- the attributes verify_dr / the packer share with the unicast form ---
+
+    @property
+    def dst(self) -> int:
+        return self.dsts[-1]
+
+    @property
+    def tail(self) -> int:
+        lt = max((pref + self.dur for _, pref in self.links), default=0)
+        rt = max((off + d for _, off, d in self.rings), default=0)
+        return max(lt, rt, self.wire + self.dur, self.dur)
+
+    @property
+    def eject(self) -> int:
+        return self.wire + self.dur + RAMP
+
+    @property
+    def hops(self) -> int:
+        return self.arc.hops
+
+    @property
+    def voq_key(self) -> tuple:
+        return (self.src, self.dsts)
+
+    @property
+    def arrivals(self) -> dict[int, int]:
+        return dict(self.arrive)
+
+
+AnyFootprint = "RingFootprint | RingMcastFootprint"
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +442,90 @@ class RingTopology:
         fp.wire = t
         return fp
 
+    # -- multicast: one boarding, many extract points -----------------------
+
+    def mcast_cover(self, ring: RingId, src: int, members: Iterable[int],
+                    *, bidir: bool = True
+                    ) -> list[tuple[int, tuple[int, ...]]]:
+        """Split `members` into at most two arcs, one per direction.
+
+        A bidirectional ring reaches the far side either way, so the cover that
+        minimises both span and arc load sends each member the short way: with
+        k nodes the worst member is ceil((k-1)/2) hops instead of k-1, and every
+        segment carries half the sources it would under a single-direction
+        cover. That halving is the whole point of walking both ways, and it is
+        why the calendars below never use a full-circle multicast.
+
+        `bidir=False` is the control that prices it: one arc all the way round.
+        It costs one fewer boarding at the source -- worth remembering, because
+        the two directions of a bidirectional cover contend for the SAME insert
+        point in this model, so walking both ways is not free.
+
+        Returns [(direction, member_nodes_in_arc_order)], excluding `src`.
+        """
+        k = self.ring_size(ring)
+        i = self.index_on(ring, src)
+        cw: list[tuple[int, int]] = []
+        ccw: list[tuple[int, int]] = []
+        for n in members:
+            if n == src:
+                continue
+            j = self.index_on(ring, n)
+            dcw = (j - i) % k
+            dccw = (i - j) % k
+            if bidir and dccw < dcw:
+                ccw.append((dccw, n))
+            else:
+                cw.append((dcw, n))
+        out: list[tuple[int, tuple[int, ...]]] = []
+        for direction, lst in ((1, cw), (-1, ccw)):
+            if not lst:
+                continue
+            lst.sort()
+            out.append((direction, tuple(n for _, n in lst)))
+        return out
+
+    def mcast_footprint(self, flow_id: int, ring: RingId, src: int,
+                        members: Sequence[int], direction: int, m: int,
+                        *, op: str = "FWD", release: int = 0
+                        ) -> RingMcastFootprint:
+        """Rigid occupancy of one copy-and-continue arc.
+
+        The arc runs from `src` to the farthest member; every member on the way
+        charges its own extract point at the cycle the head passes it.
+        """
+        if not members:
+            raise ValueError("multicast needs at least one member")
+        far = max(members,
+                  key=lambda n: (self.index_on(ring, n) - self.index_on(ring, src)
+                                 ) % self.ring_size(ring) if direction > 0 else
+                  (self.index_on(ring, src) - self.index_on(ring, n))
+                  % self.ring_size(ring))
+        arc = self.make_arc(ring, src, far, direction)
+        dur = m * self.sigma
+        lat = self.ring_lat(ring)
+        fp = RingMcastFootprint(flow_id=flow_id, src=src,
+                                dsts=tuple(members), arc=arc, m=m,
+                                sigma=self.sigma, op=op, dur=dur,
+                                release=release)
+        fp.boards.append((board_key(src, ring), 0))
+        acc = 0
+        at: dict[int, int] = {}
+        for pos, e in enumerate(arc.links()):
+            fp.links.append((e, acc))
+            acc += lat
+            at[arc.nodes[pos + 1]] = acc
+        member_set = set(members)
+        missing = member_set - set(at)
+        if missing:
+            raise ValueError(f"members {sorted(missing)} not on arc {arc.nodes}")
+        for n in members:
+            fp.leaves.append((leave_key(n, ring), at[n]))
+            fp.arrive[n] = at[n]
+        fp.rings.append((arc.key(), 0, acc + dur))
+        fp.wire = acc
+        return fp
+
     # -- loads / bounds -----------------------------------------------------
 
     def link_load(self, paths: Iterable[RingPath]) -> dict[Edge, int]:
@@ -413,6 +578,64 @@ class RingTopology:
             "port_witness": (str(max(pol, key=lambda k: pol[k])) if pol
                              else None),
             "spatial_reuse": self.spatial_reuse,
+        }
+
+    def footprint_bounds(self, fps: Iterable[Any]) -> dict[str, Any]:
+        """Same bounds as `bounds()` but read off footprints, so it works for
+        multicast too. Loads are in CYCLES of occupancy (m*sigma per grant),
+        not in grants, because a calendar is packed in cycles and a multi-flit
+        grant holds its segment for the whole burst.
+        """
+        link: dict[Edge, int] = defaultdict(int)
+        ring: dict[tuple[RingId, int], int] = defaultdict(int)
+        board: dict[Any, int] = defaultdict(int)
+        leave: dict[Any, int] = defaultdict(int)
+        inj: dict[int, int] = defaultdict(int)
+        ej: dict[int, int] = defaultdict(int)
+        n = 0
+        for fp in fps:
+            n += 1
+            for e, _ in fp.links:
+                link[e] += fp.dur
+            for k, _, _ in fp.rings:
+                ring[k] += fp.dur
+            for k, _ in fp.boards:
+                board[k] += fp.dur
+            for k, _ in fp.leaves:
+                leave[k] += fp.dur
+            inj[fp.src] += fp.dur
+            for d in fp.arrivals:
+                ej[d] += fp.dur
+        max_link = max(link.values()) if link else 0
+        max_ring = max(ring.values()) if ring else 0
+        max_board = max(board.values()) if board else 0
+        max_leave = max(leave.values()) if leave else 0
+        max_inj = max(inj.values()) if inj else 0
+        max_ej = max(ej.values()) if ej else 0
+        ramp_cap = max(1, RAMP_BW * self.sigma)
+        primary = max_ring if self.spatial_reuse == "whole_ring" else max_link
+        port_lb = max(math.ceil(max_board / max(1, self.board_ports)),
+                      math.ceil(max_leave / max(1, self.leave_ports)))
+        ramp_lb = max(math.ceil(max_inj / ramp_cap),
+                      math.ceil(max_ej / ramp_cap))
+        cands = {"arc_load": primary, "port": port_lb, "ramp": ramp_lb}
+        binding = max(cands, key=lambda k: cands[k])
+        return {
+            "n_grants": n,
+            "arc_load_lb": primary,
+            "port_lb": port_lb,
+            "ramp_lb": ramp_lb,
+            "max_link_cycles": max_link,
+            "max_ring_cycles": max_ring,
+            "max_board_cycles": max_board,
+            "max_leave_cycles": max_leave,
+            "max_inj_cycles": max_inj,
+            "max_eject_cycles": max_ej,
+            "occupancy_lb": max(cands.values()),
+            "binding_lb": binding,
+            "total_link_cycles": sum(link.values()),
+            "link_witness": (list(max(link, key=lambda k: link[k])) if link
+                             else None),
         }
 
     # -- metal audit --------------------------------------------------------
@@ -645,12 +868,21 @@ def occupancy(topo: RingTopology, fp: RingFootprint, t0: int
 
 
 def verify_dr(topo: RingTopology,
-              items: Sequence[tuple[RingFootprint, int]]) -> dict[str, Any]:
+              items: Sequence[tuple[Any, int]]) -> dict[str, Any]:
     """Re-check all five D-R clauses from the paths, not from the scheduler.
 
-    `items` = [(footprint, t0)]. Every clause is checked independently so a
-    failure names the clause; R4 in particular asserts ZERO residency at the
-    turn point, which is the property that makes the bufferless ring legal.
+    `items` = [(footprint, t0)]; a footprint is either a unicast
+    `RingFootprint` or a `RingMcastFootprint`. Every clause is checked
+    independently so a failure names the clause; R4 in particular asserts ZERO
+    residency at the turn point, which is the property that makes the
+    bufferless ring legal.
+
+    Multicast needs no new clause, only the honest charging already implied by
+    R3: a copy-and-continue arc appears once in `links` and once per member in
+    `leaves`, so `_cap_violations` counts each copy against that node's extract
+    point. What multicast DOES change is R5: the serialization key becomes the
+    whole member set, because two arcs from one source to overlapping member
+    sets are the same logical stream and must not interleave.
     """
     link_items: list[tuple[Any, int, int, int]] = []
     ring_items: list[tuple[Any, int, int, int]] = []
@@ -658,7 +890,10 @@ def verify_dr(topo: RingTopology,
     leave_items: list[tuple[Any, int, int, int]] = []
     r4_bad: list[dict[str, Any]] = []
     turn_residency: list[int] = []
-    by_voq: dict[Pair, list[tuple[int, RingFootprint]]] = defaultdict(list)
+    by_voq: dict[tuple, list[tuple[int, Any]]] = defaultdict(list)
+    n_mcast = 0
+    n_copies = 0
+    mcast_bad: list[dict[str, Any]] = []
 
     for fp, t0 in items:
         occ = occupancy(topo, fp, t0)
@@ -670,6 +905,18 @@ def verify_dr(topo: RingTopology,
             board_items.append((k, s, t, fp.flow_id))
         for k, s, t in occ["leave"]:
             leave_items.append((k, s, t, fp.flow_id))
+        if isinstance(fp, RingMcastFootprint):
+            n_mcast += 1
+            n_copies += len(fp.dsts)
+            if len(fp.leaves) != len(set(fp.dsts)):
+                mcast_bad.append({"flow": fp.flow_id,
+                                  "reason": "leaves not one per member",
+                                  "n_leaves": len(fp.leaves),
+                                  "n_members": len(set(fp.dsts))})
+            if len(fp.boards) != 1:
+                mcast_bad.append({"flow": fp.flow_id,
+                                  "reason": "multicast must board once",
+                                  "n_boards": len(fp.boards)})
         if fp.turn is not None:
             leave_off, board_off = fp.turn
             residency = board_off - leave_off - topo.t_turn
@@ -677,12 +924,18 @@ def verify_dr(topo: RingTopology,
             if residency != 0:
                 r4_bad.append({"flow": fp.flow_id, "residency": residency})
             # the two halves must be the SAME cycle pair on the two rings
-            phase1_leave = leave_key(fp.path.a1.end, fp.path.a1.ring)
-            phase2_board = board_key(fp.path.a2.start, fp.path.a2.ring)
-            if (phase1_leave, leave_off) not in fp.leaves or \
-                    (phase2_board, board_off) not in fp.boards:
-                r4_bad.append({"flow": fp.flow_id, "reason": "turn unpaired"})
-        by_voq[(fp.src, fp.dst)].append((t0, fp))
+            path = getattr(fp, "path", None)
+            if path is None:
+                r4_bad.append({"flow": fp.flow_id,
+                               "reason": "turn without a two-phase path"})
+            else:
+                phase1_leave = leave_key(path.a1.end, path.a1.ring)
+                phase2_board = board_key(path.a2.start, path.a2.ring)
+                if (phase1_leave, leave_off) not in fp.leaves or \
+                        (phase2_board, board_off) not in fp.boards:
+                    r4_bad.append({"flow": fp.flow_id,
+                                   "reason": "turn unpaired"})
+        by_voq[fp.voq_key].append((t0, fp))
 
     if topo.spatial_reuse == "whole_ring":
         r1 = _cap_violations(ring_items, 1)
@@ -696,13 +949,15 @@ def verify_dr(topo: RingTopology,
     r5_bad: list[dict[str, Any]] = []
     for voq, lst in by_voq.items():
         lst.sort(key=lambda t: t[0])
-        sigs = {fp.path.signature() for _, fp in lst}
+        sigs = {(fp.path.signature() if getattr(fp, "path", None) is not None
+                 else (fp.arc.ring, fp.arc.dir, fp.arc.nodes))
+                for _, fp in lst}
         if len(sigs) > 1:
-            r5_bad.append({"voq": list(voq), "reason": "route switched",
+            r5_bad.append({"voq": str(voq), "reason": "route switched",
                            "n_routes": len(sigs)})
         for i in range(1, len(lst)):
             if lst[i][0] < lst[i - 1][0] + lst[i - 1][1].dur:
-                r5_bad.append({"voq": list(voq), "reason": "overlap",
+                r5_bad.append({"voq": str(voq), "reason": "overlap",
                                "t": lst[i][0]})
                 break
 
@@ -714,11 +969,14 @@ def verify_dr(topo: RingTopology,
         "R3_leave_violations": len(r3),
         "R4_turn_violations": len(r4_bad),
         "R5_voq_violations": len(r5_bad),
+        "MC_shape_violations": len(mcast_bad),
+        "n_mcast_grants": n_mcast,
+        "n_mcast_copies": n_copies,
         "max_turn_residency": max(turn_residency) if turn_residency else 0,
         "n_turns": len(turn_residency),
-        "conflict_free": not (r1 or r2 or r3 or r4_bad or r5_bad),
+        "conflict_free": not (r1 or r2 or r3 or r4_bad or r5_bad or mcast_bad),
         "examples": {"R1": r1[:3], "R2": r2[:3], "R3": r3[:3],
-                     "R4": r4_bad[:3], "R5": r5_bad[:3]},
+                     "R4": r4_bad[:3], "R5": r5_bad[:3], "MC": mcast_bad[:3]},
     }
 
 

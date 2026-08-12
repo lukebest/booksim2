@@ -34,6 +34,7 @@ import math
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 matplotlib.use("Agg")
@@ -49,6 +50,11 @@ OUT_JSON = ROOT / "results" / "multiflit_area_makespan.json"
 OUT_PNG = ROOT / "results" / "multiflit_area_makespan.png"
 
 ROUNDS = 5
+# R=1 is the fill-only case (T_avg == T1 by definition); R=13 is the deep-pipeline
+# end of the range. Both are needed because the two ends do not have to rank
+# schemes the same way: T1 dominates T_avg at small R and II_eff dominates at
+# large R, so a scheme can win one and lose the other.
+ROUNDS_LIST = [1, 5, 13]
 CAP = 1000
 W_RANGE = [1, 2, 3, 4]
 E_RANGE = [1, 2, 3, 4]
@@ -266,14 +272,27 @@ def main() -> None:
                     pack1 = rec
             t1 = pack1["makespan"] if pack1 else None
             d2 = delta2_stats(fps, B, pack1) if pack1 else None
-            r5 = best_rounds(fps, ROUNDS, B, orders) if pack1 else None
-            t5 = r5["makespan"] if r5 else None
-            ii_eff = (round((t5 - t1) / (ROUNDS - 1), 2)
-                      if (t1 is not None and t5 is not None) else None)
-            t_avg = (round((t1 + t5) / 2, 1)
-                     if (t1 is not None and t5 is not None) else None)
+            by_rounds: dict[str, Any] = {}
+            for R in ROUNDS_LIST:
+                if t1 is None:
+                    by_rounds[str(R)] = None
+                    continue
+                if R == 1:
+                    by_rounds["1"] = {"T_R": t1, "II_eff": None, "T_avg": t1}
+                    continue
+                rr = best_rounds(fps, R, B, orders)
+                tr = rr["makespan"] if rr else None
+                by_rounds[str(R)] = None if tr is None else {
+                    "T_R": tr,
+                    "II_eff": round((tr - t1) / (R - 1), 2),
+                    "T_avg": round((t1 + tr) / 2, 1)}
+            r5 = by_rounds.get(str(ROUNDS))
+            t5 = r5["T_R"] if r5 else None
+            ii_eff = r5["II_eff"] if r5 else None
+            t_avg = r5["T_avg"] if r5 else None
             down_lb = math.ceil((N - 1) / E)
             points.append({
+                "by_rounds": by_rounds,
                 "scheme": key, "label": label, "pmax": pmax, "issue": issue,
                 "W": W, "E": E, "B": B,
                 "t1": t1, "t5": t5, "t_avg": t_avg,
@@ -307,6 +326,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "model": {
             "mesh": [MX, MY], "H": H, "V": V, "rounds": ROUNDS,
+            "rounds_list": ROUNDS_LIST,
             "design_vars": {"W": W_RANGE, "E": E_RANGE, "B": B_RANGE},
             "t1_lb": lb1,
             "combined_metric": "T_avg = (T1+T5)/2  [= T1 + (R-1)/2 * II_eff]",

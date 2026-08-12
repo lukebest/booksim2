@@ -1,0 +1,598 @@
+{
+ "definition": "II_eff=(T_R-T1)/(R-1) from a free multi-round rigid pack; T_avg=(T1+T_R)/2",
+ "rounds_list": [
+  1,
+  5,
+  13
+ ],
+ "root": 27,
+ "audit": {
+  "mx": 8,
+  "my": 6,
+  "n": 48,
+  "sigma": 1,
+  "delay_scale": 1,
+  "H": 7,
+  "V": 9,
+  "t_turn": 1,
+  "board_ports": 1,
+  "leave_ports": 1,
+  "spatial_reuse": "arc",
+  "n_row_rings": 6,
+  "n_col_rings": 8,
+  "n_directed_links": 192,
+  "n_undirected_links": 96,
+  "n_ring_mutex_units": 192,
+  "mesh_undirected": 82,
+  "metal_ratio_vs_mesh": 1.1707,
+  "n_bridges": 48
+ },
+ "ring": [
+  {
+   "pattern": "allgather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "T1": 86,
+   "by_rounds": {
+    "1": {
+     "T_R": 86,
+     "II_eff": null,
+     "T_avg": 86,
+     "util": {
+      "total_link_cycles": 8064,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.4884,
+      "critical_arc_cycles": 49,
+      "critical_arc_util": 0.5698,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.4884
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 318,
+     "II_eff": 58.0,
+     "T_avg": 202.0,
+     "util": {
+      "total_link_cycles": 40320,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.6604,
+      "critical_arc_cycles": 245,
+      "critical_arc_util": 0.7704,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.6604
+     },
+     "makespan_lb": 245,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 786,
+     "II_eff": 58.33,
+     "T_avg": 436.0,
+     "util": {
+      "total_link_cycles": 104832,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.6947,
+      "critical_arc_cycles": 637,
+      "critical_arc_util": 0.8104,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.6947
+     },
+     "makespan_lb": 637,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 59,
+   "T1_binding_lb": "latency",
+   "ports": 1
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "T1": 93,
+   "by_rounds": {
+    "1": {
+     "T_R": 93,
+     "II_eff": null,
+     "T_avg": 93,
+     "util": {
+      "total_link_cycles": 4224,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.2366,
+      "critical_arc_cycles": 48,
+      "critical_arc_util": 0.5161,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.2366
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 328,
+     "II_eff": 58.75,
+     "T_avg": 210.5,
+     "util": {
+      "total_link_cycles": 21120,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.3354,
+      "critical_arc_cycles": 240,
+      "critical_arc_util": 0.7317,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.3354
+     },
+     "makespan_lb": 240,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 813,
+     "II_eff": 60.0,
+     "T_avg": 453.0,
+     "util": {
+      "total_link_cycles": 54912,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.3518,
+      "critical_arc_cycles": 624,
+      "critical_arc_util": 0.7675,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.3518
+     },
+     "makespan_lb": 624,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 68,
+   "T1_binding_lb": "latency",
+   "ports": 1
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 1,
+   "T1": 85,
+   "by_rounds": {
+    "1": {
+     "T_R": 85,
+     "II_eff": null,
+     "T_avg": 85,
+     "util": {
+      "total_link_cycles": 2256,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.1382,
+      "critical_arc_cycles": 24,
+      "critical_arc_util": 0.2824,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.1382
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 278,
+     "II_eff": 48.25,
+     "T_avg": 181.5,
+     "util": {
+      "total_link_cycles": 11280,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.2113,
+      "critical_arc_cycles": 120,
+      "critical_arc_util": 0.4317,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.2113
+     },
+     "makespan_lb": 200,
+     "binding_lb": "port",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 674,
+     "II_eff": 49.08,
+     "T_avg": 379.5,
+     "util": {
+      "total_link_cycles": 29328,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.2266,
+      "critical_arc_cycles": 312,
+      "critical_arc_util": 0.4629,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.2266
+     },
+     "makespan_lb": 520,
+     "binding_lb": "port",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 68,
+   "T1_binding_lb": "latency",
+   "ports": 1
+  },
+  {
+   "pattern": "allgather",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "T1": 564,
+   "by_rounds": {
+    "1": {
+     "T_R": 564,
+     "II_eff": null,
+     "T_avg": 564,
+     "util": {
+      "total_link_cycles": 2256,
+      "n_directed_links": 192,
+      "n_links_used": 48,
+      "global_util": 0.0208,
+      "critical_arc_cycles": 47,
+      "critical_arc_util": 0.0833,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.0833
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 752,
+     "II_eff": 47.0,
+     "T_avg": 658.0,
+     "util": {
+      "total_link_cycles": 11280,
+      "n_directed_links": 192,
+      "n_links_used": 48,
+      "global_util": 0.0781,
+      "critical_arc_cycles": 235,
+      "critical_arc_util": 0.3125,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.3125
+     },
+     "makespan_lb": 564,
+     "binding_lb": "latency",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 1128,
+     "II_eff": 47.0,
+     "T_avg": 846.0,
+     "util": {
+      "total_link_cycles": 29328,
+      "n_directed_links": 192,
+      "n_links_used": 48,
+      "global_util": 0.1354,
+      "critical_arc_cycles": 611,
+      "critical_arc_util": 0.5417,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.5417
+     },
+     "makespan_lb": 611,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 564,
+   "T1_binding_lb": "latency",
+   "ports": 1
+  },
+  {
+   "pattern": "allgather",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 1,
+   "T1": 240,
+   "by_rounds": {
+    "1": {
+     "T_R": 240,
+     "II_eff": null,
+     "T_avg": 240,
+     "util": {
+      "total_link_cycles": 6000,
+      "n_directed_links": 192,
+      "n_links_used": 144,
+      "global_util": 0.1302,
+      "critical_arc_cycles": 64,
+      "critical_arc_util": 0.2667,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.1736
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 815,
+     "II_eff": 143.75,
+     "T_avg": 527.5,
+     "util": {
+      "total_link_cycles": 30000,
+      "n_directed_links": 192,
+      "n_links_used": 144,
+      "global_util": 0.1917,
+      "critical_arc_cycles": 320,
+      "critical_arc_util": 0.3926,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.2556
+     },
+     "makespan_lb": 320,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 1958,
+     "II_eff": 143.17,
+     "T_avg": 1099.0,
+     "util": {
+      "total_link_cycles": 78000,
+      "n_directed_links": 192,
+      "n_links_used": 144,
+      "global_util": 0.2075,
+      "critical_arc_cycles": 832,
+      "critical_arc_util": 0.4249,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.2766
+     },
+     "makespan_lb": 832,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 169,
+   "T1_binding_lb": "latency",
+   "ports": 1
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 1,
+   "T1": 68,
+   "by_rounds": {
+    "1": {
+     "T_R": 68,
+     "II_eff": null,
+     "T_avg": 68,
+     "util": {
+      "total_link_cycles": 2256,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.1728,
+      "critical_arc_cycles": 24,
+      "critical_arc_util": 0.3529,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.1728
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 176,
+     "II_eff": 27.0,
+     "T_avg": 122.0,
+     "util": {
+      "total_link_cycles": 11280,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.3338,
+      "critical_arc_cycles": 120,
+      "critical_arc_util": 0.6818,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.3338
+     },
+     "makespan_lb": 120,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 413,
+     "II_eff": 28.75,
+     "T_avg": 240.5,
+     "util": {
+      "total_link_cycles": 29328,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.3699,
+      "critical_arc_cycles": 312,
+      "critical_arc_util": 0.7554,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.3699
+     },
+     "makespan_lb": 312,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 68,
+   "T1_binding_lb": "latency",
+   "ports": 2
+  },
+  {
+   "pattern": "allgather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "T1": 76,
+   "by_rounds": {
+    "1": {
+     "T_R": 76,
+     "II_eff": null,
+     "T_avg": 76,
+     "util": {
+      "total_link_cycles": 8064,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.5526,
+      "critical_arc_cycles": 49,
+      "critical_arc_util": 0.6447,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.5526
+     },
+     "conflict_free": true
+    },
+    "5": {
+     "T_R": 271,
+     "II_eff": 48.75,
+     "T_avg": 173.5,
+     "util": {
+      "total_link_cycles": 40320,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.7749,
+      "critical_arc_cycles": 245,
+      "critical_arc_util": 0.9041,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.7749
+     },
+     "makespan_lb": 245,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    },
+    "13": {
+     "T_R": 664,
+     "II_eff": 49.0,
+     "T_avg": 370.0,
+     "util": {
+      "total_link_cycles": 104832,
+      "n_directed_links": 192,
+      "n_links_used": 192,
+      "global_util": 0.8223,
+      "critical_arc_cycles": 637,
+      "critical_arc_util": 0.9593,
+      "critical_arc_cycles_vs_lb": 1.0,
+      "used_link_util": 0.8223
+     },
+     "makespan_lb": 637,
+     "binding_lb": "arc_load",
+     "conflict_free": true
+    }
+   },
+   "T1_lb": 59,
+   "T1_binding_lb": "latency",
+   "ports": 2
+  }
+ ],
+ "rotation_utilization": {
+  "rows": [
+   {
+    "rounds": 1,
+    "makespan": 564,
+    "II_eff": null,
+    "critical_arc_util": 0.0833,
+    "global_util": 0.0208,
+    "used_link_util": 0.0833,
+    "n_links_used": 48,
+    "arc_load_lb": 47,
+    "makespan_lb": 564,
+    "binding_lb": "latency"
+   },
+   {
+    "rounds": 2,
+    "makespan": 611,
+    "II_eff": 47.0,
+    "critical_arc_util": 0.1538,
+    "global_util": 0.0385,
+    "used_link_util": 0.1538,
+    "n_links_used": 48,
+    "arc_load_lb": 94,
+    "makespan_lb": 564,
+    "binding_lb": "latency"
+   },
+   {
+    "rounds": 5,
+    "makespan": 752,
+    "II_eff": 47.0,
+    "critical_arc_util": 0.3125,
+    "global_util": 0.0781,
+    "used_link_util": 0.3125,
+    "n_links_used": 48,
+    "arc_load_lb": 235,
+    "makespan_lb": 564,
+    "binding_lb": "latency"
+   },
+   {
+    "rounds": 13,
+    "makespan": 1128,
+    "II_eff": 47.0,
+    "critical_arc_util": 0.5417,
+    "global_util": 0.1354,
+    "used_link_util": 0.5417,
+    "n_links_used": 48,
+    "arc_load_lb": 611,
+    "makespan_lb": 611,
+    "binding_lb": "arc_load"
+   },
+   {
+    "rounds": 26,
+    "makespan": 1739,
+    "II_eff": 47.0,
+    "critical_arc_util": 0.7027,
+    "global_util": 0.1757,
+    "used_link_util": 0.7027,
+    "n_links_used": 48,
+    "arc_load_lb": 1222,
+    "makespan_lb": 1222,
+    "binding_lb": "arc_load"
+   },
+   {
+    "rounds": 47,
+    "makespan": 2726,
+    "II_eff": 47.0,
+    "critical_arc_util": 0.8103,
+    "global_util": 0.2026,
+    "used_link_util": 0.8103,
+    "n_links_used": 48,
+    "arc_load_lb": 2209,
+    "makespan_lb": 2209,
+    "binding_lb": "arc_load"
+   }
+  ],
+  "reaches_unit_utilization": false,
+  "best_critical_arc_util": 0.8103
+ },
+ "mesh_reference": {
+  "available": false,
+  "reason": "multiflit_area_makespan.json predates the R sweep; rerun dse_multiflit_area_makespan.py"
+ },
+ "ring_vs_mesh": [
+  {
+   "R": 1,
+   "ring_best": {
+    "algo": "dim_2phase",
+    "tier": "T1",
+    "ports": 2,
+    "T_R": 68,
+    "II_eff": null,
+    "T_avg": 68
+   }
+  },
+  {
+   "R": 5,
+   "ring_best": {
+    "algo": "dim_2phase",
+    "tier": "T1",
+    "ports": 2,
+    "T_R": 176,
+    "II_eff": 27.0,
+    "T_avg": 122.0
+   }
+  },
+  {
+   "R": 13,
+   "ring_best": {
+    "algo": "dim_2phase",
+    "tier": "T1",
+    "ports": 2,
+    "T_R": 413,
+    "II_eff": 28.75,
+    "T_avg": 240.5
+   }
+  }
+ ],
+ "wall_s": 19.7
+}
