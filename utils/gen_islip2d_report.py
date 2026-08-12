@@ -276,19 +276,21 @@ def fig_round(mesh: dict) -> str:
                   "s=1: 1 0 0 1 1 0 …",
                   f"实测每轮 {f(mesh['ctrl_msgs_total']/mesh['n_rounds'],1)}"
                   f" 条消息（上界 96）"]))
-    b.append(box(280, 30, 250, 190, "arb", "② CA：每资源 grant 指针",
+    b.append(box(280, 30, 250, 200, "arb", "② CA：每资源 grant 指针",
                  ["mesh：每条有向链路一个 g_e",
-                  "（164 个指针 × 6 bit = 984 bit）",
+                  "存「下一轮从第几号源开始」",
+                  "⌈log₂48⌉=6 bit ⇒ 164×6 = 984 bit",
                   "环：每条环-方向一个 g（28 个）",
                   "",
-                  "每个资源沿指针 RR 选一个申请者",
+                  "每个资源沿指针 RR 选一个源",
                   "→ 一条 VOQ 只有在它路径上",
                   "   所有资源都选中它时才「全路径",
                   "   一致」"]))
-    b.append(box(580, 30, 230, 190, "acc", "③ 每源 accept 指针",
-                 ["a_s over 48 个 dst（288 bit）",
+    b.append(box(580, 30, 230, 200, "acc", "③ 每源 accept 指针",
+                 ["a_s 存「本源下一个 dst」",
+                  "6 bit × 48 源 = 288 bit",
                   "在全路径一致的 VOQ 里按 a_s 收",
-                  f"接受数 ≤ grants_per_src",
+                  "接受数 ≤ grants_per_src",
                   "",
                   f"实测全路径一致率仅 "
                   f"{pct(mesh['unanimous_frac'])}",
@@ -1184,8 +1186,14 @@ def s_mesh(b: dict) -> str:
 控制面消息恒为每轮 ≤ 2×{f(N)} 条（request + grant），与积压无关。
 实测每轮 {f(dm['ctrl_msgs_total'] / dm['n_rounds'], 1)} 条。</td></tr>
 <tr><td>grant 指针挂在哪</td><td>每个输出端口一个</td>
-<td><b>每条有向链路一个</b>（164 个，984 bit）。
-资源从「端口」变成「链路」，指针数量随之从 48 变成 164。</td></tr>
+<td><b>每条有向链路一个</b>：资源从「端口」变成「链路」，
+指针数量随之从 {f(N)} 变成 164。每个指针存一个<b>源编号</b>
+（下一轮从第几号源开始轮转），⌈log₂{f(N)}⌉ = 6 bit，
+共 164 × 6 = 984 bit。<br/>
+<span class="muted">指针指向源而不是流：链路上的候选是 VOQ（
+{f(2256)} 条），若直接指向流需 ⌈log₂{f(2256)}⌉ = 12 bit（1,968 bit，
+翻一倍）。两级分解让「选哪条流」= 链路选源 + 源选 dst，
+两个 6 bit 字段各存在该存的地方。</span></td></tr>
 <tr><td>什么叫「被选中」</td><td>输出端口选中它</td>
 <td><b>路径上每条链路都选中它</b>（全路径一致 / unanimity）。
 这是 AND 而不是 OR，所以一致率天然低：
