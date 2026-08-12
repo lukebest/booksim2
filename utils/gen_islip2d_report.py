@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BATCH = ROOT / "results" / "islip2d_8x6.json"
 SWEEP = ROOT / "results" / "load_sweep_8x6.json"
 VERIFY = ROOT / "results" / "verify_islip2d_8x6.json"
+BISECT = ROOT / "results" / "bisect_lat_8x6.json"
 OUT = ROOT / "results" / "report_islip2d_8x6.html"
 
 MX, MY, N = 8, 6, 48
@@ -32,11 +33,17 @@ H, V = 7, 9
 # 1. Data access
 # ---------------------------------------------------------------------------
 
-def load() -> tuple[dict, dict, dict]:
+def load() -> tuple[dict, dict, dict, dict]:
     def rd(p: Path) -> dict:
         with open(p, encoding="utf-8") as f:
             return json.load(f)
-    return rd(BATCH), rd(SWEEP), rd(VERIFY)
+    return rd(BATCH), rd(SWEEP), rd(VERIFY), rd(BISECT)
+
+
+def xrow(x: dict, config: str) -> list[dict]:
+    """Bisection/latency sweep rows for one configuration, ordered by lambda."""
+    return sorted([r for r in x["rows"] if r["config"] == config],
+                  key=lambda r: r["lam"])
 
 
 def brow(b: dict, **filt: Any) -> dict | None:
@@ -490,6 +497,177 @@ def fig_curve(s: dict) -> str:
                 "两个基线在过载区回落，两个集中式单调平台化。")
 
 
+XCFG = [("mesh_islip2d", "cB", "mesh_islip2d（切面 12 条有向链路）"),
+        ("ring_islip2d", "cD", "ring_islip2d（切面 24 条：行环需切两处）")]
+
+
+def _xframe(x: dict, b: list[str], ox: int, oy: int, pw: int, ph: int,
+            Y, yticks: list[tuple[float, str]]) -> None:
+    """Plot box, grid, both axes' ticks, and a dotted marker at each lambda*."""
+    b.append(f'<rect class="plot" x="{ox}" y="{oy}" width="{pw}" '
+             f'height="{ph}"/>')
+    for yv, lbl in yticks:
+        b.append(f'<line class="gl" x1="{ox}" y1="{Y(yv):.1f}" '
+                 f'x2="{ox+pw}" y2="{Y(yv):.1f}"/>')
+        b.append(f'<text class="tick" x="{ox-42}" y="{Y(yv)+4:.1f}">'
+                 f'{lbl}</text>')
+    for gv in (0.2, 0.4, 0.6, 0.8, 1.0):
+        b.append(f'<text class="tick" x="{ox+gv*pw-10:.1f}" '
+                 f'y="{oy+ph+18}">{gv:.1f}</text>')
+    for cfg, cls, _ in XCFG:
+        ls = x["summary"][cfg]["lam_star"]
+        b.append(f'<line class="lstar" x1="{ox+ls*pw:.1f}" y1="{oy}" '
+                 f'x2="{ox+ls*pw:.1f}" y2="{oy+ph}"/>')
+        b.append(f'<text class="tick {cls}" fill="currentColor" '
+                 f'x="{ox+ls*pw-16:.1f}" y="{oy-6}">λ*={ls}</text>')
+    b.append(f'<text class="axl" x="{ox+pw//2-60}" y="{oy+ph+40}">'
+             f'注入率 λ（包/节点/拍）</text>')
+
+
+def _xlegend(b: list[str], ox: int, oy: int, extra: list[str] | None = None
+             ) -> None:
+    """Legend rows starting at (ox, oy); caller places it in free plot space."""
+    for i, (_cfg, cls, lbl) in enumerate(XCFG + [("", "", e) for e in
+                                                 (extra or [])]):
+        yy = oy + i * 20
+        if cls:
+            b.append(f'<line class="cv {cls}" x1="{ox+16}" y1="{yy}" '
+                     f'x2="{ox+52}" y2="{yy}"/>')
+        b.append(f'<text class="bxl{"" if cls else " dim"}" x="{ox+60}" '
+                 f'y="{yy+4}">{lbl}</text>')
+
+
+def xcross(x: dict, cfg: str) -> dict[float, float]:
+    """Measured cut crossings per accepted packet, keyed by lambda.
+
+    `bisect_flits_per_cy` counts flit-cycles over the whole cut, so dividing by
+    the accepted packet rate of all N nodes takes the cut width out of the
+    number: what is left is a property of the traffic, and the two fabrics must
+    therefore agree on it even though their cuts differ in width.
+    """
+    return {r["lam"]: r["bisect_flits_per_cy"] / (r["accepted"] * N)
+            for r in xrow(x, cfg) if r["accepted"] > 0}
+
+
+def xcross_gap(x: dict, *, stable_only: bool = True) -> float:
+    """Largest mesh-vs-ring disagreement on crossings per accepted packet."""
+    a, c = xcross(x, "mesh_islip2d"), xcross(x, "ring_islip2d")
+    ok = {r["lam"] for r in x["rows"] if r["stable"]} if stable_only else None
+    sh = [k for k in a.keys() & c.keys() if ok is None or k in ok]
+    return max((abs(a[k] - c[k]) for k in sh), default=0.0)
+
+
+def _xcurve(b: list[str], rows: list[dict], cls: str, ox: int, pw: int,
+            Y, key: str) -> dict | None:
+    """Solid inside the stable region, dashed past it, dot at lambda*.
+
+    The dashed part is a separate polyline that starts at the last stable point
+    so the two segments join without overlapping, and it is drawn first so the
+    solid part stays on top wherever they meet.
+    """
+    st = [r for r in rows if r["stable"]]
+    un = [r for r in rows if not r["stable"]]
+    def pts(sel: list[dict]) -> str:
+        return " ".join(f"{ox+r['lam']*pw:.1f},{Y(r[key]):.1f}" for r in sel)
+    tail = (st[-1:] if st else []) + un
+    if len(tail) > 1:
+        b.append(f'<polyline class="cvu {cls}" points="{pts(tail)}"/>')
+    if len(st) > 1:
+        b.append(f'<polyline class="cv {cls}" points="{pts(st)}"/>')
+    if st:
+        r = st[-1]
+        b.append(f'<circle class="star {cls}" cx="{ox+r["lam"]*pw:.1f}" '
+                 f'cy="{Y(r[key]):.1f}" r="5"/>')
+    return st[-1] if st else None
+
+
+def fig_bisect(x: dict) -> str:
+    """Bisection utilization: the mesh fills its cut, the ring never does."""
+    w, h = 940, 380
+    ox, oy, pw, ph = 74, 34, 760, 262
+    ymax = 1.1
+
+    def Y(u: float) -> float:
+        return oy + ph - u / ymax * ph
+    b: list[str] = []
+    _xframe(x, b, ox, oy, pw, ph, Y,
+            [(v, f"{v:.1f}") for v in (0.2, 0.4, 0.6, 0.8, 1.0)])
+    b.append(f'<line class="satl" x1="{ox}" y1="{Y(1.0):.1f}" '
+             f'x2="{ox+pw}" y2="{Y(1.0):.1f}"/>')
+    b.append(f'<text class="satt" x="{ox+pw-236}" y="{Y(1.0)-8:.1f}">'
+             f'切面饱和：每条链路 100% 时间在忙</text>')
+    for cfg, cls, _ in XCFG:
+        _xcurve(b, xrow(x, cfg), cls, ox, pw, Y, "bisect_util")
+    m, g = x["summary"]["mesh_islip2d"], x["summary"]["ring_islip2d"]
+    b.append(f'<text class="bxl cB" fill="currentColor" '
+             f'x="{ox+pw*0.53:.0f}" y="{Y(0.925):.1f}">'
+             f'λ≥{m["peak_bisect_util_at_lam"]} 起贴住上限'
+             f'（λ* 处已 {pct(m["bisect_util_at_lam_star"])}）</text>')
+    b.append(f'<text class="bxl cD" fill="currentColor" x="{ox+300}" '
+             f'y="{Y(0.70):.1f}">全程 ≤ {pct(g["peak_bisect_util"])}，'
+             f'始终留着余量</text>')
+    b.append(f'<text class="axl" transform="translate(18,'
+             f'{oy+ph//2+60}) rotate(-90)">二分带宽利用率</text>')
+    _xlegend(b, ox + pw // 2, oy + ph - 76)
+    return _svg(w, h, "".join(b),
+                "图 8 · 二分带宽利用率：实心圆 = λ*，竖虚线标出各自的 λ*，"
+                "虚线段表示已越过 λ*。"
+                "两条曲线的斜率差正好 2×——同一注入率下两个 fabric 的"
+                "绝对跨切流量完全相同（λ* 处每个被接受的包 "
+                f"{xcross(x, 'mesh_islip2d')[m['lam_star']]:.4f} 次跨切，"
+                f"解析值 {x['summary']['crossing_fraction']:.4f}），"
+                "只是环的切面链路数是 mesh 的两倍。")
+
+
+def _fig_lat(x: dict, key: str, num: int, title: str, note: str) -> str:
+    """One latency metric on a log axis, shared by the mean and p99 figures.
+
+    Both figures use the same decade range so they can be compared by eye; the
+    point of the pair is that p99 sits just above the mean everywhere inside the
+    stable region.
+    """
+    w, h = 940, 380
+    ox, oy, pw, ph = 74, 34, 760, 262
+    lo, hi = 40.0, 10000.0
+    lg_lo, lg_hi = math.log10(lo), math.log10(hi)
+
+    def Y(t: float) -> float:
+        u = (math.log10(max(lo, t)) - lg_lo) / (lg_hi - lg_lo)
+        return oy + ph - u * ph
+    b: list[str] = []
+    _xframe(x, b, ox, oy, pw, ph, Y,
+            [(50, "50"), (100, "100"), (300, "300"), (1000, "1k"),
+             (3000, "3k"), (10000, "10k")])
+    for cfg, cls, _ in XCFG:
+        rows = xrow(x, cfg)
+        r = _xcurve(b, rows, cls, ox, pw, Y, key)
+        if r is not None:
+            base = [q for q in rows if q["stable"]][0][key]
+            b.append(f'<text class="bxl {cls}" fill="currentColor" '
+                     f'x="{ox+r["lam"]*pw-186:.1f}" y="{Y(r[key])-10:.1f}">'
+                     f'λ* 处 {r[key]:.0f} 拍（空载 {base:.0f}，'
+                     f'×{r[key]/base:.2f}）</text>')
+    b.append(f'<text class="axl" transform="translate(18,'
+             f'{oy+ph//2+52}) rotate(-90)">{title}（拍，对数轴）</text>')
+    _xlegend(b, ox + 30, oy + 14, ["虚线 = 越过 λ* 后源队列无界增长，"
+                                   "数字反映测量窗而非 fabric"])
+    return _svg(w, h, "".join(b), f"图 {num} · {note}")
+
+
+def fig_mean_lat(x: dict) -> str:
+    return _fig_lat(
+        x, "mean_lat", 9, "平均时延",
+        "平均时延：λ* 之前几乎水平——排队全发生在源端队列，"
+        "网络内无缓冲，所以网络内时延不随负载变化，曲线在 λ* 处近乎垂直拐起。")
+
+
+def fig_p99_lat(x: dict) -> str:
+    return _fig_lat(
+        x, "p99", 10, "p99 时延",
+        "p99 时延：与图 9 同一纵轴范围。整个稳定区内 p99 只比平均高不到 2 倍，"
+        "因为授权是刚性的——包一旦被授权就不会在网络里被任何东西阻塞。")
+
+
 # ---------------------------------------------------------------------------
 # 3. Tables
 # ---------------------------------------------------------------------------
@@ -831,6 +1009,10 @@ svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
 .star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
 .star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
 .axl { fill: #9aa3b5; font-size: 12px; }
+.cvu { fill: none; stroke-width: 2.6; stroke-dasharray: 4 4; opacity: .75; }
+.satl { stroke: #e06c6c; stroke-width: 1.3; stroke-dasharray: 4 3; }
+.satt { fill: #e06c6c; font-size: 11px; }
+.lstar { stroke: #55618a; stroke-width: 1.1; stroke-dasharray: 2 4; }
 """
 
 
@@ -1504,7 +1686,7 @@ transfer FIFO {f(rbb['transfer_fifos'])} · 预留 Tx {f(rbb['reserved_tx_buffer
 """
 
 
-def s_steady(s: dict) -> str:
+def s_steady(s: dict, x: dict) -> str:
     def gtbl(group, key, head, fmtk=str):
         return t_group(s, group, key, head, fmtk)
     m4 = [r for r in s["rows"] if r["group"] == "m4s1"]
@@ -1585,6 +1767,92 @@ mesh 领先 {ratio(ls([r for r in s['rows'] if r['group'] == 'main'], 'mesh_isli
 因为请求-授权环路是流水的，稳定状态下它只是一段固定的管道延迟，
 不减少每拍能放行的流数。这与批量口径（§10.2）结论相反，
 那里 RTT 会直接吃掉 makespan——两个口径不能混谈。</p>
+
+{s_bisect(x)}
+"""
+
+
+def s_bisect(x: dict) -> str:
+    """9.3-9.5: what limits each fabric, and how the latency tails behave."""
+    m, g = x["summary"]["mesh_islip2d"], x["summary"]["ring_islip2d"]
+
+    def at(cfg: str, key: str) -> tuple[float, float]:
+        st = [r for r in xrow(x, cfg) if r["stable"]]
+        return st[0][key], st[-1][key]
+    mm0, mm1 = at("mesh_islip2d", "mean_lat")
+    gm0, gm1 = at("ring_islip2d", "mean_lat")
+    mp0, mp1 = at("mesh_islip2d", "p99")
+    gp0, gp1 = at("ring_islip2d", "p99")
+    lat = tbl(["", "空载平均", "λ* 处平均", "空载 p99", "λ* 处 p99",
+               "λ* 处 p99/平均"],
+              [["mesh_islip2d", f"{mm0:.0f} 拍", f"{mm1:.0f} 拍（×{mm1/mm0:.2f}）",
+                f"{mp0:.0f} 拍", f"{mp1:.0f} 拍（×{mp1/mp0:.2f}）",
+                f"<b class='win'>{mp1/mm1:.2f}×</b>"],
+               ["ring_islip2d", f"{gm0:.0f} 拍", f"{gm1:.0f} 拍（×{gm1/gm0:.2f}）",
+                f"{gp0:.0f} 拍", f"{gp1:.0f} 拍（×{gp1/gp0:.2f}）",
+                f"<b class='win'>{gp1/gm1:.2f}×</b>"]])
+    return f"""
+<h3>9.3 二分带宽利用率：mesh 卡在切面上，环不卡</h3>
+<p>λ* 是「多少」，这一节回答「<b>被什么卡住</b>」。
+把每次授权在二分切面链路上的占用拍数记账下来，
+除以切面容量，就得到切面的忙闲比例。</p>
+{fig_bisect(x)}
+<ul>
+<li><b>mesh 的 λ* 就是二分带宽</b>：λ*={m['lam_star']} 时切面已用掉
+{pct(m['bisect_util_at_lam_star'])}，λ={m['peak_bisect_util_at_lam']}
+起就贴住 {f(m['peak_bisect_util'], 3)} 不动。
+再怎么改调度也榨不出东西，除非改路由让流量离开热切面（§3 的 ROMM）
+或者加金属。</li>
+<li><b>环不是</b>：它在自己的 λ*={g['lam_star']} 处切面只用掉
+{pct(g['bisect_util_at_lam_star'])}，整个过载区最高也只到
+{pct(g['peak_bisect_util'])}，<b>始终留着两成余量</b>。
+环的瓶颈在上/下环口与那条 load=60 的热环链路上（§4 的 R2/R3），
+不在切面。</li>
+<li><b>两条曲线的斜率差 2× 是拓扑给的，不是调度本事</b>：
+mesh 切 x=3|4 得 6 行 × 双向 = 12 条有向链路；
+环的行环会绕回，把 x≤3 与 x≥4 分开必须切两处（3–4 和 7–0），
+= 24 条。代价是 §11 里那 {f(1.1707, 2)}× 的金属。</li>
+</ul>
+<div class="note">
+<b>这条曲线有两重独立校验，所以可以当尺子用。</b>
+<ul>
+<li><b>对解析值</b>：均匀流量下一对 (src,dst) 跨切概率 =
+2·(24/48)·(24/47) = {x['summary']['crossing_fraction']:.4f}，
+最小路由下跨切恰好一次。稳定区内实测与解析的最大偏差
+{f(m['analytic_max_abs_err_stable'], 4)}（mesh）／
+{f(g['analytic_max_abs_err_stable'], 4)}（环）。</li>
+<li><b>两 fabric 互校</b>：同一注入率下每个被接受包的跨切次数
+两者相差不超过 {f(xcross_gap(x), 4)}——<b>绝对跨切流量完全相同</b>，
+只有分母（切面链路数）不同，正是应该的结果。</li>
+<li>过载区解析值会<b>高于</b>实测（mesh 偏差 +{f(m['overload_mix_skew'], 3)}），
+因为那时仲裁器只发得出没被堵的授权，被接受的流量组合主动偏离热切面——
+与 §9 表里「峰值可以超过锚点」是同一个现象的两面。</li>
+</ul>
+</div>
+
+<h3>9.4 平均时延：λ* 前几乎是平的</h3>
+{fig_mean_lat(x)}
+<p>空载 mesh {mm0:.0f} 拍、环 {gm0:.0f} 拍（环少
+{mm0-gm0:.0f} 拍是因为绕回链路让它平均跳数更短）。
+两条曲线在 λ* 之前近乎水平，到 λ* 才近乎垂直地拐起，
+中间<b>没有</b>传统缓冲网络那种缓慢爬升段。
+原因是无缓冲 + 刚性授权把排队<b>全部</b>挤到了源端队列里：
+网络内部驻留恒为 0（§13 断言），
+所以网络内时延不随负载变化，负载只改变「等多久拿到授权」。</p>
+
+<h3>9.5 p99 时延：尾巴贴着平均走</h3>
+{fig_p99_lat(x)}
+{lat}
+<p>整个稳定区内 <b>p99 只是平均的 {mp1/mm1:.2f}×（mesh）／
+{gp1/gm1:.2f}×（环）</b>。授权是刚性的——包一旦被授权，
+它路径上的每条链路、每个端口都已按拍预留，
+不会在网络里被任何东西阻塞，
+所以尾延迟没有逐跳争用网络那种长尾。
+这是集中式授权最容易被低估的一项收益：
+它买到的不只是吞吐，更是<b>可预测性</b>。</p>
+<p class="muted">越过 λ* 之后（虚线段）p99 冲到数千拍，
+但那反映的是源队列无界增长下的有限测量窗，
+不是 fabric 的性质——所以图 9／图 10 把不稳定段画成虚线。</p>
 """
 
 
@@ -1798,7 +2066,7 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 """
 
 
-def build(b: dict, s: dict, v: dict, led: dict) -> str:
+def build(b: dict, s: dict, v: dict, x: dict, led: dict) -> str:
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1828,7 +2096,7 @@ load_sweep_8x6.json · verify_islip2d_8x6.json</span>
 {s_domain(b, s)}
 {s_ring(b, s)}
 {s_base(s, led)}
-{s_steady(s)}
+{s_steady(s, x)}
 {s_order(b, s)}
 {s_area(led, s, b)}
 {s_tail(b, s, v)}
@@ -1845,9 +2113,9 @@ def main() -> None:
     sys.path.insert(0, str(ROOT / "utils"))
     import rg_sched_cost
 
-    b, s, v = load()
+    b, s, v, x = load()
     led = rg_sched_cost.centralization_ledger()
-    OUT.write_text(build(b, s, v, led), encoding="utf-8")
+    OUT.write_text(build(b, s, v, x, led), encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)} "
           f"({OUT.stat().st_size / 1024:.0f} KB)")
 

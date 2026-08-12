@@ -571,6 +571,9 @@ class RGSim:
             self.maps += [self.m_board, self.m_leave]
             self._plan = build_ring_plan(self.rtopo, pairs, p.ring_path_mode)
         self._res: dict[tuple[int, int], tuple[list, int]] = {}
+        self._cross: dict[tuple[int, int], tuple[int, ...]] = {}
+        self.bisect = bisection_links(fabric)
+        self.bisect_busy = 0          # link-busy cycles on the cut, measure only
 
         self.voq: dict[int, dict[int, deque[_Req]]] = defaultdict(
             lambda: defaultdict(deque))
@@ -629,6 +632,9 @@ class RGSim:
             res += [(self.m_board, k, off) for k, off in f.boards]
             res += [(self.m_leave, k, off) for k, off in f.leaves]
             wire = f.wire
+        self._cross[(s, d)] = tuple(
+            pref for mp, key, pref in res
+            if mp is self.m_link and key in self.bisect)
         res.append((self.m_inj, s, 0))
         res.append((self.m_ej, d, wire))
         got = (res, wire)
@@ -667,6 +673,16 @@ class RGSim:
     def _commit(self, s: int, d: int, t0: int) -> int:
         dur = self.dur
         res, wire = self._res_of(s, d)
+        # Each crossing is counted at the cycle the flit actually occupies the cut
+        # link (t0 + pref) and clipped to the measure window. Attributing the
+        # whole duration to t0 instead would let the total exceed capacity by up
+        # to dur/measure for packets straddling the window edge, which shows up as
+        # a nonsensical utilization above 1.
+        w0 = self.p.warmup
+        w1 = w0 + self.p.measure
+        for pref in self._cross[(s, d)]:
+            a, b = t0 + pref, t0 + pref + dur
+            self.bisect_busy += max(0, min(b, w1) - max(a, w0))
         for mp, key, pref in res:
             mp.reserve(key, t0 + pref, t0 + pref + dur)
         # M3 / R5: the next packet of this VOQ may not start before this one
@@ -788,6 +804,26 @@ class RingBaseAdapter:
 # 6. Analytic saturation anchors
 # ---------------------------------------------------------------------------
 
+def bisection_links(fabric: str) -> frozenset[tuple[int, int]]:
+    """Directed links severed by the X bisection, per fabric.
+
+    The mesh cut is the six column-3/4 link pairs = 12 directed links. The ring
+    cut is twice that: a row ring wraps, so separating x<=3 from x>=4 must sever
+    each row ring in TWO places (3-4 and 7-0) = 24 directed links. That factor
+    of two is topology, not scheduling, which is why utilization below is
+    normalized per fabric and the absolute crossing rate is reported next to it.
+    """
+    cut = {(3, 4), (4, 3)} | ({(7, 0), (0, 7)} if fabric == "ring" else set())
+    out = set()
+    for a in range(48):
+        ax, ay = coord(a)
+        for b in range(48):
+            bx, by = coord(b)
+            if ay == by and (ax, bx) in cut:
+                out.add((a, b))
+    return frozenset(out)
+
+
 def anchors(m: int = 1, sigma: int = 1) -> dict[str, float]:
     """lambda* upper bounds from hottest-resource load; any measurement above
     these means the implementation is wrong, so they go into the check list."""
@@ -899,6 +935,11 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
             sim.st["n_deferred"] / max(1, sim.st["n_rounds"]), 2)
         out["bitmap_bits_per_round"] = round(
             sim.st["n_bitmap_bits"] / max(1, sim.st["n_rounds"]), 1)
+        nb = len(sim.bisect)
+        out["bisect_links"] = nb
+        out["bisect_util"] = round(sim.bisect_busy / (nb * p.measure), 4)
+        out["bisect_flits_per_cy"] = round(
+            sim.bisect_busy / (p.sigma * p.measure), 3)
     if isinstance(sim, RingBaseAdapter):
         s = sim.sim.st
         out["n_deflections"] = s["n_deflections"]

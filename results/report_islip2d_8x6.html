@@ -112,6 +112,10 @@ svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
 .star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
 .star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
 .axl { fill: #9aa3b5; font-size: 12px; }
+.cvu { fill: none; stroke-width: 2.6; stroke-dasharray: 4 4; opacity: .75; }
+.satl { stroke: #e06c6c; stroke-width: 1.3; stroke-dasharray: 4 3; }
+.satt { fill: #e06c6c; font-size: 11px; }
+.lstar { stroke: #55618a; stroke-width: 1.1; stroke-dasharray: 2 4; }
 </style>
 </head>
 <body><div class="wrap">
@@ -708,6 +712,70 @@ mesh 领先 1.60×。</li>
 因为请求-授权环路是流水的，稳定状态下它只是一段固定的管道延迟，
 不减少每拍能放行的流数。这与批量口径（§10.2）结论相反，
 那里 RTT 会直接吃掉 makespan——两个口径不能混谈。</p>
+
+
+<h3>9.3 二分带宽利用率：mesh 卡在切面上，环不卡</h3>
+<p>λ* 是「多少」，这一节回答「<b>被什么卡住</b>」。
+把每次授权在二分切面链路上的占用拍数记账下来，
+除以切面容量，就得到切面的忙闲比例。</p>
+<div class="fig"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="74" y="34" width="760" height="262"/><line class="gl" x1="74" y1="248.4" x2="834" y2="248.4"/><text class="tick" x="32" y="252.4">0.2</text><line class="gl" x1="74" y1="200.7" x2="834" y2="200.7"/><text class="tick" x="32" y="204.7">0.4</text><line class="gl" x1="74" y1="153.1" x2="834" y2="153.1"/><text class="tick" x="32" y="157.1">0.6</text><line class="gl" x1="74" y1="105.5" x2="834" y2="105.5"/><text class="tick" x="32" y="109.5">0.8</text><line class="gl" x1="74" y1="57.8" x2="834" y2="57.8"/><text class="tick" x="32" y="61.8">1.0</text><text class="tick" x="216.0" y="314">0.2</text><text class="tick" x="368.0" y="314">0.4</text><text class="tick" x="520.0" y="314">0.6</text><text class="tick" x="672.0" y="314">0.8</text><text class="tick" x="824.0" y="314">1.0</text><line class="lstar" x1="431.2" y1="34" x2="431.2" y2="296"/><text class="tick cB" fill="currentColor" x="415.2" y="28">λ*=0.47</text><line class="lstar" x1="659.2" y1="34" x2="659.2" y2="296"/><text class="tick cD" fill="currentColor" x="643.2" y="28">λ*=0.77</text><text class="axl" x="394" y="336">注入率 λ（包/节点/拍）</text><line class="satl" x1="74" y1="57.8" x2="834" y2="57.8"/><text class="satt" x="598" y="49.8">切面饱和：每条链路 100% 时间在忙</text><polyline class="cvu cB" points="431.2,67.8 454.0,57.8 492.0,57.8 530.0,57.8 568.0,57.8 590.8,57.8 613.6,57.8 636.4,57.8 659.2,57.8 682.0,57.8 720.0,57.8 758.0,57.8 834.0,57.8"/><polyline class="cv cB" points="81.6,291.2 89.2,286.3 104.4,276.7 119.6,266.7 134.8,256.8 150.0,247.1 188.0,222.6 226.0,198.6 264.0,174.3 302.0,149.7 340.0,125.2 362.8,111.8 385.6,96.4 408.4,81.8 431.2,67.8"/><circle class="star cB" cx="431.2" cy="67.8" r="5"/><polyline class="cvu cD" points="659.2,108.8 682.0,104.1 720.0,99.6 758.0,94.9 834.0,87.2"/><polyline class="cv cD" points="81.6,293.6 89.2,291.1 104.4,286.4 119.6,281.4 134.8,276.4 150.0,271.5 188.0,259.3 226.0,247.3 264.0,235.1 302.0,222.9 340.0,210.6 362.8,203.9 385.6,196.2 408.4,188.9 431.2,182.0 454.0,174.2 492.0,162.4 530.0,149.4 568.0,137.5 590.8,130.4 613.6,123.5 636.4,115.7 659.2,108.8"/><circle class="star cD" cx="659.2" cy="108.8" r="5"/><text class="bxl cB" fill="currentColor" x="324" y="79.8">λ≥0.5 起贴住上限（λ* 处已 95.8%）</text><text class="bxl cD" fill="currentColor" x="374" y="148.3">全程 ≤ 87.7%，始终留着余量</text><text class="axl" transform="translate(18,225) rotate(-90)">二分带宽利用率</text><line class="cv cB" x1="470" y1="220" x2="506" y2="220"/><text class="bxl" x="514" y="224">mesh_islip2d（切面 12 条有向链路）</text><line class="cv cD" x1="470" y1="240" x2="506" y2="240"/><text class="bxl" x="514" y="244">ring_islip2d（切面 24 条：行环需切两处）</text></svg><div class="cap">图 8 · 二分带宽利用率：实心圆 = λ*，竖虚线标出各自的 λ*。两条曲线的斜率差正好 2×——同一注入率下两个 fabric 的绝对跨切流量完全相同（每个被接受的包 0.513 次跨切，解析值 0.5106），只是环的切面链路数是 mesh 的两倍。</div></div>
+<ul>
+<li><b>mesh 的 λ* 就是二分带宽</b>：λ*=0.47 时切面已用掉
+95.8%，λ=0.5
+起就贴住 1.000 不动。
+再怎么改调度也榨不出东西，除非改路由让流量离开热切面（§3 的 ROMM）
+或者加金属。</li>
+<li><b>环不是</b>：它在自己的 λ*=0.77 处切面只用掉
+78.6%，整个过载区最高也只到
+87.7%，<b>始终留着两成余量</b>。
+环的瓶颈在上/下环口与那条 load=60 的热环链路上（§4 的 R2/R3），
+不在切面。</li>
+<li><b>两条曲线的斜率差 2× 是拓扑给的，不是调度本事</b>：
+mesh 切 x=3|4 得 6 行 × 双向 = 12 条有向链路；
+环的行环会绕回，把 x≤3 与 x≥4 分开必须切两处（3–4 和 7–0），
+= 24 条。代价是 §11 里那 1.17× 的金属。</li>
+</ul>
+<div class="note">
+<b>这条曲线有两重独立校验，所以可以当尺子用。</b>
+<ul>
+<li><b>对解析值</b>：均匀流量下一对 (src,dst) 跨切概率 =
+2·(24/48)·(24/47) = 0.5106，
+最小路由下跨切恰好一次。稳定区内实测与解析的最大偏差
+0.0055（mesh）／
+0.0068（环）。</li>
+<li><b>两 fabric 互校</b>：同一注入率下每个被接受包的跨切次数
+两者相差不超过 0.0009——<b>绝对跨切流量完全相同</b>，
+只有分母（切面链路数）不同，正是应该的结果。</li>
+<li>过载区解析值会<b>高于</b>实测（mesh 偏差 +0.100），
+因为那时仲裁器只发得出没被堵的授权，被接受的流量组合主动偏离热切面——
+与 §9 表里「峰值可以超过锚点」是同一个现象的两面。</li>
+</ul>
+</div>
+
+<h3>9.4 平均时延：λ* 前几乎是平的</h3>
+<div class="fig"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="74" y="34" width="760" height="262"/><line class="gl" x1="74" y1="285.4" x2="834" y2="285.4"/><text class="tick" x="32" y="289.4">50</text><line class="gl" x1="74" y1="252.5" x2="834" y2="252.5"/><text class="tick" x="32" y="256.5">100</text><line class="gl" x1="74" y1="200.4" x2="834" y2="200.4"/><text class="tick" x="32" y="204.4">300</text><line class="gl" x1="74" y1="143.3" x2="834" y2="143.3"/><text class="tick" x="32" y="147.3">1k</text><line class="gl" x1="74" y1="91.1" x2="834" y2="91.1"/><text class="tick" x="32" y="95.1">3k</text><line class="gl" x1="74" y1="34.0" x2="834" y2="34.0"/><text class="tick" x="32" y="38.0">10k</text><text class="tick" x="216.0" y="314">0.2</text><text class="tick" x="368.0" y="314">0.4</text><text class="tick" x="520.0" y="314">0.6</text><text class="tick" x="672.0" y="314">0.8</text><text class="tick" x="824.0" y="314">1.0</text><line class="lstar" x1="431.2" y1="34" x2="431.2" y2="296"/><text class="tick cB" fill="currentColor" x="415.2" y="28">λ*=0.47</text><line class="lstar" x1="659.2" y1="34" x2="659.2" y2="296"/><text class="tick cD" fill="currentColor" x="643.2" y="28">λ*=0.77</text><text class="axl" x="394" y="336">注入率 λ（包/节点/拍）</text><polyline class="cvu cB" points="431.2,272.5 454.0,225.4 492.0,180.4 530.0,164.0 568.0,161.8 590.8,155.9 613.6,149.7 636.4,145.3 659.2,142.6 682.0,140.5 720.0,138.0 758.0,137.5 834.0,136.2"/><polyline class="cv cB" points="81.6,280.4 89.2,280.4 104.4,280.5 119.6,280.2 134.8,280.2 150.0,280.2 188.0,280.1 226.0,279.9 264.0,279.6 302.0,279.4 340.0,278.9 362.8,278.5 385.6,277.8 408.4,276.5 431.2,272.5"/><circle class="star cB" cx="431.2" cy="272.5" r="5"/><text class="bxl cB" fill="currentColor" x="245.2" y="262.5">λ* 处 66 拍（空载 56，×1.18）</text><polyline class="cvu cD" points="659.2,242.0 682.0,219.5 720.0,189.6 758.0,170.2 834.0,147.0"/><polyline class="cv cD" points="81.6,287.7 89.2,287.5 104.4,287.5 119.6,287.4 134.8,287.4 150.0,287.4 188.0,287.3 226.0,287.1 264.0,286.9 302.0,286.8 340.0,286.5 362.8,286.3 385.6,286.1 408.4,285.8 431.2,285.5 454.0,285.0 492.0,284.2 530.0,282.8 568.0,280.4 590.8,277.1 613.6,271.4 636.4,260.9 659.2,242.0"/><circle class="star cD" cx="659.2" cy="242.0" r="5"/><text class="bxl cD" fill="currentColor" x="473.2" y="232.0">λ* 处 125 拍（空载 48，×2.62）</text><text class="axl" transform="translate(18,217) rotate(-90)">平均时延（拍，对数轴）</text><line class="cv cB" x1="120" y1="48" x2="156" y2="48"/><text class="bxl" x="164" y="52">mesh_islip2d（切面 12 条有向链路）</text><line class="cv cD" x1="120" y1="68" x2="156" y2="68"/><text class="bxl" x="164" y="72">ring_islip2d（切面 24 条：行环需切两处）</text><text class="bxl dim" x="164" y="92">虚线 = 越过 λ* 后源队列无界增长，数字反映测量窗而非 fabric</text></svg><div class="cap">图 9 · 平均时延：λ* 之前几乎水平——排队全发生在源端队列，网络内无缓冲，所以网络内时延不随负载变化，曲线在 λ* 处近乎垂直拐起。</div></div>
+<p>空载 mesh 56 拍、环 48 拍（环少
+8 拍是因为绕回链路让它平均跳数更短）。
+两条曲线在 λ* 之前近乎水平，到 λ* 才近乎垂直地拐起，
+中间<b>没有</b>传统缓冲网络那种缓慢爬升段。
+原因是无缓冲 + 刚性授权把排队<b>全部</b>挤到了源端队列里：
+网络内部驻留恒为 0（§13 断言），
+所以网络内时延不随负载变化，负载只改变「等多久拿到授权」。</p>
+
+<h3>9.5 p99 时延：尾巴贴着平均走</h3>
+<div class="fig"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="74" y="34" width="760" height="262"/><line class="gl" x1="74" y1="285.4" x2="834" y2="285.4"/><text class="tick" x="32" y="289.4">50</text><line class="gl" x1="74" y1="252.5" x2="834" y2="252.5"/><text class="tick" x="32" y="256.5">100</text><line class="gl" x1="74" y1="200.4" x2="834" y2="200.4"/><text class="tick" x="32" y="204.4">300</text><line class="gl" x1="74" y1="143.3" x2="834" y2="143.3"/><text class="tick" x="32" y="147.3">1k</text><line class="gl" x1="74" y1="91.1" x2="834" y2="91.1"/><text class="tick" x="32" y="95.1">3k</text><line class="gl" x1="74" y1="34.0" x2="834" y2="34.0"/><text class="tick" x="32" y="38.0">10k</text><text class="tick" x="216.0" y="314">0.2</text><text class="tick" x="368.0" y="314">0.4</text><text class="tick" x="520.0" y="314">0.6</text><text class="tick" x="672.0" y="314">0.8</text><text class="tick" x="824.0" y="314">1.0</text><line class="lstar" x1="431.2" y1="34" x2="431.2" y2="296"/><text class="tick cB" fill="currentColor" x="415.2" y="28">λ*=0.47</text><line class="lstar" x1="659.2" y1="34" x2="659.2" y2="296"/><text class="tick cD" fill="currentColor" x="643.2" y="28">λ*=0.77</text><text class="axl" x="394" y="336">注入率 λ（包/节点/拍）</text><polyline class="cvu cB" points="431.2,244.3 454.0,123.2 492.0,65.5 530.0,51.8 568.0,45.1 590.8,43.3 613.6,42.7 636.4,41.6 659.2,40.7 682.0,39.8 720.0,39.3 758.0,38.9 834.0,37.2"/><polyline class="cv cB" points="81.6,253.0 89.2,253.0 104.4,253.0 119.6,253.0 134.8,253.0 150.0,253.0 188.0,253.0 226.0,253.0 264.0,252.5 302.0,252.5 340.0,251.6 362.8,252.0 385.6,250.7 408.4,250.7 431.2,244.3"/><circle class="star cB" cx="431.2" cy="244.3" r="5"/><text class="bxl cB" fill="currentColor" x="245.2" y="234.3">λ* 处 119 拍（空载 99，×1.20）</text><polyline class="cvu cD" points="659.2,201.3 682.0,140.2 720.0,94.7 758.0,76.7 834.0,56.1"/><polyline class="cv cD" points="81.6,266.2 89.2,266.2 104.4,266.2 119.6,266.2 134.8,266.2 150.0,266.2 188.0,266.2 226.0,266.2 264.0,266.2 302.0,266.2 340.0,265.5 362.8,265.5 385.6,265.5 408.4,265.5 431.2,265.5 454.0,264.9 492.0,264.3 530.0,263.1 568.0,260.2 590.8,256.5 613.6,249.8 636.4,234.2 659.2,201.3"/><circle class="star cD" cx="659.2" cy="201.3" r="5"/><text class="bxl cD" fill="currentColor" x="473.2" y="191.3">λ* 处 294 拍（空载 75，×3.92）</text><text class="axl" transform="translate(18,217) rotate(-90)">p99 时延（拍，对数轴）</text><line class="cv cB" x1="120" y1="48" x2="156" y2="48"/><text class="bxl" x="164" y="52">mesh_islip2d（切面 12 条有向链路）</text><line class="cv cD" x1="120" y1="68" x2="156" y2="68"/><text class="bxl" x="164" y="72">ring_islip2d（切面 24 条：行环需切两处）</text><text class="bxl dim" x="164" y="92">虚线 = 越过 λ* 后源队列无界增长，数字反映测量窗而非 fabric</text></svg><div class="cap">图 10 · p99 时延：与图 9 同一纵轴范围。整个稳定区内 p99 只比平均高不到 2 倍，因为授权是刚性的——包一旦被授权就不会在网络里被任何东西阻塞。</div></div>
+<table class=""><thead><tr><th></th><th>空载平均</th><th>λ* 处平均</th><th>空载 p99</th><th>λ* 处 p99</th><th>λ* 处 p99/平均</th></tr></thead><tbody><tr><td>mesh_islip2d</td><td>56 拍</td><td>66 拍（×1.18）</td><td>99 拍</td><td>119 拍（×1.20）</td><td><b class='win'>1.81×</b></td></tr><tr><td>ring_islip2d</td><td>48 拍</td><td>125 拍（×2.62）</td><td>75 拍</td><td>294 拍（×3.92）</td><td><b class='win'>2.36×</b></td></tr></tbody></table>
+<p>整个稳定区内 <b>p99 只是平均的 1.81×（mesh）／
+2.36×（环）</b>。授权是刚性的——包一旦被授权，
+它路径上的每条链路、每个端口都已按拍预留，
+不会在网络里被任何东西阻塞，
+所以尾延迟没有逐跳争用网络那种长尾。
+这是集中式授权最容易被低估的一项收益：
+它买到的不只是吞吐，更是<b>可预测性</b>。</p>
+<p class="muted">越过 λ* 之后（虚线段）p99 冲到数千拍，
+但那反映的是源队列无界增长下的有限测量窗，
+不是 fabric 的性质——所以图 9／图 10 把不稳定段画成虚线。</p>
+
 
 
 <h2 id="s10">10 · 保序、流水与 RTT 敏感度</h2>
