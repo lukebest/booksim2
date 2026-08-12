@@ -1626,7 +1626,35 @@ depth≥2 或 ∞ 时收益不再消失——加深流水就是在用控制面�
 """
 
 
-def s_area(led: dict, s: dict) -> str:
+def t_iters_ledger(b: dict) -> str:
+    """iters priced the same way as the data plane: rounds + arbitration steps.
+
+    Depth is per-iteration, so iterations are charged only as dependent steps.
+    """
+    from rg_sched_cost import sched_cost
+    from rg_topo import Topology
+    mesh = Topology("mesh")
+    rows = [r for r in b["rows"]
+            if r.get("iters") is not None and r["fabric"] == "mesh"]
+    out, best = [], min(
+        r["makespan"] + sched_cost("islip2d_mesh", mesh, r["n_flows"],
+                                   iters=r["iters"], n_rounds=r["n_rounds"]
+                                   )["t_sched_cycles"] for r in rows)
+    for r in sorted(rows, key=lambda r: r["iters"]):
+        c = sched_cost("islip2d_mesh", mesh, r["n_flows"], iters=r["iters"],
+                       n_rounds=r["n_rounds"])
+        tot = r["makespan"] + c["t_sched_cycles"]
+        lab = f"{r['iters']}" + ("（纯贪心补齐）" if r["iters"] == 0 else "")
+        win = tot == best
+        out.append([f"<b>{lab}</b>" if win else lab, f(r["n_rounds"]),
+                    f(r["makespan"]), f(c["dependent_steps"]),
+                    f(c["t_sched_cycles"]),
+                    f"<b class='win'>{f(tot)}</b>" if win else f(tot)])
+    return tbl(["iters", "轮次", "数据面 makespan", "依赖步", "T_sched", "合计"],
+               out)
+
+
+def s_area(led: dict, s: dict, b: dict) -> str:
     mv = led["mesh_islip2d_vs_mesh_base"]
     rv = led["ring_islip2d_vs_ring_base"]
     mi, ri = led["mesh_islip2d"], led["ring_islip2d"]
@@ -1685,6 +1713,18 @@ interval {mi['t_sched_interval']} 拍），
 {mi['gate_levels_interval']} 级。若时序吃不下，
 应该做的是把仲裁流水切深（§10.2），而不是退回 free_at。</li>
 </ul>
+<h3>11.1 迭代次数按同一口径结算</h3>
+<p>上表都是 <code>iters=1</code>。门级深度是<b>一次迭代</b>的深度，
+与 <code>iters</code> 无关（{mi['gate_levels_free_at']} 级不随迭代变）；
+迭代之间互相依赖，所以 <code>iters</code> 只按<b>依赖步</b>线性计入
+<code>T_sched</code>。把 §5 的「加迭代买轮次」放到
+「数据面 makespan + T_sched」这一个口径里看：</p>
+{t_iters_ledger(b)}
+<p><b><code>iters=1</code> 是最差的一档</b>——付了指针纪律的轮次代价，
+又没迭代到能把代价赚回来。<code>iters=2</code> 多花仲裁、省下更多数据面，
+与 <code>iters=0</code> 打平却额外保留指针纪律的公平性，是本表最优点；
+<code>iters=4</code> 已经过头。这里是<b>不流水</b>的保守相加，
+§10.2 的控制/数据流水只会让 <code>iters=2</code> 更有利。</p>
 """
 
 
@@ -1790,7 +1830,7 @@ load_sweep_8x6.json · verify_islip2d_8x6.json</span>
 {s_base(s, led)}
 {s_steady(s)}
 {s_order(b, s)}
-{s_area(led, s)}
+{s_area(led, s, b)}
 {s_tail(b, s, v)}
 <p class="muted" style="margin-top:2.5rem">
 批量扫描 {f(b['wall_secs'], 1)} 秒 · 稳态扫描 {f(s['wall_secs'], 1)} 秒 ·

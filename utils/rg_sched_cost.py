@@ -468,6 +468,25 @@ if __name__ == "__main__":
         for k, v in c["bits_breakdown"].items():
             print(f"    {k:24} {v:>8}")
 
+    print("\n=== iters pricing: depth is per-iteration, T_sched is linear ===")
+    for algo in ("islip_mesh", "pim_mesh", "islip2d_mesh"):
+        c1 = sched_cost(algo, Topology("mesh"), 2256, iters=1, n_rounds=110)
+        row = [f"{algo:12}"]
+        for it in (1, 2, 4):
+            c = sched_cost(algo, Topology("mesh"), 2256, iters=it,
+                           n_rounds=110)
+            assert c["gate_levels"] == c1["gate_levels"], (
+                f"{algo}: depth must not scale with iters "
+                f"({c['gate_levels']} vs {c1['gate_levels']} at I={it})")
+            assert c["t_sched_cycles"] == it * c1["t_sched_cycles"], (
+                f"{algo}: T_sched must be linear in iters, not "
+                f"{c['t_sched_cycles']} at I={it}")
+            row.append(f"I={it}: lv={c['gate_levels']:>2} "
+                       f"T={c['t_sched_cycles']:>4}")
+        print("  " + "  ".join(row))
+    print("  [ok] one iteration = one decision depth; iterations are "
+          "dependent steps")
+
     print("\n=== centralization ledger (bits) ===")
     led = centralization_ledger()
     for cfg in ("mesh_base", "ring_base", "mesh_islip2d", "ring_islip2d"):

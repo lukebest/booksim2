@@ -238,8 +238,16 @@ iSLIP / BvN 分配的是**一个**交叉开关上各 VOQ 对端口的占用：�
 「I 轮分布式一致性匹配 **+ 按优先级顺序补齐该轮 LDPS**」，成员差别落在**优先级规则**上
 （flow_id / pressure / ROM / RR 指针 / 随机）。
 
-**连带结果：迭代轮数 I 的边际收益为负。** alltoall m=4 下 I：1→4 数据面几乎不动（4433→4325），
-却把 `T_sched` 乘到 1728，makespan 4576→**6053**。**I=1 在全部 (pattern, m) 上都不劣。**
+**连带结果：迭代轮数 I 的边际收益很小，且基本被 `T_sched` 吃掉。**
+alltoall m=4（mesh bufferless）下 I：1→4 数据面几乎不动（4433→4325，−2.4%），
+`T_sched` 却从 143 涨到 576（每轮 4 个依赖迭代），makespan 4576→**4901**。
+全部 120 组 (topo, plane, pattern, m, algo) 里只有 **9 组** I=2 反超 I=1，
+幅度均 ≤5%（最大者 allreduce m=4 `pim_mesh` 541→513），I=4 一组未赢；
+计入面积后 §6.4 的前沿与 λ 胜者不受这 9 组影响。**故默认恒取 I=1。**
+
+> 口径修正：一次迭代的组合深度与迭代次数无关（迭代之间是**依赖步**，
+> 由 `dependent_steps` 计费），早期版本在门级深度上又乘了一次 I，
+> 把 I=2/4 的 `T_sched` 高估了 2×/4×。上面是修正后的数。
 
 ### 6.3 结论二：护航效应 + VOQ 控制汇聚税
 
@@ -330,7 +338,7 @@ VOQ 非聚合下 torus 对短消息 alltoall 的优势放大到 0.55×（控制�
 | 面积敏感 + 树形 collective | **`bvn_mesh`**（0.0018） | 轮次已达下界 |
 | torus + 短 alltoall | **`islip_mesh`** | VOQ 口径下 torus/mesh≈0.55× |
 | torus + 长 alltoall | **`mwm_mesh`** | 下界降到 60 轮后「更少轮次」才值得付面积 |
-| 迭代轮数 I | **恒取 I=1** | I>1 几乎不改善 DES，却线性放大 T_sched |
+| 迭代轮数 I | **默认 I=1** | I>1 几乎不改善 DES，却线性放大 T_sched；仅 9/120 组 I=2 以 ≤5% 反超 |
 | 切勿 | `bcfs`、mesh 上的 `mwm_mesh` | 全程不在 Pareto 前沿 |
 | 切勿 | 把 alltoall 的 N−1 条 VOQ 聚合成 1 条 request 当基线 | 会系统性低估控制汇聚税（R_rg 175 vs ~2000） |
 

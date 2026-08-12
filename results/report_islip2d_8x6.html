@@ -771,6 +771,18 @@ interval 220 拍），
 13 级。若时序吃不下，
 应该做的是把仲裁流水切深（§10.2），而不是退回 free_at。</li>
 </ul>
+<h3>11.1 迭代次数按同一口径结算</h3>
+<p>上表都是 <code>iters=1</code>。门级深度是<b>一次迭代</b>的深度，
+与 <code>iters</code> 无关（9 级不随迭代变）；
+迭代之间互相依赖，所以 <code>iters</code> 只按<b>依赖步</b>线性计入
+<code>T_sched</code>。把 §5 的「加迭代买轮次」放到
+「数据面 makespan + T_sched」这一个口径里看：</p>
+<table class=""><thead><tr><th>iters</th><th>轮次</th><th>数据面 makespan</th><th>依赖步</th><th>T_sched</th><th>合计</th></tr></thead><tbody><tr><td>0（纯贪心补齐）</td><td>97</td><td>3,501</td><td>97</td><td>97</td><td>3,598</td></tr><tr><td>1</td><td>110</td><td>3,847</td><td>110</td><td>110</td><td>3,957</td></tr><tr><td><b>2</b></td><td>103</td><td>3,386</td><td>206</td><td>206</td><td><b class='win'>3,592</b></td></tr><tr><td>4</td><td>103</td><td>3,362</td><td>412</td><td>412</td><td>3,774</td></tr></tbody></table>
+<p><b><code>iters=1</code> 是最差的一档</b>——付了指针纪律的轮次代价，
+又没迭代到能把代价赚回来。<code>iters=2</code> 多花仲裁、省下更多数据面，
+与 <code>iters=0</code> 打平却额外保留指针纪律的公平性，是本表最优点；
+<code>iters=4</code> 已经过头。这里是<b>不流水</b>的保守相加，
+§10.2 的控制/数据流水只会让 <code>iters=2</code> 更有利。</p>
 
 
 <h2 id="s12">12 · 验证清单与已知局限</h2>
@@ -779,7 +791,7 @@ interval 220 拍），
 每次改动都会重跑。共 <b>51</b> 条，
 当前 <b class="win">
 51 通过 / 0 失败</b>
-（205.1 秒）。</p>
+（197.6 秒）。</p>
 <table class=""><thead><tr><th>分组</th><th>断言数</th><th>结果</th><th>断言名</th></tr></thead><tbody><tr><td>共同（两 fabric 都必须成立）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_conflict_free</code>、<code>mesh_rounds_disjoint_recheck</code>、<code>mesh_rounds_ge_lb</code>、<code>mesh_residual_bitmap_discipline</code>、<code>mesh_ctrl_msgs_per_round</code>、<code>ring_conflict_free</code>、<code>ring_rounds_ge_lb</code>、<code>ring_residual_bitmap_discipline</code>、<code>ring_bufferless_zero_residency</code></span></td></tr><tr><td>D-M 专项（mesh 判据）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>cut_bound_is_96</code>、<code>xy_meets_cut_bound</code>、<code>romm_latency_invariant</code>、<code>crossbar_predicate_fails_both_ways</code>、<code>romm_cannot_reduce_load_without_headroom</code>、<code>round_gain_without_load_gain_is_a_packing_effect</code>、<code>in_order_xy</code>、<code>in_order_romm_static</code>、<code>in_order_romm_dyn</code></span></td></tr><tr><td>D-R 专项（环判据）</td><td>13</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>192_directed_links</code>、<code>metal_ratio_1_17</code>、<code>link_set_equals_folded_torus</code>、<code>every_node_is_a_bridge</code>、<code>link_bound_fixed</code>、<code>link_bound_balanced</code>、<code>minimal_routes_are_latency_invariant</code>、<code>non_minimal_routes_break_latency_invariance</code>、<code>pure_link_predicate_is_unsafe</code>、<code>pure_link_predicate_overstates_concurrency</code>、<code>whole_ring_costs_multiple_x</code>、<code>clauses_hold_ports1</code>、<code>clauses_hold_ports2</code></span></td></tr><tr><td>ring_base 基线专项</td><td>6</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>swap_rule_unreachable_under_fixed_dim_order</code>、<code>swap_rule_fires_under_mixed_dim_order</code>、<code>no_deadlock_even_without_swap_rule</code>、<code>no_flit_ever_blocked_in_ring</code>、<code>starvation_bounded_and_tracks_threshold</code>、<code>deflection_causes_reordering_so_reassembly_is_required</code></span></td></tr><tr><td>稳态专项</td><td>14</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_base_lam_star_within_anchor</code>、<code>mesh_islip2d_lam_star_within_anchor</code>、<code>ring_base_lam_star_within_anchor</code>、<code>ring_islip2d_lam_star_within_anchor</code>、<code>mesh_islip2d_zero_in_network_residency</code>、<code>ring_islip2d_zero_in_network_residency</code>、<code>credit_buffer_must_cover_rtt</code>、<code>mesh_base_plateaus_past_saturation</code>、<code>ring_base_plateaus_past_saturation</code>、<code>mesh_islip2d_plateaus_past_saturation</code>、<code>ring_islip2d_plateaus_past_saturation</code>、<code>mesh_islip2d_interval_beats_free_at</code>、<code>ring_islip2d_interval_beats_free_at</code>、<code>rg_pays_rtt_at_low_load</code></span></td></tr></tbody></table>
 <p>其中最关键的几条：逐资源两两复核 0 冲突（两 fabric）、
 bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
@@ -838,6 +850,6 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 
 <p class="muted" style="margin-top:2.5rem">
 批量扫描 69.1 秒 · 稳态扫描 1577.0 秒 ·
-验证 205.1 秒。
+验证 197.6 秒。
 重新生成：<code>python3 utils/gen_islip2d_report.py</code></p>
 </div></body></html>
