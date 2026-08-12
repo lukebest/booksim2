@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>iSLIP-2D：两种 fabric、两套冲突判据 · 8×6</title>
+<style>
+body { font-family: "Segoe UI", "Noto Sans SC", system-ui, sans-serif;
+       margin: 0; background: #0b1020; color: #e8ecf4; line-height: 1.62; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 28px 34px 80px; }
+h1 { font-size: 1.65rem; color: #f0f4ff; border-bottom: 1px solid #2a3555;
+     padding-bottom: .5rem; }
+h2 { margin-top: 2.4rem; font-size: 1.28rem; color: #f0f4ff;
+     border-left: 4px solid #7eb6ff; padding-left: .6rem; }
+h3 { margin-top: 1.7rem; font-size: 1.05rem; color: #c8d6f0; }
+h4 { margin: 1.1rem 0 .35rem; font-size: .96rem; color: #c8d0e0; }
+p { margin: .6rem 0; }
+a { color: #7eb6ff; }
+.muted { color: #9aa3b5; font-size: .85rem; }
+.lead { font-size: 1.02rem; color: #d6def0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(215px,1fr));
+         gap: 12px; margin: 1.1rem 0 1.6rem; }
+.card { background: #141b2f; border: 1px solid #2a3555; border-radius: 10px;
+        padding: 12px 14px; }
+.card.ok { border-color: #2d6a4f; } .card.bad { border-color: #9b2226; }
+.card .k { font-size: .78rem; color: #9aa3b5; }
+.card .v { font-size: 1.4rem; font-weight: 700; margin: .2rem 0; }
+.card .s { font-size: .78rem; color: #b8c0d0; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem;
+        margin: .7rem 0 1.3rem; }
+th, td { border: 1px solid #2a3555; padding: 6px 9px; text-align: left;
+         vertical-align: top; }
+th { background: #1a2340; font-weight: 600; }
+tr:nth-child(even) { background: #12192c; }
+tr.hl td { background: #17243d; }
+code { background: #1a2340; padding: 1px 5px; border-radius: 4px;
+       font-size: .88em; }
+pre.code { background: #10162a; border: 1px solid #2a3555; border-left: 3px
+       solid #7eb6ff; border-radius: 8px; padding: 12px 16px; overflow-x: auto;
+       font-family: ui-monospace, "Cascadia Code", monospace; font-size: .82rem;
+       line-height: 1.5; color: #d8e2f5; }
+pre.code .c { color: #7f8ca8; }
+.eq { background: #141b2f; padding: 10px 15px; border-radius: 8px;
+      font-family: ui-monospace, monospace; margin: .7rem 0; font-size: .85rem;
+      border: 1px solid #2a3555; }
+.win, .ok2 { color: #6ee7a8; font-weight: 600; }
+.lose { color: #f0a0a0; font-weight: 600; }
+.pill { display: inline-block; background: #1a2340; border: 1px solid #2a3555;
+        border-radius: 999px; padding: 2px 11px; font-size: .78rem;
+        margin: 0 6px 6px 0; }
+.note { background: #141b2f; border-left: 3px solid #d9a03c;
+        border-radius: 0 8px 8px 0; padding: 10px 15px; margin: .9rem 0;
+        font-size: .89rem; }
+.note.good { border-left-color: #2d6a4f; }
+.note.bad { border-left-color: #9b2226; }
+.note b { color: #f0f4ff; }
+.fig { background: #0e1425; border: 1px solid #2a3555; border-radius: 10px;
+       padding: 14px 12px 8px; margin: 1.1rem 0 1.4rem; }
+.fig .cap { color: #9aa3b5; font-size: .82rem; margin-top: .5rem;
+            padding: 0 6px; }
+.toc { background: #141b2f; border: 1px solid #2a3555; border-radius: 10px;
+       padding: 12px 20px; columns: 2; font-size: .88rem; }
+.toc a { text-decoration: none; }
+ul, ol { margin: .5rem 0 .9rem; padding-left: 1.5rem; }
+li { margin: .22rem 0; }
+/* svg */
+svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
+.lk { stroke: #2c3a5c; stroke-width: 2; }
+.rlk { stroke: #3a5580; stroke-width: 2.4; }
+.clk { stroke: #4a3f70; stroke-width: 2.4; }
+.wrp { fill: none; stroke: #55618a; stroke-width: 1.4;
+       stroke-dasharray: 4 3; }
+.nd { fill: #8fa2c8; }
+.cut { stroke: #d9a03c; stroke-width: 2; stroke-dasharray: 6 4; }
+.cutlbl { fill: #d9a03c; }
+.pXY { fill: none; stroke: #6ee7a8; stroke-width: 4; stroke-linejoin: round; }
+.pRM { fill: none; stroke: #ff9ecb; stroke-width: 3; stroke-dasharray: 7 4;
+       stroke-linejoin: round; }
+.arcR { fill: none; stroke: #6ee7a8; stroke-width: 4.5; }
+.arcC { fill: none; stroke: #c9a6ff; stroke-width: 4.5; }
+.src { fill: #6ee7a8; } .dst { fill: #7eb6ff; } .wp { fill: #ff9ecb; }
+.tag { fill: #0b1020; font-size: 10px; font-weight: 700;
+       text-anchor: middle; }
+.tag2 { fill: #e8ecf4; font-size: 11px; text-anchor: middle; }
+.lbl { fill: #c8d0e0; font-size: 12px; }
+.lbl.warn, .warn { fill: #f0c070; } .ok2 { fill: #6ee7a8; }
+.bx { fill: #141b2f; stroke: #2a3555; stroke-width: 1.5; }
+.bx.src { fill: #13251c; stroke: #2d6a4f; }
+.bx.arb { fill: #141d33; stroke: #3d5a99; }
+.bx.acc { fill: #1b1730; stroke: #6b52a8; }
+.bx.fill { fill: #1a1626; stroke: #55618a; }
+.bxt { fill: #f0f4ff; font-size: 13px; font-weight: 700; }
+.bxl { fill: #c2ccdf; font-size: 11.5px; }
+.bxl.dim, .dim { fill: #8b95ab; }
+.ar { stroke: #7eb6ff; stroke-width: 1.8; } .ahd { fill: #7eb6ff; }
+.arl { fill: #7eb6ff; font-size: 11px; }
+.cel { stroke: #2a3555; }
+.cocc { fill: #3d4a72; } .cfree { fill: #1b2340; }
+.cnew { fill: #2d6a4f; } .cblk { fill: #5c2327; }
+.tick { fill: #8b95ab; font-size: 11px; }
+.ringc { fill: none; stroke: #3a5580; stroke-width: 2.6; }
+.defl { fill: none; stroke: #f0a0a0; stroke-width: 2.4;
+        stroke-dasharray: 5 4; }
+.plot { fill: #0b142a; stroke: #2a3555; }
+.gl { stroke: #1f2a47; }
+.ideal { stroke: #55618a; stroke-width: 1.4; stroke-dasharray: 5 4; }
+.anch { stroke: #d9a03c; stroke-width: 1.3; stroke-dasharray: 3 3; }
+.anchl { fill: #d9a03c; font-size: 11px; }
+.cv { fill: none; stroke-width: 2.6; }
+.cA { stroke: #7eb6ff; } .cB { stroke: #6ee7a8; }
+.cC { stroke: #f0a0a0; } .cD { stroke: #c9a6ff; }
+.star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
+.star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
+.axl { fill: #9aa3b5; font-size: 12px; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>iSLIP-2D：两种 fabric、两套冲突判据</h1>
+<p class="muted">8×6 · 2D mesh 与 2D 无缓冲环（维度切片）·
+集中式 request–grant 仲裁 vs 分布式基线</p>
+<p>
+<span class="pill">48 节点 · 2,256 条 all-to-all 流</span>
+<span class="pill">H=7 / V=9 · RAMP_BW=2</span>
+<span class="pill">环 192 有向链路</span>
+<span class="pill">51 条断言</span>
+<span class="pill">数据 results/islip2d_8x6.json ·
+load_sweep_8x6.json · verify_islip2d_8x6.json</span>
+</p>
+<div class="cards"><div class="card ok"><div class="k">集中式 mesh λ*</div><div class="v">0.48</div><div class="s">基线 mesh_base 0.40（缓冲深 20）</div></div><div class="card ok"><div class="k">集中式环 λ*</div><div class="v">0.75</div><div class="s">基线 ring_base 0.55（偏转损耗）</div></div><div class="card ok"><div class="k">冲突域决定生死</div><div class="v">25.3×</div><div class="s">interval 相对 free_at 的 data_span（批量口径）</div></div><div class="card "><div class="k">D-M 轮数 / 割界</div><div class="v">111 / 96</div><div class="s">比 = 1.156，96 来自中切 6 链路</div></div><div class="card bad"><div class="k">交叉开关判据不安全</div><div class="v">4.99%</div><div class="s">mesh 上 src≠src∧dst≠dst 仍冲突的比例</div></div><div class="card ok"><div class="k">环上转环驻留</div><div class="v">0 拍</div><div class="s">R4 刚性对齐，实测 max_turn_residency=0</div></div><div class="card ok"><div class="k">验证断言</div><div class="v">51 / 51</div><div class="s">全部通过</div></div><div class="card "><div class="k">环金属开销</div><div class="v">1.17×</div><div class="s">96 无向环链路 vs mesh 82</div></div></div>
+
+<h2 id="s0">0 · 一句话结论与全文地图</h2>
+<p class="lead">iSLIP 原本是交叉开关上的算法：一次授权只占「一个输入 + 一个输出」，
+所以「源不同、目的不同 ⇒ 无冲突」。把它搬到 8×6 的 2D mesh 和 2D 无缓冲环上，
+<b>这句判据两个方向都错</b>——它既会放过真冲突（mesh 上
+4.99%），
+又会挡住本可并发的传输（mesh 上
+44.48%）。
+本文因此为两种 fabric 各写一套冲突判据（D-M / D-R），
+在其上各写一个集中式 iSLIP 变种，并与各自的分布式基线在同一台稳态仿真器里对打。</p>
+
+<div class="note good">
+<b>四条最该记住的结论</b>
+<ol>
+<li><b>判据必须分开写。</b>mesh 的冲突是「路径上的有向链路 + 坡道口」，
+环的冲突是「弧 + 上环口 + 下环口 + 转环同拍」。
+只用「链路不相交」在环上会漏掉
+1.08% 的真冲突，
+并把可并发流数从 61.8
+高估到 93.8。</li>
+<li><b>决定成败的不是仲裁器有多聪明，而是冲突域记什么。</b>
+只记「资源在 t 之后空闲」（<code>free_at</code>）会产生前沿棘轮，
+data_span 是 mesh 3,797 / 环 1,957；
+改成完整占用区间（<code>interval</code>）后是 mesh 150 /
+环 120，相差
+25.3× 与
+16.3×。轮数一模一样。</li>
+<li><b>mesh 上集中化是为了省面积，环上集中化是为了可行。</b>
+mesh_base 用缓冲和信用换来能工作；无缓冲环没有缓冲可用，
+R4「转环必须同拍完成」是个需要未来信息的约束，
+分布式环站只能靠偏转绕圈化解——这是 ring_base 掉吞吐的根因。</li>
+<li><b>稳态里集中式两边都赢，但赢的理由不同。</b>
+λ* 从 mesh_base 0.40 → mesh_islip2d 0.48，
+ring_base 0.55 → ring_islip2d 0.75；
+mesh 那边同时省掉 48 个节点的输入缓冲
+（面积净省 5.96×），环那边面积基本打平（1.05×）。</li>
+</ol></div>
+
+<div class="toc">
+<a href="#s1">1 · 三个前提（授权制 / 刚性零缓冲 / 半开区间）</a><br/>
+<a href="#s2">2 · 为什么交叉开关判据在两种 fabric 上都不成立</a><br/>
+<a href="#s3">3 · D-M：2D mesh 的冲突定义</a><br/>
+<a href="#s4">4 · D-R：2D 无缓冲环的冲突定义</a><br/>
+<a href="#s5">5 · Part A：islip2d_mesh 算法逐步拆解</a><br/>
+<a href="#s6">6 · 冲突域：free_at 与 interval</a><br/>
+<a href="#s7">7 · Part B：islip2d_ring 与「集中化的必要性」</a><br/>
+<a href="#s8">8 · 两个分布式基线</a><br/>
+<a href="#s9">9 · 稳态注入率扫描（四配置头对头）</a><br/>
+<a href="#s10">10 · 保序、流水与 RTT 敏感度</a><br/>
+<a href="#s11">11 · 面积与调度时间</a><br/>
+<a href="#s12">12 · 验证清单与已知局限</a>
+</div>
+
+<h2 id="s1">1 · 三个前提</h2>
+<p>下面所有讨论都建立在三条约定上。它们不是本文的结论，
+而是「一次授权到底意味着什么」的定义；不先说清楚，后面的判据无从谈起。</p>
+
+<h3>1.1 授权制传输（authorized transfer）</h3>
+<p>源节点不能自行发包。它把「我还有哪些目的地要发」告诉集中仲裁器，
+仲裁器回一个授权，授权里含<b>一个明确的起始时刻 t₀</b>。
+源在 t₀ 那一拍准时注入，此后包沿既定路径无阻塞前进——
+因为仲裁器在发授权之前已经确认整条路径在需要的那些拍上都空着。
+这与信用反压是两种世界观：信用制是「先发出去，遇堵再等」，
+授权制是「先算好，发出去就不会堵」。</p>
+
+<h3>1.2 刚性零缓冲足迹</h3>
+<p>零缓冲意味着包在网络中途没有落脚点，于是<b>足迹是刚性的</b>：
+授权时刻 t₀ 一旦定下，包在第 k 跳链路上占用的时间窗也就完全确定。
+这让「有没有冲突」变成一个可以在授权前离线判定的问题——
+本文两套判据能存在，全靠这一点。</p>
+
+<h3>1.3 半开区间记法</h3>
+<div class="eq">资源 x 的占用区间 = [ t₀ + pre(x) , t₀ + pre(x) + dur(x) )</div>
+<p><code>pre(x)</code> 是从注入到抵达该资源的累计线延迟，
+<code>dur(x)</code> 是占用拍数（单 flit 包 σ 拍，m flit 包 m·σ 拍）。
+左闭右开：相邻两次传输可以在同一拍首尾相接而不算冲突，
+判定统一写成 <code>a1 &lt; b2 且 b1 &lt; a2</code>。
+8×6 的线延迟取 H=7（水平）与 V=9（垂直），
+坡道带宽 RAMP_BW=2。</p>
+
+
+<h2 id="s2">2 · 为什么交叉开关的判据在两种 fabric 上都不成立</h2>
+<p>交叉开关里，一次传输只碰两个资源：输入端口和输出端口。
+所以 iSLIP 只要保证「一个输入最多被选一次、一个输出最多被选一次」，
+就自动无冲突。这个前提在网络里消失了：<b>一次传输要碰一整条路径</b>。</p>
+<div class="fig"><svg viewBox="0 0 980 346" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><line class="lk" x1="60" y1="40" x2="128" y2="40"/><line class="lk" x1="128" y1="40" x2="196" y2="40"/><line class="lk" x1="196" y1="40" x2="264" y2="40"/><line class="lk" x1="264" y1="40" x2="332" y2="40"/><line class="lk" x1="332" y1="40" x2="400" y2="40"/><line class="lk" x1="400" y1="40" x2="468" y2="40"/><line class="lk" x1="468" y1="40" x2="536" y2="40"/><line class="lk" x1="60" y1="86" x2="128" y2="86"/><line class="lk" x1="128" y1="86" x2="196" y2="86"/><line class="lk" x1="196" y1="86" x2="264" y2="86"/><line class="lk" x1="264" y1="86" x2="332" y2="86"/><line class="lk" x1="332" y1="86" x2="400" y2="86"/><line class="lk" x1="400" y1="86" x2="468" y2="86"/><line class="lk" x1="468" y1="86" x2="536" y2="86"/><line class="lk" x1="60" y1="132" x2="128" y2="132"/><line class="lk" x1="128" y1="132" x2="196" y2="132"/><line class="lk" x1="196" y1="132" x2="264" y2="132"/><line class="lk" x1="264" y1="132" x2="332" y2="132"/><line class="lk" x1="332" y1="132" x2="400" y2="132"/><line class="lk" x1="400" y1="132" x2="468" y2="132"/><line class="lk" x1="468" y1="132" x2="536" y2="132"/><line class="lk" x1="60" y1="178" x2="128" y2="178"/><line class="lk" x1="128" y1="178" x2="196" y2="178"/><line class="lk" x1="196" y1="178" x2="264" y2="178"/><line class="lk" x1="264" y1="178" x2="332" y2="178"/><line class="lk" x1="332" y1="178" x2="400" y2="178"/><line class="lk" x1="400" y1="178" x2="468" y2="178"/><line class="lk" x1="468" y1="178" x2="536" y2="178"/><line class="lk" x1="60" y1="224" x2="128" y2="224"/><line class="lk" x1="128" y1="224" x2="196" y2="224"/><line class="lk" x1="196" y1="224" x2="264" y2="224"/><line class="lk" x1="264" y1="224" x2="332" y2="224"/><line class="lk" x1="332" y1="224" x2="400" y2="224"/><line class="lk" x1="400" y1="224" x2="468" y2="224"/><line class="lk" x1="468" y1="224" x2="536" y2="224"/><line class="lk" x1="60" y1="270" x2="128" y2="270"/><line class="lk" x1="128" y1="270" x2="196" y2="270"/><line class="lk" x1="196" y1="270" x2="264" y2="270"/><line class="lk" x1="264" y1="270" x2="332" y2="270"/><line class="lk" x1="332" y1="270" x2="400" y2="270"/><line class="lk" x1="400" y1="270" x2="468" y2="270"/><line class="lk" x1="468" y1="270" x2="536" y2="270"/><line class="lk" x1="60" y1="40" x2="60" y2="86"/><line class="lk" x1="60" y1="86" x2="60" y2="132"/><line class="lk" x1="60" y1="132" x2="60" y2="178"/><line class="lk" x1="60" y1="178" x2="60" y2="224"/><line class="lk" x1="60" y1="224" x2="60" y2="270"/><line class="lk" x1="128" y1="40" x2="128" y2="86"/><line class="lk" x1="128" y1="86" x2="128" y2="132"/><line class="lk" x1="128" y1="132" x2="128" y2="178"/><line class="lk" x1="128" y1="178" x2="128" y2="224"/><line class="lk" x1="128" y1="224" x2="128" y2="270"/><line class="lk" x1="196" y1="40" x2="196" y2="86"/><line class="lk" x1="196" y1="86" x2="196" y2="132"/><line class="lk" x1="196" y1="132" x2="196" y2="178"/><line class="lk" x1="196" y1="178" x2="196" y2="224"/><line class="lk" x1="196" y1="224" x2="196" y2="270"/><line class="lk" x1="264" y1="40" x2="264" y2="86"/><line class="lk" x1="264" y1="86" x2="264" y2="132"/><line class="lk" x1="264" y1="132" x2="264" y2="178"/><line class="lk" x1="264" y1="178" x2="264" y2="224"/><line class="lk" x1="264" y1="224" x2="264" y2="270"/><line class="lk" x1="332" y1="40" x2="332" y2="86"/><line class="lk" x1="332" y1="86" x2="332" y2="132"/><line class="lk" x1="332" y1="132" x2="332" y2="178"/><line class="lk" x1="332" y1="178" x2="332" y2="224"/><line class="lk" x1="332" y1="224" x2="332" y2="270"/><line class="lk" x1="400" y1="40" x2="400" y2="86"/><line class="lk" x1="400" y1="86" x2="400" y2="132"/><line class="lk" x1="400" y1="132" x2="400" y2="178"/><line class="lk" x1="400" y1="178" x2="400" y2="224"/><line class="lk" x1="400" y1="224" x2="400" y2="270"/><line class="lk" x1="468" y1="40" x2="468" y2="86"/><line class="lk" x1="468" y1="86" x2="468" y2="132"/><line class="lk" x1="468" y1="132" x2="468" y2="178"/><line class="lk" x1="468" y1="178" x2="468" y2="224"/><line class="lk" x1="468" y1="224" x2="468" y2="270"/><line class="lk" x1="536" y1="40" x2="536" y2="86"/><line class="lk" x1="536" y1="86" x2="536" y2="132"/><line class="lk" x1="536" y1="132" x2="536" y2="178"/><line class="lk" x1="536" y1="178" x2="536" y2="224"/><line class="lk" x1="536" y1="224" x2="536" y2="270"/><circle class="nd" cx="60" cy="40" r="4"/><circle class="nd" cx="128" cy="40" r="4"/><circle class="nd" cx="196" cy="40" r="4"/><circle class="nd" cx="264" cy="40" r="4"/><circle class="nd" cx="332" cy="40" r="4"/><circle class="nd" cx="400" cy="40" r="4"/><circle class="nd" cx="468" cy="40" r="4"/><circle class="nd" cx="536" cy="40" r="4"/><circle class="nd" cx="60" cy="86" r="4"/><circle class="nd" cx="128" cy="86" r="4"/><circle class="nd" cx="196" cy="86" r="4"/><circle class="nd" cx="264" cy="86" r="4"/><circle class="nd" cx="332" cy="86" r="4"/><circle class="nd" cx="400" cy="86" r="4"/><circle class="nd" cx="468" cy="86" r="4"/><circle class="nd" cx="536" cy="86" r="4"/><circle class="nd" cx="60" cy="132" r="4"/><circle class="nd" cx="128" cy="132" r="4"/><circle class="nd" cx="196" cy="132" r="4"/><circle class="nd" cx="264" cy="132" r="4"/><circle class="nd" cx="332" cy="132" r="4"/><circle class="nd" cx="400" cy="132" r="4"/><circle class="nd" cx="468" cy="132" r="4"/><circle class="nd" cx="536" cy="132" r="4"/><circle class="nd" cx="60" cy="178" r="4"/><circle class="nd" cx="128" cy="178" r="4"/><circle class="nd" cx="196" cy="178" r="4"/><circle class="nd" cx="264" cy="178" r="4"/><circle class="nd" cx="332" cy="178" r="4"/><circle class="nd" cx="400" cy="178" r="4"/><circle class="nd" cx="468" cy="178" r="4"/><circle class="nd" cx="536" cy="178" r="4"/><circle class="nd" cx="60" cy="224" r="4"/><circle class="nd" cx="128" cy="224" r="4"/><circle class="nd" cx="196" cy="224" r="4"/><circle class="nd" cx="264" cy="224" r="4"/><circle class="nd" cx="332" cy="224" r="4"/><circle class="nd" cx="400" cy="224" r="4"/><circle class="nd" cx="468" cy="224" r="4"/><circle class="nd" cx="536" cy="224" r="4"/><circle class="nd" cx="60" cy="270" r="4"/><circle class="nd" cx="128" cy="270" r="4"/><circle class="nd" cx="196" cy="270" r="4"/><circle class="nd" cx="264" cy="270" r="4"/><circle class="nd" cx="332" cy="270" r="4"/><circle class="nd" cx="400" cy="270" r="4"/><circle class="nd" cx="468" cy="270" r="4"/><circle class="nd" cx="536" cy="270" r="4"/><line class="cut" x1="298" y1="18" x2="298" y2="292"/><text class="lbl cutlbl" x="304" y="14">中切 x=3→4：仅 6 条同向链路</text><polyline class="pXY" points="60,86 400,86 400,270"/><polyline class="pRM" points="60,86 196,86 196,224 400,224 400,270"/><circle class="src" cx="60" cy="86" r="8"/><text class="tag" x="60" y="90">s</text><circle class="dst" cx="400" cy="270" r="8"/><text class="tag" x="400" y="274">d</text><circle class="wp" cx="196" cy="224" r="8"/><text class="tag" x="196" y="228">w</text><line class="pXY" x1="60" y1="322" x2="100" y2="322"/><text class="lbl" x="108" y="326">XY：先 X 后 Y，唯一路径</text><line class="pRM" x1="340" y1="322" x2="380" y2="322"/><text class="lbl" x="388" y="326">ROMM：经中间点 w 的两段 XY —— 跳数仍是 dx+dy ⇒ 时延不变</text></svg><div class="cap">图 1 · D-M：mesh 上一次授权占用的是路径上的一串有向链路。ROMM 换路不改变跳数，所以换路也不会乱序。</div></div>
+<p>于是原判据的两条腿同时断掉：</p>
+<ul>
+<li><b>不安全（假阴性）</b>：src 和 dst 都不同的两条流，
+路径完全可以压在同一条链路上。mesh 上抽样
+38,334 对这样的流，
+4.99% 实际冲突。
+按老判据放行就是数据损坏。</li>
+<li><b>过严（假阳性）</b>：同一个源的两条流，在交叉开关上必然冲突（共用输入端口），
+但在 mesh 上只要第一跳方向不同就毫不相干——
+实测 44.48% 的同源对其实可以并发。
+把它们一律互斥掉，等于白扔掉这
+44% 的机会。</li>
+</ul>
+<p>并发度的量化：在真判据下贪心找极大无冲突集，mesh 平均能同时放
+<b>74.7</b> 条流（最好 90 条），
+而交叉开关的置换上限只有 48 条。
+也就是说，网络的并发度天生比交叉开关高，
+用交叉开关的判据去管网络，既不安全又浪费。</p>
+<table class=""><thead><tr><th>检验项</th><th>2D mesh（D-M）</th><th>2D 无缓冲环（D-R）</th></tr></thead><tbody><tr><td>「src≠src 且 dst≠dst ⇒ 无冲突」的错判率<br><span class='muted'>把实际冲突的一对判成安全（假阴性）</span></td><td><b class='lose'>4.99%</b><br><span class='muted'>38,334 对样本</span></td><td><b class='lose'>0.19%</b><br><span class='muted'>环上还要叠加端口冲突</span></td></tr><tr><td>「同 src ⇒ 有冲突」的错判率<br><span class='muted'>把实际可并发的一对判成冲突（假阳性）</span></td><td><b class='lose'>44.48%</b></td><td><b class='lose'>21.58%</b></td></tr><tr class="hl"><td>同时刻可并发流数（贪心极大集，均值）</td><td><b class='win'>74.7</b> 条<br><span class='muted'>交叉开关置换上限 = 48</span></td><td><b class='win'>61.8</b> 条<br><span class='muted'>只看链路 R1 会高估到 93.8</span></td></tr><tr><td>只用「链路不相交」是否足够</td><td>不够：M2 上/下环坡道口（RAMP_BW=2）单独限流</td><td>不够：漏检率 1.08%，全部来自端口<br><span class='muted'>板/离 = 79.5% / 11.6%，混合 8.8%</span></td></tr></tbody></table>
+<p class="muted">口径：抽样 40,000 对流，
+all-to-all 全流集（2,256 条）。
+拓扑自检：6 行环 × 8 列环，
+192 有向链路（=96 无向），
+金属量相对 mesh 的 82 条为
+1.17×。</p>
+
+
+<h2 id="s3">3 · D-M：2D mesh 的冲突定义</h2>
+<p>一次授权 x 在 mesh 上要独占的东西只有两类：路径上的每条<b>有向</b>链路，
+以及两端的坡道口。三条子句合起来就是 D-M。</p>
+
+<h3>M1 · 有向链路互斥</h3>
+<div class="eq">∀ e ∈ path(x) ∩ path(y)：[t₀ˣ+pre_x(e), …) ∩ [t₀ʸ+pre_y(e), …) = ∅</div>
+<p>注意是<b>有向</b>链路：东行与西行是两个独立资源，
+所以对向流互不干扰。这一条是主力约束，也是 all-to-all 下界的来源。</p>
+
+<h3>M2 · 坡道口（注入 / 弹出）互斥</h3>
+<p>每个节点的注入口和弹出口带宽 RAMP_BW=2，用容量为 2 的资源计。
+它单独成条是因为链路互斥管不到它：
+同一节点同时给两个不同方向发包，链路上毫无冲突，坡道口却可能超发。</p>
+
+<h3>M3 · 同 (src,dst) 序内串行化</h3>
+<p>同一对 (src,dst) 的多个包必须按序进网。这条不是资源约束而是语义约束，
+它保证接收端不用重排。</p>
+
+<div class="note">
+<b>为什么 all-to-all 的轮数下界是 96？</b>
+把 8×6 网格从 x=3 与 x=4 之间切开，左半 24 个节点要给右半 24 个节点各发一个包，
+共 24×24 = 576 个包，而跨过这道切口的同向链路只有
+<b>6 条</b>（每行一条）。所以任何无冲突排程至少需要 576 / 6 = 96
+个「链路-拍」，即轮数 ≥ 96。
+实测 111 轮，比值 1.156——
+离信息论下界只差 15.6%。
+这个割界同时说明：mesh 上再怎么优化仲裁，也逃不掉中切带宽。
+</div>
+
+<h3>ROMM 换路与保序</h3>
+<p>D-M 允许同一 (src,dst) 走不同路径：在 src-dst 构成的矩形内选一个中间点 w，
+走「src→w 的 XY」+「w→dst 的 XY」。
+关键性质是<b>跳数恒为 dx+dy</b>（图 1）——矩形内绕行不增加跳数，
+所以所有候选路径的线延迟完全相同。这带来一个不太直观的好结论：
+<b>换路不会乱序</b>，因此 M3 只需要管注入顺序，不需要禁止换路。
+（实测 14,560 对 mesh 候选路径，延迟差为 0。）</p>
+
+
+<h2 id="s4">4 · D-R：2D 无缓冲环的冲突定义</h2>
+<p>先说清拓扑，因为「2D 环」有歧义。这里是<b>维度切片</b>的：
+同一行的 8 个节点共用一条物理双向行环（共 6 条），
+同一列的 6 个节点共用一条物理双向列环（共 8 条）。
+每个节点既在一条行环上也在一条列环上，因此<b>每个节点都是桥</b>
+（48 个桥）。
+链路数：每条 k 节点的环有 k 条无向链路（含绕回），
+故 6×8 + 8×6 = 96 无向 = 192 有向。</p>
+<div class="fig"><svg viewBox="0 0 980 372" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><line class="rlk" x1="70" y1="46" x2="532" y2="46"/><line class="rlk" x1="70" y1="92" x2="532" y2="92"/><line class="rlk" x1="70" y1="138" x2="532" y2="138"/><line class="rlk" x1="70" y1="184" x2="532" y2="184"/><line class="rlk" x1="70" y1="230" x2="532" y2="230"/><line class="rlk" x1="70" y1="276" x2="532" y2="276"/><line class="clk" x1="70" y1="46" x2="70" y2="276"/><line class="clk" x1="136" y1="46" x2="136" y2="276"/><line class="clk" x1="202" y1="46" x2="202" y2="276"/><line class="clk" x1="268" y1="46" x2="268" y2="276"/><line class="clk" x1="334" y1="46" x2="334" y2="276"/><line class="clk" x1="400" y1="46" x2="400" y2="276"/><line class="clk" x1="466" y1="46" x2="466" y2="276"/><line class="clk" x1="532" y1="46" x2="532" y2="276"/><path class="wrp" d="M 70 46 C 130 12, 472 12, 532 46"/><text class="lbl dim" x="220" y="20">行环 R₀ 的绕回链路</text><path class="wrp" d="M 70 46 C 30 126, 30 196, 70 276"/><circle class="nd" cx="70" cy="46" r="4"/><circle class="nd" cx="136" cy="46" r="4"/><circle class="nd" cx="202" cy="46" r="4"/><circle class="nd" cx="268" cy="46" r="4"/><circle class="nd" cx="334" cy="46" r="4"/><circle class="nd" cx="400" cy="46" r="4"/><circle class="nd" cx="466" cy="46" r="4"/><circle class="nd" cx="532" cy="46" r="4"/><circle class="nd" cx="70" cy="92" r="4"/><circle class="nd" cx="136" cy="92" r="4"/><circle class="nd" cx="202" cy="92" r="4"/><circle class="nd" cx="268" cy="92" r="4"/><circle class="nd" cx="334" cy="92" r="4"/><circle class="nd" cx="400" cy="92" r="4"/><circle class="nd" cx="466" cy="92" r="4"/><circle class="nd" cx="532" cy="92" r="4"/><circle class="nd" cx="70" cy="138" r="4"/><circle class="nd" cx="136" cy="138" r="4"/><circle class="nd" cx="202" cy="138" r="4"/><circle class="nd" cx="268" cy="138" r="4"/><circle class="nd" cx="334" cy="138" r="4"/><circle class="nd" cx="400" cy="138" r="4"/><circle class="nd" cx="466" cy="138" r="4"/><circle class="nd" cx="532" cy="138" r="4"/><circle class="nd" cx="70" cy="184" r="4"/><circle class="nd" cx="136" cy="184" r="4"/><circle class="nd" cx="202" cy="184" r="4"/><circle class="nd" cx="268" cy="184" r="4"/><circle class="nd" cx="334" cy="184" r="4"/><circle class="nd" cx="400" cy="184" r="4"/><circle class="nd" cx="466" cy="184" r="4"/><circle class="nd" cx="532" cy="184" r="4"/><circle class="nd" cx="70" cy="230" r="4"/><circle class="nd" cx="136" cy="230" r="4"/><circle class="nd" cx="202" cy="230" r="4"/><circle class="nd" cx="268" cy="230" r="4"/><circle class="nd" cx="334" cy="230" r="4"/><circle class="nd" cx="400" cy="230" r="4"/><circle class="nd" cx="466" cy="230" r="4"/><circle class="nd" cx="532" cy="230" r="4"/><circle class="nd" cx="70" cy="276" r="4"/><circle class="nd" cx="136" cy="276" r="4"/><circle class="nd" cx="202" cy="276" r="4"/><circle class="nd" cx="268" cy="276" r="4"/><circle class="nd" cx="334" cy="276" r="4"/><circle class="nd" cx="400" cy="276" r="4"/><circle class="nd" cx="466" cy="276" r="4"/><circle class="nd" cx="532" cy="276" r="4"/><polyline class="arcR" points="136,92 466,92"/><polyline class="arcC" points="466,92 466,230"/><circle class="src" cx="136" cy="92" r="9"/><text class="tag" x="136" y="96">s</text><circle class="wp" cx="466" cy="92" r="9"/><text class="tag" x="466" y="96">t</text><circle class="dst" cx="466" cy="230" r="9"/><text class="tag" x="466" y="234">d</text><text class="lbl warn" x="480" y="82">转环 t：同一拍消耗行环抽取点 + 列环插入点（R4，零松弛）</text><line class="arcR" x1="70" y1="322" x2="110" y2="322"/><text class="lbl" x="118" y="326">行相弧（6 条行环，各 8 节点）</text><line class="arcC" x1="350" y1="322" x2="390" y2="322"/><text class="lbl" x="398" y="326">列相弧（8 条列环，各 6 节点）</text><path class="wrp" d="M 70 348 L 110 348"/><text class="lbl" x="118" y="352">绕回链路：每环各有 1 条（图中只画 2 条示意）。6×8 + 8×6 = 96 无向 = 192 有向</text></svg><div class="cap">图 2 · D-R：环上一次授权 = 行相弧 + 转环 + 列相弧。弧是环上连续一段，可绕回；转环没有缓冲，两相时刻被刚性绑定。</div></div>
+<p>一次授权在环上要独占五类东西，对应 R1–R5：</p>
+<table><thead><tr><th>子句</th><th>资源</th><th>为什么必须单列</th></tr></thead>
+<tbody>
+<tr><td><b>R1</b> 弧上链路互斥</td>
+<td>行相弧与列相弧覆盖的每条有向环链路</td>
+<td>主力约束。弧是环上连续一段，可以跨绕回链路。</td></tr>
+<tr><td><b>R2</b> 上环口（board）</td>
+<td>源节点把包放上行环的插入点，<code>board_ports</code> 个</td>
+<td>只看链路会漏检：两条流的弧完全不相交，
+但若同一节点同拍上环，物理上做不到。
+实测漏检里 79.5%
+是 board-board 型。</td></tr>
+<tr><td><b>R3</b> 下环口（leave）</td>
+<td>目的节点从列环取下包的抽取点，<code>leave_ports</code> 个</td>
+<td>同理，占漏检的
+11.6%。</td></tr>
+<tr><td><b>R4</b> 转环原子性</td>
+<td>转环节点上「行环抽取点 + 列环插入点」<b>同一拍</b></td>
+<td>无缓冲 ⇒ 包不能在桥上等。这是全文最关键的一条，
+也是集中化的唯一硬理由（见 §7）。</td></tr>
+<tr><td><b>R5</b> 同 (src,dst) 序内串行化</td>
+<td>语义约束</td>
+<td>与 M3 同源。最小弧集是延迟不变的，所以它同样不禁止换路。</td></tr>
+</tbody></table>
+
+<h3>空分复用：arc 还是 whole_ring</h3>
+<p>一个实现选择：环上同时能否有多个互不重叠的传输？</p>
+<ul>
+<li><code>arc</code>（默认）：以弧覆盖的链路为粒度互斥 ⇒ 一条环上可并行多段。
+轮数下界 60，实测 69 轮。</li>
+<li><code>whole_ring</code>：整条环一次只服务一个传输（令牌环式）。
+下界立刻涨到 192，实测 195 轮，
+makespan 5,280 vs 1,957，
+代价 <b class="lose">2.70×</b>。</li>
+</ul>
+<div class="note bad">这 2.70× 是环设计里最贵的一个
+二选一。它也解释了为什么 D-R 必须以「弧」而不是「环」为资源单位：
+把互斥粒度做粗一点，省下的是仲裁器几百个比较器，
+丢掉的是接近三倍的吞吐。</div>
+<p class="muted">参照点 fixed·g=1：67 轮 /
+makespan 2,025 / 最热链路负载 60。
+五子句逐条复核结果见 §12（R1–R5 全为 0 违例）。</p>
+
+
+<h2 id="s5">5 · Part A：islip2d_mesh 算法逐步拆解</h2>
+<p>算法要解决的问题：48 个源、每源最多 47 条 VOQ，
+每轮要挑出一批「彼此无冲突」的 VOQ 并给每条一个起始时刻，
+使总时间尽可能短，同时不让任何 VOQ 被饿死。</p>
+
+<h3>5.1 与原版 iSLIP 的三处结构差异</h3>
+<table><thead><tr><th></th><th>交叉开关 iSLIP</th>
+<th>islip2d_mesh</th></tr></thead><tbody>
+<tr><td>请求单位</td><td>每个 VOQ 一条请求线</td>
+<td><b>整张位图一条消息</b>：源 s 把 47 bit 残余 VOQ 一次带给仲裁器。
+控制面消息恒为每轮 ≤ 2×48 条（request + grant），与积压无关。
+实测每轮 83.9 条。</td></tr>
+<tr><td>grant 指针挂在哪</td><td>每个输出端口一个</td>
+<td><b>每条有向链路一个</b>（164 个，984 bit）。
+资源从「端口」变成「链路」，指针数量随之从 48 变成 164。</td></tr>
+<tr><td>什么叫「被选中」</td><td>输出端口选中它</td>
+<td><b>路径上每条链路都选中它</b>（全路径一致 / unanimity）。
+这是 AND 而不是 OR，所以一致率天然低：
+实测只有 28.1%。</td></tr>
+</tbody></table>
+<div class="fig"><svg viewBox="0 0 980 400" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ahd"/></marker></defs><rect class="bx src" x="20" y="40" width="210" height="150" rx="8"/><text class="bxt" x="32" y="62">① 每源一条 request</text><text class="bxl" x="32" y="84">源 s 的残余 VOQ 位图（47 bit）</text><text class="bxl" x="32" y="101">1 = 该 dst 还有包没被授权</text><text class="bxl" x="32" y="118">s=0: 0 1 1 0 0 1 …</text><text class="bxl" x="32" y="135">s=1: 1 0 0 1 1 0 …</text><text class="bxl" x="32" y="152">实测每轮 83.9 条消息（上界 96）</text><rect class="bx arb" x="280" y="30" width="250" height="190" rx="8"/><text class="bxt" x="292" y="52">② CA：每资源 grant 指针</text><text class="bxl" x="292" y="74">mesh：每条有向链路一个 g_e</text><text class="bxl" x="292" y="91">（164 个指针 × 6 bit = 984 bit）</text><text class="bxl" x="292" y="108">环：每条环-方向一个 g（28 个）</text><text class="bxl" x="292" y="125"></text><text class="bxl" x="292" y="142">每个资源沿指针 RR 选一个申请者</text><text class="bxl" x="292" y="159">→ 一条 VOQ 只有在它路径上</text><text class="bxl" x="292" y="176">   所有资源都选中它时才「全路径</text><text class="bxl" x="292" y="193">   一致」</text><rect class="bx acc" x="580" y="30" width="230" height="190" rx="8"/><text class="bxt" x="592" y="52">③ 每源 accept 指针</text><text class="bxl" x="592" y="74">a_s over 48 个 dst（288 bit）</text><text class="bxl" x="592" y="91">在全路径一致的 VOQ 里按 a_s 收</text><text class="bxl" x="592" y="108">接受数 ≤ grants_per_src</text><text class="bxl" x="592" y="125"></text><text class="bxl" x="592" y="142">实测全路径一致率仅 28.1%</text><text class="bxl" x="592" y="159">（交叉开关上只要 1 个输出同意，</text><text class="bxl" x="592" y="176"> mesh 上要整条路径同意）</text><rect class="bx fill" x="280" y="250" width="530" height="120" rx="8"/><text class="bxt" x="292" y="272">④ 顺序补齐 + 落 t0</text><text class="bxl" x="292" y="294">一致相通常只填掉一小部分容量，剩下的按静态序（跳数/弧长降序）贪心补齐；</text><text class="bxl" x="292" y="311">每条被选中的 VOQ 去冲突域问「最早哪个 t0 整条路径都空」，落一个 t0 并占区间。</text><text class="bxl" x="292" y="328">实测每轮放行 20.3 条 VOQ，共 111 轮（割界 96）。</text><rect class="bx src" x="20" y="250" width="210" height="120" rx="8"/><text class="bxt" x="32" y="272">⑤ 未授予的留在位图</text><text class="bxl" x="32" y="294">没拿到 grant 的位不清零，</text><text class="bxl" x="32" y="311">下一轮 request 继续带出。</text><text class="bxl" x="32" y="328">所以控制面消息数与积压无关，</text><text class="bxl" x="32" y="345">恒为每轮 ≤ 2×48 条。</text><line class="ar" x1="230" y1="100" x2="275" y2="100" marker-end="url(#ah)"/><text class="arl" x="252" y="92">48 条</text><line class="ar" x1="530" y1="110" x2="575" y2="110" marker-end="url(#ah)"/><text class="arl" x="552" y="102">候选</text><line class="ar" x1="695" y1="225" x2="620" y2="245" marker-end="url(#ah)"/><line class="ar" x1="280" y1="310" x2="235" y2="310" marker-end="url(#ah)"/><text class="arl" x="257" y="302">残余</text><text class="arl" x="700" y="248">授予</text></svg><div class="cap">图 3 · iSLIP-2D 的一轮：两级指针（每资源 grant + 每源 accept）决定谁被授予，冲突域决定被授予者落在哪个 t0。</div></div>
+
+<h3>5.2 一轮的六个步骤</h3>
+<pre class="code"><span class="c"># ---- 一轮 iSLIP-2D（mesh）。所有源同步进行 ----</span>
+<span class="c"># 状态：R[s] = 源 s 的残余 VOQ 位图（47 bit，1 = 还有包没被授权）</span>
+<span class="c">#       g[e] = 每条有向链路的 grant 指针（指向 48 个源之一）</span>
+<span class="c">#       a[s] = 每个源的 accept 指针（指向 48 个 dst 之一）</span>
+<span class="c">#       D    = 冲突域（free_at 或 interval），记已被占用的资源时间</span>
+
+<span class="c"># ① REQUEST：一条消息带出整张位图，不是每个 VOQ 一条消息</span>
+for s in sources:
+    req[s] = R[s]                      <span class="c"># 1 条消息 / 源 / 轮</span>
+
+<span class="c"># ② GRANT：每条链路独立地沿自己的指针做一次 RR</span>
+for e in directed_links:
+    cand = [ (s,d) for s in sources for d in bits(req[s])
+             if e in path(s,d) ]       <span class="c"># 谁的路径压在我身上</span>
+    grant[e] = rr_pick(cand, start=g[e])
+
+<span class="c"># ③ ACCEPT：一条 VOQ 只有在它路径上"每一条"链路都选中它时才算候选</span>
+unanimous = [ (s,d) for (s,d) in requested
+              if all( grant[e] == (s,d) for e in path(s,d) ) ]
+for s in sources:
+    take = rr_take(unanimous[s], start=a[s], k=grants_per_src)
+    for (s,d) in take:
+        g[e] = advance(g[e]) for e in path(s,d)   <span class="c"># 指针只在成交后前进</span>
+        a[s] = advance(a[s])
+
+<span class="c"># ④ FILL：一致相通常只填掉一小部分容量，按静态序贪心补齐</span>
+for (s,d) in remaining_requests sorted by fill_order:
+    if compatible_with(selected, (s,d)):   <span class="c"># 逐资源查 D-M</span>
+        selected.append((s,d))
+
+<span class="c"># ⑤ COMMIT：为每个被选中的 VOQ 求最早可行 t0，然后占区间</span>
+for (s,d) in selected:
+    t0 = D.earliest( resources_of(s,d), lower=now + T_rtt )
+    D.occupy( resources_of(s,d), t0 )
+    grant_message(s, d, t0)            <span class="c"># 授权里带明确起始时刻</span>
+    R[s].clear_bit(d)                  <span class="c"># 只有成交才清位</span>
+
+<span class="c"># ⑥ 未成交的位原样留在 R[s]，下一轮继续带出 ⇒ 控制面消息数与积压无关</span>
+</pre>
+
+<h4>为什么需要第 ④ 步「补齐」</h4>
+<p>这是把 iSLIP 搬到网络上最容易被忽略的一点。
+交叉开关上一致相能填满整个置换（每个输出都能成交一个），
+但在 mesh 上一条 VOQ 要跨 dx+dy 条链路，
+只要有一条链路把 grant 给了别人，这条 VOQ 就落空。
+一致率只有 28.1%，也就是说
+<b>光靠 iSLIP 的两级指针，每轮容量的绝大部分是空着的</b>。
+补齐步骤按静态序（默认跳数降序）把剩余请求逐条试塞进去，
+只要过 D-M 就收。指针只在一致相里推进，
+所以补齐不破坏 iSLIP 的无饿死性质。</p>
+
+<div class="note">
+<b>一个反直觉的实测结果</b>：把一致相整个关掉（<code>iters=0</code>，
+只留补齐）反而轮数最少——97 轮 vs 保留一致相的
+110 轮，即一致相带来约
+13% 的额外轮数。
+原因是一致相会「占着容量却填不满」：
+它先把一批链路的 grant 指针分配给一组注定凑不齐全路径的 VOQ，
+补齐步骤反而少了自由度。
+一致相真正的价值在<b>公平性</b>（指针保证无饿死）而不是效率；
+如果只看 makespan，应该把它当成一层薄薄的反饿死保险，
+而不是主要的匹配机制。
+</div>
+
+<h3>5.3 各旋钮的实测影响</h3>
+<table class=""><thead><tr><th>配置</th><th>轮数</th><th>轮数/下界</th><th>data_span</th><th>makespan</th><th>全路径一致率</th><th>读法</th></tr></thead><tbody><tr><td>基准 xy · g=1 · free_at</td><td>111</td><td>1.156</td><td>3,797</td><td>3,813</td><td>28.1%</td><td>参照点</td></tr><tr class="hl"><td>xy · g=1 · <b>interval</b></td><td>111</td><td>1.156</td><td>150</td><td>166</td><td>28.1%</td><td>换冲突域：data_span 从 3797 降到 150</td></tr><tr><td>xy · g=2 · free_at</td><td>110</td><td>1.146</td><td>3,831</td><td>3,847</td><td>23.1%</td><td>每源多授一个 VOQ，几乎不动轮数</td></tr><tr class="hl"><td>xy · g=2 · <b>interval</b></td><td>110</td><td>1.146</td><td>145</td><td>161</td><td>23.1%</td><td>两者叠加后的最优点</td></tr><tr><td>romm_static · g=2</td><td>110</td><td>1.146</td><td>3,831</td><td>3,847</td><td>23.1%</td><td>静态平衡中间点：最热链路负载 96 = 割界，已最优，轮数与 XY 相同</td></tr><tr><td>romm_dyn · g=2</td><td>119</td><td>1.000</td><td>4,092</td><td>4,108</td><td>5.5%</td><td>在线选点把最热链路负载推到 119（比割界 96 高 24%），轮数下界随之升到 119，所以「轮数/下界」看似 1.000 其实是变差了</td></tr><tr><td>补齐序 hops_asc</td><td>110</td><td>1.146</td><td>2,277</td><td>2,293</td><td>8.7%</td><td>短流先填：data_span 最优</td></tr><tr><td>补齐序 pressure</td><td>110</td><td>1.146</td><td>3,756</td><td>3,772</td><td>30.3%</td><td>按剩余压力填</td></tr><tr><td>iters=0（关掉一致相）</td><td>97</td><td>1.010</td><td>3,485</td><td>3,501</td><td>0.0%</td><td>只留补齐：轮数反而最少</td></tr><tr><td>iters=4</td><td>103</td><td>1.073</td><td>3,346</td><td>3,362</td><td>19.2%</td><td>多迭代把轮数拉回 103</td></tr><tr><td><i>对照：单级 islip_mesh</i></td><td>156</td><td>—</td><td>4,056</td><td>4,083</td><td>—</td><td>无两级指针、无 VOQ 位图</td></tr><tr><td><i>对照：greedy_ff（无轮次概念）</i></td><td>—</td><td>—</td><td>1,971</td><td>1,998</td><td>—</td><td>离线全知贪心，作 data_span 参照</td></tr></tbody></table>
+<ul>
+<li><b>grants_per_src</b>：从 1 到 2 只把轮数从 111 降到
+110（0.9%）。
+每源多授一个 VOQ 听起来能翻倍，实际瓶颈在链路而不在源，
+所以几乎没用——但它让每轮多放行的流数上升，
+在多 flit 包（m=4）下才开始有价值。</li>
+<li><b>path_mode</b>：ROMM 在 all-to-all 上<b>没有增益</b>，原因很直白——
+all-to-all 本身就是均匀的，XY 路由下最热链路负载已经等于割界 96，
+没有热点可平衡（<code>romm_static</code> 实测 max_load 恰为 96，
+轮数与 XY 相同）。更值得注意的是 <code>romm_dyn</code>（每轮在线选点）
+把最热链路负载推到 <b>119</b>，比割界高 24%，
+轮数从 110
+涨到 119：
+逐轮各自随机选点，在全局看来是把负载搞得更不均。
+ROMM 的价值要到 hotspot / transpose 这类非均匀 pattern 才体现，
+而且必须离线平衡而不是在线随机。</li>
+<li><b>补齐序</b>：<code>hops_asc</code>（短流先填）data_span 最优
+（2,277
+vs 默认 3,831），因为短流占的资源少、更容易塞进空洞；
+但轮数不变——两个指标优化方向不同，需要按目标选。</li>
+</ul>
+
+
+<h2 id="s6">6 · 冲突域：free_at 与 interval</h2>
+<p>仲裁器要回答的最后一个问题是「这条被选中的 VOQ 最早能从哪一拍开始」。
+答案取决于冲突域<b>记了什么</b>，而这是全文影响最大的单个实现选择——
+比换路、比 grants_per_src、比端口数都大一个数量级。</p>
+<div class="fig"><svg viewBox="0 0 940 300" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><text class="tick" x="98" y="52">0</text><text class="tick" x="124" y="52">1</text><text class="tick" x="150" y="52">2</text><text class="tick" x="176" y="52">3</text><text class="tick" x="202" y="52">4</text><text class="tick" x="228" y="52">5</text><text class="tick" x="254" y="52">6</text><text class="tick" x="280" y="52">7</text><text class="tick" x="306" y="52">8</text><text class="tick" x="332" y="52">9</text><text class="tick" x="358" y="52">10</text><text class="tick" x="384" y="52">11</text><text class="tick" x="410" y="52">12</text><text class="tick" x="436" y="52">13</text><text class="bxl" x="12" y="78">链路 e 现状</text><rect class="cel cocc" x="90" y="60" width="24" height="22" rx="3"/><rect class="cel cocc" x="116" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="142" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="168" y="60" width="24" height="22" rx="3"/><rect class="cel cocc" x="194" y="60" width="24" height="22" rx="3"/><rect class="cel cocc" x="220" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="246" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="272" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="298" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="324" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="350" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="376" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="402" y="60" width="24" height="22" rx="3"/><rect class="cel cfree" x="428" y="60" width="24" height="22" rx="3"/><text class="bxl dim" x="466" y="77">深色 = 已被占，浅色 = 空洞</text><text class="bxl" x="12" y="130">free_at 域</text><rect class="cel cocc" x="90" y="112" width="24" height="22" rx="3"/><rect class="cel cocc" x="116" y="112" width="24" height="22" rx="3"/><rect class="cel cblk" x="142" y="112" width="24" height="22" rx="3"/><rect class="cel cblk" x="168" y="112" width="24" height="22" rx="3"/><rect class="cel cocc" x="194" y="112" width="24" height="22" rx="3"/><rect class="cel cocc" x="220" y="112" width="24" height="22" rx="3"/><rect class="cel cnew" x="246" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="272" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="298" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="324" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="350" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="376" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="402" y="112" width="24" height="22" rx="3"/><rect class="cel cfree" x="428" y="112" width="24" height="22" rx="3"/><text class="bxl dim" x="466" y="129">只记「t 之后空闲」⇒ 空洞不可用，新传输被顶到前沿之后</text><text class="bxl" x="12" y="182">interval 域</text><rect class="cel cocc" x="90" y="164" width="24" height="22" rx="3"/><rect class="cel cocc" x="116" y="164" width="24" height="22" rx="3"/><rect class="cel cnew" x="142" y="164" width="24" height="22" rx="3"/><rect class="cel cnew" x="168" y="164" width="24" height="22" rx="3"/><rect class="cel cocc" x="194" y="164" width="24" height="22" rx="3"/><rect class="cel cocc" x="220" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="246" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="272" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="298" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="324" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="350" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="376" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="402" y="164" width="24" height="22" rx="3"/><rect class="cel cfree" x="428" y="164" width="24" height="22" rx="3"/><text class="bxl dim" x="466" y="181">整条位向量 ⇒ 新传输可回填空洞，兑现「错时穿过同一链路」</text><text class="bxl" x="12" y="238">后果</text><text class="bxl" x="90" y="238">free_at 提交时会把路径上<tspan class="warn">每一个</tspan>资源的前沿都推到全路径的最大值，</text><text class="bxl" x="90" y="258">于是一条拥塞链路把自己的滞后输出给它接触的所有链路，再逐跳扩散——这就是前沿棘轮。</text></svg><div class="cap">图 4 · 冲突域：同一条链路的时间轴。两者的仲裁决策完全相同，差别只在被授予者落到哪个 t₀——所以这不是一项精细化，而是稳态下能否工作的分界。</div></div>
+<h3>两种记法</h3>
+<ul>
+<li><code>free_at</code>：每个资源只记一个时间戳「我在 t 之后空闲」。
+查询 O(1)，硬件只要一个寄存器（mesh 共 3,120 bit）。</li>
+<li><code>interval</code>：每个资源记一段滑动窗口内的完整占用位向量。
+可以回填空洞，代价是位向量存储（mesh 共 99,840 bit，约 32×）。</li>
+</ul>
+<div class="note bad">
+<b>前沿棘轮（frontier ratchet）</b>：<code>free_at</code> 的问题不是「不够精细」，
+而是会自我放大。提交一条流时，它必须把路径上<b>每一个</b>资源的前沿
+都推到「整条路径都能开始」的那个最大值——
+包括那些其实很空闲的资源。于是一条拥塞链路把自己的滞后
+输出给了它接触的所有链路，再逐跳向外扩散。
+批量口径下 data_span 从 150 恶化到 3,797
+（<b>25.3×</b>），环上从
+120 到 1,957
+（<b>16.3×</b>），
+而两者<b>轮数完全相同</b>——仲裁决策一模一样，
+差别纯粹来自「落在哪个 t₀」。
+</div>
+<h4>稳态下同一现象</h4>
+<table class=""><thead><tr><th>配置</th><th>λ*（free_at）</th><th>λ*（interval）</th><th>峰值吞吐（free_at）</th><th>峰值吞吐（interval）</th><th>峰值之比</th></tr></thead><tbody><tr><td>mesh_islip2d</td><td><span class='lose'>λ=0.1 即已不稳定</span></td><td><b>0.30</b></td><td>0.109</td><td>0.520</td><td><b class='win'>4.75×</b></td></tr><tr><td>ring_islip2d</td><td><span class='lose'>λ=0.1 即已不稳定</span></td><td><b>0.70</b></td><td>0.151</td><td>0.693</td><td><b class='win'>4.60×</b></td></tr></tbody></table>
+<p class="muted">这一组的 λ 网格较粗（0.1 / 0.3 / 0.5 / 0.7），
+所以 interval 列的 λ* 低于 §9 主曲线的细网格结果；
+关键信息是 <code>free_at</code> 在最低的 λ=0.1 上就已经判定不稳定——
+它的接受吞吐卡在 0.11 附近不再上升，无论注多少。</p>
+<p>所以 <code>interval</code> 不是一个「可选优化」，
+而是集中式排程能否兑现「错时穿过同一链路」这个卖点的前提。
+不加它，集中式的吞吐会掉到分布式基线以下。</p>
+<div class="note">
+<b>实现陷阱</b>：多服务器资源（如 RAMP_BW=2 的坡道口、
+<code>board_ports</code>&gt;1 的上环口）不能用「按拍取或」来判可用。
+必须检查<b>存在某一个服务器在整段 dur 上都空闲</b>——
+否则会出现「第 0 拍服务器 A 空、第 1 拍服务器 B 空」被误判为可用，
+而单个传输无法在两个服务器之间跳。这个 bug 曾被容量断言抓到。
+</div>
+
+
+<h2 id="s7">7 · Part B：islip2d_ring 与「集中化的必要性」</h2>
+<p>环上的变种与 mesh 版共用同一个骨架（位图请求、两级指针、补齐、落 t₀），
+差别全在资源集和一个额外的刚性约束上。</p>
+
+<h3>7.1 一轮的伪码</h3>
+<pre class="code"><span class="c"># ---- 一轮 iSLIP-2D（无缓冲环）。与 mesh 版同骨架，资源与对齐不同 ----</span>
+<span class="c"># 每条授权 = 行相弧 A_row + 转环时刻 t_turn + 列相弧 A_col</span>
+
+<span class="c"># ① REQUEST：与 mesh 完全一样，一条消息带整张残余 VOQ 位图</span>
+for s in sources: req[s] = R[s]
+
+<span class="c"># ② GRANT：指针挂在"环-方向"上（6 行环 + 8 列环，各 2 方向 = 28 个）</span>
+for ring, dirn in ring_directions:
+    grant[ring,dirn] = rr_pick(candidates_touching(ring,dirn), start=g[ring,dirn])
+
+<span class="c"># ③ ACCEPT：两相都被选中才算候选（AND 宽度只有 2，比 mesh 短）</span>
+unanimous = [ f for f in requested
+              if grant[row_ring(f)] == f and grant[col_ring(f)] == f ]
+for s in sources:
+    take = rr_take(unanimous[s], start=a[s], k=grants_per_src)
+
+<span class="c"># ④ FILL：按弧长降序补齐（长弧先占，短弧塞缝）</span>
+for f in remaining sorted by arc_len desc:
+    if compatible_with(selected, f): selected.append(f)
+
+<span class="c"># ⑤ COMMIT：R4 是这里唯一真正棘手的一步</span>
+for f in selected:
+    <span class="c"># 求最早的 t0，使得同时满足：</span>
+    <span class="c">#   R1 行相弧每条链路在 [t0+pre, ...) 空闲</span>
+    <span class="c">#   R2 源节点上环口在 t0 空闲</span>
+    <span class="c">#   R4 转环那一拍，行环抽取点与列环插入点"同时"空闲  <-- 零松弛</span>
+    <span class="c">#   R1 列相弧每条链路在 [t_turn+pre', ...) 空闲</span>
+    <span class="c">#   R3 目的节点下环口在抵达拍空闲</span>
+    t0 = earliest_t0_satisfying_all_five(f)
+    occupy_all(f, t0)                  <span class="c"># 两相时刻被刚性绑定</span>
+    grant_message(f.src, f.dst, t0, f.route)
+</pre>
+<table><thead><tr><th></th><th>islip2d_mesh</th><th>islip2d_ring</th>
+</tr></thead><tbody>
+<tr><td>grant 指针数</td><td>164（每条有向链路）</td>
+<td>28（每条环 × 方向）—— 少得多，硬件更便宜</td></tr>
+<tr><td>一致相的 AND 宽度</td><td>dx+dy 条链路（最多 11）</td>
+<td>恒为 2（行相 + 列相）</td></tr>
+<tr><td>实测全路径一致率</td><td>28.1%</td>
+<td>16.2%</td></tr>
+</tbody></table>
+<div class="note">
+一个曾经写错的推断：既然环的 AND 宽度只有 2，一致率「应该」更高。
+实测相反（16.2% &lt;
+28.1%）。
+原因是一致率由<b>授权单元的数量</b>主导而不是 AND 的宽度：
+环上只有 28 个 grant 单元要在 2,256 条流里挑，
+每个单元被争抢得更凶，凑齐两相的概率反而更低。
+</div>
+
+<h3>7.2 R4：为什么这件事分布式做不了</h3>
+<div class="fig"><svg viewBox="0 0 940 260" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><text class="bxt" x="12" y="26">R4：转环必须在同一拍完成（行环抽取点 + 列环插入点）</text><text class="bxl" x="12" y="65">行环 R_ys</text><rect class="cel cocc" x="110" y="48" width="28" height="22" rx="3"/><rect class="cel cocc" x="140" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="170" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="200" y="48" width="28" height="22" rx="3"/><rect class="cel cnew" x="230" y="48" width="28" height="22" rx="3"/><text class="tag2" x="244" y="64">转</text><rect class="cel cfree" x="260" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="290" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="320" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="350" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="380" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="410" y="48" width="28" height="22" rx="3"/><rect class="cel cfree" x="440" y="48" width="28" height="22" rx="3"/><text class="bxl" x="12" y="111">列环 C_xd（集中式）</text><rect class="cel cfree" x="110" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="140" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="170" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="200" y="94" width="28" height="22" rx="3"/><rect class="cel cnew" x="230" y="94" width="28" height="22" rx="3"/><text class="tag2" x="244" y="110">转</text><rect class="cel cfree" x="260" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="290" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="320" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="350" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="380" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="410" y="94" width="28" height="22" rx="3"/><rect class="cel cfree" x="440" y="94" width="28" height="22" rx="3"/><text class="bxl" x="12" y="165">列环 C_xd（分布式看到的）</text><rect class="cel cfree" x="110" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="140" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="170" y="148" width="28" height="22" rx="3"/><rect class="cel cocc" x="200" y="148" width="28" height="22" rx="3"/><rect class="cel cocc" x="230" y="148" width="28" height="22" rx="3"/><rect class="cel cblk" x="260" y="148" width="28" height="22" rx="3"/><text class="tag2" x="274" y="164">×</text><rect class="cel cfree" x="290" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="320" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="350" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="380" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="410" y="148" width="28" height="22" rx="3"/><rect class="cel cfree" x="440" y="148" width="28" height="22" rx="3"/><text class="bxl" x="470" y="65">CA 事先知道两条环的未来占用，挑一个两边都空的拍</text><text class="bxl" x="470" y="111">⇒ 转环零驻留（实测 max_turn_residency = 0）</text><text class="bxl warn" x="470" y="165">环站只看得到本地：flit 到了才发现列环那一拍被占</text><text class="bxl warn" x="470" y="185">⇒ 只能三选一：加缓冲（transfer FIFO）／偏转绕一圈／活锁</text><text class="bxl" x="12" y="230">这就是「集中化不是为了更快，而是为了可行」的全部内容：R4 是一个需要未来信息的约束。</text></svg><div class="cap">图 5 · R4 转环原子性：无缓冲 2D 环之所以需要集中式上/下环仲裁。</div></div>
+<p>R4 要求转环在<b>同一拍</b>完成：包从行环被抽出的那一拍，
+必须同时被插入列环。零缓冲的定义就是桥上没有落脚点。
+集中仲裁器能满足它，因为它<b>同时掌握两条环的未来占用</b>，
+可以挑一个两边都空的拍——实测 <code>max_turn_residency = 0</code>，
+R4 违例 0。</p>
+<p>分布式环站做不到，因为它只有本地视野：包已经在行环上跑了，
+到桥才发现列环那一拍被占。此时它只有三条路：
+<b>加缓冲</b>（就不再是无缓冲网络了）、
+<b>偏转</b>（绕整环一圈再试，吃掉一整圈时隙）、
+或者<b>活锁</b>。ring_base 选的是前两者的组合。</p>
+<div class="note good">
+<b>这就是「集中化不是为了更快，而是为了可行」的完整含义。</b>
+在 mesh 上，分布式方案（信用反压）是可行的，集中化换来的是省掉缓冲；
+在无缓冲环上，R4 是一个<b>需要未来信息</b>的约束，
+分布式方案只能用偏转把它化解掉，代价直接记在带宽和乱序上：
+λ* 从 ring_base 0.55 提到 ring_islip2d
+0.75（1.36×）。
+</div>
+
+<h3>7.3 各旋钮的实测影响</h3>
+<table class=""><thead><tr><th>配置</th><th>轮数</th><th>轮数下界</th><th>轮数/下界</th><th>makespan</th><th>最热链路负载</th><th>读法</th></tr></thead><tbody><tr><td>fixed（静态维序 RC）· g=1</td><td>67</td><td>60</td><td>1.117</td><td>2,025</td><td>60</td><td>参照点</td></tr><tr class="hl"><td>balanced（离线平衡方向×维序）· g=1</td><td>64</td><td>49</td><td>1.306</td><td>1,992</td><td>49</td><td>把最热链路负载从 60 压到 49，下界随之下降</td></tr><tr><td>dyn（在线选候选）· g=1</td><td>69</td><td>56</td><td>1.232</td><td>2,079</td><td>56</td><td>在线选点不如离线平衡</td></tr><tr><td>board=1 / leave=1 · g=2</td><td>69</td><td>60</td><td>1.150</td><td>1,957</td><td>60</td><td>每节点单上环口 + 单下环口（参照）</td></tr><tr><td>board=2 / leave=2 · g=2</td><td>65</td><td>60</td><td>1.083</td><td>1,827</td><td>60</td><td>端口翻倍只值约 7% makespan</td></tr><tr><td>spatial_reuse=<b>whole_ring</b> · g=2</td><td>195</td><td>192</td><td>1.016</td><td>5,280</td><td>60</td><td>整环互斥（无空分复用）⇒ 下界从 60 涨到 192</td></tr><tr class="hl"><td>conflict_domain=<b>interval</b> · g=2</td><td>69</td><td>60</td><td>1.150</td><td>120</td><td>60</td><td>轮数不变，makespan 从 1,957 降到 120</td></tr></tbody></table>
+<ul>
+<li><b>ring_path_mode</b>：<code>balanced</code>（离线平衡方向×维序）把最热链路
+负载从 60 压到 49，
+轮数下界随之从 60 降到 49，
+同 g=1 口径下实测轮数 67 → 64。
+这是环上唯一真正有效的路径优化：环的绕回结构让「顺时针 / 逆时针」
+和「先行后列 / 先列后行」构成 4 个候选，离线均衡它们收益明显——
+与 mesh 上 ROMM 无增益形成对照。</li>
+<li><b>board / leave 端口数</b>：1→2 只把 makespan 从 1,957
+降到 1,827（6.6%）。
+端口不是瓶颈，翻倍不值那个面积。</li>
+<li><b>spatial_reuse</b>：见 §4，<code>whole_ring</code> 贵
+2.70×。</li>
+</ul>
+
+
+<h2 id="s8">8 · 两个分布式基线</h2>
+<h3>8.1 mesh_base：有缓冲 + 信用反压</h3>
+<p>教科书式的分组交换 mesh：每输入端口一组 VC 缓冲，
+信用（credit）保证不会发到满缓冲上，交换分配用输入队列 iSLIP。
+它是分布式方案在 mesh 上<b>可行</b>的证明，
+代价是每节点的缓冲——614,400 bit 输入缓冲
++ 1,440 bit 信用计数器
++ 720 bit 分配指针，
+合计 616,560 bit。</p>
+<table class=""><thead><tr><th>缓冲深度</th><th>λ*</th><th>峰值接受吞吐</th></tr></thead><tbody><tr><td>buf_depth = 4 flit</td><td>0.01</td><td>0.098</td></tr><tr><td>buf_depth = 8 flit</td><td>0.20</td><td>0.203</td></tr><tr><td>buf_depth = 20 flit</td><td>0.40</td><td>0.396</td></tr></tbody></table>
+<p>缓冲深度是它的命门：浅缓冲下信用反压把拥塞逐跳往回传，
+λ* 明显下降。这也是集中化的卖点所在——授权制根本不需要这些缓冲，
+因为包发出去就不会堵。</p>
+
+<h3>8.2 ring_base：E-tag / I-tag + 偏转</h3>
+<p>按 HPCA'22《Application Defined On-chip Networks for Heterogeneous
+Chiplets》与 HiRD 谱系重建的<b>反应式</b>基线。
+它不做任何事前无冲突保证，而是逐拍化解：</p>
+<div class="fig"><svg viewBox="0 0 940 250" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><circle class="ringc" cx="190" cy="120" r="74"/><circle class="nd" cx="190" cy="46" r="5"/><circle class="nd" cx="242" cy="68" r="5"/><circle class="nd" cx="264" cy="120" r="5"/><circle class="nd" cx="242" cy="172" r="5"/><circle class="nd" cx="190" cy="194" r="5"/><circle class="nd" cx="138" cy="172" r="5"/><circle class="nd" cx="116" cy="120" r="5"/><circle class="nd" cx="138" cy="68" r="5"/><text class="tag2" x="190" y="118">行环</text><text class="tag2" x="190" y="136">（无缓冲）</text><rect class="bx acc" x="330" y="60" width="150" height="60" rx="8"/><text class="bxt" x="342" y="84">transfer FIFO</text><text class="bxl" x="342" y="104">满 ⇒ 无法转环</text><path class="defl" d="M 264 120 C 300 120, 300 175, 264 175"/><text class="bxl warn" x="272" y="196">偏转：绕整环一圈再试（吃掉一整圈时隙）</text><text class="bxl" x="530" y="52">逐拍反应式，从不做全局无冲突保证：</text><text class="bxl" x="530" y="78">· 环内 flit 永远优先，不停留（实测零违例）</text><text class="bxl" x="530" y="100">· I-tag：抢不到空时隙时为饿死节点预留一个</text><text class="bxl" x="530" y="122">· E-tag：转不过去太久时为该 flit 预留 FIFO 槽</text><text class="bxl" x="530" y="144">· Swap Rule：两侧互相转向时直接交换（绕过 FIFO）</text><text class="bxl" x="530" y="166">· 偏转 + Swap ⇒ 乱序 ⇒ 目的端必须有重组缓冲</text><text class="bxl" x="530" y="196">⚠ 它是<tspan class="warn">反应式策略</tspan>，D-R 是<tspan class="ok2">排程谓词</tspan>，两者只能比结果</text></svg><div class="cap">图 6 · 基线 ring_base（E-tag / I-tag + 偏转）：用事中化解代替事前排程，代价是带宽、乱序与每个桥的缓冲。</div></div>
+<ul>
+<li><b>环内优先</b>：已在环上的 flit 永不停留（实测零违例），
+新注入只能抢空时隙。</li>
+<li><b>I-tag</b>：源节点长期抢不到空时隙时，为它预留一个时隙 ⇒ 注入保证。</li>
+<li><b>E-tag</b>：flit 长期转不过去时，为它预留 transfer FIFO 槽 ⇒ 转移保证。</li>
+<li><b>偏转</b>：transfer FIFO 满时，flit 绕整环一圈再试。</li>
+<li><b>Swap Rule</b>：两侧互相转向时直接交换，绕过 FIFO。</li>
+<li><b>重组缓冲</b>：偏转和交换都会乱序，目的端必须重排。</li>
+</ul>
+<table class=""><thead><tr><th>transfer FIFO 深度</th><th>λ*</th><th>峰值接受吞吐</th><th>最大 p99</th></tr></thead><tbody><tr><td>fifo_depth = 1</td><td>0.30</td><td>0.429</td><td>2759</td></tr><tr><td>fifo_depth = 4</td><td>0.50</td><td>0.551</td><td>1363</td></tr><tr><td>fifo_depth = 8</td><td>0.50</td><td>0.563</td><td>1320</td></tr></tbody></table>
+<div class="note">
+<b>三个与预期不同的实测结果</b>（都已写进验证清单）：
+<ol>
+<li>固定维序（RC）下 <b>Swap Rule 从不触发</b>——
+它需要两侧同时互相转向，而固定维序不产生这种模式。
+要让它动起来必须允许双向转弯（<code>dim_order=mixed</code>）。</li>
+<li>关掉 Swap Rule <b>也不会死锁</b>：偏转通道永远可用，
+包总能绕回来再试。原文的死锁场景需要更紧的时隙约束。</li>
+<li>真正的失效模式是<b>活锁</b>而不是死锁：包一直在绕圈但不推进。
+I-tag / E-tag 的预留机制正是为此存在，它们把「不推进」变成有界等待。</li>
+</ol>
+</div>
+<p class="muted">分布式硬件账（198,528 bit 合计）：
+transfer FIFO 49,152 · 预留 Tx 12,288
+· 弹出队列 24,576 · 重组缓冲 98,304
+· 饿死计数器 1,728 · I/E-tag 状态
+192 · Swap 旁路 MUX 12,288。
+其中重组缓冲（49.5%）
+纯粹是偏转导致乱序的代价，集中式方案不需要它。</p>
+
+
+<h2 id="s9">9 · 稳态注入率扫描：四配置头对头</h2>
+<p>四种配置跑在<b>同一个</b>开环稳态 DES 里（同注入器、同统计器、
+源端无限队列、warmup 后测量、按源队列斜率判稳），
+所以曲线之间的差异只来自 fabric 与仲裁方式。
+流量是 all-to-all，λ 从 0.01 扫到 1.0。</p>
+<div class="fig"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="74" y="30" width="760" height="268"/><line class="gl" x1="74" y1="238.4" x2="834" y2="238.4"/><text class="tick" x="36" y="242.4">0.2</text><line class="gl" x1="74" y1="178.9" x2="834" y2="178.9"/><text class="tick" x="36" y="182.9">0.4</text><line class="gl" x1="74" y1="119.3" x2="834" y2="119.3"/><text class="tick" x="36" y="123.3">0.6</text><line class="gl" x1="74" y1="59.8" x2="834" y2="59.8"/><text class="tick" x="36" y="63.8">0.8</text><text class="tick" x="216.0" y="316">0.2</text><text class="tick" x="368.0" y="316">0.4</text><text class="tick" x="520.0" y="316">0.6</text><text class="tick" x="672.0" y="316">0.8</text><text class="tick" x="824.0" y="316">1.0</text><line class="ideal" x1="74" y1="298.0" x2="758.0" y2="30.0"/><text class="tick" x="286.8" y="170.0">y=λ（全部被接受）</text><line class="anch" x1="74" y1="152.2" x2="834" y2="152.2"/><text class="anchl" x="716" y="146.2">mesh 解析锚点 0.490</text><line class="anch" x1="74" y1="64.7" x2="834" y2="64.7"/><text class="anchl" x="716" y="58.7">环解析锚点 0.783</text><polyline class="cv cA" points="81.6,295.1 150.0,268.3 226.0,238.7 302.0,209.4 378.0,180.1 393.2,177.2 416.0,179.4 438.8,183.1 454.0,185.8 469.2,187.1 492.0,191.2 530.0,198.0 568.0,201.5 606.0,205.5 644.0,209.2 682.0,212.6 758.0,220.4 834.0,227.7"/><circle class="star cA" cx="378.0" cy="180.1" r="5"/><polyline class="cv cB" points="81.6,295.1 150.0,268.4 226.0,238.9 302.0,209.7 378.0,180.3 393.2,174.3 416.0,165.5 438.8,156.8 454.0,153.1 469.2,150.5 492.0,149.0 530.0,147.2 568.0,143.7 606.0,143.3 644.0,143.0 682.0,141.7 758.0,140.5 834.0,139.2"/><circle class="star cB" cx="438.8" cy="156.8" r="5"/><polyline class="cv cC" points="81.6,295.1 150.0,268.2 226.0,238.6 302.0,209.3 378.0,179.7 393.2,173.7 416.0,164.8 438.8,155.7 454.0,149.6 469.2,143.7 492.0,135.0 530.0,127.4 568.0,129.9 606.0,133.9 644.0,137.6 682.0,141.0 758.0,149.0 834.0,155.4"/><circle class="star cC" cx="492.0" cy="135.0" r="5"/><polyline class="cv cD" points="81.6,295.1 150.0,268.3 226.0,238.8 302.0,209.6 378.0,180.1 393.2,174.1 416.0,165.2 438.8,156.1 454.0,150.0 469.2,144.1 492.0,135.3 530.0,120.5 568.0,106.1 606.0,91.5 644.0,78.1 682.0,67.3 758.0,55.7 834.0,51.0"/><circle class="star cD" cx="644.0" cy="78.1" r="5"/><text class="axl" x="394" y="338">注入率 λ（包/节点/拍）</text><text class="axl" transform="translate(20,204) rotate(-90)">接受吞吐</text><line class="cv cA" x1="90" y1="44" x2="126" y2="44"/><text class="bxl" x="134" y="48">mesh_base（有缓冲 + 信用反压）</text><line class="cv cB" x1="90" y1="64" x2="126" y2="64"/><text class="bxl" x="134" y="68">mesh_islip2d（集中式）</text><line class="cv cC" x1="90" y1="84" x2="126" y2="84"/><text class="bxl" x="134" y="88">ring_base（E-tag/I-tag + 偏转）</text><line class="cv cD" x1="90" y1="104" x2="126" y2="104"/><text class="bxl" x="134" y="108">ring_islip2d（集中式）</text></svg><div class="cap">图 7 · 稳态延迟-吞吐：实心圆 = λ*（最大仍稳定的注入率）。两个基线在过载区回落，两个集中式单调平台化。</div></div>
+<table class=""><thead><tr><th>配置</th><th>λ*（稳定上限）</th><th>峰值接受吞吐</th><th>解析锚点</th><th>p50@λ=0.1</th><th>p99@λ=0.1</th><th>p50@峰值</th><th>CV@λ=0.1</th><th>CV@λ=1.0（过载）</th></tr></thead><tbody><tr><td>mesh_base<br><span class='muted'>有缓冲 + 信用反压 + 输入队列 iSLIP</span></td><td><b>0.40</b></td><td>0.406</td><td>0.490</td><td>38</td><td>85</td><td>67</td><td>0.036</td><td>0.853</td></tr><tr class="hl"><td>mesh_islip2d<br><span class='muted'>集中式 D-M 排程</span></td><td><b>0.48</b></td><td>0.533</td><td>0.490</td><td>54</td><td>101</td><td>193</td><td>0.036</td><td>0.456</td></tr><tr><td>ring_base<br><span class='muted'>E-tag/I-tag + 偏转</span></td><td><b>0.55</b></td><td>0.573</td><td>0.783</td><td>28</td><td>55</td><td>172</td><td>0.036</td><td>0.019</td></tr><tr class="hl"><td>ring_islip2d<br><span class='muted'>集中式 D-R 排程</span></td><td><b>0.75</b></td><td>0.830</td><td>0.783</td><td>47</td><td>75</td><td>215</td><td>0.036</td><td>0.010</td></tr></tbody></table>
+<p>读法：</p>
+<ul>
+<li><b>两个基线在过载区会回落</b>：mesh_base 是信用反压把拥塞传回源，
+ring_base 是偏转吃掉越来越多时隙。集中式两条曲线单调上升后平台化——
+因为授权制下超出容量的请求只是排在源端队列里，网络内部不会互相踩。</li>
+<li><b>峰值接受吞吐可以超过解析锚点</b>，这不是 bug：
+锚点是「均匀 all-to-all 下最热链路」的上界；
+过载区被接受的流量组合会自动偏离热链路（热链路上的请求排不进去），
+于是实测混合吞吐高于均匀假设下的界。λ* 本身没有越界。</li>
+<li><b>公平性只在过载区分化</b>：λ=0.1 时四者的 CV 都在 0.036 附近
+（没到容量，谁都不用抢）。过载区才看出差别：
+mesh_base 的 CV 涨到 0.85，mesh_islip2d 是 0.46——
+集中式的两级指针给了显式轮转保证，但 mesh 上仍有相当的离散度，
+因为链路热度本身不均匀。环上两者都在 0.01–0.02，
+环的对称性把公平性问题基本消掉了。</li>
+</ul>
+
+<h3>9.1 包长与金属常数</h3>
+<table class=""><thead><tr><th>口径</th><th>mesh_base</th><th>mesh_islip2d</th><th>ring_base</th><th>ring_islip2d</th><th>结论</th></tr></thead><tbody><tr><td>m=1 · σ=1（主曲线）</td><td>0.40</td><td>0.48</td><td>0.55</td><td>0.75</td><td>环/mesh = <b>1.56×</b></td></tr><tr><td>m=4 · σ=1（多 flit 包）</td><td>0.05</td><td>0.10</td><td>0.10</td><td>0.15</td><td>环/mesh = <b>1.50×</b></td></tr><tr><td>m=1 · σ=2（金属常数加倍）</td><td>0.20</td><td>0.20</td><td>0.25</td><td>0.30</td><td>环/mesh = <b>1.50×</b></td></tr><tr><td>m=4 · σ=2</td><td>0.00</td><td>0.00</td><td>0.05</td><td>0.05</td><td>环/mesh = <b>n/a</b></td></tr></tbody></table>
+<div class="note">
+<b>σ 口径决定谁赢，必须说清用的是哪一种。</b>
+<ul>
+<li><b>同 σ 口径</b>（两者都 σ=1，或都 σ=2）：环稳定领先
+1.56×
+（σ=1）与 1.50×（σ=2）。
+环的绕回链路给了它更短的平均跳数和更高的对分带宽。</li>
+<li><b>金属归一化口径</b>（mesh 保持 σ=1，环按 1.17× 的走线
+长度折算为 σ=2）：结论<b>反转</b>——
+mesh_islip2d λ*=0.48
+vs ring_islip2d(σ=2) λ*=0.30，
+mesh 领先 1.60×。</li>
+</ul>
+换句话说，「环更好」这句话只在忽略走线长度时成立。
+环多用了 1.17× 的金属（96 vs 82 条无向链路），
+这笔账不结清，比较就没有意义。<br/>
+多 flit 包（m=4）则一致地放大集中式的优势：包越长，
+一次授权摊到的控制开销越小，而基线的逐跳堵塞概率越高。
+σ=2 与 m=4 叠加时（末行）两种 fabric 的基线都在最低采样点
+λ=0.01 就已失稳，此时 λ* 已无分辨力，应看接受吞吐曲线本身。
+</div>
+
+<h3>9.2 控制环路 RTT 与端口数</h3>
+<table class=""><thead><tr><th>T_rtt（拍）</th><th>mesh_islip2d</th><th>ring_islip2d</th></tr></thead><tbody><tr><td>T_rtt = 8</td><td><b>0.30</b> / 0.487</td><td><b>0.50</b> / 0.498</td></tr><tr><td>T_rtt = 16</td><td><b>0.30</b> / 0.487</td><td><b>0.50</b> / 0.497</td></tr><tr><td>T_rtt = 32</td><td><b>0.30</b> / 0.485</td><td><b>0.50</b> / 0.496</td></tr><tr><td>T_rtt = 64</td><td><b>0.30</b> / 0.483</td><td><b>0.50</b> / 0.493</td></tr></tbody></table>
+<table class=""><thead><tr><th>上环口数</th><th>ring_islip2d</th></tr></thead><tbody><tr><td>board_ports = 1</td><td><b>0.70</b> / 0.775</td></tr><tr><td>board_ports = 2</td><td><b>0.70</b> / 0.779</td></tr></tbody></table>
+<p>格式为「λ* / 峰值接受吞吐」。
+稳态下 RTT <b>几乎不影响吞吐</b>，只线性抬高延迟：
+因为请求-授权环路是流水的，稳定状态下它只是一段固定的管道延迟，
+不减少每拍能放行的流数。这与批量口径（§10.2）结论相反，
+那里 RTT 会直接吃掉 makespan——两个口径不能混谈。</p>
+
+
+<h2 id="s10">10 · 保序、流水与 RTT 敏感度</h2>
+<h3>10.1 为什么换路不会乱序</h3>
+<p>直觉上「多路径 ⇒ 乱序 ⇒ 需要重组缓冲」。
+在这两种 fabric 上，只要限定在最小路径集内，这个直觉是<b>错的</b>：</p>
+<ul>
+<li><b>mesh ROMM</b>：矩形内任意中间点给出的两段 XY，跳数恒为 dx+dy，
+线延迟完全相同。实测 14,560 对候选路径，延迟差 <b>0</b>。</li>
+<li><b>环最小弧集</b>：RC（先行后列）与 CR（先列后行）的最小路径
+跳数与线延迟也相同。实测 2,256 对，延迟差 <b>0</b>。</li>
+</ul>
+<p>所以 M3 / R5 只需要保证<b>同 (src,dst) 的注入顺序</b>，
+不必把路径钉死。这直接省掉了目的端的重组缓冲——
+对比 ring_base 必须为偏转付出的
+重组缓冲，这是集中式的一项实打实的收益。</p>
+<div class="note bad">
+反面情形：如果放开到<b>非最小</b>环路径（允许绕远），
+延迟不变性立刻破裂——93.6% 的 (src,dst) 对出现延迟差，
+最大差 78 拍。所以「换路自由」必须限定在最小路径集内，
+否则就要重新引入重组缓冲。
+</div>
+
+<h3>10.2 流水与 RTT 临界点</h3>
+<p>批量口径下引入 <code>pipeline_depth</code>：控制面算第 k+1 轮的同时，
+数据面在跑第 k 轮。衡量指标是
+<code>convoy_ratio = convoy_span / data_span</code>——
+硬 barrier（每轮等齐）相对流水的倍数，越大说明流水收益越大，
+跌到 1 说明流水已被 RTT 完全吃掉。</p>
+<table class=""><thead><tr><th>配置</th><th>T=8</th><th>T=16</th><th>T=32</th><th>T=64</th><th>T=96</th><th>convoy_ratio 跌到 1 的 T_rtt</th></tr></thead><tbody><tr><td>mesh · pipeline_depth=1</td><td>1.829</td><td>1.796</td><td>1.620</td><td>1.012</td><td>0.677</td><td><b class='lose'>≈65.1</b></td></tr><tr><td>mesh · pipeline_depth=2</td><td>1.840</td><td>1.829</td><td>1.799</td><td>1.627</td><td>1.316</td><td><span class='win'>不出现</span></td></tr><tr><td>mesh · pipeline_depth=∞</td><td>1.853</td><td>1.853</td><td>1.853</td><td>1.853</td><td>1.853</td><td><span class='win'>不出现</span></td></tr><tr><td>环 · pipeline_depth=1</td><td>1.604</td><td>1.574</td><td>1.305</td><td>0.714</td><td>0.477</td><td><b class='lose'>≈45.6</b></td></tr><tr><td>环 · pipeline_depth=2</td><td>1.610</td><td>1.604</td><td>1.575</td><td>1.310</td><td>0.950</td><td><b class='lose'>≈91.6</b></td></tr><tr><td>环 · pipeline_depth=∞</td><td>1.610</td><td>1.610</td><td>1.610</td><td>1.610</td><td>1.610</td><td><span class='win'>不出现</span></td></tr></tbody></table>
+<p>depth=1 时 mesh 在 T_rtt ≈ 65 拍、环在 ≈ 46 拍失去全部收益
+（环更早，因为它每轮时间更短，同样的 RTT 占比更大）。
+depth≥2 或 ∞ 时收益不再消失——加深流水就是在用控制面并行度对冲 RTT。
+工程含义：如果集中仲裁器离节点很远（RTT 大），
+必须把控制流水做深，否则集中式的排程优势会被往返延迟抵消。</p>
+
+
+<h2 id="s11">11 · 面积与调度时间</h2>
+<p>「集中化消掉了什么」需要面积数字而不只是定性论断。
+下表把分布式侧被删掉的存储与集中侧新增的仲裁器状态放在同一口径
+（bit 等效）下结算。</p>
+<table class=""><thead><tr><th>方向</th><th>删掉的分布式存储</th><th>新增的仲裁器状态</th><th>净账</th><th>关键路径</th></tr></thead><tbody><tr><td>mesh：集中化前后</td><td>616,560 bit<br><span class='muted'>输入缓冲 + 信用 + 分配指针</span></td><td>103,532 bit<br><span class='muted'>位图 + 两级指针 + interval 表</span></td><td><b class='win'>5.96×</b> 净省</td><td>13 级 / T_sched=220 拍</td></tr><tr><td>环：集中化前后</td><td>198,528 bit<br><span class='muted'>FIFO + 预留 Tx + 重组缓冲</span></td><td>189,528 bit<br><span class='muted'>弧表 + 端口计数器 + interval 表</span></td><td><b>1.05×</b>（基本打平）</td><td>15 级 / T_sched=138 拍</td></tr></tbody></table>
+<ul>
+<li><b>mesh 上集中化是净赚的</b>：5.96× 净省，
+因为输入缓冲（614,400
+bit）本身就是 mesh_base 面积的绝大部分，
+而授权制根本不需要它。</li>
+<li><b>环上集中化面积基本打平</b>（1.05×）：
+删掉的 FIFO 和重组缓冲，差不多正好被 interval 表吃回去。
+所以环上集中化的理由不能是省面积，只能是 §7.2 的可行性
+与 §9 的吞吐。</li>
+<li><b>interval 表是最贵的单项</b>：mesh 上
+99,840 bit，
+占仲裁器的
+96.4%。
+但 §6 已经说明它换来 4.6–4.7× 的接受吞吐——
+这是全设计里性价比最高的一笔存储。</li>
+<li><b>T_sched 会翻倍</b>（free_at 110 →
+interval 220 拍），
+门级深度从 9 升到
+13 级。若时序吃不下，
+应该做的是把仲裁流水切深（§10.2），而不是退回 free_at。</li>
+</ul>
+
+
+<h2 id="s12">12 · 验证清单与已知局限</h2>
+<h3>12.1 可执行断言</h3>
+<p>所有结论都由 <code>utils/verify_islip2d_8x6.py</code> 里的断言守卫，
+每次改动都会重跑。共 <b>51</b> 条，
+当前 <b class="win">
+51 通过 / 0 失败</b>
+（205.1 秒）。</p>
+<table class=""><thead><tr><th>分组</th><th>断言数</th><th>结果</th><th>断言名</th></tr></thead><tbody><tr><td>共同（两 fabric 都必须成立）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_conflict_free</code>、<code>mesh_rounds_disjoint_recheck</code>、<code>mesh_rounds_ge_lb</code>、<code>mesh_residual_bitmap_discipline</code>、<code>mesh_ctrl_msgs_per_round</code>、<code>ring_conflict_free</code>、<code>ring_rounds_ge_lb</code>、<code>ring_residual_bitmap_discipline</code>、<code>ring_bufferless_zero_residency</code></span></td></tr><tr><td>D-M 专项（mesh 判据）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>cut_bound_is_96</code>、<code>xy_meets_cut_bound</code>、<code>romm_latency_invariant</code>、<code>crossbar_predicate_fails_both_ways</code>、<code>romm_cannot_reduce_load_without_headroom</code>、<code>round_gain_without_load_gain_is_a_packing_effect</code>、<code>in_order_xy</code>、<code>in_order_romm_static</code>、<code>in_order_romm_dyn</code></span></td></tr><tr><td>D-R 专项（环判据）</td><td>13</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>192_directed_links</code>、<code>metal_ratio_1_17</code>、<code>link_set_equals_folded_torus</code>、<code>every_node_is_a_bridge</code>、<code>link_bound_fixed</code>、<code>link_bound_balanced</code>、<code>minimal_routes_are_latency_invariant</code>、<code>non_minimal_routes_break_latency_invariance</code>、<code>pure_link_predicate_is_unsafe</code>、<code>pure_link_predicate_overstates_concurrency</code>、<code>whole_ring_costs_multiple_x</code>、<code>clauses_hold_ports1</code>、<code>clauses_hold_ports2</code></span></td></tr><tr><td>ring_base 基线专项</td><td>6</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>swap_rule_unreachable_under_fixed_dim_order</code>、<code>swap_rule_fires_under_mixed_dim_order</code>、<code>no_deadlock_even_without_swap_rule</code>、<code>no_flit_ever_blocked_in_ring</code>、<code>starvation_bounded_and_tracks_threshold</code>、<code>deflection_causes_reordering_so_reassembly_is_required</code></span></td></tr><tr><td>稳态专项</td><td>14</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_base_lam_star_within_anchor</code>、<code>mesh_islip2d_lam_star_within_anchor</code>、<code>ring_base_lam_star_within_anchor</code>、<code>ring_islip2d_lam_star_within_anchor</code>、<code>mesh_islip2d_zero_in_network_residency</code>、<code>ring_islip2d_zero_in_network_residency</code>、<code>credit_buffer_must_cover_rtt</code>、<code>mesh_base_plateaus_past_saturation</code>、<code>ring_base_plateaus_past_saturation</code>、<code>mesh_islip2d_plateaus_past_saturation</code>、<code>ring_islip2d_plateaus_past_saturation</code>、<code>mesh_islip2d_interval_beats_free_at</code>、<code>ring_islip2d_interval_beats_free_at</code>、<code>rg_pays_rtt_at_low_load</code></span></td></tr></tbody></table>
+<p>其中最关键的几条：逐资源两两复核 0 冲突（两 fabric）、
+bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
+残余位图纪律（未授权的位必须原样留下）、
+实测 λ* ≤ 解析锚点（0.490 /
+0.783，四配置全部满足）。</p>
+
+<h3>12.2 已知局限</h3>
+<ul>
+<li><b>E-tag/I-tag 是重建口径</b>：HPCA'22 原文在付费墙后，
+本文按论文描述与 HiRD 谱系重建了机制骨架
+（环内优先、注入/转移保证、偏转、Swap Rule、死锁检测）。
+定量结果应视为「这一类反应式策略」的代表，而非对原设计的复刻。</li>
+<li><b>与 HiRD 的结构差异</b>：HiRD 是局部环 + 全局环的层次结构，
+只有少数节点是桥；本文是维度切片，<b>每个节点都是桥</b>，
+所以桥资源竞争更激烈、偏转代价更高。</li>
+<li><b>死锁未能复现</b>：见 §8.2。在本文的时隙模型下偏转通道永远可用，
+需要更紧的时隙约束（<code>slot_ring</code>）才能构造出死锁。</li>
+<li><b>interval 窗口有限</b>：滑动窗口 + rebase 实现，
+窗口外的空洞看不见。窗口取 128 拍时已经拿到绝大部分收益，
+但它不是「完整区间表」的等价物。</li>
+<li><b>未做 BookSim 交叉验证</b>：本轮按要求跳过。
+准备工作已就绪（<code>utils/xval_booksim_8x6.py</code> 能生成 8×6 anynet
+拓扑与配置并解析输出），
+但当前环境缺 flex/bison 且无法取得 sudo，故 mesh_base 的延迟-吞吐曲线
+仅有自洽性验证（解析锚点、缓冲深度单调性）而无第三方对照。</li>
+</ul>
+
+<h3>12.3 文件索引</h3>
+<table><thead><tr><th>文件</th><th>作用</th></tr></thead><tbody>
+<tr><td><code>utils/rg_mesh_paths.py</code></td>
+<td>ROMM 路径构造、静态平衡分配、延迟不变性断言、割界计算</td></tr>
+<tr><td><code>utils/rg_mesh_sched.py</code></td>
+<td><code>islip2d_mesh</code>：位图请求、两级指针、补齐、冲突域</td></tr>
+<tr><td><code>utils/rg_ring_topo.py</code></td>
+<td>维度切片环拓扑、弧构造、D-R 五子句独立复核器、金属记账</td></tr>
+<tr><td><code>utils/rg_ring_sched.py</code></td>
+<td><code>islip2d_ring</code>：两相 R4 刚性对齐、弧长降序补齐</td></tr>
+<tr><td><code>utils/rg_ring_base.py</code></td>
+<td>E-tag/I-tag + 偏转基线（反应式逐拍）</td></tr>
+<tr><td><code>utils/rg_steady_des.py</code></td>
+<td>开环稳态 DES 内核，四配置共用注入器与统计器</td></tr>
+<tr><td><code>utils/rg_sched_cost.py</code></td>
+<td>状态位 / 比较器 / 门级深度 + 集中化面积台账</td></tr>
+<tr><td><code>utils/dse_islip2d_8x6.py</code></td>
+<td>批量 makespan 扫描 → <code>results/islip2d_8x6.json</code></td></tr>
+<tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
+<td>稳态注入率扫描 → <code>results/load_sweep_8x6.json</code></td></tr>
+<tr><td><code>utils/verify_islip2d_8x6.py</code></td>
+<td>51 条可执行断言 → <code>results/verify_islip2d_8x6.json</code></td></tr>
+<tr><td><code>utils/gen_islip2d_report.py</code></td>
+<td>本报告生成器（所有数字均从三个 JSON 读出）</td></tr>
+<tr><td><code>docs/phase-7-exploration/islip2d-mesh-ring-8x6.md</code></td>
+<td>同一研究的 Markdown 版（更侧重结论与判据条文）</td></tr>
+</tbody></table>
+
+<p class="muted" style="margin-top:2.5rem">
+批量扫描 69.1 秒 · 稳态扫描 1577.0 秒 ·
+验证 205.1 秒。
+重新生成：<code>python3 utils/gen_islip2d_report.py</code></p>
+</div></body></html>

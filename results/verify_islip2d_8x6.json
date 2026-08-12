@@ -265,6 +265,15 @@
   },
   {
    "group": "D-R",
+   "check": "non_minimal_routes_break_latency_invariance",
+   "ok": true,
+   "frac_with_spread": 0.9362,
+   "pairs_with_spread": 2112,
+   "max_wire_spread": 78,
+   "minimal_set_spread": 0
+  },
+  {
+   "group": "D-R",
    "check": "pure_link_predicate_is_unsafe",
    "ok": true,
    "rate": 0.0108,
@@ -482,7 +491,7 @@
    }
   }
  ],
- "n_checks": 50,
+ "n_checks": 51,
  "n_fail": 0,
- "wall_secs": 222.2
+ "wall_secs": 205.1
 }
