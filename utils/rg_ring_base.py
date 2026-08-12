@@ -191,6 +191,25 @@ class RingBaseSim:
         }
         self._pid = 0
 
+        # optional bisection accounting, off until the driver calls count_cut()
+        self.cut: frozenset[tuple[int, int]] = frozenset()
+        self.cut_win = (0, 0)
+        self.cut_busy = 0
+
+    def count_cut(self, links: Any, t0: int, t1: int) -> None:
+        """Count link-busy cycles on `links` for ring hops taken in [t0, t1).
+
+        Counts HOPS, not packets, so a deflected flit that rides past its turn
+        and comes around is charged for every crossing. Measured on 8x6
+        all-to-all that turns out to be a small effect (under 0.01 deflections
+        per packet even past saturation); the accounting is per hop anyway
+        because it is the only definition that stays correct for a fabric whose
+        route is decided cycle by cycle.
+        """
+        self.cut = frozenset(links)
+        self.cut_win = (t0, t1)
+        self.cut_busy = 0
+
     # -- routing -----------------------------------------------------------
 
     def _pick_order(self, s: int, d: int) -> str:
@@ -268,6 +287,12 @@ class RingBaseSim:
         k = self.topo.ring_size(f.ring)
         nxt = (f.idx + f.dir) % k
         lat = self.sigma if self.p.slot_ring else self.topo.ring_lat(f.ring)
+        if self.cut:
+            order = self.topo.ring_nodes(f.ring)
+            if (order[f.idx], order[nxt]) in self.cut:
+                t0, t1 = self.cut_win
+                self.cut_busy += max(0, min(self.t + self.sigma, t1)
+                                     - max(self.t, t0))
         f.idx = nxt
         self.arrivals[self.t + lat].append(f)
         self.arr_set[(f.ring, f.dir, nxt)].add(self.t + lat)

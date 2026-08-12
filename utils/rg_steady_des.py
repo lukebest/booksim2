@@ -284,6 +284,13 @@ class MeshBaseSim:
         self._path: dict[tuple[int, int], list[int]] = {}
         self.st: dict[str, int] = defaultdict(int)
 
+        # Bisection accounting, same units as RGSim: one flit occupies a link
+        # for sigma cycles, counted only inside the measurement window. Here it
+        # is charged per HOP taken rather than per packet booked, which is the
+        # only way to measure a fabric that decides its next hop reactively.
+        self.bisect = bisection_links("mesh")
+        self.bisect_busy = 0
+
     # -- interface used by run_steady -------------------------------------
 
     def offer(self, src: int, dst: int) -> None:
@@ -355,6 +362,11 @@ class MeshBaseSim:
                 self.rr[(node, out)] = (self._pnum(key[1]) + 1) % nn
                 self.credit[(node, out)] -= 1
                 self.out_free[(node, out)] = self.t + p.sigma
+                if (node, out) in self.bisect:
+                    w0 = p.warmup
+                    self.bisect_busy += max(
+                        0, min(self.t + p.sigma, w0 + p.measure)
+                        - max(self.t, w0))
                 f.hop += 1
                 lat = self.topo.link_lat(node, out) * p.sigma
                 self.arrive[self.t + lat].append((out, node, f))
@@ -775,6 +787,12 @@ class RingBaseAdapter:
             t_inj=p.t_inj, t_xfer=p.t_xfer), seed=seed)
         self.t_gen: dict[int, int] = {}
         self.pkt_done: list[tuple[int, int, int, int, int]] = []
+        self.bisect = bisection_links("ring")
+        self.sim.count_cut(self.bisect, p.warmup, p.warmup + p.measure)
+
+    @property
+    def bisect_busy(self) -> int:
+        return self.sim.cut_busy
 
     def offer(self, src: int, dst: int) -> None:
         pid = self.sim.offer(src, dst, self.p.m)
@@ -935,6 +953,9 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
             sim.st["n_deferred"] / max(1, sim.st["n_rounds"]), 2)
         out["bitmap_bits_per_round"] = round(
             sim.st["n_bitmap_bits"] / max(1, sim.st["n_rounds"]), 1)
+    if hasattr(sim, "bisect"):
+        # All four configurations report this the same way, which is what makes
+        # the curves comparable: busy cycles on the cut / (cut width * window).
         nb = len(sim.bisect)
         out["bisect_links"] = nb
         out["bisect_util"] = round(sim.bisect_busy / (nb * p.measure), 4)

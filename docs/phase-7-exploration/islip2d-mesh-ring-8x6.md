@@ -594,7 +594,9 @@ FIFO 从 4 减到 1，偏转暴涨 50×、吞吐掉 **14%**、p99 涨 16×。**�
 |---|---|
 | [utils/dse_islip2d_8x6.py](utils/dse_islip2d_8x6.py) | `results/islip2d_8x6.json`（批量 makespan、流水扫描、RTT 交叉点、**两个 fabric 各自的判据误用统计与贪心最大无冲突集**） |
 | [utils/dse_load_sweep_8x6.py](utils/dse_load_sweep_8x6.py) | `results/load_sweep_8x6.json`（稳态 λ 扫描 × 四配置 × 缓冲/域/RTT/端口/m/σ） |
+| [utils/dse_bisect_lat_8x6.py](utils/dse_bisect_lat_8x6.py) | `results/bisect_lat_8x6.json`（两个集中式配置 × λ 网格，膝部加密；二分切面利用率、平均时延、p99，附解析跨切率与 λ\* 锚点校验） |
+| [utils/gen_bisect_lat_plots.py](utils/gen_bisect_lat_plots.py) | `results/bisect_util_vs_lam.png`、`mean_lat_vs_lam.png`、`p99_lat_vs_lam.png`、`bisect_lat_all.png`（HTML 报告内为等价的内联 SVG，见 §9.3–9.5） |
 | [utils/verify_islip2d_8x6.py](utils/verify_islip2d_8x6.py) | `results/verify_islip2d_8x6.json`（51 项断言，全过） |
 | [utils/xval_booksim_8x6.py](utils/xval_booksim_8x6.py) | 8×6 `anynet` 拓扑 + BookSim 配置 + 对比脚本（**本环境未能执行**，见 §14.5） |
-| [utils/gen_islip2d_report.py](utils/gen_islip2d_report.py) | `results/report_islip2d_8x6.html`：面向初读者的 HTML 版，含两个仲裁器一轮的示意图、冲突域时间轴、R4 转环原子性图与稳态曲线；数字全部从上面三个 JSON 读出 |
+| [utils/gen_islip2d_report.py](utils/gen_islip2d_report.py) | `results/report_islip2d_8x6.html`：面向初读者的 HTML 版，含两个仲裁器一轮的示意图、冲突域时间轴、R4 转环原子性图、稳态曲线，以及二分带宽利用率 / 平均时延 / p99 三张图（§9.3–9.5）；数字全部从上面四个 JSON 读出 |
 
