@@ -724,37 +724,161 @@ def _fault_aware_collective(topo: RingTopology, pattern: str, algo: str,
                 return None
     col = build_ring_collective(topo, pattern, m=m, tier=tier, algo=algo,
                                 root=root)
+    initial = {k: v for k, v in col.initial.items() if k in alive}
+    goal = {k: v for k, v in col.goal.items() if k in alive}
+    # An item survives only if both its producer and some surviving consumer
+    # are alive. Payloads must then be intersected with that set: a relay whose
+    # row-mate died never received its contribution, so a bundle still claiming
+    # it would be a transfer of data that does not exist. Getting this wrong is
+    # invisible in the makespan and only the item replay catches it.
+    owned: set[int] = set()
+    for s in alive:
+        owned |= col.initial.get(s, frozenset())
+    wanted: set[int] = set()
+    for d in alive:
+        wanted |= col.goal.get(d, frozenset())
+    useful = owned & wanted
+    goal = {k: frozenset(v & useful) for k, v in goal.items()}
+
     keep_phases: list[Phase] = []
+    holds = {k: set(v) for k, v in initial.items()}
     for ph in col.phases:
         xf: list[Xfer] = []
+        arriving: dict[int, set[int]] = {}
         for x in ph.xfers:
             if x.src not in alive:
                 continue
             dsts = tuple(d for d in x.dsts if d in alive)
-            if not dsts:
+            # Trim to what the source actually holds by now. A later phase of a
+            # multi-phase algorithm forwards what an earlier phase delivered, so
+            # once a hole starves that earlier phase the later payload is a
+            # claim about data nobody has.
+            items = frozenset(x.items & useful & holds.get(x.src, set()))
+            if not dsts or not items:
                 continue
+            # a bundle shrinks with its payload; a folded partial sum does not
+            nflit = (m * len(items) if x.nflit == m * len(x.items)
+                     else x.nflit)
             if x.ring is None:
-                xf.append(Xfer(x.xid, x.src, dsts, x.items, x.nflit, x.op))
-                continue
-            cover = clean_cover(topo, x.ring, x.src, dsts, bad)
-            if cover is None:
-                return None
-            for sub, (direction, members) in enumerate(cover):
-                xf.append(Xfer(x.xid + 100000 * sub, x.src, members, x.items,
-                               x.nflit, x.op, x.ring, direction))
+                xf.append(Xfer(x.xid, x.src, dsts, items, nflit, x.op))
+            else:
+                cover = clean_cover(topo, x.ring, x.src, dsts, bad)
+                if cover is None:
+                    return None
+                for sub, (direction, members) in enumerate(cover):
+                    xf.append(Xfer(x.xid + 100000 * sub, x.src, members, items,
+                                   nflit, x.op, x.ring, direction))
+            for d in dsts:
+                arriving.setdefault(d, set()).update(items)
+        for d, s in arriving.items():
+            holds.setdefault(d, set()).update(s)
         keep_phases.append(Phase(ph.name, xf, ph.barrier, ph.note))
-    initial = {k: v for k, v in col.initial.items() if k in alive}
-    goal = {k: frozenset(i for i in v if i in _item_owners(col, alive))
-            for k, v in col.goal.items() if k in alive}
-    return RingCollective(col.pattern, col.tier, col.algo, m, col.n,
-                          keep_phases, initial, goal, col.root, col.notes)
+
+    out = RingCollective(col.pattern, col.tier, col.algo, m, col.n,
+                         keep_phases, initial, goal, col.root, col.notes)
+    rep = repair_phases(topo, out, alive, bad, m)
+    if rep is None:
+        return None
+    if rep:
+        out.phases = out.phases + rep
+        out.notes = out.notes + [
+            f"{len(rep)} repair phase(s) added: a dimension decomposition "
+            f"assumes every row-column intersection node is alive, and a hole "
+            f"leaves whole rings with no local source for another ring's data"]
+    return out
 
 
-def _item_owners(col: RingCollective, alive: set[int]) -> set[int]:
-    owned: set[int] = set()
-    for s in alive:
-        owned |= col.initial.get(s, frozenset())
-    return owned
+def _holds_after(col: RingCollective) -> dict[int, set[int]]:
+    holds = {k: set(v) for k, v in col.initial.items()}
+    for ph in col.phases:
+        arriving: dict[int, set[int]] = {}
+        for x in ph.xfers:
+            for d in x.dsts:
+                arriving.setdefault(d, set()).update(x.items)
+        for d, s in arriving.items():
+            holds.setdefault(d, set()).update(s)
+    return holds
+
+
+def repair_phases(topo: RingTopology, col: RingCollective, alive: set[int],
+                  bad: frozenset[Edge], m: int, *, max_rounds: int = 3
+                  ) -> list[Phase] | None:
+    """Extra single-ring phases that finish a collective broken by a hole.
+
+    Why they are needed: a dimension-sliced algorithm delivers row data into a
+    column through the ONE node where that row and column meet. Kill that node
+    and the whole column loses that row's contribution -- not because the fabric
+    is disconnected (it is 2-connected in both dimensions) but because the
+    schedule had exactly one path for that data. So the fault is not a
+    rescheduling problem, it is a missing-phase problem, and reporting it as
+    "recompiles with 1.2x inflation" would be wrong.
+
+    The repair alternates row and column phases: whoever holds a missing item
+    and shares a ring with whoever needs it supplies it. Each missing item is
+    assigned to exactly ONE supplier, which matters for the reducing
+    collectives -- two suppliers forwarding overlapping partial sums would
+    double-count, and the item-set model would not notice.
+
+    Returns [] when nothing is missing, None when no repair converges.
+    """
+    holds = _holds_after(col)
+    fold = col.pattern in ("reduce", "allreduce")
+    added: list[Phase] = []
+    xid = max((x.xid for x in col.xfers), default=0) + 1_000_000
+    for rnd in range(max_rounds):
+        missing = {d: set(col.goal[d]) - holds.get(d, set())
+                   for d in col.goal if not col.goal[d] <= holds.get(d, set())}
+        if not missing:
+            return added
+        progress = False
+        for kind in ("row", "col"):
+            xf: list[Xfer] = []
+            rings = topo.row_rings if kind == "row" else topo.col_rings
+            for ring in rings:
+                members = [n for n in topo.ring_nodes(ring) if n in alive]
+                if len(members) < 2:
+                    continue
+                supply: dict[int, set[int]] = {}
+                for d in members:
+                    for item in missing.get(d, set()):
+                        if item in holds.get(d, set()):
+                            continue
+                        src = next((s for s in members
+                                    if item in holds.get(s, set())), None)
+                        if src is None:
+                            continue
+                        supply.setdefault(src, set()).add(item)
+                for src, items in supply.items():
+                    dsts = [d for d in members
+                            if d != src and (missing.get(d, set()) & items)]
+                    if not dsts:
+                        continue
+                    cover = clean_cover(topo, ring, src, dsts, bad)
+                    if cover is None:
+                        return None
+                    nflit = m if fold else m * len(items)
+                    for direction, mem in cover:
+                        xf.append(Xfer(xid, src, mem, frozenset(items), nflit,
+                                       "ADD" if fold else "FWD", ring,
+                                       direction))
+                        xid += 1
+            if not xf:
+                continue
+            progress = True
+            added.append(Phase(f"repair-{kind}[{rnd}]", xf, barrier=True,
+                               note="supplies data a dead intersection node "
+                                    "was the only source of"))
+            for x in xf:
+                for d in x.dsts:
+                    holds.setdefault(d, set()).update(x.items)
+            missing = {d: set(col.goal[d]) - holds.get(d, set())
+                       for d in col.goal
+                       if not col.goal[d] <= holds.get(d, set())}
+            if not missing:
+                return added
+        if not progress:
+            return None
+    return None
 
 
 def fault_sweep(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
@@ -815,6 +939,9 @@ def fault_sweep(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
         row["inflation"] = round(cal.makespan / max(1, base.makespan), 3)
         row["delivers_survivor_goal"] = rp["ok"]
         row["n_blocked_transfers"] = len(cal.blocked)
+        row["n_repair_phases"] = sum(1 for p in col.phases
+                                     if p.name.startswith("repair-"))
+        row["n_phases"] = len(col.phases)
         # A node fault REMOVES work: fewer participants means fewer flits, so
         # an inflation below 1.0 means the array got smaller, not that losing a
         # node made the collective faster. Carrying the work ratio next to the
@@ -847,6 +974,10 @@ def fault_sweep(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
         "worst_inflation": max(infl) if infl else None,
         "median_inflation": (sorted(infl)[len(infl) // 2] if infl else None),
         "worst_work_normalized_inflation": max(wni) if wni else None,
+        "n_needing_repair_phase": sum(1 for r in rows
+                                      if r.get("n_repair_phases")),
+        "max_repair_phases": max((r.get("n_repair_phases") or 0)
+                                 for r in rows) if rows else 0,
         "by_fault_class": by_class,
         "rows": rows,
     }

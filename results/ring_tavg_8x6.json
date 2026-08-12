@@ -556,8 +556,238 @@
   "best_critical_arc_util": 0.8103
  },
  "mesh_reference": {
-  "available": false,
-  "reason": "multiflit_area_makespan.json predates the R sweep; rerun dse_multiflit_area_makespan.py"
+  "available": true,
+  "rounds_list": [
+   1,
+   5,
+   13
+  ],
+  "schemes": {
+   "axis_ccw": {
+    "label": "axis+CCW",
+    "by_rounds": {
+     "1": {
+      "T_R": 96,
+      "II_eff": null,
+      "T_avg": 96,
+      "W": 4,
+      "E": 1,
+      "B": 11,
+      "area_total": 1.35559
+     },
+     "5": {
+      "T_R": 265,
+      "II_eff": 42.25,
+      "T_avg": 180.5,
+      "W": 4,
+      "E": 2,
+      "B": 4,
+      "area_total": 1.38479
+     },
+     "13": {
+      "T_R": 608,
+      "II_eff": 42.67,
+      "T_avg": 352.0,
+      "W": 4,
+      "E": 2,
+      "B": 4,
+      "area_total": 1.38479
+     }
+    }
+   },
+   "dim_yx": {
+    "label": "dim-YX",
+    "by_rounds": {
+     "1": {
+      "T_R": 120,
+      "II_eff": null,
+      "T_avg": 120,
+      "W": 2,
+      "E": 1,
+      "B": 8,
+      "area_total": 1.14591
+     },
+     "5": {
+      "T_R": 341,
+      "II_eff": 55.25,
+      "T_avg": 230.5,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18788
+     },
+     "13": {
+      "T_R": 732,
+      "II_eff": 51.0,
+      "T_avg": 426.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18788
+     }
+    }
+   },
+   "dim_xy": {
+    "label": "dim-XY",
+    "by_rounds": {
+     "1": {
+      "T_R": 126,
+      "II_eff": null,
+      "T_avg": 126,
+      "W": 2,
+      "E": 1,
+      "B": 4,
+      "area_total": 1.12401
+     },
+     "5": {
+      "T_R": 372,
+      "II_eff": 61.5,
+      "T_avg": 249.0,
+      "W": 2,
+      "E": 1,
+      "B": 8,
+      "area_total": 1.14591
+     },
+     "13": {
+      "T_R": 814,
+      "II_eff": 57.33,
+      "T_avg": 470.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18788
+     }
+    }
+   },
+   "col_comb3": {
+    "label": "col-comb3",
+    "by_rounds": {
+     "1": {
+      "T_R": 114,
+      "II_eff": null,
+      "T_avg": 114,
+      "W": 2,
+      "E": 1,
+      "B": 11,
+      "area_total": 1.16178
+     },
+     "5": {
+      "T_R": 262,
+      "II_eff": 37.0,
+      "T_avg": 188.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     },
+     "13": {
+      "T_R": 574,
+      "II_eff": 38.33,
+      "T_avg": 344.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     }
+    }
+   },
+   "nec3": {
+    "label": "NEC-3",
+    "by_rounds": {
+     "1": {
+      "T_R": 118,
+      "II_eff": null,
+      "T_avg": 118,
+      "W": 2,
+      "E": 1,
+      "B": 4,
+      "area_total": 1.12345
+     },
+     "5": {
+      "T_R": 255,
+      "II_eff": 34.25,
+      "T_avg": 186.5,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     },
+     "13": {
+      "T_R": 532,
+      "II_eff": 34.5,
+      "T_avg": 325.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     }
+    }
+   },
+   "nec2": {
+    "label": "NEC-2",
+    "by_rounds": {
+     "1": {
+      "T_R": 145,
+      "II_eff": null,
+      "T_avg": 145,
+      "W": 2,
+      "E": 1,
+      "B": 1,
+      "area_total": 1.10703
+     },
+     "5": {
+      "T_R": 266,
+      "II_eff": 30.25,
+      "T_avg": 205.5,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     },
+     "13": {
+      "T_R": 554,
+      "II_eff": 34.08,
+      "T_avg": 349.5,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     }
+    }
+   },
+   "hamilton_bi_tree": {
+    "label": "Hamilton bi-tree",
+    "by_rounds": {
+     "1": {
+      "T_R": 210,
+      "II_eff": null,
+      "T_avg": 210,
+      "W": 2,
+      "E": 1,
+      "B": 1,
+      "area_total": 1.10703
+     },
+     "5": {
+      "T_R": 214,
+      "II_eff": 1.0,
+      "T_avg": 212.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     },
+     "13": {
+      "T_R": 428,
+      "II_eff": 18.17,
+      "T_avg": 319.0,
+      "W": 2,
+      "E": 2,
+      "B": 0,
+      "area_total": 1.18733
+     }
+    }
+   }
+  }
  },
  "ring_vs_mesh": [
   {
@@ -569,6 +799,30 @@
     "T_R": 68,
     "II_eff": null,
     "T_avg": 68
+   },
+   "mesh_best": {
+    "scheme": "axis_ccw",
+    "label": "axis+CCW",
+    "T_R": 96,
+    "II_eff": null,
+    "T_avg": 96
+   },
+   "ring_over_mesh_T_avg": 0.708,
+   "by_ring_ports": {
+    "1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 85,
+     "ring_over_mesh": 0.885,
+     "winner": "ring"
+    },
+    "2": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 68,
+     "ring_over_mesh": 0.708,
+     "winner": "ring"
+    }
    }
   },
   {
@@ -580,6 +834,30 @@
     "T_R": 176,
     "II_eff": 27.0,
     "T_avg": 122.0
+   },
+   "mesh_best": {
+    "scheme": "axis_ccw",
+    "label": "axis+CCW",
+    "T_R": 265,
+    "II_eff": 42.25,
+    "T_avg": 180.5
+   },
+   "ring_over_mesh_T_avg": 0.676,
+   "by_ring_ports": {
+    "1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 181.5,
+     "ring_over_mesh": 1.006,
+     "winner": "mesh"
+    },
+    "2": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 122.0,
+     "ring_over_mesh": 0.676,
+     "winner": "ring"
+    }
    }
   },
   {
@@ -591,8 +869,36 @@
     "T_R": 413,
     "II_eff": 28.75,
     "T_avg": 240.5
+   },
+   "mesh_best": {
+    "scheme": "hamilton_bi_tree",
+    "label": "Hamilton bi-tree",
+    "T_R": 428,
+    "II_eff": 18.17,
+    "T_avg": 319.0
+   },
+   "ring_over_mesh_T_avg": 0.754,
+   "by_ring_ports": {
+    "1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 379.5,
+     "ring_over_mesh": 1.19,
+     "winner": "mesh"
+    },
+    "2": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T_avg": 240.5,
+     "ring_over_mesh": 0.754,
+     "winner": "ring"
+    }
    }
   }
  ],
- "wall_s": 19.7
+ "order_flips": [
+  "best MESH scheme changes with R: R=1:axis+CCW -> R=5:axis+CCW -> R=13:Hamilton bi-tree",
+  "at ring ports=1 the ring/mesh winner changes with R: R=1:ring(0.885), R=5:mesh(1.006), R=13:mesh(1.19)"
+ ],
+ "wall_s": 19.1
 }

@@ -29,9 +29,13 @@ Combined metric (compute-agnostic mean ready time):
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
+import os
+import time
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -239,7 +243,17 @@ def make_plot(points, front_avg, front_t5, lb1):
     plt.close(fig)
 
 
-def main() -> None:
+# Adding R=13 made this sweep roughly 400 CPU-minutes: a 13-round pack costs
+# ~40 s at the widest scheme and there are 7 schemes x 96 coherent design
+# points. The work is embarrassingly parallel over (scheme, W, E, B) and the
+# packers are pure functions of (fps, B, order) once the two module globals are
+# set, so each worker sets them itself and results are bit-identical to the
+# serial run.
+
+_W: dict[str, Any] = {}
+
+
+def _worker_init() -> None:
     S.cfg(MX, MY, H, V)
     S.init_ring()
     S.init_quadrants()
@@ -249,10 +263,63 @@ def main() -> None:
             orders.append(list(gen()))
         except TypeError:
             continue
-    # keep the search manageable: corner + up to 3 SRC_ORDERS
-    orders = orders[:4]
+    _W["orders"] = orders[:4]
+    _W["fps"] = {}
 
-    points = []
+
+def _fps_for(key: str):
+    if key not in _W["fps"]:
+        _label, builder = SCHEMES[key]
+        _W["fps"][key] = BSW.build(builder)[0]
+    return _W["fps"][key]
+
+
+def _one_point(task: tuple[str, int, int, int]) -> dict[str, Any]:
+    key, W, E, B = task
+    fps = _fps_for(key)
+    orders = _W["orders"]
+    BSW.XBAR_WRITE = W
+    BSW.DRAIN = E
+    pack1 = None
+    for order in orders:
+        rec = pack_one_with_offs(fps, B, order)
+        if rec and (pack1 is None or rec["makespan"] < pack1["makespan"]):
+            pack1 = rec
+    t1 = pack1["makespan"] if pack1 else None
+    d2 = delta2_stats(fps, B, pack1) if pack1 else None
+    by_rounds: dict[str, Any] = {}
+    for R in ROUNDS_LIST:
+        if t1 is None:
+            by_rounds[str(R)] = None
+            continue
+        if R == 1:
+            by_rounds["1"] = {"T_R": t1, "II_eff": None, "T_avg": t1}
+            continue
+        rr = best_rounds(fps, R, B, orders)
+        tr = rr["makespan"] if rr else None
+        by_rounds[str(R)] = None if tr is None else {
+            "T_R": tr,
+            "II_eff": round((tr - t1) / (R - 1), 2),
+            "T_avg": round((t1 + tr) / 2, 1)}
+    r5 = by_rounds.get(str(ROUNDS))
+    return {
+        "by_rounds": by_rounds, "scheme": key, "W": W, "E": E, "B": B,
+        "t1": t1,
+        "t5": r5["T_R"] if r5 else None,
+        "t_avg": r5["T_avg"] if r5 else None,
+        "ii_eff": r5["II_eff"] if r5 else None,
+        "delta2_min": d2["min"] if d2 else None,
+        "delta2_avg": d2["avg"] if d2 else None,
+        "delta2_max": d2["max"] if d2 else None,
+    }
+
+
+def main(jobs: int = 0) -> None:
+    S.cfg(MX, MY, H, V)
+    S.init_ring()
+    S.init_quadrants()
+    jobs = jobs or max(1, (os.cpu_count() or 2) - 1)
+
     scheme_meta = {}
     for key, (label, builder) in SCHEMES.items():
         pmax, issue = scheme_pmax(key, builder)
@@ -261,55 +328,42 @@ def main() -> None:
         scheme_meta[key] = {"label": label, "pmax": pmax, "issue": issue,
                             "dilation": dil, "link_reuse": lreuse,
                             "cyclic_ii_lb": lreuse}
-        for W, E, B in coherent():
-            BSW.XBAR_WRITE = W
-            BSW.DRAIN = E
-            pack1 = None
-            for order in orders:
-                rec = pack_one_with_offs(fps, B, order)
-                if rec and (pack1 is None
-                            or rec["makespan"] < pack1["makespan"]):
-                    pack1 = rec
-            t1 = pack1["makespan"] if pack1 else None
-            d2 = delta2_stats(fps, B, pack1) if pack1 else None
-            by_rounds: dict[str, Any] = {}
-            for R in ROUNDS_LIST:
-                if t1 is None:
-                    by_rounds[str(R)] = None
-                    continue
-                if R == 1:
-                    by_rounds["1"] = {"T_R": t1, "II_eff": None, "T_avg": t1}
-                    continue
-                rr = best_rounds(fps, R, B, orders)
-                tr = rr["makespan"] if rr else None
-                by_rounds[str(R)] = None if tr is None else {
-                    "T_R": tr,
-                    "II_eff": round((tr - t1) / (R - 1), 2),
-                    "T_avg": round((t1 + tr) / 2, 1)}
-            r5 = by_rounds.get(str(ROUNDS))
-            t5 = r5["T_R"] if r5 else None
-            ii_eff = r5["II_eff"] if r5 else None
-            t_avg = r5["T_avg"] if r5 else None
-            down_lb = math.ceil((N - 1) / E)
-            points.append({
-                "by_rounds": by_rounds,
-                "scheme": key, "label": label, "pmax": pmax, "issue": issue,
-                "W": W, "E": E, "B": B,
-                "t1": t1, "t5": t5, "t_avg": t_avg,
-                "ii": ii_eff,                       # throughput II_eff
-                "ii_eff": ii_eff,
-                "delta2_min": d2["min"] if d2 else None,
-                "delta2_avg": d2["avg"] if d2 else None,
-                "delta2_max": d2["max"] if d2 else None,
-                "cyclic_ii_lb": max(lreuse, down_lb),
-                "down_ii_lb": down_lb,
-                "link_reuse": lreuse,
-                "area_total": total_area(pmax, issue, W, E, B),
-            })
+
+    tasks = [(key, W, E, B) for key in SCHEMES for W, E, B in coherent()]
+    t0 = time.time()
+    print(f"{len(tasks)} design points x R in {ROUNDS_LIST} on {jobs} workers",
+          flush=True)
+    raw: list[dict[str, Any]] = []
+    with ProcessPoolExecutor(max_workers=jobs,
+                             initializer=_worker_init) as ex:
+        for i, p in enumerate(ex.map(_one_point, tasks, chunksize=1), 1):
+            raw.append(p)
+            if i % 24 == 0 or i == len(tasks):
+                print(f"  {i}/{len(tasks)} points  {time.time() - t0:.0f}s",
+                      flush=True)
+
+    points = []
+    for p in raw:
+        meta = scheme_meta[p["scheme"]]
+        down_lb = math.ceil((N - 1) / p["E"])
+        points.append({**p,
+                       "label": meta["label"], "pmax": meta["pmax"],
+                       "issue": meta["issue"],
+                       "ii": p["ii_eff"],          # throughput II_eff
+                       "cyclic_ii_lb": max(meta["link_reuse"], down_lb),
+                       "down_ii_lb": down_lb,
+                       "link_reuse": meta["link_reuse"],
+                       "area_total": total_area(meta["pmax"], meta["issue"],
+                                                p["W"], p["E"], p["B"])})
+    for key, (label, _b) in SCHEMES.items():
         sp = [p for p in points if p["scheme"] == key and p["t5"]]
-        print(f"{label:16s} reuse={lreuse:3d} "
+        if not sp:
+            continue
+        print(f"{label:16s} reuse={scheme_meta[key]['link_reuse']:3d} "
               f"T1={min(p['t1'] for p in sp)} "
               f"T5={min(p['t5'] for p in sp)} "
+              f"T13={min((p['by_rounds']['13']['T_R'] for p in sp
+                          if p['by_rounds'].get('13')), default=None)} "
               f"II_eff={min(p['ii_eff'] for p in sp)} "
               f"delta2_min={min(p['delta2_min'] for p in sp)} "
               f"delta2_avg@bestT5="
@@ -361,4 +415,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="worker processes; default is cpu_count-1")
+    main(jobs=ap.parse_args().jobs)

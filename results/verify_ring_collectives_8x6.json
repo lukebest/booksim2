@@ -1,0 +1,421 @@
+{
+ "n_checks": 56,
+ "n_pass": 56,
+ "all_pass": true,
+ "audit": {
+  "mx": 8,
+  "my": 6,
+  "n": 48,
+  "sigma": 1,
+  "delay_scale": 1,
+  "H": 7,
+  "V": 9,
+  "t_turn": 1,
+  "board_ports": 1,
+  "leave_ports": 1,
+  "spatial_reuse": "arc",
+  "n_row_rings": 6,
+  "n_col_rings": 8,
+  "n_directed_links": 192,
+  "n_undirected_links": 96,
+  "n_ring_mutex_units": 192,
+  "mesh_undirected": 82,
+  "metal_ratio_vs_mesh": 1.1707,
+  "n_bridges": 48
+ },
+ "root": 27,
+ "checks": [
+  {
+   "id": 1,
+   "name": "192 directed / 96 undirected segments",
+   "pass": true,
+   "detail": "192/96",
+   "prediction": ""
+  },
+  {
+   "id": 2,
+   "name": "segment set equals the folded 2D torus",
+   "pass": true,
+   "detail": "mine=96 torus=96 only_mine=0",
+   "prediction": ""
+  },
+  {
+   "id": 3,
+   "name": "every node bridges its two rings",
+   "pass": true,
+   "detail": "48 of 48",
+   "prediction": ""
+  },
+  {
+   "id": 4,
+   "name": "Hamiltonian cycle visits all 48 nodes once",
+   "pass": true,
+   "detail": "48",
+   "prediction": ""
+  },
+  {
+   "id": 5,
+   "name": "every cycle step is one ring segment",
+   "pass": true,
+   "detail": "all 48 steps",
+   "prediction": ""
+  },
+  {
+   "id": 6,
+   "name": "the cycle needs a wrap segment to close (a mesh cannot)",
+   "pass": true,
+   "detail": "1 wrap segments used",
+   "prediction": ""
+  },
+  {
+   "id": 7,
+   "name": "bidirectional cover partitions the members exactly",
+   "pass": true,
+   "detail": "2 arcs, 7 members",
+   "prediction": ""
+  },
+  {
+   "id": 8,
+   "name": "multicast charges one board and one leave per member",
+   "pass": true,
+   "detail": "boards=[1, 1] leaves=[4, 3]",
+   "prediction": ""
+  },
+  {
+   "id": 9,
+   "name": "all defined collectives deliver their own goal set (m=1)",
+   "pass": true,
+   "detail": "23 configs, 0 bad []",
+   "prediction": ""
+  },
+  {
+   "id": 10,
+   "name": "flat allgather and flat alltoall are the SAME unicast flow set",
+   "pass": true,
+   "detail": "2256 vs 2256 deliveries",
+   "prediction": ""
+  },
+  {
+   "id": 11,
+   "name": "gather and reduce share the traffic shape",
+   "pass": true,
+   "detail": "47 deliveries",
+   "prediction": ""
+  },
+  {
+   "id": 12,
+   "name": "folding is size-preserving, so reduce boards fewer flits",
+   "pass": true,
+   "detail": "reduce=611 gather=1066 ratio=1.74x",
+   "prediction": ""
+  },
+  {
+   "id": 13,
+   "name": "where multicast cannot apply, T1 is identical to T0",
+   "pass": true,
+   "detail": "17 (pattern,algo) pairs checked",
+   "prediction": "multicast is a fan-out primitive only"
+  },
+  {
+   "id": 14,
+   "name": "multicast cuts boarded flits on broadcast",
+   "pass": true,
+   "detail": "T1=14 T0=47 ratio=3.36x",
+   "prediction": ""
+  },
+  {
+   "id": 15,
+   "name": "R rounds contain exactly R times the transfers",
+   "pass": true,
+   "detail": "960 = 5 x 192, 2 phases",
+   "prediction": ""
+  },
+  {
+   "id": 16,
+   "name": "a reduction payload never grows along the chain",
+   "pass": true,
+   "detail": "nflit set = [7]",
+   "prediction": ""
+  },
+  {
+   "id": 17,
+   "name": "R1 segment mutual exclusion: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 18,
+   "name": "R2 boarding mutual exclusion: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 19,
+   "name": "R3 leaving mutual exclusion: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 20,
+   "name": "R4 turn atomicity: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 21,
+   "name": "R5 VOQ order + static route: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 22,
+   "name": "multicast shape: zero violations across all calendars",
+   "pass": true,
+   "detail": "0 over 16 calendars",
+   "prediction": ""
+  },
+  {
+   "id": 23,
+   "name": "zero turn residency (no in-ring buffering anywhere)",
+   "pass": true,
+   "detail": "max=0",
+   "prediction": ""
+  },
+  {
+   "id": 24,
+   "name": "multicast grants are actually present to be checked",
+   "pass": true,
+   "detail": "628 copy-and-continue arcs",
+   "prediction": ""
+  },
+  {
+   "id": 25,
+   "name": "every makespan is at or above the combined makespan bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 26,
+   "name": "every makespan is at or above the zero-contention latency bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 27,
+   "name": "every makespan is at or above the L1 ramp ejection bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 28,
+   "name": "every makespan is at or above the vertical bisection bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 29,
+   "name": "every makespan is at or above the busiest-segment bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 30,
+   "name": "every makespan is at or above the insert/extract port bound",
+   "pass": true,
+   "detail": "0 below []",
+   "prediction": ""
+  },
+  {
+   "id": 31,
+   "name": "rotation II_eff is constant across R",
+   "pass": true,
+   "detail": "[47.0]",
+   "prediction": ""
+  },
+  {
+   "id": 32,
+   "name": "rotation II_eff equals the per-round busiest-segment load",
+   "pass": true,
+   "detail": "II_eff=47.0 arc load per round=47.0",
+   "prediction": "rotation is throughput-optimal: CONFIRMED"
+  },
+  {
+   "id": 33,
+   "name": "rotation utilization rises monotonically with R",
+   "pass": true,
+   "detail": "[0.1538, 0.3125, 0.5417, 0.7027, 0.8103]",
+   "prediction": ""
+  },
+  {
+   "id": 34,
+   "name": "rotation utilization does NOT reach 1.0 at any practical R",
+   "pass": true,
+   "detail": "best=0.8103 at R=47; the fill T1=564 dilutes it",
+   "prediction": "plan predicted util=1.0: REFUTED"
+  },
+  {
+   "id": 35,
+   "name": "utilization matches II*R/(T1+II*(R-1)) closed form",
+   "pass": true,
+   "detail": "measured=[0.1538, 0.3125, 0.5417, 0.7027, 0.8103] closed_form=[0.1538, 0.3125, 0.5417, 0.7027, 0.8103]",
+   "prediction": ""
+  },
+  {
+   "id": 36,
+   "name": "fault scenario set covers wrap, scattered, link, node, quadrant",
+   "pass": true,
+   "detail": "27 scenarios",
+   "prediction": ""
+  },
+  {
+   "id": 37,
+   "name": "every immune scenario is genuinely recompile free",
+   "pass": true,
+   "detail": "9 immune of 27",
+   "prediction": ""
+  },
+  {
+   "id": 38,
+   "name": "a recompiled calendar is D-R legal and avoids the dead segments",
+   "pass": true,
+   "detail": "wrap_row0_1: cf=True dead_used=0",
+   "prediction": ""
+  },
+  {
+   "id": 39,
+   "name": "every recompiled calendar still delivers the survivor goal",
+   "pass": true,
+   "detail": "4 schemes x all scenarios",
+   "prediction": ""
+  },
+  {
+   "id": 40,
+   "name": "a dead node forces an EXTRA phase, not just a reschedule",
+   "pass": true,
+   "detail": "16 of 81 recompiles need a repair phase: the dead node was the only row-column meeting point feeding a whole ring",
+   "prediction": "plan assumed rerouting suffices: REFUTED"
+  },
+  {
+   "id": 41,
+   "name": "rotation is infeasible under most faults, dimension-phase is not",
+   "pass": true,
+   "detail": "rotation 20/27 infeasible, dim_2phase 1/27",
+   "prediction": "rotation trades fault tolerance for throughput"
+  },
+  {
+   "id": 42,
+   "name": "a contiguous node hole needs NO ring-station bypass mux",
+   "pass": true,
+   "detail": "extra infeasible without bypass = 0",
+   "prediction": "plan assumed a dead node always cuts the ring: REFUTED for contiguous holes"
+  },
+  {
+   "id": 43,
+   "name": "scattered dead nodes DO need a bypass mux",
+   "pass": true,
+   "detail": "extra infeasible without bypass = 3 of 4 scenarios",
+   "prediction": ""
+  },
+  {
+   "id": 44,
+   "name": "a global shift inflates the makespan by exactly the worst lateness",
+   "pass": true,
+   "detail": "3 models x 3 jitter levels",
+   "prediction": "a rigid replay absorbs nothing"
+  },
+  {
+   "id": 45,
+   "name": "per-phase resynchronization is never worse than a global shift",
+   "pass": true,
+   "detail": "3 models x 3 jitter levels",
+   "prediction": ""
+  },
+  {
+   "id": 46,
+   "name": "a jitter-aware repack is still D-R legal",
+   "pass": true,
+   "detail": "makespan 815 -> 981",
+   "prediction": ""
+  },
+  {
+   "id": 47,
+   "name": "repacking beats both rigid replays, so the slack is real",
+   "pass": true,
+   "detail": "repack=981 vs rigid=1071 (absorbed 90)",
+   "prediction": ""
+  },
+  {
+   "id": 48,
+   "name": "the set of nodes that receive data is unchanged under jitter",
+   "pass": true,
+   "detail": "48 nodes both ways",
+   "prediction": ""
+  },
+  {
+   "id": 49,
+   "name": "exported calendar index exists",
+   "pass": true,
+   "detail": "ring_index.json",
+   "prediction": ""
+  },
+  {
+   "id": 50,
+   "name": "every exported calendar is marked conflict free",
+   "pass": true,
+   "detail": "16 files",
+   "prediction": ""
+  },
+  {
+   "id": 51,
+   "name": "every exported makespan is at or above its own bound",
+   "pass": true,
+   "detail": "16 files",
+   "prediction": ""
+  },
+  {
+   "id": 52,
+   "name": "no exported calendar drives one output port twice in a cycle",
+   "pass": true,
+   "detail": "0 collisions",
+   "prediction": ""
+  },
+  {
+   "id": 53,
+   "name": "no exported calendar overruns the L1 ramp",
+   "pass": true,
+   "detail": "0 overruns (ramp_bw=2)",
+   "prediction": ""
+  },
+  {
+   "id": 54,
+   "name": "copy-and-continue appears as ring_out + leave in one mask",
+   "pass": true,
+   "detail": "at least one multicast station record",
+   "prediction": ""
+  },
+  {
+   "id": 55,
+   "name": "OP_ADD appears only on reducing collectives",
+   "pass": true,
+   "detail": "reduce/allreduce only",
+   "prediction": ""
+  },
+  {
+   "id": 56,
+   "name": "the multicast calendar is far smaller in slot-table entries",
+   "pass": true,
+   "detail": "dim_2phase/T1=768 records vs flat/T0=10320 (13.4x smaller)",
+   "prediction": ""
+  }
+ ]
+}

@@ -108,9 +108,11 @@
    "n_immune": 9,
    "n_recompile": 17,
    "n_infeasible": 1,
-   "worst_inflation": 1.274,
+   "worst_inflation": 1.621,
    "median_inflation": 1.274,
-   "worst_work_normalized_inflation": 1.401,
+   "worst_work_normalized_inflation": 1.346,
+   "n_needing_repair_phase": 2,
+   "max_repair_phases": 1,
    "by_fault_class": {
     "wrap": {
      "immune": 5,
@@ -213,6 +215,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 46,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -231,6 +235,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 45,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -249,6 +255,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 46,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -263,13 +271,15 @@
      "recompile_free": false,
      "healthy_makespan": 95,
      "outcome": "recompile",
-     "makespan": 121,
-     "inflation": 1.274,
-     "delivers_survivor_goal": false,
+     "makespan": 154,
+     "inflation": 1.621,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 44,
-     "flits_vs_healthy": 1.214,
-     "work_normalized_inflation": 1.049
+     "flits_vs_healthy": 1.714,
+     "work_normalized_inflation": 0.946
     },
     {
      "scenario": "link_corner_1",
@@ -285,6 +295,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -303,6 +315,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -321,6 +335,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -365,6 +381,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -409,6 +427,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -427,6 +447,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -445,6 +467,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -463,6 +487,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -481,6 +507,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -499,6 +527,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -517,6 +547,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 1.5,
      "work_normalized_inflation": 0.849
@@ -535,6 +567,8 @@
      "inflation": 1.274,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 39,
      "flits_vs_healthy": 1.286,
      "work_normalized_inflation": 0.991
@@ -549,13 +583,15 @@
      "recompile_free": false,
      "healthy_makespan": 95,
      "outcome": "recompile",
-     "makespan": 95,
-     "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "makespan": 137,
+     "inflation": 1.442,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 39,
-     "flits_vs_healthy": 0.714,
-     "work_normalized_inflation": 1.401
+     "flits_vs_healthy": 1.071,
+     "work_normalized_inflation": 1.346
     },
     {
      "scenario": "node_center_3x3",
@@ -587,6 +623,8 @@
    "worst_inflation": 1.0,
    "median_inflation": 1.0,
    "worst_work_normalized_inflation": 1.005,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 5,
@@ -689,6 +727,8 @@
      "inflation": 0.96,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.003
@@ -707,6 +747,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 45,
      "flits_vs_healthy": 0.936,
      "work_normalized_inflation": 0.983
@@ -725,6 +767,8 @@
      "inflation": 0.96,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.003
@@ -743,6 +787,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.005
@@ -774,6 +820,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -792,6 +840,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -810,6 +860,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -828,6 +880,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 2,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -846,6 +900,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 4,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.92
@@ -864,6 +920,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 2,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -882,6 +940,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 3,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -900,6 +960,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 8,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -918,6 +980,8 @@
      "inflation": 0.96,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 0.981
@@ -936,6 +1000,8 @@
      "inflation": 0.96,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 0.981
@@ -954,6 +1020,8 @@
      "inflation": 0.96,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 0.981
@@ -972,6 +1040,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.005
@@ -990,6 +1060,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.005
@@ -1008,6 +1080,8 @@
      "inflation": 0.92,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.005
@@ -1026,6 +1100,8 @@
      "inflation": 0.799,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 0.988
@@ -1044,6 +1120,8 @@
      "inflation": 0.799,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 0.988
@@ -1075,9 +1153,11 @@
    "n_immune": 0,
    "n_recompile": 26,
    "n_infeasible": 1,
-   "worst_inflation": 1.24,
+   "worst_inflation": 2.071,
    "median_inflation": 1.24,
-   "worst_work_normalized_inflation": 1.168,
+   "worst_work_normalized_inflation": 1.555,
+   "n_needing_repair_phase": 12,
+   "max_repair_phases": 1,
    "by_fault_class": {
     "wrap": {
      "immune": 0,
@@ -1115,6 +1195,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.497,
      "work_normalized_inflation": 0.828
@@ -1133,6 +1215,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.497,
      "work_normalized_inflation": 0.828
@@ -1151,6 +1235,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.472,
      "work_normalized_inflation": 0.842
@@ -1169,6 +1255,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.472,
      "work_normalized_inflation": 0.842
@@ -1187,6 +1275,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.469,
      "work_normalized_inflation": 0.844
@@ -1201,13 +1291,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1234,
+     "inflation": 1.514,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 46,
-     "flits_vs_healthy": 1.417,
-     "work_normalized_inflation": 0.875
+     "flits_vs_healthy": 1.444,
+     "work_normalized_inflation": 1.048
     },
     {
      "scenario": "scatter_row_split3",
@@ -1219,13 +1311,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1235,
+     "inflation": 1.515,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 45,
-     "flits_vs_healthy": 1.375,
-     "work_normalized_inflation": 0.902
+     "flits_vs_healthy": 1.381,
+     "work_normalized_inflation": 1.097
     },
     {
      "scenario": "scatter_col_split2",
@@ -1237,13 +1331,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1185,
+     "inflation": 1.454,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 46,
-     "flits_vs_healthy": 1.435,
-     "work_normalized_inflation": 0.864
+     "flits_vs_healthy": 1.451,
+     "work_normalized_inflation": 1.002
     },
     {
      "scenario": "scatter_diag_scatter4",
@@ -1255,13 +1351,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1688,
+     "inflation": 2.071,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 44,
-     "flits_vs_healthy": 1.333,
-     "work_normalized_inflation": 0.93
+     "flits_vs_healthy": 1.562,
+     "work_normalized_inflation": 1.326
     },
     {
      "scenario": "link_corner_1",
@@ -1277,6 +1375,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.497,
      "work_normalized_inflation": 0.828
@@ -1295,6 +1395,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.469,
      "work_normalized_inflation": 0.844
@@ -1313,6 +1415,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.441,
      "work_normalized_inflation": 0.861
@@ -1331,6 +1435,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.472,
      "work_normalized_inflation": 0.842
@@ -1349,6 +1455,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.444,
      "work_normalized_inflation": 0.859
@@ -1367,6 +1475,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.441,
      "work_normalized_inflation": 0.861
@@ -1385,6 +1495,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.472,
      "work_normalized_inflation": 0.842
@@ -1403,6 +1515,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.444,
      "work_normalized_inflation": 0.859
@@ -1421,6 +1535,8 @@
      "inflation": 1.24,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.441,
      "work_normalized_inflation": 0.861
@@ -1435,13 +1551,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1180,
+     "inflation": 1.448,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 47,
-     "flits_vs_healthy": 1.458,
-     "work_normalized_inflation": 0.85
+     "flits_vs_healthy": 1.475,
+     "work_normalized_inflation": 0.982
     },
     {
      "scenario": "node_edge_1x1",
@@ -1453,13 +1571,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1201,
+     "inflation": 1.474,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 47,
-     "flits_vs_healthy": 1.458,
-     "work_normalized_inflation": 0.85
+     "flits_vs_healthy": 1.475,
+     "work_normalized_inflation": 0.999
     },
     {
      "scenario": "node_center_1x1",
@@ -1471,13 +1591,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1110,
+     "inflation": 1.362,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 47,
-     "flits_vs_healthy": 1.458,
-     "work_normalized_inflation": 0.85
+     "flits_vs_healthy": 1.475,
+     "work_normalized_inflation": 0.923
     },
     {
      "scenario": "node_corner_2x2",
@@ -1489,13 +1611,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1200,
+     "inflation": 1.472,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 44,
-     "flits_vs_healthy": 1.296,
-     "work_normalized_inflation": 0.957
+     "flits_vs_healthy": 1.269,
+     "work_normalized_inflation": 1.16
     },
     {
      "scenario": "node_edge_2x2",
@@ -1507,13 +1631,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1214,
+     "inflation": 1.49,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 44,
-     "flits_vs_healthy": 1.296,
-     "work_normalized_inflation": 0.957
+     "flits_vs_healthy": 1.269,
+     "work_normalized_inflation": 1.174
     },
     {
      "scenario": "node_center_2x2",
@@ -1525,13 +1651,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1178,
+     "inflation": 1.445,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 44,
-     "flits_vs_healthy": 1.296,
-     "work_normalized_inflation": 0.957
+     "flits_vs_healthy": 1.269,
+     "work_normalized_inflation": 1.139
     },
     {
      "scenario": "node_corner_3x3",
@@ -1543,13 +1671,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1085,
+     "inflation": 1.331,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 39,
-     "flits_vs_healthy": 1.062,
-     "work_normalized_inflation": 1.168
+     "flits_vs_healthy": 0.958,
+     "work_normalized_inflation": 1.389
     },
     {
      "scenario": "node_edge_3x3",
@@ -1561,13 +1691,15 @@
      "recompile_free": false,
      "healthy_makespan": 815,
      "outcome": "recompile",
-     "makespan": 1011,
-     "inflation": 1.24,
-     "delivers_survivor_goal": false,
+     "makespan": 1280,
+     "inflation": 1.571,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 1,
+     "n_phases": 3,
      "n_survivors": 39,
-     "flits_vs_healthy": 1.062,
-     "work_normalized_inflation": 1.168
+     "flits_vs_healthy": 1.01,
+     "work_normalized_inflation": 1.555
     },
     {
      "scenario": "node_center_3x3",
@@ -1599,6 +1731,8 @@
    "worst_inflation": 1.011,
    "median_inflation": 0.976,
    "worst_work_normalized_inflation": 1.14,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 0,
@@ -1636,6 +1770,8 @@
      "inflation": 0.989,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.989
@@ -1654,6 +1790,8 @@
      "inflation": 0.995,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.995
@@ -1672,6 +1810,8 @@
      "inflation": 0.986,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 72,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.986
@@ -1690,6 +1830,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 74,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -1708,6 +1850,8 @@
      "inflation": 0.997,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 160,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.997
@@ -1726,6 +1870,8 @@
      "inflation": 0.95,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.918,
      "work_normalized_inflation": 1.035
@@ -1744,6 +1890,8 @@
      "inflation": 0.917,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 45,
      "flits_vs_healthy": 0.878,
      "work_normalized_inflation": 1.044
@@ -1762,6 +1910,8 @@
      "inflation": 0.957,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.918,
      "work_normalized_inflation": 1.042
@@ -1780,6 +1930,8 @@
      "inflation": 0.883,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.052
@@ -1798,6 +1950,8 @@
      "inflation": 1.011,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.011
@@ -1816,6 +1970,8 @@
      "inflation": 0.998,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 157,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.998
@@ -1834,6 +1990,8 @@
      "inflation": 0.981,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 223,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.981
@@ -1852,6 +2010,8 @@
      "inflation": 1.002,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 74,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.002
@@ -1870,6 +2030,8 @@
      "inflation": 0.99,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 150,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.99
@@ -1888,6 +2050,8 @@
      "inflation": 0.969,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 233,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.969
@@ -1906,6 +2070,8 @@
      "inflation": 1.007,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 71,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.007
@@ -1924,6 +2090,8 @@
      "inflation": 0.976,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 146,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.976
@@ -1942,6 +2110,8 @@
      "inflation": 0.964,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 220,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.964
@@ -1960,6 +2130,8 @@
      "inflation": 0.969,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.011
@@ -1978,6 +2150,8 @@
      "inflation": 0.966,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.008
@@ -1996,6 +2170,8 @@
      "inflation": 0.988,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.031
@@ -2014,6 +2190,8 @@
      "inflation": 0.886,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.056
@@ -2032,6 +2210,8 @@
      "inflation": 0.883,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.052
@@ -2050,6 +2230,8 @@
      "inflation": 0.909,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.083
@@ -2068,6 +2250,8 @@
      "inflation": 0.749,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.657,
      "work_normalized_inflation": 1.14
@@ -2086,6 +2270,8 @@
      "inflation": 0.739,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.657,
      "work_normalized_inflation": 1.125
@@ -2120,6 +2306,8 @@
    "worst_inflation": 1.0,
    "median_inflation": 1.0,
    "worst_work_normalized_inflation": null,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 3,
@@ -2506,11 +2694,13 @@
    "healthy_flits": 611,
    "n_scenarios": 27,
    "n_immune": 6,
-   "n_recompile": 20,
-   "n_infeasible": 1,
+   "n_recompile": 18,
+   "n_infeasible": 3,
    "worst_inflation": 1.005,
    "median_inflation": 1.0,
-   "worst_work_normalized_inflation": 1.667,
+   "worst_work_normalized_inflation": 1.236,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 2,
@@ -2519,8 +2709,8 @@
     },
     "scatter": {
      "immune": 0,
-     "recompile": 4,
-     "infeasible": 0
+     "recompile": 3,
+     "infeasible": 1
     },
     "link": {
      "immune": 4,
@@ -2529,8 +2719,8 @@
     },
     "node": {
      "immune": 0,
-     "recompile": 8,
-     "infeasible": 1
+     "recompile": 7,
+     "infeasible": 2
     }
    },
    "rows": [
@@ -2548,6 +2738,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2566,6 +2758,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2610,6 +2804,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2626,8 +2822,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.045
@@ -2646,6 +2844,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 45,
      "flits_vs_healthy": 0.936,
      "work_normalized_inflation": 1.068
@@ -2662,8 +2862,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.045
@@ -2677,14 +2879,9 @@
      "n_forbidden_directed": 0,
      "recompile_free": false,
      "healthy_makespan": 189,
-     "outcome": "recompile",
-     "makespan": 176,
-     "inflation": 0.931,
-     "delivers_survivor_goal": false,
-     "n_blocked_transfers": 0,
-     "n_survivors": 44,
-     "flits_vs_healthy": 0.766,
-     "work_normalized_inflation": 1.215
+     "outcome": "infeasible",
+     "makespan": null,
+     "inflation": null
     },
     {
      "scenario": "link_corner_1",
@@ -2700,6 +2897,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2718,6 +2917,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2736,6 +2937,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -2780,6 +2983,8 @@
      "inflation": 1.005,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.005
@@ -2824,6 +3029,8 @@
      "inflation": 1.005,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.005
@@ -2840,8 +3047,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.021
@@ -2858,8 +3067,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.021
@@ -2878,6 +3089,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.021
@@ -2894,8 +3107,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.093
@@ -2912,8 +3127,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.093
@@ -2930,8 +3147,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.093
@@ -2948,8 +3167,10 @@
      "outcome": "recompile",
      "makespan": 189,
      "inflation": 1.0,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 2,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 1.236
@@ -2963,14 +3184,9 @@
      "n_forbidden_directed": 0,
      "recompile_free": false,
      "healthy_makespan": 189,
-     "outcome": "recompile",
-     "makespan": 154,
-     "inflation": 0.815,
-     "delivers_survivor_goal": false,
-     "n_blocked_transfers": 0,
-     "n_survivors": 39,
-     "flits_vs_healthy": 0.489,
-     "work_normalized_inflation": 1.667
+     "outcome": "infeasible",
+     "makespan": null,
+     "inflation": null
     },
     {
      "scenario": "node_center_3x3",
@@ -3002,6 +3218,8 @@
    "worst_inflation": 1.0,
    "median_inflation": 0.979,
    "worst_work_normalized_inflation": 1.027,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 3,
@@ -3052,6 +3270,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -3083,6 +3303,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -3114,6 +3336,8 @@
      "inflation": 0.961,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.004
@@ -3132,6 +3356,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 45,
      "flits_vs_healthy": 0.936,
      "work_normalized_inflation": 1.004
@@ -3150,6 +3376,8 @@
      "inflation": 0.961,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.004
@@ -3168,6 +3396,8 @@
      "inflation": 0.921,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.007
@@ -3186,6 +3416,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -3204,6 +3436,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -3222,6 +3456,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -3266,6 +3502,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -3284,6 +3522,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 3,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -3302,6 +3542,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 3,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -3320,6 +3562,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 9,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -3338,6 +3582,8 @@
      "inflation": 0.973,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 0.994
@@ -3356,6 +3602,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.0
@@ -3374,6 +3622,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.0
@@ -3392,6 +3642,8 @@
      "inflation": 0.921,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.007
@@ -3410,6 +3662,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.027
@@ -3428,6 +3682,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.027
@@ -3446,6 +3702,8 @@
      "inflation": 0.816,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 1.009
@@ -3464,6 +3722,8 @@
      "inflation": 0.822,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 1.016
@@ -3495,9 +3755,11 @@
    "n_immune": 6,
    "n_recompile": 20,
    "n_infeasible": 1,
-   "worst_inflation": 1.095,
+   "worst_inflation": 1.789,
    "median_inflation": 1.092,
-   "worst_work_normalized_inflation": 1.621,
+   "worst_work_normalized_inflation": 1.19,
+   "n_needing_repair_phase": 2,
+   "max_repair_phases": 3,
    "by_fault_class": {
     "wrap": {
      "immune": 2,
@@ -3535,6 +3797,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3553,6 +3817,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3597,6 +3863,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3613,8 +3881,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 46,
      "flits_vs_healthy": 1.082,
      "work_normalized_inflation": 1.009
@@ -3631,8 +3901,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 45,
      "flits_vs_healthy": 1.066,
      "work_normalized_inflation": 1.024
@@ -3649,8 +3921,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 46,
      "flits_vs_healthy": 1.082,
      "work_normalized_inflation": 1.009
@@ -3665,13 +3939,15 @@
      "recompile_free": false,
      "healthy_makespan": 284,
      "outcome": "recompile",
-     "makespan": 297,
-     "inflation": 1.046,
-     "delivers_survivor_goal": false,
+     "makespan": 508,
+     "inflation": 1.789,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 3,
+     "n_phases": 7,
      "n_survivors": 44,
-     "flits_vs_healthy": 0.869,
-     "work_normalized_inflation": 1.204
+     "flits_vs_healthy": 1.525,
+     "work_normalized_inflation": 1.173
     },
     {
      "scenario": "link_corner_1",
@@ -3687,6 +3963,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.115,
      "work_normalized_inflation": 0.979
@@ -3705,6 +3983,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.115,
      "work_normalized_inflation": 0.979
@@ -3723,6 +4003,8 @@
      "inflation": 1.092,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.115,
      "work_normalized_inflation": 0.979
@@ -3767,6 +4049,8 @@
      "inflation": 1.095,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.115,
      "work_normalized_inflation": 0.982
@@ -3811,6 +4095,8 @@
      "inflation": 1.095,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 48,
      "flits_vs_healthy": 1.115,
      "work_normalized_inflation": 0.982
@@ -3827,8 +4113,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 47,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3845,8 +4133,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 47,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3863,8 +4153,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 47,
      "flits_vs_healthy": 1.098,
      "work_normalized_inflation": 0.995
@@ -3881,8 +4173,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 44,
      "flits_vs_healthy": 1.049,
      "work_normalized_inflation": 1.041
@@ -3899,8 +4193,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 44,
      "flits_vs_healthy": 1.049,
      "work_normalized_inflation": 1.041
@@ -3917,8 +4213,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 44,
      "flits_vs_healthy": 1.049,
      "work_normalized_inflation": 1.041
@@ -3935,8 +4233,10 @@
      "outcome": "recompile",
      "makespan": 310,
      "inflation": 1.092,
-     "delivers_survivor_goal": false,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 4,
      "n_survivors": 39,
      "flits_vs_healthy": 0.918,
      "work_normalized_inflation": 1.19
@@ -3951,13 +4251,15 @@
      "recompile_free": false,
      "healthy_makespan": 284,
      "outcome": "recompile",
-     "makespan": 249,
-     "inflation": 0.877,
-     "delivers_survivor_goal": false,
+     "makespan": 473,
+     "inflation": 1.665,
+     "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 3,
+     "n_phases": 7,
      "n_survivors": 39,
-     "flits_vs_healthy": 0.541,
-     "work_normalized_inflation": 1.621
+     "flits_vs_healthy": 1.656,
+     "work_normalized_inflation": 1.005
     },
     {
      "scenario": "node_center_3x3",
@@ -3989,6 +4291,8 @@
    "worst_inflation": 1.0,
    "median_inflation": 0.979,
    "worst_work_normalized_inflation": 1.027,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 3,
@@ -4039,6 +4343,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -4070,6 +4376,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -4101,6 +4409,8 @@
      "inflation": 0.961,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.004
@@ -4119,6 +4429,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 45,
      "flits_vs_healthy": 0.936,
      "work_normalized_inflation": 1.004
@@ -4137,6 +4449,8 @@
      "inflation": 0.961,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.957,
      "work_normalized_inflation": 1.004
@@ -4155,6 +4469,8 @@
      "inflation": 0.921,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.007
@@ -4173,6 +4489,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -4191,6 +4509,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -4209,6 +4529,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -4253,6 +4575,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 1,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -4271,6 +4595,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 3,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -4289,6 +4615,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 3,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -4307,6 +4635,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 9,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.979
@@ -4325,6 +4655,8 @@
      "inflation": 0.973,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 0.994
@@ -4343,6 +4675,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.0
@@ -4361,6 +4695,8 @@
      "inflation": 0.979,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.979,
      "work_normalized_inflation": 1.0
@@ -4379,6 +4715,8 @@
      "inflation": 0.921,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.007
@@ -4397,6 +4735,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.027
@@ -4415,6 +4755,8 @@
      "inflation": 0.94,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.915,
      "work_normalized_inflation": 1.027
@@ -4433,6 +4775,8 @@
      "inflation": 0.816,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 1.009
@@ -4451,6 +4795,8 @@
      "inflation": 0.822,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.809,
      "work_normalized_inflation": 1.016
@@ -4485,6 +4831,8 @@
    "worst_inflation": 1.011,
    "median_inflation": 0.976,
    "worst_work_normalized_inflation": 1.14,
+   "n_needing_repair_phase": 0,
+   "max_repair_phases": 0,
    "by_fault_class": {
     "wrap": {
      "immune": 0,
@@ -4522,6 +4870,8 @@
      "inflation": 0.989,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.989
@@ -4540,6 +4890,8 @@
      "inflation": 0.995,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.995
@@ -4558,6 +4910,8 @@
      "inflation": 0.986,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 72,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.986
@@ -4576,6 +4930,8 @@
      "inflation": 1.0,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 74,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.0
@@ -4594,6 +4950,8 @@
      "inflation": 0.997,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 160,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.997
@@ -4612,6 +4970,8 @@
      "inflation": 0.95,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.918,
      "work_normalized_inflation": 1.035
@@ -4630,6 +4990,8 @@
      "inflation": 0.917,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 45,
      "flits_vs_healthy": 0.878,
      "work_normalized_inflation": 1.044
@@ -4648,6 +5010,8 @@
      "inflation": 0.957,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 46,
      "flits_vs_healthy": 0.918,
      "work_normalized_inflation": 1.042
@@ -4666,6 +5030,8 @@
      "inflation": 0.883,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.052
@@ -4684,6 +5050,8 @@
      "inflation": 1.011,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 96,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.011
@@ -4702,6 +5070,8 @@
      "inflation": 0.998,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 157,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.998
@@ -4720,6 +5090,8 @@
      "inflation": 0.981,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 223,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.981
@@ -4738,6 +5110,8 @@
      "inflation": 1.002,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 74,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.002
@@ -4756,6 +5130,8 @@
      "inflation": 0.99,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 150,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.99
@@ -4774,6 +5150,8 @@
      "inflation": 0.969,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 233,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.969
@@ -4792,6 +5170,8 @@
      "inflation": 1.007,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 71,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 1.007
@@ -4810,6 +5190,8 @@
      "inflation": 0.976,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 146,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.976
@@ -4828,6 +5210,8 @@
      "inflation": 0.964,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 220,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 48,
      "flits_vs_healthy": 1.0,
      "work_normalized_inflation": 0.964
@@ -4846,6 +5230,8 @@
      "inflation": 0.969,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.011
@@ -4864,6 +5250,8 @@
      "inflation": 0.966,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.008
@@ -4882,6 +5270,8 @@
      "inflation": 0.988,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 47,
      "flits_vs_healthy": 0.958,
      "work_normalized_inflation": 1.031
@@ -4900,6 +5290,8 @@
      "inflation": 0.886,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.056
@@ -4918,6 +5310,8 @@
      "inflation": 0.883,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.052
@@ -4936,6 +5330,8 @@
      "inflation": 0.909,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 44,
      "flits_vs_healthy": 0.839,
      "work_normalized_inflation": 1.083
@@ -4954,6 +5350,8 @@
      "inflation": 0.749,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.657,
      "work_normalized_inflation": 1.14
@@ -4972,6 +5370,8 @@
      "inflation": 0.739,
      "delivers_survivor_goal": true,
      "n_blocked_transfers": 0,
+     "n_repair_phases": 0,
+     "n_phases": 1,
      "n_survivors": 39,
      "flits_vs_healthy": 0.657,
      "work_normalized_inflation": 1.125
@@ -5003,7 +5403,7 @@
     "n_immune": 0,
     "n_recompile": 12,
     "n_infeasible": 1,
-    "worst_inflation": 1.274,
+    "worst_inflation": 1.621,
     "median_inflation": 1.274
    },
    "no_bypass": {
@@ -5011,11 +5411,11 @@
     "n_immune": 0,
     "n_recompile": 10,
     "n_infeasible": 3,
-    "worst_inflation": 1.274,
+    "worst_inflation": 1.768,
     "median_inflation": 1.274
    },
    "extra_infeasible_without_bypass": 2,
-   "inflation_penalty": 1.0
+   "inflation_penalty": 1.091
   },
   {
    "pattern": "broadcast",
@@ -5049,16 +5449,16 @@
     "n_immune": 0,
     "n_recompile": 12,
     "n_infeasible": 1,
-    "worst_inflation": 1.24,
-    "median_inflation": 1.24
+    "worst_inflation": 2.071,
+    "median_inflation": 1.474
    },
    "no_bypass": {
     "n_scenarios": 13,
     "n_immune": 0,
     "n_recompile": 9,
     "n_infeasible": 4,
-    "worst_inflation": 1.24,
-    "median_inflation": 1.24
+    "worst_inflation": 2.071,
+    "median_inflation": 1.472
    },
    "extra_infeasible_without_bypass": 3,
    "inflation_penalty": 1.0
@@ -5116,16 +5516,16 @@
    "bypass": {
     "n_scenarios": 13,
     "n_immune": 0,
-    "n_recompile": 12,
-    "n_infeasible": 1,
+    "n_recompile": 10,
+    "n_infeasible": 3,
     "worst_inflation": 1.0,
     "median_inflation": 1.0
    },
    "no_bypass": {
     "n_scenarios": 13,
     "n_immune": 0,
-    "n_recompile": 10,
-    "n_infeasible": 3,
+    "n_recompile": 8,
+    "n_infeasible": 5,
     "worst_inflation": 1.0,
     "median_inflation": 1.0
    },
@@ -5164,7 +5564,7 @@
     "n_immune": 0,
     "n_recompile": 12,
     "n_infeasible": 1,
-    "worst_inflation": 1.092,
+    "worst_inflation": 1.789,
     "median_inflation": 1.092
    },
    "no_bypass": {
@@ -5172,11 +5572,11 @@
     "n_immune": 0,
     "n_recompile": 10,
     "n_infeasible": 3,
-    "worst_inflation": 1.092,
+    "worst_inflation": 1.859,
     "median_inflation": 1.092
    },
    "extra_infeasible_without_bypass": 2,
-   "inflation_penalty": 1.0
+   "inflation_penalty": 1.039
   },
   {
    "pattern": "gather",
@@ -10647,5 +11047,5 @@
    }
   }
  ],
- "wall_s": 162.0
+ "wall_s": 157.7
 }

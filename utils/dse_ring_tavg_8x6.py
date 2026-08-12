@@ -220,12 +220,65 @@ def main() -> None:
                      for v in [rec["by_rounds"].get(str(R))] if v]
             if cands:
                 name, v = min(cands, key=lambda t: t[1]["T_avg"])
-                entry["mesh_best"] = {"scheme": name,
-                                      **{k: v[k] for k in
-                                         ("T_R", "II_eff", "T_avg")}}
+                entry["mesh_best"] = {
+                    "scheme": name,
+                    "label": mesh["schemes"][name].get("label") or name,
+                    **{k: v[k] for k in ("T_R", "II_eff", "T_avg")}}
                 entry["ring_over_mesh_T_avg"] = round(
                     entry["ring_best"]["T_avg"] / v["T_avg"], 3)
+                # The global best ring row is the 2-port one, and 2 board/leave
+                # ports per ring station is a hardware assumption the mesh side
+                # never made. Splitting by port count is the only way this
+                # comparison means anything, and it is where the verdict
+                # actually turns over.
+                by_ports: dict[str, Any] = {}
+                for p in sorted({r["ports"] for r in rows}):
+                    cand = [r for r in rows if r["ports"] == p]
+                    br = min(cand,
+                             key=lambda r: r["by_rounds"][str(R)]["T_avg"])
+                    ta = br["by_rounds"][str(R)]["T_avg"]
+                    by_ports[str(p)] = {
+                        "algo": br["algo"], "tier": br["tier"], "T_avg": ta,
+                        "ring_over_mesh": round(ta / v["T_avg"], 3),
+                        "winner": "ring" if ta < v["T_avg"] else "mesh"}
+                entry["by_ring_ports"] = by_ports
         cmp_rows.append(entry)
+
+    # Does the ranking survive the pipeline depth? T1 dominates T_avg at small R
+    # and II_eff dominates at large R, so a scheme can win one end and lose the
+    # other. If nothing flips, the single-R number was safe to quote all along;
+    # if something flips, quoting one R was misleading.
+    def _tag(e: dict[str, Any]) -> str:
+        rb = e["ring_best"]
+        return f"{rb['algo']}/{rb['tier']}/p{rb['ports']}"
+    flips: list[str] = []
+    ring_win = [_tag(e) for e in cmp_rows]
+    if len(set(ring_win)) > 1:
+        flips.append("best ring scheme changes with R: "
+                     + " -> ".join(f"R={e['R']}:{t}"
+                                   for e, t in zip(cmp_rows, ring_win)))
+    side = [(e["R"], e.get("ring_over_mesh_T_avg")) for e in cmp_rows
+            if e.get("ring_over_mesh_T_avg") is not None]
+    if side and len({r < 1.0 for _R, r in side}) > 1:
+        flips.append("ring/mesh winner changes with R: "
+                     + ", ".join(f"R={R}:{r}" for R, r in side))
+    mesh_win = [e["mesh_best"]["label"] for e in cmp_rows
+                if e.get("mesh_best")]
+    if len(set(mesh_win)) > 1:
+        flips.append("best MESH scheme changes with R: "
+                     + " -> ".join(f"R={e['R']}:{e['mesh_best']['label']}"
+                                   for e in cmp_rows if e.get("mesh_best")))
+    for p in sorted({r["ports"] for r in rows}):
+        w = [e["by_ring_ports"][str(p)]["winner"] for e in cmp_rows
+             if e.get("by_ring_ports")]
+        if len(set(w)) > 1:
+            flips.append(
+                f"at ring ports={p} the ring/mesh winner changes with R: "
+                + ", ".join(
+                    f"R={e['R']}:{e['by_ring_ports'][str(p)]['winner']}"
+                    f"({e['by_ring_ports'][str(p)]['ring_over_mesh']})"
+                    for e in cmp_rows if e.get("by_ring_ports")))
+    payload_flips = flips
 
     print("\n--- ring vs mesh, allgather T_avg ---")
     for e in cmp_rows:
@@ -247,6 +300,8 @@ def main() -> None:
         "rotation_utilization": rot,
         "mesh_reference": mesh,
         "ring_vs_mesh": cmp_rows,
+        "order_flips": payload_flips or
+                       "no ordering flips: the same scheme wins at R=1, 5 and 13",
         "wall_s": round(time.perf_counter() - t_start, 1),
     }
     OUT.parent.mkdir(exist_ok=True)

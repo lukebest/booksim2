@@ -177,6 +177,44 @@ def main() -> None:
         f"<td>W{p['W']}/E{p['E']}/B{p['B']}</td></tr>"
         for p in front_t5
     )
+    # R=1/5/13: T_avg mixes a fill term and a throughput term, and which one
+    # dominates depends on the pipeline depth. Quoting only R=5 hides that the
+    # winner changes -- so the depth sweep gets its own table with the winner
+    # marked per R rather than being summarised into one number.
+    mf_R = mf["model"].get("rounds_list") or [R]
+
+    def mf_best_at(key: str, Rv: int) -> dict | None:
+        cands = [p["by_rounds"][str(Rv)] for p in mf_pts
+                 if p["scheme"] == key and (p.get("by_rounds") or {}).get(
+                     str(Rv))]
+        return min(cands, key=lambda v: v["T_avg"]) if cands else None
+
+    mf_depth_win = {}
+    for Rv in mf_R:
+        cands = [(k, mf_best_at(k, Rv)) for k in mf_meta]
+        cands = [(k, v) for k, v in cands if v]
+        if cands:
+            mf_depth_win[Rv] = min(cands, key=lambda t: t[1]["T_avg"])[0]
+    mf_depth_rows = "".join(
+        f"<tr><td class='l'>{esc(mf_lbl[k])}</td>"
+        + "".join(
+            (lambda v: (
+                f"<td>{v['T_R'] if v else '—'}</td>"
+                f"<td>{v['II_eff'] if v and v['II_eff'] is not None else '—'}</td>"
+                f"<td class='{'win' if mf_depth_win.get(Rv) == k else ''}'>"
+                f"{v['T_avg'] if v else '—'}</td>"))(mf_best_at(k, Rv))
+            for Rv in mf_R)
+        + "</tr>"
+        for k in sorted(mf_meta,
+                        key=lambda k: (mf_best_at(k, mf_R[-1]) or
+                                       {"T_avg": 1e9})["T_avg"]))
+    mf_depth_head = "".join(
+        f"<th>T<sub>{Rv}</sub></th><th>II_eff</th><th>T_avg(R={Rv})</th>"
+        for Rv in mf_R)
+    mf_depth_flip = " → ".join(f"R={Rv}: {esc(mf_lbl[mf_depth_win[Rv]])}"
+                               for Rv in mf_R if Rv in mf_depth_win)
+    mf_depth_flips = len({mf_depth_win[Rv] for Rv in mf_depth_win}) > 1
+
     axis_t1 = mf_floor("axis_ccw", "t1")
     axis_t5 = mf_floor("axis_ccw", "t5")
     best_t5_key = mf_order[0]
@@ -463,12 +501,26 @@ Hamilton 复用最低（24）却因 T1 太差（填充 210）而 T5 被淘汰。
 两者对硬件的诉求不同，这正是要用组合指标做 Pareto 的原因。</li>
 </ul>
 
-<h3>5.5 组合指标 T_avg 的全局 Pareto 明细</h3>
+<h3>5.5 流水深度扫描：R = {esc(' / '.join(str(x) for x in mf_R))}</h3>
+<p>同一 T_avg 定义（自由多轮 rigid pack 实测 T<sub>R</sub>，
+II_eff=(T<sub>R</sub>−T1)/(R−1)，T_avg=(T1+T<sub>R</sub>)/2），每格取该方案在
+该 R 下 T_avg 最小的设计点。R=1 时 T_avg ≡ T1。</p>
+<table>
+<thead><tr><th>方案</th>{mf_depth_head}</tr></thead>
+<tbody>{mf_depth_rows}</tbody></table>
+<p class="note">{'<b>最优方案随流水深度翻转</b>：' + mf_depth_flip +
+'。浅流水由 T1 支配（短树赢），深流水由 II_eff 支配（低复用的扁平树赢）——'
+'所以<b>只报一个 R 会随机挑出一个赢家</b>。'
+if mf_depth_flips else
+'最优方案在所有 R 上一致（' + mf_depth_flip + '），说明该口径下 T1 与 II_eff '
+'没有把排序拉向相反方向。'}</p>
+
+<h3>5.6 组合指标 T_avg 的全局 Pareto 明细</h3>
 <table>
 <thead><tr><th>面积</th><th>T_avg</th><th>T1</th><th>II</th><th>T5</th><th>方案</th><th>W/E/B</th></tr></thead>
 <tbody>{mf_avg_rows}</tbody></table>
 
-<h3>5.6 T1–T5（填充–吞吐）前沿明细</h3>
+<h3>5.7 T1–T5（填充–吞吐）前沿明细</h3>
 <table>
 <thead><tr><th>T1</th><th>T5</th><th>II</th><th>方案</th><th>W/E/B</th></tr></thead>
 <tbody>{mf_t5_rows}</tbody></table>
