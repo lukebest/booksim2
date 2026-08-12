@@ -2205,8 +2205,9 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
 <td>稳态注入率扫描 → <code>results/load_sweep_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_bisect_lat_8x6.py</code></td>
-<td>二分带宽 / 平均时延 / p99 扫描（膝部加密）→
-<code>results/bisect_lat_8x6.json</code>（§9.3–9.5）</td></tr>
+<td>四配置的二分带宽 / 平均时延 / p99 扫描（四个膝部都加密）→
+<code>results/bisect_lat_8x6.json</code>（§9.3–9.5）。
+<code>--from-json</code> 只重算汇总、不重跑仿真</td></tr>
 <tr><td><code>utils/gen_bisect_lat_plots.py</code></td>
 <td>同一数据的 PNG 版三张图（论文/幻灯片用；本报告内是等价的内联 SVG）</td></tr>
 <tr><td><code>utils/verify_islip2d_8x6.py</code></td>

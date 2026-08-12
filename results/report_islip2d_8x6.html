@@ -929,7 +929,7 @@ interval 220 拍），
 每次改动都会重跑。共 <b>51</b> 条，
 当前 <b class="win">
 51 通过 / 0 失败</b>
-（197.6 秒）。</p>
+（207.6 秒）。</p>
 <table class=""><thead><tr><th>分组</th><th>断言数</th><th>结果</th><th>断言名</th></tr></thead><tbody><tr><td>共同（两 fabric 都必须成立）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_conflict_free</code>、<code>mesh_rounds_disjoint_recheck</code>、<code>mesh_rounds_ge_lb</code>、<code>mesh_residual_bitmap_discipline</code>、<code>mesh_ctrl_msgs_per_round</code>、<code>ring_conflict_free</code>、<code>ring_rounds_ge_lb</code>、<code>ring_residual_bitmap_discipline</code>、<code>ring_bufferless_zero_residency</code></span></td></tr><tr><td>D-M 专项（mesh 判据）</td><td>9</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>cut_bound_is_96</code>、<code>xy_meets_cut_bound</code>、<code>romm_latency_invariant</code>、<code>crossbar_predicate_fails_both_ways</code>、<code>romm_cannot_reduce_load_without_headroom</code>、<code>round_gain_without_load_gain_is_a_packing_effect</code>、<code>in_order_xy</code>、<code>in_order_romm_static</code>、<code>in_order_romm_dyn</code></span></td></tr><tr><td>D-R 专项（环判据）</td><td>13</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>192_directed_links</code>、<code>metal_ratio_1_17</code>、<code>link_set_equals_folded_torus</code>、<code>every_node_is_a_bridge</code>、<code>link_bound_fixed</code>、<code>link_bound_balanced</code>、<code>minimal_routes_are_latency_invariant</code>、<code>non_minimal_routes_break_latency_invariance</code>、<code>pure_link_predicate_is_unsafe</code>、<code>pure_link_predicate_overstates_concurrency</code>、<code>whole_ring_costs_multiple_x</code>、<code>clauses_hold_ports1</code>、<code>clauses_hold_ports2</code></span></td></tr><tr><td>ring_base 基线专项</td><td>6</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>swap_rule_unreachable_under_fixed_dim_order</code>、<code>swap_rule_fires_under_mixed_dim_order</code>、<code>no_deadlock_even_without_swap_rule</code>、<code>no_flit_ever_blocked_in_ring</code>、<code>starvation_bounded_and_tracks_threshold</code>、<code>deflection_causes_reordering_so_reassembly_is_required</code></span></td></tr><tr><td>稳态专项</td><td>14</td><td><span class='win'>全部通过</span></td><td><span class='muted'><code>mesh_base_lam_star_within_anchor</code>、<code>mesh_islip2d_lam_star_within_anchor</code>、<code>ring_base_lam_star_within_anchor</code>、<code>ring_islip2d_lam_star_within_anchor</code>、<code>mesh_islip2d_zero_in_network_residency</code>、<code>ring_islip2d_zero_in_network_residency</code>、<code>credit_buffer_must_cover_rtt</code>、<code>mesh_base_plateaus_past_saturation</code>、<code>ring_base_plateaus_past_saturation</code>、<code>mesh_islip2d_plateaus_past_saturation</code>、<code>ring_islip2d_plateaus_past_saturation</code>、<code>mesh_islip2d_interval_beats_free_at</code>、<code>ring_islip2d_interval_beats_free_at</code>、<code>rg_pays_rtt_at_low_load</code></span></td></tr></tbody></table>
 <p>其中最关键的几条：逐资源两两复核 0 冲突（两 fabric）、
 bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
@@ -979,8 +979,9 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
 <td>稳态注入率扫描 → <code>results/load_sweep_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_bisect_lat_8x6.py</code></td>
-<td>二分带宽 / 平均时延 / p99 扫描（膝部加密）→
-<code>results/bisect_lat_8x6.json</code>（§9.3–9.5）</td></tr>
+<td>四配置的二分带宽 / 平均时延 / p99 扫描（四个膝部都加密）→
+<code>results/bisect_lat_8x6.json</code>（§9.3–9.5）。
+<code>--from-json</code> 只重算汇总、不重跑仿真</td></tr>
 <tr><td><code>utils/gen_bisect_lat_plots.py</code></td>
 <td>同一数据的 PNG 版三张图（论文/幻灯片用；本报告内是等价的内联 SVG）</td></tr>
 <tr><td><code>utils/verify_islip2d_8x6.py</code></td>
@@ -993,6 +994,6 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 
 <p class="muted" style="margin-top:2.5rem">
 批量扫描 69.1 秒 · 稳态扫描 1577.0 秒 ·
-验证 197.6 秒。
+验证 207.6 秒。
 重新生成：<code>python3 utils/gen_islip2d_report.py</code></p>
 </div></body></html>

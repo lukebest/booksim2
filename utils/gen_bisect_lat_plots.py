@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three injection-rate curves for the two centralized arbiters.
+"""Three injection-rate curves for all four configurations.
 
 Reads results/bisect_lat_8x6.json and writes
 
@@ -7,6 +7,10 @@ Reads results/bisect_lat_8x6.json and writes
     results/mean_lat_vs_lam.png       mean packet latency
     results/p99_lat_vs_lam.png        99th percentile latency
     results/bisect_lat_all.png        the three panels side by side
+
+One hue per fabric, light for the distributed baseline and dark for the
+centralized arbiter, so the two comparisons a reader wants -- baseline vs
+centralized, and mesh vs ring -- are both visible without a legend lookup.
 
 Points past the stability boundary are drawn hollow with a dashed line: beyond
 it the source queues grow without bound, so the latency there is a property of
@@ -29,9 +33,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "results" / "bisect_lat_8x6.json"
 
 STYLE = {
-    "mesh_islip2d": ("#2563eb", "o", "iSLIP-2D mesh (D-M, 12-link cut)"),
-    "ring_islip2d": ("#dc2626", "s", "iSLIP-2D ring (D-R, 24-link cut)"),
+    "mesh_base": ("#93c5fd", "^", "mesh_base (buffered + credits)"),
+    "mesh_islip2d": ("#1d4ed8", "o", "mesh_islip2d (central, 12-link cut)"),
+    "ring_base": ("#fca5a5", "v", "ring_base (E-tag/I-tag + deflection)"),
+    "ring_islip2d": ("#b91c1c", "s", "ring_islip2d (central, 24-link cut)"),
 }
+CEN = ("mesh_islip2d", "ring_islip2d")
 
 
 def load() -> dict[str, Any]:
@@ -43,118 +50,121 @@ def series(d: dict, config: str) -> list[dict]:
                   key=lambda r: r["lam"])
 
 
+def stable(d: dict, config: str) -> list[dict]:
+    return [r for r in series(d, config) if r["stable"]]
+
+
 def _draw(ax, d: dict, key: str) -> None:
-    """One metric for both fabrics: solid+filled while stable, dashed+hollow after."""
+    """One metric for all four configs: filled while stable, hollow after."""
     for cfg, (color, mark, label) in STYLE.items():
         rs = series(d, cfg)
         x = [r["lam"] for r in rs]
         y = [r[key] for r in rs]
         st = [bool(r["stable"]) for r in rs]
-        ax.plot(x, y, "-", color=color, lw=1.6, alpha=0.9, label=label,
-                zorder=3)
+        cen = cfg in CEN
+        ax.plot(x, y, "-", color=color, lw=1.8 if cen else 2.6,
+                alpha=0.95 if cen else 0.55, label=label, zorder=3 if cen else 2)
         ax.plot([a for a, s in zip(x, st) if s],
                 [b for b, s in zip(y, st) if s],
-                mark, color=color, ms=5, zorder=4)
+                mark, color=color, ms=4.5, zorder=4)
         ax.plot([a for a, s in zip(x, st) if not s],
                 [b for b, s in zip(y, st) if not s],
-                mark, mfc="white", mec=color, ms=5, zorder=4)
+                mark, mfc="white", mec=color, ms=4.5, zorder=4)
         lam_star = d["summary"][cfg]["lam_star"]
         if lam_star is not None:
-            ax.axvline(lam_star, color=color, ls=":", lw=1.1, alpha=0.55,
+            ax.axvline(lam_star, color=color, ls=":", lw=1.0, alpha=0.5,
                        zorder=1)
     ax.set_xlabel("offered injection rate  λ  (packets / node / cycle)")
     ax.grid(alpha=0.25, lw=0.5)
     ax.set_xlim(0, 1.02)
-    # Below the axes: the plot area is needed for annotations, and a log-scaled
-    # latency panel has no reliably empty corner to put a legend in.
-    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.145),
+    # Below the axes: with four curves no corner stays empty across the sweep,
+    # and a log-scaled latency panel has nowhere safe to put a legend.
+    ax.legend(fontsize=7.5, loc="upper center", bbox_to_anchor=(0.5, -0.145),
               ncol=2, framealpha=0.95)
 
 
 def _lamstar_note(d: dict) -> str:
-    return "  ·  ".join(
-        f"{STYLE[c][2].split(' (')[0]} λ*={d['summary'][c]['lam_star']}"
-        for c in STYLE)
+    """Compact enough to fit one title line at this figure width."""
+    s = d["summary"]
+    return (f"λ* mesh {s['mesh_base']['lam_star']}→"
+            f"{s['mesh_islip2d']['lam_star']}, "
+            f"ring {s['ring_base']['lam_star']}→"
+            f"{s['ring_islip2d']['lam_star']}")
 
 
 def fig_bisect(d: dict, ax=None) -> Any:
-    own = ax is None
-    if own:
+    if ax is None:
         _, ax = plt.subplots(figsize=(7.4, 5.1))
     _draw(ax, d, "bisect_util")
     ax.axhline(1.0, color="#111827", ls="--", lw=1.0, alpha=0.6)
     ax.text(0.015, 1.012, "bisection saturated", fontsize=8, color="#111827")
     ax.set_ylabel("bisection utilization  (fraction of cut link-cycles busy)")
     ax.set_ylim(0, 1.12)
-    m = d["summary"]["mesh_islip2d"]
-    ax.annotate(f"cut is full ({m['peak_bisect_util']:.3f}) —\n"
-                f"mesh λ* is bisection bound\n"
-                f"({m['bisect_util_at_lam_star']:.3f} already at λ*)",
-                xy=(0.52, 1.0), xytext=(0.055, 0.775),
+    mi, mb = d["summary"]["mesh_islip2d"], d["summary"]["mesh_base"]
+    rb = d["summary"]["ring_base"]
+    ax.annotate(f"only mesh_islip2d fills the cut ({mi['peak_bisect_util']:.3f});"
+                f"\n{mi['bisect_util_at_lam_star']:.3f} already at its λ*, so"
+                f"\nits λ* IS the bisection bound",
+                xy=(mi["peak_bisect_util_at_lam"], 1.0), xytext=(0.05, 0.80),
                 fontsize=8, color=STYLE["mesh_islip2d"][0],
                 arrowprops=dict(arrowstyle="->", lw=0.9,
                                 color=STYLE["mesh_islip2d"][0]))
-    r = d["summary"]["ring_islip2d"]
-    ax.annotate(f"ring never exceeds {r['peak_bisect_util']:.3f}:\n"
-                f"only {r['bisect_util_at_lam_star']:.3f} at its own λ*,\n"
-                f"so the ring saturates elsewhere",
-                xy=(r["lam_star"], r["bisect_util_at_lam_star"]),
-                xytext=(0.545, 0.115),
-                fontsize=8, color=STYLE["ring_islip2d"][0],
-                arrowprops=dict(arrowstyle="->", lw=0.9,
-                                color=STYLE["ring_islip2d"][0]))
+    ax.annotate(f"baselines stop short: mesh_base peaks at\n"
+                f"{mb['peak_bisect_util']:.3f}, ring_base at "
+                f"{rb['peak_bisect_util']:.3f} — they are\n"
+                f"limited by credits / deflection, not by metal",
+                xy=(rb["peak_bisect_util_at_lam"], rb["peak_bisect_util"]),
+                xytext=(0.30, 0.115), fontsize=8, color="#7f1d1d",
+                arrowprops=dict(arrowstyle="->", lw=0.9, color="#7f1d1d"))
     ax.set_title("Bisection utilization vs injection rate\n"
                  f"8×6, all-to-all uniform, m=1, σ=1  ·  {_lamstar_note(d)}",
-                 fontsize=9.5)
+                 fontsize=8.5)
     return ax
 
 
 def fig_mean(d: dict, ax=None) -> Any:
-    own = ax is None
-    if own:
+    if ax is None:
         _, ax = plt.subplots(figsize=(7.4, 5.1))
     _draw(ax, d, "mean_lat")
     ax.set_ylabel("mean packet latency  (cycles)")
     ax.set_yscale("log")
-    for cfg, dy in (("mesh_islip2d", 1.07), ("ring_islip2d", 0.86)):
-        rs = [r for r in series(d, cfg) if r["stable"]]
-        if rs:
-            lo = min(r["mean_lat"] for r in rs)
-            hi = max(r["mean_lat"] for r in rs)
-            ax.axhline(lo, color=STYLE[cfg][0], ls="-.", lw=0.8, alpha=0.4)
-            ax.text(0.02, lo * dy,
-                    f"unloaded {lo:.0f} cy → {hi:.0f} cy at λ* "
-                    f"(×{hi / lo:.2f})", fontsize=7.5, color=STYLE[cfg][0])
+    # All four unloaded means sit within a factor of two of each other, so
+    # per-curve labels would pile up on a log axis: one block instead.
+    lines = []
+    for cfg in STYLE:
+        rs = stable(d, cfg)
+        lo, hi = rs[0]["mean_lat"], rs[-1]["mean_lat"]
+        lines.append(f"{cfg}: {lo:.0f} cy unloaded → {hi:.0f} cy at λ* "
+                     f"(×{hi / lo:.2f})")
+    ax.text(0.025, 150, "\n".join(lines), fontsize=7.5, color="#111827",
+            bbox=dict(fc="white", ec="#9ca3af", lw=0.6, alpha=0.92, pad=3))
     ax.set_title("Mean latency vs injection rate  (log scale)\n"
-                 "flat until λ*, then diverges — hollow markers are unstable",
-                 fontsize=9.5)
+                 "the centralized pair pays the grant round trip unloaded, "
+                 "then stays flat to a higher λ*", fontsize=8.5)
     return ax
 
 
 def fig_p99(d: dict, ax=None) -> Any:
-    own = ax is None
-    if own:
+    if ax is None:
         _, ax = plt.subplots(figsize=(7.4, 5.1))
     _draw(ax, d, "p99")
     ax.set_ylabel("p99 packet latency  (cycles)")
     ax.set_yscale("log")
-    for cfg, tx in (("mesh_islip2d", (0.055, 260)),
-                    ("ring_islip2d", (0.45, 620))):
-        rs = [r for r in series(d, cfg) if r["stable"]]
-        if rs:
-            hi = max(r["p99"] for r in rs)
-            lo = min(r["p99"] for r in rs)
-            ax.plot([rs[-1]["lam"]], [hi], "*", color=STYLE[cfg][0], ms=11,
-                    zorder=5)
-            ax.annotate(f"p99 at λ*: {hi:.0f} cy  (unloaded {lo:.0f}, "
-                        f"×{hi / lo:.2f})",
-                        xy=(rs[-1]["lam"], hi), xytext=tx, fontsize=8,
-                        color=STYLE[cfg][0],
-                        arrowprops=dict(arrowstyle="->", lw=0.9,
-                                        color=STYLE[cfg][0]))
+    lines = [f"{c}: worst p99/mean = "
+             f"{d['summary'][c]['worst_p99_over_mean_stable']:.2f}×"
+             for c in STYLE]
+    ax.text(0.02, 1.6e3, "\n".join(lines), fontsize=7.5, color="#111827",
+            bbox=dict(fc="white", ec="#9ca3af", lw=0.6, alpha=0.9, pad=3))
+    mbl = d["summary"]["mesh_base"]["lam_star"]
+    pb = next(r["p99"] for r in series(d, "mesh_base") if r["lam"] == mbl)
+    pc = next(r["p99"] for r in series(d, "mesh_islip2d") if r["lam"] == mbl)
+    ax.annotate(f"at mesh_base's own λ*={mbl}:\n{pb:.0f} cy vs {pc:.0f} cy "
+                f"= {pb / pc:.1f}× tail gap",
+                xy=(mbl, pb), xytext=(0.47, 130), fontsize=8, color="#111827",
+                arrowprops=dict(arrowstyle="->", lw=0.9, color="#111827"))
     ax.set_title("p99 latency vs injection rate  (log scale)\n"
-                 "bufferless + rigid grants keep the tail near the mean "
-                 "throughout the stable region", fontsize=9.5)
+                 "rigid grants keep the tail near the mean; the baselines' "
+                 "tails run 3-5× their mean", fontsize=8.5)
     return ax
 
 
