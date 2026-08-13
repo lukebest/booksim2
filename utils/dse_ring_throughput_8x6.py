@@ -81,7 +81,7 @@ from rg_ring_collectives import (
     all_configs, build_ring_collective, multiround, replay,
 )
 from rg_ring_topo import RingTopology
-from rg_topo import RAMP_BW, coord
+from rg_topo import RAMP, RAMP_BW, T_TURN_BRIDGE, coord
 
 OUT = Path(__file__).resolve().parent.parent / "results"
 ROUNDS: tuple[int, ...] = (1, 5, 13)
@@ -119,16 +119,19 @@ def cut_capacity(topo: RingTopology) -> dict[str, list[dict[str, Any]]]:
 
 
 def hop_latency(topo: RingTopology, s: int, d: int) -> int:
-    """Zero-contention delay of the cheapest s->d route, bridge turns charged.
+    """Zero-contention delay of the cheapest s->d route, dimension change priced.
 
     Dijkstra over (core, ring) states, so it minimises over every legal route
-    rather than assuming the calendars' two-phase dimension order. Both legs pay
-    the same two things now: the folded per-segment wire delay (2 core pitches
-    for a typical segment, 1 for the two fold ends) and `t_turn` for each ring
-    change. A pair that differs in both dimensions must change rings at least
-    once, so charging one turn keeps this a floor for ANY algorithm.
+    rather than assuming the calendars' two-phase dimension order. Wire delay is
+    per segment (folded: 2 core pitches for a typical one, 1 for the two fold
+    ends). Changing dimension is unavoidable for a pair that differs in x and y,
+    but it has TWO prices and the floor has to take the cheaper: ride the bridge
+    for `t_turn` = 10 cycles, or eject into that core's L1 and re-inject on the
+    other ring for the ramp = 2. With a 10-cycle bridge the relay wins, which is
+    why the dimension-decomposed calendars can legally sit below a floor that
+    charges a turn -- and why charging one would not be a floor at all.
     """
-    return topo.wire_distance(s, d)
+    return topo.wire_distance(s, d, turn_cost=min(topo.t_turn, RAMP))
 
 
 def latency_floor(topo: RingTopology, pattern: str, m: int) -> dict[str, Any]:
@@ -492,6 +495,13 @@ def main() -> None:
             "II_lb": "容量界 max(cut, 核端口, L1 ramp)；允许中继与本地合并，"
                      "因此 T0/T1 同界，任何算法都不得低于它",
             "makespan_lb": "max(容量界, 时延地板)",
+            "lat_latency_floor":
+                "零竞争时延地板：在 (core, 所在环) 状态图上跑 Dijkstra，"
+                "逐链路收线延迟（折叠后典型段 2 pitch = 10/14 拍，每环两段"
+                f"折返端 1 pitch = 5/7 拍），换维收 min(t_turn, RAMP) = "
+                f"{min(T_TURN_BRIDGE, RAMP)} 拍 —— 过桥 {T_TURN_BRIDGE} 拍与"
+                f"「落 L1 再上另一个环」{RAMP} 拍取便宜的那个，否则按维分解的"
+                "拍图（它根本不过桥）会合法地低于「下界」",
             "util": "该次运行自身口径：弧占用周期 / (192 * 该次 makespan)，"
                     "R=1 为单发、R=13 为流水稳态，构造上 <= 1",
             "hop_tax": "实际弧占用 / 最小跳数弧占用，>1 即偏转或绕路的浪费",

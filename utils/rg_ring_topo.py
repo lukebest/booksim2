@@ -362,17 +362,25 @@ class RingTopology:
         return sum(self.link_lat(ring, i)
                    for i in range(self.ring_size(ring)))
 
-    def wire_distance(self, src: int, dst: int) -> int:
+    def wire_distance(self, src: int, dst: int, *,
+                      turn_cost: int | None = None) -> int:
         """Zero-contention shortest delay, minimised over every legal route.
 
         Dijkstra over states (core, ring being ridden): riding a segment costs
-        that segment's own wire delay and changing rings costs `t_turn`. This is
-        routing independent by construction -- it does not assume the two-phase
-        dimension order the calendars use, so it is a floor for ANY schedule,
-        including one that relays through a third core.
+        that segment's own wire delay and changing rings costs `turn_cost`
+        (default `t_turn`). Routing independent by construction -- it does not
+        assume the two-phase dimension order the calendars use.
+
+        `turn_cost` is a parameter because a schedule has two ways to change
+        dimension and they do not cost the same: ride through the bridge for
+        `t_turn`, or eject into the core's L1 and re-inject on the other ring for
+        the ramp. With a 10-cycle bridge the relay is the cheaper one, so a floor
+        that must hold for EVERY algorithm has to charge min(t_turn, RAMP).
         """
         if src == dst:
             return 0
+        if turn_cost is None:
+            turn_cost = self.t_turn
         best: dict[tuple[int, RingId], int] = {}
         # boarding either of the core's two rings is free: the turn cost is only
         # paid when a flit already riding one ring moves to the other
@@ -396,7 +404,7 @@ class RingTopology:
                 heapq.heappush(heap, (d + lat, order[j], ring))
             for other in self.rings_of(node):
                 if other != ring:
-                    heapq.heappush(heap, (d + self.t_turn, node, other))
+                    heapq.heappush(heap, (d + turn_cost, node, other))
         return out if out is not None else -1
 
     def rings_of(self, node: int) -> tuple[RingId, RingId]:

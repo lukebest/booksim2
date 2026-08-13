@@ -44,6 +44,7 @@ from typing import Any
 
 from dse_ring_collectives_8x6 import ROOT, phase_offers, run_base_phase
 from rg_ring_base import RingBaseParams
+from rg_ring_calendar import build_calendar
 from rg_ring_collectives import build_ring_collective
 from rg_ring_topo import RingTopology
 from rg_topo import coord
@@ -140,6 +141,54 @@ def census(topo: RingTopology, pattern: str, algo: str, m: int, *,
     }
 
 
+def calendar_census(topo: RingTopology, pattern: str, algo: str, m: int,
+                    tier: str = "T0") -> dict[str, Any]:
+    """The same question asked of the static schedule: how many crossings at once?
+
+    The calendar has no transfer FIFO. R4 pins the column boarding exactly
+    `t_turn` after the row extract, so a crossing is a reservation and nobody
+    ever arrives to find it full. What the bridge must still be able to hold is
+    the number of crossings the schedule lets OVERLAP in one node, so that
+    count is the honest counterpart of `ring_base`'s FIFO depth -- and unlike
+    the FIFO it is a property of the slot table, checkable before tape-out.
+    """
+    col = build_ring_collective(topo, pattern, m=m, tier=tier, algo=algo,
+                                root=ROOT, bidir=True)
+    cal = build_calendar(topo, col)
+    iv: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for fp, t0 in cal.items:
+        turn = getattr(fp, "turn", None)
+        if turn is None:
+            continue
+        leave, _board = turn
+        iv[fp.path.turn].append((t0 + leave, t0 + leave + topo.t_turn + fp.dur))
+    peak: dict[int, int] = {}
+    occ: dict[int, int] = {}
+    for node, lst in iv.items():
+        ev = sorted([(a, 1) for a, _ in lst] + [(b, -1) for _, b in lst])
+        cur = hi = 0
+        for _, d in ev:
+            cur += d
+            hi = max(hi, cur)
+        peak[node] = hi
+        occ[node] = sum(b - a for a, b in lst)
+    span = max(1, cal.makespan)
+    return {
+        "pattern": pattern, "algo": algo, "tier": tier, "m": m,
+        "makespan": cal.makespan,
+        "n_bridges_touched": len(iv),
+        "n_crossings": sum(len(v) for v in iv.values()),
+        "peak_max": max(peak.values(), default=0),
+        "mean_max": round(max(occ.values(), default=0) / span, 3),
+        "mean_avg": round(sum(occ.values()) / span / max(1, len(iv)), 3)
+        if iv else 0.0,
+        "table": [{"node": n, "x": coord(n, topo.mx)[0],
+                   "y": coord(n, topo.mx)[1], "peak": peak[n],
+                   "mean": round(occ[n] / span, 3), "entries": len(iv[n])}
+                  for n in sorted(iv)],
+    }
+
+
 def depth_sweep(topo: RingTopology, pattern: str, algo: str, m: int
                 ) -> dict[str, Any]:
     rows = []
@@ -219,12 +268,26 @@ def main() -> None:
                   f"bridges touched {c['n_bridges_touched']:3} peak "
                   f"{c['peak_max']:2}", flush=True)
 
+    print("\n=== the same bridges under the static calendar ===")
+    cal_rows = []
+    for pattern, algo in CASES:
+        for m in M_LIST:
+            c = calendar_census(topo, pattern, algo, m)
+            cal_rows.append(c)
+            print(f"{pattern:10} m={m:<3} mk {c['makespan']:7} bridges "
+                  f"{c['n_bridges_touched']:3} peak {c['peak_max']:3} "
+                  f"mean_max {c['mean_max']:6.2f} crossings "
+                  f"{c['n_crossings']:6}", flush=True)
+
     print("\n=== depth sweep: alltoall m=1 ===")
     d1 = depth_sweep(topo, "alltoall", "flat", 1)
     print("=== depth sweep: alltoall m=13 ===")
     d13 = depth_sweep(topo, "alltoall", "flat", 13)
-    print("=== depth sweep: allgather m=13 ===")
-    dag = depth_sweep(topo, "allgather", "flat", 13)
+    # gather instead of allgather: flat allgather is the same flow set as flat
+    # alltoall (verified), while gather is the fan-in shape whose bridges load
+    # unevenly, so it is the one that can behave differently
+    print("=== depth sweep: gather m=13 ===")
+    dag = depth_sweep(topo, "gather", "flat", 13)
 
     print("\n=== turn sweep: alltoall m=1 ===")
     t1 = turn_sweep(topo, "alltoall", "flat", 1)
@@ -252,6 +315,7 @@ def main() -> None:
             "wait": "在 t_turn 之外还多等的拍数（排队 + 抢不到插入点）",
         },
         "per_pattern": per_pattern,
+        "calendar": cal_rows,
         "no_turn_control": control,
         "depth_sweep": [d1, d13, dag],
         "turn_sweep": [t1, t13],

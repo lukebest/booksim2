@@ -30,6 +30,7 @@ from typing import Any, Sequence
 from rg_ring_calendar import build_calendar
 from rg_ring_collectives import build_ring_collective, multiround
 from rg_ring_topo import RingTopology, verify_dr
+from rg_topo import H_BASE, PITCH_H, PITCH_V, V_BASE
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "ring_tavg_8x6.json"
@@ -153,6 +154,15 @@ def mesh_reference() -> dict[str, Any]:
                                        "B": p["B"],
                                        "area_total": p["area_total"]}
     return {"available": True, "rounds_list": data["model"].get("rounds_list"),
+            "wire": {"H": H_BASE, "V": V_BASE, "per_hop_pitches": 1},
+            "wire_caveat":
+                f"mesh 一跳 = 一个 core pitch，但那边的口径是 H={H_BASE}/"
+                f"V={V_BASE} 拍；本报告的 pitch 口径下一个 pitch 只 "
+                f"{PITCH_H}/{PITCH_V} 拍，环因为折叠一跳跨 2 个 pitch 才是 "
+                f"{2 * PITCH_H}/{2 * PITCH_V}。也就是说 mesh 这一列被按旧口径"
+                f"多收了 {round(H_BASE / PITCH_H, 2)}x / "
+                f"{round(V_BASE / PITCH_V, 2)}x 的线延迟，这一行只能读作"
+                "「同一 mesh 参照下环没有变慢」，不能读作环赢 mesh",
             "schemes": per_scheme}
 
 

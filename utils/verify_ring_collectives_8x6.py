@@ -44,14 +44,16 @@ from rg_ring_collectives import (
     mcast_applicable, multiround, replay,
 )
 from rg_ring_topo import (
-    RingMcastFootprint, RingTopology, build_ring_plan, verify_dr,
+    RingMcastFootprint, RingTopology, build_ring_plan, route_delay_spread,
+    verify_dr,
 )
-from rg_topo import MX, MY, RAMP, RAMP_BW, coord, nid
+from rg_topo import MX, MY, PITCH_H, PITCH_V, RAMP, RAMP_BW, coord, nid
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 OUT = ROOT_DIR / "results" / "verify_ring_collectives_8x6.json"
 COLL = ROOT_DIR / "results" / "ring_collectives_8x6.json"
 THR = ROOT_DIR / "results" / "ring_throughput_8x6.json"
+BRIDGE = ROOT_DIR / "results" / "ring_bridge_8x6.json"
 ROOT_NODE = 27
 
 RESULTS: list[dict[str, Any]] = []
@@ -517,7 +519,7 @@ def group_attach() -> None:
     # the independent model must reproduce the main pipeline's bounds
     coll = json.loads(COLL.read_text())
     a2a = next(r for r in coll["rows"] if r["pattern"] == "alltoall"
-               and r["tier"] == "T0" and r["m"] == 1)
+               and r["tier"] == "T0" and r["m"] == 1 and r["algo"] == "flat")
     b = a2a["bounds"]
     ax = A["cuts"]["x"]
     cut_row = next(r for r in ax["per_cut"] if r["at"] == 4)
@@ -528,11 +530,14 @@ def group_attach() -> None:
           and a2a_lb["cut_lb"] == b["bisection_lb"],
           f"cut width {cut_row['cap_per_dir']} vs {b['cut_width_directed']}, "
           f"bisection LB {a2a_lb['cut_lb']} vs {b['bisection_lb']}")
+    # flat alltoall at m=1 has one phase and no relaying, so its latency floor in
+    # ring_base's own model is exactly "worst pair's wire delay + one flit time"
     check("independent attachment model reproduces the pipeline's latency "
-          "floor (diameter)",
-          A["distance"]["diameter_cy"] == a2a["bounds_base"]["latency_lb"],
-          f"diameter {A['distance']['diameter_cy']} cy vs base-model "
-          f"latency LB {a2a['bounds_base']['latency_lb']}")
+          "floor (diameter + one flit time)",
+          A["distance"]["diameter_cy"] + a2a["m"]
+          == a2a["bounds_base"]["latency_lb"],
+          f"diameter {A['distance']['diameter_cy']} cy + m={a2a['m']} vs "
+          f"base-model latency LB {a2a['bounds_base']['latency_lb']}")
     check("folded full rings cost exactly 2x mesh wire length, which is where "
           "the repo's sigma=2 yardstick comes from",
           A["structure"]["wire_vs_mesh"] == 2.0,
@@ -845,11 +850,170 @@ def group_export(topo: RingTopology) -> None:
               f"({round(flat / mc, 1)}x smaller)" if mc and flat else smaller)
 
 
+def group_wire(topo: RingTopology) -> None:
+    """The link-delay setup itself, and the two things it must not break."""
+    rows = [topo.link_lat(("row", 0), i) for i in range(topo.mx)]
+    cols = [topo.link_lat(("col", 0), i) for i in range(topo.my)]
+    check("folded segments: 2 core pitches each except the two fold ends, "
+          "which are 1",
+          sorted(set(rows)) == [PITCH_H, 2 * PITCH_H]
+          and sorted(set(cols)) == [PITCH_V, 2 * PITCH_V]
+          and rows.count(PITCH_H) == 2 and cols.count(PITCH_V) == 2,
+          f"row {rows} (pitch {PITCH_H}), col {cols} (pitch {PITCH_V})")
+    check("one lane of a ring is 2(k-1) pitches of wire, i.e. exactly the "
+          "2x-mesh metal the attachment study charges",
+          topo.ring_wire(("row", 0)) == (2 * topo.mx - 2) * PITCH_H
+          and topo.ring_wire(("col", 0)) == (2 * topo.my - 2) * PITCH_V,
+          f"row {topo.ring_wire(('row', 0))} cy = "
+          f"{2 * topo.mx - 2} x {PITCH_H}, col "
+          f"{topo.ring_wire(('col', 0))} cy = {2 * topo.my - 2} x {PITCH_V}")
+
+    # the two short segments sit half a ring apart, so a tie in hops stays a tie
+    # in delay and hop-minimal routing is still latency-minimal
+    spread = route_delay_spread(topo, [(s, d) for s in range(topo.n)
+                                      for d in range(topo.n) if s != d])
+    check("uneven segments do NOT break latency invariance of the minimal "
+          "route set (the two short segments are half a ring apart)",
+          spread["latency_invariant"],
+          f"{spread['n_pairs']} pairs, worst spread "
+          f"{spread['max_wire_spread']} cy")
+
+    # the two-phase dimension-order route is delay-optimal, so the calendars are
+    # not paying for their routing discipline
+    worst = (0, None)
+    for s in range(topo.n):
+        for d in range(topo.n):
+            if s == d:
+                continue
+            best = min(topo.footprint(0, p, 1).wire
+                       for p in topo.candidates(s, d))
+            dij = topo.wire_distance(s, d)
+            if best - dij > worst[0]:
+                worst = (best - dij, (s, d, best, dij))
+    check("the two-phase RC/CR route set is delay-optimal over all routes "
+          "(Dijkstra over (core, ring) states finds nothing shorter)",
+          worst[0] == 0, f"worst excess {worst[0]} cy {worst[1] or ''}")
+
+    turning = topo.wire_distance(0, 9)
+    straight = topo.wire_distance(0, 1) + topo.wire_distance(1, 9)
+    check("changing rings costs t_turn, and it is charged once per ring "
+          "change, not per hop",
+          turning == topo.link_lat(("row", 0), 0) + topo.t_turn
+          + topo.link_lat(("col", 1), 0)
+          and turning == straight - topo.t_turn + topo.t_turn,
+          f"0->9 = {turning} cy = 10 (row hop) + {topo.t_turn} (bridge) + 14 "
+          f"(col hop); diameter "
+          f"{max(topo.wire_distance(0, d) for d in range(topo.n))} cy")
+
+    # with a 10-cycle bridge, relaying through L1 is CHEAPER than turning, which
+    # is why the floor charges min(t_turn, RAMP) -- see dse_ring_throughput
+    check("a 10-cycle bridge makes the L1 relay the cheaper way to change "
+          "dimension, so charging a turn would NOT be a floor",
+          topo.t_turn > RAMP
+          and topo.wire_distance(0, 9, turn_cost=RAMP) < topo.wire_distance(0, 9),
+          f"turn {topo.t_turn} cy vs L1 relay {RAMP} cy; 0->9 "
+          f"{topo.wire_distance(0, 9, turn_cost=RAMP)} vs "
+          f"{topo.wire_distance(0, 9)} cy",
+          prediction="REFUTED 「转维必须过桥」：按维分解的拍图靠落 L1 中继"
+                     "绕开了桥，这也是它们能压过 flat 的原因")
+
+
+def group_bridge() -> None:
+    """The 48 transfer FIFOs: occupancy, what fills them, what it costs.
+
+    This is the buffer the rings do not have. Every check here is about the same
+    claim: with a 10-cycle bridge the transfer FIFO stops being an
+    implementation detail and becomes the baseline's binding resource.
+    """
+    b = load_json(BRIDGE)
+    if not b:
+        check("ring_bridge_8x6.json is present for the bridge census", False,
+              "missing; run dse_ring_bridge_8x6.py")
+        return
+    per = {(r["pattern"], r["m"]): r for r in b["per_pattern"]}
+    a2a1, a2a13 = per[("alltoall", 1)], per[("alltoall", 13)]
+    depth = b["params"]["fifo_depth"]
+    resv = b["params"]["resv_tx"]
+
+    check("every core is a bridge and every bridge is used by flat alltoall",
+          a2a1["n_bridges_touched"] == MX * MY,
+          f"{a2a1['n_bridges_touched']} of {MX * MY} bridges hold entries")
+    over = [(r["pattern"], r["m"], r["peak_max"]) for r in b["per_pattern"]
+            if r["peak_max"] > depth + resv]
+    check("no bridge ever holds more than fifo_depth + resv_tx entries",
+          not over, f"peak <= {depth}+{resv} on all "
+          f"{len(b['per_pattern'])} runs, worst "
+          f"{max(r['peak_max'] for r in b['per_pattern'])}")
+    check("the mean depth in use is far below the peak, so the depth is paid "
+          "for a transient",
+          a2a13["mean_max"] < a2a13["peak_max"],
+          f"alltoall m=13: peak {a2a13['peak_max']} entries vs mean "
+          f"{a2a13['mean_max']} (max over bridges), "
+          f"{a2a13['full_frac_max']:.1%} of cycles at capacity")
+
+    # the control: a dimension-decomposed schedule relays instead of turning
+    ctl = [r for r in b["no_turn_control"] if r["n_bridges_touched"] == 0]
+    check("a dimension-decomposed calendar needs ZERO bridge buffer: it "
+          "relays through L1 instead of turning in flight",
+          len(ctl) == len(b["no_turn_control"]),
+          f"{len(ctl)}/{len(b['no_turn_control'])} control runs touch no "
+          "bridge at all",
+          prediction="CONFIRMED: 拍图不是把桥用得更好，是根本不用桥")
+
+    # depth is a first-order performance knob, not a detail
+    d13 = next(d for d in b["depth_sweep"]
+               if d["pattern"] == "alltoall" and d["m"] == 13)
+    mono = all(d13["rows"][i]["makespan"] >= d13["rows"][i + 1]["makespan"]
+               for i in range(len(d13["rows"]) - 1))
+    check("a full bridge deflects instead of blocking, so FIFO depth buys "
+          "makespan monotonically",
+          mono, "depth " + " -> ".join(f"{r['fifo_depth']}:{r['makespan']}"
+                                       for r in d13["rows"]))
+    check("depth 1 is not a design point under a 10-cycle bridge",
+          d13["cost_of_depth1"] > 2.0,
+          f"alltoall m=13: depth 1 costs {d13['cost_of_depth1']}x the best "
+          f"depth, knee at {d13['knee_depth']} entries")
+
+    # and the requirement is created by the turn latency, not just by load
+    t13 = next(t for t in b["turn_sweep"]
+               if t["pattern"] == "alltoall" and t["m"] == 13)
+    check("occupancy and deflection are functions of the turn latency: the "
+          "10-cycle bridge is what fills the FIFOs",
+          t13["mean_10_over_1"] > 1.5 and t13["deflect_10_over_1"] > 2.0
+          and t13["makespan_10_over_1"] > 1.2,
+          f"t_turn 1 -> 10 at m=13: mean depth x{t13['mean_10_over_1']}, "
+          f"bridge deflections x{t13['deflect_10_over_1']}, makespan "
+          f"x{t13['makespan_10_over_1']}")
+
+    # the fan-in shapes are the ones with a hotspot
+    g13 = per[("gather", 13)]
+    check("fan-in loads the bridges unevenly, all-to-all does not",
+          g13["mean_max"] / max(1e-9, g13["mean_avg"])
+          > a2a13["mean_max"] / max(1e-9, a2a13["mean_avg"]),
+          f"gather m=13 hottest/average = "
+          f"{g13['mean_max'] / g13['mean_avg']:.2f} (node "
+          f"{g13['hot_node']['node']}), alltoall = "
+          f"{a2a13['mean_max'] / a2a13['mean_avg']:.2f}")
+
+    # and the sim's own accounting has to add up
+    thr = load_json(THR)
+    rows = [r for r in (thr or {}).get("rows", [])
+            if r["pattern"] == "alltoall" and r["algo"] == "flat"
+            and r["m"] == 13]
+    br = rows[0]["ring_base"]["by_rounds"]["1"]["bridge"] if rows else None
+    check("the throughput sweep and the bridge census agree on the peak",
+          br is not None and br["bridge_peak_max"] == a2a13["peak_max"],
+          f"throughput leg {br and br['bridge_peak_max']} vs census "
+          f"{a2a13['peak_max']} entries")
+
+
 def main() -> None:
     topo = RingTopology()
     print("=== verify: 8x6 bufferless ring collectives ===\n")
     print("-- topology and footprint model --")
     group_topology(topo)
+    print("\n-- link delay setup --")
+    group_wire(topo)
     print("\n-- collective semantics --")
     group_semantics(topo)
     cals = _all_calendars(topo)
@@ -861,6 +1025,8 @@ def main() -> None:
     group_base_bounds()
     print("\n-- structural floors, II and bandwidth utilization --")
     group_throughput()
+    print("\n-- bridge transfer FIFOs --")
+    group_bridge()
     print("\n-- core attachment: why 2 ports, full rings --")
     group_attach()
     print("\n-- rotation and utilization --")
