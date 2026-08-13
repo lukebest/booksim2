@@ -401,6 +401,44 @@ def theorem44() -> dict[str, Any]:
     }
 
 
+def turnmodel44() -> dict[str, Any]:
+    """How often can a *direction-based* turn model serve every good node?
+
+    Same 44 budget scenarios as theorem44(), but the question is routability
+    under a fixed turn model (XY / west-first / negative-first) versus the
+    label-based Up*/Down* set. A model that cannot route all pairs has to
+    sacrifice healthy nodes, so this is the fault-tolerance column for turn
+    models.
+    """
+    models = {"xy": XY_BAN, "west_first": WEST_FIRST_BAN,
+              "negative_first": NEG_FIRST_BAN}
+    out = {k: {"zero_sacrifice": 0, "cases": []} for k in models}
+    out["m3p"] = {"zero_sacrifice": 0, "cases": []}
+    n = 0
+    for scen in B.stratified_scenarios(n_per_cell=1, seed=0):
+        pg = B.expand_budget(scen, "dead")
+        adj, compute = pg["route_adj"], pg["compute_nodes"]
+        n += 1
+        for name, ban in models.items():
+            T = model_turnset(adj, ban)
+            ok = all_pairs_routable(adj, compute, T)
+            out[name]["zero_sacrifice"] += ok
+            if not ok:
+                out[name]["cases"].append(scen["name"])
+        raw = R.gen_updown_best_root(pg)
+        ok = bool(raw) and R.validate_routing(raw["paths"], compute, adj)[0]
+        out["m3p"]["zero_sacrifice"] += ok
+        print("   %-16s xy=%-5s wf=%-5s nf=%-5s m3p=%s"
+              % (scen["name"],
+                 scen["name"] not in out["xy"]["cases"],
+                 scen["name"] not in out["west_first"]["cases"],
+                 scen["name"] not in out["negative_first"]["cases"], ok),
+              flush=True)
+    for rec in out.values():
+        rec["n"] = n
+    return out
+
+
 def maximality(pgs: dict[str, dict]) -> dict[str, Any]:
     """Theorem 2 check: no forbidden down->up turn can be re-permitted."""
     out = {}
@@ -691,9 +729,11 @@ def main() -> None:
 
     print("placement study (healthy)")
     ph = placement_study(healthy, "healthy",
-                         with_loads=("xy", "m3p", "m3p_minmax"))
+                         with_loads=("xy", "west_first", "negative_first",
+                                     "m3p", "m3p_minmax"))
     print("placement study (2 holes + 1 cut)")
-    pd = placement_study(demo, "demo", with_loads=("m3p", "m3p_minmax"))
+    pd = placement_study(demo, "demo",
+                         with_loads=("negative_first", "m3p", "m3p_minmax"))
     print("XY on the same residual graph (sacrifice needed)")
     pd["xy_sacrifice"] = xy_sacrifice(demo)
     pd["xy_best"] = xy_best_sacrifice(demo)
@@ -741,6 +781,8 @@ def main() -> None:
     if not args.quick:
         print("theorem 1 check over the 44-scenario budget catalogue")
         doc["theorem44"] = theorem44()
+        print("turn-model routability over the same 44 scenarios")
+        doc["turnmodel44"] = turnmodel44()
     doc["meta"]["generated_s"] = round(time.time() - t0, 1)
     args.o.parent.mkdir(parents=True, exist_ok=True)
     args.o.write_text(json.dumps(doc, indent=1))
