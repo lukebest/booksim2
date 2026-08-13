@@ -22,12 +22,15 @@ from gen_pg_fault_deadlock_slide import (
     BLUE, CARD_BG, CARD_LN, GREEN, GREY, GREY_L, HDR_BG, INK, ORANGE, RED,
     SLIDE_H, SLIDE_W, WHITE, Deck, card, emit_png, emit_pptx, p,
 )
-from pg_routing import _updown_labels, _updown_table, link_loads, max_link_load
+from pg_routing import (
+    _tree_path, _updown_labels, _updown_table, link_loads, max_link_load,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PPTX = ROOT / "results" / "pg_m3p_updown_slide.pptx"
 OUT_PNG = ROOT / "results" / "pg_m3p_updown_slide.png"
 OUT_PNG_PROOF = ROOT / "results" / "pg_m3p_proof_slide.png"
+OUT_PNG_DETAIL = ROOT / "results" / "pg_m3p_proof_detail_slide.png"
 OUT_PNG_LIMIT = ROOT / "results" / "pg_m3p_limit_slide.png"
 ANALYSIS = ROOT / "results" / "pg_m3p_analysis.json"
 
@@ -47,6 +50,16 @@ def demo_pg() -> dict:
         "desc": "2 node holes + 1 link cut",
     }
     return F.expand_pg(scen, "dead")
+
+
+_DEMO: dict | None = None
+
+
+def demo_adj() -> dict[int, list[int]]:
+    global _DEMO
+    if _DEMO is None:
+        _DEMO = demo_pg()
+    return _DEMO["route_adj"]
 
 
 def best_root(pg: dict) -> tuple[int, int, int, int]:
@@ -93,6 +106,20 @@ def heat(t: float) -> str:
                                + int(c1[k:k + 2], 16) * f)
                 for k in (0, 2, 4))
     return HEAT_STOPS[-1][1]
+
+
+def colorbar_frac(d: Deck, x0, y0, w, h, ticks: list[tuple[float, str]]) -> None:
+    """Colour bar whose axis is dimensionless (load ÷ cut bound)."""
+    n = 40
+    for i in range(n):
+        d.rect(x0 + w * i / n, y0, w / n * 1.02, h,
+               fill=heat(i / (n - 1.0)), line=None)
+    d.rect(x0, y0, w, h, fill=None, line=GREY_L, lw=0.5)
+    for frac, lab in ticks:
+        tx = x0 + w * min(max(frac, 0.0), 1.0)
+        d.line(tx, y0 + h, tx, y0 + h + 0.05, color=GREY, lw=0.6)
+        d.text(tx - 0.42, y0 + h + 0.05, 0.84, 0.16,
+               [p(lab, size=6.6, color=GREY, align="c", space=0)])
 
 
 def colorbar(d: Deck, x0, y0, w, h, vmax: int, ticks: list[int]) -> None:
@@ -143,10 +170,17 @@ def table(d: Deck, x0, y0, widths, header, rows, *, accent=BLUE, fs=7.4,
 
 def fig_heat(d: Deck, x0, y0, w, h, loads: dict[str, int],
              adj: dict[int, list[int]], vmax: int, *, title: str, sub: str,
-             accent: str, root: int | None = None) -> None:
-    """8x6 grid,每条链路按 all-to-all 负载着色（取两方向较大者）."""
+             accent: str, root: int | None = None, holes: tuple = (),
+             cuts: tuple = (), live: set[int] | None = None,
+             sub2: str | None = None) -> None:
+    """8x6 grid, one link coloured by its all-to-all load (max of both dirs).
+
+    holes = dead routers (grey cross), cuts = severed links (dashed grey),
+    live  = nodes that actually take part in the traffic; everything else is
+    drawn hollow so a sacrificed subset is visible at a glance.
+    """
     nx, ny = F.MX, F.MY
-    gh = h - 0.46
+    gh = h - (0.66 if sub2 else 0.46)
     sx = w / (nx - 1 + 1.3)
     sy = gh / (ny - 1 + 1.3)
     ox, oy = x0 + sx * 0.65, y0 + sy * 0.75
@@ -160,9 +194,9 @@ def fig_heat(d: Deck, x0, y0, w, h, loads: dict[str, int],
         return max(loads.get("%d-%d" % (u, v), 0),
                    loads.get("%d-%d" % (v, u), 0))
 
-    d.rect(x0, y0 + 0.21, w, h - 0.45, fill="FDFDFE", line="E1E6EB", lw=0.5)
+    d.rect(x0, y0 + 0.21, w, gh + 0.06, fill="FDFDFE", line="E1E6EB", lw=0.5)
     d.text(x0, y0, w, 0.20,
-           [p(title, size=8.6, bold=True, color=accent, align="c", space=0)])
+           [p(title, size=8.4, bold=True, color=accent, align="c", space=0)])
     segs = []
     for u in sorted(adj):
         for v in adj[u]:
@@ -173,15 +207,36 @@ def fig_heat(d: Deck, x0, y0, w, h, loads: dict[str, int],
         t = load / vmax if vmax else 0.0
         ux, uy = pos(u)
         vx, vy = pos(v)
-        d.line(ux, uy, vx, vy, color=heat(t), lw=0.9 + 2.4 * t)
+        d.line(ux, uy, vx, vy,
+               color=(heat(t) if load else "DDE3E9"), lw=0.8 + 2.5 * t)
+    for u, v in cuts:
+        ux, uy = pos(u)
+        vx, vy = pos(v)
+        d.line(ux, uy, vx, vy, color="9AA5B1", lw=0.9, dash=True)
+        mx_, my_ = (ux + vx) / 2, (uy + vy) / 2
+        d.line(mx_ - r * 0.7, my_ - r * 0.7, mx_ + r * 0.7, my_ + r * 0.7,
+               color=RED, lw=0.9)
+        d.line(mx_ - r * 0.7, my_ + r * 0.7, mx_ + r * 0.7, my_ - r * 0.7,
+               color=RED, lw=0.9)
     for n in sorted(adj):
         px, py = pos(n)
-        d.oval(px, py, r, fill="8C99A6", line=None, lw=0)
+        if live is None or n in live:
+            d.oval(px, py, r, fill="8C99A6", line=None, lw=0)
+        else:
+            d.oval(px, py, r * 0.92, fill=WHITE, line="B8C1CA", lw=0.7)
+    for n in holes:
+        px, py = pos(n)
+        d.line(px - r, py - r, px + r, py + r, color="6E7A86", lw=1.1)
+        d.line(px - r, py + r, px + r, py - r, color="6E7A86", lw=1.1)
     if root is not None:
         rx, ry = pos(root)
         d.star(rx, ry, r * 2.5, fill=RED)
-    d.text(x0, y0 + h - 0.24, w, 0.24,
-           [p(sub, size=7.4, color=GREY, align="c", space=0)])
+    d.text(x0, y0 + h - (0.44 if sub2 else 0.24), w, 0.24,
+           [p(sub, size=7.3, color=GREY, align="c", space=0)])
+    if sub2:
+        d.text(x0, y0 + h - 0.22, w, 0.22,
+               [p(sub2, size=7.3, bold=True, color=accent, align="c",
+                  space=0)])
 
 
 def bfs_tree(adj: dict[int, list[int]], root: int) -> set[frozenset[int]]:
@@ -534,149 +589,393 @@ def hot_spot_stats(loads: dict[str, int], adj, root: int, k: int = 10) -> dict:
 
 def build_proof() -> Deck:
     A = analysis()
-    H = A["healthy"]
-    S = H["schemes"]
+    H, DM = A["healthy"], A["demo"]
+    S, SD = H["schemes"], DM["schemes"]
     T44 = A["theorem44"]
     MX_ = A["maximality"]["healthy"]
     healthy = F.healthy_pg()
     adj = healthy["route_adj"]
     root = H["root"]
-    hs = hot_spot_stats(H["loads"]["m3p"], adj, root)
     lb = H["lb"]
-    vmax = S["m3p"]["peak"]
+    XB = DM["xy_best"]
+    dadj = demo_adj()
+    dholes = tuple(DM["dead_nodes"])
+    dcuts = tuple(tuple(e) for e in DM["dead_links"])
+    droot, dlb = DM["root"], DM["lb"]
+    hsd = hot_spot_stats(DM["loads"]["m3p"], dadj, droot)
+    vmax = SD["m3p"]["peak"]
 
     d = Deck()
     d.rect(0, 0, SLIDE_W, SLIDE_H, fill=WHITE, line=None)
     d.rect(0, 0, SLIDE_W, 0.92, fill=INK, line=None)
     d.rect(0, 0, 0.10, 0.92, fill=GREEN, line=None)
     d.text(0.34, 0.10, 12.6, 0.44,
-           [p("M3′ Up*/Down*：容错能力的严格证明 · 与 XY 基线的负载热点对比",
+           [p("M3′ Up*/Down*：容错的严格证明 · 同一残图上的负载热点对比",
               size=21, bold=True, color=WHITE, space=0)])
     d.text(0.36, 0.55, 12.6, 0.30,
-           [p("定理 1：残图连通 ⇒ 零牺牲（容错达理论上界）· 定理 2：转向集已极大 "
-              "· 代价：峰值链路负载 %.2f× 割界"
-              % S["m3p"]["peak_over_lb"], size=10.0, color="C3CBD4", space=0)])
+           [p("同一 partial good 下：XY 须牺牲 %d/%d 好节点才可路由；M3′ 零牺牲，"
+              "代价是峰值 %.2f× 割界，min-max 选路降到 %.2f×"
+              % (XB["n_sacrificed"], XB["n_good"], SD["m3p"]["peak_over_lb"],
+                 SD["m3p_minmax"]["peak_over_lb"]),
+              size=10.0, color="C3CBD4", space=0)])
 
-    ry, rh = 1.00, 3.64
-    cw1 = 6.86
-    card(d, 0.30, ry, cw1, rh,
-         "① 定理 1 与证明：残图连通 ⇒ 表一定建得出，且单 VC 无死锁", accent=GREEN)
-    d.text(0.46, ry + 0.42, cw1 - 0.32, rh - 0.50, [
-        p("定理 1（容错达理论上界）", size=9.5, bold=True, color=GREEN,
-          space=1.0),
-        p("残图 G′ = 删去死 router 及其链路、断链之后的存活图。若 G′ 连通，则对"
-          "任意根 r 都能建出覆盖全部 (s,d) 的合法表、牺牲 0；若 G′ 不连通，任何"
-          "路由都无法跨分量通信。故 M3′ 可容忍的故障集合 = {F : G′ 连通}，"
-          "即理论最大集合。", size=8.3, color=GREY, space=2.0),
-        p("证明", size=9.5, bold=True, color=GREEN, space=1.0),
-        p("① 标号：G′ 连通 ⇒ BFS 得有限 ℓ(v)=dist(r,v)，每个 v≠r 都有父节点 u "
-          "使 ℓ(u)=ℓ(v)−1。", size=8.3, color=GREY, space=1.6),
-        p("② 可达：s 沿父链升到 r（全 up），再沿 d 的父链降到 d（全 down），"
-          "拼成 up*·down* ⇒ 合法。故每对至少一条合法路径（≤ ℓ(s)+ℓ(d) 跳），"
-          "表必然建成。", size=8.3, color=GREY, space=1.6),
-        p("③ 无死锁：定通道势能 Φ(u→v) = (0, −ℓ(v)) 若 up、(1, +ℓ(v)) 若 down"
-          "（字典序）。合法衔接只有 up→up / up→down / down→down，三者都严格增大 "
-          "Φ ⇒ CDG 每条边升势 ⇒ 有限集内无环 ⇒ Dally–Seitz 成立，单 VC 即安全。"
-          "（mesh 按 x+y 二分，无同层边；一般图改用 (ℓ, id) 字典序。）",
-          size=8.3, color=GREY, space=1.6),
-        p("④ 保序：每对唯一静态路径 + 单 VC + 每跳 FIFO ⇒ flit 天然按序。",
-          size=8.3, color=GREY, space=1.6),
-        p("⑤ 与根无关：①–④ 对任意 r∈V′ 成立 ⇒ %d 个候选根全部合法；best-root "
-          "只在合法解里挑峰值最小者，搜索绝不返回空。" % MX_["n_roots"],
-          size=8.3, color=GREY, space=2.0),
-        p("实测校核（%d 场景 ≤4R/≤8L）" % T44["n"], size=9.3, bold=True,
-          color=ORANGE, space=1.0),
-        p("%d 个场景残图连通 → 全部零牺牲、CDG 成环 0 例、反例 %d 个；%d 个场景"
-          "残图本身断开（孤立 %s 个好节点）⇒ 牺牲是信息论下界。同目录下 XY 零"
-          "牺牲 %d/%d。"
-          % (T44["n_connected"], T44["violations"], T44["n_disconnected"],
-             "/".join(str(x) for x in T44["disconnected_isolated"]),
-             T44["xy_zero_sacrifice"], T44["n"]),
-          size=8.3, color=ORANGE, space=0),
+    # --- row 1: four heat panels on the same fault scenario ---------------
+    hy, hh = 1.00, 3.04
+    card(d, 0.30, hy, SLIDE_W - 0.60, hh,
+         "① all-to-all 链路负载热点（物理 1 VC）：后三幅为同一 partial good 场景，"
+         "四幅各按自身割界归一", accent=RED, hdr_h=0.30)
+    pw, ph, gap = 2.95, 2.12, 0.22
+    px0, py0 = 0.44, hy + 0.38
+    fig_heat(d, px0, py0, pw, ph, H["loads"]["xy"], adj, 2 * lb,
+             title="参照：XY，无故障 48 节点", accent=GREY,
+             sub="峰值 %d = 1.00× 割界（最均衡）" % S["xy"]["peak"],
+             sub2="但零容错：44 场景 0 次零牺牲")
+    fig_heat(d, px0 + (pw + gap), py0, pw, ph, DM["loads"]["xy_best"], dadj,
+             2 * XB["lb"], title="XY，同一残图（牺牲后）", accent=BLUE,
+             holes=dholes, cuts=dcuts, live=set(XB["kept"]),
+             sub="空心 = 被牺牲的好节点，仅 %d/%d 参与" % (XB["n_kept"],
+                                                          XB["n_good"]),
+             sub2="峰值 %d = %.2f× 子网割界 %d" % (XB["peak"],
+                                                  XB["peak_over_lb"],
+                                                  XB["lb"]))
+    fig_heat(d, px0 + 2 * (pw + gap), py0, pw, ph, DM["loads"]["m3p"], dadj,
+             2 * dlb, title="M3′ best-root，同一残图", accent=RED, root=droot,
+             holes=dholes, cuts=dcuts,
+             sub="★ = 根 (7,5)；%d 个好节点全参与、牺牲 0" % DM["n_compute"],
+             sub2="峰值 %d = %.2f× 割界 %d（向根聚拢）"
+                  % (SD["m3p"]["peak"], SD["m3p"]["peak_over_lb"], dlb))
+    fig_heat(d, px0 + 3 * (pw + gap), py0, pw, ph, DM["loads"]["m3p_minmax"],
+             dadj, 2 * dlb, title="M3′ + min-max 选路，同一残图", accent=GREEN,
+             root=droot, holes=dholes, cuts=dcuts,
+             sub="同一转向集内换路径，牺牲仍为 0",
+             sub2="峰值 %d = %.2f× 割界（−%.0f%%）"
+                  % (SD["m3p_minmax"]["peak"], SD["m3p_minmax"]["peak_over_lb"],
+                     100 * (1 - SD["m3p_minmax"]["peak"] / SD["m3p"]["peak"])))
+    colorbar_frac(d, 0.66, hy + 2.58, 2.90, 0.12,
+                  [(0.0, "0"), (0.25, "0.5×"), (0.5, "1.0× 割界"),
+                   (0.75, "1.5×"), (1.0, "≥2.0×")])
+    d.text(4.06, hy + 2.54, 8.84, 0.42, [
+        p("色标 = 该链路承载的 (s,d) 对数 ÷ 本场景割界（两方向取大者）；割界 = "
+          "任何路由都突破不了的最小可能峰值，所以「÷割界」才是跨场景可比的量。"
+          "× = 死 router (3,2)/(4,2)，红叉虚线 = 断链 (1,4)–(2,4)，空心圆 = 被"
+          "牺牲的好节点，★ = 根。M3′ 最热 %d 条链路中 %d 条落在根的 ≤2 跳邻域内。"
+          % (hsd["k"], hsd["near_root"]), size=7.0, color=GREY, space=0),
     ])
 
-    cx2 = 0.30 + cw1 + 0.16
-    cw2 = SLIDE_W - cx2 - 0.30
-    card(d, cx2, ry, cw2, rh,
-         "② 无故障 all-to-all 链路负载热点（同 1 VC）", accent=RED)
-    fig_heat(d, cx2 + 0.10, ry + 0.40, 2.58, 2.50, H["loads"]["xy"], adj, vmax,
-             title="XY 基线（不容错）", accent=BLUE,
-             sub="峰值 %d = 割界，均匀铺满" % S["xy"]["peak"])
-    fig_heat(d, cx2 + 2.98, ry + 0.40, 2.58, 2.50, H["loads"]["m3p"], adj,
-             vmax, title="M3′ best-root（★=根）", accent=RED, root=root,
-             sub="峰值 %d = %.2f× 割界，向根聚拢"
-                 % (S["m3p"]["peak"], S["m3p"]["peak_over_lb"]))
-    colorbar(d, cx2 + 1.35, ry + 3.02, 3.00, 0.13, vmax, [0, 48, lb, vmax])
-    d.text(cx2 + 0.12, ry + 3.30, cw2 - 0.24, 0.28, [
-        p("色标 = 该链路承载的 (s,d) 对数（两方向取大者，两图共用）；最热 %d 条"
-          "链路有 %d 条落在根的 ≤2 跳邻域内。" % (hs["k"], hs["near_root"]),
-          size=7.2, color=GREY, space=0),
-    ])
-
-    ty, th = 4.76, 1.80
+    ty, th = 4.16, 2.02
     tw = 8.10
-    card(d, 0.30, ty, tw, th, "③ 负载不均的定量代价（无故障 8×6，物理 1 VC）",
+    card(d, 0.30, ty, tw, th, "② 负载不均的定量代价（物理 1 VC）",
          accent=RED, hdr_h=0.30)
-    widths = [1.92, 0.90, 0.62, 0.52, 0.72, 0.86, 0.86, 1.30]
-    header = ["方案", "峰值链路负载", "÷割界", "CV", "归一吞吐",
+    widths = [1.86, 0.74, 0.86, 0.62, 0.52, 0.80, 0.80, 0.90]
+    header = ["方案 / 场景", "参与节点", "峰值链路负载", "÷割界", "CV",
               "mk m=1", "mk m=13", "44 场景零牺牲"]
 
-    def row(tag, key, sac):
-        s = S[key]
-        return [tag, s["peak"], "%.2f×" % s["peak_over_lb"], "%.2f" % s["cv"],
-                "%.2f" % s["throughput_ratio"], "%s cy" % s["makespan_m1"],
-                "%s cy" % s["makespan_m13"], sac]
+    def row(tag, s, nodes, sac):
+        def mk(k):
+            v = s.get(k)
+            return "%s cy" % v if v else "—"
+
+        return [tag, nodes, s["peak"], "%.2f×" % s["peak_over_lb"],
+                "%.2f" % s["cv"], mk("makespan_m1"), mk("makespan_m13"), sac]
 
     rows = [
-        row("XY（不容错基线）", "xy", "0/44"),
-        row("M3：根 = 度最大点", "m3", "41/44"),
-        row("M3′：根 = 负载最优", "m3p", "41/44"),
-        row("M3′ + min-max 选路", "m3p_minmax", "41/44"),
-        ["割界（任何路由的下界）", lb, "1.00×", "—", "1.00", "—", "—", "—"],
+        row("XY，无故障", S["xy"], "48/48", "0/44"),
+        row("M3′，无故障", S["m3p"], "48/48", "41/44"),
+        row("XY，同一残图（牺牲后）", XB, "%d/%d" % (XB["n_kept"],
+                                                   XB["n_good"]), "—"),
+        row("M3′，同一残图", SD["m3p"], "46/46", "41/44"),
+        row("M3′ + min-max，同一残图", SD["m3p_minmax"], "46/46", "41/44"),
+        ["割界：无故障 %d / 残图 %d" % (lb, dlb), "—", "—", "1.00×", "—", "—",
+         "—", "—"],
     ]
-    table(d, 0.42, ty + 0.34, widths, header, rows, accent=RED, mark=(2,))
+    table(d, 0.42, ty + 0.34, widths, header, rows, accent=RED, fs=7.4,
+          mark=(4,))
 
     cx3 = 0.30 + tw + 0.16
     cw3 = SLIDE_W - cx3 - 0.30
-    card(d, cx3, ty, cw3, th, "④ 这个代价该怎么读", accent=BLUE, hdr_h=0.30)
+    card(d, cx3, ty, cw3, th, "③ 这四幅图该怎么读", accent=BLUE, hdr_h=0.30)
     d.text(cx3 + 0.14, ty + 0.36, cw3 - 0.28, th - 0.42, [
-        p("不是绕远，是选路集中。", size=8.6, bold=True, color=BLUE, space=1.0),
-        p("M3′ 总跳数 %d、平均 %.2f 跳，与 XY 完全相同（都是最短路）"
-          "⇒ 不均衡纯粹来自「同一最短路集合里怎么挑」。"
+        p("XY 的「均衡」是牺牲换来的。", size=8.6, bold=True, color=BLUE,
+          space=1.0),
+        p("同一残图上 XY 必须丢掉 %d/%d 个好节点（整列 3、4 与整行 2、4）才有完整 "
+          "L 形路径，剩下 %d 个节点、%d 对流量；M3′ 一个不丢。两者峰值不可直接比，"
+          "只能各自比自己的割界。"
+          % (XB["n_sacrificed"], XB["n_good"], XB["n_kept"], XB["n_pairs"]),
+          size=8.2, color=GREY, space=2.2),
+        p("M3′ 的代价不是绕远，是选路集中。", size=8.6, bold=True, color=RED,
+          space=1.0),
+        p("无故障时 M3′ 与 XY 总跳数都是 %d、平均 %.2f 跳 ⇒ 不均衡纯粹来自"
+          "「同一最短路集合里怎么挑」，因此换选路就能免费改善。"
           % (S["m3p"]["hops"], S["m3p"]["avg_hops"]),
-          size=8.2, color=GREY, space=2.4),
-        p("重载差距远大于 1.41×。", size=8.6, bold=True, color=RED, space=1.0),
-        p("m=13 时 %s vs %s cy（+%.0f%%），远超峰值负载比 ⇒ 单 VC 共享 FIFO 下"
-          "路径交织带来的 HOL 阻塞把不均衡进一步放大。"
-          % (S["m3p"]["makespan_m13"], S["xy"]["makespan_m13"],
-             100 * (S["m3p"]["makespan_m13"] / S["xy"]["makespan_m13"] - 1)),
           size=8.2, color=GREY, space=0),
     ])
 
-    by, bh = 6.66, 0.72
+    by, bh = 6.26, 1.04
     d.rect(0.30, by, SLIDE_W - 0.60, bh, fill="F2F7F4", line=GREEN, lw=0.9,
            round_=0.04)
     d.rect(0.30, by, 0.055, bh, fill=GREEN, line=None)
-    d.text(0.48, by + 0.08, 7.60, bh - 0.14, [
-        p("定理 2（极大性）：M3′ 的转向集不可能再放宽", size=9.4, bold=True,
-          color=GREEN, space=1.2),
-        p("任一被禁的 down→up 转向 (u→v→w) 一旦放开必成环：(v→w) 是 up 通道，"
-          "可沿 up* 走到 ℓ 最小点、再沿 down* 回到 u，最后经 down 通道 (u→v) "
-          "回到起点。实测 %d 个根 × %d 条禁令逐条测试，可加入 %d 条。"
+    d.text(0.48, by + 0.10, 6.10, bh - 0.18, [
+        p("定理 1 实测校核（%d 场景 ≤4 router / ≤8 link）" % T44["n"],
+          size=9.4, bold=True, color=GREEN, space=1.2),
+        p("%d 个残图连通的场景全部零牺牲、CDG 成环 0 例、反例 %d 个；余下 %d 个"
+          "场景残图本身断开（分别孤立 %s 个好节点），牺牲量等于信息论下界。同批"
+          "场景 XY 零牺牲 %d/%d。"
+          % (T44["n_connected"], T44["violations"], T44["n_disconnected"],
+             "/".join(str(x) for x in T44["disconnected_isolated"]),
+             T44["xy_zero_sacrifice"], T44["n"]),
+          size=8.2, color=INK, space=0),
+    ])
+    d.text(6.80, by + 0.10, 3.30, bh - 0.18, [
+        p("定理 2（极大性）", size=9.4, bold=True, color=GREEN, space=1.2),
+        p("任一被禁的 down→up 一旦放开必成环；实测 %d 个根 × %d 条禁令逐条测试，"
+          "可加入 %d 条。"
           % (MX_["n_roots"], MX_["forbidden_tested"], MX_["addable_total"]),
           size=8.2, color=INK, space=0),
     ])
-    d.text(8.20, by + 0.08, SLIDE_W - 8.20 - 0.45, bh - 0.14, [
-        p("所以问题只剩一个", size=9.4, bold=True, color=GREEN, space=1.2),
-        p("容错已达理论上界、死锁已构造性排除、保序天然成立；唯一的短板是负载"
-          "不均。下一页：1 VC 下这块短板还能补到什么程度。",
-          size=8.2, color=INK, space=0),
+    d.text(10.30, by + 0.10, SLIDE_W - 10.30 - 0.45, bh - 0.18, [
+        p("下一页", size=9.4, bold=True, color=GREEN, space=1.2),
+        p("两条定理的符号定义与逐步推导（含 Φ 势能沿真实路径的实测校核）见第 3 页；"
+          "1 VC 的可行边界见第 4 页。", size=8.2, color=INK, space=0),
     ])
     return d
 
 
 # --------------------------------------------------------------------------
-# Slide 3: how far can a 1-VC scheme go?
+# Slide 3: what every symbol in the two theorems means, step by step
+# --------------------------------------------------------------------------
+
+def phi_example(root: int, src_xy=(0, 0), dst_xy=(3, 4)) -> dict:
+    """One real up*·down* path with its labels and channel potentials.
+
+    Taken straight from the routing code, then checked here: the potential must
+    increase strictly along the path, which is exactly the deadlock argument.
+    """
+    adj = F.healthy_pg()["route_adj"]
+    lab = _updown_labels(adj, root) or {}
+    s, dst = F.nid(*src_xy), F.nid(*dst_xy)
+    path = _tree_path(s, dst, adj, lab, "ud")
+    rows = []
+    for u, v in zip(path, path[1:]):
+        up = lab[v] < lab[u]
+        rows.append({"u": u, "v": v, "up": up, "lu": lab[u], "lv": lab[v],
+                     "phi": (0, -lab[v]) if up else (1, lab[v])})
+    ok = all(a["phi"] < b["phi"] for a, b in zip(rows, rows[1:]))
+    turn = next((i for i, r in enumerate(rows) if not r["up"]), len(rows))
+    return {"path": path, "labels": [lab[n] for n in path], "rows": rows,
+            "strict": ok, "turn_at": rows[turn - 1]["lv"] if turn else None,
+            "root_label": 0, "lmax": max(lab.values())}
+
+
+def fig_stairs(d: Deck, x0, y0, w, h, ex: dict) -> None:
+    """Label profile of the example path: up* segment then down* segment."""
+    ls = ex["labels"]
+    n = len(ls)
+    lo, hi = min(ls), max(ls)
+    sx = w / (n - 1 + 0.6)
+    gh = h - 0.50
+    sy = gh / max(hi - lo, 1)
+    ox = x0 + sx * 0.3
+    oy = y0 + 0.24
+    r = min(sx * 0.30, 0.085)
+
+    def pos(i):
+        return ox + i * sx, oy + (ls[i] - lo) * sy
+
+    for i in range(n - 1):
+        ax, ay = pos(i)
+        bx, by = pos(i + 1)
+        up = ls[i + 1] < ls[i]
+        dx, dy = bx - ax, by - ay
+        L = (dx * dx + dy * dy) ** 0.5 or 1.0
+        k = r * 1.25 / L
+        d.line(ax + dx * k, ay + dy * k, bx - dx * k, by - dy * k,
+               color=(GREEN if up else ORANGE), lw=1.6, arrow=True)
+    for i in range(n):
+        px, py = pos(i)
+        band = LABEL_BANDS[min(int(ls[i] / max(ex["lmax"], 1) * 4.999), 4)]
+        d.oval(px, py, r, fill=band, line=WHITE, lw=0.6)
+        d.text(px - r, py - r * 0.66, r * 2, r * 1.4,
+               [p(str(ls[i]), size=6.2, bold=True,
+                  color=(WHITE if ls[i] >= 4 else INK), align="c", space=0)])
+    d.text(x0, y0 + h - 0.22, w * 0.5, 0.20,
+           [p("↑ up：ℓ−1", size=7.0, bold=True, color=GREEN, align="c",
+              space=0)])
+    d.text(x0 + w * 0.5, y0 + h - 0.22, w * 0.5, 0.20,
+           [p("↓ down：ℓ+1", size=7.0, bold=True, color=ORANGE, align="c",
+              space=0)])
+
+
+def build_proof_detail() -> Deck:
+    A = analysis()
+    H = A["healthy"]
+    MX_ = A["maximality"]["healthy"]
+    T44 = A["theorem44"]
+    RM = A["random_maximal_healthy"]
+    root = H["root"]
+    ex = phi_example(root)
+    dm = A["demo"]
+
+    d = Deck()
+    d.rect(0, 0, SLIDE_W, SLIDE_H, fill=WHITE, line=None)
+    d.rect(0, 0, SLIDE_W, 0.92, fill=INK, line=None)
+    d.rect(0, 0, 0.10, 0.92, fill=GREEN, line=None)
+    d.text(0.34, 0.10, 12.6, 0.44,
+           [p("定理 1 / 定理 2 详解：每个符号的定义与逐步推导",
+              size=21, bold=True, color=WHITE, space=0)])
+    d.text(0.36, 0.55, 12.6, 0.30,
+           [p("全部符号只有四个：残图 G′、根 r、高度 ℓ(v)、通道势能 Φ(c)。"
+              "定理 1 用它们证「表一定建得出 + 无死锁」，定理 2 用它们证"
+              "「转向集不能再放宽」", size=10.0, color="C3CBD4", space=0)])
+
+    # --- ① notation ------------------------------------------------------
+    ry, rh = 1.00, 3.32
+    cw1 = 4.30
+    card(d, 0.30, ry, cw1, rh, "① 全部符号（本例：8×6，2 洞 1 断链）",
+         accent=BLUE, hdr_h=0.30)
+    sym = [
+        ("G=(V,E)　原始 8×6 mesh：|V|=48，|E|=82，即 164 条有向通道。", False),
+        ("F　故障集 = 死 router ∪ 断链（本例 2 router + 1 link）。", False),
+        ("G′=(V′,E′)　残图 = 删去 F 及其附属链路后的存活图（|V′|=46，|E′|=74）。",
+         True),
+        ("r ∈ V′　根 = BFS 源点，由 best-root 枚举挑出（本例 (7,5)）。", True),
+        ("ℓ(v)　高度 = G′ 上 r 到 v 的 BFS 跳数，ℓ(r)=0（本例 0…%d）。"
+         % ex["lmax"], True),
+        ("up / down　有向通道 (u→v)：ℓ(v)=ℓ(u)−1 记 up（朝根）、ℓ(v)=ℓ(u)+1 记 "
+         "down（离根）。mesh 按 x+y 二分 ⇒ 不存在 ℓ 相等的边。", False),
+        ("(u→v→w)　转向 = 两条首尾相接的有向通道，本例共 %d 个。"
+         % dm["total_turns"], False),
+        ("CDG D=(C,A)　通道依赖图：点 = 有向通道（|C|=%d），边 = 被同一条路径连续"
+         "使用的转向。" % (2 * 74), False),
+        ("Φ(c)　通道势能：up 记 (0,−ℓ(v))、down 记 (1,+ℓ(v))，按字典序比较"
+         "（实例见 ④）。", True),
+        ("S　牺牲集 = 为建表而放弃的好节点，M3′ 在连通残图上恒有 S=∅。", False),
+    ]
+    d.text(0.44, ry + 0.34, cw1 - 0.28, rh - 0.40,
+           [p(t, size=7.8, bold=b, color=(INK if b else GREY),
+              space=(1.6 if i < len(sym) - 1 else 0))
+            for i, (t, b) in enumerate(sym)])
+
+    # --- ② theorem 1 -----------------------------------------------------
+    cx2 = 0.30 + cw1 + 0.14
+    cw2 = 4.30
+    card(d, cx2, ry, cw2, rh, "② 定理 1：连通 ⇒ 零牺牲 + 无死锁",
+         accent=GREEN, hdr_h=0.30)
+    d.text(cx2 + 0.13, ry + 0.34, cw2 - 0.26, rh - 0.40, [
+        p("陈述　∀F：G′ 连通 ⇔ 存在覆盖全部 (s,d) 的合法表且 S=∅。",
+          size=8.1, bold=True, color=GREEN, space=1.2),
+        p("（⇐ 显然：G′ 不连通时跨分量物理不可达，任何路由都得牺牲。下证 ⇒）",
+          size=7.7, color=GREY, space=1.5),
+        p("第 1 步 · 定义 ℓ　G′ 连通 ⇒ 从 r 做 BFS，每个 v 得到有限 ℓ(v)=dist(r,v)，"
+          "且每个 v≠r 至少有一个邻居 u 满足 ℓ(u)=ℓ(v)−1（父节点）。",
+          size=7.7, color=GREY, space=1.5),
+        p("第 2 步 · 构造路径　从 s 沿父链升到 r（全 up），再沿 d 的父链降到 d"
+          "（全 down），拼成 up*·down*，长度 ≤ ℓ(s)+ℓ(d) ⇒ 每对都有合法路径，"
+          "表必然建成、S=∅。", size=7.7, color=GREY, space=1.5),
+        p("第 3 步 · 无死锁　合法衔接仅三种，且都严格增大 Φ：up→up（(0,−ℓ) 增大）、"
+          "up→down（首位 0→1）、down→down（(1,+ℓ) 增大）；被禁的 down→up 恰是唯一"
+          "降 Φ 的衔接。故 CDG 每条边升 Φ ⇒ 有限点集上无环 ⇒ 按 Dally–Seitz 判据，"
+          "1 个 VC 即无死锁。", size=7.7, color=GREY, space=1.5),
+        p("第 4 步 · 保序　每对 (s,d) 唯一静态路径 + 单 VC 不换道 + 每跳 FIFO "
+          "⇒ flit 不可能乱序。", size=7.7, color=GREY, space=1.5),
+        p("第 5 步 · 与 r 无关　1–4 对任意 r∈V′ 成立 ⇒ %d 个候选根全部合法；"
+          "best-root 只在合法解里挑峰值最小者，不会返回空。"
+          % MX_["n_roots"], size=7.7, color=GREY, space=0),
+    ])
+
+    # --- ③ theorem 2 -----------------------------------------------------
+    cx3 = cx2 + cw2 + 0.14
+    cw3 = SLIDE_W - cx3 - 0.30
+    card(d, cx3, ry, cw3, rh, "③ 定理 2：转向集已极大", accent=RED, hdr_h=0.30)
+    d.text(cx3 + 0.13, ry + 0.34, cw3 - 0.26, rh - 0.40, [
+        p("陈述　设 T_UD = 全部 up→up / up→down / down→down 转向。则任取 t ∉ T_UD"
+          "（即任一 down→up），T_UD ∪ {t} 的 CDG 必含环。",
+          size=8.1, bold=True, color=RED, space=1.2),
+        p("证明　记 t=(u→v→w)，按定义 (u→v) 是 down、(v→w) 是 up。",
+          size=7.7, color=INK, space=1.5),
+        p("① 从通道 (v→w) 出发（ℓ(w)=ℓ(v)−1），继续沿父链 up，有限步必达 r（ℓ=0）；"
+          "这些衔接都是 up→up ∈ T_UD。", size=7.7, color=GREY, space=1.5),
+        p("② 在 r 处拐头，沿 u 的父链下行到 u，每跳 ℓ+1。首次衔接是 up→down、"
+          "其后都是 down→down，全 ∈ T_UD。", size=7.7, color=GREY, space=1.5),
+        p("③ 于是抵达通道 (·→u)，再走 (u→v)（down→down ∈ T_UD），最后用新放开的 "
+          "t 从 (u→v) 接回 (v→w) —— 回到起点，环成立（证毕）。",
+          size=7.7, color=GREY, space=1.5),
+        p("一句话版　T_UD 每条边都升 Φ，t 是唯一降 Φ 的衔接；加入任何降势边，"
+          "都能与升势路径接成回路。", size=7.7, color=INK, space=1.5),
+        p("实测：%d 个根 × 共 %d 条禁令逐条放开测试，可加入 %d 条。"
+          % (MX_["n_roots"], MX_["forbidden_tested"], MX_["addable_total"]),
+          size=7.7, bold=True, color=RED, space=0),
+    ])
+
+    # --- ④ worked example ------------------------------------------------
+    ey, eh = 4.44, 1.88
+    ew = 7.90
+    card(d, 0.30, ey, ew, eh,
+         "④ 实例校核：真实表里的 (0,0)→(3,4)，Φ 逐跳严格递增",
+         accent=ORANGE, hdr_h=0.28)
+    fig_stairs(d, 0.42, ey + 0.32, 2.44, eh - 0.44, ex)
+    xs = 2.98
+    nch = len(ex["rows"])
+    widths = [0.88] + [0.54] * nch
+    header = ["通道"] + ["c%d" % (i + 1) for i in range(nch)]
+    rows = [
+        ["类型"] + ["up" if r["up"] else "down" for r in ex["rows"]],
+        ["ℓ 变化"] + ["%d→%d" % (r["lu"], r["lv"]) for r in ex["rows"]],
+        ["Φ(c)"] + ["(%d,%+d)" % r["phi"] for r in ex["rows"]],
+    ]
+    table(d, xs, ey + 0.32, widths, header, rows, accent=ORANGE, fs=6.6,
+          hdr_h=0.22, row_h=0.24, aligns=["l"] + ["c"] * nch)
+    d.text(xs, ey + 1.30, ew - xs + 0.22, 0.50, [
+        p("Φ 按字典序严格递增（代码断言 strict=%s）：%s。转折点在 ℓ=%d、并未爬到根 "
+          "⇒ up*·down* 不要求「必须经过根」，定理 1 第 2 步只是给出一条存在性路径。"
+          % (ex["strict"],
+             " < ".join("(%d,%+d)" % r["phi"] for r in ex["rows"][:4]) + " < …",
+             ex["turn_at"]),
+          size=7.0, color=GREY, space=0),
+    ])
+
+    # --- ⑤ common misreadings --------------------------------------------
+    cx5 = 0.30 + ew + 0.14
+    cw5 = SLIDE_W - cx5 - 0.30
+    card(d, cx5, ey, cw5, eh, "⑤ 三个容易读错的地方", accent=BLUE, hdr_h=0.28)
+    d.text(cx5 + 0.13, ey + 0.32, cw5 - 0.26, eh - 0.38, [
+        p("① 极大 ≠ 最大（maximal ≠ maximum）：定理 2 只说不能再单独加一条。"
+          "别的极大无环集依然存在，大小 %d–%d 条不等（M3′ 是 %d 条）—— 这正是"
+          "第 4 页 L4「换位」的搜索空间。"
+          % (RM["min"], RM["max"], MX_["permitted_min"]),
+          size=7.7, color=GREY, space=1.8),
+        p("② ℓ 是无权跳数，不是线延迟：它只用来定序、保证 CDG 无环；真实 H=%d / "
+          "V=%d cy 的线延迟只影响端到端时间，不影响两条定理。"
+          % (A["meta"]["H"], A["meta"]["V"]), size=7.7, color=GREY, space=1.8),
+        p("③ 零牺牲 ≠ 零性能损失：定理 1 只保证「连通即可达」，负载均衡完全不在"
+          "结论里 —— 那正是第 2 页热点图与第 4 页要处理的问题。",
+          size=7.7, color=GREY, space=0),
+    ])
+
+    # --- bottom band ------------------------------------------------------
+    by, bh = 6.42, 0.88
+    d.rect(0.30, by, SLIDE_W - 0.60, bh, fill="F2F7F4", line=GREEN, lw=0.9,
+           round_=0.04)
+    d.rect(0.30, by, 0.055, bh, fill=GREEN, line=None)
+    d.text(0.48, by + 0.10, 6.30, bh - 0.18, [
+        p("两条定理合起来给出的边界", size=9.2, bold=True, color=GREEN,
+          space=1.2),
+        p("容错：{F : G′ 连通} 已是任何路由的上界（定理 1）· 死锁：Φ 构造性排除，"
+          "只需 1 VC · 保序：唯一静态路径天然成立 · 转向：不能再放宽（定理 2）。",
+          size=8.0, color=INK, space=0),
+    ])
+    d.text(7.00, by + 0.10, SLIDE_W - 7.00 - 0.45, bh - 0.18, [
+        p("代码对应关系（可逐行复核）", size=9.2, bold=True, color=GREEN,
+          space=1.2),
+        p("ℓ = _updown_labels（BFS）· up*·down* = _tree_path 两阶段 BFS · "
+          "CDG 复验 = build_cdg + cdg_acyclic · 44 场景校核 = "
+          "pg_m3p_analysis.theorem44（反例 %d）。"
+          % T44["violations"], size=8.0, color=INK, space=0),
+    ])
+    return d
+
+
+# --------------------------------------------------------------------------
+# Slide 4: how far can a 1-VC scheme go?
 # --------------------------------------------------------------------------
 
 def fig_cycle(d: Deck, x0, y0, w, h) -> None:
@@ -901,11 +1200,12 @@ def main() -> None:
     if not (args.pptx or args.png):
         args.pptx = args.png = True
 
-    decks = [build(), build_proof(), build_limit()]
+    decks = [build(), build_proof(), build_proof_detail(), build_limit()]
     if args.pptx:
         emit_pptx(decks, OUT_PPTX)
     if args.png:
-        for deck, path in zip(decks, (OUT_PNG, OUT_PNG_PROOF, OUT_PNG_LIMIT)):
+        for deck, path in zip(decks, (OUT_PNG, OUT_PNG_PROOF, OUT_PNG_DETAIL,
+                                      OUT_PNG_LIMIT)):
             emit_png(deck, path)
 
 

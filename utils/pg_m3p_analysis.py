@@ -295,6 +295,58 @@ def demo_pg() -> dict:
     return F.expand_pg(scen, "dead")
 
 
+def xy_sacrifice(pg: dict, scheme: str = "xy") -> dict[str, Any]:
+    """XY on the *same* residual graph.
+
+    Dimension-order routing cannot cover a graph with holes, so the DSE
+    sacrifice ladder (solve_scheme) throws healthy nodes away until the table
+    builds. Reporting that surviving subset is what makes an apples-to-apples
+    heat map possible: same faults, same links, but far fewer live pairs.
+    """
+    sol = R.solve_scheme(pg, scheme)
+    if not sol["feasible"]:
+        return {"routable": False, "scheme": scheme}
+    kept, adj = sorted(sol["compute_nodes"]), sol["route_adj"]
+    lb = R.minimax_load_lb(kept, adj)
+    rec = load_stats(adj, sol["paths"], lb)
+    rec.update(routable=True, scheme=scheme, lb=lb, kept=kept, n_kept=len(kept),
+               sacrificed=sol["sacrificed"], n_sacrificed=sol["n_sacrificed"],
+               n_pairs=len(sol["paths"]), n_good=len(pg["compute_nodes"]))
+    return rec
+
+
+def xy_best_sacrifice(pg: dict) -> dict[str, Any]:
+    """XY at its best on the same residual graph.
+
+    solve_scheme's generic ladder is conservative (it falls back to a line), so
+    for a fair picture we search XY's own optimum directly: greedily drop the
+    node involved in the most broken XY pairs until every surviving pair has an
+    intact L-shaped path. The result is the largest hole-free sub-grid XY can
+    serve, i.e. an upper bound on how well XY can do here.
+    """
+    adj, good = pg["route_adj"], list(pg["compute_nodes"])
+    S = set(good)
+    while True:
+        bad = [(s, d) for s in S for d in S
+               if s != d and R.xy_path(s, d, adj) is None]
+        if not bad:
+            break
+        cnt: dict[int, int] = {}
+        for s, d in bad:
+            cnt[s] = cnt.get(s, 0) + 1
+            cnt[d] = cnt.get(d, 0) + 1
+        S.discard(max(sorted(cnt), key=lambda n: (cnt[n], -n)))
+    kept = sorted(S)
+    paths = {(s, d): R.xy_path(s, d, adj) for s in kept for d in kept if s != d}
+    lb = R.minimax_load_lb(kept, adj)
+    rec = load_stats(adj, paths, lb)
+    rec.update(routable=True, scheme="xy_greedy_sacrifice", lb=lb, kept=kept,
+               n_kept=len(kept), n_sacrificed=len(good) - len(kept),
+               n_pairs=len(paths), n_good=len(good),
+               loads=dump_loads(adj, paths))
+    return rec
+
+
 def theorem44() -> dict[str, Any]:
     """Theorem 1 check: residual graph connected <=> M3' needs zero sacrifice."""
     out = []
@@ -642,6 +694,18 @@ def main() -> None:
                          with_loads=("xy", "m3p", "m3p_minmax"))
     print("placement study (2 holes + 1 cut)")
     pd = placement_study(demo, "demo", with_loads=("m3p", "m3p_minmax"))
+    print("XY on the same residual graph (sacrifice needed)")
+    pd["xy_sacrifice"] = xy_sacrifice(demo)
+    pd["xy_best"] = xy_best_sacrifice(demo)
+    pd["loads"]["xy_best"] = pd["xy_best"].pop("loads")
+    print("   DSE ladder keeps %s/%s; XY's own optimum keeps %d/%d, peak=%d "
+          "(%.2fx its own cut bound)"
+          % (pd["xy_sacrifice"].get("n_kept"), pd["xy_sacrifice"].get("n_good"),
+             pd["xy_best"]["n_kept"], pd["xy_best"]["n_good"],
+             pd["xy_best"]["peak"], pd["xy_best"]["peak_over_lb"]))
+    pd["dead_nodes"] = [F.nid(x, y) for x, y in DEMO_DEAD_NODES]
+    pd["dead_links"] = [[F.nid(*DEMO_DEAD_LINK[0]), F.nid(*DEMO_DEAD_LINK[1])]]
+    pd["n_compute"] = len(demo["compute_nodes"])
     print("root sweep (healthy)")
     rs = healthy_rs = root_sweep(healthy)
     print("   base   min=%d med=%.0f max=%d" % (rs["base"]["min"],
