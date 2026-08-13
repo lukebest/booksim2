@@ -92,8 +92,15 @@ def phase_offers(col: RingCollective) -> list[list[tuple[int, int, int]]]:
 
 def run_base_phase(topo: RingTopology, offers: Sequence[tuple[int, int, int]],
                    params: RingBaseParams | None, seed: int,
-                   t_max: int = 400_000) -> dict[str, Any]:
-    """`run_batch` with a per-pair flit count instead of one global m."""
+                   t_max: int = 400_000,
+                   link_busy: dict[Any, int] | None = None) -> dict[str, Any]:
+    """`run_batch` with a per-pair flit count instead of one global m.
+
+    `link_busy`, when given, accumulates this phase's per-arc busy cycles into
+    the caller's dict. Phases run back to back in time, so summing them and
+    dividing by the summed makespan is the same utilization the calendar reports
+    for its own footprints.
+    """
     sim = RingBaseSim(topo, params, seed=seed)
     total = 0
     for s, d, nf in offers:
@@ -107,6 +114,9 @@ def run_base_phase(topo: RingTopology, offers: Sequence[tuple[int, int, int]],
             last_t = sim.t
         elif sim.t - last_t > 20_000:
             break
+    if link_busy is not None:
+        for e, cy in sim.link_busy.items():
+            link_busy[e] = link_busy.get(e, 0) + cy
     out = sim.summary()
     out["makespan"] = sim.t
     out["n_target_flits"] = total
@@ -120,7 +130,8 @@ def run_base_phase(topo: RingTopology, offers: Sequence[tuple[int, int, int]],
 
 
 def run_base_collective(topo: RingTopology, col: RingCollective, *,
-                        params: RingBaseParams | None = None, seed: int = 0
+                        params: RingBaseParams | None = None, seed: int = 0,
+                        link_busy: dict[Any, int] | None = None
                         ) -> dict[str, Any]:
     mk = 0
     agg = defaultdict(int)
@@ -131,7 +142,7 @@ def run_base_collective(topo: RingTopology, col: RingCollective, *,
         if not offers:
             per_phase.append(0)
             continue
-        r = run_base_phase(topo, offers, params, seed)
+        r = run_base_phase(topo, offers, params, seed, link_busy=link_busy)
         mk += r["makespan"]
         per_phase.append(r["makespan"])
         done = done and r["completed"]

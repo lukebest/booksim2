@@ -141,6 +141,8 @@ class Flit:
     deflections: int = 0
     e_tag: bool = False
     t_inject: int = -1
+    t_fifo: int = -1             # cycle it entered the bridge FIFO
+    t_ready: int = -1            # earliest cycle it may board the next ring
 
 
 class RingBaseSim:
@@ -161,11 +163,32 @@ class RingBaseSim:
         self.seg_free: dict[Any, int] = defaultdict(int)
         self.arrivals: dict[int, list[Flit]] = defaultdict(list)
         self.arr_set: dict[Any, set[int]] = defaultdict(set)
+        self.order: dict[RingId, list[int]] = {r: topo.ring_nodes(r)
+                                               for r in topo.rings}
+
+        # per-arc busy cycles, charged sigma per hop taken -- the same quantity
+        # the calendar sums over footprints, so the two legs' utilization is one
+        # formula and not two. A deflected flit is charged for every crossing.
+        self.link_busy: dict[tuple[int, int], int] = defaultdict(int)
 
         # bridge state: FIFO per (node, target ring)
         self.fifo: dict[Any, deque[Flit]] = defaultdict(deque)
         self.fifo_blocked: dict[Any, int] = defaultdict(int)
         self.resv_used: dict[Any, int] = defaultdict(int)
+
+        # bridge buffer accounting, per bridge node. `occ` is the flit-cycle
+        # integral (divide by makespan for the mean depth actually needed),
+        # `peak` the deepest it ever got, `full` the cycles it sat at capacity
+        # -- that last one is what turns into deflection, so it is the number
+        # that decides whether fifo_depth is provisioned or merely assumed.
+        self.br_occ: dict[int, int] = defaultdict(int)
+        self.br_peak: dict[int, int] = defaultdict(int)
+        self.br_full: dict[int, int] = defaultdict(int)
+        self.br_in: dict[int, int] = defaultdict(int)
+        self.br_deflect: dict[int, int] = defaultdict(int)
+        self.br_wait_max = 0          # worst queueing on top of t_turn
+        self.br_wait_sum = 0
+        self.br_wait_n = 0
 
         # endpoint state
         self.srcq: dict[int, deque[Flit]] = defaultdict(deque)
@@ -286,9 +309,13 @@ class RingBaseSim:
         self.seg_free[seg] = self.t + self.sigma
         k = self.topo.ring_size(f.ring)
         nxt = (f.idx + f.dir) % k
-        lat = self.sigma if self.p.slot_ring else self.topo.ring_lat(f.ring)
+        # the physical segment is the one between idx and nxt, which for a
+        # backwards hop is indexed by the lower endpoint
+        lat = (self.sigma if self.p.slot_ring else
+               self.topo.link_lat(f.ring, f.idx if f.dir > 0 else f.idx - 1))
+        order = self.order[f.ring]
+        self.link_busy[(order[f.idx], order[nxt])] += self.sigma
         if self.cut:
-            order = self.topo.ring_nodes(f.ring)
             if (order[f.idx], order[nxt]) in self.cut:
                 t0, t1 = self.cut_win
                 self.cut_busy += max(0, min(self.t + self.sigma, t1)
@@ -548,6 +575,10 @@ class RingBaseSim:
         out["deflect_per_flit"] = (
             round(self.st["n_deflections"] /
                   max(1, self.st["n_delivered_flits"]), 3))
+        out["total_link_cycles"] = sum(self.link_busy.values())
+        out["critical_arc_cycles"] = (max(self.link_busy.values())
+                                      if self.link_busy else 0)
+        out["n_links_used"] = len(self.link_busy)
         return out
 
 

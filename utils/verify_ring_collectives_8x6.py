@@ -8,14 +8,16 @@ the plan started from -- those are kept, inverted, and marked, because a check
 that has been quietly relaxed to keep passing is worse than no check.
 
 Groups:
-    topology and footprint model      1-8
-    collective semantics              9-16
-    D-R legality of every calendar   17-24
-    lower bounds                     25-30
-    rotation and utilization         31-35
-    faults                           36-41
-    jitter                           42-46
-    calendar export                  47-51
+    topology and footprint model
+    collective semantics
+    D-R legality of every calendar
+    lower bounds (calendar model, then ring_base's own model)
+    structural floors vs measured makespan / II / utilization, both legs
+    core attachment: why 2 ports and full rings, not half rings
+    rotation and utilization
+    faults
+    jitter
+    calendar export
 """
 
 from __future__ import annotations
@@ -44,11 +46,12 @@ from rg_ring_collectives import (
 from rg_ring_topo import (
     RingMcastFootprint, RingTopology, build_ring_plan, verify_dr,
 )
-from rg_topo import RAMP, RAMP_BW, coord, nid
+from rg_topo import MX, MY, RAMP, RAMP_BW, coord, nid
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 OUT = ROOT_DIR / "results" / "verify_ring_collectives_8x6.json"
 COLL = ROOT_DIR / "results" / "ring_collectives_8x6.json"
+THR = ROOT_DIR / "results" / "ring_throughput_8x6.json"
 ROOT_NODE = 27
 
 RESULTS: list[dict[str, Any]] = []
@@ -329,6 +332,302 @@ def group_base_bounds() -> None:
           f"on a turning route, t_turn={topo.t_turn}")
 
 
+def group_throughput() -> None:
+    """The structural floors, and the measurements that must respect them.
+
+    This group exists because the interesting failure mode is not "a schedule is
+    slow", it is "a number was printed below a floor and nobody noticed". The
+    floors here are the weak ones (relaying and local combining allowed, so they
+    hold for T0 and T1 alike and for every algorithm), which is exactly what
+    makes a violation meaningful.
+    """
+    d = load_json(THR)
+    if not d:
+        check("ring_throughput_8x6.json is present", False,
+              "missing -- run dse_ring_throughput_8x6.py")
+        return
+    th = {(t["pattern"], t["m"]): t for t in d["theory"]}
+    rows = d["rows"]
+
+    legs = [(r, leg, L) for r in rows for leg, L in
+            (("calendar", r["calendar"]), ("ring_base", r["ring_base"]))
+            if L["T1"] is not None]
+    bad = [(leg, r["pattern"], r["algo"], r["tier"], r["m"], L["T1"])
+           for r, leg, L in legs
+           if L["T1"] < th[(r["pattern"], r["m"])]["makespan_lb"]]
+    check("no measured makespan is below the structural floor, either leg",
+          not bad, f"{len(legs)} leg-rows checked, {len(bad)} below {bad[:2]}")
+
+    bad = [(leg, r["pattern"], r["algo"], r["m"], R, v["per_round"])
+           for r, leg, L in legs for R, v in L["by_rounds"].items()
+           if v["per_round"] < th[(r["pattern"], r["m"])]["II_lb"] - 1e-9]
+    check("no amortised per-round time T_R/R is below the capacity floor",
+          not bad, f"{len(bad)} below {bad[:2]}")
+
+    # the same is NOT true of the marginal II estimate, and that is a property of
+    # the estimator, not of the hardware -- pin it so the two never get conflated
+    def dips(rounds: str) -> list[tuple[Any, ...]]:
+        return [(r["pattern"], r["algo"], leg, v["II_eff"],
+                 th[(r["pattern"], r["m"])]["II_lb"])
+                for r, leg, L in legs for R, v in L["by_rounds"].items()
+                if R == rounds and v["II_eff"]
+                and v["II_eff"] < th[(r["pattern"], r["m"])]["II_lb"]]
+    d5, d13 = dips("5"), dips("13")
+    w5 = min(d5, key=lambda x: x[3] / x[4], default=None)
+    w13 = min(d13, key=lambda x: x[3] / x[4], default=None)
+    check("II_eff=(T_R-T1)/(R-1) may dip below the capacity floor at finite R "
+          "(estimator artefact: the first instance already did some of the "
+          "work being amortised away), and the dip shrinks with R",
+          bool(d5) and bool(d13) and w13[3] / w13[4] > w5[3] / w5[4],
+          f"R=5: {len(d5)} dips, worst {w5[3]} vs floor {w5[4]} = "
+          f"{w5[3] / w5[4]:.3f}x ({w5[0]}/{w5[1]}/{w5[2]}); "
+          f"R=13: {len(d13)} dips, worst "
+          + (f"{w13[3]} vs {w13[4]} = {w13[3] / w13[4]:.3f}x "
+             f"({w13[0]}/{w13[1]}/{w13[2]})" if w13 else "none"),
+          prediction="II_eff is a safe throughput bound to check: REFUTED")
+
+    bad = [(leg, r["pattern"], r["m"], R, u["global_util"],
+            u["critical_arc_util"])
+           for r, leg, L in legs for R, v in L["by_rounds"].items()
+           for u in [v["util"]]
+           if u["global_util"] > 1 + 1e-6 or u["critical_arc_util"] > 1 + 1e-6]
+    check("no utilization exceeds 100% (measured over each run's own span)",
+          not bad, f"{len(bad)} over {bad[:2]}")
+
+    bad = [(leg, r["pattern"], r["m"], R)
+           for r, leg, L in legs for R, v in L["by_rounds"].items()
+           if v["util"]["useful_global"] > v["util"]["global_util"] + 1e-6]
+    check("useful (minimum-hop) utilization never exceeds occupied utilization",
+          not bad, f"{len(bad)} over {bad[:2]}")
+
+    taxes = {r["cal_hop_tax"] for r in rows}
+    check("the calendar spends EXACTLY the minimum-hop arc budget: hop tax 1.00",
+          taxes == {1.0}, f"distinct calendar hop taxes: {sorted(taxes)}")
+
+    fanin = max((r for r in rows if r["pattern"] in ("gather", "reduce")
+                 and r.get("base_hop_tax")),
+                key=lambda r: r["base_hop_tax"], default=None)
+    if fanin:
+        u = fanin["ring_base"]["by_rounds"]["13"]["util"]
+        check("ring_base pays for its fan-in makespan in wasted arc bandwidth, "
+              "not in useful work",
+              fanin["base_hop_tax"] > 3
+              and u["useful_global"] < u["global_util"] / 3,
+              f'{fanin["pattern"]}/{fanin["algo"]} m={fanin["m"]}: hop tax '
+              f'{fanin["base_hop_tax"]}x, occupied {u["global_util"]} vs '
+              f'useful {u["useful_global"]}; the calendar delivers the same '
+              f'flow set at '
+              f'{fanin["calendar"]["by_rounds"]["13"]["util"]["global_util"]} '
+              f'with hop tax {fanin["cal_hop_tax"]}x')
+
+    at1 = th[("alltoall", 1)]
+    check("alltoall is the one pattern whose II floor is the CUT, and relaying "
+          "cannot help it (distinct payload per src-dst pair)",
+          at1["binding_capacity"] == "cut" and at1["cut_lb"] == 48,
+          f'cut={at1["cut_lb"]} port={at1["port_lb"]} ramp={at1["ramp_lb"]}: '
+          f'{at1["cut_witness"]}')
+
+    lat = {t["lat_distance_cy"] for t in d["theory"]}
+    check("every m=1 collective on this fabric is LATENCY bound, not bandwidth "
+          "bound: the floor is pure wire delay",
+          all(t["binding"] == "latency" for t in d["theory"] if t["m"] == 1),
+          f"distance floors {sorted(lat)} cy vs capacity floors "
+          f'{sorted({t["capacity_lb"] for t in d["theory"] if t["m"] == 1})}')
+
+    m13 = [t for t in d["theory"] if t["m"] == 13]
+    check("at m=13 the binding floor moves off latency for the three "
+          "many-item patterns",
+          {t["pattern"] for t in m13 if t["binding"] != "latency"}
+          == {"gather", "allgather", "alltoall"},
+          ", ".join(f'{t["pattern"]}:{t["binding"]}' for t in m13))
+
+    # the floors here must be weaker than the attachment study's flat-demand
+    # convention, otherwise one of the two documents is wrong about relaying
+    att = load_json(ROOT_DIR / "results" / "ring_attach_8x6.json")
+    if att:
+        a = next(s for s in att["schemes"] if s["key"] == "A_full_2port")
+        worse = [p for p in ("broadcast", "reduce", "gather", "allreduce",
+                             "allgather", "alltoall")
+                 if th[(p, 1)]["II_lb"] > a["bounds"][f"{p}/T0"]["lb"]]
+        check("the relay-aware floors are never stronger than the attachment "
+              "study's no-relay convention (the two models are consistent)",
+              not worse, f"stronger on: {worse or 'none'}")
+
+    hl = {(h["pattern"], h["m"]): h for h in d["headline"]}
+    g = hl[("gather", 1)]
+    check("the calendar is within a few percent of the gather throughput floor",
+          g["cal_T0"]["per_round_over_lb"] <= 1.10,
+          f'gather m=1: {g["cal_T0"]["best_II"]["per_round"]} cy/round vs floor '
+          f'{g["bound"]["II_lb"]} = {g["cal_T0"]["per_round_over_lb"]}x')
+
+    a = hl[("alltoall", 13)]
+    check("under pipelining the calendar beats ring_base on throughput for the "
+          "bandwidth-bound patterns",
+          a["base_over_cal_T0"]["per_round"] > 1.2,
+          f'alltoall m=13: base {a["base"]["best_II"]["per_round"]} vs calendar '
+          f'{a["cal_T0"]["best_II"]["per_round"]} cy/round = '
+          f'{a["base_over_cal_T0"]["per_round"]}x')
+
+    reasm = max((v["max_reasm_occupancy"] for r, leg, L in legs
+                 if leg == "ring_base" for v in L["by_rounds"].values()),
+                default=0)
+    check("ring_base's pipelined throughput assumes a reorder buffer far larger "
+          "than the 64 flits it is provisioned with",
+          reasm > 64,
+          f"peak reassembly occupancy {reasm} flits over all pipelined runs")
+
+
+def group_attach() -> None:
+    """Why the fabric is attached the way it is (scheme A), not by assumption.
+
+    These checks re-derive the attachment from structure only -- port budget,
+    connectivity, cut capacity, wire length -- with an independent model
+    (`rg_ring_attach`), and then confront that model with the numbers the main
+    pipeline produced. Two independent computations agreeing on 12 / 576 / 48 /
+    56 is the reason to trust either.
+    """
+    import rg_ring_attach as at
+
+    rows = {s.key: at.analyse(s) for s in at.schemes()}
+    at.rank(rows.values())
+    A = rows["A_full_2port"]
+
+    check("recommended attachment: every core spends its 2 ports on "
+          "1 row ring + 1 column ring",
+          A["ports_min"] == A["ports_max"] == 2 and A["ports_ok"],
+          f"ports/core = {A['ports_min']}, both dims tappable = "
+          f"{A['dims_directly_reachable']}")
+    check("2 ring ports exactly match the L1 ramp (RAMP_BW=2), so neither "
+          "side starves the other",
+          A["core_rate"] == RAMP_BW and A["ramp_match"],
+          f"core rate {A['core_rate']} flit/cy vs ramp {RAMP_BW}")
+    check("co-located bridge: turning needs no extra ring tap",
+          A["structure"]["n_extra_tap_bridges"] == 0
+          and A["structure"]["n_bridges"] == 48,
+          f"{A['structure']['n_bridges']} bridges, "
+          f"{A['structure']['n_extra_tap_bridges']} extra taps")
+
+    # the independent model must reproduce the main pipeline's bounds
+    coll = json.loads(COLL.read_text())
+    a2a = next(r for r in coll["rows"] if r["pattern"] == "alltoall"
+               and r["tier"] == "T0" and r["m"] == 1)
+    b = a2a["bounds"]
+    ax = A["cuts"]["x"]
+    cut_row = next(r for r in ax["per_cut"] if r["at"] == 4)
+    a2a_lb = A["bounds"]["alltoall/T0"]
+    check("independent attachment model reproduces the pipeline's bisection "
+          "numbers",
+          cut_row["cap_per_dir"] == b["cut_width_directed"]
+          and a2a_lb["cut_lb"] == b["bisection_lb"],
+          f"cut width {cut_row['cap_per_dir']} vs {b['cut_width_directed']}, "
+          f"bisection LB {a2a_lb['cut_lb']} vs {b['bisection_lb']}")
+    check("independent attachment model reproduces the pipeline's latency "
+          "floor (diameter)",
+          A["distance"]["diameter_cy"] == a2a["bounds_base"]["latency_lb"],
+          f"diameter {A['distance']['diameter_cy']} cy vs base-model "
+          f"latency LB {a2a['bounds_base']['latency_lb']}")
+    check("folded full rings cost exactly 2x mesh wire length, which is where "
+          "the repo's sigma=2 yardstick comes from",
+          A["structure"]["wire_vs_mesh"] == 2.0,
+          f"{A['structure']['wire_pitches']} pitches vs mesh "
+          f"{A['structure']['mesh_wire_pitches']} = "
+          f"{A['structure']['wire_vs_mesh']}x")
+
+    # half-SPAN rings: the seam is the whole story
+    c0 = rows["C0_rowhalf_noseam"]
+    half = (MX // 2) * MY
+    expect = 2 * half * (half - 1)
+    check("half-span rings with <=2 ports/core DISCONNECT the fabric unless "
+          "the seam is repaired",
+          not c0["distance"]["connected"]
+          and c0["distance"]["reachable_pairs"] == expect
+          and c0["cuts"]["x"]["min_cap_per_dir"] == 0,
+          f"{c0['distance']['reachable_pairs']}/"
+          f"{c0['distance']['total_pairs']} pairs reachable "
+          f"(two {half}-core halves), x-cut capacity "
+          f"{c0['cuts']['x']['min_cap_per_dir']}",
+          prediction="CONFIRMED: a column ring never changes x and a split "
+                     "row ring never spans the seam")
+    c = rows["C_rowhalf_seam"]
+    check("seam bridges restore connectivity but halve the crossing capacity, "
+          "and the bandwidth-bound collectives inherit it",
+          c["distance"]["connected"]
+          and c["cuts"]["x"]["min_cap_per_dir"] * 2
+          == A["cuts"]["x"]["min_cap_per_dir"]
+          and c["bounds"]["alltoall/T0"]["lb"]
+          == 2 * A["bounds"]["alltoall/T0"]["lb"],
+          f"x-cut {c['cuts']['x']['min_cap_per_dir']} vs "
+          f"{A['cuts']['x']['min_cap_per_dir']} flit/cy; alltoall LB "
+          f"{c['bounds']['alltoall/T0']['lb']} vs "
+          f"{A['bounds']['alltoall/T0']['lb']} cy")
+    e = rows["E_bothhalf_seam"]
+    check("splitting both dimensions saves wire but loses both cuts",
+          e["structure"]["wire_pitches"] < A["structure"]["wire_pitches"]
+          and e["bounds"]["alltoall/T0"]["lb"]
+          > A["bounds"]["alltoall/T0"]["lb"],
+          f"wire {e['structure']['wire_pitches']} vs "
+          f"{A['structure']['wire_pitches']} pitches, alltoall LB "
+          f"{e['bounds']['alltoall/T0']['lb']} vs "
+          f"{A['bounds']['alltoall/T0']['lb']} cy")
+    f = rows["F_rowhalf_stagger"]
+    check("staggered half rings keep the cut and need no seam bridge, but a "
+          "wrap-around loop cannot be folded under 2 pitches",
+          f["cuts"]["x"]["min_cap_per_dir"] == A["cuts"]["x"]["min_cap_per_dir"]
+          and f["structure"]["max_link_pitches"] > 2
+          and f["structure"]["wire_pitches"] > A["structure"]["wire_pitches"],
+          f"x-cut {f['cuts']['x']['min_cap_per_dir']}, longest wire "
+          f"{f['structure']['max_link_pitches']} pitches (A: "
+          f"{A['structure']['max_link_pitches']}), wire "
+          f"{f['structure']['wire_pitches']} vs "
+          f"{A['structure']['wire_pitches']}",
+          prediction="REFUTED the cheap reading of 'half rings save metal': "
+                     "a staggered half ring costs MORE (352 vs 328)")
+
+    # half-LANE rings: metal-constant, so the loss is latency not bandwidth
+    bl = rows["B_full_1lane"]
+    lat_ratio = bl["distance"]["avg_lat_cy"] / A["distance"]["avg_lat_cy"]
+    same = all(bl["bounds"][k]["lb"] == A["bounds"][k]["lb"]
+               for k in A["bounds"])
+    check("one-lane rings at metal parity (half the wires, 2x width) tie every "
+          "bound and pay only in latency",
+          same and bl["structure"]["wire_pitches_x_width"]
+          == A["structure"]["wire_pitches_x_width"] and lat_ratio > 1.5,
+          f"all 12 bounds equal, metal {bl['structure']['wire_pitches']}x"
+          f"{bl['structure']['segment_width']} = "
+          f"{bl['structure']['wire_pitches_x_width']}, average latency "
+          f"{lat_ratio:.2f}x, diameter {bl['distance']['diameter_cy']} vs "
+          f"{A['distance']['diameter_cy']} cy")
+
+    # port budget: 1 port is the one choice that hurts every collective
+    g = rows["G_row_only_1port"]
+    check("spending only 1 port per core doubles every port-bound collective",
+          g["core_rate"] == 1
+          and g["bounds"]["allgather/T1"]["lb"]
+          == 2 * A["bounds"]["allgather/T1"]["lb"] - 1,
+          f"allgather/T1 LB {g['bounds']['allgather/T1']['lb']} vs "
+          f"{A['bounds']['allgather/T1']['lb']} cy, gather/T0 "
+          f"{g['bounds']['gather/T0']['lb']} vs "
+          f"{A['bounds']['gather/T0']['lb']} cy")
+    h = rows["H_two_on_row"]
+    check("spending both ports on one ring keeps the bounds but pays 48 extra "
+          "ring taps and longer paths",
+          h["bounds"]["alltoall/T0"]["lb"] == A["bounds"]["alltoall/T0"]["lb"]
+          and h["structure"]["n_extra_tap_bridges"] == 48
+          and h["distance"]["avg_hops"] > A["distance"]["avg_hops"],
+          f"extra taps {h['structure']['n_extra_tap_bridges']}, average hops "
+          f"{h['distance']['avg_hops']} vs {A['distance']['avg_hops']}")
+
+    gates = {k: [r["key"] for r in rows.values() if not r["gates"][k]]
+             for k in A["gates"]}
+    beats_a = [r["key"] for r in rows.values()
+               if r["best_vs_A"] is not None and r["best_vs_A"] < 1.0]
+    check("scheme A passes all four physical gates and no other candidate "
+          "beats it on a single one of the 12 bounds",
+          not A["fails"] and A["worst_vs_A"] == 1.0 and not beats_a,
+          f"schemes with any bound below A: {beats_a or 'none'}; "
+          + "; ".join(f"{k}: {v or 'all pass'}" for k, v in gates.items()))
+
+
 def group_rotation(topo: RingTopology) -> None:
     base = build_ring_collective(topo, "allgather", m=1, algo="ring_rotate")
     t1 = build_calendar(topo, base).makespan
@@ -553,6 +852,10 @@ def main() -> None:
     group_bounds(topo, cals)
     print("\n-- ring_base against its own model's bounds --")
     group_base_bounds()
+    print("\n-- structural floors, II and bandwidth utilization --")
+    group_throughput()
+    print("\n-- core attachment: why 2 ports, full rings --")
+    group_attach()
     print("\n-- rotation and utilization --")
     group_rotation(topo)
     print("\n-- faults --")
