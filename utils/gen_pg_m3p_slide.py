@@ -29,6 +29,7 @@ from pg_routing import (
 ROOT = Path(__file__).resolve().parents[1]
 OUT_PPTX = ROOT / "results" / "pg_m3p_updown_slide.pptx"
 OUT_PNG = ROOT / "results" / "pg_m3p_updown_slide.png"
+OUT_PNG_IMPL = ROOT / "results" / "pg_m3p_impl_slide.png"
 OUT_PNG_PROOF = ROOT / "results" / "pg_m3p_proof_slide.png"
 OUT_PNG_SYMBOL = ROOT / "results" / "pg_m3p_symbols_slide.png"
 OUT_PNG_THEOREM = ROOT / "results" / "pg_m3p_theorem_slide.png"
@@ -592,6 +593,202 @@ def hot_spot_stats(loads: dict[str, int], adj, root: int, k: int = 10) -> dict:
     }
 
 
+def fig_pipeline(d: Deck, x0, y0, w, h, steps) -> None:
+    """Offline pipeline as a left-to-right chain of boxes."""
+    n = len(steps)
+    gap = 0.13
+    bw = (w - gap * (n - 1)) / n
+    for i, (head, body, foot, col) in enumerate(steps):
+        bx = x0 + i * (bw + gap)
+        d.rect(bx, y0, bw, h, fill="FDFDFE", line=col, lw=0.9)
+        d.rect(bx, y0, bw, 0.22, fill=col, line=None)
+        d.text(bx + 0.04, y0 + 0.02, bw - 0.08, 0.20,
+               [p(head, size=7.0, bold=True, color=WHITE, align="c", space=0)])
+        d.text(bx + 0.06, y0 + 0.28, bw - 0.12, h - 0.50,
+               [p(body, size=6.6, color=GREY, space=0)])
+        d.text(bx + 0.06, y0 + h - 0.20, bw - 0.12, 0.18,
+               [p(foot, size=6.6, bold=True, color=col, space=0)])
+        if i:
+            d.line(bx - gap + 0.01, y0 + h * 0.5, bx - 0.01, y0 + h * 0.5,
+                   color=GREY_L, lw=1.4, arrow=True)
+
+
+def build_impl() -> Deck:
+    A = analysis()
+    IM = A["impl"]
+    IH, ID, BA = IM["healthy"], IM["demo"], IM["baseline"]
+    SD = A["demo"]["schemes"]
+    n_dest = 48
+    tbl_bits = n_dest * 2 * 3
+    chip_bytes = 48 * tbl_bits / 8
+    base_bits = BA["bits_per_node"]
+    extra = tbl_bits + 5
+    t_verify = 0.1
+    t_total = IH["t_bestroot_s"] + IH["t_desttree_s"] + t_verify
+
+    d = Deck()
+    d.rect(0, 0, SLIDE_W, SLIDE_H, fill=WHITE, line=None)
+    d.rect(0, 0, SLIDE_W, 0.92, fill=INK, line=None)
+    d.rect(0, 0, 0.10, 0.92, fill=BLUE, line=None)
+    d.text(0.34, 0.10, 12.6, 0.44,
+           [p("M3′ + min-max 的实现：流程、路由表怎么配、硬件与软件代价",
+              size=20, bold=True, color=WHITE, space=0)])
+    d.text(0.36, 0.55, 12.6, 0.30,
+           [p("离线 %.1f s 生成表 → 复位写入 %.1f KB → 运行时零软件；硬件只多 "
+              "%d bit/router 的可写表（每节点存储的 %.1f%%）"
+              % (t_total, chip_bytes / 1024, extra, 100 * extra / base_bits),
+              size=10.0, color="C3CBD4", space=0)])
+
+    # --- ① pipeline -------------------------------------------------------
+    py, phh = 1.00, 1.62
+    card(d, 0.30, py, SLIDE_W - 0.60, phh,
+         "① 离线流程：每张故障图跑一次，产物是一张静态表（括号内为实测耗时）",
+         accent=BLUE, hdr_h=0.28)
+    steps = [
+        ("① 采集故障图", "自检 / BIST 给出死 router 与断链清单。", "输入", GREY),
+        ("② 建残图 G′", "删掉故障点及其链路，查连通性。", "定理 1（第 5 页）",
+         BLUE),
+        ("③ 选根 best-root", "%d 个存活 router 逐个当根建表，取峰值最小者。" % 48,
+         "%.1f s" % IH["t_bestroot_s"], BLUE),
+        ("④ 标高度 ℓ", "从根 BFS 得 ℓ(v)，同时给每端口标 up/down。", "<0.1 s",
+         BLUE),
+        ("⑤ min-max 重选路", "按目的地拆-重路由，代价 (load+1)³。",
+         "%.1f s" % max(IH["t_desttree_s"], 0.1), GREEN),
+        ("⑥ 三项复验", "可达 · 无环 · 唯一路径，不过就回退。", "<0.1 s", GREEN),
+        ("⑦ 编表 + 写入", "每 router %d bit，复位时经 CSR 写入。" % tbl_bits,
+         "%.1f KB / 全片" % (chip_bytes / 1024), ORANGE),
+    ]
+    fig_pipeline(d, 0.44, py + 0.32, SLIDE_W - 0.88, phh - 0.44, steps)
+
+    # --- ② the table ------------------------------------------------------
+    ty, th = 2.70, 2.24
+    tw = 7.30
+    card(d, 0.30, ty, tw, th,
+         "② up/down 机制怎么落到路由表里（出端口 = 表[目的 d][相位 φ]）",
+         accent=GREEN, hdr_h=0.28)
+    d.text(0.44, ty + 0.32, 3.70, th - 0.40, [
+        p("键只有两项：目的地 d + 1 bit 相位 φ。", size=7.8, bold=True,
+          color=GREEN, space=1.4),
+        p("φ = 「是否已经走过一条 down 通道」。注入时 φ=0；入端口是 down 就置 1"
+          "（每端口一个 up/down 标记位，随表一起写）⇒ φ 不必进包头，本地就能算。",
+          size=7.4, color=GREY, space=1.6),
+        p("禁令 down→up 就是一条填表约束：φ=1 的行只允许填 down 端口。",
+          size=7.8, bold=True, color=RED, space=1.4),
+        p("硬件因此不需要转向检查逻辑，也不需要知道 ℓ —— 合法性由离线工具一次性"
+          "保证。表里「—」= 该键不可能出现，填什么都不影响。",
+          size=7.4, color=GREY, space=1.6),
+        p("表规模：%d 目的 × 2 相位 × 3 bit = %d bit = %.0f B/router，全片 "
+          "%.1f KB。实测只有 %d 个键两相位不同 ⇒ 也可退化成 %d bit 主表 + %d 条"
+          "例外。"
+          % (n_dest, tbl_bits, tbl_bits / 8, chip_bytes / 1024,
+             ID["conflicts_desttree"]["phase_split"], n_dest * 3,
+             ID["conflicts_desttree"]["phase_split"]),
+          size=7.4, bold=True, color=INK, space=0),
+    ])
+    sx = 4.24
+    d.text(sx, ty + 0.32, tw - sx + 0.20, 0.40, [
+        p("真实表片段：router (%d,%d)，ℓ=%d，端口 %s；S 口因 (4,2) 死而禁用"
+          % (ID["snippet_node"][0], ID["snippet_node"][1], ID["snippet_l"],
+             " / ".join("%s=%s" % kv for kv in ID["snippet_ports"].items())),
+          size=7.0, bold=True, color=INK, space=0),
+    ])
+    widths = [0.86, 0.56, 0.86, 0.86]
+    header = ["目的 d", "ℓ(d)", "φ=0 出端口", "φ=1 出端口"]
+    rows = [["(%d,%d)" % tuple(r["dest"]), r["l_dest"],
+             "%s %s" % (r["p0"], "" if r["t0"] == "-" else "(%s)" % r["t0"]),
+             "%s %s" % (r["p1"], "" if r["t1"] == "-" else "(%s)" % r["t1"])]
+            for r in ID["snippet"]]
+    table(d, sx, ty + 0.70, widths, header, rows, accent=GREEN, fs=6.8,
+          hdr_h=0.22, row_h=0.19, aligns=["l", "c", "c", "c"])
+    d.text(sx, ty + 2.00, tw - sx + 0.20, 0.26, [
+        p("注：逐对 min-max 有 %d 个键冲突（同一节点到同一目的要两个出端口），"
+          "根本装不进按目的地的表；改成「按目的地树」重选路后 %d 冲突。"
+          % (ID["conflicts_minmax"]["conflict_vd"],
+             ID["conflicts_desttree"]["conflict_vpd"]),
+          size=6.8, color=ORANGE, space=0),
+    ])
+
+    # --- ③ hardware delta -------------------------------------------------
+    cx3 = 0.30 + tw + 0.14
+    cw3 = SLIDE_W - cx3 - 0.30
+    card(d, cx3, ty, cw3, th, "③ 硬件代价（新增部分，同为 1 VC）",
+         accent=RED, hdr_h=0.28)
+    w3 = [1.36, 1.62, 1.24, 0.86]
+    hdr3 = ["模块", "baseline（分组交换 mesh）", "M3′+min-max", "增量"]
+    rows3 = [
+        ["路由计算", "XY 比较器（组合）", "%d 项 × 3 bit 查表" % (n_dest * 2),
+         "+%d bit" % tbl_bits],
+        ["端口 up/down 标记", "—", "每端口 1 bit", "+5 bit"],
+        ["相位 φ", "—", "入端口本地推出", "0"],
+        ["VC 数 / 输入缓冲", "1 VC × %d flit × %d b" % (BA["buf_depth"],
+                                                       BA["w_flit"]),
+         "完全不变", "0"],
+        ["credit / 仲裁 / 开关", "iSLIP + credit", "完全不变", "0"],
+        ["重排序缓冲", "不需要", "不需要", "0"],
+        ["合计（每节点）", "%d bit" % base_bits, "+%d bit" % extra,
+         "+%.1f%%" % (100 * extra / base_bits)],
+    ]
+    table(d, cx3 + 0.12, ty + 0.32, w3, hdr3, rows3, accent=RED, fs=6.6,
+          hdr_h=0.22, row_h=0.202, aligns=["l", "l", "l", "c"], mark=(6,))
+    d.text(cx3 + 0.12, ty + 1.98, cw3 - 0.24, 0.28, [
+        p("按本项目 bit 等价口径（ROM/SRAM 位 = %.2f 触发器位）≈ %.2f%%；"
+          "配置通路复用已有 CSR / JTAG，无新增。"
+          % (BA["rom_bit"], 100 * extra * BA["rom_bit"] / base_bits),
+          size=6.8, color=GREY, space=0),
+    ])
+
+    # --- ④ software cost --------------------------------------------------
+    sy, sh = 5.08, 2.18
+    card(d, 0.30, sy, tw, sh, "④ 软件代价：离线一次性，运行时为零",
+         accent=ORANGE, hdr_h=0.28)
+    d.text(0.44, sy + 0.32, tw * 0.50 - 0.16, sh - 0.40, [
+        p("离线（每张故障图一次，单核 Python 实测）", size=7.8, bold=True,
+          color=ORANGE, space=1.4),
+        p("枚举 48 个根建表 %.1f s → 按目的地 min-max 重选路 %.1f s → 三项复验 "
+          "<0.1 s，合计约 %.1f s。产物：%.1f KB 表镜像 + 每 router 5 bit 端口"
+          "掩码。C 实现可到毫秒级。"
+          % (IH["t_bestroot_s"], max(IH["t_desttree_s"], 0.1), t_total,
+             chip_bytes / 1024), size=7.4, color=GREY, space=1.6),
+        p("上线与运行时", size=7.8, bold=True, color=ORANGE, space=1.4),
+        p("复位后由管理核经 CSR 写一遍表，之后运行时软件参与 = 0：无 barrier、"
+          "无同步、无自适应决策。", size=7.4, color=GREY, space=0),
+    ])
+    d.text(0.44 + tw * 0.50, sy + 0.32, tw * 0.50 - 0.20, sh - 0.40, [
+        p("与 BB 类方案的对比", size=7.8, bold=True, color=RED, space=1.4),
+        p("BB 每批都要一次软件 barrier，同步开销 T_sync ≈ 2·radius_wire（本设计"
+          "百余 cy/批）且要求全局时钟对齐；M3′ 全静态，这一项为 0。",
+          size=7.4, color=GREY, space=1.6),
+        p("什么时候要重跑", size=7.8, bold=True, color=RED, space=1.4),
+        p("只在故障图变化时：上电自检、现场降级事件。常见故障模式可预生成镜像"
+          "直接选用。镜像里再带一份 M3′ 原表（+%d B/router）作兜底：复验任一项"
+          "不过就用它。" % (n_dest * 3 / 8), size=7.4, color=GREY, space=0),
+    ])
+
+    # --- ⑤ why it is still correct ---------------------------------------
+    card(d, cx3, sy, cw3, sh, "⑤ 论证：这样配表，三条性质与均衡都还在",
+         accent=GREEN, hdr_h=0.28)
+    d.text(cx3 + 0.13, sy + 0.32, cw3 - 0.26, sh - 0.40, [
+        p("可达 / 零牺牲　定理 1（第 5 页）给出「残图连通 ⇒ 存在 up*·down*」；按目的地建表是"
+          "在 (节点, 相位) 状态图上跑 Dijkstra，可达性与定理 1 同源 —— 实测 %d/%d "
+          "个好节点全对可达、牺牲 0。" % (ID["n_compute"], ID["n_compute"]),
+          size=7.4, color=GREY, space=1.6),
+        p("无死锁　「φ=1 行只填 down」⇔ 禁 down→up ⇒ CDG 无环（实测 acyclic=%s），"
+          "1 个 VC 即可。" % ID["desttree_cdg_acyclic"], size=7.4, color=GREY,
+          space=1.6),
+        p("保序　表是 (d,φ) 的函数 ⇒ 每对唯一路径；单 VC 不换道 + 每跳 FIFO ⇒ "
+          "不需要重排序缓冲。", size=7.4, color=GREY, space=1.6),
+        p("均衡　峰值 %d→%d（残图，与逐对 min-max 同值）、%d→%d（无故障）；"
+          "总跳数只多 %.1f%%。残图重载 makespan %s cy，反而优于逐对 min-max 的 "
+          "%s cy —— 可实现的那一版并没有更差。"
+          % (ID["peak_m3p"], ID["peak_desttree"], IH["peak_m3p"],
+             IH["peak_desttree"],
+             100 * (ID["desttree_hops"] / ID["hops_m3p"] - 1),
+             ID["desttree_makespan_m13"], SD["m3p_minmax"]["makespan_m13"]),
+          size=7.4, bold=True, color=GREEN, space=0),
+    ])
+    return d
+
+
 def build_proof() -> Deck:
     A = analysis()
     H, DM = A["healthy"], A["demo"]
@@ -729,7 +926,7 @@ def build_proof() -> Deck:
         p("M3′ 的代价不是绕远，是选路集中。", size=8.4, bold=True, color=RED,
           space=1.0),
         p("无故障时 M3′ 与 XY 总跳数都是 %d、平均 %.2f 跳（都走最短路）⇒ 不均衡纯粹"
-          "来自「同一最短路集合里怎么挑」，换选路即可改善（第 5 页）。"
+          "来自「同一最短路集合里怎么挑」，换选路即可改善（第 2、6 页）。"
           % (S["m3p"]["hops"], S["m3p"]["avg_hops"]),
           size=8.0, color=GREY, space=2.0),
         p("坦白说：本场景重载 neg-first %s cy 快于 M3′+min-max %s cy，但它只在 "
@@ -765,8 +962,8 @@ def build_proof() -> Deck:
     ])
     d.text(10.30, by + 0.10, SLIDE_W - 10.30 - 0.45, bh - 0.18, [
         p("下一页", size=9.4, bold=True, color=GREEN, space=1.2),
-        p("符号（u/v/w、通道势能 Φ）见第 3 页，两条定理的逐步推导见第 4 页；"
-          "min-max 算法与 1 VC 边界见第 5 页。", size=8.2, color=INK, space=0),
+        p("符号（u/v/w、通道势能 Φ）见第 4 页，两条定理的逐步推导见第 5 页；"
+          "1 VC 的可行边界见第 6 页。", size=8.2, color=INK, space=0),
     ])
     return d
 
@@ -1077,7 +1274,7 @@ def build_theorems() -> Deck:
           "再沿 d 的父链下行到 d（全是 down），拼成 up*·down*，长度 ≤ ℓ(s)+ℓ(d) 且"
           "不含 down→up ⇒ 表必然建得出、S=∅。", size=7.7, color=GREY, space=1.8),
         p("第 3 步 · 无死锁　路径里只可能出现 up→up、up→down、down→down 三种衔接，"
-          "而它们都严格升 Φ（第 3 页 ②）。CDG 的每条边都升 Φ，而 Φ 取值在有限集合里 "
+          "而它们都严格升 Φ（第 4 页 ②）。CDG 的每条边都升 Φ，而 Φ 取值在有限集合里 "
           "⇒ CDG 无环 ⇒ 按 Dally–Seitz，1 个 VC 就无死锁。",
           size=7.7, color=GREY, space=1.8),
         p("第 4 步 · 保序　每对 (s,d) 只有一条静态路径，单 VC 不存在换道，"
@@ -1155,7 +1352,7 @@ def build_theorems() -> Deck:
         p("在这张残图上，M3′ 的转向集已经是极大无环集：再放开任何一条被禁转向，"
           "CDG 立刻成环（上面 ② 的构造对每条禁令都适用）。所以「找一个转向集严格"
           "包含 M3′ 的 turn model」是不可能的 —— 唯一的自由度是把同样多的禁令"
-          "挪到别处，这正是第 5 页 L4「禁令换位」在搜的东西。",
+          "挪到别处，这正是第 6 页 L4「禁令换位」在搜的东西。",
           size=7.8, color=GREY, space=2.0),
         p("差别不在宽松度，而在禁令「放在哪」。", size=8.4, bold=True,
           color=ORANGE, space=1.4),
@@ -1178,13 +1375,13 @@ def build_theorems() -> Deck:
           color=INK, space=1.4),
         p("定理 2 只说「不能再单独加一条」，并不说 M3′ 是所有无环转向集里最大的"
           "那个。随机贪心能生成大量别的极大集，大小 %d–%d 条不等（M3′ 是 %d 条）。"
-          "这些集合就是第 5 页 L4 的搜索空间：总量相当、位置不同。"
+          "这些集合就是第 6 页 L4 的搜索空间：总量相当、位置不同。"
           % (RM["min"], RM["max"], MX_["permitted_min"]),
           size=7.8, color=GREY, space=2.2),
         p("② 零牺牲 ≠ 零性能损失。", size=8.2, bold=True, color=INK, space=1.4),
         p("定理 1 只保证「连通即可达」，负载均衡完全不在结论里：M3′ 会把流挤到"
-          "通往根的主干走廊上，峰值可达 %.2f× 割界（第 2 页热点图）。改善它要靠"
-          "同一转向集内换选路（第 5 页 L3 min-max），而不是改禁令。"
+          "通往根的主干走廊上，峰值可达 %.2f× 割界（第 3 页热点图）。改善它要靠"
+          "同一转向集内换选路（第 2、6 页 min-max），而不是改禁令。"
           % A["demo"]["schemes"]["m3p"]["peak_over_lb"],
           size=7.8, color=GREY, space=0),
     ])
@@ -1250,7 +1447,7 @@ def build_limit() -> Deck:
            [p("M3′ 有超集吗？—— 转向不能再放宽，但选路可以：1 VC 的可行边界",
               size=21, bold=True, color=WHITE, space=0)])
     d.text(0.36, 0.55, 12.6, 0.30,
-           [p("① 转向不能再放宽（定理 2，第 4 页 ③）；② 同一转向集内 min-max 选路"
+           [p("① 转向不能再放宽（定理 2，第 5 页 ③）；② 同一转向集内 min-max 选路"
               "是唯一「免费」的超集：峰值 %.2f×→%.2f× 割界；③ 禁令换位更均衡却"
               "更慢 ⇒ 不推荐"
               % (SH["m3p"]["peak_over_lb"], SH["m3p_minmax"]["peak_over_lb"]),
@@ -1331,7 +1528,7 @@ def build_limit() -> Deck:
         p("禁令换位是什么　禁令总数不变，只把它们挪个位置：",
           size=8.0, bold=True, color=INK, space=1.4),
         p("① 找出当前最热的那条链路；② 在与它相关的被禁转向里挑一条放开；"
-          "③ 放开必然成环（第 4 页 ②），就在这个环上挑一条「被路径用得最少」的"
+          "③ 放开必然成环（第 5 页 ②），就在这个环上挑一条「被路径用得最少」的"
           "转向改判为禁令，把环重新打断；④ 重验全对可达 + CDG 无环，峰值下降就"
           "保留、否则回退。如此反复若干轮。", size=7.7, color=GREY, space=1.6),
         p("结果：更均衡，但更慢。", size=8.0, bold=True, color=RED, space=1.4),
@@ -1404,13 +1601,14 @@ def main() -> None:
     if not (args.pptx or args.png):
         args.pptx = args.png = True
 
-    decks = [build(), build_proof(), build_symbols(), build_theorems(),
-             build_limit()]
+    decks = [build(), build_impl(), build_proof(), build_symbols(),
+             build_theorems(), build_limit()]
     if args.pptx:
         emit_pptx(decks, OUT_PPTX)
     if args.png:
-        for deck, path in zip(decks, (OUT_PNG, OUT_PNG_PROOF, OUT_PNG_SYMBOL,
-                                      OUT_PNG_THEOREM, OUT_PNG_LIMIT)):
+        for deck, path in zip(decks, (OUT_PNG, OUT_PNG_IMPL, OUT_PNG_PROOF,
+                                      OUT_PNG_SYMBOL, OUT_PNG_THEOREM,
+                                      OUT_PNG_LIMIT)):
             emit_png(deck, path)
 
 

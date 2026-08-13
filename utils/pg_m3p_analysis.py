@@ -695,6 +695,215 @@ def swap_search(pg: dict, *, iters: int = 120, seed: int = 0,
     return rec
 
 
+# ---------------------------------------------------------------------------
+# Implementation cost: can the path set live in a per-destination lookup table?
+# ---------------------------------------------------------------------------
+
+def phase_seq(path: list[int], lab: dict[int, int]) -> list[int]:
+    """Phase on ARRIVAL at each node: 0 while still climbing, 1 once descended."""
+    out, cur = [0], 0
+    for u, v in zip(path, path[1:]):
+        if lab[v] > lab[u]:
+            cur = 1
+        out.append(cur)
+    return out
+
+
+def table_conflicts(paths: dict, lab: dict[int, int]) -> dict[str, Any]:
+    """How many table entries would need two different next hops.
+
+    A router can only hold ONE next hop per key. Keying on (dest) alone is the
+    cheapest; keying on (dest, phase) costs one extra bit of key. If a key needs
+    two next hops the path set cannot be stored that way at all -- it would need
+    the source in the header (per-(s,d) table) or source routing.
+    """
+    vd: dict[tuple, set[int]] = {}
+    vpd: dict[tuple, set[int]] = {}
+    for (_s, d), path in paths.items():
+        ph = phase_seq(path, lab)
+        for i, u in enumerate(path[:-1]):
+            vd.setdefault((u, d), set()).add(path[i + 1])
+            vpd.setdefault((u, ph[i], d), set()).add(path[i + 1])
+    return {
+        "keys_vd": len(vd),
+        "conflict_vd": sum(1 for v in vd.values() if len(v) > 1),
+        "keys_vpd": len(vpd),
+        "conflict_vpd": sum(1 for v in vpd.values() if len(v) > 1),
+        "phase_split": sum(1 for (u, p, d) in vpd if p == 1
+                           and (u, 0, d) in vpd
+                           and vpd[(u, 1, d)] != vpd[(u, 0, d)]),
+    }
+
+
+def dest_tree(d: int, adj: dict[int, list[int]], lab: dict[int, int],
+              load: dict[tuple[int, int], int], alpha: float
+              ) -> dict[tuple[int, int], int]:
+    """Cheapest (dest, phase) -> next-hop table for one destination.
+
+    Reverse Dijkstra over states (node, phase). The phase rule is exactly the
+    up*/down* restriction: a packet that has already taken a down channel
+    (phase 1) may not take an up channel. Because the result is a FUNCTION of
+    (node, phase), every source that passes through a node leaves it the same
+    way -- which is what makes the per-destination table legal.
+    """
+    INF = float("inf")
+    dist = {(d, 0): 0.0, (d, 1): 0.0}
+    nxt: dict[tuple[int, int], int] = {}
+    pq: list[tuple[float, int, int]] = [(0.0, d, 0), (0.0, d, 1)]
+    while pq:
+        c, v, ph = heapq.heappop(pq)
+        if c > dist.get((v, ph), INF):
+            continue
+        for u in adj[v]:
+            down = lab[v] > lab[u]
+            for phu in (0, 1):
+                if phu == 1 and not down:
+                    continue                      # banned down->up
+                if (1 if down else phu) != ph:
+                    continue
+                nc = c + (load.get((u, v), 0) + 1) ** alpha
+                if nc < dist.get((u, phu), INF):
+                    dist[(u, phu)] = nc
+                    nxt[(u, phu)] = v
+                    heapq.heappush(pq, (nc, u, phu))
+    return nxt
+
+
+def walk_table(s: int, d: int, nxt: dict, lab: dict[int, int]) -> list[int] | None:
+    path, v, ph = [s], s, 0
+    while v != d:
+        w = nxt.get((v, ph))
+        if w is None or len(path) > 4 * len(lab):
+            return None
+        ph = 1 if lab[w] > lab[v] else ph
+        path.append(w)
+        v = w
+    return path
+
+
+def minmax_dest_trees(adj, compute, lab, *, rounds: int = 6, alpha: float = 3.0
+                      ) -> dict[str, Any] | None:
+    """min-max re-selection restricted to per-(dest, phase) tables.
+
+    Same convex cost as minmax_paths, but the unit of rip-up/re-route is a whole
+    destination tree instead of one (s,d) pair, so the result is storable in a
+    48-entry x 2-phase table per router.
+    """
+    load = {(u, v): 0 for u in adj for v in adj[u]}
+    paths: dict[tuple[int, int], list[int]] = {}
+    best = None
+    for _ in range(rounds):
+        for d in compute:
+            for key in [k for k in paths if k[1] == d]:
+                for u, v in zip(paths[key], paths[key][1:]):
+                    load[(u, v)] -= 1
+                del paths[key]
+            nxt = dest_tree(d, adj, lab, load, alpha)
+            for s in compute:
+                if s == d:
+                    continue
+                path = walk_table(s, d, nxt, lab)
+                if path is None:
+                    return None
+                paths[(s, d)] = path
+                for u, v in zip(path, path[1:]):
+                    load[(u, v)] += 1
+        peak = max(load.values())
+        if best is None or peak < best[0]:
+            best = (peak, {k: list(v) for k, v in paths.items()})
+    return {"peak": best[0], "paths": best[1]}
+
+
+PORT_NAME = {E: "E", W: "W", NN: "N", S: "S"}
+
+
+def table_snippet(node: int, adj, lab, nxt_by_dest: dict[int, dict],
+                  dests: list[int]) -> list[dict[str, Any]]:
+    """A few real rows of one router's (dest, phase) -> out-port table."""
+    rows = []
+    for d in dests:
+        row: dict[str, Any] = {"dest": list(F.coord(d)), "l_dest": lab[d]}
+        for ph in (0, 1):
+            w = nxt_by_dest[d].get((node, ph))
+            if d == node:
+                row["p%d" % ph] = "L"
+                row["t%d" % ph] = "-"
+            elif w is None:
+                row["p%d" % ph] = "—"
+                row["t%d" % ph] = "-"
+            else:
+                row["p%d" % ph] = PORT_NAME[R.dir_of(node, w)]
+                row["t%d" % ph] = "down" if lab[w] > lab[node] else "up"
+        rows.append(row)
+    return rows
+
+
+def impl_cost(pg: dict, tag: str) -> dict[str, Any]:
+    """Table organisation + offline runtime for M3' and M3' + min-max."""
+    adj, compute = pg["route_adj"], pg["compute_nodes"]
+    t0 = time.perf_counter()
+    raw = R.gen_updown_best_root(pg)
+    t_root = time.perf_counter() - t0
+    root = raw["root"]
+    lab = R._updown_labels(adj, root)
+    T = ud_turnset(adj, lab)
+
+    t0 = time.perf_counter()
+    mm_paths = minmax_paths(adj, compute, T, init=raw["paths"])
+    t_mm = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    dt = minmax_dest_trees(adj, compute, lab)
+    t_dt = time.perf_counter() - t0
+
+    out: dict[str, Any] = {
+        "tag": tag, "root": root, "n_compute": len(compute),
+        "lmax": max(lab.values()),
+        "t_bestroot_s": round(t_root, 2),
+        "t_minmax_s": round(t_mm, 2),
+        "t_desttree_s": round(t_dt, 2),
+        "peak_m3p": R.max_link_load(raw["paths"]),
+        "peak_minmax": R.max_link_load(mm_paths),
+        "peak_desttree": dt["peak"] if dt else None,
+        "conflicts_m3p": table_conflicts(raw["paths"], lab),
+        "conflicts_minmax": table_conflicts(mm_paths, lab),
+    }
+    if dt:
+        out["conflicts_desttree"] = table_conflicts(dt["paths"], lab)
+        ok, why = R.validate_routing(dt["paths"], compute, adj)
+        cdg = R.build_cdg(dt["paths"])
+        out["desttree_valid"] = bool(ok)
+        out["desttree_reason"] = why
+        out["desttree_cdg_acyclic"] = bool(R.cdg_acyclic(cdg))
+        out["desttree_hops"] = sum(len(p) - 1 for p in dt["paths"].values())
+        out["desttree_stats"] = load_stats(adj, dt["paths"],
+                                          R.minimax_load_lb(compute, adj))
+        out["desttree_makespan_m1"] = des_makespan(dt["paths"], compute, adj, 1)
+        out["desttree_makespan_m13"] = des_makespan(dt["paths"], compute, adj,
+                                                    13)
+    out["hops_m3p"] = sum(len(p) - 1 for p in raw["paths"].values())
+    out["hops_minmax"] = sum(len(p) - 1 for p in mm_paths.values())
+
+    # one router's real table rows, rebuilt from the final loads
+    load = {(u, v): 0 for u in adj for v in adj[u]}
+    for path in (dt or {}).get("paths", {}).values():
+        for u, v in zip(path, path[1:]):
+            load[(u, v)] += 1
+    trees = {d: dest_tree(d, adj, lab, load, 3.0) for d in compute}
+    node = F.nid(4, 3) if F.nid(4, 3) in adj else compute[0]
+    dests: list[int] = []
+    for d in (F.nid(0, 0), F.nid(2, 3), F.nid(6, 0), F.nid(0, 5), root):
+        if d in adj and d not in dests:
+            dests.append(d)
+    out["snippet_node"] = list(F.coord(node))
+    out["snippet_l"] = lab[node]
+    out["snippet_ports"] = {PORT_NAME[R.dir_of(node, v)]:
+                            ("down" if lab[v] > lab[node] else "up")
+                            for v in adj[node]}
+    out["snippet"] = table_snippet(node, adj, lab, trees, dests)
+    return out
+
+
 def root_sweep(pg: dict) -> dict[str, Any]:
     """Peak load per root, before and after min-max re-selection."""
     adj, compute = pg["route_adj"], pg["compute_nodes"]

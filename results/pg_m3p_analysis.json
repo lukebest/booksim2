@@ -3165,5 +3165,252 @@
    "cases": [],
    "n": 44
   }
+ },
+ "impl": {
+  "healthy": {
+   "tag": "healthy",
+   "root": 40,
+   "n_compute": 48,
+   "lmax": 12,
+   "t_bestroot_s": 3.46,
+   "t_minmax_s": 1.21,
+   "t_desttree_s": 0.12,
+   "peak_m3p": 135,
+   "peak_minmax": 111,
+   "peak_desttree": 116,
+   "conflicts_m3p": {
+    "keys_vd": 2256,
+    "conflict_vd": 0,
+    "keys_vpd": 2777,
+    "conflict_vpd": 0,
+    "phase_split": 0
+   },
+   "conflicts_minmax": {
+    "keys_vd": 2256,
+    "conflict_vd": 347,
+    "keys_vpd": 2825,
+    "conflict_vpd": 265,
+    "phase_split": 194
+   },
+   "conflicts_desttree": {
+    "keys_vd": 2256,
+    "conflict_vd": 3,
+    "keys_vpd": 2734,
+    "conflict_vpd": 0,
+    "phase_split": 3
+   },
+   "desttree_valid": true,
+   "desttree_reason": "ok",
+   "desttree_cdg_acyclic": true,
+   "desttree_hops": 10556,
+   "desttree_stats": {
+    "peak": 116,
+    "peak_over_lb": 1.208,
+    "mean": 64.4,
+    "cv": 0.433,
+    "gini": 0.249,
+    "hot80": 32,
+    "hot90": 10,
+    "n_links": 164,
+    "hops": 10556,
+    "avg_hops": 4.679,
+    "router_transit_peak": 329,
+    "throughput_ratio": 0.828
+   },
+   "desttree_makespan_m1": 228,
+   "desttree_makespan_m13": 5343,
+   "hops_m3p": 10528,
+   "hops_minmax": 10528,
+   "snippet_node": [
+    4,
+    3
+   ],
+   "snippet_l": 6,
+   "snippet_ports": {
+    "S": "down",
+    "W": "up",
+    "E": "down",
+    "N": "up"
+   },
+   "snippet": [
+    {
+     "dest": [
+      0,
+      0
+     ],
+     "l_dest": 5,
+     "p0": "W",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    },
+    {
+     "dest": [
+      2,
+      3
+     ],
+     "l_dest": 4,
+     "p0": "W",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    },
+    {
+     "dest": [
+      6,
+      0
+     ],
+     "l_dest": 11,
+     "p0": "N",
+     "t0": "up",
+     "p1": "S",
+     "t1": "down"
+    },
+    {
+     "dest": [
+      0,
+      5
+     ],
+     "l_dest": 0,
+     "p0": "W",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    }
+   ]
+  },
+  "demo": {
+   "tag": "demo",
+   "root": 47,
+   "n_compute": 46,
+   "lmax": 12,
+   "t_bestroot_s": 2.98,
+   "t_minmax_s": 0.97,
+   "t_desttree_s": 0.11,
+   "peak_m3p": 204,
+   "peak_minmax": 154,
+   "peak_desttree": 154,
+   "conflicts_m3p": {
+    "keys_vd": 2070,
+    "conflict_vd": 0,
+    "keys_vpd": 2512,
+    "conflict_vpd": 0,
+    "phase_split": 0
+   },
+   "conflicts_minmax": {
+    "keys_vd": 2070,
+    "conflict_vd": 194,
+    "keys_vpd": 2519,
+    "conflict_vpd": 150,
+    "phase_split": 114
+   },
+   "conflicts_desttree": {
+    "keys_vd": 2070,
+    "conflict_vd": 15,
+    "keys_vpd": 2437,
+    "conflict_vpd": 0,
+    "phase_split": 15
+   },
+   "desttree_valid": true,
+   "desttree_reason": "ok",
+   "desttree_cdg_acyclic": true,
+   "desttree_hops": 11168,
+   "desttree_stats": {
+    "peak": 154,
+    "peak_over_lb": 1.453,
+    "mean": 75.5,
+    "cv": 0.547,
+    "gini": 0.314,
+    "hot80": 26,
+    "hot90": 8,
+    "n_links": 148,
+    "hops": 11168,
+    "avg_hops": 5.395,
+    "router_transit_peak": 438,
+    "throughput_ratio": 0.688
+   },
+   "desttree_makespan_m1": 302,
+   "desttree_makespan_m13": 5751,
+   "hops_m3p": 10646,
+   "hops_minmax": 10856,
+   "snippet_node": [
+    4,
+    3
+   ],
+   "snippet_l": 5,
+   "snippet_ports": {
+    "W": "down",
+    "E": "up",
+    "N": "up"
+   },
+   "snippet": [
+    {
+     "dest": [
+      0,
+      0
+     ],
+     "l_dest": 12,
+     "p0": "N",
+     "t0": "up",
+     "p1": "W",
+     "t1": "down"
+    },
+    {
+     "dest": [
+      2,
+      3
+     ],
+     "l_dest": 7,
+     "p0": "N",
+     "t0": "up",
+     "p1": "W",
+     "t1": "down"
+    },
+    {
+     "dest": [
+      6,
+      0
+     ],
+     "l_dest": 6,
+     "p0": "E",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    },
+    {
+     "dest": [
+      0,
+      5
+     ],
+     "l_dest": 7,
+     "p0": "N",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    },
+    {
+     "dest": [
+      7,
+      5
+     ],
+     "l_dest": 0,
+     "p0": "E",
+     "t0": "up",
+     "p1": "\u2014",
+     "t1": "-"
+    }
+   ]
+  },
+  "baseline": {
+   "bits_per_node": 12845.0,
+   "breakdown": {
+    "input_buffers": 614400,
+    "credit_counters": 1440,
+    "switch_alloc_pointers": 720
+   },
+   "w_flit": 128,
+   "rom_bit": 0.15,
+   "buf_depth": 20
+  }
  }
 }
