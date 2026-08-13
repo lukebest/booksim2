@@ -65,16 +65,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from rg_topo import H_BASE as H_HOP
-from rg_topo import MX, MY, RAMP_BW, coord, nid
-from rg_topo import V_BASE as V_HOP
+from rg_topo import (MX, MY, PITCH_H, PITCH_V, RAMP_BW, T_TURN_BRIDGE, coord,
+                     nid)
 
 N = MX * MY
 ROOT = 0                # collective root, matches the rest of the ring work
 OUT = Path(__file__).resolve().parents[1] / "results" / "ring_attach_8x6.json"
 
-T_TURN = 1              # co-located bridge: hand-off between a core's 2 ports
-T_BRIDGE = 2            # seam bridge: store-and-forward, one extra FIFO stage
+# Wire delay is charged per core pitch, so a scheme that needs longer wires
+# pays for them in latency instead of getting them for free. This is the same
+# model the pipeline uses, implemented independently on top of positions.
+T_TURN = T_TURN_BRIDGE  # co-located bridge: hand-off between a core's 2 ports
+T_BRIDGE = T_TURN + 1   # seam bridge: same crossing plus one store-and-forward
+H_PITCH, V_PITCH = PITCH_H, PITCH_V
 
 Kind = Literal["row", "col"]
 PATTERNS = ("alltoall", "allgather", "allreduce", "gather", "broadcast",
@@ -125,19 +128,33 @@ class Ring:
         """
         return 2 * self.span() * self.lanes
 
+    def tour(self) -> list[int]:
+        """Physical positions in the order the folded loop visits them."""
+        q = sorted(self.positions())
+        k = len(q)
+        out = [q[i] for i in range(0, k, 2)]              # go: every other core
+        back = [q[i] for i in range(k - 1 if (k - 1) % 2 else k - 2, 0, -2)]
+        return out + back                                  # closed, folded
+
+    def link_pitches(self) -> list[int]:
+        """Length of each segment of the folded loop, in core pitches.
+
+        Folding trades one long wrap for uniformly medium wires: a consecutive
+        loop gets k-2 segments of two pitches and two of one, so a ring
+        neighbour is normally the core after next. That is where the ring's
+        per-hop delay comes from, and it is why hop count alone is the wrong
+        yardstick when comparing schemes with different spans.
+        """
+        t = self.tour()
+        return [abs(t[i] - t[(i + 1) % len(t)]) for i in range(len(t))]
+
     def max_link_pitches(self) -> int:
         """Longest single wire, which is what sets the achievable clock.
 
         Folding a consecutive loop caps this at 2 pitches. A wrap-around loop
         cannot be folded down: some wire has to reach across the array.
         """
-        q = sorted(self.positions())
-        k = len(q)
-        out = [q[i] for i in range(0, k, 2)]              # go: every other core
-        back = [q[i] for i in range(k - 1 if (k - 1) % 2 else k - 2, 0, -2)]
-        tour = out + back                                  # closed, folded
-        return max(abs(tour[i] - tour[(i + 1) % len(tour)])
-                   for i in range(len(tour)))
+        return max(self.link_pitches())
 
 
 @dataclass(frozen=True)
@@ -323,19 +340,26 @@ def hop_graph(s: Scheme) -> dict[tuple[int, str], list[tuple[tuple[int, str],
                                                              int, int]]]:
     """States are (core, ring being ridden); edges are (state, cycles, hops).
 
-    Riding a segment costs that dimension's wire delay. Turning at a core is
-    free of wire but costs T_TURN and is only legal if the core taps both rings
-    (co-located bridge). A bridge with taps on two different cores costs
-    T_BRIDGE and is open to anyone reaching either tap.
+    Riding a segment costs its own physical length: pitches x the dimension's
+    per-pitch delay, so a folded two-pitch neighbour hop costs 2xPITCH and the
+    two fold ends cost one. Turning at a core is free of wire but costs T_TURN
+    and is only legal if the core taps both rings (co-located bridge). A bridge
+    with taps on two different cores costs T_BRIDGE and is open to anyone
+    reaching either tap.
     """
     rm = _ring_map(s)
     at = s.attach()
     g: dict[tuple[int, str], list[tuple[tuple[int, str], int, int]]] = \
         defaultdict(list)
     for r in s.rings:
-        lat = H_HOP if r.kind == "row" else V_HOP
-        for a, b in r.segments():
+        pitch = H_PITCH if r.kind == "row" else V_PITCH
+        span = r.link_pitches()
+        for i in range(r.k):
+            a, b = r.nodes[i], r.nodes[(i + 1) % r.k]
+            lat = pitch * span[i]
             g[(a, r.rid)].append(((b, r.rid), lat, 1))
+            if r.lanes == 2:
+                g[(b, r.rid)].append(((a, r.rid), lat, 1))
     for c in range(N):
         for r1, r2 in itertools.permutations(at[c], 2):
             g[(c, r1)].append(((c, r2), T_TURN, 0))
@@ -609,7 +633,9 @@ def main() -> None:
     winner = ok[0]
     payload = {
         "geometry": {"mx": MX, "my": MY, "n": N, "root": ROOT,
-                     "H_hop": H_HOP, "V_hop": V_HOP, "t_turn": T_TURN,
+                     "pitch_h": H_PITCH, "pitch_v": V_PITCH,
+                     "H_hop": 2 * H_PITCH, "V_hop": 2 * V_PITCH,
+                     "t_turn": T_TURN,
                      "t_bridge": T_BRIDGE, "ramp_bw": RAMP_BW},
         "patterns": list(PATTERNS),
         "schemes": rows,

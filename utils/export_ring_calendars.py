@@ -124,10 +124,12 @@ def station_records(topo: RingTopology, cal: Calendar) -> list[dict[str, Any]]:
                     break
             emit(arc.start, t0 + base, in_at_start, [out_here], opcode, xid,
                  in_slot=(t0 + base - topo.t_turn) if ai else None)
-            lat = topo.ring_lat(arc.ring)
+            # per-hop delay: the two fold-end segments of a ring are one core
+            # pitch, the rest are two, so the slots are not evenly spaced
+            lats = topo.arc_lats(arc)
             for hop in range(arc.hops):
                 node = arc.nodes[hop + 1]
-                slot = t0 + base + (hop + 1) * lat
+                slot = t0 + base + sum(lats[:hop + 1])
                 last = hop + 1 == arc.hops
                 in_here = _side(topo, arc.ring, arc.dir, "in")
                 outs: list[str] = []
@@ -218,6 +220,12 @@ def export_one(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
         "topology": {
             "kind": "dimension_sliced_2d_bufferless_ring",
             "mx": topo.mx, "my": topo.my, "h": topo.H, "v": topo.V,
+            "pitch_h": topo.pitch_h, "pitch_v": topo.pitch_v,
+            "folded": topo.folded,
+            "row_hop_cycles": sorted({topo.link_lat(("row", 0), i)
+                                      for i in range(topo.mx)}),
+            "col_hop_cycles": sorted({topo.link_lat(("col", 0), i)
+                                      for i in range(topo.my)}),
             "sigma": topo.sigma, "t_turn": topo.t_turn,
             "board_ports": topo.board_ports, "leave_ports": topo.leave_ports,
             "ramp": RAMP, "ramp_bw": RAMP_BW,
@@ -232,10 +240,12 @@ def export_one(topo: RingTopology, pattern: str, algo: str, tier: str, m: int,
         "message_flits": m,
         "root": root if col.root is not None else None,
         "schedule_kind": "rigid_static_calendar",
-        "timing_model": ("slots are station-send cycles; H/V segment delay and "
-                         "the PE ramp are explicit; zero in-ring buffering, so "
-                         "a record either fires on its slot or the schedule is "
-                         "invalid"),
+        "timing_model": ("slots are station-send cycles; segment delay is per "
+                         "link (folded layout: 2 core pitches for a typical "
+                         "segment, 1 for the two fold ends), the bridge turn "
+                         "costs t_turn and the PE ramp is explicit; zero "
+                         "in-ring buffering, so a record either fires on its "
+                         "slot or the schedule is invalid"),
         "expected_makespan": cal.makespan,
         "bounds": {k: cal.bounds[k] for k in
                    ("makespan_lb", "binding_lb", "arc_load_lb", "port_lb",

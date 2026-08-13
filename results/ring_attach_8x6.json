@@ -1,0 +1,2254 @@
+{
+ "geometry": {
+  "mx": 8,
+  "my": 6,
+  "n": 48,
+  "root": 0,
+  "pitch_h": 5,
+  "pitch_v": 7,
+  "H_hop": 10,
+  "V_hop": 14,
+  "t_turn": 10,
+  "t_bridge": 11,
+  "ramp_bw": 2
+ },
+ "patterns": [
+  "alltoall",
+  "allgather",
+  "allreduce",
+  "gather",
+  "broadcast",
+  "reduce"
+ ],
+ "schemes": [
+  {
+   "key": "A_full_2port",
+   "label": "A 全环双向：1 行口 + 1 列口",
+   "note": "桥与核同址、复用核的这 2 个口，不额外开环上抽头；每核皆桥",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 328,
+    "wire_pitches_x_width": 328,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 14,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 0,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 2.0,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 80,
+    "avg_lat_cy": 43.19,
+    "max_hops": 7,
+    "avg_hops": 3.57
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.0,
+    "alltoall/T1": 1.0,
+    "allgather/T0": 1.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 1.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 1
+  },
+  {
+   "key": "B_full_1lane",
+   "label": "B 全环单向（半环＝只留一条车道）：1 行口 + 1 列口",
+   "note": "金属减半，按金属恒定口径把省下的换成 2× 线宽；代价是跳数翻倍",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": false,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 164,
+    "wire_pitches_x_width": 328,
+    "max_link_pitches": 2,
+    "n_directed_segments": 96,
+    "n_undirected_segments": 96,
+    "n_rings": 14,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 0,
+    "segment_width": 2,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 2.0,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 12,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 16,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 16,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 16,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 16,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 16,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 138,
+    "avg_lat_cy": 68.51,
+    "max_hops": 12,
+    "avg_hops": 6.13
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "ramp"
+    },
+    "allreduce/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "ramp"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "ramp"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "ramp"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 12,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "ramp"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.0,
+    "alltoall/T1": 1.0,
+    "allgather/T0": 1.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 1.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 2
+  },
+  {
+   "key": "C0_rowhalf_noseam",
+   "label": "C0 行半环(2×4) + 列全环，不加缝桥",
+   "note": "用来证明「半跨环必须修缝」：列环不改变 x，半行环又跨不过缝，左右两半彼此不可达",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 304,
+    "wire_pitches_x_width": 304,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 20,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 0,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 1.854,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 0,
+     "at": 4,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 0,
+       "bridges": 0,
+       "cap_per_dir": 0
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 1104,
+    "total_pairs": 2256,
+    "connected": false,
+    "diameter_cy": 60,
+    "avg_lat_cy": 32.61,
+    "max_hops": 5,
+    "avg_hops": 2.61
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 24 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "allreduce/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": null,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 24 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "gather/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 24 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "broadcast/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 24 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "broadcast/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": null,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 24 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": null,
+     "binding": "cut"
+    },
+    "reduce/T1": {
+     "cut_lb": null,
+     "cut_witness": "x=4：容量 0 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": null,
+     "binding": "cut"
+    }
+   },
+   "disconnected": true,
+   "vs_A": {
+    "alltoall/T0": null,
+    "alltoall/T1": null,
+    "allgather/T0": null,
+    "allgather/T1": null,
+    "allreduce/T0": null,
+    "allreduce/T1": null,
+    "gather/T0": null,
+    "gather/T1": null,
+    "broadcast/T0": null,
+    "broadcast/T1": null,
+    "reduce/T0": null,
+    "reduce/T1": null
+   },
+   "worst_vs_A": null,
+   "best_vs_A": null,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": false,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [
+    "全连通"
+   ],
+   "rank": null
+  },
+  {
+   "key": "C_rowhalf_seam",
+   "label": "C 行半环(2×4) + 列全环 + 6 个行-行缝桥",
+   "note": "行内跳数减半；跨缝必须过缝桥（存转发），x 对分塌到缝桥带宽",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 304,
+    "wire_pitches_x_width": 304,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 20,
+    "n_bridges": 54,
+    "n_extra_tap_bridges": 6,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 1.854,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 6,
+     "at": 4,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 0,
+       "bridges": 6,
+       "cap_per_dir": 6
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 86,
+    "avg_lat_cy": 42.43,
+    "max_hops": 8,
+    "avg_hops": 3.57
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 2.0,
+    "alltoall/T1": 2.0,
+    "allgather/T0": 2.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 2.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 2.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 6
+  },
+  {
+   "key": "D_colhalf_seam",
+   "label": "D 列半环(2×3) + 行全环 + 8 个列-列缝桥",
+   "note": "列本来只有 6 个核，再拆一半收益很小，却把 y 对分压到缝桥带宽",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 296,
+    "wire_pitches_x_width": 296,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 22,
+    "n_bridges": 56,
+    "n_extra_tap_bridges": 8,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 1.805,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 8,
+     "at": 3,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 0,
+       "bridges": 8,
+       "cap_per_dir": 8
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 77,
+    "avg_lat_cy": 40.07,
+    "max_hops": 7,
+    "avg_hops": 3.57
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 72,
+     "cut_witness": "y=3：容量 8 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 72,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 72,
+     "cut_witness": "y=3：容量 8 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 72,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 72,
+     "cut_witness": "y=3：容量 8 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 72,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 72,
+     "cut_witness": "y=3：容量 8 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 72,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.5,
+    "alltoall/T1": 1.5,
+    "allgather/T0": 1.5,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 1.5,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.5,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 4
+  },
+  {
+   "key": "E_bothhalf_seam",
+   "label": "E 行列都半环 + 14 个缝桥",
+   "note": "跳数最短、金属最省，但两个方向的对分都塌到缝桥上",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 272,
+    "wire_pitches_x_width": 272,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 28,
+    "n_bridges": 62,
+    "n_extra_tap_bridges": 14,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 1.659,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 6,
+     "at": 4,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 0,
+       "bridges": 6,
+       "cap_per_dir": 6
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 8,
+     "at": 3,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 0,
+       "bridges": 8,
+       "cap_per_dir": 8
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 83,
+    "avg_lat_cy": 39.3,
+    "max_hops": 8,
+    "avg_hops": 3.57
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 96,
+     "cut_witness": "x=4：容量 6 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 96,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 2.0,
+    "alltoall/T1": 2.0,
+    "allgather/T0": 2.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 2.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 2.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 5
+  },
+  {
+   "key": "F_rowhalf_stagger",
+   "label": "F 行半环错位（奇偶行错开 2 列）+ 列全环，无缝桥",
+   "note": "靠奇数行的半环自己跨过缝来保持连通，省掉缝桥硬件",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "col",
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 352,
+    "wire_pitches_x_width": 352,
+    "max_link_pitches": 6,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 20,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 0,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 2.146,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 36,
+       "bridges": 0,
+       "cap_per_dir": 18
+      },
+      {
+       "at": 4,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 36,
+       "bridges": 0,
+       "cap_per_dir": 18
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 78,
+    "avg_lat_cy": 44.09,
+    "max_hops": 6,
+    "avg_hops": 3.23
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.0,
+    "alltoall/T1": 1.0,
+    "allgather/T0": 1.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 1.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": false
+   },
+   "fails": [
+    "最长单根线 ≤2 pitch"
+   ],
+   "rank": null
+  },
+  {
+   "key": "G_row_only_1port",
+   "label": "G 每核只 1 口（只挂行环），纵向全靠桥",
+   "note": "核侧最省，但注入/弹出被压到 1 flit/cy，只用掉一半 L1 ramp",
+   "ports_min": 1,
+   "ports_max": 1,
+   "ports_ok": true,
+   "core_rate": 1,
+   "ramp_match": false,
+   "dims_directly_reachable": [
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 328,
+    "wire_pitches_x_width": 328,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 14,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 48,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 2.0,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 92,
+    "avg_lat_cy": 54.47,
+    "max_hops": 9,
+    "avg_hops": 5.28
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 47,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 47,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 47,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 47,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 47,
+     "ramp_lb": 24,
+     "lb": 47,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.0,
+    "alltoall/T1": 1.0,
+    "allgather/T0": 1.0,
+    "allgather/T1": 1.958,
+    "allreduce/T0": 1.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.958,
+    "gather/T1": 1.958,
+    "broadcast/T0": 1.958,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.958,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.958,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": false,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [
+    "环侧速率跟得上 L1 ramp"
+   ],
+   "rank": null
+  },
+  {
+   "key": "H_two_on_row",
+   "label": "H 2 口都挂同一行环（不挂列环）",
+   "note": "行向进出翻倍，但核无法直接进出列环，每个跨行流程多两次桥",
+   "ports_min": 2,
+   "ports_max": 2,
+   "ports_ok": true,
+   "core_rate": 2,
+   "ramp_match": true,
+   "dims_directly_reachable": [
+    "row"
+   ],
+   "structure": {
+    "wire_pitches": 328,
+    "wire_pitches_x_width": 328,
+    "max_link_pitches": 2,
+    "n_directed_segments": 192,
+    "n_undirected_segments": 96,
+    "n_rings": 14,
+    "n_bridges": 48,
+    "n_extra_tap_bridges": 48,
+    "segment_width": 1,
+    "mesh_wire_pitches": 164,
+    "wire_vs_mesh": 2.0,
+    "links_vs_mesh": 1.1707
+   },
+   "cuts": {
+    "x": {
+     "min_cap_per_dir": 12,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 2,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 3,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 4,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 5,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 6,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      },
+      {
+       "at": 7,
+       "segments": 24,
+       "bridges": 0,
+       "cap_per_dir": 12
+      }
+     ]
+    },
+    "y": {
+     "min_cap_per_dir": 16,
+     "at": 1,
+     "per_cut": [
+      {
+       "at": 1,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 2,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 3,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 4,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      },
+      {
+       "at": 5,
+       "segments": 32,
+       "bridges": 0,
+       "cap_per_dir": 16
+      }
+     ]
+    }
+   },
+   "distance": {
+    "reachable_pairs": 2256,
+    "total_pairs": 2256,
+    "connected": true,
+    "diameter_cy": 92,
+    "avg_lat_cy": 54.47,
+    "max_hops": 9,
+    "avg_hops": 5.28
+   },
+   "bounds": {
+    "alltoall/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "alltoall/T1": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allgather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "allreduce/T0": {
+     "cut_lb": 48,
+     "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 48,
+     "binding": "cut"
+    },
+    "allreduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "gather/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "gather/T1": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "broadcast/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    },
+    "reduce/T0": {
+     "cut_lb": 4,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+     "port_lb": 24,
+     "ramp_lb": 24,
+     "lb": 24,
+     "binding": "port"
+    },
+    "reduce/T1": {
+     "cut_lb": 1,
+     "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+     "port_lb": 1,
+     "ramp_lb": 1,
+     "lb": 1,
+     "binding": "cut"
+    }
+   },
+   "disconnected": false,
+   "vs_A": {
+    "alltoall/T0": 1.0,
+    "alltoall/T1": 1.0,
+    "allgather/T0": 1.0,
+    "allgather/T1": 1.0,
+    "allreduce/T0": 1.0,
+    "allreduce/T1": 1.0,
+    "gather/T0": 1.0,
+    "gather/T1": 1.0,
+    "broadcast/T0": 1.0,
+    "broadcast/T1": 1.0,
+    "reduce/T0": 1.0,
+    "reduce/T1": 1.0
+   },
+   "worst_vs_A": 1.0,
+   "best_vs_A": 1.0,
+   "gates": {
+    "每核 ≤2 口": true,
+    "全连通": true,
+    "环侧速率跟得上 L1 ramp": true,
+    "最长单根线 ≤2 pitch": true
+   },
+   "fails": [],
+   "rank": 3
+  }
+ ],
+ "ranking": [
+  "A_full_2port",
+  "B_full_1lane",
+  "H_two_on_row",
+  "D_colhalf_seam",
+  "E_bothhalf_seam",
+  "C_rowhalf_seam"
+ ],
+ "recommend": "A_full_2port",
+ "recommend_label": "A 全环双向：1 行口 + 1 列口",
+ "runner_up": "B_full_1lane"
+}

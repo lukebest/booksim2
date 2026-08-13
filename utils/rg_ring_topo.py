@@ -20,6 +20,22 @@ The ring differs only at the NODES: a torus router is a buffered full crossbar,
 a ring station has no crossbar, has a bounded number of insert/extract points,
 and cannot turn without leaving one ring and boarding the other.
 
+Wire model
+----------
+Folding is a layout, so it has to be paid for in wire length, not assumed away.
+One core pitch costs PITCH_H=5 cycles horizontally and PITCH_V=7 vertically. A
+folded k-cycle is an out-and-back tour over the k collinear cores, so a ring
+neighbour is normally the core AFTER NEXT -- two pitches, 10 / 14 cycles -- and
+exactly two segments per ring close the tour between physically adjacent cores
+at one pitch (5 / 7 cycles). Per lane that is 2(k-1) pitches, i.e. the 2x-mesh
+metal the attachment study charges. Hop-minimal routing stays latency-minimal:
+the two short segments sit half a ring apart, so any half-ring arc contains
+exactly one of them and the two directions of a tie stay tied.
+
+Changing rings costs t_turn = T_TURN_BRIDGE = 10 cycles at the bridge, for the
+calendar and for the `ring_base` simulator alike. A 2D path therefore pays one
+bridge crossing that no routing choice can avoid.
+
 Definition D-R (five clauses)
 -----------------------------
 R1  ring-link mutual exclusion   -- 192 directed segments, occupancy is an arc
@@ -44,13 +60,20 @@ quantitative reason D-M must not be reused here.
 
 from __future__ import annotations
 
+import heapq
 import math
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, Sequence
 
-from rg_topo import H_BASE, MX, MY, RAMP, RAMP_BW, V_BASE, coord, nid
+from rg_topo import (MX, MY, PITCH_H, PITCH_V, RAMP, RAMP_BW, T_TURN_BRIDGE,
+                     coord, nid)
+
+# The wire setup used by the islip2d study before the folded-pitch model landed:
+# one uniform hop delay per segment (wrap included) and a free ring change. Kept
+# so those results stay reproducible; do not use it for new ring work.
+LEGACY_WIRE = {"pitch_h": 7, "pitch_v": 9, "folded": False, "t_turn": 1}
 
 RingId = tuple[str, int]          # ("row", y) | ("col", x)
 Edge = tuple[int, int]            # directed segment, by node ids
@@ -263,7 +286,9 @@ class RingTopology:
 
     def __init__(self, mx: int = MX, my: int = MY, *, sigma: int = 1,
                  delay_scale: int = 1, board_ports: int = 1,
-                 leave_ports: int = 1, t_turn: int = 1,
+                 leave_ports: int = 1, t_turn: int = T_TURN_BRIDGE,
+                 pitch_h: int = PITCH_H, pitch_v: int = PITCH_V,
+                 folded: bool = True,
                  spatial_reuse: SpatialReuse = "arc"):
         if spatial_reuse not in ("arc", "whole_ring"):
             raise ValueError(spatial_reuse)
@@ -271,8 +296,13 @@ class RingTopology:
         self.n = mx * my
         self.sigma = sigma
         self.delay_scale = delay_scale
-        self.H = H_BASE * delay_scale
-        self.V = V_BASE * delay_scale
+        self.folded = folded
+        self.pitch_h = pitch_h * delay_scale
+        self.pitch_v = pitch_v * delay_scale
+        # A typical (2-pitch) segment, kept for audits and for the unfolded
+        # control where every segment is the same length.
+        self.H = self.pitch_h * (2 if folded else 1)
+        self.V = self.pitch_v * (2 if folded else 1)
         self.board_ports = board_ports
         self.leave_ports = leave_ports
         self.t_turn = t_turn
@@ -296,8 +326,78 @@ class RingTopology:
             return [nid(x, idx, self.mx) for x in range(self.mx)]
         return [nid(idx, y, self.mx) for y in range(self.my)]
 
-    def ring_lat(self, ring: RingId) -> int:
-        return self.H if ring[0] == "row" else self.V
+    def pitch(self, ring: RingId) -> int:
+        return self.pitch_h if ring[0] == "row" else self.pitch_v
+
+    def link_pitches(self, ring: RingId, i: int) -> int:
+        """Physical length, in core pitches, of the segment leaving index `i`.
+
+        Folding lays a k-cycle over k collinear cores as an out-and-back tour,
+        so a ring neighbour is normally the core *after next* -- two pitches --
+        and exactly two segments close the tour over physically adjacent cores:
+        the far turn (k/2-1 -> k/2) and the near one (k-1 -> 0, the segment an
+        unfolded drawing would show as the long wrap). Total 2(k-1) pitches,
+        which is the 2x-mesh metal the attachment study charges scheme A.
+        """
+        if not self.folded:
+            return 1
+        k = self.ring_size(ring)
+        return 1 if i % k in (k // 2 - 1, k - 1) else 2
+
+    def link_lat(self, ring: RingId, i: int) -> int:
+        """Wire delay of the segment leaving index `i` of `ring`."""
+        return self.pitch(ring) * self.link_pitches(ring, i)
+
+    def arc_lats(self, arc: Arc) -> list[int]:
+        """Per-hop wire delay along `arc`, in travel order."""
+        out = []
+        for h in range(arc.hops):
+            i = self.index_on(arc.ring, arc.nodes[h])
+            out.append(self.link_lat(arc.ring,
+                                     i if arc.dir > 0 else i - 1))
+        return out
+
+    def ring_wire(self, ring: RingId) -> int:
+        """Total wire delay round one lane of `ring`."""
+        return sum(self.link_lat(ring, i)
+                   for i in range(self.ring_size(ring)))
+
+    def wire_distance(self, src: int, dst: int) -> int:
+        """Zero-contention shortest delay, minimised over every legal route.
+
+        Dijkstra over states (core, ring being ridden): riding a segment costs
+        that segment's own wire delay and changing rings costs `t_turn`. This is
+        routing independent by construction -- it does not assume the two-phase
+        dimension order the calendars use, so it is a floor for ANY schedule,
+        including one that relays through a third core.
+        """
+        if src == dst:
+            return 0
+        best: dict[tuple[int, RingId], int] = {}
+        # boarding either of the core's two rings is free: the turn cost is only
+        # paid when a flit already riding one ring moves to the other
+        heap = [(0, src, r) for r in self.rings_of(src)]
+        heapq.heapify(heap)
+        out = None
+        while heap:
+            d, node, ring = heapq.heappop(heap)
+            if best.get((node, ring), 1 << 60) <= d:
+                continue
+            best[(node, ring)] = d
+            if node == dst:
+                out = d
+                break
+            i = self.index_on(ring, node)
+            k = self.ring_size(ring)
+            order = self.ring_nodes(ring)
+            for direction in (1, -1):
+                j = (i + direction) % k
+                lat = self.link_lat(ring, i if direction > 0 else i - 1)
+                heapq.heappush(heap, (d + lat, order[j], ring))
+            for other in self.rings_of(node):
+                if other != ring:
+                    heapq.heappush(heap, (d + self.t_turn, node, other))
+        return out if out is not None else -1
 
     def rings_of(self, node: int) -> tuple[RingId, RingId]:
         x, y = coord(node, self.mx)
@@ -428,9 +528,9 @@ class RingTopology:
             if prev_leave is not None:
                 t = prev_leave + self.t_turn      # R4: rigid hand-off
             fp.boards.append((board_key(a.start, a.ring), t))
-            lat = self.ring_lat(a.ring)
+            lats = self.arc_lats(a)
             acc = t
-            for e in a.links():
+            for e, lat in zip(a.links(), lats):
                 fp.links.append((e, acc))
                 acc += lat
             fp.rings.append((a.key(), t, (acc - t) + dur))
@@ -503,7 +603,7 @@ class RingTopology:
                   % self.ring_size(ring))
         arc = self.make_arc(ring, src, far, direction)
         dur = m * self.sigma
-        lat = self.ring_lat(ring)
+        lats = self.arc_lats(arc)
         fp = RingMcastFootprint(flow_id=flow_id, src=src,
                                 dsts=tuple(members), arc=arc, m=m,
                                 sigma=self.sigma, op=op, dur=dur,
@@ -513,7 +613,7 @@ class RingTopology:
         at: dict[int, int] = {}
         for pos, e in enumerate(arc.links()):
             fp.links.append((e, acc))
-            acc += lat
+            acc += lats[pos]
             at[arc.nodes[pos + 1]] = acc
         member_set = set(members)
         missing = member_set - set(at)
@@ -646,6 +746,14 @@ class RingTopology:
             "mx": self.mx, "my": self.my, "n": self.n,
             "sigma": self.sigma, "delay_scale": self.delay_scale,
             "H": self.H, "V": self.V, "t_turn": self.t_turn,
+            "folded": self.folded,
+            "pitch_h": self.pitch_h, "pitch_v": self.pitch_v,
+            "row_hop_cycles": sorted({self.link_lat(("row", 0), i)
+                                      for i in range(self.mx)}),
+            "col_hop_cycles": sorted({self.link_lat(("col", 0), i)
+                                      for i in range(self.my)}),
+            "row_ring_wire": self.ring_wire(("row", 0)),
+            "col_ring_wire": self.ring_wire(("col", 0)),
             "board_ports": self.board_ports,
             "leave_ports": self.leave_ports,
             "spatial_reuse": self.spatial_reuse,

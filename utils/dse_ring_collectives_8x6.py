@@ -138,6 +138,10 @@ def run_base_collective(topo: RingTopology, col: RingCollective, *,
     p99 = 0
     done = True
     per_phase: list[int] = []
+    br_occ = [0.0] * topo.n          # flit-cycles per bridge, summed over phases
+    br_full = [0] * topo.n
+    br_turn = [0] * topo.n
+    wsum = wn = 0.0
     for offers in phase_offers(col):
         if not offers:
             per_phase.append(0)
@@ -155,9 +159,30 @@ def run_base_collective(topo: RingTopology, col: RingCollective, *,
                                          r.get("max_reasm_occupancy", 0) or 0)
         agg["max_deflections"] = max(agg["max_deflections"],
                                      r.get("max_deflections", 0) or 0)
+        # bridge buffers: peaks are maxima over phases, occupancy is a
+        # flit-cycle integral so it adds, and the deflections a full bridge
+        # caused add as well
+        for k in ("bridge_peak_max", "bridge_wait_max"):
+            agg[k] = max(agg[k], r.get(k, 0) or 0)
+        for k in ("bridge_full_cycles", "bridge_deflect", "bridge_entries"):
+            agg[k] += r.get(k, 0) or 0
+        for n, v in r.get("_bridge_per_node", {}).items():
+            br_occ[n] += v["occ"]
+            br_full[n] += v["full_cy"]
+            br_turn[n] += v["entries"]
+        wsum += (r.get("bridge_wait_mean", 0.0) or 0.0) * r.get("bridge_entries",
+                                                                0)
+        wn += r.get("bridge_entries", 0)
+    used = [n for n in range(topo.n) if br_turn[n]]
     out = {"leg": "ring_base", "makespan": mk, "completed": done,
            "lat_p99": p99, "per_phase_makespan": per_phase}
     out.update(agg)
+    out["n_bridges_used"] = len(used)
+    out["bridge_occ_mean"] = round(sum(br_occ) / max(1, mk) / max(1, len(used)),
+                                   3)
+    out["bridge_occ_max"] = round(max(br_occ) / max(1, mk), 3) if br_occ else 0.
+    out["bridge_full_frac"] = round(max(br_full) / max(1, mk), 4)
+    out["bridge_wait_mean"] = round(wsum / wn, 2) if wn else 0.0
     out["deflect_per_flit"] = (round(agg["n_deflections"]
                                     / max(1, agg["n_delivered_flits"]), 5))
     return out
@@ -239,20 +264,22 @@ def base_model_bounds(topo: RingTopology, col: RingCollective,
     """Lower bound for `ring_base` **in ring_base's own machine model**.
 
     The calendar's `makespan_lb` is not a bound on this leg, and pretending it
-    is makes ring_base look like it beats a lower bound. The two models differ
-    in exactly three places, all of which have to be undone here:
+    is makes ring_base look like it beats a lower bound. Two differences remain
+    and both have to be undone here:
 
     * a ring station's exit passes ONE flit per cycle in the calendar
       (`leave_ports=1`), while the sim's node absorbs `RAMP_BW` per cycle, so
       the calendar's `port_lb` can be ~2x what the sim actually owes; the
       matching term here is the ramp/eject bound;
     * `latency_floor` charges `+RAMP` per phase for the L1 ramp; the sim
-      charges nothing, so the constant has to come off;
-    * the calendar charges `t_turn` to cross a bridge; the sim crosses for
-      free, so the surcharge comes off each turning route.
+      charges nothing, so the constant has to come off.
 
-    The arc-load term is the one thing both models agree on: a segment carries
-    one flit per cycle either way.
+    A third difference used to exist and no longer does: the bridge. Both legs
+    now pay `t_turn` cycles to change rings, so the turn surcharge is NOT
+    removed here -- the sim owes it as well.
+
+    The arc-load term is the one thing both models always agreed on: a segment
+    carries one flit per cycle either way.
 
     Verified in verify_ring_collectives_8x6.py: ring_base is >= this bound on
     every measured row, and exactly equal on the rotation schedules.
@@ -264,8 +291,7 @@ def base_model_bounds(topo: RingTopology, col: RingCollective,
             fp = cal.fps.get(x.xid)
             if fp is None:
                 continue
-            n_turn = max(0, len(fp.rings) - 1)
-            spans.append(fp.wire - topo.t_turn * n_turn + fp.dur)
+            spans.append(fp.wire + fp.dur)
         per.append(max(spans, default=0))
     lat = 0
     for pi, ph in enumerate(col.phases):
@@ -280,7 +306,7 @@ def base_model_bounds(topo: RingTopology, col: RingCollective,
             "makespan_lb": max(cands.values()),
             "binding_lb": max(cands, key=lambda k: cands[k]),
             "model": "ring_base: eject at RAMP_BW/cycle, no +RAMP per phase, "
-                     "free bridge turn"}
+                     "same t_turn bridge as the calendar"}
 
 
 def ramp_eject_bound(topo: RingTopology, col: RingCollective) -> dict[str, Any]:

@@ -87,7 +87,8 @@ from typing import Any
 
 from rg_topo import RAMP, RAMP_BW, Topology, coord
 from rg_mesh_paths import build_plan
-from rg_ring_topo import RingTopology, board_key, build_ring_plan, leave_key
+from rg_ring_topo import (LEGACY_WIRE, RingTopology, board_key,
+                          build_ring_plan, leave_key)
 from rg_ring_base import RingBaseParams, RingBaseSim
 
 CONFIGS = ("mesh_base", "ring_base", "mesh_islip2d", "ring_islip2d")
@@ -576,7 +577,7 @@ class RGSim:
             self._plan = None if p.path_mode == "xy" else build_plan(
                 pairs, p.path_mode, seed=seed)
         else:
-            self.rtopo = RingTopology(sigma=p.sigma,
+            self.rtopo = RingTopology(**LEGACY_WIRE, sigma=p.sigma,
                                       board_ports=p.board_ports,
                                       leave_ports=p.leave_ports)
             self.m_board, self.m_leave = mk(p.board_ports), mk(p.leave_ports)
@@ -780,7 +781,7 @@ class RingBaseAdapter:
 
     def __init__(self, p: SteadyParams, seed: int = 0):
         self.p = p
-        self.topo = RingTopology(sigma=p.sigma)
+        self.topo = RingTopology(**LEGACY_WIRE, sigma=p.sigma)
         self.sim = RingBaseSim(self.topo, RingBaseParams(
             dim_order=p.dim_order, swap_rule=p.swap_rule,
             resolution_mode=p.resolution_mode, fifo_depth=p.fifo_depth,

@@ -1,0 +1,7144 @@
+{
+ "topology": {
+  "mx": 8,
+  "my": 6,
+  "n": 48,
+  "sigma": 1,
+  "delay_scale": 1,
+  "H": 7,
+  "V": 9,
+  "t_turn": 1,
+  "board_ports": 1,
+  "leave_ports": 1,
+  "spatial_reuse": "arc",
+  "n_row_rings": 6,
+  "n_col_rings": 8,
+  "n_directed_links": 192,
+  "n_undirected_links": 96,
+  "n_ring_mutex_units": 192,
+  "mesh_undirected": 82,
+  "metal_ratio_vs_mesh": 1.1707,
+  "n_bridges": 48,
+  "reading": "无缓冲折叠 2D torus：链路集与折叠 torus 相同，节点是无缓冲环站而非 torus 路由器"
+ },
+ "root": 27,
+ "rounds": [
+  1,
+  5,
+  13
+ ],
+ "m_list": [
+  1,
+  13
+ ],
+ "geometry": {
+  "H_cy_per_row_hop": 7,
+  "V_cy_per_col_hop": 9,
+  "delay_scale": 1,
+  "t_turn_cy": 1,
+  "worst_row_hops": 4,
+  "worst_col_hops": 3,
+  "ring_span_cy": 55,
+  "ring_span_witness": "4x7 + 3x9 = 55：每维走环上较短的那一边，最多绕半圈",
+  "measured_worst_pair_cy": 55,
+  "mesh_manhattan_cy": 94,
+  "mesh_witness": "7x7 + 5x9 = 94：mesh 上没有绕回边，最远要走满两个维度",
+  "span_over_mesh": 0.585,
+  "folded_wire_reading_cy": 110,
+  "folded_over_mesh": 1.17,
+  "reading": "同一条链路延迟（横向 7 拍 / 纵向 9 拍每跳）下，折叠环的最远距离只有 mesh 曼哈顿直径的一半左右，所以 m=1 的 makespan 低于 94 拍是跨度优势而不是记账错误；但若按折叠线长 x2 计延迟，地板反而高于 mesh"
+ },
+ "definitions": {
+  "II_eff": "(T_R - T1)/(R-1)，R 轮自由流水打包实测；它是让 T_avg=(T1+T_R)/2 成立的插值参数，不是渐近值，有限 R 下可低于容量界（R=5 最狠 0.73×，R=13 收窄到 0.91×），所以校验下界要用 per_round 而不是它",
+  "per_round": "T_R / R，流水下一轮的均摊时间；这一项恒 >= 容量界",
+  "II_lb": "容量界 max(cut, 核端口, L1 ramp)；允许中继与本地合并，因此 T0/T1 同界，任何算法都不得低于它",
+  "makespan_lb": "max(容量界, 时延地板)",
+  "util": "该次运行自身口径：弧占用周期 / (192 * 该次 makespan)，R=1 为单发、R=13 为流水稳态，构造上 <= 1",
+  "hop_tax": "实际弧占用 / 最小跳数弧占用，>1 即偏转或绕路的浪费"
+ },
+ "cuts": {
+  "x": [
+   {
+    "at": 1,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 6
+   },
+   {
+    "at": 2,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 12
+   },
+   {
+    "at": 3,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 18
+   },
+   {
+    "at": 4,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 24
+   },
+   {
+    "at": 5,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 30
+   },
+   {
+    "at": 6,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 36
+   },
+   {
+    "at": 7,
+    "segments_pos": 12,
+    "segments_neg": 12,
+    "cap_per_dir": 12.0,
+    "nodes_low": 42
+   }
+  ],
+  "y": [
+   {
+    "at": 1,
+    "segments_pos": 16,
+    "segments_neg": 16,
+    "cap_per_dir": 16.0,
+    "nodes_low": 8
+   },
+   {
+    "at": 2,
+    "segments_pos": 16,
+    "segments_neg": 16,
+    "cap_per_dir": 16.0,
+    "nodes_low": 16
+   },
+   {
+    "at": 3,
+    "segments_pos": 16,
+    "segments_neg": 16,
+    "cap_per_dir": 16.0,
+    "nodes_low": 24
+   },
+   {
+    "at": 4,
+    "segments_pos": 16,
+    "segments_neg": 16,
+    "cap_per_dir": 16.0,
+    "nodes_low": 32
+   },
+   {
+    "at": 5,
+    "segments_pos": 16,
+    "segments_neg": 16,
+    "cap_per_dir": 16.0,
+    "nodes_low": 40
+   }
+  ]
+ },
+ "theory": [
+  {
+   "pattern": "broadcast",
+   "m": 1,
+   "cut_lb": 1,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+   "max_originate": 1,
+   "max_absorb": 1,
+   "port_lb": 1,
+   "ramp_lb": 1,
+   "capacity_lb": 1,
+   "binding_capacity": "cut",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "root 27 到最远节点",
+   "II_lb": 1,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "m": 13,
+   "cut_lb": 2,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 13 flit",
+   "max_originate": 13,
+   "max_absorb": 13,
+   "port_lb": 7,
+   "ramp_lb": 7,
+   "capacity_lb": 7,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "root 27 到最远节点",
+   "II_lb": 7,
+   "makespan_lb": 67,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "m": 1,
+   "cut_lb": 1,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+   "max_originate": 1,
+   "max_absorb": 1,
+   "port_lb": 1,
+   "ramp_lb": 1,
+   "capacity_lb": 1,
+   "binding_capacity": "cut",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "最远节点到 root 27",
+   "II_lb": 1,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "m": 13,
+   "cut_lb": 2,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 13 flit",
+   "max_originate": 13,
+   "max_absorb": 13,
+   "port_lb": 7,
+   "ramp_lb": 7,
+   "capacity_lb": 7,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "最远节点到 root 27",
+   "II_lb": 7,
+   "makespan_lb": 67,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "gather",
+   "m": 1,
+   "cut_lb": 2,
+   "cut_witness": "x=3：容量 12 flit/cy，必须过 18 flit",
+   "max_originate": 1,
+   "max_absorb": 47,
+   "port_lb": 24,
+   "ramp_lb": 24,
+   "capacity_lb": 24,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "最远节点到 root 27",
+   "II_lb": 24,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "gather",
+   "m": 13,
+   "cut_lb": 26,
+   "cut_witness": "x=4：容量 12 flit/cy，必须过 312 flit",
+   "max_originate": 13,
+   "max_absorb": 611,
+   "port_lb": 306,
+   "ramp_lb": 306,
+   "capacity_lb": 306,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "最远节点到 root 27",
+   "II_lb": 306,
+   "makespan_lb": 306,
+   "binding": "port",
+   "latency_frac": 0.219
+  },
+  {
+   "pattern": "allreduce",
+   "m": 1,
+   "cut_lb": 1,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 1 flit",
+   "max_originate": 1,
+   "max_absorb": 1,
+   "port_lb": 1,
+   "ramp_lb": 1,
+   "capacity_lb": 1,
+   "binding_capacity": "cut",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 1,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "m": 13,
+   "cut_lb": 2,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 13 flit",
+   "max_originate": 13,
+   "max_absorb": 13,
+   "port_lb": 7,
+   "ramp_lb": 7,
+   "capacity_lb": 7,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 7,
+   "makespan_lb": 67,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "m": 1,
+   "cut_lb": 4,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 42 flit",
+   "max_originate": 1,
+   "max_absorb": 47,
+   "port_lb": 24,
+   "ramp_lb": 24,
+   "capacity_lb": 24,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 24,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "m": 13,
+   "cut_lb": 46,
+   "cut_witness": "x=1：容量 12 flit/cy，必须过 546 flit",
+   "max_originate": 13,
+   "max_absorb": 611,
+   "port_lb": 306,
+   "ramp_lb": 306,
+   "capacity_lb": 306,
+   "binding_capacity": "port",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 306,
+   "makespan_lb": 306,
+   "binding": "port",
+   "latency_frac": 0.219
+  },
+  {
+   "pattern": "alltoall",
+   "m": 1,
+   "cut_lb": 48,
+   "cut_witness": "x=4：容量 12 flit/cy，必须过 576 flit",
+   "max_originate": 47,
+   "max_absorb": 47,
+   "port_lb": 24,
+   "ramp_lb": 24,
+   "capacity_lb": 48,
+   "binding_capacity": "cut",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 0,
+   "lat_latency_floor": 55,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 48,
+   "makespan_lb": 55,
+   "binding": "latency",
+   "latency_frac": 1.0
+  },
+  {
+   "pattern": "alltoall",
+   "m": 13,
+   "cut_lb": 624,
+   "cut_witness": "x=4：容量 12 flit/cy，必须过 7488 flit",
+   "max_originate": 611,
+   "max_absorb": 611,
+   "port_lb": 306,
+   "ramp_lb": 306,
+   "capacity_lb": 624,
+   "binding_capacity": "cut",
+   "lat_distance_cy": 55,
+   "lat_tail_cy": 12,
+   "lat_latency_floor": 67,
+   "lat_witness": "全对全，取直径",
+   "II_lb": 624,
+   "makespan_lb": 624,
+   "binding": "cut",
+   "latency_frac": 0.107
+  }
+ ],
+ "rows": [
+  {
+   "pattern": "broadcast",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 59,
+    "by_rounds": {
+     "1": {
+      "T_R": 59,
+      "II_eff": null,
+      "per_round": 59.0,
+      "T_avg": 59.0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 72,
+       "global_util": 0.0148,
+       "critical_arc_util": 0.2034,
+       "critical_arc_cycles": 12,
+       "useful_global": 0.0148,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 131,
+      "II_eff": 18.0,
+      "per_round": 26.2,
+      "T_avg": 95.0,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 72,
+       "global_util": 0.0334,
+       "critical_arc_util": 0.458,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.0334,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 323,
+      "II_eff": 22.0,
+      "per_round": 24.85,
+      "T_avg": 191.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 72,
+       "global_util": 0.0352,
+       "critical_arc_util": 0.483,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0352,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 93,
+    "by_rounds": {
+     "1": {
+      "T_R": 93,
+      "II_eff": null,
+      "per_round": 93.0,
+      "T_avg": 93.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0094,
+       "critical_arc_util": 0.2581,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0094,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 281,
+      "II_eff": 47.0,
+      "per_round": 56.2,
+      "T_avg": 187.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0156,
+       "critical_arc_util": 0.427,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.0156,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 657,
+      "II_eff": 47.0,
+      "per_round": 50.54,
+      "T_avg": 375.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0173,
+       "critical_arc_util": 0.4749,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.0173,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 168,
+   "wall_s": 0.13,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 323,
+    "by_rounds": {
+     "1": {
+      "T_R": 323,
+      "II_eff": null,
+      "per_round": 323.0,
+      "T_avg": 323.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 72,
+       "global_util": 0.0352,
+       "critical_arc_util": 0.483,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0352,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1571,
+      "II_eff": 312.0,
+      "per_round": 314.2,
+      "T_avg": 947.0,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 72,
+       "global_util": 0.0362,
+       "critical_arc_util": 0.4965,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.0362,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 4067,
+      "II_eff": 312.0,
+      "per_round": 312.85,
+      "T_avg": 2195.0,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 72,
+       "global_util": 0.0364,
+       "critical_arc_util": 0.4986,
+       "critical_arc_cycles": 2028,
+       "useful_global": 0.0364,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 657,
+    "by_rounds": {
+     "1": {
+      "T_R": 657,
+      "II_eff": null,
+      "per_round": 657.0,
+      "T_avg": 657.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0173,
+       "critical_arc_util": 0.4749,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.0173,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3101,
+      "II_eff": 611.0,
+      "per_round": 620.2,
+      "T_avg": 1879.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0183,
+       "critical_arc_util": 0.5031,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.0183,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 7989,
+      "II_eff": 611.0,
+      "per_round": 614.54,
+      "T_avg": 4323.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0185,
+       "critical_arc_util": 0.5077,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.0185,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2184,
+   "wall_s": 0.5,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 482,
+    "by_rounds": {
+     "1": {
+      "T_R": 482,
+      "II_eff": null,
+      "per_round": 482.0,
+      "T_avg": 482.0,
+      "util": {
+       "link_cycles": 47,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0005,
+       "critical_arc_util": 0.0021,
+       "critical_arc_cycles": 1,
+       "useful_global": 0.0005,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 670,
+      "II_eff": 47.0,
+      "per_round": 134.0,
+      "T_avg": 576.0,
+      "util": {
+       "link_cycles": 235,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0018,
+       "critical_arc_util": 0.0075,
+       "critical_arc_cycles": 5,
+       "useful_global": 0.0018,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1046,
+      "II_eff": 47.0,
+      "per_round": 80.46,
+      "T_avg": 764.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.003,
+       "critical_arc_util": 0.0124,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.003,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 388,
+    "by_rounds": {
+     "1": {
+      "T_R": 388,
+      "II_eff": null,
+      "per_round": 388.0,
+      "T_avg": 388.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 47,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0006,
+       "critical_arc_util": 0.0026,
+       "critical_arc_cycles": 1,
+       "useful_global": 0.0006,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 576,
+      "II_eff": 47.0,
+      "per_round": 115.2,
+      "T_avg": 482.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 235,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0021,
+       "critical_arc_util": 0.0087,
+       "critical_arc_cycles": 5,
+       "useful_global": 0.0021,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 952,
+      "II_eff": 47.0,
+      "per_round": 73.23,
+      "T_avg": 670.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0033,
+       "critical_arc_util": 0.0137,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0033,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 47,
+   "wall_s": 0.05,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1046,
+    "by_rounds": {
+     "1": {
+      "T_R": 1046,
+      "II_eff": null,
+      "per_round": 1046.0,
+      "T_avg": 1046.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.003,
+       "critical_arc_util": 0.0124,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.003,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3490,
+      "II_eff": 611.0,
+      "per_round": 698.0,
+      "T_avg": 2268.0,
+      "util": {
+       "link_cycles": 3055,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0046,
+       "critical_arc_util": 0.0186,
+       "critical_arc_cycles": 65,
+       "useful_global": 0.0046,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8378,
+      "II_eff": 611.0,
+      "per_round": 644.46,
+      "T_avg": 4712.0,
+      "util": {
+       "link_cycles": 7943,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0049,
+       "critical_arc_util": 0.0202,
+       "critical_arc_cycles": 169,
+       "useful_global": 0.0049,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 952,
+    "by_rounds": {
+     "1": {
+      "T_R": 952,
+      "II_eff": null,
+      "per_round": 952.0,
+      "T_avg": 952.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0033,
+       "critical_arc_util": 0.0137,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0033,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3396,
+      "II_eff": 611.0,
+      "per_round": 679.2,
+      "T_avg": 2174.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 3055,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0047,
+       "critical_arc_util": 0.0191,
+       "critical_arc_cycles": 65,
+       "useful_global": 0.0047,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8284,
+      "II_eff": 611.0,
+      "per_round": 637.23,
+      "T_avg": 4618.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 7943,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.005,
+       "critical_arc_util": 0.0204,
+       "critical_arc_cycles": 169,
+       "useful_global": 0.005,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 611,
+   "wall_s": 0.17,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 61,
+    "by_rounds": {
+     "1": {
+      "T_R": 61,
+      "II_eff": null,
+      "per_round": 61.0,
+      "T_avg": 61.0,
+      "util": {
+       "link_cycles": 105,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.009,
+       "critical_arc_util": 0.0656,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.009,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 80,
+      "II_eff": 4.75,
+      "per_round": 16.0,
+      "T_avg": 70.5,
+      "util": {
+       "link_cycles": 525,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0342,
+       "critical_arc_util": 0.25,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0342,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 176,
+      "II_eff": 9.58,
+      "per_round": 13.54,
+      "T_avg": 118.5,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0404,
+       "critical_arc_util": 0.2955,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0404,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 63,
+    "by_rounds": {
+     "1": {
+      "T_R": 63,
+      "II_eff": null,
+      "per_round": 63.0,
+      "T_avg": 63.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 105,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0087,
+       "critical_arc_util": 0.0635,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0087,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 111,
+      "II_eff": 12.0,
+      "per_round": 22.2,
+      "T_avg": 87.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 525,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0246,
+       "critical_arc_util": 0.1802,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0246,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 207,
+      "II_eff": 12.0,
+      "per_round": 15.92,
+      "T_avg": 135.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0343,
+       "critical_arc_util": 0.2512,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0343,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 105,
+   "wall_s": 0.04,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 176,
+    "by_rounds": {
+     "1": {
+      "T_R": 176,
+      "II_eff": null,
+      "per_round": 176.0,
+      "T_avg": 176.0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0404,
+       "critical_arc_util": 0.2955,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0404,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 800,
+      "II_eff": 156.0,
+      "per_round": 160.0,
+      "T_avg": 488.0,
+      "util": {
+       "link_cycles": 6825,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0444,
+       "critical_arc_util": 0.325,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0444,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2048,
+      "II_eff": 156.0,
+      "per_round": 157.54,
+      "T_avg": 1112.0,
+      "util": {
+       "link_cycles": 17745,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0451,
+       "critical_arc_util": 0.3301,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0451,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 202,
+    "by_rounds": {
+     "1": {
+      "T_R": 202,
+      "II_eff": null,
+      "per_round": 202.0,
+      "T_avg": 202.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0352,
+       "critical_arc_util": 0.2574,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0352,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 826,
+      "II_eff": 156.0,
+      "per_round": 165.2,
+      "T_avg": 514.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 6825,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.043,
+       "critical_arc_util": 0.3148,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.043,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2074,
+      "II_eff": 156.0,
+      "per_round": 159.54,
+      "T_avg": 1138.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 17745,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0446,
+       "critical_arc_util": 0.3259,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0446,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 1365,
+   "wall_s": 0.19,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 61,
+    "by_rounds": {
+     "1": {
+      "T_R": 61,
+      "II_eff": null,
+      "per_round": 61.0,
+      "T_avg": 61.0,
+      "util": {
+       "link_cycles": 47,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.004,
+       "critical_arc_util": 0.0164,
+       "critical_arc_cycles": 1,
+       "useful_global": 0.004,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 69,
+      "II_eff": 2.0,
+      "per_round": 13.8,
+      "T_avg": 65.0,
+      "util": {
+       "link_cycles": 235,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0177,
+       "critical_arc_util": 0.0725,
+       "critical_arc_cycles": 5,
+       "useful_global": 0.0177,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 95,
+      "II_eff": 2.83,
+      "per_round": 7.31,
+      "T_avg": 78.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0335,
+       "critical_arc_util": 0.1368,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0335,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 47,
+   "wall_s": 0.01,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 95,
+    "by_rounds": {
+     "1": {
+      "T_R": 95,
+      "II_eff": null,
+      "per_round": 95.0,
+      "T_avg": 95.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0335,
+       "critical_arc_util": 0.1368,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0335,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 303,
+      "II_eff": 52.0,
+      "per_round": 60.6,
+      "T_avg": 199.0,
+      "util": {
+       "link_cycles": 3055,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0525,
+       "critical_arc_util": 0.2145,
+       "critical_arc_cycles": 65,
+       "useful_global": 0.0525,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 719,
+      "II_eff": 52.0,
+      "per_round": 55.31,
+      "T_avg": 407.0,
+      "util": {
+       "link_cycles": 7943,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0575,
+       "critical_arc_util": 0.235,
+       "critical_arc_cycles": 169,
+       "useful_global": 0.0575,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 611,
+   "wall_s": 0.03,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 128,
+    "by_rounds": {
+     "1": {
+      "T_R": 128,
+      "II_eff": null,
+      "per_round": 128.0,
+      "T_avg": 128.0,
+      "util": {
+       "link_cycles": 93,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0038,
+       "critical_arc_util": 0.0312,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0038,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 152,
+      "II_eff": 6.0,
+      "per_round": 30.4,
+      "T_avg": 140.0,
+      "util": {
+       "link_cycles": 465,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0159,
+       "critical_arc_util": 0.1316,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0159,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 251,
+      "II_eff": 10.25,
+      "per_round": 19.31,
+      "T_avg": 189.5,
+      "util": {
+       "link_cycles": 1209,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0251,
+       "critical_arc_util": 0.2072,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0251,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 116,
+    "by_rounds": {
+     "1": {
+      "T_R": 116,
+      "II_eff": null,
+      "per_round": 116.0,
+      "T_avg": 116.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 93,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0042,
+       "critical_arc_util": 0.0345,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0042,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 140,
+      "II_eff": 6.0,
+      "per_round": 28.0,
+      "T_avg": 128.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 465,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0173,
+       "critical_arc_util": 0.1429,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0173,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 240,
+      "II_eff": 10.33,
+      "per_round": 18.46,
+      "T_avg": 178.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1209,
+       "round_link_cycles": 93.0,
+       "n_links_used": 74,
+       "global_util": 0.0262,
+       "critical_arc_util": 0.2167,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0262,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 93,
+   "wall_s": 0.04,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "broadcast",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 251,
+    "by_rounds": {
+     "1": {
+      "T_R": 251,
+      "II_eff": null,
+      "per_round": 251.0,
+      "T_avg": 251.0,
+      "util": {
+       "link_cycles": 1209,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0251,
+       "critical_arc_util": 0.2072,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0251,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 771,
+      "II_eff": 130.0,
+      "per_round": 154.2,
+      "T_avg": 511.0,
+      "util": {
+       "link_cycles": 6045,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0408,
+       "critical_arc_util": 0.3372,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0408,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1811,
+      "II_eff": 130.0,
+      "per_round": 139.31,
+      "T_avg": 1031.0,
+      "util": {
+       "link_cycles": 15717,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0452,
+       "critical_arc_util": 0.3733,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0452,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 240,
+    "by_rounds": {
+     "1": {
+      "T_R": 240,
+      "II_eff": null,
+      "per_round": 240.0,
+      "T_avg": 240.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1209,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0262,
+       "critical_arc_util": 0.2167,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0262,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 760,
+      "II_eff": 130.0,
+      "per_round": 152.0,
+      "T_avg": 500.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 6045,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0414,
+       "critical_arc_util": 0.3421,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0414,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1800,
+      "II_eff": 130.0,
+      "per_round": 138.46,
+      "T_avg": 1020.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 15717,
+       "round_link_cycles": 1209.0,
+       "n_links_used": 74,
+       "global_util": 0.0455,
+       "critical_arc_util": 0.3756,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0455,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 1209,
+   "wall_s": 0.19,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 59,
+    "by_rounds": {
+     "1": {
+      "T_R": 59,
+      "II_eff": null,
+      "per_round": 59.0,
+      "T_avg": 59.0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0148,
+       "critical_arc_util": 0.2034,
+       "critical_arc_cycles": 12,
+       "useful_global": 0.0148,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 129,
+      "II_eff": 17.5,
+      "per_round": 25.8,
+      "T_avg": 94.0,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0339,
+       "critical_arc_util": 0.4651,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.0339,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 321,
+      "II_eff": 21.83,
+      "per_round": 24.69,
+      "T_avg": 190.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0354,
+       "critical_arc_util": 0.486,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0354,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 56,
+    "by_rounds": {
+     "1": {
+      "T_R": 56,
+      "II_eff": null,
+      "per_round": 56.0,
+      "T_avg": 56.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0156,
+       "critical_arc_util": 0.4286,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0156,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 203,
+      "II_eff": 36.75,
+      "per_round": 40.6,
+      "T_avg": 129.5,
+      "completed": true,
+      "deflect_per_flit": 0.69362,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2144,
+       "round_link_cycles": 428.8,
+       "n_links_used": 93,
+       "global_util": 0.055,
+       "critical_arc_util": 0.5911,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.0216,
+       "hop_tax": 2.5524
+      }
+     },
+     "13": {
+      "T_R": 335,
+      "II_eff": 23.25,
+      "per_round": 25.77,
+      "T_avg": 195.5,
+      "completed": true,
+      "deflect_per_flit": 1.92799,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 11608,
+       "round_link_cycles": 892.9,
+       "n_links_used": 93,
+       "global_util": 0.1805,
+       "critical_arc_util": 0.9313,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.034,
+       "hop_tax": 5.3149
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 168,
+   "wall_s": 0.1,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 5.3149
+  },
+  {
+   "pattern": "reduce",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 331,
+    "by_rounds": {
+     "1": {
+      "T_R": 331,
+      "II_eff": null,
+      "per_round": 331.0,
+      "T_avg": 331.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.0344,
+       "critical_arc_util": 0.4713,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0344,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1579,
+      "II_eff": 312.0,
+      "per_round": 315.8,
+      "T_avg": 955.0,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.036,
+       "critical_arc_util": 0.494,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.036,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 4075,
+      "II_eff": 312.0,
+      "per_round": 313.46,
+      "T_avg": 2203.0,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.0363,
+       "critical_arc_util": 0.4977,
+       "critical_arc_cycles": 2028,
+       "useful_global": 0.0363,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 335,
+    "by_rounds": {
+     "1": {
+      "T_R": 335,
+      "II_eff": null,
+      "per_round": 335.0,
+      "T_avg": 335.0,
+      "completed": true,
+      "deflect_per_flit": 1.92799,
+      "n_out_of_order": 34,
+      "max_reasm_occupancy": 126,
+      "n_reasm_overflow": 451,
+      "util": {
+       "link_cycles": 11608,
+       "round_link_cycles": 11608.0,
+       "n_links_used": 93,
+       "global_util": 0.1805,
+       "critical_arc_util": 0.9313,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.034,
+       "hop_tax": 5.315
+      }
+     },
+     "5": {
+      "T_R": 1569,
+      "II_eff": 308.5,
+      "per_round": 313.8,
+      "T_avg": 952.0,
+      "completed": true,
+      "deflect_per_flit": 2.6743,
+      "n_out_of_order": 2306,
+      "max_reasm_occupancy": 190,
+      "n_reasm_overflow": 2754,
+      "util": {
+       "link_cycles": 76280,
+       "round_link_cycles": 15256.0,
+       "n_links_used": 101,
+       "global_util": 0.2532,
+       "critical_arc_util": 0.9943,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.0362,
+       "hop_tax": 6.9853
+      }
+     },
+     "13": {
+      "T_R": 4065,
+      "II_eff": 310.83,
+      "per_round": 312.69,
+      "T_avg": 2200.0,
+      "completed": true,
+      "deflect_per_flit": 2.66323,
+      "n_out_of_order": 6805,
+      "max_reasm_occupancy": 207,
+      "n_reasm_overflow": 6834,
+      "util": {
+       "link_cycles": 197624,
+       "round_link_cycles": 15201.8,
+       "n_links_used": 101,
+       "global_util": 0.2532,
+       "critical_arc_util": 0.9978,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.0364,
+       "hop_tax": 6.9605
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2184,
+   "wall_s": 1.08,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 6.9605
+  },
+  {
+   "pattern": "reduce",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 482,
+    "by_rounds": {
+     "1": {
+      "T_R": 482,
+      "II_eff": null,
+      "per_round": 482.0,
+      "T_avg": 482.0,
+      "util": {
+       "link_cycles": 47,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0005,
+       "critical_arc_util": 0.0021,
+       "critical_arc_cycles": 1,
+       "useful_global": 0.0005,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 670,
+      "II_eff": 47.0,
+      "per_round": 134.0,
+      "T_avg": 576.0,
+      "util": {
+       "link_cycles": 235,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0018,
+       "critical_arc_util": 0.0075,
+       "critical_arc_cycles": 5,
+       "useful_global": 0.0018,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1046,
+      "II_eff": 47.0,
+      "per_round": 80.46,
+      "T_avg": 764.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.003,
+       "critical_arc_util": 0.0124,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.003,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 388,
+    "by_rounds": {
+     "1": {
+      "T_R": 388,
+      "II_eff": null,
+      "per_round": 388.0,
+      "T_avg": 388.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 47,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0006,
+       "critical_arc_util": 0.0026,
+       "critical_arc_cycles": 1,
+       "useful_global": 0.0006,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 576,
+      "II_eff": 47.0,
+      "per_round": 115.2,
+      "T_avg": 482.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 235,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0021,
+       "critical_arc_util": 0.0087,
+       "critical_arc_cycles": 5,
+       "useful_global": 0.0021,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 952,
+      "II_eff": 47.0,
+      "per_round": 73.23,
+      "T_avg": 670.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 47.0,
+       "n_links_used": 47,
+       "global_util": 0.0033,
+       "critical_arc_util": 0.0137,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0033,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 47,
+   "wall_s": 0.04,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1046,
+    "by_rounds": {
+     "1": {
+      "T_R": 1046,
+      "II_eff": null,
+      "per_round": 1046.0,
+      "T_avg": 1046.0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.003,
+       "critical_arc_util": 0.0124,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.003,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3490,
+      "II_eff": 611.0,
+      "per_round": 698.0,
+      "T_avg": 2268.0,
+      "util": {
+       "link_cycles": 3055,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0046,
+       "critical_arc_util": 0.0186,
+       "critical_arc_cycles": 65,
+       "useful_global": 0.0046,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8378,
+      "II_eff": 611.0,
+      "per_round": 644.46,
+      "T_avg": 4712.0,
+      "util": {
+       "link_cycles": 7943,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0049,
+       "critical_arc_util": 0.0202,
+       "critical_arc_cycles": 169,
+       "useful_global": 0.0049,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 952,
+    "by_rounds": {
+     "1": {
+      "T_R": 952,
+      "II_eff": null,
+      "per_round": 952.0,
+      "T_avg": 952.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 611,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0033,
+       "critical_arc_util": 0.0137,
+       "critical_arc_cycles": 13,
+       "useful_global": 0.0033,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3396,
+      "II_eff": 611.0,
+      "per_round": 679.2,
+      "T_avg": 2174.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 3055,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.0047,
+       "critical_arc_util": 0.0191,
+       "critical_arc_cycles": 65,
+       "useful_global": 0.0047,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8284,
+      "II_eff": 611.0,
+      "per_round": 637.23,
+      "T_avg": 4618.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 7943,
+       "round_link_cycles": 611.0,
+       "n_links_used": 47,
+       "global_util": 0.005,
+       "critical_arc_util": 0.0204,
+       "critical_arc_cycles": 169,
+       "useful_global": 0.005,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 611,
+   "wall_s": 0.17,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 61,
+    "by_rounds": {
+     "1": {
+      "T_R": 61,
+      "II_eff": null,
+      "per_round": 61.0,
+      "T_avg": 61.0,
+      "util": {
+       "link_cycles": 105,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.009,
+       "critical_arc_util": 0.0656,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.009,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 80,
+      "II_eff": 4.75,
+      "per_round": 16.0,
+      "T_avg": 70.5,
+      "util": {
+       "link_cycles": 525,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0342,
+       "critical_arc_util": 0.25,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0342,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 176,
+      "II_eff": 9.58,
+      "per_round": 13.54,
+      "T_avg": 118.5,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0404,
+       "critical_arc_util": 0.2955,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0404,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 57,
+    "by_rounds": {
+     "1": {
+      "T_R": 57,
+      "II_eff": null,
+      "per_round": 57.0,
+      "T_avg": 57.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 105,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0096,
+       "critical_arc_util": 0.0702,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0096,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 65,
+      "II_eff": 2.0,
+      "per_round": 13.0,
+      "T_avg": 61.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 525,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0421,
+       "critical_arc_util": 0.3077,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0421,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 107,
+      "II_eff": 4.17,
+      "per_round": 8.23,
+      "T_avg": 82.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 105.0,
+       "n_links_used": 47,
+       "global_util": 0.0664,
+       "critical_arc_util": 0.486,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0664,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 105,
+   "wall_s": 0.04,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "reduce",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 189,
+    "by_rounds": {
+     "1": {
+      "T_R": 189,
+      "II_eff": null,
+      "per_round": 189.0,
+      "T_avg": 189.0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0376,
+       "critical_arc_util": 0.2751,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0376,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 813,
+      "II_eff": 156.0,
+      "per_round": 162.6,
+      "T_avg": 501.0,
+      "util": {
+       "link_cycles": 6825,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0437,
+       "critical_arc_util": 0.3198,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0437,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2061,
+      "II_eff": 156.0,
+      "per_round": 158.54,
+      "T_avg": 1125.0,
+      "util": {
+       "link_cycles": 17745,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0448,
+       "critical_arc_util": 0.328,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0448,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 107,
+    "by_rounds": {
+     "1": {
+      "T_R": 107,
+      "II_eff": null,
+      "per_round": 107.0,
+      "T_avg": 107.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 54,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1365,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0664,
+       "critical_arc_util": 0.486,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0664,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 471,
+      "II_eff": 91.0,
+      "per_round": 94.2,
+      "T_avg": 289.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 2256,
+      "max_reasm_occupancy": 54,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 6825,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0755,
+       "critical_arc_util": 0.552,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0755,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1199,
+      "II_eff": 91.0,
+      "per_round": 92.23,
+      "T_avg": 653.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6768,
+      "max_reasm_occupancy": 68,
+      "n_reasm_overflow": 24,
+      "util": {
+       "link_cycles": 17745,
+       "round_link_cycles": 1365.0,
+       "n_links_used": 47,
+       "global_util": 0.0771,
+       "critical_arc_util": 0.5638,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0771,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 1365,
+   "wall_s": 0.2,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "gather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 59,
+    "by_rounds": {
+     "1": {
+      "T_R": 59,
+      "II_eff": null,
+      "per_round": 59.0,
+      "T_avg": 59.0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0148,
+       "critical_arc_util": 0.2034,
+       "critical_arc_cycles": 12,
+       "useful_global": 0.0148,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 129,
+      "II_eff": 17.5,
+      "per_round": 25.8,
+      "T_avg": 94.0,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0339,
+       "critical_arc_util": 0.4651,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.0339,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 321,
+      "II_eff": 21.83,
+      "per_round": 24.69,
+      "T_avg": 190.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 73,
+       "global_util": 0.0354,
+       "critical_arc_util": 0.486,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0354,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 56,
+    "by_rounds": {
+     "1": {
+      "T_R": 56,
+      "II_eff": null,
+      "per_round": 56.0,
+      "T_avg": 56.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0156,
+       "critical_arc_util": 0.4286,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0156,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 203,
+      "II_eff": 36.75,
+      "per_round": 40.6,
+      "T_avg": 129.5,
+      "completed": true,
+      "deflect_per_flit": 0.69362,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2144,
+       "round_link_cycles": 428.8,
+       "n_links_used": 93,
+       "global_util": 0.055,
+       "critical_arc_util": 0.5911,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.0216,
+       "hop_tax": 2.5524
+      }
+     },
+     "13": {
+      "T_R": 335,
+      "II_eff": 23.25,
+      "per_round": 25.77,
+      "T_avg": 195.5,
+      "completed": true,
+      "deflect_per_flit": 1.92799,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 11608,
+       "round_link_cycles": 892.9,
+       "n_links_used": 93,
+       "global_util": 0.1805,
+       "critical_arc_util": 0.9313,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.034,
+       "hop_tax": 5.3149
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 168,
+   "wall_s": 0.1,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 5.3149
+  },
+  {
+   "pattern": "gather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 331,
+    "by_rounds": {
+     "1": {
+      "T_R": 331,
+      "II_eff": null,
+      "per_round": 331.0,
+      "T_avg": 331.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.0344,
+       "critical_arc_util": 0.4713,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0344,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1579,
+      "II_eff": 312.0,
+      "per_round": 315.8,
+      "T_avg": 955.0,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.036,
+       "critical_arc_util": 0.494,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.036,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 4075,
+      "II_eff": 312.0,
+      "per_round": 313.46,
+      "T_avg": 2203.0,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 73,
+       "global_util": 0.0363,
+       "critical_arc_util": 0.4977,
+       "critical_arc_cycles": 2028,
+       "useful_global": 0.0363,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 335,
+    "by_rounds": {
+     "1": {
+      "T_R": 335,
+      "II_eff": null,
+      "per_round": 335.0,
+      "T_avg": 335.0,
+      "completed": true,
+      "deflect_per_flit": 1.92799,
+      "n_out_of_order": 34,
+      "max_reasm_occupancy": 126,
+      "n_reasm_overflow": 451,
+      "util": {
+       "link_cycles": 11608,
+       "round_link_cycles": 11608.0,
+       "n_links_used": 93,
+       "global_util": 0.1805,
+       "critical_arc_util": 0.9313,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.034,
+       "hop_tax": 5.315
+      }
+     },
+     "5": {
+      "T_R": 1569,
+      "II_eff": 308.5,
+      "per_round": 313.8,
+      "T_avg": 952.0,
+      "completed": true,
+      "deflect_per_flit": 2.6743,
+      "n_out_of_order": 2306,
+      "max_reasm_occupancy": 190,
+      "n_reasm_overflow": 2754,
+      "util": {
+       "link_cycles": 76280,
+       "round_link_cycles": 15256.0,
+       "n_links_used": 101,
+       "global_util": 0.2532,
+       "critical_arc_util": 0.9943,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.0362,
+       "hop_tax": 6.9853
+      }
+     },
+     "13": {
+      "T_R": 4065,
+      "II_eff": 310.83,
+      "per_round": 312.69,
+      "T_avg": 2200.0,
+      "completed": true,
+      "deflect_per_flit": 2.66323,
+      "n_out_of_order": 6805,
+      "max_reasm_occupancy": 207,
+      "n_reasm_overflow": 6834,
+      "util": {
+       "link_cycles": 197624,
+       "round_link_cycles": 15201.8,
+       "n_links_used": 101,
+       "global_util": 0.2532,
+       "critical_arc_util": 0.9978,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.0364,
+       "hop_tax": 6.9605
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2184,
+   "wall_s": 1.05,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 6.9605
+  },
+  {
+   "pattern": "gather",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1563,
+    "by_rounds": {
+     "1": {
+      "T_R": 1563,
+      "II_eff": null,
+      "per_round": 1563.0,
+      "T_avg": 1563.0,
+      "util": {
+       "link_cycles": 1128,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.0038,
+       "critical_arc_util": 0.0301,
+       "critical_arc_cycles": 47,
+       "useful_global": 0.0038,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 6075,
+      "II_eff": 1128.0,
+      "per_round": 1215.0,
+      "T_avg": 3819.0,
+      "util": {
+       "link_cycles": 5640,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.0048,
+       "critical_arc_util": 0.0387,
+       "critical_arc_cycles": 235,
+       "useful_global": 0.0048,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 15099,
+      "II_eff": 1128.0,
+      "per_round": 1161.46,
+      "T_avg": 8331.0,
+      "util": {
+       "link_cycles": 14664,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.0051,
+       "critical_arc_util": 0.0405,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.0051,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1469,
+    "by_rounds": {
+     "1": {
+      "T_R": 1469,
+      "II_eff": null,
+      "per_round": 1469.0,
+      "T_avg": 1469.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 47,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1128,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.004,
+       "critical_arc_util": 0.032,
+       "critical_arc_cycles": 47,
+       "useful_global": 0.004,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 5981,
+      "II_eff": 1128.0,
+      "per_round": 1196.2,
+      "T_avg": 3725.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 4324,
+      "max_reasm_occupancy": 47,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 5640,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.0049,
+       "critical_arc_util": 0.0393,
+       "critical_arc_cycles": 235,
+       "useful_global": 0.0049,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 15005,
+      "II_eff": 1128.0,
+      "per_round": 1154.23,
+      "T_avg": 8237.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 12972,
+      "max_reasm_occupancy": 47,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 14664,
+       "round_link_cycles": 1128.0,
+       "n_links_used": 47,
+       "global_util": 0.0051,
+       "critical_arc_util": 0.0407,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.0051,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 1128,
+   "wall_s": 0.32,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "gather",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 15099,
+    "by_rounds": {
+     "1": {
+      "T_R": 15099,
+      "II_eff": null,
+      "per_round": 15099.0,
+      "T_avg": 15099.0,
+      "util": {
+       "link_cycles": 14664,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0051,
+       "critical_arc_util": 0.0405,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.0051,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 73755,
+      "II_eff": 14664.0,
+      "per_round": 14751.0,
+      "T_avg": 44427.0,
+      "util": {
+       "link_cycles": 73320,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0052,
+       "critical_arc_util": 0.0414,
+       "critical_arc_cycles": 3055,
+       "useful_global": 0.0052,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 191067,
+      "II_eff": 14664.0,
+      "per_round": 14697.46,
+      "T_avg": 103083.0,
+      "util": {
+       "link_cycles": 190632,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0052,
+       "critical_arc_util": 0.0416,
+       "critical_arc_cycles": 7943,
+       "useful_global": 0.0052,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 15005,
+    "by_rounds": {
+     "1": {
+      "T_R": 15005,
+      "II_eff": null,
+      "per_round": 15005.0,
+      "T_avg": 15005.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 611,
+      "n_reasm_overflow": 11782,
+      "util": {
+       "link_cycles": 14664,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0051,
+       "critical_arc_util": 0.0407,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.0051,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 73661,
+      "II_eff": 14664.0,
+      "per_round": 14732.2,
+      "T_avg": 44333.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 58468,
+      "max_reasm_occupancy": 611,
+      "n_reasm_overflow": 58910,
+      "util": {
+       "link_cycles": 73320,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0052,
+       "critical_arc_util": 0.0415,
+       "critical_arc_cycles": 3055,
+       "useful_global": 0.0052,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 190973,
+      "II_eff": 14664.0,
+      "per_round": 14690.23,
+      "T_avg": 102989.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 175404,
+      "max_reasm_occupancy": 611,
+      "n_reasm_overflow": 153166,
+      "util": {
+       "link_cycles": 190632,
+       "round_link_cycles": 14664.0,
+       "n_links_used": 47,
+       "global_util": 0.0052,
+       "critical_arc_util": 0.0416,
+       "critical_arc_cycles": 7943,
+       "useful_global": 0.0052,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 14664,
+   "wall_s": 4.72,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "gather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 84,
+    "by_rounds": {
+     "1": {
+      "T_R": 84,
+      "II_eff": null,
+      "per_round": 84.0,
+      "T_avg": 84.0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0104,
+       "critical_arc_util": 0.2857,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0104,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 257,
+      "II_eff": 43.25,
+      "per_round": 51.4,
+      "T_avg": 170.5,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.017,
+       "critical_arc_util": 0.4669,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.017,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 633,
+      "II_eff": 45.75,
+      "per_round": 48.69,
+      "T_avg": 358.5,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.018,
+       "critical_arc_util": 0.4929,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.018,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 64,
+    "by_rounds": {
+     "1": {
+      "T_R": 64,
+      "II_eff": null,
+      "per_round": 64.0,
+      "T_avg": 64.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 15,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 168,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0137,
+       "critical_arc_util": 0.375,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0137,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 162,
+      "II_eff": 24.5,
+      "per_round": 32.4,
+      "T_avg": 113.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 140,
+      "max_reasm_occupancy": 18,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 840,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.027,
+       "critical_arc_util": 0.7407,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.027,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 380,
+      "II_eff": 26.33,
+      "per_round": 29.23,
+      "T_avg": 222.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 420,
+      "max_reasm_occupancy": 20,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 168.0,
+       "n_links_used": 47,
+       "global_util": 0.0299,
+       "critical_arc_util": 0.8211,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.0299,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 168,
+   "wall_s": 0.05,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "gather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 657,
+    "by_rounds": {
+     "1": {
+      "T_R": 657,
+      "II_eff": null,
+      "per_round": 657.0,
+      "T_avg": 657.0,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0173,
+       "critical_arc_util": 0.4749,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.0173,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3101,
+      "II_eff": 611.0,
+      "per_round": 620.2,
+      "T_avg": 1879.0,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0183,
+       "critical_arc_util": 0.5031,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.0183,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 7989,
+      "II_eff": 611.0,
+      "per_round": 614.54,
+      "T_avg": 4323.0,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0185,
+       "critical_arc_util": 0.5077,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.0185,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 380,
+    "by_rounds": {
+     "1": {
+      "T_R": 380,
+      "II_eff": null,
+      "per_round": 380.0,
+      "T_avg": 380.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 244,
+      "n_reasm_overflow": 421,
+      "util": {
+       "link_cycles": 2184,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0299,
+       "critical_arc_util": 0.8211,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.0299,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1836,
+      "II_eff": 364.0,
+      "per_round": 367.2,
+      "T_avg": 1108.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 4076,
+      "max_reasm_occupancy": 352,
+      "n_reasm_overflow": 2211,
+      "util": {
+       "link_cycles": 10920,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.031,
+       "critical_arc_util": 0.8497,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.031,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 4748,
+      "II_eff": 364.0,
+      "per_round": 365.23,
+      "T_avg": 2564.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 12228,
+      "max_reasm_occupancy": 459,
+      "n_reasm_overflow": 5845,
+      "util": {
+       "link_cycles": 28392,
+       "round_link_cycles": 2184.0,
+       "n_links_used": 47,
+       "global_util": 0.0311,
+       "critical_arc_util": 0.8543,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.0311,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2184,
+   "wall_s": 0.36,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 118,
+    "by_rounds": {
+     "1": {
+      "T_R": 118,
+      "II_eff": null,
+      "per_round": 118.0,
+      "T_avg": 118.0,
+      "util": {
+       "link_cycles": 336,
+       "round_link_cycles": 336.0,
+       "n_links_used": 145,
+       "global_util": 0.0148,
+       "critical_arc_util": 0.1017,
+       "critical_arc_cycles": 12,
+       "useful_global": 0.0148,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 260,
+      "II_eff": 35.5,
+      "per_round": 52.0,
+      "T_avg": 189.0,
+      "util": {
+       "link_cycles": 1680,
+       "round_link_cycles": 336.0,
+       "n_links_used": 145,
+       "global_util": 0.0337,
+       "critical_arc_util": 0.2308,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.0337,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 644,
+      "II_eff": 43.83,
+      "per_round": 49.54,
+      "T_avg": 381.0,
+      "util": {
+       "link_cycles": 4368,
+       "round_link_cycles": 336.0,
+       "n_links_used": 145,
+       "global_util": 0.0353,
+       "critical_arc_util": 0.2422,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0353,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 149,
+    "by_rounds": {
+     "1": {
+      "T_R": 149,
+      "II_eff": null,
+      "per_round": 149.0,
+      "T_avg": 149.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 336,
+       "round_link_cycles": 336.0,
+       "n_links_used": 94,
+       "global_util": 0.0117,
+       "critical_arc_util": 0.1611,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.0117,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 484,
+      "II_eff": 83.75,
+      "per_round": 96.8,
+      "T_avg": 316.5,
+      "completed": true,
+      "deflect_per_flit": 0.34681,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2984,
+       "round_link_cycles": 596.8,
+       "n_links_used": 133,
+       "global_util": 0.0321,
+       "critical_arc_util": 0.2996,
+       "critical_arc_cycles": 145,
+       "useful_global": 0.0181,
+       "hop_tax": 1.7762
+      }
+     },
+     "13": {
+      "T_R": 992,
+      "II_eff": 70.25,
+      "per_round": 76.31,
+      "T_avg": 570.5,
+      "completed": true,
+      "deflect_per_flit": 0.96399,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 13792,
+       "round_link_cycles": 1060.9,
+       "n_links_used": 133,
+       "global_util": 0.0724,
+       "critical_arc_util": 0.502,
+       "critical_arc_cycles": 498,
+       "useful_global": 0.0229,
+       "hop_tax": 3.1574
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 336,
+   "wall_s": 0.19,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 3.1574
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 654,
+    "by_rounds": {
+     "1": {
+      "T_R": 654,
+      "II_eff": null,
+      "per_round": 654.0,
+      "T_avg": 654.0,
+      "util": {
+       "link_cycles": 4368,
+       "round_link_cycles": 4368.0,
+       "n_links_used": 145,
+       "global_util": 0.0348,
+       "critical_arc_util": 0.2385,
+       "critical_arc_cycles": 156,
+       "useful_global": 0.0348,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3150,
+      "II_eff": 624.0,
+      "per_round": 630.0,
+      "T_avg": 1902.0,
+      "util": {
+       "link_cycles": 21840,
+       "round_link_cycles": 4368.0,
+       "n_links_used": 145,
+       "global_util": 0.0361,
+       "critical_arc_util": 0.2476,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.0361,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8142,
+      "II_eff": 624.0,
+      "per_round": 626.31,
+      "T_avg": 4398.0,
+      "util": {
+       "link_cycles": 56784,
+       "round_link_cycles": 4368.0,
+       "n_links_used": 145,
+       "global_util": 0.0363,
+       "critical_arc_util": 0.2491,
+       "critical_arc_cycles": 2028,
+       "useful_global": 0.0363,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 992,
+    "by_rounds": {
+     "1": {
+      "T_R": 992,
+      "II_eff": null,
+      "per_round": 992.0,
+      "T_avg": 992.0,
+      "completed": true,
+      "deflect_per_flit": 0.96399,
+      "n_out_of_order": 34,
+      "max_reasm_occupancy": 126,
+      "n_reasm_overflow": 451,
+      "util": {
+       "link_cycles": 13792,
+       "round_link_cycles": 13792.0,
+       "n_links_used": 133,
+       "global_util": 0.0724,
+       "critical_arc_util": 0.502,
+       "critical_arc_cycles": 498,
+       "useful_global": 0.0229,
+       "hop_tax": 3.1575
+      }
+     },
+     "5": {
+      "T_R": 4670,
+      "II_eff": 919.5,
+      "per_round": 934.0,
+      "T_avg": 2831.0,
+      "completed": true,
+      "deflect_per_flit": 1.33715,
+      "n_out_of_order": 4562,
+      "max_reasm_occupancy": 190,
+      "n_reasm_overflow": 2754,
+      "util": {
+       "link_cycles": 87200,
+       "round_link_cycles": 17440.0,
+       "n_links_used": 141,
+       "global_util": 0.0973,
+       "critical_arc_util": 0.5976,
+       "critical_arc_cycles": 2791,
+       "useful_global": 0.0244,
+       "hop_tax": 3.9927
+      }
+     },
+     "13": {
+      "T_R": 12054,
+      "II_eff": 921.83,
+      "per_round": 927.23,
+      "T_avg": 6523.0,
+      "completed": true,
+      "deflect_per_flit": 1.33161,
+      "n_out_of_order": 13573,
+      "max_reasm_occupancy": 207,
+      "n_reasm_overflow": 6834,
+      "util": {
+       "link_cycles": 226016,
+       "round_link_cycles": 17385.8,
+       "n_links_used": 141,
+       "global_util": 0.0977,
+       "critical_arc_util": 0.6025,
+       "critical_arc_cycles": 7263,
+       "useful_global": 0.0245,
+       "hop_tax": 3.9803
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 4368,
+   "wall_s": 1.52,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 3.9803
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1128,
+    "by_rounds": {
+     "1": {
+      "T_R": 1128,
+      "II_eff": null,
+      "per_round": 1128.0,
+      "T_avg": 1128.0,
+      "util": {
+       "link_cycles": 4512,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0208,
+       "critical_arc_util": 0.0833,
+       "critical_arc_cycles": 94,
+       "useful_global": 0.0208,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1504,
+      "II_eff": 94.0,
+      "per_round": 300.8,
+      "T_avg": 1316.0,
+      "util": {
+       "link_cycles": 22560,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0781,
+       "critical_arc_util": 0.3125,
+       "critical_arc_cycles": 470,
+       "useful_global": 0.0781,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2256,
+      "II_eff": 94.0,
+      "per_round": 173.54,
+      "T_avg": 1692.0,
+      "util": {
+       "link_cycles": 58656,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.1354,
+       "critical_arc_util": 0.5417,
+       "critical_arc_cycles": 1222,
+       "useful_global": 0.1354,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 940,
+    "by_rounds": {
+     "1": {
+      "T_R": 940,
+      "II_eff": null,
+      "per_round": 940.0,
+      "T_avg": 940.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 4512,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.025,
+       "critical_arc_util": 0.1,
+       "critical_arc_cycles": 94,
+       "useful_global": 0.025,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1316,
+      "II_eff": 94.0,
+      "per_round": 263.2,
+      "T_avg": 1128.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 22560,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0893,
+       "critical_arc_util": 0.3571,
+       "critical_arc_cycles": 470,
+       "useful_global": 0.0893,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2068,
+      "II_eff": 94.0,
+      "per_round": 159.08,
+      "T_avg": 1504.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 58656,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.1477,
+       "critical_arc_util": 0.5909,
+       "critical_arc_cycles": 1222,
+       "useful_global": 0.1477,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 4512,
+   "wall_s": 3.89,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1128,
+    "by_rounds": {
+     "1": {
+      "T_R": 1128,
+      "II_eff": null,
+      "per_round": 1128.0,
+      "T_avg": 1128.0,
+      "util": {
+       "link_cycles": 4512,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0208,
+       "critical_arc_util": 0.0833,
+       "critical_arc_cycles": 94,
+       "useful_global": 0.0208,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1504,
+      "II_eff": 94.0,
+      "per_round": 300.8,
+      "T_avg": 1316.0,
+      "util": {
+       "link_cycles": 22560,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0781,
+       "critical_arc_util": 0.3125,
+       "critical_arc_cycles": 470,
+       "useful_global": 0.0781,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2256,
+      "II_eff": 94.0,
+      "per_round": 173.54,
+      "T_avg": 1692.0,
+      "util": {
+       "link_cycles": 58656,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.1354,
+       "critical_arc_util": 0.5417,
+       "critical_arc_cycles": 1222,
+       "useful_global": 0.1354,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 940,
+    "by_rounds": {
+     "1": {
+      "T_R": 940,
+      "II_eff": null,
+      "per_round": 940.0,
+      "T_avg": 940.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 4512,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.025,
+       "critical_arc_util": 0.1,
+       "critical_arc_cycles": 94,
+       "useful_global": 0.025,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1316,
+      "II_eff": 94.0,
+      "per_round": 263.2,
+      "T_avg": 1128.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 22560,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.0893,
+       "critical_arc_util": 0.3571,
+       "critical_arc_cycles": 470,
+       "useful_global": 0.0893,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2068,
+      "II_eff": 94.0,
+      "per_round": 159.08,
+      "T_avg": 1504.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 58656,
+       "round_link_cycles": 4512.0,
+       "n_links_used": 48,
+       "global_util": 0.1477,
+       "critical_arc_util": 0.5909,
+       "critical_arc_cycles": 1222,
+       "useful_global": 0.1477,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 4512,
+   "wall_s": 3.83,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 122,
+    "by_rounds": {
+     "1": {
+      "T_R": 122,
+      "II_eff": null,
+      "per_round": 122.0,
+      "T_avg": 122.0,
+      "util": {
+       "link_cycles": 210,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.009,
+       "critical_arc_util": 0.0328,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.009,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 160,
+      "II_eff": 9.5,
+      "per_round": 32.0,
+      "T_avg": 141.0,
+      "util": {
+       "link_cycles": 1050,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.0342,
+       "critical_arc_util": 0.125,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0342,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 352,
+      "II_eff": 19.17,
+      "per_round": 27.08,
+      "T_avg": 237.0,
+      "util": {
+       "link_cycles": 2730,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.0404,
+       "critical_arc_util": 0.1477,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0404,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 120,
+    "by_rounds": {
+     "1": {
+      "T_R": 120,
+      "II_eff": null,
+      "per_round": 120.0,
+      "T_avg": 120.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 210,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.0091,
+       "critical_arc_util": 0.0333,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0091,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 176,
+      "II_eff": 14.0,
+      "per_round": 35.2,
+      "T_avg": 148.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 1050,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.0311,
+       "critical_arc_util": 0.1136,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0311,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 314,
+      "II_eff": 16.17,
+      "per_round": 24.15,
+      "T_avg": 217.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2730,
+       "round_link_cycles": 210.0,
+       "n_links_used": 94,
+       "global_util": 0.0453,
+       "critical_arc_util": 0.1656,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0453,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 210,
+   "wall_s": 0.08,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 365,
+    "by_rounds": {
+     "1": {
+      "T_R": 365,
+      "II_eff": null,
+      "per_round": 365.0,
+      "T_avg": 365.0,
+      "util": {
+       "link_cycles": 2730,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.039,
+       "critical_arc_util": 0.1425,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.039,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1613,
+      "II_eff": 312.0,
+      "per_round": 322.6,
+      "T_avg": 989.0,
+      "util": {
+       "link_cycles": 13650,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.0441,
+       "critical_arc_util": 0.1612,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0441,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 4109,
+      "II_eff": 312.0,
+      "per_round": 316.08,
+      "T_avg": 2237.0,
+      "util": {
+       "link_cycles": 35490,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.045,
+       "critical_arc_util": 0.1645,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.045,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 309,
+    "by_rounds": {
+     "1": {
+      "T_R": 309,
+      "II_eff": null,
+      "per_round": 309.0,
+      "T_avg": 309.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 54,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2730,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.046,
+       "critical_arc_util": 0.1683,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.046,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1297,
+      "II_eff": 247.0,
+      "per_round": 259.4,
+      "T_avg": 803.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 4512,
+      "max_reasm_occupancy": 54,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 13650,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.0548,
+       "critical_arc_util": 0.2005,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0548,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 3273,
+      "II_eff": 247.0,
+      "per_round": 251.77,
+      "T_avg": 1791.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 13536,
+      "max_reasm_occupancy": 68,
+      "n_reasm_overflow": 24,
+      "util": {
+       "link_cycles": 35490,
+       "round_link_cycles": 2730.0,
+       "n_links_used": 94,
+       "global_util": 0.0565,
+       "critical_arc_util": 0.2065,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0565,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2730,
+   "wall_s": 0.4,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 122,
+    "by_rounds": {
+     "1": {
+      "T_R": 122,
+      "II_eff": null,
+      "per_round": 122.0,
+      "T_avg": 122.0,
+      "util": {
+       "link_cycles": 152,
+       "round_link_cycles": 152.0,
+       "n_links_used": 94,
+       "global_util": 0.0065,
+       "critical_arc_util": 0.0328,
+       "critical_arc_cycles": 4,
+       "useful_global": 0.0065,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 149,
+      "II_eff": 6.75,
+      "per_round": 29.8,
+      "T_avg": 135.5,
+      "util": {
+       "link_cycles": 760,
+       "round_link_cycles": 152.0,
+       "n_links_used": 94,
+       "global_util": 0.0266,
+       "critical_arc_util": 0.1342,
+       "critical_arc_cycles": 20,
+       "useful_global": 0.0266,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 271,
+      "II_eff": 12.42,
+      "per_round": 20.85,
+      "T_avg": 196.5,
+      "util": {
+       "link_cycles": 1976,
+       "round_link_cycles": 152.0,
+       "n_links_used": 94,
+       "global_util": 0.038,
+       "critical_arc_util": 0.1919,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.038,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 152,
+   "wall_s": 0.04,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 284,
+    "by_rounds": {
+     "1": {
+      "T_R": 284,
+      "II_eff": null,
+      "per_round": 284.0,
+      "T_avg": 284.0,
+      "util": {
+       "link_cycles": 1976,
+       "round_link_cycles": 1976.0,
+       "n_links_used": 94,
+       "global_util": 0.0362,
+       "critical_arc_util": 0.1831,
+       "critical_arc_cycles": 52,
+       "useful_global": 0.0362,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 1116,
+      "II_eff": 208.0,
+      "per_round": 223.2,
+      "T_avg": 700.0,
+      "util": {
+       "link_cycles": 9880,
+       "round_link_cycles": 1976.0,
+       "n_links_used": 94,
+       "global_util": 0.0461,
+       "critical_arc_util": 0.233,
+       "critical_arc_cycles": 260,
+       "useful_global": 0.0461,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2780,
+      "II_eff": 208.0,
+      "per_round": 213.85,
+      "T_avg": 1532.0,
+      "util": {
+       "link_cycles": 25688,
+       "round_link_cycles": 1976.0,
+       "n_links_used": 94,
+       "global_util": 0.0481,
+       "critical_arc_util": 0.2432,
+       "critical_arc_cycles": 676,
+       "useful_global": 0.0481,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 1976,
+   "wall_s": 0.1,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 112,
+    "by_rounds": {
+     "1": {
+      "T_R": 112,
+      "II_eff": null,
+      "per_round": 112.0,
+      "T_avg": 112.0,
+      "util": {
+       "link_cycles": 576,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.0268,
+       "critical_arc_util": 0.0625,
+       "critical_arc_cycles": 7,
+       "useful_global": 0.0268,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 136,
+      "II_eff": 6.0,
+      "per_round": 27.2,
+      "T_avg": 124.0,
+      "util": {
+       "link_cycles": 2880,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.1103,
+       "critical_arc_util": 0.2574,
+       "critical_arc_cycles": 35,
+       "useful_global": 0.1103,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 230,
+      "II_eff": 9.83,
+      "per_round": 17.69,
+      "T_avg": 171.0,
+      "util": {
+       "link_cycles": 7488,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.1696,
+       "critical_arc_util": 0.3957,
+       "critical_arc_cycles": 91,
+       "useful_global": 0.1696,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 100,
+    "by_rounds": {
+     "1": {
+      "T_R": 100,
+      "II_eff": null,
+      "per_round": 100.0,
+      "T_avg": 100.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 576,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.03,
+       "critical_arc_util": 0.07,
+       "critical_arc_cycles": 7,
+       "useful_global": 0.03,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 124,
+      "II_eff": 6.0,
+      "per_round": 24.8,
+      "T_avg": 112.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2880,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.121,
+       "critical_arc_util": 0.2823,
+       "critical_arc_cycles": 35,
+       "useful_global": 0.121,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 218,
+      "II_eff": 9.83,
+      "per_round": 16.77,
+      "T_avg": 159.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 7488,
+       "round_link_cycles": 576.0,
+       "n_links_used": 144,
+       "global_util": 0.1789,
+       "critical_arc_util": 0.4174,
+       "critical_arc_cycles": 91,
+       "useful_global": 0.1789,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 576,
+   "wall_s": 0.21,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allreduce",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 309,
+    "by_rounds": {
+     "1": {
+      "T_R": 309,
+      "II_eff": null,
+      "per_round": 309.0,
+      "T_avg": 309.0,
+      "util": {
+       "link_cycles": 7488,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.1262,
+       "critical_arc_util": 0.2945,
+       "critical_arc_cycles": 91,
+       "useful_global": 0.1262,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 986,
+      "II_eff": 169.25,
+      "per_round": 197.2,
+      "T_avg": 647.5,
+      "util": {
+       "link_cycles": 37440,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.1978,
+       "critical_arc_util": 0.4615,
+       "critical_arc_cycles": 455,
+       "useful_global": 0.1978,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2316,
+      "II_eff": 167.25,
+      "per_round": 178.15,
+      "T_avg": 1312.5,
+      "util": {
+       "link_cycles": 97344,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.2189,
+       "critical_arc_util": 0.5108,
+       "critical_arc_cycles": 1183,
+       "useful_global": 0.2189,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 218,
+    "by_rounds": {
+     "1": {
+      "T_R": 218,
+      "II_eff": null,
+      "per_round": 218.0,
+      "T_avg": 218.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 7488,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.1789,
+       "critical_arc_util": 0.4174,
+       "critical_arc_cycles": 91,
+       "useful_global": 0.1789,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 862,
+      "II_eff": 161.0,
+      "per_round": 172.4,
+      "T_avg": 540.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 13824,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 37440,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.2262,
+       "critical_arc_util": 0.5278,
+       "critical_arc_cycles": 455,
+       "useful_global": 0.2262,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 2104,
+      "II_eff": 157.17,
+      "per_round": 161.85,
+      "T_avg": 1161.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 41472,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 97344,
+       "round_link_cycles": 7488.0,
+       "n_links_used": 144,
+       "global_util": 0.241,
+       "critical_arc_util": 0.5623,
+       "critical_arc_cycles": 1183,
+       "useful_global": 0.241,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 7488,
+   "wall_s": 1.09,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 86,
+    "by_rounds": {
+     "1": {
+      "T_R": 86,
+      "II_eff": null,
+      "per_round": 86.0,
+      "T_avg": 86.0,
+      "util": {
+       "link_cycles": 8064,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.4884,
+       "critical_arc_util": 0.5698,
+       "critical_arc_cycles": 49,
+       "useful_global": 0.4884,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 318,
+      "II_eff": 58.0,
+      "per_round": 63.6,
+      "T_avg": 202.0,
+      "util": {
+       "link_cycles": 40320,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.6604,
+       "critical_arc_util": 0.7704,
+       "critical_arc_cycles": 245,
+       "useful_global": 0.6604,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 786,
+      "II_eff": 58.33,
+      "per_round": 60.46,
+      "T_avg": 436.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.6947,
+       "critical_arc_util": 0.8104,
+       "critical_arc_cycles": 637,
+       "useful_global": 0.6947,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 163,
+    "by_rounds": {
+     "1": {
+      "T_R": 163,
+      "II_eff": null,
+      "per_round": 163.0,
+      "T_avg": 163.0,
+      "completed": true,
+      "deflect_per_flit": 0.01684,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 8368,
+       "round_link_cycles": 8368.0,
+       "n_links_used": 192,
+       "global_util": 0.2674,
+       "critical_arc_util": 0.4479,
+       "critical_arc_cycles": 73,
+       "useful_global": 0.2577,
+       "hop_tax": 1.0377
+      }
+     },
+     "5": {
+      "T_R": 475,
+      "II_eff": 78.0,
+      "per_round": 95.0,
+      "T_avg": 319.0,
+      "completed": true,
+      "deflect_per_flit": 0.00523,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 40792,
+       "round_link_cycles": 8158.4,
+       "n_links_used": 192,
+       "global_util": 0.4473,
+       "critical_arc_util": 0.6632,
+       "critical_arc_cycles": 315,
+       "useful_global": 0.4421,
+       "hop_tax": 1.0117
+      }
+     },
+     "13": {
+      "T_R": 1116,
+      "II_eff": 79.42,
+      "per_round": 85.85,
+      "T_avg": 639.5,
+      "completed": true,
+      "deflect_per_flit": 0.00273,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 105472,
+       "round_link_cycles": 8113.2,
+       "n_links_used": 192,
+       "global_util": 0.4922,
+       "critical_arc_util": 0.7142,
+       "critical_arc_cycles": 797,
+       "useful_global": 0.4892,
+       "hop_tax": 1.0061
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 8064,
+   "wall_s": 4.18,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0061
+  },
+  {
+   "pattern": "allgather",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1044,
+    "by_rounds": {
+     "1": {
+      "T_R": 1044,
+      "II_eff": null,
+      "per_round": 1044.0,
+      "T_avg": 1044.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.523,
+       "critical_arc_util": 0.6102,
+       "critical_arc_cycles": 637,
+       "useful_global": 0.523,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 4889,
+      "II_eff": 961.25,
+      "per_round": 977.8,
+      "T_avg": 2966.5,
+      "util": {
+       "link_cycles": 524160,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.5584,
+       "critical_arc_util": 0.6515,
+       "critical_arc_cycles": 3185,
+       "useful_global": 0.5584,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 12332,
+      "II_eff": 940.67,
+      "per_round": 948.62,
+      "T_avg": 6688.0,
+      "util": {
+       "link_cycles": 1362816,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.5756,
+       "critical_arc_util": 0.6715,
+       "critical_arc_cycles": 8281,
+       "useful_global": 0.5756,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1912,
+    "by_rounds": {
+     "1": {
+      "T_R": 1912,
+      "II_eff": null,
+      "per_round": 1912.0,
+      "T_avg": 1912.0,
+      "completed": true,
+      "deflect_per_flit": 0.19804,
+      "n_out_of_order": 2047,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 3006,
+      "util": {
+       "link_cycles": 151296,
+       "round_link_cycles": 151296.0,
+       "n_links_used": 192,
+       "global_util": 0.4121,
+       "critical_arc_util": 0.8143,
+       "critical_arc_cycles": 1557,
+       "useful_global": 0.2856,
+       "hop_tax": 1.4432
+      }
+     },
+     "5": {
+      "T_R": 7602,
+      "II_eff": 1422.5,
+      "per_round": 1520.4,
+      "T_avg": 4757.0,
+      "completed": true,
+      "deflect_per_flit": 0.15823,
+      "n_out_of_order": 110360,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 6149,
+      "util": {
+       "link_cycles": 709784,
+       "round_link_cycles": 141956.8,
+       "n_links_used": 192,
+       "global_util": 0.4863,
+       "critical_arc_util": 0.8072,
+       "critical_arc_cycles": 6136,
+       "useful_global": 0.3591,
+       "hop_tax": 1.3541
+      }
+     },
+     "13": {
+      "T_R": 18432,
+      "II_eff": 1376.67,
+      "per_round": 1417.85,
+      "T_avg": 10172.0,
+      "completed": true,
+      "deflect_per_flit": 0.13684,
+      "n_out_of_order": 326936,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 7335,
+      "util": {
+       "link_cycles": 1780184,
+       "round_link_cycles": 136937.2,
+       "n_links_used": 192,
+       "global_util": 0.503,
+       "critical_arc_util": 0.8059,
+       "critical_arc_cycles": 14855,
+       "useful_global": 0.3851,
+       "hop_tax": 1.3063
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 104832,
+   "wall_s": 22.12,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.3063
+  },
+  {
+   "pattern": "allgather",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 564,
+    "by_rounds": {
+     "1": {
+      "T_R": 564,
+      "II_eff": null,
+      "per_round": 564.0,
+      "T_avg": 564.0,
+      "util": {
+       "link_cycles": 2256,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.0208,
+       "critical_arc_util": 0.0833,
+       "critical_arc_cycles": 47,
+       "useful_global": 0.0208,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 752,
+      "II_eff": 47.0,
+      "per_round": 150.4,
+      "T_avg": 658.0,
+      "util": {
+       "link_cycles": 11280,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.0781,
+       "critical_arc_util": 0.3125,
+       "critical_arc_cycles": 235,
+       "useful_global": 0.0781,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1128,
+      "II_eff": 47.0,
+      "per_round": 86.77,
+      "T_avg": 846.0,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.1354,
+       "critical_arc_util": 0.5417,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.1354,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 470,
+    "by_rounds": {
+     "1": {
+      "T_R": 470,
+      "II_eff": null,
+      "per_round": 470.0,
+      "T_avg": 470.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 2256,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.025,
+       "critical_arc_util": 0.1,
+       "critical_arc_cycles": 47,
+       "useful_global": 0.025,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 658,
+      "II_eff": 47.0,
+      "per_round": 131.6,
+      "T_avg": 564.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 11280,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.0893,
+       "critical_arc_util": 0.3571,
+       "critical_arc_cycles": 235,
+       "useful_global": 0.0893,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1034,
+      "II_eff": 47.0,
+      "per_round": 79.54,
+      "T_avg": 752.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 48,
+       "global_util": 0.1477,
+       "critical_arc_util": 0.5909,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.1477,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 2256,
+   "wall_s": 1.7,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "ring_rotate",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1128,
+    "by_rounds": {
+     "1": {
+      "T_R": 1128,
+      "II_eff": null,
+      "per_round": 1128.0,
+      "T_avg": 1128.0,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.1354,
+       "critical_arc_util": 0.5417,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.1354,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3572,
+      "II_eff": 611.0,
+      "per_round": 714.4,
+      "T_avg": 2350.0,
+      "util": {
+       "link_cycles": 146640,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.2138,
+       "critical_arc_util": 0.8553,
+       "critical_arc_cycles": 3055,
+       "useful_global": 0.2138,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8460,
+      "II_eff": 611.0,
+      "per_round": 650.77,
+      "T_avg": 4794.0,
+      "util": {
+       "link_cycles": 381264,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.2347,
+       "critical_arc_util": 0.9389,
+       "critical_arc_cycles": 7943,
+       "useful_global": 0.2347,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1034,
+    "by_rounds": {
+     "1": {
+      "T_R": 1034,
+      "II_eff": null,
+      "per_round": 1034.0,
+      "T_avg": 1034.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.1477,
+       "critical_arc_util": 0.5909,
+       "critical_arc_cycles": 611,
+       "useful_global": 0.1477,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3478,
+      "II_eff": 611.0,
+      "per_round": 695.6,
+      "T_avg": 2256.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 108288,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 146640,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.2196,
+       "critical_arc_util": 0.8784,
+       "critical_arc_cycles": 3055,
+       "useful_global": 0.2196,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 8366,
+      "II_eff": 611.0,
+      "per_round": 643.54,
+      "T_avg": 4700.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 324864,
+      "max_reasm_occupancy": 13,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 381264,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 48,
+       "global_util": 0.2374,
+       "critical_arc_util": 0.9494,
+       "critical_arc_cycles": 7943,
+       "useful_global": 0.2374,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 29328,
+   "wall_s": 8.79,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 93,
+    "by_rounds": {
+     "1": {
+      "T_R": 93,
+      "II_eff": null,
+      "per_round": 93.0,
+      "T_avg": 93.0,
+      "util": {
+       "link_cycles": 4224,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.2366,
+       "critical_arc_util": 0.5161,
+       "critical_arc_cycles": 48,
+       "useful_global": 0.2366,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 328,
+      "II_eff": 58.75,
+      "per_round": 65.6,
+      "T_avg": 210.5,
+      "util": {
+       "link_cycles": 21120,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.3354,
+       "critical_arc_util": 0.7317,
+       "critical_arc_cycles": 240,
+       "useful_global": 0.3354,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 813,
+      "II_eff": 60.0,
+      "per_round": 62.54,
+      "T_avg": 453.0,
+      "util": {
+       "link_cycles": 54912,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.3518,
+       "critical_arc_util": 0.7675,
+       "critical_arc_cycles": 624,
+       "useful_global": 0.3518,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 126,
+    "by_rounds": {
+     "1": {
+      "T_R": 126,
+      "II_eff": null,
+      "per_round": 126.0,
+      "T_avg": 126.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 15,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 4224,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.1746,
+       "critical_arc_util": 0.381,
+       "critical_arc_cycles": 48,
+       "useful_global": 0.1746,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 422,
+      "II_eff": 74.0,
+      "per_round": 84.4,
+      "T_avg": 274.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 6720,
+      "max_reasm_occupancy": 19,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 21120,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.2607,
+       "critical_arc_util": 0.5687,
+       "critical_arc_cycles": 240,
+       "useful_global": 0.2607,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 985,
+      "II_eff": 71.58,
+      "per_round": 75.77,
+      "T_avg": 555.5,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 20160,
+      "max_reasm_occupancy": 19,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 54912,
+       "round_link_cycles": 4224.0,
+       "n_links_used": 192,
+       "global_util": 0.2904,
+       "critical_arc_util": 0.6335,
+       "critical_arc_cycles": 624,
+       "useful_global": 0.2904,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 4224,
+   "wall_s": 0.85,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 864,
+    "by_rounds": {
+     "1": {
+      "T_R": 864,
+      "II_eff": null,
+      "per_round": 864.0,
+      "T_avg": 864.0,
+      "util": {
+       "link_cycles": 54912,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.331,
+       "critical_arc_util": 0.7222,
+       "critical_arc_cycles": 624,
+       "useful_global": 0.331,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 4075,
+      "II_eff": 802.75,
+      "per_round": 815.0,
+      "T_avg": 2469.5,
+      "util": {
+       "link_cycles": 274560,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.3509,
+       "critical_arc_util": 0.7656,
+       "critical_arc_cycles": 3120,
+       "useful_global": 0.3509,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 10530,
+      "II_eff": 805.5,
+      "per_round": 810.0,
+      "T_avg": 5697.0,
+      "util": {
+       "link_cycles": 713856,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.3531,
+       "critical_arc_util": 0.7704,
+       "critical_arc_cycles": 8112,
+       "useful_global": 0.3531,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1211,
+    "by_rounds": {
+     "1": {
+      "T_R": 1211,
+      "II_eff": null,
+      "per_round": 1211.0,
+      "T_avg": 1211.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 16640,
+      "util": {
+       "link_cycles": 54912,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.2362,
+       "critical_arc_util": 0.5153,
+       "critical_arc_cycles": 624,
+       "useful_global": 0.2362,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 5327,
+      "II_eff": 1029.0,
+      "per_round": 1065.4,
+      "T_avg": 3269.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 115008,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 79008,
+      "util": {
+       "link_cycles": 274560,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.2684,
+       "critical_arc_util": 0.5857,
+       "critical_arc_cycles": 3120,
+       "useful_global": 0.2684,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 13105,
+      "II_eff": 991.17,
+      "per_round": 1008.08,
+      "T_avg": 7158.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 345024,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 196272,
+      "util": {
+       "link_cycles": 713856,
+       "round_link_cycles": 54912.0,
+       "n_links_used": 192,
+       "global_util": 0.2837,
+       "critical_arc_util": 0.619,
+       "critical_arc_cycles": 8112,
+       "useful_global": 0.2837,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 54912,
+   "wall_s": 7.84,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 85,
+    "by_rounds": {
+     "1": {
+      "T_R": 85,
+      "II_eff": null,
+      "per_round": 85.0,
+      "T_avg": 85.0,
+      "util": {
+       "link_cycles": 2256,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 192,
+       "global_util": 0.1382,
+       "critical_arc_util": 0.2824,
+       "critical_arc_cycles": 24,
+       "useful_global": 0.1382,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 278,
+      "II_eff": 48.25,
+      "per_round": 55.6,
+      "T_avg": 181.5,
+      "util": {
+       "link_cycles": 11280,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 192,
+       "global_util": 0.2113,
+       "critical_arc_util": 0.4317,
+       "critical_arc_cycles": 120,
+       "useful_global": 0.2113,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 674,
+      "II_eff": 49.08,
+      "per_round": 51.85,
+      "T_avg": 379.5,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 2256.0,
+       "n_links_used": 192,
+       "global_util": 0.2266,
+       "critical_arc_util": 0.4629,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.2266,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 2256,
+   "wall_s": 0.21,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T1",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 815,
+    "by_rounds": {
+     "1": {
+      "T_R": 815,
+      "II_eff": null,
+      "per_round": 815.0,
+      "T_avg": 815.0,
+      "util": {
+       "link_cycles": 29328,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 192,
+       "global_util": 0.1874,
+       "critical_arc_util": 0.3828,
+       "critical_arc_cycles": 312,
+       "useful_global": 0.1874,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 3717,
+      "II_eff": 725.5,
+      "per_round": 743.4,
+      "T_avg": 2266.0,
+      "util": {
+       "link_cycles": 146640,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 192,
+       "global_util": 0.2055,
+       "critical_arc_util": 0.4197,
+       "critical_arc_cycles": 1560,
+       "useful_global": 0.2055,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 9525,
+      "II_eff": 725.83,
+      "per_round": 732.69,
+      "T_avg": 5170.0,
+      "util": {
+       "link_cycles": 381264,
+       "round_link_cycles": 29328.0,
+       "n_links_used": 192,
+       "global_util": 0.2085,
+       "critical_arc_util": 0.4258,
+       "critical_arc_cycles": 4056,
+       "useful_global": 0.2085,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": null,
+    "skipped": "paper 机制只有 unicast，T1 行无可比基线"
+   },
+   "useful_link_cycles": 29328,
+   "wall_s": 1.32,
+   "cal_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 240,
+    "by_rounds": {
+     "1": {
+      "T_R": 240,
+      "II_eff": null,
+      "per_round": 240.0,
+      "T_avg": 240.0,
+      "util": {
+       "link_cycles": 6000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.1302,
+       "critical_arc_util": 0.2667,
+       "critical_arc_cycles": 64,
+       "useful_global": 0.1302,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 815,
+      "II_eff": 143.75,
+      "per_round": 163.0,
+      "T_avg": 527.5,
+      "util": {
+       "link_cycles": 30000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.1917,
+       "critical_arc_util": 0.3926,
+       "critical_arc_cycles": 320,
+       "useful_global": 0.1917,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1958,
+      "II_eff": 143.17,
+      "per_round": 150.62,
+      "T_avg": 1099.0,
+      "util": {
+       "link_cycles": 78000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.2075,
+       "critical_arc_util": 0.4249,
+       "critical_arc_cycles": 832,
+       "useful_global": 0.2075,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 193,
+    "by_rounds": {
+     "1": {
+      "T_R": 193,
+      "II_eff": null,
+      "per_round": 193.0,
+      "T_avg": 193.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 32,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 6000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.1619,
+       "critical_arc_util": 0.3316,
+       "critical_arc_cycles": 64,
+       "useful_global": 0.1619,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 683,
+      "II_eff": 122.5,
+      "per_round": 136.6,
+      "T_avg": 438.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 10944,
+      "max_reasm_occupancy": 32,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 30000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.2288,
+       "critical_arc_util": 0.4685,
+       "critical_arc_cycles": 320,
+       "useful_global": 0.2288,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1702,
+      "II_eff": 125.75,
+      "per_round": 130.92,
+      "T_avg": 947.5,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 32832,
+      "max_reasm_occupancy": 32,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 78000,
+       "round_link_cycles": 6000.0,
+       "n_links_used": 144,
+       "global_util": 0.2387,
+       "critical_arc_util": 0.4888,
+       "critical_arc_cycles": 832,
+       "useful_global": 0.2387,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 6000,
+   "wall_s": 0.87,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "allgather",
+   "algo": "halving_doubling",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 2166,
+    "by_rounds": {
+     "1": {
+      "T_R": 2166,
+      "II_eff": null,
+      "per_round": 2166.0,
+      "T_avg": 2166.0,
+      "util": {
+       "link_cycles": 78000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.1876,
+       "critical_arc_util": 0.3841,
+       "critical_arc_cycles": 832,
+       "useful_global": 0.1876,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 10462,
+      "II_eff": 2074.0,
+      "per_round": 2092.4,
+      "T_avg": 6314.0,
+      "util": {
+       "link_cycles": 390000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.1942,
+       "critical_arc_util": 0.3976,
+       "critical_arc_cycles": 4160,
+       "useful_global": 0.1942,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 27054,
+      "II_eff": 2074.0,
+      "per_round": 2081.08,
+      "T_avg": 14610.0,
+      "util": {
+       "link_cycles": 1014000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.1952,
+       "critical_arc_util": 0.3998,
+       "critical_arc_cycles": 10816,
+       "useful_global": 0.1952,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1702,
+    "by_rounds": {
+     "1": {
+      "T_R": 1702,
+      "II_eff": null,
+      "per_round": 1702.0,
+      "T_avg": 1702.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 416,
+      "n_reasm_overflow": 25728,
+      "util": {
+       "link_cycles": 78000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.2387,
+       "critical_arc_util": 0.4888,
+       "critical_arc_cycles": 832,
+       "useful_global": 0.2387,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 8206,
+      "II_eff": 1626.0,
+      "per_round": 1641.2,
+      "T_avg": 4954.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 156096,
+      "max_reasm_occupancy": 416,
+      "n_reasm_overflow": 128640,
+      "util": {
+       "link_cycles": 390000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.2475,
+       "critical_arc_util": 0.5069,
+       "critical_arc_cycles": 4160,
+       "useful_global": 0.2475,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 21193,
+      "II_eff": 1624.25,
+      "per_round": 1630.23,
+      "T_avg": 11447.5,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 468288,
+      "max_reasm_occupancy": 416,
+      "n_reasm_overflow": 334464,
+      "util": {
+       "link_cycles": 1014000,
+       "round_link_cycles": 78000.0,
+       "n_links_used": 144,
+       "global_util": 0.2492,
+       "critical_arc_util": 0.5104,
+       "critical_arc_cycles": 10816,
+       "useful_global": 0.2492,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 78000,
+   "wall_s": 10.07,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 86,
+    "by_rounds": {
+     "1": {
+      "T_R": 86,
+      "II_eff": null,
+      "per_round": 86.0,
+      "T_avg": 86.0,
+      "util": {
+       "link_cycles": 8064,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.4884,
+       "critical_arc_util": 0.5698,
+       "critical_arc_cycles": 49,
+       "useful_global": 0.4884,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 318,
+      "II_eff": 58.0,
+      "per_round": 63.6,
+      "T_avg": 202.0,
+      "util": {
+       "link_cycles": 40320,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.6604,
+       "critical_arc_util": 0.7704,
+       "critical_arc_cycles": 245,
+       "useful_global": 0.6604,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 786,
+      "II_eff": 58.33,
+      "per_round": 60.46,
+      "T_avg": 436.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.6947,
+       "critical_arc_util": 0.8104,
+       "critical_arc_cycles": 637,
+       "useful_global": 0.6947,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 163,
+    "by_rounds": {
+     "1": {
+      "T_R": 163,
+      "II_eff": null,
+      "per_round": 163.0,
+      "T_avg": 163.0,
+      "completed": true,
+      "deflect_per_flit": 0.01684,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 8368,
+       "round_link_cycles": 8368.0,
+       "n_links_used": 192,
+       "global_util": 0.2674,
+       "critical_arc_util": 0.4479,
+       "critical_arc_cycles": 73,
+       "useful_global": 0.2577,
+       "hop_tax": 1.0377
+      }
+     },
+     "5": {
+      "T_R": 475,
+      "II_eff": 78.0,
+      "per_round": 95.0,
+      "T_avg": 319.0,
+      "completed": true,
+      "deflect_per_flit": 0.00523,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 40792,
+       "round_link_cycles": 8158.4,
+       "n_links_used": 192,
+       "global_util": 0.4473,
+       "critical_arc_util": 0.6632,
+       "critical_arc_cycles": 315,
+       "useful_global": 0.4421,
+       "hop_tax": 1.0117
+      }
+     },
+     "13": {
+      "T_R": 1116,
+      "II_eff": 79.42,
+      "per_round": 85.85,
+      "T_avg": 639.5,
+      "completed": true,
+      "deflect_per_flit": 0.00273,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 1,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 105472,
+       "round_link_cycles": 8113.2,
+       "n_links_used": 192,
+       "global_util": 0.4922,
+       "critical_arc_util": 0.7142,
+       "critical_arc_cycles": 797,
+       "useful_global": 0.4892,
+       "hop_tax": 1.0061
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 8064,
+   "wall_s": 4.07,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0061
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "flat",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1044,
+    "by_rounds": {
+     "1": {
+      "T_R": 1044,
+      "II_eff": null,
+      "per_round": 1044.0,
+      "T_avg": 1044.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.523,
+       "critical_arc_util": 0.6102,
+       "critical_arc_cycles": 637,
+       "useful_global": 0.523,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 4889,
+      "II_eff": 961.25,
+      "per_round": 977.8,
+      "T_avg": 2966.5,
+      "util": {
+       "link_cycles": 524160,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.5584,
+       "critical_arc_util": 0.6515,
+       "critical_arc_cycles": 3185,
+       "useful_global": 0.5584,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 12332,
+      "II_eff": 940.67,
+      "per_round": 948.62,
+      "T_avg": 6688.0,
+      "util": {
+       "link_cycles": 1362816,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.5756,
+       "critical_arc_util": 0.6715,
+       "critical_arc_cycles": 8281,
+       "useful_global": 0.5756,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 1912,
+    "by_rounds": {
+     "1": {
+      "T_R": 1912,
+      "II_eff": null,
+      "per_round": 1912.0,
+      "T_avg": 1912.0,
+      "completed": true,
+      "deflect_per_flit": 0.19804,
+      "n_out_of_order": 2047,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 3006,
+      "util": {
+       "link_cycles": 151296,
+       "round_link_cycles": 151296.0,
+       "n_links_used": 192,
+       "global_util": 0.4121,
+       "critical_arc_util": 0.8143,
+       "critical_arc_cycles": 1557,
+       "useful_global": 0.2856,
+       "hop_tax": 1.4432
+      }
+     },
+     "5": {
+      "T_R": 7602,
+      "II_eff": 1422.5,
+      "per_round": 1520.4,
+      "T_avg": 4757.0,
+      "completed": true,
+      "deflect_per_flit": 0.15823,
+      "n_out_of_order": 110360,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 6149,
+      "util": {
+       "link_cycles": 709784,
+       "round_link_cycles": 141956.8,
+       "n_links_used": 192,
+       "global_util": 0.4863,
+       "critical_arc_util": 0.8072,
+       "critical_arc_cycles": 6136,
+       "useful_global": 0.3591,
+       "hop_tax": 1.3541
+      }
+     },
+     "13": {
+      "T_R": 18432,
+      "II_eff": 1376.67,
+      "per_round": 1417.85,
+      "T_avg": 10172.0,
+      "completed": true,
+      "deflect_per_flit": 0.13684,
+      "n_out_of_order": 326936,
+      "max_reasm_occupancy": 161,
+      "n_reasm_overflow": 7335,
+      "util": {
+       "link_cycles": 1780184,
+       "round_link_cycles": 136937.2,
+       "n_links_used": 192,
+       "global_util": 0.503,
+       "critical_arc_util": 0.8059,
+       "critical_arc_cycles": 14855,
+       "useful_global": 0.3851,
+       "hop_tax": 1.3063
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 104832,
+   "wall_s": 21.98,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.3063
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 137,
+    "by_rounds": {
+     "1": {
+      "T_R": 137,
+      "II_eff": null,
+      "per_round": 137.0,
+      "T_avg": 137.0,
+      "util": {
+       "link_cycles": 8064,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.3066,
+       "critical_arc_util": 0.438,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.3066,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 605,
+      "II_eff": 117.0,
+      "per_round": 121.0,
+      "T_avg": 371.0,
+      "util": {
+       "link_cycles": 40320,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.3471,
+       "critical_arc_util": 0.4959,
+       "critical_arc_cycles": 300,
+       "useful_global": 0.3471,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1541,
+      "II_eff": 117.0,
+      "per_round": 118.54,
+      "T_avg": 839.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.3543,
+       "critical_arc_util": 0.5062,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.3543,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 205,
+    "by_rounds": {
+     "1": {
+      "T_R": 205,
+      "II_eff": null,
+      "per_round": 205.0,
+      "T_avg": 205.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 15,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 8064,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.2049,
+       "critical_arc_util": 0.2927,
+       "critical_arc_cycles": 60,
+       "useful_global": 0.2049,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 757,
+      "II_eff": 138.0,
+      "per_round": 151.4,
+      "T_avg": 481.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 13440,
+      "max_reasm_occupancy": 19,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 40320,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.2774,
+       "critical_arc_util": 0.3963,
+       "critical_arc_cycles": 300,
+       "useful_global": 0.2774,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 1819,
+      "II_eff": 134.5,
+      "per_round": 139.92,
+      "T_avg": 1012.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 40320,
+      "max_reasm_occupancy": 19,
+      "n_reasm_overflow": 0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 8064.0,
+       "n_links_used": 192,
+       "global_util": 0.3002,
+       "critical_arc_util": 0.4288,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.3002,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 8064,
+   "wall_s": 1.41,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "calendar": {
+    "leg": "calendar",
+    "T1": 1690,
+    "by_rounds": {
+     "1": {
+      "T_R": 1690,
+      "II_eff": null,
+      "per_round": 1690.0,
+      "T_avg": 1690.0,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.3231,
+       "critical_arc_util": 0.4615,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.3231,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 7731,
+      "II_eff": 1510.25,
+      "per_round": 1546.2,
+      "T_avg": 4710.5,
+      "util": {
+       "link_cycles": 524160,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.3531,
+       "critical_arc_util": 0.5045,
+       "critical_arc_cycles": 3900,
+       "useful_global": 0.3531,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 19906,
+      "II_eff": 1518.0,
+      "per_round": 1531.23,
+      "T_avg": 10798.0,
+      "util": {
+       "link_cycles": 1362816,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.3566,
+       "critical_arc_util": 0.5094,
+       "critical_arc_cycles": 10140,
+       "useful_global": 0.3566,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "ring_base": {
+    "leg": "ring_base",
+    "T1": 2322,
+    "by_rounds": {
+     "1": {
+      "T_R": 2322,
+      "II_eff": null,
+      "per_round": 2322.0,
+      "T_avg": 2322.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 0,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 32168,
+      "util": {
+       "link_cycles": 104832,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.2351,
+       "critical_arc_util": 0.3359,
+       "critical_arc_cycles": 780,
+       "useful_global": 0.2351,
+       "hop_tax": 1.0
+      }
+     },
+     "5": {
+      "T_R": 10366,
+      "II_eff": 2011.0,
+      "per_round": 2073.2,
+      "T_avg": 6344.0,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 202368,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 148806,
+      "util": {
+       "link_cycles": 524160,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.2634,
+       "critical_arc_util": 0.3762,
+       "critical_arc_cycles": 3900,
+       "useful_global": 0.2634,
+       "hop_tax": 1.0
+      }
+     },
+     "13": {
+      "T_R": 25171,
+      "II_eff": 1904.08,
+      "per_round": 1936.23,
+      "T_avg": 13746.5,
+      "completed": true,
+      "deflect_per_flit": 0.0,
+      "n_out_of_order": 607104,
+      "max_reasm_occupancy": 351,
+      "n_reasm_overflow": 345330,
+      "util": {
+       "link_cycles": 1362816,
+       "round_link_cycles": 104832.0,
+       "n_links_used": 192,
+       "global_util": 0.282,
+       "critical_arc_util": 0.4028,
+       "critical_arc_cycles": 10140,
+       "useful_global": 0.282,
+       "hop_tax": 1.0
+      }
+     }
+    }
+   },
+   "useful_link_cycles": 104832,
+   "wall_s": 15.23,
+   "cal_hop_tax": 1.0,
+   "base_hop_tax": 1.0
+  }
+ ],
+ "headline": [
+  {
+   "pattern": "broadcast",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 1,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 9.58,
+     "T13": 176,
+     "per_round": 13.54,
+     "util": 0.0404,
+     "useful_util": 0.0404,
+     "crit": 0.2955,
+     "hop_tax": 1.0,
+     "util_1shot": 0.009
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 13.54
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "II": 2.83,
+     "T13": 95,
+     "per_round": 7.31,
+     "util": 0.0335,
+     "useful_util": 0.0335,
+     "crit": 0.1368,
+     "hop_tax": 1.0,
+     "util_1shot": 0.004
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 7.31
+   },
+   "base": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 63,
+     "util": 0.0087,
+     "crit": 0.0635
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 12.0,
+     "T13": 207,
+     "per_round": 15.92,
+     "util": 0.0343,
+     "useful_util": 0.0343,
+     "crit": 0.2512,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0087,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 1.145,
+    "per_round_over_lb": 15.92
+   },
+   "base_over_cal_T0": {
+    "T1": 1.068,
+    "per_round": 1.176
+   }
+  },
+  {
+   "pattern": "broadcast",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 67,
+    "II_lb": 7,
+    "binding": "latency",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 176,
+     "util": 0.0404,
+     "crit": 0.2955
+    },
+    "best_II": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "II": 130.0,
+     "T13": 1811,
+     "per_round": 139.31,
+     "util": 0.0452,
+     "useful_util": 0.0452,
+     "crit": 0.3733,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0251
+    },
+    "T1_over_lb": 2.627,
+    "per_round_over_lb": 19.901
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T1": 95,
+     "util": 0.0335,
+     "crit": 0.1368
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "II": 52.0,
+     "T13": 719,
+     "per_round": 55.31,
+     "util": 0.0575,
+     "useful_util": 0.0575,
+     "crit": 0.235,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0335
+    },
+    "T1_over_lb": 1.418,
+    "per_round_over_lb": 7.901
+   },
+   "base": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 202,
+     "util": 0.0352,
+     "crit": 0.2574
+    },
+    "best_II": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "II": 130.0,
+     "T13": 1800,
+     "per_round": 138.46,
+     "util": 0.0455,
+     "useful_util": 0.0455,
+     "crit": 0.3756,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0262,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 13
+    },
+    "T1_over_lb": 3.015,
+    "per_round_over_lb": 19.78
+   },
+   "base_over_cal_T0": {
+    "T1": 1.148,
+    "per_round": 0.994
+   }
+  },
+  {
+   "pattern": "reduce",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 1,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 9.58,
+     "T13": 176,
+     "per_round": 13.54,
+     "util": 0.0404,
+     "useful_util": 0.0404,
+     "crit": 0.2955,
+     "hop_tax": 1.0,
+     "util_1shot": 0.009
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 13.54
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 9.58,
+     "T13": 176,
+     "per_round": 13.54,
+     "util": 0.0404,
+     "useful_util": 0.0404,
+     "crit": 0.2955,
+     "hop_tax": 1.0,
+     "util_1shot": 0.009
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 13.54
+   },
+   "base": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 56,
+     "util": 0.0156,
+     "crit": 0.4286
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 4.17,
+     "T13": 107,
+     "per_round": 8.23,
+     "util": 0.0664,
+     "useful_util": 0.0664,
+     "crit": 0.486,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0096,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 1.018,
+    "per_round_over_lb": 8.23
+   },
+   "base_over_cal_T0": {
+    "T1": 0.949,
+    "per_round": 0.608
+   }
+  },
+  {
+   "pattern": "reduce",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 67,
+    "II_lb": 7,
+    "binding": "latency",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 189,
+     "util": 0.0376,
+     "crit": 0.2751
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 156.0,
+     "T13": 2061,
+     "per_round": 158.54,
+     "util": 0.0448,
+     "useful_util": 0.0448,
+     "crit": 0.328,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0376
+    },
+    "T1_over_lb": 2.821,
+    "per_round_over_lb": 22.649
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 189,
+     "util": 0.0376,
+     "crit": 0.2751
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 156.0,
+     "T13": 2061,
+     "per_round": 158.54,
+     "util": 0.0448,
+     "useful_util": 0.0448,
+     "crit": 0.328,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0376
+    },
+    "T1_over_lb": 2.821,
+    "per_round_over_lb": 22.649
+   },
+   "base": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 107,
+     "util": 0.0664,
+     "crit": 0.486
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 91.0,
+     "T13": 1199,
+     "per_round": 92.23,
+     "util": 0.0771,
+     "useful_util": 0.0771,
+     "crit": 0.5638,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0664,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 68
+    },
+    "T1_over_lb": 1.597,
+    "per_round_over_lb": 13.176
+   },
+   "base_over_cal_T0": {
+    "T1": 0.566,
+    "per_round": 0.582
+   }
+  },
+  {
+   "pattern": "gather",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 24,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 21.83,
+     "T13": 321,
+     "per_round": 24.69,
+     "util": 0.0354,
+     "useful_util": 0.0354,
+     "crit": 0.486,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0148
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 1.029
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 59,
+     "util": 0.0148,
+     "crit": 0.2034
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 21.83,
+     "T13": 321,
+     "per_round": 24.69,
+     "util": 0.0354,
+     "useful_util": 0.0354,
+     "crit": 0.486,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0148
+    },
+    "T1_over_lb": 1.073,
+    "per_round_over_lb": 1.029
+   },
+   "base": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 56,
+     "util": 0.0156,
+     "crit": 0.4286
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 23.25,
+     "T13": 335,
+     "per_round": 25.77,
+     "util": 0.1805,
+     "useful_util": 0.034,
+     "crit": 0.9313,
+     "hop_tax": 5.3149,
+     "util_1shot": 0.0156,
+     "deflect_per_flit": 1.92799,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 1.018,
+    "per_round_over_lb": 1.074
+   },
+   "base_over_cal_T0": {
+    "T1": 0.949,
+    "per_round": 1.044
+   }
+  },
+  {
+   "pattern": "gather",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 306,
+    "II_lb": 306,
+    "binding": "port",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 331,
+     "util": 0.0344,
+     "crit": 0.4713
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 312.0,
+     "T13": 4075,
+     "per_round": 313.46,
+     "util": 0.0363,
+     "useful_util": 0.0363,
+     "crit": 0.4977,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0344
+    },
+    "T1_over_lb": 1.082,
+    "per_round_over_lb": 1.024
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 331,
+     "util": 0.0344,
+     "crit": 0.4713
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 312.0,
+     "T13": 4075,
+     "per_round": 313.46,
+     "util": 0.0363,
+     "useful_util": 0.0363,
+     "crit": 0.4977,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0344
+    },
+    "T1_over_lb": 1.082,
+    "per_round_over_lb": 1.024
+   },
+   "base": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 335,
+     "util": 0.1805,
+     "crit": 0.9313
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 310.83,
+     "T13": 4065,
+     "per_round": 312.69,
+     "util": 0.2532,
+     "useful_util": 0.0364,
+     "crit": 0.9978,
+     "hop_tax": 6.9605,
+     "util_1shot": 0.1805,
+     "deflect_per_flit": 2.66323,
+     "max_reasm_occupancy": 207
+    },
+    "T1_over_lb": 1.095,
+    "per_round_over_lb": 1.022
+   },
+   "base_over_cal_T0": {
+    "T1": 1.012,
+    "per_round": 0.998
+   }
+  },
+  {
+   "pattern": "allreduce",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 1,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "T1": 112,
+     "util": 0.0268,
+     "crit": 0.0625
+    },
+    "best_II": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "II": 9.83,
+     "T13": 230,
+     "per_round": 17.69,
+     "util": 0.1696,
+     "useful_util": 0.1696,
+     "crit": 0.3957,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0268
+    },
+    "T1_over_lb": 2.036,
+    "per_round_over_lb": 17.69
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "T1": 112,
+     "util": 0.0268,
+     "crit": 0.0625
+    },
+    "best_II": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "II": 9.83,
+     "T13": 230,
+     "per_round": 17.69,
+     "util": 0.1696,
+     "useful_util": 0.1696,
+     "crit": 0.3957,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0268
+    },
+    "T1_over_lb": 2.036,
+    "per_round_over_lb": 17.69
+   },
+   "base": {
+    "best_T1": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "T1": 100,
+     "util": 0.03,
+     "crit": 0.07
+    },
+    "best_II": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "II": 9.83,
+     "T13": 218,
+     "per_round": 16.77,
+     "util": 0.1789,
+     "useful_util": 0.1789,
+     "crit": 0.4174,
+     "hop_tax": 1.0,
+     "util_1shot": 0.03,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 1.818,
+    "per_round_over_lb": 16.77
+   },
+   "base_over_cal_T0": {
+    "T1": 0.893,
+    "per_round": 0.948
+   }
+  },
+  {
+   "pattern": "allreduce",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 67,
+    "II_lb": 7,
+    "binding": "latency",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "T1": 309,
+     "util": 0.1262,
+     "crit": 0.2945
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 94.0,
+     "T13": 2256,
+     "per_round": 173.54,
+     "util": 0.1354,
+     "useful_util": 0.1354,
+     "crit": 0.5417,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0208
+    },
+    "T1_over_lb": 4.612,
+    "per_round_over_lb": 24.791
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T1": 284,
+     "util": 0.0362,
+     "crit": 0.1831
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 94.0,
+     "T13": 2256,
+     "per_round": 173.54,
+     "util": 0.1354,
+     "useful_util": 0.1354,
+     "crit": 0.5417,
+     "hop_tax": 1.0,
+     "util_1shot": 0.0208
+    },
+    "T1_over_lb": 4.239,
+    "per_round_over_lb": 24.791
+   },
+   "base": {
+    "best_T1": {
+     "algo": "halving_doubling",
+     "tier": "T0",
+     "T1": 218,
+     "util": 0.1789,
+     "crit": 0.4174
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 94.0,
+     "T13": 2068,
+     "per_round": 159.08,
+     "util": 0.1477,
+     "useful_util": 0.1477,
+     "crit": 0.5909,
+     "hop_tax": 1.0,
+     "util_1shot": 0.025,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 3.254,
+    "per_round_over_lb": 22.726
+   },
+   "base_over_cal_T0": {
+    "T1": 0.706,
+    "per_round": 0.917
+   }
+  },
+  {
+   "pattern": "allgather",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 24,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 86,
+     "util": 0.4884,
+     "crit": 0.5698
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 58.33,
+     "T13": 786,
+     "per_round": 60.46,
+     "util": 0.6947,
+     "useful_util": 0.6947,
+     "crit": 0.8104,
+     "hop_tax": 1.0,
+     "util_1shot": 0.4884
+    },
+    "T1_over_lb": 1.564,
+    "per_round_over_lb": 2.519
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T1": 85,
+     "util": 0.1382,
+     "crit": 0.2824
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "II": 49.08,
+     "T13": 674,
+     "per_round": 51.85,
+     "util": 0.2266,
+     "useful_util": 0.2266,
+     "crit": 0.4629,
+     "hop_tax": 1.0,
+     "util_1shot": 0.1382
+    },
+    "T1_over_lb": 1.545,
+    "per_round_over_lb": 2.16
+   },
+   "base": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 126,
+     "util": 0.1746,
+     "crit": 0.381
+    },
+    "best_II": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "II": 71.58,
+     "T13": 985,
+     "per_round": 75.77,
+     "util": 0.2904,
+     "useful_util": 0.2904,
+     "crit": 0.6335,
+     "hop_tax": 1.0,
+     "util_1shot": 0.1746,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 19
+    },
+    "T1_over_lb": 2.291,
+    "per_round_over_lb": 3.157
+   },
+   "base_over_cal_T0": {
+    "T1": 1.465,
+    "per_round": 1.253
+   }
+  },
+  {
+   "pattern": "allgather",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 306,
+    "II_lb": 306,
+    "binding": "port",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T0",
+     "T1": 864,
+     "util": 0.331,
+     "crit": 0.7222
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 611.0,
+     "T13": 8460,
+     "per_round": 650.77,
+     "util": 0.2347,
+     "useful_util": 0.2347,
+     "crit": 0.9389,
+     "hop_tax": 1.0,
+     "util_1shot": 0.1354
+    },
+    "T1_over_lb": 2.824,
+    "per_round_over_lb": 2.127
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "dim_2phase",
+     "tier": "T1",
+     "T1": 815,
+     "util": 0.1874,
+     "crit": 0.3828
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 611.0,
+     "T13": 8460,
+     "per_round": 650.77,
+     "util": 0.2347,
+     "useful_util": 0.2347,
+     "crit": 0.9389,
+     "hop_tax": 1.0,
+     "util_1shot": 0.1354
+    },
+    "T1_over_lb": 2.663,
+    "per_round_over_lb": 2.127
+   },
+   "base": {
+    "best_T1": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "T1": 1034,
+     "util": 0.1477,
+     "crit": 0.5909
+    },
+    "best_II": {
+     "algo": "ring_rotate",
+     "tier": "T0",
+     "II": 611.0,
+     "T13": 8366,
+     "per_round": 643.54,
+     "util": 0.2374,
+     "useful_util": 0.2374,
+     "crit": 0.9494,
+     "hop_tax": 1.0,
+     "util_1shot": 0.1477,
+     "deflect_per_flit": 0.0,
+     "max_reasm_occupancy": 13
+    },
+    "T1_over_lb": 3.379,
+    "per_round_over_lb": 2.103
+   },
+   "base_over_cal_T0": {
+    "T1": 1.197,
+    "per_round": 0.989
+   }
+  },
+  {
+   "pattern": "alltoall",
+   "m": 1,
+   "bound": {
+    "makespan_lb": 55,
+    "II_lb": 48,
+    "binding": "latency",
+    "latency_floor": 55
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 86,
+     "util": 0.4884,
+     "crit": 0.5698
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 58.33,
+     "T13": 786,
+     "per_round": 60.46,
+     "util": 0.6947,
+     "useful_util": 0.6947,
+     "crit": 0.8104,
+     "hop_tax": 1.0,
+     "util_1shot": 0.4884
+    },
+    "T1_over_lb": 1.564,
+    "per_round_over_lb": 1.26
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 86,
+     "util": 0.4884,
+     "crit": 0.5698
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 58.33,
+     "T13": 786,
+     "per_round": 60.46,
+     "util": 0.6947,
+     "useful_util": 0.6947,
+     "crit": 0.8104,
+     "hop_tax": 1.0,
+     "util_1shot": 0.4884
+    },
+    "T1_over_lb": 1.564,
+    "per_round_over_lb": 1.26
+   },
+   "base": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 163,
+     "util": 0.2674,
+     "crit": 0.4479
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 79.42,
+     "T13": 1116,
+     "per_round": 85.85,
+     "util": 0.4922,
+     "useful_util": 0.4892,
+     "crit": 0.7142,
+     "hop_tax": 1.0061,
+     "util_1shot": 0.2674,
+     "deflect_per_flit": 0.00273,
+     "max_reasm_occupancy": 1
+    },
+    "T1_over_lb": 2.964,
+    "per_round_over_lb": 1.789
+   },
+   "base_over_cal_T0": {
+    "T1": 1.895,
+    "per_round": 1.42
+   }
+  },
+  {
+   "pattern": "alltoall",
+   "m": 13,
+   "bound": {
+    "makespan_lb": 624,
+    "II_lb": 624,
+    "binding": "cut",
+    "latency_floor": 67
+   },
+   "cal_T0": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 1044,
+     "util": 0.523,
+     "crit": 0.6102
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 940.67,
+     "T13": 12332,
+     "per_round": 948.62,
+     "util": 0.5756,
+     "useful_util": 0.5756,
+     "crit": 0.6715,
+     "hop_tax": 1.0,
+     "util_1shot": 0.523
+    },
+    "T1_over_lb": 1.673,
+    "per_round_over_lb": 1.52
+   },
+   "cal_T1": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 1044,
+     "util": 0.523,
+     "crit": 0.6102
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 940.67,
+     "T13": 12332,
+     "per_round": 948.62,
+     "util": 0.5756,
+     "useful_util": 0.5756,
+     "crit": 0.6715,
+     "hop_tax": 1.0,
+     "util_1shot": 0.523
+    },
+    "T1_over_lb": 1.673,
+    "per_round_over_lb": 1.52
+   },
+   "base": {
+    "best_T1": {
+     "algo": "flat",
+     "tier": "T0",
+     "T1": 1912,
+     "util": 0.4121,
+     "crit": 0.8143
+    },
+    "best_II": {
+     "algo": "flat",
+     "tier": "T0",
+     "II": 1376.67,
+     "T13": 18432,
+     "per_round": 1417.85,
+     "util": 0.503,
+     "useful_util": 0.3851,
+     "crit": 0.8059,
+     "hop_tax": 1.3063,
+     "util_1shot": 0.4121,
+     "deflect_per_flit": 0.13684,
+     "max_reasm_occupancy": 161
+    },
+    "T1_over_lb": 3.064,
+    "per_round_over_lb": 2.272
+   },
+   "base_over_cal_T0": {
+    "T1": 1.831,
+    "per_round": 1.495
+   }
+  }
+ ],
+ "wall_s": 121.6
+}

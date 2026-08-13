@@ -76,6 +76,15 @@ So the baseline is NOT buffer-free: the rings are, but every one of the 48 nodes
 is a bridge, and therefore carries a transfer FIFO, reserved Tx entries, an
 eject queue, threshold counters and a reassembly buffer. That per-node cost is
 the thing centralized arbitration removes.
+
+Timing
+------
+Wire delay comes from the folded layout in `rg_ring_topo`: a segment is charged
+per link, so the two fold-end segments of every ring cost one core pitch and the
+rest cost two. Crossing a bridge costs `topo.t_turn` cycles, during which the
+flit holds its transfer-FIFO entry and cannot be offered to the second ring --
+which is why the bridge census below is a function of the turn latency and not
+just of the load.
 """
 
 from __future__ import annotations
@@ -104,8 +113,9 @@ class RingBaseParams:
     dim_order: str = "RC"        # "RC" | "CR" | "mixed"
     # Slot scarcity is the other precondition for deadlock, and it is a
     # PHYSICAL assumption, not a policy knob. With the pipelined links the rest
-    # of this study assumes (hop delay H=7 / V=9, one flit per cycle per
-    # segment) a segment holds 7-9 flits in flight, so a flit that cannot turn
+    # of this study assumes (a folded segment is 2 core pitches = 10 cycles
+    # horizontally / 14 vertically, one flit per cycle per
+    # segment) a segment holds 10-14 flits in flight, so a flit that cannot turn
     # can always keep circulating and the ring cannot deadlock -- only livelock,
     # which is what the E-tag/I-tag guarantees bound. `slot_ring=True` collapses
     # the hop delay to one flit time, giving the classic slotted ring with as
@@ -338,21 +348,27 @@ class RingBaseSim:
     def _fifo_key(self, node: int, ring: RingId) -> Any:
         return (node, ring)
 
-    def _fifo_push(self, node: int, f: Flit) -> bool:
+    def _fifo_push(self, node: int, f: Flit, *, bypass: bool = False) -> bool:
         legs = self._route(f.src, f.dst)
         ring, direction, idx, target = legs[1]
         key = self._fifo_key(node, ring)
         q = self.fifo[key]
         cap = self.p.fifo_depth
-        if len(q) < cap:
+        if bypass or len(q) < cap:
             pass
         elif f.e_tag and self.resv_used[key] < self.p.resv_tx:
             self.resv_used[key] += 1
         else:
+            self.br_deflect[node] += 1
             return False
         f.phase = 1
         f.ring, f.dir, f.idx, f.target = ring, direction, idx, target
+        # crossing the bridge is a real datapath, not a relabelling: the flit
+        # is not offered to the second ring until t_turn cycles have passed
+        f.t_fifo = self.t
+        f.t_ready = self.t + self.topo.t_turn
         q.append(f)
+        self.br_in[node] += 1
         return True
 
     def _try_eject(self, f: Flit) -> bool:
@@ -406,7 +422,7 @@ class RingBaseSim:
                 if len(self.fifo[ka]) < self.p.fifo_depth and \
                         len(self.fifo[kb]) < self.p.fifo_depth:
                     break                       # no need to swap
-                if not self._try_swap(a, b):
+                if not self._try_swap(node, a, b):
                     break        # slots not handover-able; fall through below
                 by_from["row"].pop(0)
                 by_from["col"].pop(0)
@@ -426,6 +442,10 @@ class RingBaseSim:
                 self.fifo_blocked[key] = 0
                 continue
             f = q[0]
+            if t < f.t_ready:
+                # the bridge datapath is still carrying this flit: it holds its
+                # FIFO entry for t_turn cycles before it can be offered
+                continue
             # The I-tag reserves a slot against other INJECTIONS, not against
             # ring-to-ring transfers: priority is in-ring > transfer > inject.
             # Letting it gate transfers as well deadlocks the two guarantees
@@ -439,6 +459,10 @@ class RingBaseSim:
             if self.resv_used[key] > 0 and len(q) >= self.p.fifo_depth:
                 self.resv_used[key] -= 1
             self.fifo_blocked[key] = 0
+            wait = t - f.t_fifo - self.topo.t_turn
+            self.br_wait_max = max(self.br_wait_max, wait)
+            self.br_wait_sum += wait
+            self.br_wait_n += 1
             self._launch(f, inring=False)
 
         # --- local injection (lowest priority)
@@ -473,6 +497,16 @@ class RingBaseSim:
                     break
                 q.popleft()
 
+        # --- bridge buffer census, taken after everything has moved
+        for (node, _ring), q in self.fifo.items():
+            if not q:
+                continue
+            self.br_occ[node] += len(q)
+            if len(q) > self.br_peak[node]:
+                self.br_peak[node] = len(q)
+            if len(q) >= self.p.fifo_depth:
+                self.br_full[node] += 1
+
         self.t += 1
 
     def _itag_blocks(self, f: Flit, boarding_node: int) -> bool:
@@ -480,15 +514,19 @@ class RingBaseSim:
         holders = self.i_tag[(f.ring, f.dir)]
         return bool(holders) and boarding_node not in holders
 
-    def _try_swap(self, a: Flit, b: Flit) -> bool:
-        """Bypass both FIFOs: each flit takes the slot the other vacates.
+    def _try_swap(self, node: int, a: Flit, b: Flit) -> bool:
+        """Trade bridge slots: each flit takes the entry the other vacates.
 
-        Both handovers must be checked BEFORE committing. The slot a flit hands
-        over is the one it would have continued into, but its partner's second
-        leg may run the other way round its ring, where an unrelated
-        counter-rotating flit can already own that segment. Swapping without
-        checking loses a flit there, and a lost flit shows up only as a run that
-        never finishes.
+        The swap dodges the capacity check, not the bridge itself -- both
+        flits still pay `t_turn` on the way across, because the datapath they
+        use is the same one. (Under a fixed dimension order this never fires;
+        it is kept for the `mixed` deadlock experiment.)
+
+        The handover must be checked BEFORE committing: the entry a flit hands
+        over is the one its partner arrived through, so the trade is only
+        physical when each flit continues onto the ring and in the direction the
+        other came from. Swapping without checking loses a flit, and a lost flit
+        shows up only as a run that never finishes.
         """
         leg_a = self._route(a.src, a.dst)[1]
         leg_b = self._route(b.src, b.dst)[1]
@@ -501,18 +539,9 @@ class RingBaseSim:
             return False
         if leg_a[0] != b.ring or leg_b[0] != a.ring:
             return False
-        for ring, direction, idx, _ in (leg_a, leg_b):
-            if self.seg_free[(ring, direction, idx)] > self.t:
-                return False
         self.st["n_swaps"] += 1
-        for f, leg in ((a, leg_a), (b, leg_b)):
-            ring, direction, idx, target = leg
-            f.phase = 1
-            f.ring, f.dir, f.idx, f.target = ring, direction, idx, target
-            if idx == target and self._try_eject(f):
-                self._on_eject(f)      # already at its exit on the new ring
-                continue
-            self._launch(f, inring=True)
+        for f in (a, b):
+            self._fifo_push(node, f, bypass=True)
         return True
 
     def _maybe_deadlock(self, key: Any) -> None:
@@ -579,7 +608,61 @@ class RingBaseSim:
         out["critical_arc_cycles"] = (max(self.link_busy.values())
                                       if self.link_busy else 0)
         out["n_links_used"] = len(self.link_busy)
+        out.update(self.bridge_report())
         return out
+
+    def bridge_report(self) -> dict[str, Any]:
+        """Per-bridge transfer-FIFO census.
+
+        Every one of the 48 nodes is a bridge, so this is the buffer the
+        centralized calendar claims it does not need. Three quantities, because
+        they answer different questions:
+
+          * `peak` -- how many entries the deepest bridge ever held, i.e. what
+            the FIFO must be built for. Reported per bridge so a hotspot is
+            visible instead of averaged away.
+          * `mean` -- flit-cycles / makespan, i.e. how much of that depth is
+            used on average. A large peak/mean gap means the depth is paid for
+            a transient.
+          * `full_cy` / `deflect` -- cycles at capacity and the turns that were
+            deflected because of it. This is the only one with a performance
+            consequence: a full bridge does not stall the ring, it sends the
+            flit round again.
+        """
+        span = max(1, self.t)
+        peak = dict(self.br_peak)
+        occ = {n: self.br_occ[n] / span for n in peak}
+        top = sorted(peak, key=lambda n: (-peak[n], -self.br_occ[n], n))[:5]
+        return {
+            "n_bridges_used": len(peak),
+            "bridge_peak_max": max(peak.values()) if peak else 0,
+            "bridge_peak_sum": sum(peak.values()),
+            "bridge_occ_mean": round(sum(occ.values()) / max(1, len(occ)), 3),
+            "bridge_occ_max": round(max(occ.values()), 3) if occ else 0.0,
+            "bridge_full_cycles": sum(self.br_full.values()),
+            "bridge_full_frac": round(
+                max(self.br_full.values()) / span, 4) if self.br_full else 0.0,
+            "bridge_deflect": sum(self.br_deflect.values()),
+            "bridge_entries": sum(self.br_in.values()),
+            "bridge_wait_max": self.br_wait_max,
+            "bridge_wait_mean": round(self.br_wait_sum / self.br_wait_n, 2)
+            if self.br_wait_n else 0.0,
+            # full per-node table, for the census driver that merges phases;
+            # underscored because it is raw material, not a summary statistic
+            "_bridge_per_node": {n: {"peak": peak.get(n, 0),
+                                     "occ": self.br_occ[n],
+                                     "full_cy": self.br_full[n],
+                                     "entries": self.br_in[n],
+                                     "deflect": self.br_deflect[n]}
+                                 for n in set(peak) | set(self.br_deflect)},
+            "bridge_hot": [{"node": n, "peak": peak[n],
+                            "mean": round(occ[n], 3),
+                            "full_cy": self.br_full[n],
+                            "entries": self.br_in[n],
+                            "deflect": self.br_deflect[n]} for n in top],
+            "bridge_peak_hist": {str(v): sum(1 for p in peak.values() if p == v)
+                                 for v in sorted(set(peak.values()))},
+        }
 
 
 # ---------------------------------------------------------------------------

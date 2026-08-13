@@ -40,8 +40,8 @@ from rg_mesh_paths import (build_plan, check_latency_invariance, cut_bound,
 from rg_mesh_sched import schedule_mesh, verify_rounds_disjoint
 from rg_ring_base import RingBaseParams, run_batch
 from rg_ring_sched import schedule_ring
-from rg_ring_topo import (RingTopology, fixed_plan, greedy_max_set,
-                          misuse_stats, route_delay_spread)
+from rg_ring_topo import (LEGACY_WIRE, RingTopology, fixed_plan,
+                          greedy_max_set, misuse_stats, route_delay_spread)
 from rg_steady_des import SteadyParams, anchors, run_steady
 
 OUT = Path(__file__).resolve().parents[1] / "results" / "verify_islip2d_8x6.json"
@@ -140,7 +140,7 @@ def common() -> None:
           per_round=round(per_round, 1), bound=2 * N,
           total=r["ctrl_msgs_total"], one_shot_reference=2 * len(A2A))
 
-    rt = RingTopology()
+    rt = RingTopology(**LEGACY_WIRE)
     rr = schedule_ring(rt, A2A, m=1, grants_per_src=2, pipeline_depth=INF)
     tot = sum(rr["verify"][k] for k in (
         "R1_link_violations", "R2_board_violations", "R3_leave_violations",
@@ -248,7 +248,7 @@ def dm() -> None:
 
 def dr() -> None:
     print("== D-R (ring) ==")
-    topo = RingTopology()
+    topo = RingTopology(**LEGACY_WIRE)
     a = topo.audit()
     check("D-R", "192_directed_links", a["n_directed_links"] == 192,
           directed=a["n_directed_links"], undirected=a["n_undirected_links"])
@@ -297,8 +297,9 @@ def dr() -> None:
           overstatement=round(over, 2))
 
     arc = schedule_ring(topo, A2A, m=1, grants_per_src=2, pipeline_depth=INF)
-    whole = schedule_ring(RingTopology(spatial_reuse="whole_ring"), A2A, m=1,
-                          grants_per_src=2, pipeline_depth=INF)
+    whole = schedule_ring(
+        RingTopology(**LEGACY_WIRE, spatial_reuse="whole_ring"), A2A, m=1,
+        grants_per_src=2, pipeline_depth=INF)
     check("D-R", "whole_ring_costs_multiple_x",
           whole["n_rounds"] > 2 * arc["n_rounds"],
           arc_rounds=arc["n_rounds"], whole_rounds=whole["n_rounds"],
@@ -306,7 +307,7 @@ def dr() -> None:
           mesh_reference=110)
 
     for ports in (1, 2):
-        t = RingTopology(board_ports=ports, leave_ports=ports)
+        t = RingTopology(**LEGACY_WIRE, board_ports=ports, leave_ports=ports)
         r = schedule_ring(t, A2A, m=1, grants_per_src=2, pipeline_depth=INF)
         tot = sum(r["verify"][k] for k in (
             "R1_link_violations", "R2_board_violations",
@@ -330,7 +331,7 @@ def build_plan_ring(topo: RingTopology, mode: str):
 
 def base() -> None:
     print("== ring_base (E-tag / I-tag + deflection) ==")
-    topo = RingTopology()
+    topo = RingTopology(**LEGACY_WIRE)
 
     # Under a fixed dimension order every turn goes row -> column, so a bridge
     # never sees mutual turns and the Swap Rule is unreachable. This is a

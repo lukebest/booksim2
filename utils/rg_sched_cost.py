@@ -366,8 +366,8 @@ def centralization_ledger(*, buf_depth: int = 20, fifo_depth: int = 4,
                           n_flows: int = 2256) -> dict[str, Any]:
     """Side-by-side: what each configuration spends, and on what."""
     from rg_topo import Topology
-    from rg_ring_topo import RingTopology
-    mesh, ring = Topology("mesh"), RingTopology()
+    from rg_ring_topo import LEGACY_WIRE, RingTopology
+    mesh, ring = Topology("mesh"), RingTopology(**LEGACY_WIRE)
     out: dict[str, Any] = {}
     for cfg, topo, algo, nr in (
             ("mesh_base", mesh, None, None),
@@ -456,7 +456,7 @@ if __name__ == "__main__":
     print(f"{'algo':14} {'domain':9} {'bits':>8} {'cmp':>8} {'area':>7} "
           f"{'lv':>4} {'T_sched':>8}")
     for algo, topo, nr in (("islip2d_mesh", Topology("mesh"), 110),
-                           ("islip2d_ring", RingTopology(), 69)):
+                           ("islip2d_ring", RingTopology(**LEGACY_WIRE), 69)):
         for dom in ("free_at", "interval"):
             c = sched_cost(algo, topo, 2256, iters=1, n_rounds=nr,
                            conflict_domain=dom)

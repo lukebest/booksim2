@@ -320,16 +320,23 @@ def group_base_bounds() -> None:
               gap == RAMP * n_ph,
               f"gap={gap} = RAMP({RAMP}) x {n_ph} phases")
 
-    # cause 3: the bridge turn
+    # what used to be cause 3: the bridge. Under the folded-pitch wire setup
+    # both legs pay t_turn, so an uncontended transfer must now agree to the
+    # cycle -- turning or not. If this ever fails, the two models have drifted
+    # apart again and the cross-model ratios above stop meaning anything.
     topo = RingTopology()
-    plan = build_ring_plan(topo, [(0, 9)], "balanced")
-    fp = topo.footprint(0, plan.paths[(0, 9)], 1)
-    sim = run_base_phase(topo, [(0, 9, 1)], None, 0)
-    check("cause 3 -- the calendar charges t_turn to cross a bridge, "
-          "the sim crosses free",
-          fp.wire + fp.dur - sim["makespan"] == topo.t_turn,
-          f"calendar {fp.wire + fp.dur} vs sim {sim['makespan']} "
-          f"on a turning route, t_turn={topo.t_turn}")
+    same = []
+    for pair, kind in (((0, 9), "转环"), ((0, 1), "同环")):
+        plan = build_ring_plan(topo, [pair], "balanced")
+        fp = topo.footprint(0, plan.paths[pair], 1)
+        sim = run_base_phase(topo, [(*pair, 1)], None, 0)
+        same.append((kind, fp.wire + fp.dur, sim["makespan"]))
+    check("the bridge is no longer a model difference: one uncontended "
+          "transfer costs the same in both legs",
+          all(cal == s for _, cal, s in same),
+          "; ".join(f"{k} calendar {c} vs sim {s}" for k, c, s in same)
+          + f", t_turn={topo.t_turn}",
+          prediction="cause 3 (free bridge in the sim) is retired")
 
 
 def group_throughput() -> None:

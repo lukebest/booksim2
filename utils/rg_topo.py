@@ -19,6 +19,13 @@ N = MX * MY
 H_BASE, V_BASE = 7, 9
 RAMP, RAMP_BW = 2, 2
 
+# Ring-side wire model (the mesh work keeps H_BASE / V_BASE untouched).
+# PITCH_* is the delay of a wire spanning ONE core pitch. A folded ring hops
+# over its neighbour, so a typical ring segment is two pitches; the two fold
+# ends are one pitch. T_TURN_BRIDGE is the cost of changing rings at a bridge.
+PITCH_H, PITCH_V = 5, 7
+T_TURN_BRIDGE = 10
+
 # E=0 W=1 N=2 S=3
 DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
 DIR_NAMES = ("E", "W", "N", "S")

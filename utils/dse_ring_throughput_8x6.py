@@ -119,18 +119,16 @@ def cut_capacity(topo: RingTopology) -> dict[str, list[dict[str, Any]]]:
 
 
 def hop_latency(topo: RingTopology, s: int, d: int) -> int:
-    """Zero-contention delay of the shortest s->d path, turns free.
+    """Zero-contention delay of the cheapest s->d route, bridge turns charged.
 
-    Turns are free on purpose: the sim crosses a bridge for free and the
-    calendar charges t_turn, so the turn-free number is the one floor that is
-    valid for both. Every row hop costs H and every column hop costs V whichever
-    way round the ring it goes -- that uniformity is what folding buys.
+    Dijkstra over (core, ring) states, so it minimises over every legal route
+    rather than assuming the calendars' two-phase dimension order. Both legs pay
+    the same two things now: the folded per-segment wire delay (2 core pitches
+    for a typical segment, 1 for the two fold ends) and `t_turn` for each ring
+    change. A pair that differs in both dimensions must change rings at least
+    once, so charging one turn keeps this a floor for ANY algorithm.
     """
-    sx, sy = coord(s, topo.mx)
-    dx, dy = coord(d, topo.mx)
-    hx = min((dx - sx) % topo.mx, (sx - dx) % topo.mx)
-    hy = min((dy - sy) % topo.my, (sy - dy) % topo.my)
-    return hx * topo.H + hy * topo.V
+    return topo.wire_distance(s, d)
 
 
 def latency_floor(topo: RingTopology, pattern: str, m: int) -> dict[str, Any]:
@@ -325,6 +323,12 @@ def base_leg(topo: RingTopology, pattern: str, algo: str, tier: str, m: int
             "max_reasm_occupancy": r["max_reasm_occupancy"],
             "n_reasm_overflow": r["n_reasm_overflow"],
             "util": util_from(lb, topo, r["makespan"], R),
+            # the bridge FIFO is the buffer the calendar claims not to need, and
+            # with a 10-cycle turn it is also where the deflections come from
+            "bridge": {k: r[k] for k in (
+                "bridge_peak_max", "bridge_occ_mean", "bridge_occ_max",
+                "bridge_full_frac", "bridge_deflect", "bridge_entries",
+                "bridge_wait_max", "bridge_wait_mean", "n_bridges_used")},
         }
     return {"leg": "ring_base", "T1": t1, "by_rounds": by}
 

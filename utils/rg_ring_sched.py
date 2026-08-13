@@ -424,7 +424,7 @@ if __name__ == "__main__":
     print("--- path mode x grants_per_src (arc, ports=1, free_at) ---")
     for pm in ("fixed", "balanced"):
         for g in (1, 2):
-            topo = RingTopology()
+            topo = RingTopology(**LEGACY_WIRE)
             t0 = time.perf_counter()
             r = schedule_ring(topo, a2a, ring_path_mode=pm, grants_per_src=g,
                               pipeline_depth=1 << 20)
@@ -437,7 +437,7 @@ if __name__ == "__main__":
 
     print("\n--- ports 1 vs 2 (fixed, g=2) ---")
     for bp in (1, 2):
-        topo = RingTopology(board_ports=bp, leave_ports=bp)
+        topo = RingTopology(**LEGACY_WIRE, board_ports=bp, leave_ports=bp)
         r = schedule_ring(topo, a2a, ring_path_mode="fixed", grants_per_src=2,
                           pipeline_depth=1 << 20)
         print(f"  ports={bp} rounds={r['n_rounds']:>4}/lb={r['round_lb']:<4} "
@@ -445,7 +445,7 @@ if __name__ == "__main__":
 
     print("\n--- spatial reuse: arc vs whole_ring (fixed, g=2) ---")
     for sr in ("arc", "whole_ring"):
-        topo = RingTopology(spatial_reuse=sr)
+        topo = RingTopology(**LEGACY_WIRE, spatial_reuse=sr)
         r = schedule_ring(topo, a2a, ring_path_mode="fixed", grants_per_src=2,
                           pipeline_depth=1 << 20)
         print(f"  {sr:11} rounds={r['n_rounds']:>4}/lb={r['round_lb']:<4} "
@@ -456,7 +456,7 @@ if __name__ == "__main__":
     for fl in FILL_ORDERS:
         row = []
         for it in (0, 1, 2):
-            topo = RingTopology()
+            topo = RingTopology(**LEGACY_WIRE)
             r = schedule_ring(topo, a2a, ring_path_mode="fixed",
                               grants_per_src=2, iters=it, fill=fl,
                               pipeline_depth=1 << 20)
@@ -465,7 +465,7 @@ if __name__ == "__main__":
 
     print("\n--- conflict domain (fixed, g=2) ---")
     for cd in ("free_at", "interval"):
-        topo = RingTopology()
+        topo = RingTopology(**LEGACY_WIRE)
         r = schedule_ring(topo, a2a, ring_path_mode="fixed", grants_per_src=2,
                           conflict_domain=cd, pipeline_depth=1 << 20)
         print(f"  {cd:9} rounds={r['n_rounds']:>4} span={r['data_span']:>6} "

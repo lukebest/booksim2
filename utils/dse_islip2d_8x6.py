@@ -41,7 +41,7 @@ from typing import Any
 from rg_topo import Topology
 from rg_collectives import build_collective
 from rg_mesh_sched import schedule_mesh, verify_rounds_disjoint
-from rg_ring_topo import RingTopology, greedy_max_set, misuse_stats
+from rg_ring_topo import LEGACY_WIRE, RingTopology, greedy_max_set, misuse_stats
 from rg_ring_sched import schedule_ring
 
 OUT = Path(__file__).resolve().parents[1] / "results" / "islip2d_8x6.json"
@@ -158,8 +158,8 @@ def _mesh_row(pattern: str, m: int, sigma: int, **kw) -> dict[str, Any]:
 
 def _ring_row(m: int, sigma: int, *, board: int = 1, leave: int = 1,
               reuse: str = "arc", **kw) -> dict[str, Any]:
-    topo = RingTopology(sigma=sigma, board_ports=board, leave_ports=leave,
-                        spatial_reuse=reuse)
+    topo = RingTopology(**LEGACY_WIRE, sigma=sigma, board_ports=board,
+                        leave_ports=leave, spatial_reuse=reuse)
     t0 = time.perf_counter()
     r = schedule_ring(topo, A2A, m=m, **kw)
     dt = time.perf_counter() - t0
@@ -275,7 +275,7 @@ def sweep() -> dict[str, Any]:
             cross[key] = {"crossover_t_rtt": xr, "points": pts}
 
     # -- cross-fabric predicate misuse ------------------------------------
-    topo = RingTopology()
+    topo = RingTopology(**LEGACY_WIRE)
     from rg_ring_topo import fixed_plan
     plan = fixed_plan(topo, A2A)
     misuse = misuse_stats(topo, plan.paths, n_samples=40_000, seed=0)
