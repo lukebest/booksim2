@@ -123,9 +123,13 @@ def mech_area(kind: str, reorder_flits: float = 0.0, hi: bool = False) -> float:
 
 # --------------------------------------------------------------------------
 
-def one_scenario(scen: dict) -> list[dict]:
+def one_scenario(job: tuple[dict, tuple[str, ...]]) -> list[dict]:
+    """Worker entry.  The routing list travels inside the job because 3.14's
+    default start method re-imports this module in the child, which would
+    reset a module-level override."""
+    scen, routings = job
     out: list[dict] = []
-    for routing in SWEEP_ROUTINGS:
+    for routing in routings:
         out.extend(one_case(scen, routing))
     return out
 
@@ -319,16 +323,17 @@ def run(names: list[str] | None = None, jobs: int = 1) -> dict:
         scenarios = [s for s in scenarios if s["name"] in names]
     t0 = time.time()
     rows: list[dict] = []
+    jobs_in = [(s, tuple(SWEEP_ROUTINGS)) for s in scenarios]
     if jobs > 1:
         with mp.Pool(jobs) as pool:
             for i, part in enumerate(
-                    pool.imap_unordered(one_scenario, scenarios), 1):
+                    pool.imap_unordered(one_scenario, jobs_in), 1):
                 rows.extend(part)
                 print("[%d/%d] %s done" % (i, len(scenarios),
                                            part[0]["scenario"]), flush=True)
     else:
-        for i, scen in enumerate(scenarios, 1):
-            part = one_scenario(scen)
+        for i, job in enumerate(jobs_in, 1):
+            part = one_scenario(job)
             rows.extend(part)
             for r in part:
                 if r["m0"] == M0_LIST[-1]:
@@ -346,7 +351,7 @@ def run(names: list[str] | None = None, jobs: int = 1) -> dict:
             "fault_model": "budget_≤4R_≤8L_nonoverlap",
             "catalog": cat["meta"],
             "n_scenarios": len(scenarios),
-            "routings": ROUTINGS,
+            "routings": SWEEP_ROUTINGS,
             "routing_label": ROUTING_LABEL,
             "kinds": KINDS,
             "mech": MECH,

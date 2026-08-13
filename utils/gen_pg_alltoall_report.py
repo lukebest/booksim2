@@ -2089,6 +2089,17 @@ REC_CITE = {
 }
 
 
+def _mode_hist(rows: list[dict], top: int = 2) -> list[str]:
+    """Most frequently chosen turn-model pair, as 'name xN' strings."""
+    hist: dict[str, int] = {}
+    for r in rows:
+        m = r.get("turn_mode")
+        if m:
+            hist[m] = hist.get(m, 0) + 1
+    return ["%s ×%d" % (k, v) for k, v in
+            sorted(hist.items(), key=lambda kv: (-kv[1], kv[0]))[:top]]
+
+
 def recovery_section_html() -> str:
     """§7 deadlock recovery on baseline XY (separate Pareto from avoidance)."""
     if not RECOVERY_JSON.exists():
@@ -2142,8 +2153,7 @@ def recovery_section_html() -> str:
             "cyc_ch_med": cyc_ch[len(cyc_ch) // 2] if cyc_ch else 0,
             "cyc_frac_med": cyf[len(cyf) // 2] if cyf else 0,
             "cyc_frac_worst": cyf[-1] if cyf else 0,
-            "mode": sorted({r.get("turn_mode") for r in ok if r.get(
-                "turn_mode")}),
+            "mode": _mode_hist(ok),
             "sac0": sum(1 for r in ok if not r["n_sacrificed"]),
             "sac_tot": sum(r["n_sacrificed"] for r in ok),
             "sac_worst": max((r["n_sacrificed"] for r in ok), default=0),
@@ -2375,12 +2385,12 @@ def recovery_section_html() -> str:
             '<figure class="e2e-fig"><img src="%s" alt="recovery Pareto" '
             'style="max-width:100%%;height:auto;background:#fff;'
             'border:1px solid #e0e0e0"/><figcaption>死锁<b>恢复</b>类独立 '
-            'Pareto（%d 场景，1 VC，零牺牲）：3 种机制 × 3 种路由。'
-            '面积只由机制决定，所以同一机制的三种路由落在同一 x 上，'
+            'Pareto（%d 场景，1 VC，零牺牲）：3 种机制 × 4 种路由。'
+            '面积只由机制决定，所以同一机制的四种路由落在同一 x 上，'
             '用<b>点形</b>区分（○ R0 XY+绕障，△ R1 min-max，□ R2 M3′+兜底，'
             '▽ R3 Super-turn/1VC）。<b>横向短线</b>= 同一个设计的面积区间：'
             '左端 = 各论文自报的控制逻辑开销，右端 = 第三方复现测得的更大开销'
-            '（SB 自报 &lt;0.5% vs 第三方 10%，SPIN 自报 4% vs 第三方 ~15%，'
+            '（SB 自报 &lt;0.5%% vs 第三方 10%%，SPIN 自报 4%% vs 第三方 ~15%%，'
             'SWAP 只有一个来源故无短线）。'
             '实心=44 场景最差，空心=中位；灰菱形为 1VC <b>避免</b>类同轴对照，'
             '前沿分开计算。纵轴对数。</figcaption></figure>'
@@ -2502,10 +2512,10 @@ m<sub>eff</sub>∝(48/A)² 暴涨，端到端反而最慢（最差 25 μs 量级
 ① <i>无死锁前提下</i>最优 = M3′（要付转向限制的绕路代价 + 牺牲阶梯）；
 ② <i>不要求无死锁</i>时最优 = 纯 min-max 最短路（R1，负载可以压到理论下界的
 {static['minmax']['rat_med']:.2f}×，比 M3′ 的 {static['updown_relax']['rat_med']:.2f}× 好一大截）。
-恢复机制解锁的正是口径 ②。三种路由的静态指标：</p>
+恢复机制解锁的正是口径 ②。四种路由的静态指标：</p>
 {rt_tbl}
 <ul>
-<li><b>零牺牲（三种路由都成立）：</b>{n_sac0}/{n_scen} 场景牺牲 0 个好节点；
+<li><b>零牺牲（四种路由都成立）：</b>{n_sac0}/{n_scen} 场景牺牲 0 个好节点；
 仅 {esc(', '.join(sac_bad)) or '无'} 因残图把好节点<b>物理断连</b>而必须放弃。
 对照避免类：M1 XY 最差只剩 A={xy_av['A_worst'] if xy_av else '?'} 个节点，
 M3′ best-root 最差 A={m3_av['A_worst'] if m3_av else '?'}。</li>
@@ -2519,7 +2529,7 @@ M3′ best-root 最差 A={m3_av['A_worst'] if m3_av else '?'}。</li>
 （R0 只有 {100 * static['xy_detour']['cyc_frac_med']:.0f}%、
 R1 {100 * static['minmax']['cyc_frac_med']:.0f}%、R2 0%）。
 原因是结构性的：<b>Super-turn 的无死锁性全部来自 VC 分层，而不是来自转向集合</b>——
-它挑的互补对（最常被选中的是 {esc('/'.join(static['super_turn_1vc']['mode'][:3]))} 等）
+它挑的互补对（44 场景里 {esc('、'.join(static['super_turn_1vc']['mode']))}）
 两层合起来<b>几乎不禁任何转向</b>（east-first ∪ west-first 的并集除了 U-turn 之外全放开），
 所以压到 1 VC 就退化成「近似无转向模型」，只是路径比 R1 短一点、负载还更差
 （{static['super_turn_1vc']['load_med']} vs R1 的 {static['minmax']['load_med']}）。
@@ -2601,10 +2611,10 @@ ROM 位按 0.15 折算）；FSM、probe 单元、mux/u-turn 这类控制逻辑�
 <h3>7.5 三性质核验（与 §2.5 同口径）</h3>
 <p class="note">恢复类在「无死锁」这一列的性质<b>与避免类不同</b>：它不保证 CDG 无环，
 只保证<b>不会永久卡死</b>（活性由恢复机制提供，安全性由「环上至少一个包能动」提供），
-所以 R0 / R1 这一列只能标 △。<b>R2 是例外</b>：它的路由本身就合法，
+所以 R0 / R1 / R3 这一列只能标 △。<b>R2 是例外</b>：它的路由本身就合法，
 这一列回到 ✓，代价是恢复机制变成纯冗余——
-换句话说，这张表里「△ 换零牺牲」的交易只在 R0 / R1 成立，
-而 R0 / R1 的零牺牲 R2 也有。</p>
+换句话说，这张表里「△ 换零牺牲」的交易只在 R0 / R1 / R3 成立，
+而它们的零牺牲 R2 也有。</p>
 {cap_tbl}
 
 <h3>7.6 独立 Pareto 与结论</h3>
