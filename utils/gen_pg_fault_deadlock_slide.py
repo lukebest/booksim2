@@ -387,7 +387,8 @@ def build() -> Deck:
 # Backends
 # --------------------------------------------------------------------------
 
-def emit_pptx(deck: Deck, path: Path) -> None:
+def emit_pptx(decks: "Deck | list[Deck]", path: Path) -> None:
+    """One slide per deck, in order."""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
@@ -401,8 +402,6 @@ def emit_pptx(deck: Deck, path: Path) -> None:
     prs = Presentation()
     prs.slide_width = Inches(SLIDE_W)
     prs.slide_height = Inches(SLIDE_H)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    shapes = slide.shapes
 
     def style(shape, fill, line, lw):
         if fill:
@@ -417,60 +416,64 @@ def emit_pptx(deck: Deck, path: Path) -> None:
             shape.line.fill.background()
         shape.shadow.inherit = False
 
-    for op in deck.ops:
-        k = op["kind"]
-        if k == "rect":
-            kind = (MSO_SHAPE.ROUNDED_RECTANGLE if op["round_"]
-                    else MSO_SHAPE.RECTANGLE)
-            sh = shapes.add_shape(kind, Inches(op["x"]), Inches(op["y"]),
-                                  Inches(op["w"]), Inches(op["h"]))
-            if op["round_"]:
-                adj = op["round_"] / max(min(op["w"], op["h"]), 1e-6)
-                sh.adjustments[0] = min(max(adj, 0.0), 0.5)
-            style(sh, op["fill"], op["line"], op["lw"])
-            sh.text_frame.word_wrap = False
-        elif k in ("oval", "star"):
-            kind = (MSO_SHAPE.OVAL if k == "oval"
-                    else MSO_SHAPE.STAR_5_POINT)
-            sh = shapes.add_shape(
-                kind, Inches(op["cx"] - op["r"]),
-                Inches(op["cy"] - op["r"]), Inches(op["r"] * 2),
-                Inches(op["r"] * 2))
-            style(sh, op["fill"], op["line"], op["lw"])
-        elif k == "line":
-            conn = shapes.add_connector(
-                MSO_CONNECTOR.STRAIGHT, Inches(op["x1"]), Inches(op["y1"]),
-                Inches(op["x2"]), Inches(op["y2"]))
-            conn.line.color.rgb = RGBColor.from_string(op["color"])
-            conn.line.width = Pt(op["lw"])
-            ln = conn.line._get_or_add_ln()
-            if op["dash"]:
-                dash = ln.makeelement(qn("a:prstDash"), {"val": "dash"})
-                ln.append(dash)
-            if op["arrow"]:
-                tail = ln.makeelement(qn("a:tailEnd"),
-                                      {"type": "triangle", "w": "med",
-                                       "len": "med"})
-                ln.append(tail)
-        elif k == "text":
-            box = shapes.add_textbox(Inches(op["x"]), Inches(op["y"]),
-                                     Inches(op["w"]), Inches(op["h"]))
-            tf = box.text_frame
-            tf.word_wrap = True
-            tf.vertical_anchor = ANCHOR[op["valign"]]
-            tf.margin_left = tf.margin_right = Emu(0)
-            tf.margin_top = tf.margin_bottom = Emu(0)
-            for i, pa in enumerate(op["paras"]):
-                para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-                para.alignment = ALIGN[pa["align"]]
-                para.space_after = Pt(pa["space"])
-                para.line_spacing = pa["spacing"] * 1.18
-                run = para.add_run()
-                run.text = pa["t"]
-                run.font.size = Pt(pa["size"])
-                run.font.bold = pa["bold"]
-                run.font.name = FONT
-                run.font.color.rgb = RGBColor.from_string(pa["color"])
+    def render(deck: Deck, shapes) -> None:
+        for op in deck.ops:
+            k = op["kind"]
+            if k == "rect":
+                kind = (MSO_SHAPE.ROUNDED_RECTANGLE if op["round_"]
+                        else MSO_SHAPE.RECTANGLE)
+                sh = shapes.add_shape(kind, Inches(op["x"]), Inches(op["y"]),
+                                      Inches(op["w"]), Inches(op["h"]))
+                if op["round_"]:
+                    adj = op["round_"] / max(min(op["w"], op["h"]), 1e-6)
+                    sh.adjustments[0] = min(max(adj, 0.0), 0.5)
+                style(sh, op["fill"], op["line"], op["lw"])
+                sh.text_frame.word_wrap = False
+            elif k in ("oval", "star"):
+                kind = (MSO_SHAPE.OVAL if k == "oval"
+                        else MSO_SHAPE.STAR_5_POINT)
+                sh = shapes.add_shape(
+                    kind, Inches(op["cx"] - op["r"]),
+                    Inches(op["cy"] - op["r"]), Inches(op["r"] * 2),
+                    Inches(op["r"] * 2))
+                style(sh, op["fill"], op["line"], op["lw"])
+            elif k == "line":
+                conn = shapes.add_connector(
+                    MSO_CONNECTOR.STRAIGHT, Inches(op["x1"]), Inches(op["y1"]),
+                    Inches(op["x2"]), Inches(op["y2"]))
+                conn.line.color.rgb = RGBColor.from_string(op["color"])
+                conn.line.width = Pt(op["lw"])
+                ln = conn.line._get_or_add_ln()
+                if op["dash"]:
+                    dash = ln.makeelement(qn("a:prstDash"), {"val": "dash"})
+                    ln.append(dash)
+                if op["arrow"]:
+                    tail = ln.makeelement(qn("a:tailEnd"),
+                                          {"type": "triangle", "w": "med",
+                                           "len": "med"})
+                    ln.append(tail)
+            elif k == "text":
+                box = shapes.add_textbox(Inches(op["x"]), Inches(op["y"]),
+                                         Inches(op["w"]), Inches(op["h"]))
+                tf = box.text_frame
+                tf.word_wrap = True
+                tf.vertical_anchor = ANCHOR[op["valign"]]
+                tf.margin_left = tf.margin_right = Emu(0)
+                tf.margin_top = tf.margin_bottom = Emu(0)
+                for i, pa in enumerate(op["paras"]):
+                    para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+                    para.alignment = ALIGN[pa["align"]]
+                    para.space_after = Pt(pa["space"])
+                    para.line_spacing = pa["spacing"] * 1.18
+                    run = para.add_run()
+                    run.text = pa["t"]
+                    run.font.size = Pt(pa["size"])
+                    run.font.bold = pa["bold"]
+                    run.font.name = FONT
+                    run.font.color.rgb = RGBColor.from_string(pa["color"])
+
+    for deck in ([decks] if isinstance(decks, Deck) else decks):
+        render(deck, prs.slides.add_slide(prs.slide_layouts[6]).shapes)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(path))
