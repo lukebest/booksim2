@@ -129,6 +129,13 @@ def _axis_y(vals: list[float], top: float, bot: float, pad: float = 1.08
             ) -> tuple[Any, float]:
     hi = max(vals) * pad if vals else 1.0
     hi = hi or 1.0
+    # 把上限抬到一个「整」数：四条网格线要落在读者能记住的刻度上，否则比值类
+    # 曲线会得到 1.16 / 2.32 / 3.48 这种没人想读的标签
+    step = 10.0 ** math.floor(math.log10(hi / 4))
+    for mult in (1, 2, 2.5, 5, 10):
+        if step * mult * 4 >= hi:
+            hi = step * mult * 4
+            break
 
     def ty(v: float) -> float:
         return bot - (bot - top) * (v / hi)
@@ -254,6 +261,8 @@ def line_chart(series: list[dict], *, w: int = 780, h: int = 300,
     if hline is not None:
         ys.append(hline)
     ty, hi = _axis_y(ys, T, h - B)
+    # 小量程（比值类曲线）必须带小数，否则 1.25 / 3.75 会被四舍五入成同一批整数
+    ytf = "{:,.0f}" if hi >= 8 else "{:,.2f}"
 
     def tx(v: float) -> float:
         lo, hh = min(xs), max(xs)
@@ -268,7 +277,7 @@ def line_chart(series: list[dict], *, w: int = 780, h: int = 300,
         p.append(f'<line x1="{L}" y1="{ty(yv):.1f}" x2="{w - Rr}" '
                  f'y2="{ty(yv):.1f}" class="gl"/>')
         p.append(f'<text x="{L - 8}" y="{ty(yv) + 4:.1f}" class="tick" '
-                 f'text-anchor="end">{yv:,.0f}</text>')
+                 f'text-anchor="end">{ytf.format(yv)}</text>')
     for xv in (xticks if xticks is not None else sorted(set(xs))):
         p.append(f'<text x="{tx(xv):.1f}" y="{h - B + 17}" class="tick" '
                  f'text-anchor="middle">{xv:g}</text>')
@@ -529,85 +538,77 @@ def svg_fold(a: dict) -> str:
     p: list[str] = []
 
     def ring_panel(k: int, pitch: int, x0: float, yc: float, px: float,
-                   name: str, cls: str) -> None:
-        order = _fold_order(k)               # 物理位 -> 逻辑序号
-        pos = {u: i for i, u in enumerate(order)}
+                   name: str, vertical: bool) -> None:
+        """一维的折叠环。核按物理位置摆，环按逻辑序号连，每段标自己的拍数。"""
+        pos = {u: i for i, u in enumerate(_fold_order(k))}
+        cls = "fld v" if vertical else "fld"
+        lane = 32.0
 
         def X(u: int) -> float:
             return x0 + pos[u] * px
-        lane = 30.0
         for u in range(k):
             v = (u + 1) % k
             one = abs(pos[u] - pos[v]) == 1
             lat = pitch * (1 if one else 2)
-            up = u < k // 2
-            y = yc - lane if up else yc + lane
-            if one:                          # 折返端：两核物理相邻，直连一小段
+            if one:                          # 折返端：两核物理相邻，直连
                 xa, xb = sorted((X(u), X(v)))
-                p.append(f'<path d="M {xa + 15} {yc} H {xb - 15}" '
-                         f'class="fld {cls}"/>')
-                p.append(f'<text x="{(xa + xb) / 2}" y="{yc - 6}" '
+                p.append(f'<path d="M {xa + 16} {yc} H {xb - 16}" '
+                         f'class="{cls}"/>')
+                p.append(f'<text x="{(xa + xb) / 2}" y="{yc - 8}" '
                          f'class="bxl warn" text-anchor="middle">{lat}</text>')
                 continue
-            p.append(f'<path d="M {X(u)} {yc + (-15 if up else 15)} '
-                     f'V {y} H {X(v)} V {yc + (-15 if up else 15)}" '
-                     f'class="fld {cls}"/>')
+            up = u < k // 2                  # 去程画上方车道，回程画下方
+            y = yc - lane if up else yc + lane
+            ye = yc - 16 if up else yc + 16
+            p.append(f'<path d="M {X(u)} {ye} V {y} H {X(v)} V {ye}" '
+                     f'class="{cls}"/>')
             p.append(f'<text x="{(X(u) + X(v)) / 2}" '
-                     f'y="{y + (-6 if up else 14)}" class="bxl" '
+                     f'y="{y + (-6 if up else 15)}" class="bxl" '
                      f'text-anchor="middle">{lat}</text>')
         for u in range(k):
-            p.append(f'<circle cx="{X(u)}" cy="{yc}" r="15" class="nd"/>')
+            p.append(f'<circle cx="{X(u)}" cy="{yc}" r="16" class="nd"/>')
             p.append(f'<text x="{X(u)}" y="{yc + 4}" class="tag">{u}</text>')
-        for i in range(k - 1):               # 物理相邻的 core 间距标注
+        for i in range(k - 1):               # 物理相邻两核的 1-pitch 间距
             xa, xb = x0 + i * px, x0 + (i + 1) * px
-            p.append(f'<line x1="{xa + 16}" y1="{yc + 68}" x2="{xb - 16}" '
-                     f'y2="{yc + 68}" class="rlk"/>')
-            p.append(f'<text x="{(xa + xb) / 2}" y="{yc + 64}" '
+            p.append(f'<line x1="{xa + 17}" y1="{yc + 74}" x2="{xb - 17}" '
+                     f'y2="{yc + 74}" class="rlk"/>')
+            p.append(f'<text x="{(xa + xb) / 2}" y="{yc + 70}" '
                      f'class="bxl dim" text-anchor="middle">{pitch}</text>')
-        p.append(f'<text x="{x0 - 20}" y="{yc + 72}" class="bxl dim" '
-                 f'text-anchor="end">物理相邻</text>')
-        p.append(f'<text x="{x0 - 20}" y="{yc + 4}" class="bxl {cls}" '
+        p.append(f'<text x="{x0 - 24}" y="{yc + 78}" class="bxl dim" '
+                 f'text-anchor="end">物理相邻 1 pitch</text>')
+        p.append(f'<text x="{x0 - 24}" y="{yc + 4}" class="bxl" '
                  f'text-anchor="end">{name}</text>')
 
-    p.append('<text x="16" y="24" class="bxt">A. 行环（8 核）折叠布线：'
-             '环上一跳跨 2 个 core pitch，只有两段折返端跨 1 个</text>')
-    ring_panel(MX, ph, 150, 84, 86, "行环", "ok2")
-    p.append(f'<text x="16" y="196" class="bxl">圈内标注 = 该段线延迟（拍）；'
-             f'一圈 {a["row_ring_wire"]} 拍 = 6&times;{2 * ph} + 2&times;{ph}。'
-             f'圆圈里的号是<b>环上序号</b>，不是物理位置 &mdash; 物理上是 '
-             f'0,7,1,6,2,5,3,4 交错摆的，这就是「折叠」。</text>')
+    p.append(f'<text x="16" y="24" class="bxt">A. 行环（{MX} 核）：环上一跳跨 '
+             f'2 个 core pitch = {2 * ph} 拍，只有两段折返端跨 1 个 = '
+             f'{ph} 拍（一圈 {a["row_ring_wire"]} 拍）</text>')
+    ring_panel(MX, ph, 210, 92, 82, "行环", False)
 
-    p.append('<text x="16" y="248" class="bxt">B. 列环（6 核）：同样的折叠，'
-             '纵向一个 pitch 更贵</text>')
-    ring_panel(MY, pv, 150, 306, 86, "列环", "colt")
-    p.append(f'<text x="16" y="418" class="bxl">一圈 '
-             f'{a["col_ring_wire"]} 拍 = 4&times;{2 * pv} + 2&times;{pv} '
-             f'&mdash; 与行环<b>恰好同长</b>（{a["row_ring_wire"]} 拍），'
-             f'列少 2 个核但每 pitch 贵 {pv - ph} 拍，正好抵平。</text>')
+    p.append(f'<text x="16" y="222" class="bxt">B. 列环（{MY} 核）：同样的折叠，'
+             f'纵向 pitch 贵 {pv - ph} 拍 &rarr; 一段 {2 * pv} / {pv} 拍'
+             f'（一圈 {a["col_ring_wire"]} 拍，与行环同长）</text>')
+    ring_panel(MY, pv, 210, 290, 82, "列环", True)
 
-    # C. 换维两条路
-    y0 = 470
-    p.append(f'<text x="16" y="{y0}" class="bxt">C. 从行环换到列环：'
-             f'两条路，桥不是唯一的一条</text>')
+    y0 = 400
+    p.append('<text x="16" y="{}" class="bxt">C. 从行环换到列环：两条路，'
+             '桥不是唯一的一条</text>'.format(y0))
     for i, (nm, cost, cls, note) in enumerate([
-            ("行环 &rarr; 桥 &rarr; 列环（t_turn）", tt, "bx fill",
-             "环上不落地，但桥的 transfer FIFO 要占住"),
-            ("行环 &rarr; 落 L1 &rarr; 列环（ramp）", RAMP, "bx src",
+            ("行环 &rarr; 桥 &rarr; 列环", tt, "bx fill",
+             "环上不落地，但桥的 FIFO 条目被占住 t_turn 拍"),
+            ("行环 &rarr; 落 L1 &rarr; 列环", RAMP, "bx src",
              "占一次 ramp 带宽，拍图按相位边界收")]):
-        yy = y0 + 26 + i * 58
-        p.append(f'<rect x="150" y="{yy}" width="250" height="40" rx="6" '
+        yy = y0 + 20 + i * 54
+        p.append(f'<rect x="150" y="{yy}" width="212" height="38" rx="6" '
                  f'class="{cls}"/>')
-        p.append(f'<text x="275" y="{yy + 25}" class="bxl" '
+        p.append(f'<text x="256" y="{yy + 24}" class="bxl" '
                  f'text-anchor="middle">{nm}</text>')
-        p.append(f'<text x="418" y="{yy + 26}" class="bxt '
+        p.append(f'<text x="378" y="{yy + 25}" class="bxt '
                  f'{"warn" if cost > RAMP else "ok2"}">{cost} 拍</text>')
-        p.append(f'<text x="484" y="{yy + 26}" class="bxl dim">{note}</text>')
-    p.append(f'<text x="16" y="{y0 + 158}" class="bxl warn">'
-             f'{tt} 拍的桥比 {RAMP} 拍的中继贵 {tt // RAMP}&times; &mdash; '
-             f'所以「按维分解、每维一相位、维间落 L1」的拍图根本不过桥，'
-             f'时延地板也必须按 min(t_turn, ramp) = {min(tt, RAMP)} 拍算，'
-             f'否则拍图会合法地低于「下界」。</text>')
-    return svg(880, y0 + 190, "".join(p))
+        p.append(f'<text x="444" y="{yy + 25}" class="bxl dim">{note}</text>')
+    p.append(f'<text x="150" y="{y0 + 140}" class="bxl warn">'
+             f'桥比中继贵 {tt // RAMP}&times;，所以按维分解的拍图根本不过桥，'
+             f'时延地板也只能按 {min(tt, RAMP)} 拍收</text>')
+    return svg(880, y0 + 160, "".join(p))
 
 
 def sec_wire(d: dict) -> str:
@@ -701,12 +702,15 @@ def sec_wire(d: dict) -> str:
 {tt} 拍</b>；其余全是推出来的。</p>
 <div class="fig">{svg_fold(a)}
 <div class="cap"><b>图：折叠布线让「环上相邻」≠「物理相邻」。</b>
-环上编号 0&rarr;1 的两个核，物理上中间还隔着一个核，所以一跳收
-2&times;{ph}={2 * ph}（行）/ 2&times;{pv}={2 * pv}（列）拍；每个环只有<b>两段折返端</b>
-是物理相邻的 {ph}/{pv} 拍。段延迟因此<b>不均匀</b>，但一圈总长仍是
-2(k&minus;1) 个 pitch，且任何最短路的总延迟与走哪个方向、经过哪几段无关
-（已写成断言，见 §18）。C 图是这套口径最重要的一个后果：换维有两条路，
-桥不是唯一的一条。</div></div>
+圆圈里的号是<b>环上序号</b>而不是物理位置 &mdash; 物理上是 0,7,1,6,2,5,3,4
+交错摆的，这就是「折叠」：0&rarr;1 在环上相邻，物理上中间还隔着一个核，
+所以一跳收 2&times;{ph}={2 * ph}（行）/ 2&times;{pv}={2 * pv}（列）拍，
+每个环只有<b>两段折返端</b>是物理相邻的 {ph}/{pv} 拍。线上的数字就是该段的拍数。
+段延迟因此<b>不均匀</b>，但一圈总长仍是 2(k&minus;1) 个 pitch，
+且任何最短路的总延迟与走哪个方向、经过哪几段无关（2256 对全测，见 §18）。
+行环一圈 {a["row_ring_wire"]} 拍与列环一圈 {a["col_ring_wire"]} 拍<b>恰好相等</b>：
+列少 {MX - MY} 个核，但每个 pitch 贵 {pv - ph} 拍，正好抵平。
+C 是这套口径最重要的一个后果：<b>换维有两条路，桥不是唯一的一条</b>。</div></div>
 {tbl(setup, "口径项")}
 <h3>由它推出来的量</h3>
 {tbl(derived, "推出量")}
@@ -742,12 +746,14 @@ def svg_bridge_heat(panels: list[dict], *, w: int = 880) -> str:
     而不是 48 个数字的排序。
     """
     cw, chh, gap = 46.0, 30.0, 40.0
+    # 色标跨全部子图共用：两块图要能互相比，否则「全交换很均匀」会被各自归一化
+    # 拉成同样的满红，反而看不出它比 fan-in 轻
+    hi = max([r["mean"] for pan in panels for r in pan["rows"]] or [1.0]) or 1.0
     p: list[str] = []
     for i, pan in enumerate(panels):
         x0 = 42 + i * (MX * cw + gap + 66)
         y0 = 62
         by = {r["node"]: r for r in pan["rows"]}
-        hi = max([r["mean"] for r in pan["rows"]] or [1.0]) or 1.0
         p.append(f'<text x="{x0 - 24}" y="30" class="bxt">{pan["title"]}</text>')
         p.append(f'<text x="{x0 - 24}" y="48" class="bxl dim">'
                  f'{pan["sub"]}</text>')
@@ -772,10 +778,10 @@ def svg_bridge_heat(panels: list[dict], *, w: int = 880) -> str:
                          f'class="tag">{n}</text>')
                 p.append(f'<text x="{cx + (cw - 3) / 2}" y="{cy + 24}" '
                          f'class="tag">{r["mean"]:.1f}</text>')
-        p.append(f'<text x="{x0 - 24}" y="{y0 + MY * chh + 18}" '
-                 f'class="bxl dim">空格 = 该桥全程没被用到；格内'
-                 f'上排是节点号、下排是平均占用深度</text>')
-    return svg(w, 62 + MY * chh + 34, "".join(p))
+    p.append(f'<text x="18" y="{62 + MY * chh + 20}" class="bxl dim">'
+             f'格内上排 = 节点号，下排 = 该桥平均占用深度（条目）；空格 = 全程'
+             f'没被用到；两块图共用同一色标，最深 {hi:.1f} 条</text>')
+    return svg(w, 62 + MY * chh + 36, "".join(p))
 
 
 def svg_attach(att: dict) -> str:
@@ -1042,7 +1048,7 @@ flit/cy，全交换下界 {A['bounds']['alltoall/T0']['lb']}&rarr;
 寄存器，而寄存器会改掉无缓冲环的时序模型。</li>
 <li><b>「半环省金属」这个直觉是错的。</b>闭环上 k 个核就有 k 段，拆环<b>不改变段数</b>
 （{st['n_undirected_segments']} 条无向段、{st['links_vs_mesh']}&times; mesh 的段数，
-九个方案全一样），省的只是<b>线长</b>：半跨度 2.0&times;&rarr;
+九个方案全一样），省的只是<b>线长</b>：半跨度 {A['structure']['wire_vs_mesh']}&times;&rarr;
 {C['structure']['wire_vs_mesh']}&times; mesh。而错位半环反而更费
 （{F['structure']['wire_vs_mesh']}&times;）。至于单车道那种「半环」，金属恒定换
 2&times; 线宽后 12 个下界与全环<b>一个不差地打平</b>，只剩平均时延
@@ -1411,6 +1417,7 @@ svg text { font-family: "Noto Sans SC", "Microsoft YaHei", "Segoe UI",
 .anchl { fill: #d9a03c; font-size: 11px; }
 .rlk { stroke: #3a5580; stroke-width: 2.4; }
 .fld { fill: none; stroke: #6ee7a8; stroke-width: 2.6; }
+.fld.v { stroke: #c9a6ff; }
 .wrp.hl { stroke: #6ee7a8; stroke-width: 2; stroke-dasharray: 6 4; }
 .wrp.hl2 { stroke: #c9a6ff; stroke-width: 2; stroke-dasharray: 6 4; }
 .colt { fill: #c9a6ff; }
@@ -1477,7 +1484,7 @@ def sec_bridge(d: dict) -> str:
         f'<p>环上没有缓冲，<b>桥上有</b>。要换环的 flit 必须在该节点的 '
         f'transfer FIFO 里待着，等桥把它送过去 —— 光是过桥就占住一个条目 '
         f'{tt} 拍。48 个核每个都是桥，所以这是 48 个 FIFO，'
-        f'是<b>基线唯一赖不掉的存储</b>。默认深度 '
+        f'是<b>环上唯一的在途存储</b>（终点侧的重组缓冲另算，见 §9）。默认深度 '
         f'<code>fifo_depth={dep}</code>（+{b["params"]["resv_tx"]} 个 E-tag '
         f'保留位）。</p>',
         '<div class="note"><b>满了会怎样？不会阻塞。</b>无缓冲环上「已在环上的'
@@ -1506,12 +1513,15 @@ def sec_bridge(d: dict) -> str:
                 f'<td class="n">{r["wait_max"]} 拍</td>'
                 f'<td class="n">{r["n_bridges_touched"]}</td></tr>')
     out.append("</table>")
+    cap = dep + b["params"]["resv_tx"]
+    n_cap = sum(1 for r in b["per_pattern"] if r["peak_max"] >= cap)
     out.append(
         f'<p class="muted">读法：<b>最深条目</b>是这座桥必须做多深，'
         f'<b>平均深度</b>是它平时真正用到多少。两者差得越远，'
-        f'说明这份深度是为瞬时突发买的。m=13 的几行最深条目都顶到了 '
-        f'{dep}+{b["params"]["resv_tx"]} —— <b>顶格意味着深度是被参数卡住的，'
-               f'不是需求只有这么多</b>，真正的需求在下一张图里。</p>')
+        f'说明这份深度是为瞬时突发买的。{n_cap} 行（全是 m=13）的最深条目顶到了 '
+        f'{dep}+{b["params"]["resv_tx"]}={cap} 的天花板 —— <b>顶格意味着深度是'
+        f'被参数卡住的，不是需求只有这么多</b>，真正的需求在下一张图里；'
+        f'm=1 的几行则连顶都没顶到，桥在单 flit 下不是瓶颈。</p>')
     heat = svg_bridge_heat([
         {"title": "全交换 m=13：各桥平均占用",
          "sub": f'{a2a13["n_bridges_touched"]} 个桥全部被用到，负载几乎均匀',
@@ -1522,31 +1532,44 @@ def sec_bridge(d: dict) -> str:
     out.append(
         f'<div class="fig">{heat}'
         f'<div class="cap"><b>图：同一块布局，两种流量形状把桥压出完全不同的'
-        f'图案。</b>全交换让 48 个桥都忙、最忙 / 平均 = '
+        f'图案。</b>全交换让 {a2a13["n_bridges_touched"]} 个桥都忙、'
+        f'最忙 / 平均 = '
         f'{a2a13["mean_max"] / max(1e-9, a2a13["mean_avg"]):.2f}；'
-        f'收集只用 {g13["n_bridges_touched"]} 个桥（root 那一列 + root 那一行'
-        f'的交汇点），最忙 / 平均 = '
+        f'收集只用 {g13["n_bridges_touched"]} 个桥 &mdash; 全在 root'
+        f'（{ROOT_NODE}）所在的那一列上：每行的数据先沿行环聚到该列，'
+        f'再拐进列环下到 root，拐点就是这 {g13["n_bridges_touched"]} 个桥。'
+        f'最忙 / 平均 = '
         f'{g13["mean_max"] / max(1e-9, g13["mean_avg"]):.2f}，'
         f'热点在 x{g13["hot_node"]["x"]},y{g13["hot_node"]["y"]}。'
         f'<b>fan-in 的桥是有热点的，全交换没有</b> —— '
         f'如果只按平均值给所有桥同一个深度，热点那几个会先满。</div></div>')
     out.append('<h3>二、深度值多少钱：把 fifo_depth 扫一遍</h3>')
+    # 纵轴用「相对该曲线自己的最好值」而不是绝对拍数：三条曲线的量级差 10 倍，
+    # 画在一起绝对值会把 m=1 那条压成一条直线，而要看的恰好是拐点位置
     series = []
     for i, ds in enumerate(b["depth_sweep"]):
+        best = max(1, ds["best_makespan"])
         series.append({
             "name": f'{CN1[ds["pattern"]]} m={ds["m"]}',
             "cls": ["cA", "cB", "cD"][i % 3],
-            "pts": [(r["fifo_depth"], r["makespan"]) for r in ds["rows"]]})
+            "pts": [(r["fifo_depth"], r["makespan"] / best)
+                    for r in ds["rows"]]})
+    d1 = next(x for x in b["depth_sweep"]
+              if x["pattern"] == "alltoall" and x["m"] == 1)
     d13 = next(x for x in b["depth_sweep"]
                if x["pattern"] == "alltoall" and x["m"] == 13)
     out.append(
-        f'<div class="fig">{line_chart(series, w=820, h=320, xlabel="fifo_depth（条目）", ylabel="makespan（拍）", logx=True, xticks=b["depths"])}'
+        f'<div class="fig">'
+        f'{line_chart(series, w=820, h=320, xlabel="fifo_depth（条目）", ylabel="makespan / 该曲线最好值", logx=True, xticks=b["depths"], hline=1.0, hlabel="各自的最好值")}'
         f'<div class="cap"><b>图：桥有多深，基线就有多快。</b>'
         f'全交换 m=13 从深度 1 的 {f(d13["rows"][0]["makespan"])} 拍降到 '
-        f'{f(d13["best_makespan"])} 拍，'
-        f'<b>{times(d13["cost_of_depth1"])}</b>；拐点在 '
-        f'{d13["knee_depth"]} 个条目。深度 1（「桥就是一级寄存器」）在 '
-        f'{tt} 拍的桥下<b>不是一个设计点</b>。</div></div>')
+        f'{f(d13["best_makespan"])} 拍（{times(d13["cost_of_depth1"])}），'
+        f'm=1 是 {f(d1["rows"][0]["makespan"])}&rarr;{f(d1["best_makespan"])} 拍'
+        f'（{times(d1["cost_of_depth1"])}）。m=1 在 {d1["knee_depth"]} 个条目处'
+        f'完全走平（偏转归零），m=13 到 {d13["knee_depth"]} 个条目仍在降 —— '
+        f'纵轴是各自与自己最好值的比，否则量级差 10 倍的三条线没法放在一起看。'
+        f'唯一确定的结论：深度 1（「桥就是一级寄存器」）在 {tt} 拍的桥下'
+        f'<b>不是一个设计点</b>。</div></div>')
     out.append('<table><tr><th class="n">fifo_depth</th>'
                '<th class="n">makespan</th><th class="n">实际最深</th>'
                '<th class="n">最忙桥满的占比</th><th class="n">因满被打偏</th>'
@@ -1560,16 +1583,32 @@ def sec_bridge(d: dict) -> str:
                    f'<td class="n">{r["wait_max"]}</td></tr>')
     out.append(f'</table><p class="muted">全交换 m=13。「实际最深」一路跟着 '
                f'<code>fifo_depth</code> 顶格，说明这条流量的<b>需求超过 '
-               f'{b["depths"][-1]} 个条目</b>；makespan 却在 '
-               f'{d13["knee_depth"]} 之后基本走平 —— 需求与收益不是一回事。</p>')
+               f'{b["depths"][-1]} 个条目</b>；但 makespan 的收益递减得很快：从深 '
+               f'{b["depths"][3]} 条再加到深 {b["depths"][-1]} 条（存储 4&times;）'
+               f'只换来 '
+               f'{pct(1 - d13["rows"][-1]["makespan"] / d13["rows"][3]["makespan"], 0)}'
+               f'，而峰值占用是线性涨的 —— <b>需求与收益不是一回事</b>，'
+               f'桥 buffer 该按哪个建取决于是想省面积还是想压 makespan。'
+               f'注意「额外排队」这一列同时在恶化：深 32 条时最坏 '
+               f'{d13["rows"][-1]["wait_max"]} 拍，深度把偏转换成了排队。</p>')
     out.append('<h3>三、是谁把 FIFO 填满的：把 t_turn 扫一遍</h3>')
     t13 = next(x for x in b["turn_sweep"]
                if x["pattern"] == "alltoall" and x["m"] == 13)
     t1 = next(x for x in b["turn_sweep"]
               if x["pattern"] == "alltoall" and x["m"] == 1)
+    tser = []
+    for nm, cls, sw in (("全交换 m=13", "cA", t13), ("全交换 m=1", "cB", t1)):
+        b0 = sw["rows"][0]["makespan"]
+        tser.append({"name": nm, "cls": cls,
+                     "pts": [(r["t_turn"], r["makespan"] / b0)
+                             for r in sw["rows"]]})
+    tser.append({"name": "m=13 偏转次数", "cls": "cC",
+                 "pts": [(r["t_turn"],
+                          r["deflect_total"] / t13["rows"][0]["deflect_total"])
+                         for r in t13["rows"]]})
     out.append(
         f'<div class="fig">'
-        f'{line_chart([{"name": "makespan m=13", "cls": "cA", "pts": [(r["t_turn"], r["makespan"]) for r in t13["rows"]]}, {"name": "makespan m=1", "cls": "cB", "pts": [(r["t_turn"], r["makespan"]) for r in t1["rows"]]}], w=820, h=300, xlabel="t_turn（过桥拍数）", ylabel="makespan（拍）", xticks=[r["t_turn"] for r in t13["rows"]])}'
+        f'{line_chart(tser, w=820, h=300, xlabel="t_turn（过桥拍数）", ylabel="相对 t_turn=1 时的倍数", logx=True, xticks=[r["t_turn"] for r in t13["rows"]], hline=1.0, hlabel="t_turn=1（旧口径）")}'
         f'<div class="cap"><b>图：占用是「到达率 &times; 停留时间」，'
         f'停留时间就是 t_turn。</b>把桥从 1 拍加到 {tt} 拍，'
         f'全交换 m=13 的平均桥深度 &times;{t13["mean_10_over_1"]}、'
@@ -1578,7 +1617,7 @@ def sec_bridge(d: dict) -> str:
         f'&times;{t1["makespan_10_over_1"]}。'
         f'<b>桥 buffer 的需求是这次时延口径更新<u>造出来</u>的</b>，'
         f'不是流量本来就这么重。</div></div>')
-    out.append('<h3>四、拍图这边的桥：要么零占用，要么要求它是流水的</h3>')
+    out.append('<h3>四、拍图这边的桥：要么一个不用，要么用得更狠</h3>')
     cf13 = cal.get(("alltoall", "flat", 13))
     ctl = b.get("no_turn_control") or []
     out.append(
@@ -1587,23 +1626,23 @@ def sec_bridge(d: dict) -> str:
         f'时刻在编译期就定死了，没有「等一等」这个状态。'
         f'这带来两种截然不同的桥需求：</p>')
     out.append('<table><tr><th>拍图</th><th class="n">m</th>'
-               '<th>转维方式</th><th class="n">同时在桥上的最大条目数</th>'
+               '<th>转维方式</th><th class="n">过桥次数</th>'
+               '<th class="n">同时在桥上（峰值）</th><th class="n">平均</th>'
                '<th>对硬件的要求</th></tr>')
     for r in b["calendar"]:
-        if r["m"] != 13:
-            continue
-        need = r["max_concurrent"]
-        req = ('<span class="win">桥 buffer 可以是 0</span>'
-               if need == 0 else
-               f'桥须能同时容纳 {need} 个条目（但<b>不需要仲裁</b>，'
-               f'进出时刻已知）')
+        need = r["peak_max"]
+        req = ('<span class="win">桥可以不存在</span>' if need == 0 else
+               f'须能同时停 {need} 个条目，但<b>不需要仲裁</b>')
         out.append(f'<tr><td>{CN1[r["pattern"]]} / {r["algo"]}</td>'
                    f'<td class="n">{r["m"]}</td>'
                    f'<td>{"落 L1 中继（不过桥）" if need == 0 else "过桥"}</td>'
-                   f'<td class="n"><b>{need}</b></td><td>{req}</td></tr>')
+                   f'<td class="n">{f(r["n_crossings"])}</td>'
+                   f'<td class="n"><b>{need}</b></td>'
+                   f'<td class="n">{r["mean_max"]:.2f}</td>'
+                   f'<td>{req}</td></tr>')
     out.append("</table>")
     if ctl:
-        z = [r for r in ctl if r["bridge_crossings"] == 0]
+        z = [r for r in ctl if r["entries_total"] == 0]
         out.append(
             f'<div class="note good"><b>按维分解的拍图（<code>dim_2phase</code>）'
             f'一次桥都不过：{len(z)}/{len(ctl)} 个被测方案的过桥次数是 0。</b>'
@@ -1613,21 +1652,31 @@ def sec_bridge(d: dict) -> str:
             f'代价是那 {RAMP} 拍的 L1 往返，和「中继核必须有 L1 带宽接住它」。'
             f'这也解释了为什么 §2 的时延地板必须按 min(t_turn, RAMP) 收。'
             f'</div>')
-    if cf13:
+    cf1 = cal.get(("alltoall", "flat", 1))
+    if cf13 and cf1:
         out.append(
             f'<p>反过来，<code>flat</code> 这类直接绕环的拍图确实过桥，'
-            f'但它要的是<b>深度而不是排队</b>：全交换 m=13 需要桥同时容纳 '
-            f'{cf13["max_concurrent"]} 个条目，'
-            f'而基线在同一流量下峰值顶到 {a2a13["peak_max"]}、'
-            f'还额外付了 {f(a2a13["deflect_total"])} 次因满打偏。'
-            f'同样是「桥上有几个 flit」，一个是编译期算出来的确定数，'
-            f'一个是运行期赌出来的分布 —— 这是静态拍图在<b>面积</b>上'
-            f'（而不只是 makespan 上）的收益。</p>')
+            f'但它要的是<b>深度而不是排队</b>：同样的 {f(cf13["n_crossings"])} 次'
+            f'转环，m=13 摊在 {f(cf13["makespan"])} 拍里只需要桥同时容纳 '
+            f'{cf13["peak_max"]} 个条目，而 m=1 把它们压进 '
+            f'{f(cf1["makespan"])} 拍，就要 {cf1["peak_max"]} 个 —— '
+            f'拍图越快，对桥越贪。</p>'
+            f'<div class="note"><b>所以拍图不是「更省桥」，是「桥的用法不同」。'
+            f'</b>同样问「桥上同时有几个 flit」：拍图的答案是编译期算死的一个'
+            f'常数（m=1 要 {cf1["peak_max"]} 个条目，比基线现在的 {cap} 个'
+            f'还深），换来的是<b>不需要仲裁、不会打偏、不会乱序</b>；'
+            f'基线的答案是运行期赌出来的分布，'
+            f'{cap} 个条目跑同一份 m=13 流量还要白吃 '
+            f'{f(a2a13["deflect_total"])} 次因满绕圈。'
+            f'两条路的取舍很清楚：<b>桥面积给得起就上 <code>flat</code> '
+            f'换 makespan，给不起就上 <code>dim_2phase</code> 走 L1 中继、'
+            f'把桥 buffer 归零</b> —— 后者正是 §2 那个「过桥 {tt} 拍比 ramp '
+            f'{RAMP} 拍贵」直接推出来的结论。</div>')
     out.append(
         f'<div class="note"><b>这一节给设计的三条数：</b>'
         f'<ol><li>基线要跑得动 m=13 的重流量，桥 FIFO <b>至少 '
-        f'{d13["knee_depth"]} 个条目</b>（48 座桥都要），'
-        f'再深收益递减但仍单调。</li>'
+        f'{d1["knee_depth"]} 个条目</b>（{N} 座桥都要，这是 m=1 走平的深度），'
+        f'再深到 {d13["knee_depth"]} 条对 m=13 仍单调有收益但递减。</li>'
         f'<li>fan-in（收集 / 归约）的桥负载<b>不均匀</b>，'
         f'热点桥的平均占用是全局平均的 '
         f'{g13["mean_max"] / max(1e-9, g13["mean_avg"]):.1f}&times;；'
@@ -1687,13 +1736,23 @@ def sec_cards(d: dict) -> str:
                    f'{times(fan["base_hop_tax"])}</div><div class="s">'
                    f'最小跳数的倍数（{CN1[fan["pattern"]]}/{fan["algo"]} '
                    f'm={fan["m"]}）；拍图恒 1.0&times;</div></div>')
-    dfl = [(p, best_base(c, p, 13)) for p in PATTERNS if best_base(c, p, 13)]
-    wp, wr = max(dfl, key=lambda e: e[1]["ring_base"]["deflect_per_flit"])
-    out.append(f'<div class="card bad"><div class="k">基线偏转率峰值'
-               f'（m=13）</div><div class="v">'
-               f'{wr["ring_base"]["deflect_per_flit"]:.3f}</div>'
-               f'<div class="s">次 / flit，出现在{CN1[wp]}/{wr["algo"]}；'
-               f'白吃弧周期且制造乱序</div></div>')
+    brg = d.get("brg")
+    if brg:
+        # 桥是这套时延口径下基线唯一赖不掉的存储，放进摘要而不是只藏在 §10
+        hot = max(brg["per_pattern"], key=lambda r: r["full_frac_max"])
+        out.append(f'<div class="card bad"><div class="k">桥 FIFO 被占满的'
+                   f'时间（{CN1[hot["pattern"]]} m={hot["m"]}）</div>'
+                   f'<div class="v">{pct(hot["full_frac_max"])}</div>'
+                   f'<div class="s">满了就把转环 flit 打偏绕一圈，这一次共 '
+                   f'{f(hot["deflect_total"])} 次（见 §10）</div></div>')
+        ctl = [r for r in brg["no_turn_control"] if r["entries_total"] == 0]
+        if ctl:
+            out.append(f'<div class="card ok"><div class="k">按维分解拍图需要的'
+                       f'桥 buffer</div><div class="v">0</div>'
+                       f'<div class="s">{len(ctl)}/'
+                       f'{len(brg["no_turn_control"])} 个被测方案一次桥都不过，'
+                       f'维间走 L1 中继（{RAMP} 拍 vs 过桥 '
+                       f'{brg["wire"]["t_turn"]} 拍）</div></div>')
     if ver:
         out.append(f'<div class="card {"ok" if ver["all_pass"] else "bad"}">'
                    f'<div class="k">可执行验证</div><div class="v">'
@@ -1869,6 +1928,110 @@ def sec_two_models(c: dict) -> str:
     return "".join(out)
 
 
+def _mesh_ratios(rv: list[dict], port: str) -> dict[int, float]:
+    return {e["R"]: (e.get("by_ring_ports") or {}).get(port, {})
+            .get("ring_over_mesh")
+            for e in rv
+            if (e.get("by_ring_ports") or {}).get(port, {}).get("ring_over_mesh")}
+
+
+def _mesh_cross(rv: list[dict]) -> str:
+    """这条曲线在哪一段翻盘 —— 直接从比值序列读，不写死。"""
+    out = []
+    for port, name in (("1", "1 端口"), ("2", "2 端口")):
+        r = _mesh_ratios(rv, port)
+        if not r:
+            continue
+        Rs = sorted(r)
+        if all(r[R] < 1 for R in Rs):
+            out.append(f'{name}的环在 R={Rs[0]}&ndash;{Rs[-1]} 全程快于 mesh')
+        elif all(r[R] > 1 for R in Rs):
+            out.append(f'{name}的环在 R={Rs[0]}&ndash;{Rs[-1]} 全程慢于 mesh')
+        else:
+            k = next(R for R in Rs if r[R] >= 1)
+            out.append(f'{name}的环在 R&lt;{k} 快于 mesh、R={k} 起被反超')
+    return "；".join(out) + "。" if out else ""
+
+
+def _mesh_note(rv: list[dict]) -> str:
+    """环 vs mesh：结论按端口数分裂，且两边线延迟口径不同，必须一起说。"""
+    r1, r2 = _mesh_ratios(rv, "1"), _mesh_ratios(rv, "2")
+    if not (r1 and r2):
+        return ""
+    Rs = sorted(r1)
+    seq = lambda r: "、".join(f'R={R} {times(r[R], 3)}' for R in Rs)
+    labs = [(e["R"], (e.get("mesh_best") or {}).get("label")) for e in rv]
+    flip = [f'R={R} 换成 {lb}' for (R, lb), (_, prev) in
+            zip(labs[1:], labs) if lb and lb != prev]
+    s = (f'<div class="note bad"><b>「环比 mesh 快」这句话，端口数一变就不成立。'
+         f'</b>1 端口的环：{seq(r1)} &mdash; <b>全程输</b>，'
+         f'而且 R 越大输得越多，因为深流水下绑定资源从跨度换成了环站'
+         f'那唯一一个上/下环点。2 端口的环：{seq(r2)} &mdash; '
+         f'R 小的时候赢，到 R={Rs[-1]} 变成打平。')
+    if flip:
+        s += f'mesh 自己的最优方案也会换人（{"、".join(flip)}）。'
+    s += ('<b>只报一个 R、或不报端口数，都会随机挑出一个赢家。</b>')
+    s += ('<br><b>更要紧的口径警告：</b>这张表里 mesh 一侧仍是旧线延迟'
+          '（H=7/V=9、过桥 1 拍），环一侧已换成 §2 的新口径'
+          '（10/14 拍、过桥 10 拍）。所以这里的比值<b>不能</b>读成'
+          '「环打不打得过 mesh」，只能读成「在各自口径下两者的流水行为形状」。'
+          '要做真对比，必须先把 mesh 也搬到同一套 pitch 上重跑，本轮未做'
+          '（见 §20）。</div>')
+    return s
+
+
+def _mcast_gain(c: dict) -> str:
+    """弧多播在同一棵广播树上买到了什么，m=13 与 m=1 各报一次。"""
+    def bc(tier: str, m: int) -> dict | None:
+        return row1(c, pattern="broadcast", algo="dim_2phase", tier=tier, m=m,
+                    bidir=True)
+    a, b = bc("T0", 13), bc("T1", 13)
+    a1, b1 = bc("T0", 1), bc("T1", 1)
+    if not (a and b):
+        return ""
+    s = (f'同一棵 <code>dim_2phase</code> 树上加多播，上环 flit 从 '
+         f'{f(a["shape"]["n_flits_boarded"])} 降到 '
+         f'{f(b["shape"]["n_flits_boarded"])}、传输数从 '
+         f'{f(a["shape"]["n_xfers"])} 降到 '
+         f'{f(b["shape"]["n_xfers"])}、makespan 从 '
+         f'{f(a["calendar"]["makespan"])} 降到 '
+         f'{f(b["calendar"]["makespan"])} 拍；')
+    if a1 and b1:
+        s += (f'但这是<b>带宽</b>收益不是<b>时延</b>收益 —— m=1 时同一对 '
+              f'T1/T0 都是 {f(a1["calendar"]["makespan"])} 拍。')
+    return s
+
+
+def _m1_notes(c: dict) -> str:
+    """m=1 上两件只有在 10 拍的桥下才成立的事，全部从 JSON 读。
+
+    第二条是本次时延口径更新改掉的排名：桥一贵，「少过桥」就压过「路径短」。
+    """
+    b0 = row1(c, pattern="broadcast", algo="dim_2phase", tier="T0", m=1,
+              bidir=True)
+    b1 = row1(c, pattern="broadcast", algo="dim_2phase", tier="T1", m=1,
+              bidir=True)
+    bf = row1(c, pattern="broadcast", algo="flat", tier="T0", m=1, bidir=True)
+    out = []
+    if b0 and b1 and b0["calendar"]["makespan"] == b1["calendar"]["makespan"]:
+        out.append(f'<b>弧多播在 m=1 上买到的收益精确为 0</b> —— 广播 '
+                   f'<code>dim_2phase</code> 的 T1 与 T0 都是 '
+                   f'{f(b0["calendar"]["makespan"])} 拍，一拍不差。'
+                   f'<b>多播是带宽原语，不是时延原语。</b>')
+    if b0 and bf:
+        d0, df = b0["calendar"]["makespan"], bf["calendar"]["makespan"]
+        win = "dim_2phase" if d0 < df else "flat"
+        out.append(
+            f'<b>10 拍的桥把 m=1 的排名翻了过来</b>：广播上'
+            f'<code>{win}</code> 现在更快（{f(min(d0, df))} vs '
+            f'{f(max(d0, df))} 拍）。<code>dim_2phase</code> 多绕一次 L1、'
+            f'路径更长，但它<b>一次桥都不过</b>；<code>flat</code> 路径更短'
+            f'却要在关键路径上付 {c["audit"]["t_turn"]} 拍过桥。'
+            f'旧口径（过桥 1 拍）下是 <code>flat</code> 赢 —— '
+            f'<b>换维贵到什么程度，决定了该按维分解还是该直接绕环</b>。')
+    return "".join(f'<br>&bull; {x}' for x in out)
+
+
 def sec_compare(c: dict) -> str:
     out = []
     for m in (1, 13):
@@ -1881,7 +2044,7 @@ def sec_compare(c: dict) -> str:
             c0.append(k0["calendar"]["makespan"] if k0 else None)
             c1.append(k1["calendar"]["makespan"] if k1 else None)
             # 画两个模型都成立的公共下界：base 模型的界恒 <= 拍图模型的界
-            # （出口容量更宽、不收 +RAMP、过桥免费），所以它是唯一一条不会
+            # （出口容量更宽、不收 +RAMP；过桥两边现在同价），所以它是唯一一条不会
             # 出现「实测柱低于下界柱」的水平线。拍图自己更紧的界在 §13。
             lb.append(min(x["bounds_base"]["makespan_lb"]
                           for x in (k0, k1) if x))
@@ -2229,7 +2392,7 @@ def sec_throughput(t: dict | None) -> str:
         '<div class="note"><b>为什么主指标是「均摊一轮 T_R/R」而不是 II_eff。'
         '</b>II_eff 是让 T_avg=(T1+T_R)/2 成立的插值参数，不是渐近值：'
         '第一轮已经顺手做掉了一部分被摊掉的工作，所以有限 R 下它<b>可以低于'
-        '容量界</b>（实测最深一处到 0.91&times;）。均摊值 T_R/R 恒 &ge; 容量界，'
+        f'容量界</b>（{_ii_dip(t)}）。均摊值 T_R/R 恒 &ge; 容量界，'
         '这条已写成断言，所以画在图上不会出现「柱子低于地板」。</div>']
     for m in (1, 13):
         cats, base, c0, c1, lb = [], [], [], [], []
@@ -2458,9 +2621,8 @@ def sec_tavg(t: dict | None) -> str:
         f'<div class="fig">'
         f'{line_chart(series, xlabel="流水轮数 R", ylabel="T_avg（拍）", xticks=[1, 5, 13])}'
         f'<div class="cap"><b>图：全收集的 T_avg 随流水深度变化。</b>'
-        f'R=1 时 T_avg ≡ 单发 makespan；R 越大 II_eff 越支配。注意 1 端口的'
-        f'环（蓝）在 R=1 时低于 mesh（红），到 R=13 已经反超 —— '
-        f'交叉点就落在这段区间里。{rot_note}</div></div>')
+        f'R=1 时 T_avg ≡ 单发 makespan；R 越大 II_eff 越支配。'
+        f'{_mesh_cross(t["ring_vs_mesh"])}{rot_note}</div></div>')
     if mesh.get("available"):
         out.append('<table><tr><th class="n">R</th><th>mesh 最优</th>'
                    '<th class="n">mesh T_avg</th>'
@@ -2482,15 +2644,7 @@ def sec_tavg(t: dict | None) -> str:
                        f'<td class="n">{f(mb.get("T_avg"), 1)}</td>'
                        f'{cells}</tr>')
         out.append("</table>")
-        out.append('<div class="note bad"><b>「环比 mesh 快」必须带上端口数。'
-                   '</b>1 端口的环 R=1 赢 0.885&times;、R=5 已经基本打平'
-                   '（1.006&times;，名义上 mesh 略赢）、<b>R=13 输 1.19&times;'
-                   '</b>：深流水下绑定资源从跨度换成了环站那一个上/下环点。'
-                   '同时 mesh 自己的最优方案在 R=13 也换人：axis+CCW → '
-                   'Hamilton bi-tree（后者 II_eff 18.17 远优于前者 42.67，'
-                   '但 T1=210 的填充代价要到深流水才摊得掉）。'
-                   '<b>只报一个 R、或不报端口数，都会随机挑出一个赢家。</b>'
-                   '</div>')
+        out.append(_mesh_note(t["ring_vs_mesh"]))
     else:
         out.append(f'<div class="note bad">mesh 参照不可用：'
                    f'{mesh.get("reason", "未记录")}。</div>')
@@ -2865,9 +3019,9 @@ def sec_contrary(d: dict) -> str:
             f'不是物理。</b>{len(bad)}/{n_all} 行出现过 &lt;1 的比值，最狠 '
             f'{lbl(w["pattern"], w["algo"], w["tier"])} m={w["m"]} 的 '
             f'{times(w["ratios"]["base_over_cal_model_lb"])}。'
-            f'根因是把<b>拍图模型</b>的界（环站出口 1 flit/拍、每相位 +RAMP、'
-            f'过桥收 1 拍）拿去量<b>另一台机器</b>上的实测'
-            f'（出口按 RAMP_BW 排空、不收 +RAMP、过桥免费）。'
+            f'根因是把<b>拍图模型</b>的界（环站出口 1 flit/拍、每相位 +RAMP）'
+            f'拿去量<b>另一台机器</b>上的实测'
+            f'（出口按 RAMP_BW 排空、不收 +RAMP）。'
             f'在基线自己模型下重建界之后 40 行全部 &ge; 下界，'
             f'旋转 10 行精确 1.000&times;。'
             f'能溜过去是因为验证套件只断言过<b>拍图</b> &ge; 界，'
@@ -3016,9 +3170,10 @@ def sec_limits(d: dict) -> str:
 编译器都支持非均匀环，本轮未做。同时缝桥的 FIFO 深度、长线要插几级寄存器、
 折叠布线的实际走线拥塞都只按「线长 + 最长单线」这两个代理量记账，
 没有做版图。</li>
-<li><b>基线与拍图不共享一套机器模型</b>，差别在三处并已逐项量化（§5 末）：
-环站出口 1 flit/拍 vs 节点按 <code>RAMP_BW</code> 排空、每相位 +RAMP 的斜坡常数、
-过桥转环 1 拍。因此「离下界多远」这类陈述必须各用自己模型的界；
+<li><b>基线与拍图不共享一套机器模型</b>，差别在两处并已逐项量化（§5 末）：
+环站出口 1 flit/拍 vs 节点按 <code>RAMP_BW</code> 排空、每相位 +RAMP 的斜坡常数
+（过桥这第三处已在 §2 统一为两边同收 <code>t_turn</code>）。
+因此「离下界多远」这类陈述必须各用自己模型的界；
 本报告图上的下界柱取两模型的公共下界。要让头对头比较也严格同硬件，
 需要统一 <code>leave_ports</code> 与 <code>eject_bw</code> 后重跑全部拍图，
 那会改动几乎所有拍图数字，尚未做。</li>
@@ -3197,11 +3352,9 @@ fan-in。</b>m=13 拍图更快的是 {top}；基线更快的只有 {j(lose)}，{
 拍图把这两块删成 0（转环驻留恒为 0、乱序恒为 0），代价搬到了控制存储与
 「故障需重编译」上。</li>
 <li><b>弧多播是唯一改变数量级的硬件增量，但只对 fan-out 生效。</b>
-同一棵 <code>dim_2phase</code> 树上加多播，上环 flit 从 611 降到 182、
-传输数从 47 降到 14、makespan 从 176 降到 95 拍；而归约、收集、全交换
+{_mcast_gain(c)}而归约、收集、全交换
 <b>收益精确为 0</b>（fan-in 无可复制，全交换的 N(N−1) 条消息两两不同），
-验证套件对 17 个 (pattern, algo) 对断言 T1 与 T0 逐字段相同。
-且这是<b>带宽</b>收益不是<b>时延</b>收益：m=1 时同一对 T1/T0 都是 61 拍。</li>
+验证套件对 17 个 (pattern, algo) 对断言 T1 与 T0 逐字段相同。</li>
 <li><b>打到下界与抗故障/抗抖动是互斥的。</b>旋转拍图 II_eff 精确等于弧负载
 下界，代价是 27 个故障场景里 20 个无解、抖动吸收 0 拍。要鲁棒就得留松弛，
 留了松弛就打不到下界 —— 选方案时这是一次显式取舍，不是可以同时拿到的两件事。
@@ -3266,7 +3419,10 @@ def build(d: dict) -> str:
 <p class="muted">拓扑：{a['n_row_rings']} 个行环&times;{a['mx']} +
 {a['n_col_rings']} 个列环&times;{a['my']} = {a['n_directed_links']} 条有向弧，
 {a['n']} 个节点全是桥，环内零缓冲；金属量 {a['metal_ratio_vs_mesh']}&times;
-同尺寸 mesh。冲突判据为 D-R 五子句。
+同尺寸 mesh。链路时延口径（§2）：物理相邻两核横向 {a['pitch_h']} 拍、纵向
+{a['pitch_v']} 拍，折叠后环上一跳通常跨 2 个 pitch = {2 * a['pitch_h']}（行）/
+{2 * a['pitch_v']}（列）拍，每环两段折返端仍是 {a['pitch_h']}/{a['pitch_v']} 拍，
+换环过桥 {a['t_turn']} 拍。冲突判据为 D-R 五子句。
 {"全部 " + str(ver['n_checks']) + " 项可执行验证通过。" if ver and ver['all_pass'] else ""}
 所有数字读自 <code>results/*.json</code>，图中甘特图为现场排图的真值。</p>
 
@@ -3278,8 +3434,10 @@ def build(d: dict) -> str:
 共 {a['n_undirected_links']} 条无向段 / {a['n_directed_links']} 条有向弧。
 <b>绕回段是环的定义性边</b>：同尺寸 mesh 没有它，所以环的金属量是 mesh 的
 {a['metal_ratio_vs_mesh']}&times;，Hamilton 回路也只能靠它闭合。
-这套链路集<b>就是折叠 2D torus</b>（物理上按折叠布线，相邻环节点间距 2 个 pitch，
-每跳延迟因此均匀）；换来的好处是{_cut_note(d)}
+这套链路集<b>就是折叠 2D torus</b>：物理上按折叠布线，环上相邻的两个核在版图上
+隔着一个核，所以典型一跳收 2 个 core pitch
+（行 {2 * a['pitch_h']} 拍 / 列 {2 * a['pitch_v']} 拍，折返端 {a['pitch_h']}/{a['pitch_v']} 拍），
+换环过桥 {a['t_turn']} 拍 &mdash; 完整时延口径见 §2。折叠换来的好处是{_cut_note(d)}
 右图是一个环站内部 &mdash; 环上零队列、上/下环各一个端口、转环是原子操作，
 这四样资源就是 D-R 五子句要管的全部东西。</div></div>
 
@@ -3324,10 +3482,7 @@ def build(d: dict) -> str:
 恰好压在时延下界上（makespan == latency_lb），此时比的是「跨度 + barrier 数」，
 m=13 才切换到端口界与弧负载界。所以<b>不能只用一个 m 下结论</b> ——
 这与 §14 里「不能只用一个 R」是同一类错误。<br>
-顺带一个反直觉的读数：<b>m=1 时弧多播买到的收益精确为 0</b> —— 广播
-<code>dim_2phase</code> 的 T1 与 T0 都是 61 拍，一拍不差；此时最优方案反而是
-<code>flat</code>（59 拍），因为单 flit 下拼的是最短临界路径，不是省带宽。
-<b>多播是带宽原语，不是时延原语。</b><br>
+顺带两个反直觉的读数：{_m1_notes(c)}<br>
 和 §3 的结构地板对一下更能看出余量：{_floor_gap(d)}</div>
 
 <h2 id="winloss">七、谁赢谁输：分界线在哪里</h2>
