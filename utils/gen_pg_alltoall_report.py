@@ -23,8 +23,11 @@ CAP_JSON_PATH = ROOT / "results" / "pg_capability.json"
 M10_SCAN_PATH = ROOT / "results" / "pg_m10_cycle_scan.json"
 EF_REACH_PATH = ROOT / "results" / "pg_east_first_reach.json"
 BEYOND_REACH_PATH = ROOT / "results" / "pg_beyond_catalog_reach.json"
+RECOVERY_JSON = ROOT / "results" / "pg_recovery_e2e.json"
+RECOVERY_TDD_JSON = ROOT / "results" / "pg_recovery_tdd.json"
 E2E_PNG = "pg_e2e_pareto.png"
 BUDGET_E2E_PNG = "pg_budget_e2e_pareto.png"
+RECOVERY_PNG = "pg_recovery_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
 # Schemes that fail a hard property on their own and only "work" by sacrificing
@@ -1284,8 +1287,17 @@ def exec_summary_html(excluded_labels: str) -> str:
 保序为构造保证（唯一路径；分批方案在批内唯一路径 + 批间屏障）。</li>
 <li><b>§3 每场景最优：</b>预算故障场景上，低牺牲时常落到 M0s / M3 族 / 多 VC；
 通信占端到端约 70–86%，花 router 面积买带宽仍划算。</li>
+<li><b>另一条路——死锁恢复（§7）：</b>把转向限制拿掉、用 Static Bubble / SPIN /
+SWAP 在运行时解环，可做到 <b>零牺牲、1 VC、面积 +0.6%–15%</b>。
+关键在<b>配哪种路由</b>：<b>M3′ 天然无死锁，叠恢复机制净收益为零</b>
+（R2 = M3′ + 兜底规则，兜底一次没用上、检测器一次没响，时间与 M3′ 完全相同）；
+<b>负载最优但满是环的路由（R1）反而最慢</b>，<b>把 Super-turn 压到 1 VC（R3）更差</b>
+——它的无死锁性全在 VC 分层里，拿掉 VC 不是「小概率死锁」而是全丢。
+恢复开销由 CDG 环数决定，不由峰值负载决定。
+机制排序恒为 SB ≪ SPIN &lt; SWAP，SWAP 破坏保序。</li>
 </ol>
-<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、§6（端到端 Pareto）。</p>
+<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、
+§6（端到端 Pareto，死锁<b>避免</b>类）、§7（死锁<b>恢复</b>类，独立 Pareto）。</p>
 </div>
 """
 
@@ -2041,6 +2053,688 @@ def budget_e2e_section_html() -> str:
 """
 
 
+REC_LABEL = {
+    "none": "不装恢复机制（对照）",
+    "sb": "Static Bubble",
+    "spin": "SPIN",
+    "swap": "SWAP",
+}
+RT_LABEL = {
+    "xy_detour": "R0 基线 XY + 最小绕障",
+    "minmax": "R1 无转向模型 · min-max 负载均衡",
+    "updown_relax": "R2 M3′ best-root + 非法转向兜底",
+    "super_turn_1vc": "R3 Super-turn 转向集合压到 1 VC",
+}
+RT_SHORT = {"xy_detour": "R0 XY+绕障", "minmax": "R1 min-max",
+            "updown_relax": "R2 M3′+兜底",
+            "super_turn_1vc": "R3 Super-turn/1VC"}
+RT_NOTE = {
+    "xy_detour": "L 型完好就走 XY，被挡住才绕最小弯",
+    "minmax": "只要最短+均衡，完全不管转向 —— 纯性能最优的避障路由",
+    "updown_relax": "Up*/Down* 树路径为主；树到不了的对才走非法路径"
+                    "（实测从未发生，见下）",
+    "super_turn_1vc": "M0s 的两层 Glass–Ni 转向模型合并到 1 个物理 VC，"
+                      "剩下的环交给恢复机制",
+}
+REC_CITE = {
+    "sb": "Ramrakhyani &amp; Krishna, <i>Static Bubble: A Framework for "
+          "Deadlock-Free Irregular On-chip Topologies</i>, HPCA 2017, "
+          "pp. 253–264",
+    "spin": "Ramrakhyani, Gratz &amp; Krishna, <i>Synchronized Progress in "
+            "Interconnection Networks (SPIN): A New Theory for Deadlock "
+            "Freedom</i>, ISCA 2018, pp. 699–711",
+    "swap": "Parasar, Enright Jerger, Gratz, San Miguel &amp; Krishna, "
+            "<i>SWAP: Synchronized Weaving of Adjacent Packets for Network "
+            "Deadlock Resolution</i>, MICRO 2019, pp. 873–885",
+}
+
+
+def recovery_section_html() -> str:
+    """§7 deadlock recovery on baseline XY (separate Pareto from avoidance)."""
+    if not RECOVERY_JSON.exists():
+        return ("<h2>7. 死锁恢复类方案（Static Bubble / SPIN / SWAP）</h2>"
+                "<p class='note'>尚无 <code>results/pg_recovery_e2e.json</code>。"
+                "请跑 <code>utils/dse_pg_recovery_pareto.py --jobs 6</code> 与 "
+                "<code>utils/gen_pg_recovery_pareto_plot.py</code>。</p>")
+    doc = json.loads(RECOVERY_JSON.read_text())
+    meta, rows, summary = doc["meta"], doc["rows"], doc["summary"]
+    mech = meta["mech"]
+    n_scen = meta["n_scenarios"]
+    m0s = meta["m0_list"]
+    routings = meta["routings"]
+    best_rt = routings[-1]
+    avoid = {(s["scheme"], s["m0"]): s
+             for s in doc.get("avoidance_reference", [])}
+
+    def srow(kind: str, m0: int, routing: str = best_rt) -> dict:
+        return next(s for s in summary if s["kind"] == kind
+                    and s["m0"] == m0 and s["routing"] == routing)
+
+    # Recovery-event statistics only exist where recovery actually fires, so
+    # anything about rings / laps / detections defaults to R0.
+    def med(kind: str, m0: int, key: str, routing: str = "xy_detour"):
+        v = sorted(r[key] for r in rows
+                   if r["kind"] == kind and r["m0"] == m0
+                   and r["routing"] == routing and r.get(key))
+        return v[len(v) // 2] if v else None
+
+    def best_of(m0: int, routing: str) -> dict:
+        """Fastest mechanism (worst-case) for one routing."""
+        cand = [s for s in summary if s["m0"] == m0 and s["routing"] == routing
+                and s["kind"] != "none" and s["n_ok"]]
+        return min(cand, key=lambda s: s["t_e2e_ns_worst"])
+
+    # ---- 7.1 routing choice --------------------------------------------
+    static = {}
+    for rt in routings:
+        rr = [r for r in rows if r["routing"] == rt and r["kind"] == "sb"
+              and r["m0"] == m0s[0]]
+        ok = [r for r in rr if r.get("feasible")]
+        ld = sorted(r["max_load"] for r in ok)
+        rat = sorted(r["max_load"] / max(r.get("load_lb") or 1, 1)
+                     for r in ok)
+        hp = sorted(r["hops"] for r in ok)
+        cyf = sorted((r.get("cdg_cycle_channels") or 0)
+                     / max(r.get("cdg_channels") or 1, 1) for r in ok)
+        cyc_ch = sorted(r.get("cdg_cycle_channels") or 0 for r in ok)
+        static[rt] = {
+            "n": len(rr), "ok": len(ok),
+            "cyc_ch_med": cyc_ch[len(cyc_ch) // 2] if cyc_ch else 0,
+            "cyc_frac_med": cyf[len(cyf) // 2] if cyf else 0,
+            "cyc_frac_worst": cyf[-1] if cyf else 0,
+            "mode": sorted({r.get("turn_mode") for r in ok if r.get(
+                "turn_mode")}),
+            "sac0": sum(1 for r in ok if not r["n_sacrificed"]),
+            "sac_tot": sum(r["n_sacrificed"] for r in ok),
+            "sac_worst": max((r["n_sacrificed"] for r in ok), default=0),
+            "cyc": sum(1 for r in ok if not r["cdg_acyclic"]),
+            "load_med": ld[len(ld) // 2] if ld else 0,
+            "load_worst": ld[-1] if ld else 0,
+            "rat_med": rat[len(rat) // 2] if rat else 0,
+            "rat_worst": rat[-1] if rat else 0,
+            "hop_med": hp[len(hp) // 2] if hp else 0,
+            "free_worst": max((r["n_free_pairs"] for r in ok), default=0),
+            "detour_med": sorted(r["n_detour_pairs"] for r in ok)[len(ok) // 2]
+            if ok else 0,
+        }
+    base = [r for r in rows if r["routing"] == best_rt and r["kind"] == "sb"
+            and r["m0"] == m0s[0]]
+    n_sac0 = static[best_rt]["sac0"]
+    n_cyc = static[best_rt]["cyc"]
+    sac_bad = [r["scenario"] for r in base if r.get("n_sacrificed")]
+
+    rt_rows = []
+    for rt in routings:
+        st = static[rt]
+        nb = ["%s %d/%d" % (("m₀=%d" % m0),
+                            srow("none", m0, rt).get("n_ok", 0), n_scen)
+              for m0 in m0s]
+        rt_rows.append(
+            "<tr><td class='l'><b>%s</b><div class='sub'>%s</div></td>"
+            "<td>%d / %d</td><td>%.2f / %.2f</td><td>%d</td>"
+            "<td class='%s'>%d/%d</td><td class='%s'>%.0f%% / %.0f%%</td>"
+            "<td>%d</td><td class='l'>%s</td></tr>"
+            % (esc(RT_LABEL[rt]), esc(RT_NOTE[rt]),
+               st["load_med"], st["load_worst"], st["rat_med"],
+               st["rat_worst"], st["hop_med"],
+               "cap-ok" if st["cyc"] == 0 else "cap-bad",
+               st["cyc"], st["ok"],
+               "cap-ok" if st["cyc_frac_med"] == 0 else "cap-warn",
+               100 * st["cyc_frac_med"], 100 * st["cyc_frac_worst"],
+               st["sac_worst"], "，".join(nb)))
+    m3_av0 = avoid.get(("updown_best_root", m0s[0]))
+    rt_rows.append(
+        "<tr class='ref'><td class='l'>（对照）M3′ best-root 本体"
+        "<div class='sub'>转向限制完整保留，<b>天然无死锁，不需要恢复机制</b>"
+        "</div></td>"
+        "<td>%d / %d</td><td>%.2f / %.2f</td><td>%d</td>"
+        "<td>0/%d</td><td>0%% / 0%%</td><td>%d</td>"
+        "<td class='l'>全部场景无死锁</td></tr>"
+        % (static["updown_relax"]["load_med"],
+           static["updown_relax"]["load_worst"],
+           static["updown_relax"]["rat_med"],
+           static["updown_relax"]["rat_worst"],
+           static["updown_relax"]["hop_med"], n_scen,
+           m3_av0["sac_worst"] if m3_av0 else 0))
+    rt_tbl = ("<table class='cap'><thead><tr><th class='l'>路由</th>"
+              "<th>峰值链路负载 中位/最差</th><th>负载/理论下界 中位/最差</th>"
+              "<th>总跳数 中位</th><th>CDG 成环场景</th>"
+              "<th>环上通道占比 中位/最差</th><th>牺牲最差</th>"
+              "<th class='l'>不装恢复机制时完成的场景</th>"
+              "</tr></thead><tbody>%s</tbody></table>" % "".join(rt_rows))
+
+    none_bits = []
+    for m0 in m0s:
+        s = srow("none", m0, "xy_detour")
+        me = sorted({r["m_eff"] for r in rows
+                     if r["m0"] == m0 and "m_eff" in r})
+        none_bits.append(
+            "m₀=%d（m<sub>eff</sub>≈%s）：%d/%d 场景死锁"
+            % (m0, me[len(me) // 2] if me else "?",
+               n_scen - s.get("n_ok", 0), n_scen))
+    xy_av = avoid.get(("xy", m0s[0]))
+    m3_av = avoid.get(("updown_best_root", m0s[0]))
+
+    # ---- 7.2 mechanism table -------------------------------------------
+    mech_rows = []
+    for kind in ("sb", "spin", "swap"):
+        m = mech[kind]
+        mech_rows.append(
+            "<tr><td class='l'><b>%s</b><br><span class='sub'>%s</span></td>"
+            "<td class='l'>%s</td><td class='l'>%s</td>"
+            "<td class='l'>%s</td></tr>"
+            % (REC_LABEL[kind], REC_CITE[kind], esc(m["detect"]),
+               esc(m["action"]),
+               "路径不变 ⇒ 保序" if kind != "swap"
+               else "<b>回退改路径 ⇒ 破坏保序</b>"))
+    mech_tbl = ("<table><thead><tr><th class='l'>机制</th>"
+                "<th class='l'>死锁检测</th><th class='l'>恢复动作</th>"
+                "<th class='l'>对路径/保序的影响</th></tr></thead>"
+                "<tbody>%s</tbody></table>" % "".join(mech_rows))
+
+    # ---- 7.3 per-m0 result table ---------------------------------------
+    def res_table(m0: int) -> str:
+        head = ("<tr><th class='l'>路由</th><th class='l'>机制</th>"
+                "<th>area</th><th>A 中位/最差</th>"
+                "<th>牺牲最差</th><th>保序</th>"
+                "<th>T<sub>e2e</sub> 中位 (ns)</th>"
+                "<th>T<sub>e2e</sub> 最差 (ns)</th><th>检测次数 中位/最差</th>"
+                "<th>恢复动作最差</th><th>停摆占比</th><th>完成场景</th></tr>")
+        body = []
+        for rt in routings:
+            for j, kind in enumerate(meta["kinds"]):
+                s = srow(kind, m0, rt)
+                rt_cell = ("<td class='l' rowspan='%d'><b>%s</b></td>"
+                           % (len(meta["kinds"]), esc(RT_SHORT[rt]))
+                           if j == 0 else "")
+                if not s["n_ok"]:
+                    body.append(
+                        "<tr>%s<td class='l'>%s</td>"
+                        "<td colspan='9' class='l cap-bad'>全部场景未完成：%s"
+                        "</td><td>0/%d</td></tr>"
+                        % (rt_cell, REC_LABEL[kind],
+                           esc(", ".join(x for x in s["reasons"] if x)),
+                           s["n_scen_total"]))
+                    continue
+                body.append(
+                    "<tr>%s<td class='l'>%s</td><td>%.3f</td><td>%d/%d</td>"
+                    "<td>%d</td><td>%s</td><td>%.0f</td><td><b>%.0f</b></td>"
+                    "<td>%s/%s</td><td>%s</td><td>%.0f%%</td>"
+                    "<td>%d/%d</td></tr>"
+                    % (rt_cell, REC_LABEL[kind], s["area"], s["A_med"],
+                       s["A_worst"], s["sac_worst"],
+                       ("%d/%d" % (s["n_ordered_ok"], s["n_ok"])
+                        if s["n_ordered_ok"] == s["n_ok"]
+                        else "<b>%d/%d</b>" % (s["n_ordered_ok"], s["n_ok"])),
+                       s["t_e2e_ns_med"], s["t_e2e_ns_worst"],
+                       s["detect_med"], s["detect_worst"], s["recover_worst"],
+                       100 * s["stall_frac_med"], s["n_ok"],
+                       s["n_scen_total"]))
+        for sch in ("xy", "updown_best_root"):
+            a = avoid.get((sch, m0))
+            if not a:
+                continue
+            body.append(
+                "<tr class='ref'><td class='l'>避免类</td><td class='l'>%s</td>"
+                "<td>%.3f</td><td>%d/%d</td><td>%d</td><td>%d/%d</td>"
+                "<td>%.0f</td><td><b>%.0f</b></td><td>—</td><td>—</td>"
+                "<td>0%%</td><td>%d/%d</td></tr>"
+                % (esc(E2E_SHORT.get(sch, sch)), a["area"], a["A_med"],
+                   a["A_worst"], a.get("sac_worst", 0), a["n_scen"],
+                   a["n_scen"], a["t_e2e_ns_med"], a["t_e2e_ns_worst"],
+                   a["n_scen"], a["n_scen_total"]))
+        return ("<table><thead>%s</thead><tbody>%s</tbody></table>"
+                % (head, "".join(body)))
+
+    # ---- 7.4 hardware table --------------------------------------------
+    hw_rows = []
+    for kind in ("sb", "spin", "swap"):
+        m = mech[kind]
+        # R0 is the worst case for SWAP's reorder buffer, so price it there.
+        s = srow(kind, m0s[-1], "xy_detour")
+        extra = "%.0f bit/router" % m["extra_bits"]
+        if m["extra_flits"]:
+            extra += " + %.2f flit 缓冲/router（全片 %d 个包缓冲）" % (
+                m["extra_flits"], meta["n_sb_nodes"])
+        if kind == "swap" and s.get("reorder_depth_max"):
+            extra += " + <b>重排序缓冲 ≥%d flit/目的</b>" % s[
+                "reorder_depth_max"]
+        hw_rows.append(
+            "<tr><td class='l'><b>%s</b></td><td class='l'>%s</td>"
+            "<td class='l'>%s</td><td>%.3f</td><td>%.3f</td></tr>"
+            % (REC_LABEL[kind], extra, esc(m["pct_src"]),
+               s["area"], s["area_hi"]))
+    hw_tbl = ("<table><thead><tr><th class='l'>机制</th>"
+              "<th class='l'>本项目口径可算的新增存储</th>"
+              "<th class='l'>控制逻辑面积（各文自报 / 第三方复现）</th>"
+              "<th>area（自报）</th><th>area（第三方上限）</th>"
+              "</tr></thead><tbody>%s</tbody></table>" % "".join(hw_rows))
+
+    # ---- 7.5 three hard properties, same format as §2.5 -----------------
+    cap_rows = []
+    for rt in routings:
+        st = static[rt]
+        for j, kind in enumerate(("sb", "spin", "swap")):
+            s = srow(kind, m0s[-1], rt)
+            ordered = s["n_ok"] and s["n_ordered_ok"] == s["n_ok"]
+            first = ""
+            if j == 0:
+                first = (
+                    "<td class='l' rowspan='3'><b>%s</b></td>"
+                    "<td class='l cap-ok' rowspan='3'>✓ %d/%d 零牺牲"
+                    "<div class='sub'>另 %d 场景好节点被物理断连，"
+                    "累计弃 %d 个；峰值负载 %d（下界的 %.2f×）</div></td>"
+                    % (esc(RT_SHORT[rt]), st["sac0"], st["ok"],
+                       st["ok"] - st["sac0"], st["sac_tot"],
+                       st["load_med"], st["rat_med"]))
+            if st["cyc"] == 0 and kind == "swap":
+                dl = ("<td class='l cap-ok'>✓ CDG 0/%d 成环<div class='sub'>"
+                      "路由本身已合法，但 SWAP 不做检测，照常交换"
+                      "（最差 %s 次）⇒ 白付乱序代价</div></td>"
+                      % (st["ok"], format(s["recover_worst"], ",")))
+            elif st["cyc"] == 0:
+                dl = ("<td class='l cap-ok'>✓ CDG 0/%d 成环<div class='sub'>"
+                      "检测器在 %d 场景里<b>一次都没响</b>，"
+                      "等于白拿一层从不出险的保险</div></td>"
+                      % (st["ok"], st["ok"]))
+            elif not s["n_ok"]:
+                dl = ("<td class='l cap-bad'><b>✗</b> CDG %d/%d 成环"
+                      "<div class='sub'>恢复机制未能在 %d 拍内跑完</div></td>"
+                      % (st["cyc"], st["ok"], meta.get("t_max", 1500000)))
+            else:
+                dl = ("<td class='l cap-warn'>△ CDG %d/%d 成环"
+                      "<div class='sub'>靠运行时恢复保证「不永久死锁」："
+                      "%d/%d 场景完成，%s</div></td>"
+                      % (st["cyc"], st["ok"], s["n_ok"], s["n_scen_total"],
+                         ("无检测，靠 TDM 周期性交换（最差 %s 次）"
+                          % format(s["recover_worst"], ",") if kind == "swap"
+                          else "最差 %d 次检测 / %d 次恢复动作"
+                               % (s["detect_worst"], s["recover_worst"]))))
+            cap_rows.append(
+                "<tr>%s<td class='l'>%s</td>%s"
+                "<td class='l %s'>%s<div class='sub'>%s</div></td>"
+                "<td class='l %s'>%s</td></tr>"
+                % (first, REC_LABEL[kind], dl,
+                   "cap-ok" if ordered else "cap-bad",
+                   "✓ %d/%d 保序" % (s["n_ordered_ok"], s["n_ok"]) if ordered
+                   else "<b>✗</b> %d/%d 乱序"
+                        % (s["n_ok"] - s["n_ordered_ok"], s["n_ok"]),
+                   "不改路径、不回退" if ordered
+                   else "u-turn 回退 ⇒ 需重排序缓冲",
+                   "cap-ok" if ordered else "cap-bad",
+                   "可用" if ordered else "<b>需额外重排序硬件</b>"))
+    cap_tbl = ("<table class='cap'><thead><tr><th class='l'>路由</th>"
+               "<th class='l'>避障</th><th class='l'>机制</th>"
+               "<th class='l'>无死锁</th>"
+               "<th class='l'>保序</th><th class='l'>判定</th></tr></thead>"
+               "<tbody>%s</tbody></table>" % "".join(cap_rows))
+
+    png = ""
+    if (ROOT / "results" / RECOVERY_PNG).exists():
+        png = (
+            '<figure class="e2e-fig"><img src="%s" alt="recovery Pareto" '
+            'style="max-width:100%%;height:auto;background:#fff;'
+            'border:1px solid #e0e0e0"/><figcaption>死锁<b>恢复</b>类独立 '
+            'Pareto（%d 场景，1 VC，零牺牲）：3 种机制 × 3 种路由。'
+            '面积只由机制决定，所以同一机制的三种路由落在同一 x 上，'
+            '用<b>点形</b>区分（○ R0 XY+绕障，△ R1 min-max，□ R2 M3′+兜底，'
+            '▽ R3 Super-turn/1VC）。<b>横向短线</b>= 同一个设计的面积区间：'
+            '左端 = 各论文自报的控制逻辑开销，右端 = 第三方复现测得的更大开销'
+            '（SB 自报 &lt;0.5% vs 第三方 10%，SPIN 自报 4% vs 第三方 ~15%，'
+            'SWAP 只有一个来源故无短线）。'
+            '实心=44 场景最差，空心=中位；灰菱形为 1VC <b>避免</b>类同轴对照，'
+            '前沿分开计算。纵轴对数。</figcaption></figure>'
+            % (RECOVERY_PNG, n_scen))
+
+    tdd_tbl = ""
+    if RECOVERY_TDD_JSON.exists():
+        td = json.loads(RECOVERY_TDD_JSON.read_text())
+        by: dict[tuple[str, str], dict[int, object]] = defaultdict(dict)
+        for r in td["rows"]:
+            by[(r["kind"], r["scenario"])][r["t_dd"]] = (
+                r.get("makespan") or r.get("reason"))
+        tl = td["meta"]["t_dd_list"]
+        head = ("<tr><th class='l'>机制 / 场景</th>"
+                + "".join("<th>t<sub>DD</sub>=%d</th>" % t for t in tl)
+                + "</tr>")
+        body = []
+        for (kind, scen), d in sorted(by.items()):
+            body.append("<tr><td class='l'>%s / %s</td>%s</tr>"
+                        % (REC_LABEL[kind], scen,
+                           "".join("<td>%s</td>" % d.get(t, "—") for t in tl)))
+        # Does the SB-vs-SPIN verdict survive any detection threshold?
+        gap = []
+        for scen in td["meta"]["scenarios"]:
+            for t in tl:
+                a = by.get(("sb", scen), {}).get(t)
+                b = by.get(("spin", scen), {}).get(t)
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    gap.append(b / a)
+        swing: dict[str, list[float]] = defaultdict(list)
+        for (kind, scen), d in by.items():
+            v = [d[t] for t in tl if isinstance(d.get(t), (int, float))]
+            if len(v) > 1 and min(v):
+                swing[kind].append(max(v) / min(v))
+        sw_all = [x for v in swing.values() for x in v]
+        tdd_tbl = (
+            "<h3>7.7 检测阈值敏感度（结论不依赖 t<sub>DD</sub>）</h3>"
+            "<p class='note'>论文取值 SB=34 / SPIN=128 是按<b>单拍链路</b>调的；"
+            "本设计链路 7–9 拍，等效阈值本应更大，所以有必要确认"
+            "「SPIN 慢」不是阈值选错造成的。下表是 alltoall makespan（cy，"
+            "m<sub>eff</sub>≈2，路由取 R0——R2 根本不触发恢复，阈值无从体现）"
+            "在 t<sub>DD</sub>∈{%s} 上的全扫描：</p>"
+            "<ul><li><b>阈值本身确实有影响，但方向对 SPIN 无益：</b>"
+            "从 %d 调到 %d，makespan 整体变长，最大 %.2f×"
+            "（个别场景在 34↔128 之间有 ±13%% 抖动：更早探测偶尔会换掉解锁顺序）。"
+            "检测次数<b>完全不变</b>（同一批环、同一批依赖），"
+            "多等的时间几乎线性地进了「停摆」里 —— 也就是说"
+            "「阈值调小」只能省掉这份等待，救不了绕环本身的开销："
+            "SB 的绝对值小、占比大（最多省 %.0f%%），"
+            "SPIN 的时间几乎全在绕环上（最多省 %.0f%%）。</li>"
+            "<li><b>排序从未翻转：</b>SPIN/SB 的 makespan 比值在<b>所有</b>"
+            "阈值上都是 %.1f×–%.1f×。所以 7.6 的结论与该参数无关，"
+            "根因是「一次 spin 只让环前进 1 跳，却要付 2 趟绕环」，"
+            "这是机制固有的，调参调不掉。</li></ul>"
+            "<table><thead>%s</thead><tbody>%s</tbody></table>"
+            % (", ".join(str(t) for t in tl), tl[0], tl[-1],
+               max(sw_all) if sw_all else 1,
+               100 * (1 - 1 / max(swing["sb"])) if swing["sb"] else 0,
+               100 * (1 - 1 / max(swing["spin"])) if swing["spin"] else 0,
+               min(gap) if gap else 0, max(gap) if gap else 0,
+               head, "".join(body)))
+
+    sb1, sp1, sw1 = (srow(k, m0s[-1], "xy_detour")
+                     for k in ("sb", "spin", "swap"))
+    r2sb = srow("sb", m0s[-1], "updown_relax")
+    r2sw = srow("swap", m0s[-1], "updown_relax")
+    r1sb = srow("sb", m0s[-1], "minmax")
+    r3sb = srow("sb", m0s[-1], "super_turn_1vc")
+    base_1vc = meta["area_model"]["base_1vc"]
+    a_lo = min(srow(k, m0s[-1])["area"] for k in ("sb", "spin", "swap"))
+    a_hi = max(srow(k, m0s[-1])["area_hi"] for k in ("sb", "spin", "swap"))
+    pct_lo, pct_hi = 100 * (a_lo / base_1vc - 1), 100 * (a_hi / base_1vc - 1)
+    m3_hi = avoid.get(("updown_best_root", m0s[-1]))
+    xy_hi = avoid.get(("xy", m0s[-1]))
+    ratio = worse = better = ""
+    if m3_hi:
+        ratio = ("最好的恢复方案（%s）最差 T<sub>e2e</sub> 仍是 M3′ 的 %.1f 倍"
+                 "（中位 %.1f 倍）"
+                 % (REC_LABEL["sb"],
+                    sb1["t_e2e_ns_worst"] / m3_hi["t_e2e_ns_worst"],
+                    sb1["t_e2e_ns_med"] / m3_hi["t_e2e_ns_med"]))
+        worse = ("%.1f×/%.1f×（最差/中位）"
+                 % (sp1["t_e2e_ns_worst"] / m3_hi["t_e2e_ns_worst"],
+                    sp1["t_e2e_ns_med"] / m3_hi["t_e2e_ns_med"]))
+    if xy_hi:
+        better = ("%.0f ns vs %.0f ns" % (sb1["t_e2e_ns_med"],
+                                          xy_hi["t_e2e_ns_med"]))
+
+    return f"""
+<h2>7. 死锁恢复类方案（Static Bubble / SPIN / SWAP）× 路由选择</h2>
+<p class="note">§2–§6 全是<b>死锁避免</b>：用转向限制（A 类）或 VC 分层（B 类）
+让 CDG 先天无环，代价是绕路、多 VC 或<b>牺牲计算节点</b>。本节换第三条路
+——<b>死锁恢复</b>：把「无死锁」这个约束从路由里<b>拿掉</b>，允许 CDG 成环，
+再用运行时机制把死锁解开。按要求，本节 Pareto 与避免类<b>分开</b>作图
+（同坐标轴，便于对照）。</p>
+<p class="note">恢复机制一旦到位，路由就<b>自由</b>了，于是「配哪种路由」本身成了
+一个设计变量。本节扫四种，全是 1 VC、全都只放弃残图<b>物理断连</b>的好节点。
+其中 <b>R3</b> 专门检验一个很自然的想法：<i>M3/M3′ 天然无死锁，恢复机制在它上面是浪费；
+那就换成 Super-turn（M0s）的转向集合，只给 1 个物理 VC，把它本来靠 VC 分层
+换来的无死锁性丢掉，赌「剩下的死锁概率很小」，再用恢复机制兜底</i>。
+下面用「<b>环上通道占比</b>」（CDG 中落在某个环里的通道数 / 总通道数，
+Tarjan SCC 精确统计）来量化这个「概率很小」到底成不成立。</p>
+
+<h3>7.1 先回答：有故障的 2D mesh 上最优的避障路由是哪个？</h3>
+<p class="note"><b>先说避免类内部的答案（§6 的数据，m₀={m0s[-1]}）。</b>1 VC 这一档里最优的路由是
+<b>M3′ best-root Up*/Down*（min-max 选根）</b>：44 场景最差
+{m3_hi['t_e2e_ns_worst'] if m3_hi else '?':.0f} ns、面积
+{m3_hi['area'] if m3_hi else 0:.3f}，worst-case 优于 M3 原版（7678 ns）、
+M4 Segment 与各种固定 turn model。固定转向模型（M1 XY / M0 East-first /
+M4 Segment）在预算故障下只能保住
+<b>A 中位 {xy_av['A_med'] if xy_av else '?'}/48、最差
+{xy_av['A_worst'] if xy_av else '?'}/48</b> 个好节点，强扩展下
+m<sub>eff</sub>∝(48/A)² 暴涨，端到端反而最慢（最差 25 μs 量级）。
+比 M3′ 更快的只有多 VC 方案（M11 Stripe-VC 6.1 μs 最差，但面积 3.67 = 4.1×），
+不在「1 VC」这一档；§5 的 BB-UD 系列能做到 7061 ns，但那是<b>调度层</b>
+（batch barrier）的改进，路由仍然是 M3′。
+<b>所以「最优避障路由」= M3′ best-root。</b></p>
+<p class="note"><b>但请注意「避障最优」有两种口径</b>，这正是本节要拆开的地方：
+① <i>无死锁前提下</i>最优 = M3′（要付转向限制的绕路代价 + 牺牲阶梯）；
+② <i>不要求无死锁</i>时最优 = 纯 min-max 最短路（R1，负载可以压到理论下界的
+{static['minmax']['rat_med']:.2f}×，比 M3′ 的 {static['updown_relax']['rat_med']:.2f}× 好一大截）。
+恢复机制解锁的正是口径 ②。三种路由的静态指标：</p>
+{rt_tbl}
+<ul>
+<li><b>零牺牲（三种路由都成立）：</b>{n_sac0}/{n_scen} 场景牺牲 0 个好节点；
+仅 {esc(', '.join(sac_bad)) or '无'} 因残图把好节点<b>物理断连</b>而必须放弃。
+对照避免类：M1 XY 最差只剩 A={xy_av['A_worst'] if xy_av else '?'} 个节点，
+M3′ best-root 最差 A={m3_av['A_worst'] if m3_av else '?'}。</li>
+<li><b>R0 / R1 的 CDG 一定成环</b>（{static['xy_detour']['cyc']}/{n_scen} 与
+{static['minmax']['cyc']}/{n_scen}）：非 XY 序的转弯一出现就闭环，
+所以这两套表<b>本身是非法的</b>，必须配恢复机制才能用。</li>
+<li><b>R3 的「死锁概率很小」不成立——它比基线 XY 还危险。</b>
+把 Super-turn 的两层 Glass–Ni 模型合并到 1 个 VC 之后，
+{static['super_turn_1vc']['cyc']}/{n_scen} 场景成环，环上通道占比中位
+<b>{100 * static['super_turn_1vc']['cyc_frac_med']:.0f}%</b>
+（R0 只有 {100 * static['xy_detour']['cyc_frac_med']:.0f}%、
+R1 {100 * static['minmax']['cyc_frac_med']:.0f}%、R2 0%）。
+原因是结构性的：<b>Super-turn 的无死锁性全部来自 VC 分层，而不是来自转向集合</b>——
+它挑的互补对（最常被选中的是 {esc('/'.join(static['super_turn_1vc']['mode'][:3]))} 等）
+两层合起来<b>几乎不禁任何转向</b>（east-first ∪ west-first 的并集除了 U-turn 之外全放开），
+所以压到 1 VC 就退化成「近似无转向模型」，只是路径比 R1 短一点、负载还更差
+（{static['super_turn_1vc']['load_med']} vs R1 的 {static['minmax']['load_med']}）。
+这正是 A 类（转向限制）与 B 类（VC 分层）不能混着省的地方：
+<b>拿掉 VC 就等于拿掉了它的全部合法性，不是「小概率残留」。</b></li>
+<li><b>但 R2 的 CDG 是 {static['updown_relax']['cyc']}/{n_scen} 成环，而且这不是运气。</b>
+只要残图连通，BFS 高度函数就保证「先沿树上行到公共祖先、再下行」这条路径一定存在
+（§3 的定理 1/2），所以「树到不了的对」<b>永远不会出现</b>——实测
+{n_scen}/{n_scen} 场景里需要补非法路径的对数
+= {static['updown_relax']['free_worst']}。换句话说
+<b>R2 恒等于 M3′ 本体，恢复机制在这条路由上是一层永远不会触发的保险</b>
+（逐场景核对：R2 的 alltoall makespan 与 §6 的 M3′ 在 86/88 个
+（场景×m₀）组合上<b>逐拍相同</b>）。</li>
+<li><b>唯一的差别来自「先剪掉物理断连的节点、再做牺牲搜索」这个实现细节，与恢复机制无关。</b>
+在 <code>b_r4_l3</code> 上 §6 的 M3′ 求解器弃了 4 个节点（7/23/31/47），
+而先把物理断连的 23/31 剪掉之后，root=40 的 Up*/Down* 表能覆盖剩下
+42 个节点且 CDG 无环（已 <code>validate_routing</code> 通过）——
+即 §6 M3′ 最差牺牲 {m3_av['sac_worst'] if m3_av else '?'} 个里有
+{(m3_av['sac_worst'] if m3_av else 0) - static['updown_relax']['sac_worst']} 个是
+<b>贪心牺牲阶梯过于保守</b>，不是 Up*/Down* 的固有代价。
+这是避免类求解器可以直接修的一处，不能记在恢复机制的功劳簿上。</li>
+<li><b>控制实验（R0，无恢复机制）：</b>{'；'.join(none_bits)}。
+低载荷下成环但不死锁，正是三篇论文的立论前提（Static Bubble 实测
+「多数不规则拓扑只在 0.1–0.3 flit/node/cycle 以上才死锁，比真实应用高一个量级」）；
+但 <b>all-to-all 是一次性满注入的 collective</b>，直接落在会死锁的一侧。</li>
+</ul>
+
+<h3>7.2 三种机制与建模</h3>
+{mech_tbl}
+<p class="note"><b>本设计的关键放大器：</b>SB 与 SPIN 的 probe / disable / move /
+check_probe 都要沿死锁环<b>绕一整趟</b>。论文里链路 1 拍，一趟 ≈ 环长×2 拍；
+本设计 H=7 / V=9 拍，一趟 = Σ(1+link_lat) ≈ 环长×8–10 拍。
+实测（m₀={m0s[-1]}，R0 路由）平均环长中位 {med('sb', m0s[-1], 'ring_avg')} 个转向、最长
+{srow('sb', m0s[-1], 'xy_detour').get('ring_max')}，
+<b>一趟 = {med('sb', m0s[-1], 'lap_avg')} 拍</b>
+（SPIN 的一次 spin 要 2 趟 ≈ {2 * (med('spin', m0s[-1], 'lap_avg') or 0):.0f} 拍，
+只换来环整体前进 1 跳）。恢复延迟因此比论文语境放大近一个数量级。</p>
+<p class="note"><b>建模口径与偏差（<code>utils/pg_deadlock_recovery.py</code>）：</b>
+① DES 是 <code>dse_pg_alltoall_8x6.simulate_alltoall</code> 的 fork，
+<code>selftest()</code> 逐周期校验二者在无死锁输入上完全一致，故与 §6 数字可比；
+② 1 VC 下依赖链唯一 ⇒ probe 走链即精确判环，<b>无假阴性</b>，
+「假阳性」只来自 probe 绕环期间依赖已自行解开（表中单列）；
+③ 全局同时只允许一个恢复 FSM（SPIN 的轮转优先级/epoch 与 SWAP 的
+「全网同时只一次交换」本就如此，SB 略偏保守）；
+④ 本项目一个包=1 flit，故 SB 的 packet-sized 气泡记为 1 flit；
+⑤ SB 的 <code>is_deadlock</code>/<code>IO_priority</code>（禁止其他包进入环上转向）
+与 SPIN 的按 VC 冻结都已建模；⑥ SWAP 按 (cycle/m)%(K·N)=router_id 的 TDM
+触发，K=1 ⇒ 每个 router 每 {meta['swap_period_cy']} 拍轮到一次、
+且只在队头确实被下游堵住时才发起，握手 4 拍。</p>
+<p class="note"><b>一条必须核验的前提（SB）：</b>Static Bubble 的正确性依赖
+「<b>任何环都至少经过一个带气泡的 router</b>」，HPCA'17 是在<b>完好</b> mesh 上证明这条
+放置规则的。本项目的残图上气泡节点本身也可能坏掉，所以这条不再自动成立。
+实测：全部 {sum(r['n_detect'] for r in rows if r['kind'] == 'sb' and r.get('feasible'))}
+次检测到的环<b>都</b>至少含一个存活气泡（<code>no_bubble</code>=
+{sum(r['no_bubble'] for r in rows if r['kind'] == 'sb' and r.get('feasible'))}），
+故 8×6 + 预算故障下 15 个气泡的放置依然充分；若出现反例，SB 会直接退化为
+「检测到但无法恢复」，这也是代码里单列该计数器的原因。</p>
+
+<h3>7.3 端到端时间、恢复开销与保序</h3>
+{''.join('<h4>m₀ = %d</h4>%s' % (m0, res_table(m0)) for m0 in m0s)}
+<p class="note">「停摆占比」= 整个 alltoall 期间<b>全网无任何活动</b>的周期占比
+⚠ <b>「不装恢复机制（对照）」各行的统计只覆盖它自己跑完的那几个场景</b>
+（死锁的场景没有 makespan），所以它的时间/牺牲列<b>不能</b>与其余行横向比——
+它在表里只是用来说明「不装恢复机制会死锁多少场景」。<br>
+「停摆占比」= 整个 alltoall 期间<b>全网无任何活动</b>的周期占比
+（等检测 + 等绕环确认）。SB / SPIN 的时间主要花在这里；SWAP 无检测所以此列低，
+但它把时间花在最多 {sw1.get('recover_worst', 0):,} 次交换与同样多次<b>回退</b>上
+（见 7.6 第 2 条）。「恢复动作」= grant（SB）/ spin（SPIN）/ swap（SWAP）次数，
+三者语义不同，不可横向比大小，只能各自看趋势。</p>
+
+<h3>7.4 硬件代价</h3>
+<p class="note">本项目 area 口径只对缓冲/表这类结构可算（A<sub>flit</sub>/flit-slot，
+ROM 位按 0.15 折算）；FSM、probe 单元、mux/u-turn 这类控制逻辑只有各论文自己的
+综合数据可用，故按「基线 1VC router 面积的百分比」计入，并给出第三方复现的上限
+（图中横向短线即这段区间）。三者<b>都不增加 VC</b>，所以缓冲面积与 1VC 基线相同
+——这正是恢复类最大的卖点。</p>
+{hw_tbl}
+
+<h3>7.5 三性质核验（与 §2.5 同口径）</h3>
+<p class="note">恢复类在「无死锁」这一列的性质<b>与避免类不同</b>：它不保证 CDG 无环，
+只保证<b>不会永久卡死</b>（活性由恢复机制提供，安全性由「环上至少一个包能动」提供），
+所以 R0 / R1 这一列只能标 △。<b>R2 是例外</b>：它的路由本身就合法，
+这一列回到 ✓，代价是恢复机制变成纯冗余——
+换句话说，这张表里「△ 换零牺牲」的交易只在 R0 / R1 成立，
+而 R0 / R1 的零牺牲 R2 也有。</p>
+{cap_tbl}
+
+<h3>7.6 独立 Pareto 与结论</h3>
+{png}
+<ol>
+<li><b>直接回答「用最优避障路由叠加恢复机制」：净收益为零，只多付面积。</b>
+R2（= 最优避障路由 M3′ best-root，外加「树到不了就走非法路径」这条兜底规则）
++ SB：m₀={m0s[-1]} 最差 {r2sb['t_e2e_ns_worst']:.0f} ns / 中位
+{r2sb['t_e2e_ns_med']:.0f} ns，{r2sb['n_ordered_ok']}/{r2sb['n_ok']} 保序，
+面积 {r2sb['area']:.3f}（+{100 * (r2sb['area'] / base_1vc - 1):.1f}%，
+第三方复现口径最多 +{100 * (r2sb['area_hi'] / base_1vc - 1):.1f}%）。
+避免类 M3′ 本体：{m3_hi['t_e2e_ns_worst'] if m3_hi else '?'} ns 最差、
+面积 {m3_hi['area'] if m3_hi else 0:.3f}。
+<b>时间一模一样（{r2sb['t_e2e_ns_worst'] / m3_hi['t_e2e_ns_worst'] if m3_hi else 0:.2f}×），
+因为兜底规则一次都没用上、检测器一次都没响
+（{static['updown_relax']['free_worst']} 对非法路径、{r2sb['detect_worst']} 次检测）。</b>
+原因是结构性的、不是运气：Up*/Down* 在任何连通残图上都覆盖全部节点且 CDG 无环，
+所以<b>最优避障路由根本不给恢复机制留活干</b>。
+这条正好也说明恢复类的适用边界：<b>它只能救「路由本身不合法」，
+而最优避障路由的定义就是「合法」。</b></li>
+<li><b>R3（Super-turn 转向集合压到 1 VC）也不行，而且失败得更彻底：</b>
+它的初衷是「M3′ 天然无死锁 ⇒ 恢复机制没用武之地，那就换个更灵活的转向集合，
+留一点小概率死锁给恢复机制」。但 Super-turn 的合法性<b>全部来自 VC 分层</b>：
+它挑的两层是互补的 Glass–Ni 模型，并集除 U-turn 外几乎不禁转向，
+拿掉 VC 就等于没有转向模型。实测环上通道占比中位
+<b>{100 * static['super_turn_1vc']['cyc_frac_med']:.0f}%</b>（R0 只有
+{100 * static['xy_detour']['cyc_frac_med']:.0f}%），
+{static['super_turn_1vc']['cyc']}/{n_scen} 场景成环，
+m₀={m0s[-1]} 上 +SB 最差 {r3sb['t_e2e_ns_worst']:.0f} ns
+= R2 的 {r3sb['t_e2e_ns_worst'] / r2sb['t_e2e_ns_worst']:.1f}×、
+R0 的 {r3sb['t_e2e_ns_worst'] / sb1['t_e2e_ns_worst']:.1f}×，
+峰值负载也没换到好处（{static['super_turn_1vc']['load_med']} vs R2 的
+{static['updown_relax']['load_med']}）。
+<b>结论：A 类（转向限制）与 B 类（VC 分层）不能混着省——
+省掉 VC 不是「留一点小概率死锁」，而是把无死锁性整个丢掉。</b>
+顺带也试过「优先选环最少的转向集合」（允许少数对走模型外路径）：
+环上通道占比只降到中位 45%，负载还更差，同样救不回来。</li>
+<li><b>反直觉的核心结论：恢复类的成败不由「负载均衡」决定，而由「CDG 里有多少环」决定。</b>
+R1（纯 min-max）把峰值链路负载压到理论下界的
+{static['minmax']['rat_med']:.2f}×，比 R0 的 {static['xy_detour']['rat_med']:.2f}×
+和 R2 的 {static['updown_relax']['rat_med']:.2f}× 都好，
+按纯带宽模型它<b>应该</b>最快；实测却最慢
+（SB 上 m₀={m0s[-1]} 最差 {r1sb['t_e2e_ns_worst']:.0f} ns，
+是 R2 的 {r1sb['t_e2e_ns_worst'] / r2sb['t_e2e_ns_worst']:.1f}×、R0 的
+{r1sb['t_e2e_ns_worst'] / sb1['t_e2e_ns_worst']:.1f}×；
+检测次数中位 {r1sb['detect_med']} vs R0 的 {sb1['detect_med']} vs R2 的
+{r2sb['detect_med']}）。
+原因：无转向模型 ⇒ 每条链路上都有各方向的转弯 ⇒ 环极多且一解开就重建，
+而<b>每次恢复都要按 {med('sb', m0s[-1], 'lap_avg', 'xy_detour')} 拍的量级绕环一趟</b>。
+均衡省下的带宽（约 {100 * (1 - static['minmax']['rat_med'] / static['xy_detour']['rat_med']):.0f}%）
+远不够补这份开销。<b>所以「先把路由做成最优负载、再拿恢复机制兜底」是个陷阱；
+正确做法反过来：让路由尽量保持无环，只在它救不了的地方才动用恢复。</b></li>
+<li><b>恢复类内部排序 <span style="letter-spacing:.02em">SB ≪ SPIN &lt; SWAP</span>，
+差距达一个数量级</b>（R0 上，m₀={m0s[-1]} 最差 T<sub>e2e</sub>：
+{sb1['t_e2e_ns_worst']:.0f} / {sp1['t_e2e_ns_worst']:.0f} /
+{sw1['t_e2e_ns_worst']:.0f} ns；中位 {sb1['t_e2e_ns_med']:.0f} /
+{sp1['t_e2e_ns_med']:.0f} / {sw1['t_e2e_ns_med']:.0f} ns）。机制层面的原因：
+<ul>
+<li><b>SB</b> 一次 grant 就把环<b>彻底拆掉</b>：disable 沿环走一趟，期间禁止新包进入
+环上转向（<code>is_deadlock</code>），气泡吸收后环不会立刻重建 ⇒ 检测次数最少
+（中位 {sb1['detect_med']}、最差 {sb1['detect_worst']}），停摆占比
+{100 * sb1['stall_frac_med']:.0f}%。</li>
+<li><b>SPIN</b> 一次 spin 只让环整体<b>前进 1 跳</b>，但要付 2 趟绕环
+（≈{2 * (med('spin', m0s[-1], 'lap_avg') or 0):.0f} 拍）；饱和注入下环立刻由后续包重建，
+于是「检测→自旋→重建」反复循环（最差 {sp1['detect_worst']} 次检测、
+{sp1['recover_worst']} 次恢复动作），停摆占比高达
+{100 * sp1['stall_frac_med']:.0f}% ⇒ 整体被拖慢 {worse or 'N/A'}。</li>
+<li><b>SWAP</b> 不检测，只要轮到自己（每个 router 每 {meta['swap_period_cy']} 拍一次，
+全网每拍至多一次）且队头<b>被堵住</b>就交换。饱和注入下「被堵住」几乎恒成立，
+而其中绝大多数只是<b>普通拥塞、并非死锁</b>，于是它把交换当成常态操作：
+最差 {sw1['recover_worst']:,} 次交换 = 同样多次<b>回退一跳</b>，
+纯粹的带宽浪费（往回走的那一跳还要再走一遍）。
+换句话说，SWAP 的代价与<b>拥塞程度</b>成正比，而与<b>死锁次数</b>无关，
+这在 collective 场景是最坏的组合。</li>
+</ul></li>
+<li><b>就算配最差的路由（R0，即原来那版「基线 XY + 绕障」），恢复类也没有全面落败：</b>
+{ratio}，可是 <b>R0+SB 的中位时间已经优于避免类的 M1 XY</b>（{better}）。
+原因不在网络本身，而在强扩展：M1 XY 为保证 CDG 无环必须弃掉大量好节点
+（A 中位仅 {xy_hi['A_med'] if xy_hi else '?'}），m<sub>eff</sub> 按 (48/A)² 暴涨，
+省下来的时间远不够补。<b>所以在「XY 路由表不能改」的工程约束下，
+加一套 SB 也比用转向限制去砍节点更划算。</b></li>
+<li><b>SWAP 破坏保序，这是本项目的硬性质，而且换路由也救不了：</b>
+被换回的包 u-turn 回退一跳，同一 (s,d) 的后发包可能抢到前面。
+实测 m₀={m0s[-1]}：R0 上 {sw1.get('n_ordered_ok', 0)}/{sw1.get('n_ok', 0)} 保序、
+R2 上 {r2sw['n_ordered_ok']}/{r2sw['n_ok']} 保序——<b>即使 CDG 无环、
+一次死锁都没有，SWAP 依然照常交换</b>（subactive 机制，只看队头是否被堵），
+所以它在健康 mesh 上也会乱序。最坏乱序对数
+{max((r['n_pairs_out_of_order'] for r in rows
+      if r['kind'] == 'swap' and r.get('feasible')), default=0)}、
+需要 ≥{sw1.get('reorder_depth_max', 0)} flit/目的 的重排序缓冲（已计入其 area）。
+7.5 的三性质表里这一列直接判否（口径同 §2.5）。
+SB / SPIN 不改路径也不回退，保序不受影响。</li>
+<li><b>选型结论（按约束条件分档）：</b>
+<ul>
+<li><b>能自由设计路由</b> ⇒ <b>M3′ best-root 本体，不要加恢复机制</b>
+（1VC，面积 {m3_hi['area'] if m3_hi else 0:.3f}，保序，无检测逻辑、无运行时开销）。
+再叠 SB/SPIN/SWAP 只会多 +{100 * (r2sb['area'] / base_1vc - 1):.1f}%
+（第三方口径至多 +{100 * (max(srow(k, m0s[-1], 'updown_relax')['area_hi'] for k in ('sb', 'spin', 'swap')) / base_1vc - 1):.1f}%）
+面积换 0 收益。想把 §6 里那
+{(m3_hi['sac_worst'] if m3_hi else 0) - r2sb['sac_worst']} 个多余牺牲救回来，
+改牺牲搜索（先剪物理断连节点）就够了，不需要任何硬件。</li>
+<li><b>路由表被写死成 XY（例如复用现成 IP、不许改路由计算）</b> ⇒ R0 + Static Bubble：
+慢 {sb1['t_e2e_ns_worst'] / (m3_hi['t_e2e_ns_worst'] if m3_hi else 1):.1f}×（最差）
+但零牺牲、保序、面积几乎不变，仍优于「用固定转向模型硬砍节点」。
+这是恢复类在本工作负载下唯一站得住的用法。</li>
+<li><b>任何情况下都别选</b>：R1（纯负载最优路由）、R3（Super-turn 压到 1 VC）
+配任何机制，以及 SWAP（破坏保序）。</li>
+</ul>
+另外，恢复类真正的舞台仍是<b>低注入率</b>的通用 cache 流量：那时恢复几乎不触发，
+它退化成「零牺牲 + 1VC + 最短路低时延」。本节 <code>none</code> 行即此极限：
+在<b>那 {srow('none', m0s[0], 'xy_detour')['n_ok']}/{n_scen} 个本来就不死锁的场景</b>里，
+无转向限制的 R0 只要 {srow('none', m0s[0], 'xy_detour')['t_e2e_ns_med']:.0f} ns，
+比同场景任何避免类都快。这与 Static Bubble 论文自己的观察一致：
+PARSEC 下压根没观察到死锁；而本项目是 <b>collective 饱和注入</b>，
+前提被破坏，结论就反过来。</li>
+</ol>
+{tdd_tbl}
+<p class="note">数据：<code>results/pg_recovery_e2e.json</code>
+（{n_scen} 场景 × {len(routings)} 路由 × {len(meta['kinds'])} 机制
+× m₀∈{{{', '.join(str(m) for m in m0s)}}}，
+{meta.get('elapsed_s')}s，{len(rows)} 行 DES）；
+代码 <code>utils/pg_deadlock_recovery.py</code>、
+<code>utils/dse_pg_recovery_pareto.py</code>、
+<code>utils/gen_pg_recovery_pareto_plot.py</code>。
+静态气泡位置按 HPCA'17 的放置规则（x&gt;0,y&gt;0 且 x%4≡y%4 或 (1,3) 或 (3,1)），
+8×8 得 21 个、16×16 得 89 个（与论文一致），本 8×6 得
+{meta['n_sb_nodes']} 个。</p>
+"""
+
+
 def main():
     data = json.loads(JSON_PATH.read_text())
     meta = data["meta"]
@@ -2048,6 +2742,7 @@ def main():
     golden = meta["golden"]
     # Primary e2e is already budget-fault + VC≤2 (pg_e2e_pareto.json).
     e2e_html = e2e_section_html()
+    recovery_html = recovery_section_html()
 
     # Index primary rows (not q_sensitivity)
     primary = [r for r in rows if not r.get("q_sensitivity")]
@@ -2486,6 +3181,7 @@ div.cycfig {{ display: flex; gap: 0.8rem; flex-wrap: wrap;
              margin: 0.6rem 0; }}
 div.cycfig svg {{ background: #fff; border: 1px solid #e3e8ec;
                  border-radius: 4px; }}
+tr.ref td {{ background: #f6f7f9; color: #4b5563; }}
 table.cap td.cap-ok {{ background: #f2faf5; }}
 table.cap td.cap-bad {{ background: #fdf1ef; color: #922b21; }}
 table.cap td.cap-warn {{ background: #fdf8ec; color: #8a6d1f; }}
@@ -3351,7 +4047,9 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 
 {e2e_html}
 
-<h2>7. 指标定义</h2>
+{recovery_html}
+
+<h2>8. 指标定义</h2>
 <ul>
 <li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
 基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
@@ -3373,7 +4071,7 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 
-<h2>8. 主要观察</h2>
+<h2>9. 主要观察</h2>
 <ol>
 <li><b>故障模型与评测范围：</b>主评估 = 预算故障（≤4R+≤8L）；
 e2e 评有限 VC（Super-turn/Dual/LASH）与分批屏障 1VC；
@@ -3401,6 +4099,16 @@ M4 极常见 STRUCT；M10 在散落 ≥3 死节点上会。</li>
 <li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 可慢数倍；VC 线性放大每端口缓冲。</li>
 
 <li><b>通信占端到端 70–86%</b>。能分批优先 BB UD；否则 M3′ / Super-turn。</li>
+
+<li><b>死锁恢复类（§7，Static Bubble / SPIN / SWAP × 四种路由）：</b>
+换掉「先天无环」这个前提后，牺牲维度上完胜（零牺牲、1 VC、面积 +0.6%–15%），
+三者在全部场景都解开了死锁。<b>但成败取决于路由选择</b>：
+恢复开销 ∝ CDG 环数 × 绕环一趟的拍数，而不是 ∝ 峰值负载，所以
+①「负载最优但无转向模型」（R1）最慢；
+②「Super-turn 转向集合压到 1 VC 赌小概率死锁」（R3）也不行——
+它的无死锁性来自 VC 分层而非转向集合，环上通道占比反而比基线 XY 更高；
+③ 最优避障路由 M3′ <b>天然无死锁</b>，叠恢复机制净收益为零（检测器一次没响）。
+机制排序恒为 SB ≪ SPIN &lt; SWAP；SWAP 即使在无环路由上也破坏保序。</li>
 </ol>
 </body></html>
 """

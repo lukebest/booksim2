@@ -30,6 +30,7 @@ div.cycfig { display: flex; gap: 0.8rem; flex-wrap: wrap;
              margin: 0.6rem 0; }
 div.cycfig svg { background: #fff; border: 1px solid #e3e8ec;
                  border-radius: 4px; }
+tr.ref td { background: #f6f7f9; color: #4b5563; }
 table.cap td.cap-ok { background: #f2faf5; }
 table.cap td.cap-bad { background: #fdf1ef; color: #922b21; }
 table.cap td.cap-warn { background: #fdf8ec; color: #8a6d1f; }
@@ -96,8 +97,15 @@ m=5 → <b>770</b> cy。
 保序为构造保证（唯一路径；分批方案在批内唯一路径 + 批间屏障）。</li>
 <li><b>§3 每场景最优：</b>预算故障场景上，低牺牲时常落到 M0s / M3 族 / 多 VC；
 通信占端到端约 70–86%，花 router 面积买带宽仍划算。</li>
+<li><b>另一条路——死锁恢复（§7）：</b>把转向限制拿掉、用 Static Bubble / SPIN /
+SWAP 在运行时解环，可做到 <b>零牺牲、1 VC、面积 +0.6%–15%</b>。
+关键在<b>配哪种路由</b>：<b>M3′ 核心 + 只给树到不了的对补非法路径（R2）+ SB</b>
+时间与 M3′ 打平、保序、并把 M3′ 的牺牲节点全部救回，是恢复类唯一进前沿的组合；
+而<b>负载最优但满是环的路由（R1）反而最慢</b>——恢复开销由 CDG 环数决定，
+不由峰值负载决定。机制排序恒为 SB ≪ SPIN &lt; SWAP，SWAP 破坏保序。</li>
 </ol>
-<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、§6（端到端 Pareto）。</p>
+<p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、
+§6（端到端 Pareto，死锁<b>避免</b>类）、§7（死锁<b>恢复</b>类，独立 Pareto）。</p>
 </div>
 
 
@@ -970,7 +978,235 @@ M5h：40/44 原求解可行，其余 4 个靠整行/整列；
 
 
 
-<h2>7. 指标定义</h2>
+
+<h2>7. 死锁恢复类方案（Static Bubble / SPIN / SWAP）× 路由选择</h2>
+<p class="note">§2–§6 全是<b>死锁避免</b>：用转向限制（A 类）或 VC 分层（B 类）
+让 CDG 先天无环，代价是绕路、多 VC 或<b>牺牲计算节点</b>。本节换第三条路
+——<b>死锁恢复</b>：把「无死锁」这个约束从路由里<b>拿掉</b>，允许 CDG 成环，
+再用运行时机制把死锁解开。按要求，本节 Pareto 与避免类<b>分开</b>作图
+（同坐标轴，便于对照）。</p>
+<p class="note">恢复机制一旦到位，路由就<b>自由</b>了，于是「配哪种路由」本身成了
+一个设计变量。本节扫三种，全是 1 VC、全都只放弃残图<b>物理断连</b>的好节点：</p>
+
+<h3>7.1 先回答：有故障的 2D mesh 上最优的避障路由是哪个？</h3>
+<p class="note"><b>先说避免类内部的答案（§6 的数据，m₀=13）。</b>1 VC 这一档里最优的路由是
+<b>M3′ best-root Up*/Down*（min-max 选根）</b>：44 场景最差
+7573 ns、面积
+0.897，worst-case 优于 M3 原版（7678 ns）、
+M4 Segment 与各种固定 turn model。固定转向模型（M1 XY / M0 East-first /
+M4 Segment）在预算故障下只能保住
+<b>A 中位 8/48、最差
+2/48</b> 个好节点，强扩展下
+m<sub>eff</sub>∝(48/A)² 暴涨，端到端反而最慢（最差 25 μs 量级）。
+比 M3′ 更快的只有多 VC 方案（M11 Stripe-VC 6.1 μs 最差，但面积 3.67 = 4.1×），
+不在「1 VC」这一档；§5 的 BB-UD 系列能做到 7061 ns，但那是<b>调度层</b>
+（batch barrier）的改进，路由仍然是 M3′。
+<b>所以「最优避障路由」= M3′ best-root。</b></p>
+<p class="note"><b>但请注意「避障最优」有两种口径</b>，这正是本节要拆开的地方：
+① <i>无死锁前提下</i>最优 = M3′（要付转向限制的绕路代价 + 牺牲阶梯）；
+② <i>不要求无死锁</i>时最优 = 纯 min-max 最短路（R1，负载可以压到理论下界的
+1.10×，比 M3′ 的 1.70× 好一大截）。
+恢复机制解锁的正是口径 ②。三种路由的静态指标：</p>
+<table class='cap'><thead><tr><th class='l'>路由</th><th>峰值链路负载 中位/最差</th><th>负载/理论下界 中位/最差</th><th>总跳数 中位</th><th>CDG 成环场景</th><th>牺牲最差</th><th class='l'>不装恢复机制时完成的场景</th></tr></thead><tbody><tr><td class='l'><b>R0 基线 XY + 最小绕障</b><div class='sub'>L 型完好就走 XY，被挡住才绕最小弯</div></td><td>198 / 420</td><td>1.71 / 2.55</td><td>10178</td><td class='cap-bad'>41/44</td><td>2</td><td class='l'>m₀=1 12/44，m₀=13 4/44</td></tr><tr><td class='l'><b>R1 无转向模型 · min-max 负载均衡</b><div class='sub'>只要最短+均衡，完全不管转向 —— 纯性能最优的避障路由</div></td><td>129 / 274</td><td>1.10 / 1.83</td><td>10242</td><td class='cap-bad'>44/44</td><td>2</td><td class='l'>m₀=1 7/44，m₀=13 0/44</td></tr><tr><td class='l'><b>R2 M3′ best-root + 非法转向兜底</b><div class='sub'>Up*/Down* 树路径为主；树到不了的对才走非法路径（实测从未发生，见下）</div></td><td>210 / 323</td><td>1.70 / 2.16</td><td>10424</td><td class='cap-ok'>0/44</td><td>2</td><td class='l'>m₀=1 44/44，m₀=13 44/44</td></tr><tr class='ref'><td class='l'>（对照）M3′ best-root 本体<div class='sub'>转向限制完整保留，不需要恢复机制</div></td><td>210 / 323</td><td>1.70 / 2.16</td><td>10424</td><td>0/44</td><td>4</td><td class='l'>全部场景无死锁</td></tr></tbody></table>
+<ul>
+<li><b>零牺牲（三种路由都成立）：</b>41/44 场景牺牲 0 个好节点；
+仅 b_r1_l7_0000, b_r4_l3_0000, b_r4_l7_0000 因残图把好节点<b>物理断连</b>而必须放弃。
+对照避免类：M1 XY 最差只剩 A=2 个节点，
+M3′ best-root 最差 A=40。</li>
+<li><b>R0 / R1 的 CDG 一定成环</b>（41/44 与
+44/44）：非 XY 序的转弯一出现就闭环，
+所以这两套表<b>本身是非法的</b>，必须配恢复机制才能用。</li>
+<li><b>但 R2 的 CDG 是 0/44 成环，而且这不是运气。</b>
+只要残图连通，BFS 高度函数就保证「先沿树上行到公共祖先、再下行」这条路径一定存在
+（§3 的定理 1/2），所以「树到不了的对」<b>永远不会出现</b>——实测
+44/44 场景里需要补非法路径的对数
+= 0。换句话说
+<b>R2 恒等于 M3′ 本体，恢复机制在这条路由上是一层永远不会触发的保险</b>
+（逐场景核对：R2 的 alltoall makespan 与 §6 的 M3′ 在 86/88 个
+（场景×m₀）组合上<b>逐拍相同</b>）。</li>
+<li><b>唯一的差别来自「先剪掉物理断连的节点、再做牺牲搜索」这个实现细节，与恢复机制无关。</b>
+在 <code>b_r4_l3</code> 上 §6 的 M3′ 求解器弃了 4 个节点（7/23/31/47），
+而先把物理断连的 23/31 剪掉之后，root=40 的 Up*/Down* 表能覆盖剩下
+42 个节点且 CDG 无环（已 <code>validate_routing</code> 通过）——
+即 §6 M3′ 最差牺牲 4 个里有
+2 个是
+<b>贪心牺牲阶梯过于保守</b>，不是 Up*/Down* 的固有代价。
+这是避免类求解器可以直接修的一处，不能记在恢复机制的功劳簿上。</li>
+<li><b>控制实验（R0，无恢复机制）：</b>m₀=1（m<sub>eff</sub>≈2）：32/44 场景死锁；m₀=13（m<sub>eff</sub>≈15）：40/44 场景死锁。
+低载荷下成环但不死锁，正是三篇论文的立论前提（Static Bubble 实测
+「多数不规则拓扑只在 0.1–0.3 flit/node/cycle 以上才死锁，比真实应用高一个量级」）；
+但 <b>all-to-all 是一次性满注入的 collective</b>，直接落在会死锁的一侧。</li>
+</ul>
+
+<h3>7.2 三种机制与建模</h3>
+<table><thead><tr><th class='l'>机制</th><th class='l'>死锁检测</th><th class='l'>恢复动作</th><th class='l'>对路径/保序的影响</th></tr></thead><tbody><tr><td class='l'><b>Static Bubble</b><br><span class='sub'>Ramrakhyani &amp; Krishna, <i>Static Bubble: A Framework for Deadlock-Free Irregular On-chip Topologies</i>, HPCA 2017, pp. 253–264</span></td><td class='l'>timeout t_DD=34cy + probe 绕环一趟</td><td class='l'>环上一个静态气泡开一拍，环整体前进 1 跳</td><td class='l'>路径不变 ⇒ 保序</td></tr><tr><td class='l'><b>SPIN</b><br><span class='sub'>Ramrakhyani, Gratz &amp; Krishna, <i>Synchronized Progress in Interconnection Networks (SPIN): A New Theory for Deadlock Freedom</i>, ISCA 2018, pp. 699–711</span></td><td class='l'>timeout t_DD=128cy + probe 绕环一趟</td><td class='l'>环上所有包同一拍同步前进 1 跳（spin）</td><td class='l'>路径不变 ⇒ 保序</td></tr><tr><td class='l'><b>SWAP</b><br><span class='sub'>Parasar, Enright Jerger, Gratz, San Miguel &amp; Krishna, <i>SWAP: Synchronized Weaving of Adjacent Packets for Network Deadlock Resolution</i>, MICRO 2019, pp. 873–885</span></td><td class='l'>无检测；每 K*N=48cy 轮到一次（TDM）</td><td class='l'>与下游交换两个包，被换的包回退 1 跳（backtrack）</td><td class='l'><b>回退改路径 ⇒ 破坏保序</b></td></tr></tbody></table>
+<p class="note"><b>本设计的关键放大器：</b>SB 与 SPIN 的 probe / disable / move /
+check_probe 都要沿死锁环<b>绕一整趟</b>。论文里链路 1 拍，一趟 ≈ 环长×2 拍；
+本设计 H=7 / V=9 拍，一趟 = Σ(1+link_lat) ≈ 环长×8–10 拍。
+实测（m₀=13，R0 路由）平均环长中位 10.2 个转向、最长
+30，
+<b>一趟 = 92.2 拍</b>
+（SPIN 的一次 spin 要 2 趟 ≈ 191 拍，
+只换来环整体前进 1 跳）。恢复延迟因此比论文语境放大近一个数量级。</p>
+<p class="note"><b>建模口径与偏差（<code>utils/pg_deadlock_recovery.py</code>）：</b>
+① DES 是 <code>dse_pg_alltoall_8x6.simulate_alltoall</code> 的 fork，
+<code>selftest()</code> 逐周期校验二者在无死锁输入上完全一致，故与 §6 数字可比；
+② 1 VC 下依赖链唯一 ⇒ probe 走链即精确判环，<b>无假阴性</b>，
+「假阳性」只来自 probe 绕环期间依赖已自行解开（表中单列）；
+③ 全局同时只允许一个恢复 FSM（SPIN 的轮转优先级/epoch 与 SWAP 的
+「全网同时只一次交换」本就如此，SB 略偏保守）；
+④ 本项目一个包=1 flit，故 SB 的 packet-sized 气泡记为 1 flit；
+⑤ SB 的 <code>is_deadlock</code>/<code>IO_priority</code>（禁止其他包进入环上转向）
+与 SPIN 的按 VC 冻结都已建模；⑥ SWAP 按 (cycle/m)%(K·N)=router_id 的 TDM
+触发，K=1 ⇒ 每个 router 每 48 拍轮到一次、
+且只在队头确实被下游堵住时才发起，握手 4 拍。</p>
+<p class="note"><b>一条必须核验的前提（SB）：</b>Static Bubble 的正确性依赖
+「<b>任何环都至少经过一个带气泡的 router</b>」，HPCA'17 是在<b>完好</b> mesh 上证明这条
+放置规则的。本项目的残图上气泡节点本身也可能坏掉，所以这条不再自动成立。
+实测：全部 4614
+次检测到的环<b>都</b>至少含一个存活气泡（<code>no_bubble</code>=
+0），
+故 8×6 + 预算故障下 15 个气泡的放置依然充分；若出现反例，SB 会直接退化为
+「检测到但无法恢复」，这也是代码里单列该计数器的原因。</p>
+
+<h3>7.3 端到端时间、恢复开销与保序</h3>
+<h4>m₀ = 1</h4><table><thead><tr><th class='l'>路由</th><th class='l'>机制</th><th>area</th><th>A 中位/最差</th><th>牺牲最差</th><th>保序</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>检测次数 中位/最差</th><th>恢复动作最差</th><th>停摆占比</th><th>完成场景</th></tr></thead><tbody><tr><td class='l' rowspan='4'><b>R0 XY+绕障</b></td><td class='l'>不装恢复机制（对照）</td><td>0.897</td><td>48/43</td><td>1</td><td>12/12</td><td>329</td><td><b>969</b></td><td>0/0</td><td>0</td><td>2%</td><td>12/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>889</td><td><b>4241</b></td><td>2/16</td><td>16</td><td>8%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>3713</td><td><b>40028</b></td><td>18/83</td><td>94</td><td>63%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.936</td><td>46/42</td><td>2</td><td><b>8/44</b></td><td>1083</td><td><b>9914</b></td><td>0/0</td><td>7533</td><td>1%</td><td>44/44</td></tr><tr><td class='l' rowspan='4'><b>R1 min-max</b></td><td class='l'>不装恢复机制（对照）</td><td>0.897</td><td>48/46</td><td>0</td><td>7/7</td><td>242</td><td><b>601</b></td><td>0/0</td><td>0</td><td>1%</td><td>7/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>2535</td><td><b>7545</b></td><td>8/26</td><td>27</td><td>37%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>14368</td><td><b>48119</b></td><td>35/113</td><td>119</td><td>81%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.936</td><td>46/42</td><td>2</td><td><b>8/44</b></td><td>1200</td><td><b>9257</b></td><td>0/0</td><td>8617</td><td>1%</td><td>44/44</td></tr><tr><td class='l' rowspan='4'><b>R2 M3′+兜底</b></td><td class='l'>不装恢复机制（对照）</td><td>0.897</td><td>46/42</td><td>2</td><td>44/44</td><td>574</td><td><b>790</b></td><td>0/0</td><td>0</td><td>1%</td><td>44/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>574</td><td><b>790</b></td><td>0/0</td><td>0</td><td>1%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>574</td><td><b>790</b></td><td>0/0</td><td>0</td><td>1%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.936</td><td>46/42</td><td>2</td><td><b>8/44</b></td><td>571</td><td><b>780</b></td><td>0/0</td><td>344</td><td>2%</td><td>44/44</td></tr><tr class='ref'><td class='l'>避免类</td><td class='l'>M1 XY</td><td>0.897</td><td>8/2</td><td>45</td><td>44/44</td><td>1021</td><td><b>1928</b></td><td>—</td><td>—</td><td>0%</td><td>44/44</td></tr><tr class='ref'><td class='l'>避免类</td><td class='l'>M3′ best-root</td><td>0.897</td><td>46/40</td><td>4</td><td>44/44</td><td>574</td><td><b>790</b></td><td>—</td><td>—</td><td>0%</td><td>44/44</td></tr></tbody></table><h4>m₀ = 13</h4><table><thead><tr><th class='l'>路由</th><th class='l'>机制</th><th>area</th><th>A 中位/最差</th><th>牺牲最差</th><th>保序</th><th>T<sub>e2e</sub> 中位 (ns)</th><th>T<sub>e2e</sub> 最差 (ns)</th><th>检测次数 中位/最差</th><th>恢复动作最差</th><th>停摆占比</th><th>完成场景</th></tr></thead><tbody><tr><td class='l' rowspan='4'><b>R0 XY+绕障</b></td><td class='l'>不装恢复机制（对照）</td><td>0.897</td><td>46/44</td><td>0</td><td>4/4</td><td>4641</td><td><b>4694</b></td><td>0/0</td><td>0</td><td>0%</td><td>4/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>10251</td><td><b>31579</b></td><td>24/69</td><td>110</td><td>21%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>66173</td><td><b>414869</b></td><td>153/703</td><td>991</td><td>82%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.991</td><td>46/42</td><td>2</td><td><b>0/44</b></td><td>77591</td><td><b>662390</b></td><td>0/0</td><td>589969</td><td>5%</td><td>44/44</td></tr><tr><td class='l' rowspan='4'><b>R1 min-max</b></td><td class='l'>不装恢复机制（对照）</td><td colspan='9' class='l cap-bad'>全部场景未完成：DEADLOCK_NOT_CLEARED</td><td>0/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>27793</td><td><b>55301</b></td><td>70/154</td><td>240</td><td>48%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>186096</td><td><b>496938</b></td><td>386/986</td><td>1335</td><td>90%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.991</td><td>46/42</td><td>2</td><td><b>0/44</b></td><td>150573</td><td><b>693907</b></td><td>0/0</td><td>862295</td><td>2%</td><td>44/44</td></tr><tr><td class='l' rowspan='4'><b>R2 M3′+兜底</b></td><td class='l'>不装恢复机制（对照）</td><td>0.897</td><td>46/42</td><td>2</td><td>44/44</td><td>5422</td><td><b>7573</b></td><td>0/0</td><td>0</td><td>0%</td><td>44/44</td></tr><tr><td class='l'>Static Bubble</td><td>0.902</td><td>46/42</td><td>2</td><td>44/44</td><td>5422</td><td><b>7573</b></td><td>0/0</td><td>0</td><td>0%</td><td>44/44</td></tr><tr><td class='l'>SPIN</td><td>0.933</td><td>46/42</td><td>2</td><td>44/44</td><td>5422</td><td><b>7573</b></td><td>0/0</td><td>0</td><td>0%</td><td>44/44</td></tr><tr><td class='l'>SWAP</td><td>0.991</td><td>46/42</td><td>2</td><td><b>0/44</b></td><td>5343</td><td><b>7212</b></td><td>0/0</td><td>3589</td><td>0%</td><td>44/44</td></tr><tr class='ref'><td class='l'>避免类</td><td class='l'>M1 XY</td><td>0.897</td><td>8/2</td><td>45</td><td>44/44</td><td>13096</td><td><b>24968</b></td><td>—</td><td>—</td><td>0%</td><td>44/44</td></tr><tr class='ref'><td class='l'>避免类</td><td class='l'>M3′ best-root</td><td>0.897</td><td>46/40</td><td>4</td><td>44/44</td><td>5587</td><td><b>7573</b></td><td>—</td><td>—</td><td>0%</td><td>44/44</td></tr></tbody></table>
+<p class="note">「停摆占比」= 整个 alltoall 期间<b>全网无任何活动</b>的周期占比
+⚠ <b>「不装恢复机制（对照）」各行的统计只覆盖它自己跑完的那几个场景</b>
+（死锁的场景没有 makespan），所以它的时间/牺牲列<b>不能</b>与其余行横向比——
+它在表里只是用来说明「不装恢复机制会死锁多少场景」。<br>
+「停摆占比」= 整个 alltoall 期间<b>全网无任何活动</b>的周期占比
+（等检测 + 等绕环确认）。SB / SPIN 的时间主要花在这里；SWAP 无检测所以此列低，
+但它把时间花在最多 589,969 次交换与同样多次<b>回退</b>上
+（见 7.6 第 2 条）。「恢复动作」= grant（SB）/ spin（SPIN）/ swap（SWAP）次数，
+三者语义不同，不可横向比大小，只能各自看趋势。</p>
+
+<h3>7.4 硬件代价</h3>
+<p class="note">本项目 area 口径只对缓冲/表这类结构可算（A<sub>flit</sub>/flit-slot，
+ROM 位按 0.15 折算）；FSM、probe 单元、mux/u-turn 这类控制逻辑只有各论文自己的
+综合数据可用，故按「基线 1VC router 面积的百分比」计入，并给出第三方复现的上限
+（图中横向短线即这段区间）。三者<b>都不增加 VC</b>，所以缓冲面积与 1VC 基线相同
+——这正是恢复类最大的卖点。</p>
+<table><thead><tr><th class='l'>机制</th><th class='l'>本项目口径可算的新增存储</th><th class='l'>控制逻辑面积（各文自报 / 第三方复现）</th><th>area（自报）</th><th>area（第三方上限）</th></tr></thead><tbody><tr><td class='l'><b>Static Bubble</b></td><td class='l'>31 bit/router + 0.31 flit 缓冲/router（全片 15 个包缓冲）</td><td class='l'>自报 &lt;0.5%（32nm DSENT，对 1-cycle mesh router）；SPIN 论文测得 10%（15nm RTL）；DeDR 测得 6.1%（45nm）</td><td>0.902</td><td>0.988</td></tr><tr><td class='l'><b>SPIN</b></td><td class='l'>158 bit/router</td><td class='l'>自报 4%（15nm RTL，对 west-first router）；DRAIN 测得 ~15%（11nm，对 DoR router）；DeDR 测得 4.0%</td><td>0.933</td><td>1.032</td></tr><tr><td class='l'><b>SWAP</b></td><td class='l'>14 bit/router + <b>重排序缓冲 ≥16 flit/目的</b></td><td class='l'>自报 ~4%（对 XY/west-first router），比 escape-VC 低 30%</td><td>0.991</td><td>0.991</td></tr></tbody></table>
+
+<h3>7.5 三性质核验（与 §2.5 同口径）</h3>
+<p class="note">恢复类在「无死锁」这一列的性质<b>与避免类不同</b>：它不保证 CDG 无环，
+只保证<b>不会永久卡死</b>（活性由恢复机制提供，安全性由「环上至少一个包能动」提供），
+所以 R0 / R1 这一列只能标 △。<b>R2 是例外</b>：它的路由本身就合法，
+这一列回到 ✓，代价是恢复机制变成纯冗余——
+换句话说，这张表里「△ 换零牺牲」的交易只在 R0 / R1 成立，
+而 R0 / R1 的零牺牲 R2 也有。</p>
+<table class='cap'><thead><tr><th class='l'>路由</th><th class='l'>避障</th><th class='l'>机制</th><th class='l'>无死锁</th><th class='l'>保序</th><th class='l'>判定</th></tr></thead><tbody><tr><td class='l' rowspan='3'><b>R0 XY+绕障</b></td><td class='l cap-ok' rowspan='3'>✓ 41/44 零牺牲<div class='sub'>另 3 场景好节点被物理断连，累计弃 4 个；峰值负载 198（下界的 1.71×）</div></td><td class='l'>Static Bubble</td><td class='l cap-warn'>△ CDG 41/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，最差 69 次检测 / 110 次恢复动作</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SPIN</td><td class='l cap-warn'>△ CDG 41/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，最差 703 次检测 / 991 次恢复动作</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SWAP</td><td class='l cap-warn'>△ CDG 41/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，无检测，靠 TDM 周期性交换（最差 589,969 次）</div></td><td class='l cap-bad'><b>✗</b> 44/44 乱序<div class='sub'>u-turn 回退 ⇒ 需重排序缓冲</div></td><td class='l cap-bad'><b>需额外重排序硬件</b></td></tr><tr><td class='l' rowspan='3'><b>R1 min-max</b></td><td class='l cap-ok' rowspan='3'>✓ 41/44 零牺牲<div class='sub'>另 3 场景好节点被物理断连，累计弃 4 个；峰值负载 129（下界的 1.10×）</div></td><td class='l'>Static Bubble</td><td class='l cap-warn'>△ CDG 44/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，最差 154 次检测 / 240 次恢复动作</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SPIN</td><td class='l cap-warn'>△ CDG 44/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，最差 986 次检测 / 1335 次恢复动作</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SWAP</td><td class='l cap-warn'>△ CDG 44/44 成环<div class='sub'>靠运行时恢复保证「不永久死锁」：44/44 场景完成，无检测，靠 TDM 周期性交换（最差 862,295 次）</div></td><td class='l cap-bad'><b>✗</b> 44/44 乱序<div class='sub'>u-turn 回退 ⇒ 需重排序缓冲</div></td><td class='l cap-bad'><b>需额外重排序硬件</b></td></tr><tr><td class='l' rowspan='3'><b>R2 M3′+兜底</b></td><td class='l cap-ok' rowspan='3'>✓ 41/44 零牺牲<div class='sub'>另 3 场景好节点被物理断连，累计弃 4 个；峰值负载 210（下界的 1.70×）</div></td><td class='l'>Static Bubble</td><td class='l cap-ok'>✓ CDG 0/44 成环<div class='sub'>检测器在 44 场景里<b>一次都没响</b>，等于白拿一层从不出险的保险</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SPIN</td><td class='l cap-ok'>✓ CDG 0/44 成环<div class='sub'>检测器在 44 场景里<b>一次都没响</b>，等于白拿一层从不出险的保险</div></td><td class='l cap-ok'>✓ 44/44 保序<div class='sub'>不改路径、不回退</div></td><td class='l cap-ok'>可用</td></tr><tr><td class='l'>SWAP</td><td class='l cap-ok'>✓ CDG 0/44 成环<div class='sub'>路由本身已合法，但 SWAP 不做检测，照常交换（最差 3,589 次）⇒ 白付乱序代价</div></td><td class='l cap-bad'><b>✗</b> 44/44 乱序<div class='sub'>u-turn 回退 ⇒ 需重排序缓冲</div></td><td class='l cap-bad'><b>需额外重排序硬件</b></td></tr></tbody></table>
+
+<h3>7.6 独立 Pareto 与结论</h3>
+<figure class="e2e-fig"><img src="pg_recovery_pareto.png" alt="recovery Pareto" style="max-width:100%;height:auto;background:#fff;border:1px solid #e0e0e0"/><figcaption>死锁<b>恢复</b>类独立 Pareto（44 场景，1 VC，零牺牲）：3 种机制 × 3 种路由。面积只由机制决定，所以同一机制的三种路由落在同一 x 上，用<b>点形</b>区分（○ R0 XY+绕障，△ R1 min-max，□ R2 M3′+兜底）。实心=44 场景最差，空心=中位；灰菱形为 1VC <b>避免</b>类同轴对照，前沿分开计算。纵轴对数。</figcaption></figure>
+<ol>
+<li><b>直接回答「用最优避障路由叠加恢复机制」：净收益为零，只多付面积。</b>
+R2（= 最优避障路由 M3′ best-root，外加「树到不了就走非法路径」这条兜底规则）
++ SB：m₀=13 最差 7573 ns / 中位
+5422 ns，44/44 保序，
+面积 0.902（+0.6%，
+第三方复现口径最多 +10.1%）。
+避免类 M3′ 本体：7573.3 ns 最差、
+面积 0.897。
+<b>时间一模一样（1.00×），
+因为兜底规则一次都没用上、检测器一次都没响
+（0 对非法路径、0 次检测）。</b>
+原因是结构性的、不是运气：Up*/Down* 在任何连通残图上都覆盖全部节点且 CDG 无环，
+所以<b>最优避障路由根本不给恢复机制留活干</b>。
+这条正好也说明恢复类的适用边界：<b>它只能救「路由本身不合法」，
+而最优避障路由的定义就是「合法」。</b></li>
+<li><b>反直觉的核心结论：恢复类的成败不由「负载均衡」决定，而由「CDG 里有多少环」决定。</b>
+R1（纯 min-max）把峰值链路负载压到理论下界的
+1.10×，比 R0 的 1.71×
+和 R2 的 1.70× 都好，
+按纯带宽模型它<b>应该</b>最快；实测却最慢
+（SB 上 m₀=13 最差 55301 ns，
+是 R2 的 7.3×、R0 的
+1.8×；
+检测次数中位 70 vs R0 的 24 vs R2 的
+0）。
+原因：无转向模型 ⇒ 每条链路上都有各方向的转弯 ⇒ 环极多且一解开就重建，
+而<b>每次恢复都要按 92.2 拍的量级绕环一趟</b>。
+均衡省下的带宽（约 36%）
+远不够补这份开销。<b>所以「先把路由做成最优负载、再拿恢复机制兜底」是个陷阱；
+正确做法反过来：让路由尽量保持无环，只在它救不了的地方才动用恢复。</b></li>
+<li><b>恢复类内部排序 <span style="letter-spacing:.02em">SB ≪ SPIN &lt; SWAP</span>，
+差距达一个数量级</b>（R0 上，m₀=13 最差 T<sub>e2e</sub>：
+31579 / 414869 /
+662390 ns；中位 10251 /
+66173 / 77591 ns）。机制层面的原因：
+<ul>
+<li><b>SB</b> 一次 grant 就把环<b>彻底拆掉</b>：disable 沿环走一趟，期间禁止新包进入
+环上转向（<code>is_deadlock</code>），气泡吸收后环不会立刻重建 ⇒ 检测次数最少
+（中位 24、最差 69），停摆占比
+21%。</li>
+<li><b>SPIN</b> 一次 spin 只让环整体<b>前进 1 跳</b>，但要付 2 趟绕环
+（≈191 拍）；饱和注入下环立刻由后续包重建，
+于是「检测→自旋→重建」反复循环（最差 703 次检测、
+991 次恢复动作），停摆占比高达
+82% ⇒ 整体被拖慢 54.8×/11.8×（最差/中位）。</li>
+<li><b>SWAP</b> 不检测，只要轮到自己（每个 router 每 48 拍一次，
+全网每拍至多一次）且队头<b>被堵住</b>就交换。饱和注入下「被堵住」几乎恒成立，
+而其中绝大多数只是<b>普通拥塞、并非死锁</b>，于是它把交换当成常态操作：
+最差 589,969 次交换 = 同样多次<b>回退一跳</b>，
+纯粹的带宽浪费（往回走的那一跳还要再走一遍）。
+换句话说，SWAP 的代价与<b>拥塞程度</b>成正比，而与<b>死锁次数</b>无关，
+这在 collective 场景是最坏的组合。</li>
+</ul></li>
+<li><b>就算配最差的路由（R0，即原来那版「基线 XY + 绕障」），恢复类也没有全面落败：</b>
+最好的恢复方案（Static Bubble）最差 T<sub>e2e</sub> 仍是 M3′ 的 4.2 倍（中位 1.8 倍），可是 <b>R0+SB 的中位时间已经优于避免类的 M1 XY</b>（10251 ns vs 13096 ns）。
+原因不在网络本身，而在强扩展：M1 XY 为保证 CDG 无环必须弃掉大量好节点
+（A 中位仅 8），m<sub>eff</sub> 按 (48/A)² 暴涨，
+省下来的时间远不够补。<b>所以在「XY 路由表不能改」的工程约束下，
+加一套 SB 也比用转向限制去砍节点更划算。</b></li>
+<li><b>SWAP 破坏保序，这是本项目的硬性质，而且换路由也救不了：</b>
+被换回的包 u-turn 回退一跳，同一 (s,d) 的后发包可能抢到前面。
+实测 m₀=13：R0 上 0/44 保序、
+R2 上 0/44 保序——<b>即使 CDG 无环、
+一次死锁都没有，SWAP 依然照常交换</b>（subactive 机制，只看队头是否被堵），
+所以它在健康 mesh 上也会乱序。最坏乱序对数
+1514、
+需要 ≥16 flit/目的 的重排序缓冲（已计入其 area）。
+7.5 的三性质表里这一列直接判否（口径同 §2.5）。
+SB / SPIN 不改路径也不回退，保序不受影响。</li>
+<li><b>选型结论（按约束条件分档）：</b>
+<ul>
+<li><b>能自由设计路由</b> ⇒ <b>M3′ best-root 本体，不要加恢复机制</b>
+（1VC，面积 0.897，保序，无检测逻辑、无运行时开销）。
+再叠 SB/SPIN/SWAP 只会多 +0.6%
+（第三方口径至多 +15.1%）
+面积换 0 收益。想把 §6 里那
+2 个多余牺牲救回来，
+改牺牲搜索（先剪物理断连节点）就够了，不需要任何硬件。</li>
+<li><b>路由表被写死成 XY（例如复用现成 IP、不许改路由计算）</b> ⇒ R0 + Static Bubble：
+慢 4.2×（最差）
+但零牺牲、保序、面积几乎不变，仍优于「用固定转向模型硬砍节点」。
+这是恢复类在本工作负载下唯一站得住的用法。</li>
+<li><b>任何情况下都别选</b>：R1（纯负载最优路由）配任何机制、以及 SWAP（破坏保序）。</li>
+</ul>
+另外，恢复类真正的舞台仍是<b>低注入率</b>的通用 cache 流量：那时恢复几乎不触发，
+它退化成「零牺牲 + 1VC + 最短路低时延」。本节 <code>none</code> 行即此极限：
+在<b>那 12/44 个本来就不死锁的场景</b>里，
+无转向限制的 R0 只要 329 ns，
+比同场景任何避免类都快。这与 Static Bubble 论文自己的观察一致：
+PARSEC 下压根没观察到死锁；而本项目是 <b>collective 饱和注入</b>，
+前提被破坏，结论就反过来。</li>
+</ol>
+<h3>7.7 检测阈值敏感度（结论不依赖 t<sub>DD</sub>）</h3><p class='note'>论文取值 SB=34 / SPIN=128 是按<b>单拍链路</b>调的；本设计链路 7–9 拍，等效阈值本应更大，所以有必要确认「SPIN 慢」不是阈值选错造成的。下表是 alltoall makespan（cy，m<sub>eff</sub>≈2，路由取 R0——R2 根本不触发恢复，阈值无从体现）在 t<sub>DD</sub>∈{34, 128, 512, 1024} 上的全扫描：</p><ul><li><b>阈值本身确实有影响，但方向对 SPIN 无益：</b>从 34 调到 1024，makespan 整体变长，最大 1.86×（个别场景在 34↔128 之间有 ±13% 抖动：更早探测偶尔会换掉解锁顺序）。检测次数<b>完全不变</b>（同一批环、同一批依赖），多等的时间几乎线性地进了「停摆」里 —— 也就是说「阈值调小」只能省掉这份等待，救不了绕环本身的开销：SB 的绝对值小、占比大（最多省 46%），SPIN 的时间几乎全在绕环上（最多省 17%）。</li><li><b>排序从未翻转：</b>SPIN/SB 的 makespan 比值在<b>所有</b>阈值上都是 3.0×–21.4×。所以 7.6 的结论与该参数无关，根因是「一次 spin 只让环前进 1 跳，却要付 2 趟绕环」，这是机制固有的，调参调不掉。</li></ul><table><thead><tr><th class='l'>机制 / 场景</th><th>t<sub>DD</sub>=34</th><th>t<sub>DD</sub>=128</th><th>t<sub>DD</sub>=512</th><th>t<sub>DD</sub>=1024</th></tr></thead><tbody><tr><td class='l'>Static Bubble / b_r1_l2_0000</td><td>1347</td><td>1192</td><td>1576</td><td>2088</td></tr><tr><td class='l'>Static Bubble / b_r2_l4_0000</td><td>928</td><td>928</td><td>1211</td><td>1723</td></tr><tr><td class='l'>Static Bubble / b_r4_l8_0000</td><td>2794</td><td>2876</td><td>3260</td><td>3772</td></tr><tr><td class='l'>SPIN / b_r1_l2_0000</td><td>7008</td><td>7049</td><td>7433</td><td>7945</td></tr><tr><td class='l'>SPIN / b_r2_l4_0000</td><td>4264</td><td>4264</td><td>4628</td><td>5140</td></tr><tr><td class='l'>SPIN / b_r4_l8_0000</td><td>59855</td><td>59937</td><td>60583</td><td>61607</td></tr></tbody></table>
+<p class="note">数据：<code>results/pg_recovery_e2e.json</code>
+（44 场景 × 3 路由 × 4 机制
+× m₀∈{1, 13}，
+3191.6s，1056 行 DES）；
+代码 <code>utils/pg_deadlock_recovery.py</code>、
+<code>utils/dse_pg_recovery_pareto.py</code>、
+<code>utils/gen_pg_recovery_pareto_plot.py</code>。
+静态气泡位置按 HPCA'17 的放置规则（x&gt;0,y&gt;0 且 x%4≡y%4 或 (1,3) 或 (3,1)），
+8×8 得 21 个、16×16 得 89 个（与论文一致），本 8×6 得
+15 个。</p>
+
+
+<h2>8. 指标定义</h2>
 <ul>
 <li><b>raw / raw_slowdown</b> = <code>mk / mk_golden − 1</code>（与 ring_report 同口径）。
 基准是健康 mesh 的 XY alltoall。表中写成百分比，如 <code>+91.0%</code> = 慢 91%。
@@ -992,7 +1228,7 @@ M5h：40/44 原求解可行，其余 4 个靠整行/整列；
 <li><code>sacrifice_cost = n_sacrificed / n_originally_good</code></li>
 </ul>
 
-<h2>8. 主要观察</h2>
+<h2>9. 主要观察</h2>
 <ol>
 <li><b>故障模型与评测范围：</b>主评估 = 预算故障（≤4R+≤8L）；
 e2e 评有限 VC（Super-turn/Dual/LASH）与分批屏障 1VC；
@@ -1020,5 +1256,13 @@ M4 极常见 STRUCT；M10 在散落 ≥3 死节点上会。</li>
 <li><b>Q 与 VC 面积：</b>Q=4 时 Up*/Down* 可慢数倍；VC 线性放大每端口缓冲。</li>
 
 <li><b>通信占端到端 70–86%</b>。能分批优先 BB UD；否则 M3′ / Super-turn。</li>
+
+<li><b>死锁恢复类（§7，Static Bubble / SPIN / SWAP × 三种路由）：</b>
+换掉「先天无环」这个前提后，牺牲维度上完胜（零牺牲、1 VC、面积 +0.6%–15%），
+三者在全部场景都解开了死锁。<b>但成败取决于路由选择</b>：
+让路由尽量保持无环、只在它救不了的地方动用恢复（R2 = M3′ 核心 + 非法转向补齐）
+才是对的；反过来「先把路由做成负载最优、再拿恢复兜底」（R1）最慢，
+因为恢复开销 ∝ CDG 环数 × 绕环一趟的拍数，而不是 ∝ 峰值负载。
+机制排序恒为 SB ≪ SPIN &lt; SWAP；SWAP 即使在无环路由上也破坏保序。</li>
 </ol>
 </body></html>
