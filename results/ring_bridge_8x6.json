@@ -26,6 +26,87 @@
   1,
   13
  ],
+ "depths": [
+  1,
+  2,
+  4,
+  8,
+  16,
+  32
+ ],
+ "turns": [
+  1,
+  2,
+  5,
+  10,
+  20
+ ],
+ "legacy_wire": {
+  "pitch_h": 7,
+  "pitch_v": 9,
+  "folded": false,
+  "t_turn": 1
+ },
+ "legacy_ref": [
+  {
+   "pattern": "alltoall",
+   "algo": "flat",
+   "m": 1,
+   "makespan": 164,
+   "completed": true,
+   "n_bridges_touched": 48,
+   "peak_max": 4,
+   "peak_min": 2,
+   "peak_at_cap": 20,
+   "mean_max": 0.787,
+   "mean_avg": 0.484,
+   "full_cy_total": 111,
+   "full_frac_max": 0.0671,
+   "entries_total": 1680,
+   "deflect_total": 40,
+   "wait_max": 16,
+   "wait_mean": 1.27,
+   "hot_node": {
+    "node": 40,
+    "x": 0,
+    "y": 5,
+    "peak": 4,
+    "mean": 0.787,
+    "full_cy": 11,
+    "entries": 35,
+    "deflect": 6
+   }
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "flat",
+   "m": 13,
+   "makespan": 1928,
+   "completed": true,
+   "n_bridges_touched": 48,
+   "peak_max": 5,
+   "peak_min": 4,
+   "peak_at_cap": 48,
+   "mean_max": 1.026,
+   "mean_avg": 0.745,
+   "full_cy_total": 6883,
+   "full_frac_max": 0.1525,
+   "entries_total": 21840,
+   "deflect_total": 5347,
+   "wait_max": 167,
+   "wait_mean": 2.16,
+   "hot_node": {
+    "node": 9,
+    "x": 1,
+    "y": 1,
+    "peak": 5,
+    "mean": 1.026,
+    "full_cy": 255,
+    "entries": 455,
+    "deflect": 170
+   }
+  }
+ ],
  "definitions": {
   "peak": "该桥 transfer FIFO 在整个集合通信里到过的最深条目数，取各 phase 的最大值；FIFO 必须按它来建",
   "mean": "flit·cycle 积分 / makespan，平均真正用到多深",
@@ -1056,7 +1137,7 @@
      "deflect": 320
     }
    ],
-   "wall_s": 1.47
+   "wall_s": 1.32
   },
   {
    "pattern": "allgather",
@@ -1568,7 +1649,7 @@
      "deflect": 8
     }
    ],
-   "wall_s": 0.11
+   "wall_s": 0.1
   },
   {
    "pattern": "allgather",
@@ -2080,7 +2161,7 @@
      "deflect": 320
     }
    ],
-   "wall_s": 1.51
+   "wall_s": 1.36
   },
   {
    "pattern": "allreduce",
@@ -2916,7 +2997,7 @@
      "deflect": 172
     }
    ],
-   "wall_s": 0.06
+   "wall_s": 0.05
   }
  ],
  "calendar": [
@@ -5375,6 +5456,58 @@
      "entries": 3
     }
    ]
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "makespan": 198,
+   "n_bridges_touched": 0,
+   "n_crossings": 0,
+   "peak_max": 0,
+   "mean_max": 0.0,
+   "mean_avg": 0.0,
+   "table": []
+  },
+  {
+   "pattern": "alltoall",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "makespan": 1753,
+   "n_bridges_touched": 0,
+   "n_crossings": 0,
+   "peak_max": 0,
+   "mean_max": 0.0,
+   "mean_avg": 0.0,
+   "table": []
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 1,
+   "makespan": 134,
+   "n_bridges_touched": 0,
+   "n_crossings": 0,
+   "peak_max": 0,
+   "mean_max": 0.0,
+   "mean_avg": 0.0,
+   "table": []
+  },
+  {
+   "pattern": "allgather",
+   "algo": "dim_2phase",
+   "tier": "T0",
+   "m": 13,
+   "makespan": 914,
+   "n_bridges_touched": 0,
+   "n_crossings": 0,
+   "peak_max": 0,
+   "mean_max": 0.0,
+   "mean_avg": 0.0,
+   "table": []
   }
  ],
  "no_turn_control": [
@@ -5473,7 +5606,7 @@
      "full_frac_max": 0.519,
      "deflect_total": 3324,
      "wait_max": 2,
-     "wall_s": 0.23
+     "wall_s": 0.21
     },
     {
      "fifo_depth": 2,
@@ -5483,7 +5616,7 @@
      "full_frac_max": 0.2791,
      "deflect_total": 1622,
      "wait_max": 3,
-     "wall_s": 0.17
+     "wall_s": 0.15
     },
     {
      "fifo_depth": 4,
@@ -5513,7 +5646,7 @@
      "full_frac_max": 0.0,
      "deflect_total": 0,
      "wait_max": 12,
-     "wall_s": 0.1
+     "wall_s": 0.09
     },
     {
      "fifo_depth": 32,
@@ -5523,7 +5656,7 @@
      "full_frac_max": 0.0,
      "deflect_total": 0,
      "wait_max": 12,
-     "wall_s": 0.1
+     "wall_s": 0.09
     }
    ],
    "best_makespan": 156,
@@ -5543,7 +5676,7 @@
      "full_frac_max": 0.5631,
      "deflect_total": 57141,
      "wait_max": 32,
-     "wall_s": 3.21
+     "wall_s": 2.75
     },
     {
      "fifo_depth": 2,
@@ -5553,7 +5686,7 @@
      "full_frac_max": 0.4154,
      "deflect_total": 33497,
      "wait_max": 35,
-     "wall_s": 2.1
+     "wall_s": 1.94
     },
     {
      "fifo_depth": 4,
@@ -5563,7 +5696,7 @@
      "full_frac_max": 0.2462,
      "deflect_total": 16668,
      "wait_max": 47,
-     "wall_s": 1.63
+     "wall_s": 1.39
     },
     {
      "fifo_depth": 8,
@@ -5573,7 +5706,7 @@
      "full_frac_max": 0.2007,
      "deflect_total": 7524,
      "wait_max": 215,
-     "wall_s": 1.18
+     "wall_s": 1.23
     },
     {
      "fifo_depth": 16,
@@ -5583,7 +5716,7 @@
      "full_frac_max": 0.1592,
      "deflect_total": 2858,
      "wait_max": 221,
-     "wall_s": 0.93
+     "wall_s": 0.8
     },
     {
      "fifo_depth": 32,
@@ -5593,7 +5726,7 @@
      "full_frac_max": 0.1687,
      "deflect_total": 971,
      "wait_max": 253,
-     "wall_s": 0.9
+     "wall_s": 0.75
     }
    ],
    "best_makespan": 1648,
@@ -5613,7 +5746,7 @@
      "full_frac_max": 0.6286,
      "deflect_total": 2841,
      "wait_max": 21,
-     "wall_s": 0.12
+     "wall_s": 0.1
     },
     {
      "fifo_depth": 2,
@@ -5623,7 +5756,7 @@
      "full_frac_max": 0.4988,
      "deflect_total": 1850,
      "wait_max": 29,
-     "wall_s": 0.08
+     "wall_s": 0.07
     },
     {
      "fifo_depth": 4,
@@ -5633,7 +5766,7 @@
      "full_frac_max": 0.4701,
      "deflect_total": 1142,
      "wait_max": 48,
-     "wall_s": 0.06
+     "wall_s": 0.05
     },
     {
      "fifo_depth": 8,
@@ -5643,7 +5776,7 @@
      "full_frac_max": 0.6503,
      "deflect_total": 835,
      "wait_max": 154,
-     "wall_s": 0.05
+     "wall_s": 0.04
     },
     {
      "fifo_depth": 16,
@@ -5653,7 +5786,7 @@
      "full_frac_max": 0.6642,
      "deflect_total": 674,
      "wait_max": 220,
-     "wall_s": 0.05
+     "wall_s": 0.04
     },
     {
      "fifo_depth": 32,
@@ -5663,7 +5796,7 @@
      "full_frac_max": 0.6658,
      "deflect_total": 491,
      "wait_max": 266,
-     "wall_s": 0.04
+     "wall_s": 0.03
     }
    ],
    "best_makespan": 368,
@@ -5705,7 +5838,7 @@
      "mean_avg": 1.017,
      "full_frac_max": 0.0918,
      "deflect_total": 150,
-     "wall_s": 0.1
+     "wall_s": 0.09
     },
     {
      "t_turn": 10,
@@ -5725,7 +5858,7 @@
      "mean_avg": 1.846,
      "full_frac_max": 0.301,
      "deflect_total": 1214,
-     "wall_s": 0.14
+     "wall_s": 0.13
     }
    ],
    "makespan_10_over_1": 1.68,
@@ -5745,7 +5878,7 @@
      "mean_avg": 0.77,
      "full_frac_max": 0.1613,
      "deflect_total": 5431,
-     "wall_s": 1.04
+     "wall_s": 0.91
     },
     {
      "t_turn": 2,
@@ -5755,7 +5888,7 @@
      "mean_avg": 0.981,
      "full_frac_max": 0.1837,
      "deflect_total": 6004,
-     "wall_s": 1.09
+     "wall_s": 0.9
     },
     {
      "t_turn": 5,
@@ -5765,7 +5898,7 @@
      "mean_avg": 1.352,
      "full_frac_max": 0.2042,
      "deflect_total": 9738,
-     "wall_s": 1.39
+     "wall_s": 1.05
     },
     {
      "t_turn": 10,
@@ -5775,7 +5908,7 @@
      "mean_avg": 1.734,
      "full_frac_max": 0.2462,
      "deflect_total": 16668,
-     "wall_s": 1.54
+     "wall_s": 1.28
     },
     {
      "t_turn": 20,
@@ -5785,7 +5918,7 @@
      "mean_avg": 2.185,
      "full_frac_max": 0.3704,
      "deflect_total": 31095,
-     "wall_s": 2.28
+     "wall_s": 1.98
     }
    ],
    "makespan_10_over_1": 1.502,
@@ -5793,5 +5926,5 @@
    "deflect_10_over_1": 3.07
   }
  ],
- "wall_s": 26.9
+ "wall_s": 25.2
 }

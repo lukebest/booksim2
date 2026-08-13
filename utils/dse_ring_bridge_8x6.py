@@ -46,7 +46,7 @@ from dse_ring_collectives_8x6 import ROOT, phase_offers, run_base_phase
 from rg_ring_base import RingBaseParams
 from rg_ring_calendar import build_calendar
 from rg_ring_collectives import build_ring_collective
-from rg_ring_topo import RingTopology
+from rg_ring_topo import LEGACY_WIRE, RingTopology
 from rg_topo import coord
 
 OUT = Path(__file__).resolve().parents[1] / "results" / "ring_bridge_8x6.json"
@@ -270,7 +270,7 @@ def main() -> None:
 
     print("\n=== the same bridges under the static calendar ===")
     cal_rows = []
-    for pattern, algo in CASES:
+    for pattern, algo in CASES + CONTROL:
         for m in M_LIST:
             c = calendar_census(topo, pattern, algo, m)
             cal_rows.append(c)
@@ -294,6 +294,20 @@ def main() -> None:
     print("=== turn sweep: alltoall m=13 ===")
     t13 = turn_sweep(topo, "alltoall", "flat", 13)
 
+    # the old wire setup (1-pitch hops of 7/9 cycles, a free bridge), kept as a
+    # measured reference so the report can quote what this setup change cost
+    # instead of remembering a number
+    print("\n=== legacy wire reference (H=7/V=9, t_turn=1) ===")
+    legacy_topo = RingTopology(**LEGACY_WIRE)
+    legacy = []
+    for m in M_LIST:
+        c = census(legacy_topo, "alltoall", "flat", m)
+        c.pop("table")
+        legacy.append(c)
+        print(f"alltoall   m={m:<3} mk {c['makespan']:7} peak {c['peak_max']:2} "
+              f"mean_max {c['mean_max']:5.2f} defl {c['deflect_total']:7}",
+              flush=True)
+
     doc = {
         "wire": {"pitch_h": topo.pitch_h, "pitch_v": topo.pitch_v,
                  "folded": topo.folded, "t_turn": topo.t_turn,
@@ -305,6 +319,8 @@ def main() -> None:
                    ("fifo_depth", "resv_tx", "eject_depth", "eject_bw",
                     "t_inj", "t_xfer")},
         "root": ROOT, "m_list": list(M_LIST),
+        "depths": list(DEPTHS), "turns": list(TURNS),
+        "legacy_wire": dict(LEGACY_WIRE), "legacy_ref": legacy,
         "definitions": {
             "peak": "该桥 transfer FIFO 在整个集合通信里到过的最深条目数，"
                     "取各 phase 的最大值；FIFO 必须按它来建",

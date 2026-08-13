@@ -896,13 +896,14 @@ def group_wire(topo: RingTopology) -> None:
 
     turning = topo.wire_distance(0, 9)
     straight = topo.wire_distance(0, 1) + topo.wire_distance(1, 9)
+    row_hop = topo.link_lat(("row", 0), 0)
+    col_hop = topo.link_lat(("col", 1), 0)
     check("changing rings costs t_turn, and it is charged once per ring "
           "change, not per hop",
-          turning == topo.link_lat(("row", 0), 0) + topo.t_turn
-          + topo.link_lat(("col", 1), 0)
-          and turning == straight - topo.t_turn + topo.t_turn,
-          f"0->9 = {turning} cy = 10 (row hop) + {topo.t_turn} (bridge) + 14 "
-          f"(col hop); diameter "
+          turning == row_hop + topo.t_turn + col_hop
+          and turning == straight + topo.t_turn,
+          f"0->9 = {turning} cy = {row_hop} (row hop) + {topo.t_turn} "
+          f"(bridge) + {col_hop} (col hop); diameter "
           f"{max(topo.wire_distance(0, d) for d in range(topo.n))} cy")
 
     # with a 10-cycle bridge, relaying through L1 is CHEAPER than turning, which
@@ -994,6 +995,42 @@ def group_bridge() -> None:
           f"{g13['mean_max'] / g13['mean_avg']:.2f} (node "
           f"{g13['hot_node']['node']}), alltoall = "
           f"{a2a13['mean_max'] / a2a13['mean_avg']:.2f}")
+
+    # The calendar has no FIFO, but that does not make its bridges free: what
+    # it needs instead is a bridge that can PIPELINE, because the slot table
+    # deliberately overlaps crossings. Measuring both the same way is the only
+    # way the comparison is not rigged.
+    t_turn = b["wire"]["t_turn"]
+    cal = {(c["pattern"], c["algo"], c["m"]): c for c in b["calendar"]}
+    cflat = cal[("alltoall", "flat", 1)]
+    cdim = cal[("alltoall", "dim_2phase", 1)]
+    check("the calendar pays for the bridge in pipelining, not in queueing: a "
+          "unicast slot table overlaps crossings, a dimension-decomposed one "
+          "has none",
+          cflat["peak_max"] > 1 and cdim["peak_max"] == 0,
+          f"alltoall m=1: flat calendar {cflat['peak_max']} crossings at once "
+          f"per bridge (mean {cflat['mean_max']}), dim_2phase "
+          f"{cdim['peak_max']}; a crossing lasts t_turn+m*sigma = "
+          f"{t_turn + 1} cy so at most "
+          f"{2 * (t_turn + 1)} can overlap",
+          prediction="「拍图不需要桥 buffer」只对按维分解成立，"
+                     "flat 拍图要求桥是流水的")
+
+    # Depth 4 vs 17 concurrent crossings is not a fair fight, so re-run the
+    # comparison at matched bridge capacity. The calendar still wins, by less.
+    d13 = next(d for d in b["depth_sweep"]
+               if d["pattern"] == "alltoall" and d["m"] == 13)
+    at16 = next(r for r in d13["rows"] if r["fifo_depth"] == 16)
+    at4 = next(r for r in d13["rows"] if r["fifo_depth"] == 4)
+    cal13 = cal[("alltoall", "flat", 13)]
+    check("the calendar still wins at MATCHED bridge capacity, so the "
+          "baseline's gap is not an artefact of an under-provisioned FIFO",
+          at16["makespan"] > cal13["makespan"],
+          f"alltoall m=13: ring_base {at4['makespan']} at depth 4 and "
+          f"{at16['makespan']} at depth 16 vs calendar {cal13['makespan']} "
+          f"= {at16['makespan'] / cal13['makespan']:.2f}x "
+          f"(default depth exaggerates the gap by "
+          f"{at4['makespan'] / at16['makespan']:.2f}x)")
 
     # and the sim's own accounting has to add up
     thr = load_json(THR)

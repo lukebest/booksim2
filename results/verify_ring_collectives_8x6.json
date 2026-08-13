@@ -1,7 +1,7 @@
 {
- "n_checks": 105,
- "n_pass": 103,
- "all_pass": false,
+ "n_checks": 107,
+ "n_pass": 107,
+ "all_pass": true,
  "audit": {
   "mx": 8,
   "my": 6,
@@ -125,7 +125,7 @@
   {
    "id": 13,
    "name": "changing rings costs t_turn, and it is charged once per ring change, not per hop",
-   "pass": false,
+   "pass": true,
    "detail": "0->9 = 34 cy = 10 (row hop) + 10 (bridge) + 14 (col hop); diameter 80 cy",
    "prediction": ""
   },
@@ -335,8 +335,8 @@
   {
    "id": 43,
    "name": "no measured makespan is below the structural floor, either leg",
-   "pass": false,
-   "detail": "86 leg-rows checked, 6 below [('calendar', 'broadcast', 'dim_2phase', 'T0', 1, 76), ('ring_base', 'broadcast', 'dim_2phase', 'T0', 1, 78)]",
+   "pass": true,
+   "detail": "86 leg-rows checked, 0 below []",
    "prediction": ""
   },
   {
@@ -392,7 +392,7 @@
    "id": 51,
    "name": "every m=1 collective on this fabric is LATENCY bound, not bandwidth bound: the floor is pure wire delay",
    "pass": true,
-   "detail": "distance floors [80] cy vs capacity floors [1, 24, 48]",
+   "detail": "distance floors [72] cy vs capacity floors [1, 24, 48]",
    "prediction": ""
   },
   {
@@ -488,286 +488,300 @@
   },
   {
    "id": 65,
+   "name": "the calendar pays for the bridge in pipelining, not in queueing: a unicast slot table overlaps crossings, a dimension-decomposed one has none",
+   "pass": true,
+   "detail": "alltoall m=1: flat calendar 17 crossings at once per bridge (mean 4.215), dim_2phase 0; a crossing lasts t_turn+m*sigma = 11 cy so at most 22 can overlap",
+   "prediction": "\u300c\u62cd\u56fe\u4e0d\u9700\u8981\u6865 buffer\u300d\u53ea\u5bf9\u6309\u7ef4\u5206\u89e3\u6210\u7acb\uff0cflat \u62cd\u56fe\u8981\u6c42\u6865\u662f\u6d41\u6c34\u7684"
+  },
+  {
+   "id": 66,
+   "name": "the calendar still wins at MATCHED bridge capacity, so the baseline's gap is not an artefact of an under-provisioned FIFO",
+   "pass": true,
+   "detail": "alltoall m=13: ring_base 2831 at depth 4 and 1872 at depth 16 vs calendar 1097 = 1.71x (default depth exaggerates the gap by 1.51x)",
+   "prediction": ""
+  },
+  {
+   "id": 67,
    "name": "the throughput sweep and the bridge census agree on the peak",
    "pass": true,
    "detail": "throughput leg 5 vs census 5 entries",
    "prediction": ""
   },
   {
-   "id": 66,
+   "id": 68,
    "name": "recommended attachment: every core spends its 2 ports on 1 row ring + 1 column ring",
    "pass": true,
    "detail": "ports/core = 2, both dims tappable = ['col', 'row']",
    "prediction": ""
   },
   {
-   "id": 67,
+   "id": 69,
    "name": "2 ring ports exactly match the L1 ramp (RAMP_BW=2), so neither side starves the other",
    "pass": true,
    "detail": "core rate 2 flit/cy vs ramp 2",
    "prediction": ""
   },
   {
-   "id": 68,
+   "id": 70,
    "name": "co-located bridge: turning needs no extra ring tap",
    "pass": true,
    "detail": "48 bridges, 0 extra taps",
    "prediction": ""
   },
   {
-   "id": 69,
+   "id": 71,
    "name": "independent attachment model reproduces the pipeline's bisection numbers",
    "pass": true,
    "detail": "cut width 12 vs 12, bisection LB 48 vs 48",
    "prediction": ""
   },
   {
-   "id": 70,
+   "id": 72,
    "name": "independent attachment model reproduces the pipeline's latency floor (diameter + one flit time)",
    "pass": true,
    "detail": "diameter 80 cy + m=1 vs base-model latency LB 81",
    "prediction": ""
   },
   {
-   "id": 71,
+   "id": 73,
    "name": "folded full rings cost exactly 2x mesh wire length, which is where the repo's sigma=2 yardstick comes from",
    "pass": true,
    "detail": "328 pitches vs mesh 164 = 2.0x",
    "prediction": ""
   },
   {
-   "id": 72,
+   "id": 74,
    "name": "half-span rings with <=2 ports/core DISCONNECT the fabric unless the seam is repaired",
    "pass": true,
    "detail": "1104/2256 pairs reachable (two 24-core halves), x-cut capacity 0",
    "prediction": "CONFIRMED: a column ring never changes x and a split row ring never spans the seam"
   },
   {
-   "id": 73,
+   "id": 75,
    "name": "seam bridges restore connectivity but halve the crossing capacity, and the bandwidth-bound collectives inherit it",
    "pass": true,
    "detail": "x-cut 6 vs 12 flit/cy; alltoall LB 96 vs 48 cy",
    "prediction": ""
   },
   {
-   "id": 74,
+   "id": 76,
    "name": "splitting both dimensions saves wire but loses both cuts",
    "pass": true,
    "detail": "wire 272 vs 328 pitches, alltoall LB 96 vs 48 cy",
    "prediction": ""
   },
   {
-   "id": 75,
+   "id": 77,
    "name": "staggered half rings keep the cut and need no seam bridge, but a wrap-around loop cannot be folded under 2 pitches",
    "pass": true,
    "detail": "x-cut 12, longest wire 6 pitches (A: 2), wire 352 vs 328",
    "prediction": "REFUTED the cheap reading of 'half rings save metal': a staggered half ring costs MORE (352 vs 328)"
   },
   {
-   "id": 76,
+   "id": 78,
    "name": "one-lane rings at metal parity (half the wires, 2x width) tie every bound and pay only in latency",
    "pass": true,
    "detail": "all 12 bounds equal, metal 164x2 = 328, average latency 1.59x, diameter 138 vs 80 cy",
    "prediction": ""
   },
   {
-   "id": 77,
+   "id": 79,
    "name": "spending only 1 port per core doubles every port-bound collective",
    "pass": true,
    "detail": "allgather/T1 LB 47 vs 24 cy, gather/T0 47 vs 24 cy",
    "prediction": ""
   },
   {
-   "id": 78,
+   "id": 80,
    "name": "spending both ports on one ring keeps the bounds but pays 48 extra ring taps and longer paths",
    "pass": true,
    "detail": "extra taps 48, average hops 5.28 vs 3.57",
    "prediction": ""
   },
   {
-   "id": 79,
+   "id": 81,
    "name": "scheme A passes all four physical gates and no other candidate beats it on a single one of the 12 bounds",
    "pass": true,
    "detail": "schemes with any bound below A: none; \u6bcf\u6838 \u22642 \u53e3: all pass; \u5168\u8fde\u901a: ['C0_rowhalf_noseam']; \u73af\u4fa7\u901f\u7387\u8ddf\u5f97\u4e0a L1 ramp: ['G_row_only_1port']; \u6700\u957f\u5355\u6839\u7ebf \u22642 pitch: ['F_rowhalf_stagger']",
    "prediction": ""
   },
   {
-   "id": 80,
+   "id": 82,
    "name": "rotation II_eff is constant across R",
    "pass": true,
    "detail": "[47.0]",
    "prediction": ""
   },
   {
-   "id": 81,
+   "id": 83,
    "name": "rotation II_eff equals the per-round busiest-segment load",
    "pass": true,
    "detail": "II_eff=47.0 arc load per round=47.0",
    "prediction": "rotation is throughput-optimal: CONFIRMED"
   },
   {
-   "id": 82,
+   "id": 84,
    "name": "rotation utilization rises monotonically with R",
    "pass": true,
    "detail": "[0.1111, 0.2381, 0.4483, 0.619, 0.746]",
    "prediction": ""
   },
   {
-   "id": 83,
+   "id": 85,
    "name": "rotation utilization does NOT reach 1.0 at any practical R",
    "pass": true,
    "detail": "best=0.746 at R=47; the fill T1=799 dilutes it",
    "prediction": "plan predicted util=1.0: REFUTED"
   },
   {
-   "id": 84,
+   "id": 86,
    "name": "utilization matches II*R/(T1+II*(R-1)) closed form",
    "pass": true,
    "detail": "measured=[0.1111, 0.2381, 0.4483, 0.619, 0.746] closed_form=[0.1111, 0.2381, 0.4483, 0.619, 0.746]",
    "prediction": ""
   },
   {
-   "id": 85,
+   "id": 87,
    "name": "fault scenario set covers wrap, scattered, link, node, quadrant",
    "pass": true,
    "detail": "27 scenarios",
    "prediction": ""
   },
   {
-   "id": 86,
+   "id": 88,
    "name": "every immune scenario is genuinely recompile free",
    "pass": true,
    "detail": "9 immune of 27",
    "prediction": ""
   },
   {
-   "id": 87,
+   "id": 89,
    "name": "a recompiled calendar is D-R legal and avoids the dead segments",
    "pass": true,
    "detail": "wrap_row0_1: cf=True dead_used=0",
    "prediction": ""
   },
   {
-   "id": 88,
+   "id": 90,
    "name": "every recompiled calendar still delivers the survivor goal",
    "pass": true,
    "detail": "4 schemes x all scenarios",
    "prediction": ""
   },
   {
-   "id": 89,
+   "id": 91,
    "name": "a dead node forces an EXTRA phase, not just a reschedule",
    "pass": true,
    "detail": "16 of 81 recompiles need a repair phase: the dead node was the only row-column meeting point feeding a whole ring",
    "prediction": "plan assumed rerouting suffices: REFUTED"
   },
   {
-   "id": 90,
+   "id": 92,
    "name": "rotation is infeasible under most faults, dimension-phase is not",
    "pass": true,
    "detail": "rotation 20/27 infeasible, dim_2phase 1/27",
    "prediction": "rotation trades fault tolerance for throughput"
   },
   {
-   "id": 91,
+   "id": 93,
    "name": "a contiguous node hole needs NO ring-station bypass mux",
    "pass": true,
    "detail": "extra infeasible without bypass = 0",
    "prediction": "plan assumed a dead node always cuts the ring: REFUTED for contiguous holes"
   },
   {
-   "id": 92,
+   "id": 94,
    "name": "scattered dead nodes DO need a bypass mux",
    "pass": true,
    "detail": "extra infeasible without bypass = 3 of 4 scenarios",
    "prediction": ""
   },
   {
-   "id": 93,
+   "id": 95,
    "name": "a global shift inflates the makespan by exactly the worst lateness",
    "pass": true,
    "detail": "3 models x 3 jitter levels",
    "prediction": "a rigid replay absorbs nothing"
   },
   {
-   "id": 94,
+   "id": 96,
    "name": "per-phase resynchronization is never worse than a global shift",
    "pass": true,
    "detail": "3 models x 3 jitter levels",
    "prediction": ""
   },
   {
-   "id": 95,
+   "id": 97,
    "name": "a jitter-aware repack is still D-R legal",
    "pass": true,
    "detail": "makespan 849 -> 1011",
    "prediction": ""
   },
   {
-   "id": 96,
+   "id": 98,
    "name": "repacking beats both rigid replays, so the slack is real",
    "pass": true,
    "detail": "repack=1011 vs rigid=1105 (absorbed 94)",
    "prediction": ""
   },
   {
-   "id": 97,
+   "id": 99,
    "name": "the set of nodes that receive data is unchanged under jitter",
    "pass": true,
    "detail": "48 nodes both ways",
    "prediction": ""
   },
   {
-   "id": 98,
+   "id": 100,
    "name": "exported calendar index exists",
    "pass": true,
    "detail": "ring_index.json",
    "prediction": ""
   },
   {
-   "id": 99,
+   "id": 101,
    "name": "every exported calendar is marked conflict free",
    "pass": true,
    "detail": "16 files",
    "prediction": ""
   },
   {
-   "id": 100,
+   "id": 102,
    "name": "every exported makespan is at or above its own bound",
    "pass": true,
    "detail": "16 files",
    "prediction": ""
   },
   {
-   "id": 101,
+   "id": 103,
    "name": "no exported calendar drives one output port twice in a cycle",
    "pass": true,
    "detail": "0 collisions",
    "prediction": ""
   },
   {
-   "id": 102,
+   "id": 104,
    "name": "no exported calendar overruns the L1 ramp",
    "pass": true,
    "detail": "0 overruns (ramp_bw=2)",
    "prediction": ""
   },
   {
-   "id": 103,
+   "id": 105,
    "name": "copy-and-continue appears as ring_out + leave in one mask",
    "pass": true,
    "detail": "at least one multicast station record",
    "prediction": ""
   },
   {
-   "id": 104,
+   "id": 106,
    "name": "OP_ADD appears only on reducing collectives",
    "pass": true,
    "detail": "reduce/allreduce only",
    "prediction": ""
   },
   {
-   "id": 105,
+   "id": 107,
    "name": "the multicast calendar is far smaller in slot-table entries",
    "pass": true,
    "detail": "dim_2phase/T1=768 records vs flat/T0=10320 (13.4x smaller)",
