@@ -61,8 +61,7 @@ def main() -> None:
     meta = data["meta"]
     m0s = meta["m0_list"]
     n_scen = meta["n_scenarios"]
-    skip = {"lash_tor", "stripe_vc", "virtual_mesh", "fault_ring_vc"}
-    avoid = [s for s in data["summary_avoid"] if s["scheme"] not in skip]
+    avoid = list(data["summary_avoid"])
     rec = [s for s in data["summary_recovery"] if s.get("n_ok")]
 
     fig, axes = plt.subplots(1, len(m0s), figsize=(13.8, 6.4))
@@ -144,11 +143,18 @@ def main() -> None:
         ax.set_ylim(lo / 1.25, hi * 2.2)
         xmax = max([g["area"] for g in merged.values()]
                    + [s.get("area_hi", s["area"]) for s in rv] or [1])
-        ax.set_xlim(0.78, max(1.45, xmax + 0.12))
+        ax.set_xlim(0.78, max(1.55, xmax + 0.18))
 
         ly = None
         for g in sorted(merged.values(), key=lambda g: g["worst"]):
-            if not g.get("ft"):
+            # Always label M4–M10 and the low-sacrifice front; hide the
+            # heavy-cut turn models (XY/Rect/Segment) that only look fast.
+            names_l = " ".join(g["names"]).lower()
+            keep = g.get("ft") or any(
+                k in names_l for k in (
+                    "segment", "f-ring", "half-ring", "lash", "stripe",
+                    "dual ud", "virtual"))
+            if not keep:
                 continue
             ly = g["worst"] if ly is None else max(g["worst"], ly * 1.12)
             ax.annotate(" / ".join(g["names"]) + f"  (VC{g['vc']})",
@@ -204,7 +210,8 @@ def main() -> None:
         "(healthy + 4 corners + 4 edge midpoints + 2 interior)\n"
         f"filled = worst of {n_scen} location-stratified scenarios, "
         "hollow = median; diamonds = avoidance / BB, "
-        "other markers = recovery",
+        "other markers = recovery; M4–M10 included (Stripe 5VC / f-ring 4VC "
+        "sit on the right)",
         fontsize=9.5)
     fig.tight_layout(rect=(0, 0.08, 1, 0.90))
     fig.savefig(args.out, dpi=130)

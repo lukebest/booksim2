@@ -2114,8 +2114,7 @@ def single_router_section_html() -> str:
     n_scen = meta["n_scenarios"]
     m0s = meta["m0_list"]
     tokens = meta.get("total_tokens", {})
-    skip = {"lash_tor", "stripe_vc", "virtual_mesh", "fault_ring_vc"}
-    avoid = [s for s in data["summary_avoid"] if s["scheme"] not in skip]
+    avoid = list(data["summary_avoid"])
     rec = data.get("summary_recovery", [])
     scen = meta.get("scenarios", [])
     loc = defaultdict(list)
@@ -2173,8 +2172,9 @@ def single_router_section_html() -> str:
             'alt="single-router Pareto" '
             'style="max-width:100%;height:auto;background:#fff;'
             'border:1px solid #e0e0e0"/>'
-            f"<figcaption>最多 1 个 router 坏（{n_scen} 个位置分层场景）"
-            "：避免类（菱形）与恢复类（圆/三角/方/倒三角）同轴。"
+            f"<figcaption>最多 1 个 router 坏（{n_scen} 个位置分层场景），"
+            "含 M4–M10。"
+            "避免类（菱形）与恢复类（圆/三角/方/倒三角）同轴。"
             "实心=最差，空心=中位。</figcaption></figure>")
     loc_note = "、".join(
         "%s %d 个" % ({"healthy": "健康", "corner": "角",
@@ -2251,9 +2251,18 @@ R2（M3′ 核心）{r2['n_ok'] if r2 else '?'}/{n_scen} 完成、检测器不�
 = M3′ 的 {r0sb['t_e2e_ns_worst']/m3_13['t_e2e_ns_worst']:.1f}×。
 角和边上不装恢复也能跑完，中心孔才是恢复机制真正被调用的地方——
 而那里 M3′ 根本不需要它。</li>
-<li>与 §6 全预算对照：排名<b>没有翻转</b>。单点失效只是把差距缩小、
-把「中心 vs 角」的位置效应拆开；1VC 保底仍是 M3′ / BB UD，
-2VC 仍是 Super-turn，恢复类仍是「路由不合法时的保险」而不是更快的替代。</li>
+<li><b>M4–M10 补进同图之后：</b>
+M4 Segment 在中心孔上与 XY 一样砍到 A=12，最差最慢一档（m₀=13 9396 ns），
+不进容错前沿。M5h half-ring（2VC）中心/边仍会牺牲（A 最差 20）。
+<b>M5 f-ring（4VC）/ M7 Stripe（5VC）/ M10 Virtual（2VC）</b>
+零额外牺牲（M5 最差 A=45，多弃 2 个），m₀=13 最差
+3244 / 3275 / 3461 ns，比 1VC 的 BB/M3′ 快，但面积分别是
+1.94 / 2.28 / 1.24。M6 LASH / M6b / M9 Dual-UD 都是 2VC、A=47，
+最差 5459 / 5459 / 5121 ns，被同面积的 M10 / Super-turn 支配。
+1VC 保底不变（BB UD / M3′）；多 VC 换来的是 M10 与 M5/M7 这条右边的前沿。</li>
+<li>与 §6 全预算对照：把 M5–M10 放回来之后，单点失效下
+<b>多 VC 方案第一次真正进前沿</b>（全预算里它们被 4R+8L 的覆盖/面积挡在外面）。
+1VC 保底仍是 M3′ / BB UD，恢复类仍不是更快的替代。</li>
 </ul>
 """
 

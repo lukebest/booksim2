@@ -25,6 +25,20 @@ import pg_faults_budget_8x6 as B
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "pg_single_router_e2e.json"
 
+# M4–M10 that the VC≤2 budget sweep left out (M4 / M5h are already in E.SCHEMES).
+M4_TO_M10 = [
+    "segment", "segment_lb",          # M4
+    "fault_ring_vc", "fault_half_ring",  # M5 / M5h
+    "lash", "lash_tor",              # M6 / M6b
+    "stripe_vc",                     # M7
+    "dual_updown",                   # M9
+    "virtual_mesh",                  # M10
+]
+HIGH_VC = [
+    "fault_ring_vc", "lash", "lash_tor",
+    "stripe_vc", "dual_updown", "virtual_mesh",
+]
+
 
 def _avoid_job(arg: tuple[dict, str, int, bool]) -> dict | None:
     scen, sch, m0, full_cover = arg
@@ -78,18 +92,20 @@ def _bb_job(arg: tuple[dict, str, int]) -> dict | None:
     return rec
 
 
-def run(jobs: int = 1) -> dict:
+def run(jobs: int = 1, schemes: list[str] | None = None,
+        do_bb: bool = True, do_recovery: bool = True) -> dict:
     scenarios = B.single_router_scenarios()
     t0 = time.time()
+    schemes = list(schemes or (list(E.SCHEMES) + HIGH_VC))
 
     avoid_jobs = [(s, sch, m0, True)
                   for s in scenarios
-                  for sch in E.SCHEMES
+                  for sch in schemes
                   for m0 in E.M0_LIST]
-    bb_jobs = [(s, tag, m0)
-               for s in scenarios
-               for tag in BB.BB_TAGS
-               for m0 in E.M0_LIST]
+    bb_jobs = ([(s, tag, m0)
+                for s in scenarios
+                for tag in BB.BB_TAGS
+                for m0 in E.M0_LIST] if do_bb else [])
 
     avoid_rows: list[dict] = []
     bb_rows: list[dict] = []
@@ -132,18 +148,22 @@ def run(jobs: int = 1) -> dict:
             if rec and rec.get("feasible"):
                 bb_rows.append(rec)
 
-    print("recovery sweep…", flush=True)
-    rec_doc = R.run(jobs=jobs, scenarios=scenarios)
-    rec_rows = rec_doc["rows"]
-    for r in rec_rows:
-        r.setdefault("family", "recovery")
+    rec_rows: list[dict] = []
+    rec_sum: list[dict] = []
+    rec_elapsed = None
+    if do_recovery:
+        print("recovery sweep…", flush=True)
+        rec_doc = R.run(jobs=jobs, scenarios=scenarios)
+        rec_rows = rec_doc["rows"]
+        rec_sum = rec_doc["summary"]
+        rec_elapsed = rec_doc["meta"].get("elapsed_s")
+        for r in rec_rows:
+            r.setdefault("family", "recovery")
 
-    avoid_schemes = list(E.SCHEMES) + list(BB.BB_TAGS)
+    avoid_schemes = list(dict.fromkeys(schemes + (list(BB.BB_TAGS) if do_bb else [])))
     avoid_all = avoid_rows + bb_rows
     avoid_sum = E.summarize_e2e(avoid_all, avoid_schemes, len(scenarios),
-                                vc_cap=2)
-    # BB.summarize already sets Pareto among its own set; recompute jointly.
-    rec_sum = rec_doc["summary"]
+                                vc_cap=16)
 
     elapsed = round(time.time() - t0, 1)
     return {
@@ -160,7 +180,7 @@ def run(jobs: int = 1) -> dict:
             "kinds": R.KINDS,
             "total_tokens": {str(m): E.total_tokens(m) for m in E.M0_LIST},
             "elapsed_s": elapsed,
-            "recovery_elapsed_s": rec_doc["meta"].get("elapsed_s"),
+            "recovery_elapsed_s": rec_elapsed,
         },
         "rows_avoid": avoid_all,
         "rows_recovery": rec_rows,
@@ -169,12 +189,43 @@ def run(jobs: int = 1) -> dict:
     }
 
 
+def merge_into(base: dict, extra: dict) -> dict:
+    """Replace avoidance rows for schemes present in `extra`, keep the rest."""
+    new_sch = {r["scheme"] for r in extra["rows_avoid"]}
+    keep = [r for r in base.get("rows_avoid", []) if r["scheme"] not in new_sch]
+    avoid_all = keep + extra["rows_avoid"]
+    schemes = list(dict.fromkeys(
+        list(base.get("meta", {}).get("schemes", []))
+        + list(extra.get("meta", {}).get("schemes", []))))
+    n_scen = base["meta"]["n_scenarios"]
+    base["rows_avoid"] = avoid_all
+    base["summary_avoid"] = E.summarize_e2e(avoid_all, schemes, n_scen,
+                                            vc_cap=16)
+    base["meta"]["schemes"] = schemes
+    base["meta"]["elapsed_s"] = round(
+        (base["meta"].get("elapsed_s") or 0)
+        + (extra["meta"].get("elapsed_s") or 0), 1)
+    if extra.get("rows_recovery"):
+        base["rows_recovery"] = extra["rows_recovery"]
+        base["summary_recovery"] = extra["summary_recovery"]
+    return base
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", type=int, default=1)
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--schemes", nargs="*", default=None)
+    ap.add_argument("--skip-bb", action="store_true")
+    ap.add_argument("--skip-recovery", action="store_true")
+    ap.add_argument("--merge", action="store_true",
+                    help="merge into --out instead of overwriting")
     args = ap.parse_args()
-    doc = run(jobs=args.jobs)
+    doc = run(jobs=args.jobs, schemes=args.schemes,
+              do_bb=not args.skip_bb, do_recovery=not args.skip_recovery)
+    if args.merge and args.out.exists():
+        old = json.loads(args.out.read_text())
+        doc = merge_into(old, doc)
     args.out.write_text(json.dumps(doc, indent=1, ensure_ascii=False))
     print("Wrote %s  avoid=%d rec=%d  %ss"
           % (args.out, len(doc["rows_avoid"]), len(doc["rows_recovery"]),
