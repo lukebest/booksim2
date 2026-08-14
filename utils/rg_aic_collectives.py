@@ -63,6 +63,10 @@ RAMP = 2
 CORE_LANES = 2
 # One lap of a row ring, used as the deflection penalty in the baseline.
 ROW_TOUR = 216
+# Inter-station directed segments -- the schedulable lane resources.
+N_LANES = 960
+# Patterns where copy-and-continue changes the traffic a schedule must move.
+T1_PATTERNS: tuple[str, ...] = ("broadcast", "allgather", "allreduce")
 
 Tier = Literal["T0", "T1"]
 Pattern = Literal["allgather", "allreduce", "alltoall", "gather",
@@ -122,12 +126,20 @@ def _walk(r: Route) -> tuple[list[tuple[str, int]],
     return lanes, turns, passes
 
 
+_STEP_CACHE: dict[tuple[int, int], Step] = {}
+
+
 def unicast_step(rs: dict[tuple[int, int], Route], src: int, dst: int) -> Step:
+    got = _STEP_CACHE.get((src, dst))
+    if got is not None:
+        return got
     r = rs[(src, dst)]
     lanes, turns, _ = _walk(r)
-    return Step(src=src, dst=dst, readers=(dst,), lanes=tuple(lanes),
-                turns=tuple(turns), arrive={dst: r.total}, wire=r.total,
-                n_turns=r.turns, um=r.um)
+    st = Step(src=src, dst=dst, readers=(dst,), lanes=tuple(lanes),
+              turns=tuple(turns), arrive={dst: r.total}, wire=r.total,
+              n_turns=r.turns, um=r.um)
+    _STEP_CACHE[(src, dst)] = st
+    return st
 
 
 def _arc_cover(rs: dict[tuple[int, int], Route], src: int, far: int,
@@ -218,6 +230,20 @@ def _spread(mask: int, d: int) -> int:
     return out
 
 
+def _first_zero(mask: int, t: int) -> int:
+    """Lowest position >= t whose bit in `mask` is 0, in O(1) big-int ops.
+
+    The obvious `while (mask >> t) & 1: t += 1` costs a full-width shift per
+    candidate cycle, which is quadratic in the makespan and is why packing a
+    2256-boarding calendar did not finish.
+    """
+    x = mask >> t
+    if x == 0:
+        return t
+    inv = x ^ ((1 << (x.bit_length() + 1)) - 1)
+    return t + ((inv & -inv).bit_length() - 1)
+
+
 class Packer:
     """Earliest-feasible-start list scheduler over exclusive lane windows.
 
@@ -231,56 +257,53 @@ class Packer:
     forbidden only if *every* one of its lanes is busy.
     """
 
-    def __init__(self, *, dur: int, core_lanes: int = CORE_LANES):
-        self.dur = dur
+    def __init__(self, *, core_lanes: int = CORE_LANES):
         self.core_lanes = core_lanes
         self.lane: dict[str, int] = defaultdict(int)
         self.inj: list[int] = [0] * (N_CORES * core_lanes)
         self.ej: list[int] = [0] * (N_CORES * core_lanes)
         self.turn: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
-        self.placed: list[tuple[Step, int]] = []
+        self.placed: list[tuple[Step, int, int]] = []
         self.makespan = 0
         self.lane_cycles = 0
 
-    def _port_bad(self, slots: list[int], core: int, off: int) -> int:
+    def _port_bad(self, slots: list[int], core: int, off: int, d: int) -> int:
         base = core * self.core_lanes
-        bad = _spread(slots[base], self.dur)
+        bad = _spread(slots[base], d)
         for k in range(1, self.core_lanes):
-            bad &= _spread(slots[base + k], self.dur)
+            bad &= _spread(slots[base + k], d)
         return bad >> off if off else bad
 
-    def _pick(self, slots: list[int], core: int, at: int) -> int:
+    def _pick(self, slots: list[int], core: int, at: int, d: int) -> int:
         base = core * self.core_lanes
-        win = ((1 << self.dur) - 1) << at
+        win = ((1 << d) - 1) << at
         for k in range(self.core_lanes):
             if not (slots[base + k] & win):
                 return base + k
         raise AssertionError("port claimed free but is not")
 
-    def place(self, step: Step, tmin: int = 0) -> int:
-        d = self.dur
+    def place(self, step: Step, dur: int, tmin: int = 0) -> int:
+        d = dur
         bad = 0
         for lid, off in step.lanes:
             occ = self.lane[lid]
             if occ:
                 bad |= _spread(occ, d) >> off
-        bad |= self._port_bad(self.inj, step.src, 0)
+        bad |= self._port_bad(self.inj, step.src, 0, d)
         for rd, off in step.arrive.items():
-            bad |= self._port_bad(self.ej, rd, off)
-        t = max(0, tmin)
-        while (bad >> t) & 1:
-            t += 1
+            bad |= self._port_bad(self.ej, rd, off, d)
+        t = _first_zero(bad, max(0, tmin))
         win = ((1 << d) - 1) << t
         for lid, off in step.lanes:
             self.lane[lid] |= ((1 << d) - 1) << (t + off)
             self.lane_cycles += d
-        self.inj[self._pick(self.inj, step.src, t)] |= win
+        self.inj[self._pick(self.inj, step.src, t, d)] |= win
         for rd, off in step.arrive.items():
-            self.ej[self._pick(self.ej, rd, t + off)] |= \
+            self.ej[self._pick(self.ej, rd, t + off, d)] |= \
                 ((1 << d) - 1) << (t + off)
         for stn, _kind, off in step.turns:
             self.turn[stn].append((t + off, t + off + CYC_TURN))
-        self.placed.append((step, t))
+        self.placed.append((step, t, d))
         self.makespan = max(self.makespan, t + step.last + d)
         return t
 
@@ -429,6 +452,9 @@ def lower_bounds(fab: Fabric, pattern: Pattern, m: int, *, root: int = 0,
     dur = m * sigma
     pairs = pair_demand(pattern, root)
     combinable = pattern in ("reduce", "allreduce")
+    # The same payload can be replicated after a cut by L1 relay (both tiers)
+    # or by rail multicast (T1). Either way one crossing serves the far side.
+    replicable = pattern in ("broadcast", "allgather", "allreduce")
     mcast = tier == "T1" and pattern in T1_PATTERNS
 
     def side_col(core: int, c: int) -> int:
@@ -445,7 +471,7 @@ def lower_bounds(fab: Fabric, pattern: Pattern, m: int, *, root: int = 0,
             if not lanes:
                 continue
             flows = {(sider(s, k) if combinable else s,
-                      sider(d, k) if mcast else d)
+                      sider(d, k) if replicable else d)
                      for s, d in pairs if sider(s, k) != sider(d, k)}
             cy = math.ceil(len(flows) * dur / lanes)
             cut_detail.append({"axis": axis, "at": k, "lanes": lanes,
@@ -523,11 +549,11 @@ class Calendar:
 
     @property
     def lane_util(self) -> float:
-        return self.lane_cycles / max(1, 960 * self.makespan)
+        return self.lane_cycles / max(1, N_LANES * self.makespan)
 
     @property
     def useful_util(self) -> float:
-        return self.useful_lane_cycles / max(1, 960 * self.makespan)
+        return self.useful_lane_cycles / max(1, N_LANES * self.makespan)
 
     @property
     def hop_tax(self) -> float:
@@ -549,22 +575,23 @@ def _useful(rs: dict[tuple[int, int], Route], pattern: Pattern, root: int,
 
 
 def _schedule(rs, pattern: Pattern, algo: str, tier: Tier, m: int,
-              phases: list[list[Step]], *, root: int = 0, sigma: int = 1,
-              core_lanes: int = CORE_LANES) -> Calendar:
+              phases: list[list[tuple[Step, int]]], *, root: int = 0,
+              sigma: int = 1, core_lanes: int = CORE_LANES) -> Calendar:
     """Pack phases in order; phase i+1 is released when phase i has landed.
 
     The phase boundary *is* the data dependency: everything in a later phase
     reads something an earlier one produced, so it cannot board before that
     payload is in the relay core's L1 (hence + RAMP). Inside a phase the packer
-    interleaves freely.
+    interleaves freely. Each boarding carries its own flit count -- a column
+    leg of allgather is an 8-block row bundle, not one block.
     """
-    dur = m * sigma
-    pk = Packer(dur=dur, core_lanes=core_lanes)
+    pk = Packer(core_lanes=core_lanes)
     ready = 0
     for ph in phases:
         done = ready
-        for st in ph:
-            t = pk.place(st, ready)
+        for st, size in ph:
+            dur = size * sigma
+            t = pk.place(st, dur, ready)
             done = max(done, t + st.last + dur)
         ready = done + RAMP
     peak, mean, per = pk.turn_stats()
@@ -572,9 +599,9 @@ def _schedule(rs, pattern: Pattern, algo: str, tier: Tier, m: int,
         pattern=pattern, algo=algo, tier=tier, m=m, makespan=pk.makespan,
         n_boardings=len(pk.placed), depth=len(phases),
         lane_cycles=pk.lane_cycles,
-        useful_lane_cycles=_useful(rs, pattern, root, dur),
+        useful_lane_cycles=_useful(rs, pattern, root, m * sigma),
         turn_peak=peak, turn_mean=round(mean, 3), per_bridge=per,
-        steps=pk.placed)
+        steps=[(st, t) for st, t, _d in pk.placed])
 
 
 def _rows() -> list[list[int]]:
@@ -593,63 +620,83 @@ ALGOS: dict[str, tuple[str, ...]] = {
     "reduce": ("flat", "dim_2phase", "tree"),
     "broadcast": ("flat", "dim_2phase", "tree"),
 }
-# Patterns where copy-and-continue or in-L1 combining changes the traffic.
-T1_PATTERNS = ("broadcast", "allgather", "allreduce")
 
 
 def build_calendar(fab: Fabric, rs: dict[tuple[int, int], Route],
                    pattern: Pattern, algo: str, m: int, *,
                    tier: Tier = "T0", root: int = 0, sigma: int = 1,
-                   core_lanes: int = CORE_LANES) -> Calendar:
+                   core_lanes: int = CORE_LANES, rounds: int = 1) -> Calendar:
+    """Assemble the phase list for (pattern, algo, tier) and pack it.
+
+    Sizes are explicit. A column leg of allgather carries a whole 8-block row
+    bundle; an alltoall row leg carries the 6 messages bound for one column;
+    a reduce leg stays at m no matter how many contributions went into it.
+    Charging all of these a flat `m` would flatter the dimension-decomposed
+    schedules by up to 8x.
+    """
     U = lambda s, d: unicast_step(rs, s, d)
     tour = ring_order()
     ipos = {c: i for i, c in enumerate(tour)}
+    combine = pattern in ("reduce", "allreduce")
 
     def ring_next(core: int, k: int = 1) -> int:
         r, c = divmod(core, N_COLS)
         return r * N_COLS + tour[(ipos[c] + k) % len(tour)]
 
-    def row_fanout(src: int, dsts: list[int]) -> list[Step]:
+    def fanout(src: int, dsts: list[int], size: int) -> list[tuple[Step, int]]:
         if tier == "T1" and pattern in T1_PATTERNS and dsts:
-            return row_multicast_steps(rs, src, dsts)
-        return [U(src, d) for d in dsts]
+            return [(st, size) for st in row_multicast_steps(rs, src, dsts)]
+        return [(U(src, d), size) for d in dsts]
 
-    phases: list[list[Step]] = []
+    phases: list[list[tuple[Step, int]]] = []
+    R, C = _rows(), _cols()
 
     if pattern in ("allgather", "allreduce", "alltoall"):
         if algo == "flat":
-            phases = [[U(s, d) for s in range(N_CORES)
+            phases = [[(U(s, d), m) for s in range(N_CORES)
                        for d in range(N_CORES) if s != d]]
         elif algo == "ring_rotate":
             # 7 laps of every row ring in parallel, then the vertical line.
             # Rotation is horizontal-only: a column has no wraparound, so a
             # vertical "rotation" would pay the 111-cycle return trip.
+            # allreduce combines, so every lap stays at m; allgather grows.
+            row_sz = m
+            col_sz = m if combine else N_COLS * m
             for _ in range(1, N_COLS):
-                phases.append([U(c, ring_next(c)) for c in range(N_CORES)])
+                phases.append([(U(c, ring_next(c)), row_sz)
+                               for c in range(N_CORES)])
             for dr in range(1, N_ROWS):
-                phases.append([U(c, ((c // N_COLS + dr) % N_ROWS) * N_COLS
-                                 + c % N_COLS) for c in range(N_CORES)])
+                phases.append([(U(c, ((c // N_COLS + dr) % N_ROWS) * N_COLS
+                                    + c % N_COLS), col_sz)
+                               for c in range(N_CORES)])
         elif algo == "dim_2phase":
-            # row first (ring arcs, multicast if the tier allows), then the
-            # column line carries whole row-blocks
-            phases.append([st for c in range(N_CORES)
-                           for st in row_fanout(
-                               c, [d for d in _rows()[c // N_COLS]
-                                   if d != c])])
-            phases.append([U(s, d) for col in _cols() for s in col
-                           for d in col if s != d])
+            if pattern == "alltoall":
+                phases.append([st for c in range(N_CORES)
+                               for st in fanout(
+                                   c, [d for d in R[c // N_COLS] if d != c],
+                                   N_ROWS * m)])
+                phases.append([(U(s, d), N_COLS * m) for col in C
+                               for s in col for d in col if s != d])
+            else:
+                row_sz = m
+                col_sz = m if combine else N_COLS * m
+                phases.append([st for c in range(N_CORES)
+                               for st in fanout(
+                                   c, [d for d in R[c // N_COLS] if d != c],
+                                   row_sz)])
+                phases.append([(U(s, d), col_sz) for col in C
+                               for s in col for d in col if s != d])
         else:
             raise ValueError(algo)
 
     elif pattern == "broadcast":
         rrow = root // N_COLS
         if algo == "flat":
-            phases = [[U(root, d) for d in range(N_CORES) if d != root]]
+            phases = [[(U(root, d), m) for d in range(N_CORES) if d != root]]
         elif algo == "dim_2phase":
-            phases.append(row_fanout(root, [c for c in _rows()[rrow]
-                                            if c != root]))
-            phases.append([U(c, r * N_COLS + c % N_COLS)
-                           for c in _rows()[rrow]
+            phases.append(fanout(root, [c for c in R[rrow] if c != root], m))
+            phases.append([(U(c, r * N_COLS + c % N_COLS), m)
+                           for c in R[rrow]
                            for r in range(N_ROWS) if r != rrow])
         elif algo == "tree":
             have, rest = [root], [c for c in range(N_CORES) if c != root]
@@ -661,7 +708,7 @@ def build_calendar(fab: Fabric, rs: dict[tuple[int, int], Route],
                     d = min(rest, key=lambda x: rs[(s, x)].total)
                     rest.remove(d)
                     nxt.append(d)
-                    ph.append(U(s, d))
+                    ph.append((U(s, d), m))
                 phases.append(ph)
                 have += nxt
         else:
@@ -669,14 +716,17 @@ def build_calendar(fab: Fabric, rs: dict[tuple[int, int], Route],
 
     elif pattern in ("gather", "reduce"):
         rrow = root // N_COLS
+        grow = pattern == "gather"
         if algo == "flat":
-            phases = [[U(s, root) for s in range(N_CORES) if s != root]]
+            phases = [[(U(s, root), m) for s in range(N_CORES) if s != root]]
         elif algo == "dim_2phase":
-            phases.append([U(r * N_COLS + c % N_COLS, c)
-                           for c in _rows()[rrow]
+            phases.append([(U(r * N_COLS + c % N_COLS, c), m)
+                           for c in R[rrow]
                            for r in range(N_ROWS) if r != rrow])
-            phases.append([U(c, root) for c in _rows()[rrow] if c != root])
+            phases.append([(U(c, root), N_ROWS * m if grow else m)
+                           for c in R[rrow] if c != root])
         elif algo == "tree":
+            held = {c: 1 for c in range(N_CORES)}
             cur = [root] + [c for c in range(N_CORES) if c != root]
             while len(cur) > 1:
                 ph, nxt = [], []
@@ -685,7 +735,8 @@ def build_calendar(fab: Fabric, rs: dict[tuple[int, int], Route],
                         nxt.append(cur[i])
                         continue
                     a, b = cur[i], cur[i + 1]
-                    ph.append(U(b, a))
+                    ph.append((U(b, a), held[b] * m if grow else m))
+                    held[a] += held[b]
                     nxt.append(a)
                 phases.append(ph)
                 cur = nxt
@@ -694,6 +745,8 @@ def build_calendar(fab: Fabric, rs: dict[tuple[int, int], Route],
     else:
         raise ValueError(pattern)
 
+    if rounds > 1:
+        phases = [leg for _ in range(rounds) for leg in phases]
     return _schedule(rs, pattern, algo, tier, m, phases, root=root,
                      sigma=sigma, core_lanes=core_lanes)
 
@@ -719,7 +772,7 @@ class BaseResult:
 
     @property
     def lane_util(self) -> float:
-        return self.lane_cycles / max(1, 960 * self.makespan)
+        return self.lane_cycles / max(1, N_LANES * self.makespan)
 
 
 def run_base(fab: Fabric, rs: dict[tuple[int, int], Route],
@@ -791,14 +844,10 @@ def run_base(fab: Fabric, rs: dict[tuple[int, int], Route],
         bad |= port_bad(ej, d, step.wire)
         t = 0
         while True:
-            while (bad >> t) & 1:
-                t += 1
-            room = True
-            for stn, _k, off in step.turns:
-                live = sum(1 for a, b in fifo[stn] if a <= t + off < b)
-                if live >= fifo_depth:
-                    room = False
-                    break
+            t = _first_zero(bad, t)
+            room = all(
+                sum(1 for a, b in fifo[stn] if a <= t + off < b) < fifo_depth
+                for stn, _k, off in step.turns)
             if room:
                 break
             deflect += 1

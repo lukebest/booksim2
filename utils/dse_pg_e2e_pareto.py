@@ -96,11 +96,74 @@ def pareto(points: list[dict], xk: str, yk: str) -> list[dict]:
     return sorted(out, key=lambda p: p[xk])
 
 
+def summarize_e2e(rows: list[dict], schemes: list[str], n_scen: int,
+                  vc_cap: int = 2) -> list[dict]:
+    """Per-(scheme, m0) median/worst e2e + Pareto flags.  Soft-drops >vc_cap."""
+    vc_req: dict[str, int] = defaultdict(int)
+    for r in rows:
+        vc_req[r["scheme"]] = max(vc_req[r["scheme"]], r["num_vc"])
+    summary = []
+    for m0 in M0_LIST:
+        for sch in schemes:
+            sel = [r for r in rows if r["scheme"] == sch and r["m0"] == m0]
+            if not sel:
+                print(f"  skip summary {sch} m0={m0}: 0/{n_scen}", flush=True)
+                continue
+            partial = len(sel) < n_scen
+            if partial:
+                print(f"  partial summary {sch} m0={m0}: "
+                      f"{len(sel)}/{n_scen} covered", flush=True)
+            if vc_req[sch] > vc_cap:
+                print(f"  skip summary {sch} m0={m0}: "
+                      f"num_vc={vc_req[sch]} > {vc_cap}", flush=True)
+                continue
+            ts = sorted(r["t_e2e_ns"] for r in sel)
+            summary.append({
+                "scheme": sch,
+                "m0": m0,
+                "num_vc": vc_req[sch],
+                "area": round(router_area(vc_req[sch]), 4),
+                "n_scen": len(sel),
+                "n_scen_total": n_scen,
+                "partial": partial,
+                "t_e2e_ns_med": round(ts[len(ts) // 2], 1),
+                "t_e2e_ns_worst": round(ts[-1], 1),
+                "t_e2e_ns_best": round(ts[0], 1),
+                "A_med": sorted(r["A"] for r in sel)[len(sel) // 2],
+                "A_worst": min(r["A"] for r in sel),
+                "sac_med": sorted(r["n_sacrificed"]
+                                  for r in sel)[len(sel) // 2],
+                "sac_worst": max(r["n_sacrificed"] for r in sel),
+                "n_fc": sum(1 for r in sel
+                            if r.get("fc_stage") not in (None, "solve_scheme")),
+                "comm_frac_med": round(
+                    sorted(r["comm_frac"] for r in sel)[len(sel) // 2], 3),
+            })
+    for m0 in M0_LIST:
+        cand = [s for s in summary if s["m0"] == m0 and not s.get("partial")]
+        front_w = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_worst")}
+        front_m = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_med")}
+        for s in summary:
+            if s["m0"] != m0:
+                continue
+            s["pareto_worst"] = (not s.get("partial")
+                                 and s["scheme"] in front_w)
+            s["pareto_med"] = (not s.get("partial")
+                               and s["scheme"] in front_m)
+    return summary
+
+
 def run(quick: bool = False, n_per_cell: int | None = None,
-        seed: int = 0, full_cover: bool = True) -> dict:
-    n_per = n_per_cell if n_per_cell is not None else (1 if quick else 4)
-    cat = B.write_catalog(n_per_cell=n_per, seed=seed)
-    scenarios = cat["scenarios"]
+        seed: int = 0, full_cover: bool = True,
+        scenarios: list[dict] | None = None) -> dict:
+    if scenarios is None:
+        n_per = n_per_cell if n_per_cell is not None else (1 if quick else 4)
+        cat = B.write_catalog(n_per_cell=n_per, seed=seed)
+        scenarios = cat["scenarios"]
+        cat_meta = cat["meta"]
+    else:
+        cat_meta = {"n_scenarios": len(scenarios),
+                    "note": "caller-supplied catalogue"}
 
     rows = []
     t0 = time.time()
@@ -151,66 +214,11 @@ def run(quick: bool = False, n_per_cell: int | None = None,
                           f"m0={m0:2d} A={a:2d} vc={rec['num_vc']} "
                           f"e2e={t_tot / FREQ_GHZ:8.1f}ns", flush=True)
 
-    vc_req: dict[str, int] = defaultdict(int)
-    for r in rows:
-        vc_req[r["scheme"]] = max(vc_req[r["scheme"]], r["num_vc"])
-
-    summary = []
-    for m0 in M0_LIST:
-        for sch in SCHEMES:
-            sel = [r for r in rows if r["scheme"] == sch and r["m0"] == m0]
-            if not sel:
-                print(f"  skip summary {sch} m0={m0}: 0/{len(scenarios)}",
-                      flush=True)
-                continue
-            partial = len(sel) < len(scenarios)
-            if partial:
-                print(f"  partial summary {sch} m0={m0}: "
-                      f"{len(sel)}/{len(scenarios)} covered", flush=True)
-            # Soft guard: drop schemes that exceeded VC=2 on any scenario
-            if vc_req[sch] > 2:
-                print(f"  skip summary {sch} m0={m0}: "
-                      f"num_vc={vc_req[sch]} > 2", flush=True)
-                continue
-            ts = sorted(r["t_e2e_ns"] for r in sel)
-            summary.append({
-                "scheme": sch,
-                "m0": m0,
-                "num_vc": vc_req[sch],
-                "area": round(router_area(vc_req[sch]), 4),
-                "n_scen": len(sel),
-                "n_scen_total": len(scenarios),
-                "partial": partial,
-                "t_e2e_ns_med": round(ts[len(ts) // 2], 1),
-                "t_e2e_ns_worst": round(ts[-1], 1),
-                "t_e2e_ns_best": round(ts[0], 1),
-                "A_med": sorted(r["A"] for r in sel)[len(sel) // 2],
-                "A_worst": min(r["A"] for r in sel),
-                "sac_med": sorted(r["n_sacrificed"]
-                                  for r in sel)[len(sel) // 2],
-                "sac_worst": max(r["n_sacrificed"] for r in sel),
-                "n_fc": sum(1 for r in sel
-                            if r.get("fc_stage") not in (None, "solve_scheme")),
-                "comm_frac_med": round(
-                    sorted(r["comm_frac"] for r in sel)[len(sel) // 2], 3),
-            })
-
-    for m0 in M0_LIST:
-        # Pareto only among schemes that covered every scenario (apples-to-apples)
-        cand = [s for s in summary if s["m0"] == m0 and not s.get("partial")]
-        front_w = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_worst")}
-        front_m = {s["scheme"] for s in pareto(cand, "area", "t_e2e_ns_med")}
-        for s in summary:
-            if s["m0"] != m0:
-                continue
-            s["pareto_worst"] = (not s.get("partial")
-                                 and s["scheme"] in front_w)
-            s["pareto_med"] = (not s.get("partial")
-                               and s["scheme"] in front_m)
+    summary = summarize_e2e(rows, SCHEMES, len(scenarios), vc_cap=2)
 
     meta = {
         "fault_model": "budget_≤4R_≤8L_nonoverlap",
-        "catalog": cat["meta"],
+        "catalog": cat_meta,
         "n_scenarios": len(scenarios),
         "freq_ghz": FREQ_GHZ,
         "pe_macs_per_cycle": PE_MACS_PER_CYCLE,

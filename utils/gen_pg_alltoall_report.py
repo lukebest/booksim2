@@ -28,6 +28,8 @@ RECOVERY_TDD_JSON = ROOT / "results" / "pg_recovery_tdd.json"
 E2E_PNG = "pg_e2e_pareto.png"
 BUDGET_E2E_PNG = "pg_budget_e2e_pareto.png"
 RECOVERY_PNG = "pg_recovery_pareto.png"
+SINGLE_JSON = ROOT / "results" / "pg_single_router_e2e.json"
+SINGLE_PNG = "pg_single_router_pareto.png"
 HTML_PATH = ROOT / "results" / "report_pg_alltoall_8x6.html"
 
 # Schemes that fail a hard property on their own and only "work" by sacrificing
@@ -2100,6 +2102,162 @@ def _mode_hist(rows: list[dict], top: int = 2) -> list[str]:
             sorted(hist.items(), key=lambda kv: (-kv[1], kv[0]))[:top]]
 
 
+def single_router_section_html() -> str:
+    """§6.5 Pareto restricted to at most one dead router (corner/edge/center)."""
+    if not SINGLE_JSON.exists():
+        return ("<h2>6.5 最多 1 个 router 坏（角 / 边 / 中心）</h2>"
+                "<p class='note'>尚无 <code>results/pg_single_router_e2e.json</code>。"
+                "请跑 <code>utils/dse_pg_single_router_pareto.py --jobs 6</code> 与 "
+                "<code>utils/gen_pg_single_router_pareto_plot.py</code>。</p>")
+    data = json.loads(SINGLE_JSON.read_text())
+    meta = data["meta"]
+    n_scen = meta["n_scenarios"]
+    m0s = meta["m0_list"]
+    tokens = meta.get("total_tokens", {})
+    skip = {"lash_tor", "stripe_vc", "virtual_mesh", "fault_ring_vc"}
+    avoid = [s for s in data["summary_avoid"] if s["scheme"] not in skip]
+    rec = data.get("summary_recovery", [])
+    scen = meta.get("scenarios", [])
+    loc = defaultdict(list)
+    for s in scen:
+        loc[s.get("region", "?")].append(s["name"])
+
+    def tbl(m0: int) -> str:
+        rows = []
+        cand = sorted((s for s in avoid if s["m0"] == m0),
+                      key=lambda s: (s.get("partial", False),
+                                     s["t_e2e_ns_worst"]))
+        ft = [s for s in cand if s.get("sac_worst", 0) <= 1
+              and not s.get("partial")]
+        front = {s["scheme"] for s in _e2e_pareto_front(
+            ft, "area", "t_e2e_ns_worst")}
+        for s in cand:
+            mark = "<b>yes</b>" if s["scheme"] in front else ""
+            rows.append(
+                "<tr><td class='l'>%s</td><td>%s</td><td>%.3f</td>"
+                "<td>%d/%d</td><td>%s/%s</td><td>%.0f</td>"
+                "<td><b>%.0f</b></td><td>%s</td></tr>"
+                % (esc(E2E_SHORT.get(s["scheme"], s["scheme"])),
+                   s["num_vc"], s["area"], s["A_med"], s["A_worst"],
+                   s["sac_med"], s.get("sac_worst", "?"),
+                   s["t_e2e_ns_med"], s["t_e2e_ns_worst"], mark))
+        rec_rows = [s for s in rec if s["m0"] == m0 and s.get("n_ok")]
+        rec_rows.sort(key=lambda s: s.get("t_e2e_ns_worst", 1e18))
+        rt_lab = {"xy_detour": "R0 XY+绕障", "minmax": "R1 min-max",
+                  "updown_relax": "R2 M3′+兜底",
+                  "super_turn_1vc": "R3 Super-turn/1VC"}
+        kn_lab = {"none": "无恢复", "sb": "Static Bubble",
+                  "spin": "SPIN", "swap": "SWAP"}
+        for s in rec_rows:
+            name = "%s + %s" % (rt_lab.get(s["routing"], s["routing"]),
+                                kn_lab.get(s["kind"], s["kind"]))
+            rows.append(
+                "<tr><td class='l'>%s <span class='sub'>恢复类</span></td>"
+                "<td>1</td><td>%.3f</td><td>%s/%s</td><td>%s/%s</td>"
+                "<td>%.0f</td><td><b>%.0f</b></td><td></td></tr>"
+                % (esc(name), s.get("area", 0),
+                   s.get("A_med", "?"), s.get("A_worst", "?"),
+                   s.get("sac_med", "?"), s.get("sac_worst", "?"),
+                   s.get("t_e2e_ns_med", 0), s.get("t_e2e_ns_worst", 0)))
+        head = ("<tr><th class='l'>方案</th><th>VC</th><th>area</th>"
+                "<th>A 中位/最差</th><th>牺牲中位/最差</th>"
+                "<th>T<sub>e2e</sub> 中位 (ns)</th>"
+                "<th>T<sub>e2e</sub> 最差 (ns)</th><th>Pareto</th></tr>")
+        return ("<table><thead>%s</thead><tbody>%s</tbody></table>"
+                % (head, "".join(rows)))
+
+    png = ""
+    if (ROOT / "results" / SINGLE_PNG).exists():
+        png = (
+            f'<figure class="e2e-fig"><img src="{SINGLE_PNG}" '
+            'alt="single-router Pareto" '
+            'style="max-width:100%;height:auto;background:#fff;'
+            'border:1px solid #e0e0e0"/>'
+            f"<figcaption>最多 1 个 router 坏（{n_scen} 个位置分层场景）"
+            "：避免类（菱形）与恢复类（圆/三角/方/倒三角）同轴。"
+            "实心=最差，空心=中位。</figcaption></figure>")
+    loc_note = "、".join(
+        "%s %d 个" % ({"healthy": "健康", "corner": "角",
+                       "edge": "边中点", "center": "中心"}.get(k, k),
+                      len(v))
+        for k, v in (("healthy", loc.get("healthy", [])),
+                     ("corner", loc.get("corner", [])),
+                     ("edge", loc.get("edge", [])),
+                     ("center", loc.get("center", []))))
+    def _ft(s):
+        return s.get("sac_worst", 0) <= 1
+
+    bullets = []
+    for m0 in m0s:
+        av = [s for s in avoid if s["m0"] == m0 and _ft(s)]
+        if not av:
+            continue
+        b = min(av, key=lambda s: (s["area"], s["t_e2e_ns_worst"]))
+        fast = min(av, key=lambda s: s["t_e2e_ns_worst"])
+        bullets.append(
+            "<li>m₀=%d、只计「残图上零额外牺牲」的方案：1VC 最快是 <b>%s</b>"
+            "（最差 %s ns，area %.3f）；绝对最快是 <b>%s</b>"
+            "（最差 %s ns，VC %s）。</li>"
+            % (m0, esc(E2E_SHORT.get(b["scheme"], b["scheme"])),
+               f"{b['t_e2e_ns_worst']:.0f}", b["area"],
+               esc(E2E_SHORT.get(fast["scheme"], fast["scheme"])),
+               f"{fast['t_e2e_ns_worst']:.0f}", fast["num_vc"]))
+    xy13 = next((s for s in avoid if s["m0"] == 13 and s["scheme"] == "xy"),
+                None)
+    m3_13 = next((s for s in avoid
+                  if s["m0"] == 13 and s["scheme"] == "updown_best_root"), None)
+    st13 = next((s for s in avoid
+                 if s["m0"] == 13 and s["scheme"] == "super_turn"), None)
+    bb13 = next((s for s in avoid
+                 if s["m0"] == 13 and s["scheme"] == "bb_ud_policy"), None)
+    r2 = next((s for s in rec if s["m0"] == 13 and s.get("routing") ==
+               "updown_relax" and s.get("kind") == "none"), None)
+    r0sb = next((s for s in rec if s["m0"] == 13 and s.get("routing") ==
+                 "xy_detour" and s.get("kind") == "sb"), None)
+    return f"""
+<h2>6.5 最多 1 个 router 坏（角 / 边 / 中心）</h2>
+<p class="note">§6 的 44 场景把故障预算拉到 ≤4 router + ≤8 链路，最差时间被
+<b>多点同时坏</b>主导。本节把预算收成「<b>最多一个 router 坏、不断额外链路</b>」，
+位置显式覆盖角、边、中心（外加健康 mesh），看各容错方案在更接近单点失效
+的口径下 Pareto 是否翻转。</p>
+<p class="note">目录 {n_scen} 个场景：{esc(loc_note)}。
+图中红色前沿<b>只在「额外牺牲 ≤ 1」的方案里</b>计算——
+M0/M1/M2/M4 在中心孔上会砍掉 35 个好节点（A=12），
+最差时间被强扩展的 1/A² 流量减免「看快」，不进容错前沿。
+数据 <code>results/pg_single_router_e2e.json</code>
+（{meta.get('elapsed_s')}s）。</p>
+{png}
+<h4>m₀ = 1 flit（{int(float(tokens.get('1', 0) or 0))} tokens）</h4>
+{tbl(1)}
+<h4>m₀ = 13 flit（{int(float(tokens.get('13', 0) or 0))} tokens）</h4>
+{tbl(13)}
+<ul class="note">
+{''.join(bullets)}
+<li><b>难的是中心孔，不是角。</b>角/边死一个 router，XY 只再弃 5–7 个节点；
+两个中心点（(3,2)/(4,3)）上 M1 XY 弃 35 个（A=12，m₀=13 最差
+{xy13['t_e2e_ns_worst']:.0f} ns），而 M3′ / Super-turn / BB 全部保住
+A=47、额外牺牲 0。中心孔把固定转向模型的「矩形裁剪」代价完全暴露出来。</li>
+<li><b>1VC 避免类：BB UD policy / ×3 最差
+{bb13['t_e2e_ns_worst']:.0f} ns，M3′ {m3_13['t_e2e_ns_worst']:.0f} ns</b>
+（{bb13['t_e2e_ns_worst']/m3_13['t_e2e_ns_worst']:.2f}×）。
+花 2VC 上 Super-turn 换到 {st13['t_e2e_ns_worst']:.0f} ns
+（相对 M3′ −{(1-st13['t_e2e_ns_worst']/m3_13['t_e2e_ns_worst'])*100:.0f}%），
+面积 1.244 = 1.39×。</li>
+<li><b>恢复类在单点失效下仍然帮不上忙。</b>
+R2（M3′ 核心）{r2['n_ok'] if r2 else '?'}/{n_scen} 完成、检测器不响，
+最差 {r2['t_e2e_ns_worst']:.0f} ns，与避免类 M3′ 逐拍相同。
+中心孔上 XY+绕障 / min-max / Super-turn-1VC 的 <code>none</code> 会死锁；
+叠 Static Bubble 之后 XY+绕障最差 {r0sb['t_e2e_ns_worst']:.0f} ns
+= M3′ 的 {r0sb['t_e2e_ns_worst']/m3_13['t_e2e_ns_worst']:.1f}×。
+角和边上不装恢复也能跑完，中心孔才是恢复机制真正被调用的地方——
+而那里 M3′ 根本不需要它。</li>
+<li>与 §6 全预算对照：排名<b>没有翻转</b>。单点失效只是把差距缩小、
+把「中心 vs 角」的位置效应拆开；1VC 保底仍是 M3′ / BB UD，
+2VC 仍是 Super-turn，恢复类仍是「路由不合法时的保险」而不是更快的替代。</li>
+</ul>
+"""
+
+
 def recovery_section_html() -> str:
     """§7 deadlock recovery on baseline XY (separate Pareto from avoidance)."""
     if not RECOVERY_JSON.exists():
@@ -2752,6 +2910,7 @@ def main():
     golden = meta["golden"]
     # Primary e2e is already budget-fault + VC≤2 (pg_e2e_pareto.json).
     e2e_html = e2e_section_html()
+    single_html = single_router_section_html()
     recovery_html = recovery_section_html()
 
     # Index primary rows (not q_sensitivity)
@@ -4056,6 +4215,8 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 {q_table or '<p class="note">无 Q 敏感度数据</p>'}
 
 {e2e_html}
+
+{single_html}
 
 {recovery_html}
 

@@ -80,6 +80,54 @@ def stratified_scenarios(n_per_cell: int = 4, seed: int = 0,
     return out
 
 
+def _loc_class(n: int) -> str:
+    x, y = coord(n)
+    on_x = x in (0, MX - 1)
+    on_y = y in (0, MY - 1)
+    if on_x and on_y:
+        return "corner"
+    if on_x or on_y:
+        return "edge"
+    return "center"
+
+
+def single_router_scenarios() -> list[dict[str, Any]]:
+    """At most one dead router; positions cover corner / edge / center.
+
+    No extra link faults — isolates the location of a single router hole.
+    Includes the healthy mesh (0 routers) because the budget is "at most one".
+    """
+    # 4 corners, 1 midpoint per side, 2 interior (near geometric centre).
+    picks = [
+        (0, 0, "corner"), (MX - 1, 0, "corner"),
+        (0, MY - 1, "corner"), (MX - 1, MY - 1, "corner"),
+        (MX // 2, 0, "edge"), (MX // 2, MY - 1, "edge"),
+        (0, MY // 2, "edge"), (MX - 1, MY // 2, "edge"),
+        (MX // 2 - 1, MY // 2 - 1, "center"),
+        (MX // 2, MY // 2, "center"),
+    ]
+    out = [{
+        "name": "sr_healthy",
+        "fault_class": "single_router",
+        "region": "healthy",
+        "n_routers": 0, "n_links": 0,
+        "dead_nodes": [], "dead_links": [],
+        "desc": "healthy 8×6 (0 dead routers)",
+    }]
+    for x, y, region in picks:
+        n = nid(x, y)
+        assert _loc_class(n) == region, (n, x, y, _loc_class(n), region)
+        out.append({
+            "name": f"sr_{region}_{x}x{y}",
+            "fault_class": "single_router",
+            "region": region,
+            "n_routers": 1, "n_links": 0,
+            "dead_nodes": [n], "dead_links": [],
+            "desc": f"1 dead router @ {region} ({x},{y}) nid={n}",
+        })
+    return out
+
+
 def expand_budget(scen: dict, semantics: str = "dead") -> dict:
     return F.expand_pg({
         "name": scen["name"],

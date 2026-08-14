@@ -316,9 +316,15 @@ def avoidance_reference() -> list[dict]:
     return [s for s in doc.get("summary", []) if s["scheme"] in keep]
 
 
-def run(names: list[str] | None = None, jobs: int = 1) -> dict:
-    cat = B.write_catalog(n_per_cell=1, seed=0)
-    scenarios = cat["scenarios"]
+def run(names: list[str] | None = None, jobs: int = 1,
+        scenarios: list[dict] | None = None) -> dict:
+    if scenarios is None:
+        cat = B.write_catalog(n_per_cell=1, seed=0)
+        scenarios = cat["scenarios"]
+        cat_meta = cat["meta"]
+    else:
+        cat_meta = {"n_scenarios": len(scenarios),
+                    "note": "caller-supplied catalogue"}
     if names:
         scenarios = [s for s in scenarios if s["name"] in names]
     t0 = time.time()
@@ -349,7 +355,7 @@ def run(names: list[str] | None = None, jobs: int = 1) -> dict:
     return {
         "meta": {
             "fault_model": "budget_≤4R_≤8L_nonoverlap",
-            "catalog": cat["meta"],
+            "catalog": cat_meta,
             "n_scenarios": len(scenarios),
             "routings": SWEEP_ROUTINGS,
             "routing_label": ROUTING_LABEL,
