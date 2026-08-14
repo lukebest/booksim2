@@ -613,30 +613,43 @@ def fig_pipeline(d: Deck, x0, y0, w, h, steps) -> None:
                    color=GREY_L, lw=1.4, arrow=True)
 
 
+# Measured on healthy + demo + 44-scenario budget (utils/analyze path):
+# M3/M3′ dest-only table is conflict-free on every feasible residual graph.
+# Hop diameter: healthy 12, budget worst M3=18 / M3′=17.
+HW_N_DEST = 47          # remote dests; eject = dest==me (XY already compares)
+HW_PORT_BITS = 2        # E/W/N/S; never store a 5th "local" port
+HW_TBL_M3 = HW_N_DEST * HW_PORT_BITS          # 94
+HW_TBL_DESTTREE = HW_N_DEST * 2 * HW_PORT_BITS  # 188, only if desttree min-max
+HW_HMAX = 18
+HW_LEN_BITS = 5         # ceil(log2(19))
+HW_SR_HDR = HW_LEN_BITS + HW_PORT_BITS * HW_HMAX  # 41
+HW_FLIT = 512           # ppa_analytic_model.FLIT_BITS
+
+
 def build_impl() -> Deck:
     A = analysis()
     IM = A["impl"]
     IH, ID, BA = IM["healthy"], IM["demo"], IM["baseline"]
     SD = A["demo"]["schemes"]
-    n_dest = 48
-    tbl_bits = n_dest * 2 * 3
+    tbl_bits = HW_TBL_M3
     chip_bytes = 48 * tbl_bits / 8
-    base_bits = BA["bits_per_node"]
-    extra = tbl_bits + 5
+    extra = tbl_bits
+    rom_pct = 100 * extra * BA["rom_bit"] / BA["bits_per_node"]
     t_verify = 0.1
     t_total = IH["t_bestroot_s"] + IH["t_desttree_s"] + t_verify
+    ps = ID["conflicts_desttree"]["phase_split"]
 
     d = Deck()
     d.rect(0, 0, SLIDE_W, SLIDE_H, fill=WHITE, line=None)
     d.rect(0, 0, SLIDE_W, 0.92, fill=INK, line=None)
     d.rect(0, 0, 0.10, 0.92, fill=BLUE, line=None)
     d.text(0.34, 0.10, 12.6, 0.44,
-           [p("M3′ + min-max 的实现：流程、路由表怎么配、硬件与软件代价",
+           [p("M3′ + min-max 的实现：最小路由表、源路由、硬件与软件代价",
               size=20, bold=True, color=WHITE, space=0)])
     d.text(0.36, 0.55, 12.6, 0.30,
-           [p("离线 %.1f s 生成表 → 复位写入 %.1f KB → 运行时零软件；硬件只多 "
-              "%d bit/router 的可写表（每节点存储的 %.1f%%）"
-              % (t_total, chip_bytes / 1024, extra, 100 * extra / base_bits),
+           [p("查表落地：每 router 只多 %d bit（47 目的 × 2 bit 出端口，全片 %.2f KB，"
+              "ROM 口径 +%.2f%%）。源路由落地：router 表 = 0，包头 +%d bit，0 额外 flit。"
+              % (tbl_bits, chip_bytes / 1024, rom_pct, HW_SR_HDR),
               size=10.0, color="C3CBD4", space=0)])
 
     # --- ① pipeline -------------------------------------------------------
@@ -655,8 +668,8 @@ def build_impl() -> Deck:
         ("⑤ min-max 重选路", "按目的地拆-重路由，代价 (load+1)³。",
          "%.1f s" % max(IH["t_desttree_s"], 0.1), GREEN),
         ("⑥ 三项复验", "可达 · 无环 · 唯一路径，不过就回退。", "<0.1 s", GREEN),
-        ("⑦ 编表 + 写入", "每 router %d bit，复位时经 CSR 写入。" % tbl_bits,
-         "%.1f KB / 全片" % (chip_bytes / 1024), ORANGE),
+        ("⑦ 编表 + 写入", "每 router %d bit（dest→2b 端口），复位经 CSR 写入。"
+         % tbl_bits, "%.2f KB / 全片" % (chip_bytes / 1024), ORANGE),
     ]
     fig_pipeline(d, 0.44, py + 0.32, SLIDE_W - 0.88, phh - 0.44, steps)
 
@@ -664,26 +677,24 @@ def build_impl() -> Deck:
     ty, th = 2.70, 2.24
     tw = 7.30
     card(d, 0.30, ty, tw, th,
-         "② up/down 机制怎么落到路由表里（出端口 = 表[目的 d][相位 φ]）",
+         "② 最小路由表：M3 / M3′ 是 dest → 出端口 的函数（不必存相位）",
          accent=GREEN, hdr_h=0.28)
     d.text(0.44, ty + 0.32, 3.70, th - 0.40, [
-        p("键只有两项：目的地 d + 1 bit 相位 φ。", size=7.8, bold=True,
-          color=GREEN, space=1.4),
-        p("φ = 「是否已经走过一条 down 通道」。注入时 φ=0；入端口是 down 就置 1"
-          "（每端口一个 up/down 标记位，随表一起写）⇒ φ 不必进包头，本地就能算。",
-          size=7.4, color=GREY, space=1.6),
-        p("禁令 down→up 就是一条填表约束：φ=1 的行只允许填 down 端口。",
-          size=7.8, bold=True, color=RED, space=1.4),
-        p("硬件因此不需要转向检查逻辑，也不需要知道 ℓ —— 合法性由离线工具一次性"
-          "保证。表里「—」= 该键不可能出现，填什么都不影响。",
-          size=7.4, color=GREY, space=1.6),
-        p("表规模：%d 目的 × 2 相位 × 3 bit = %d bit = %.0f B/router，全片 "
-          "%.1f KB。实测只有 %d 个键两相位不同 ⇒ 也可退化成 %d bit 主表 + %d 条"
-          "例外。"
-          % (n_dest, tbl_bits, tbl_bits / 8, chip_bytes / 1024,
-             ID["conflicts_desttree"]["phase_split"], n_dest * 3,
-             ID["conflicts_desttree"]["phase_split"]),
-          size=7.4, bold=True, color=INK, space=0),
+        p("M3 / M3′ 的路径集：conflict_vd = 0（健康、demo、预算 41/41 可行场景）。",
+          size=7.6, bold=True, color=GREEN, space=1.2),
+        p("同一 router 到同一目的只有一个下一跳，与源、与 φ 无关。"
+          "硬件就是 TABLE[dest] → {E,W,N,S}，2 bit/项。本节点用 dest==me 弹出"
+          "（XY 已有比较器），表里不存第 5 口、不存 up/down 标记、包头不加 φ。",
+          size=7.2, color=GREY, space=1.4),
+        p("最小增量：47 × 2 = %d bit/router = %.0f B，全片 %.2f KB。"
+          "相对旧口径（48×2×3+5 = 293 bit）压缩 3.1×。"
+          % (HW_TBL_M3, HW_TBL_M3 / 8, 48 * HW_TBL_M3 / 8 / 1024),
+          size=7.4, bold=True, color=INK, space=1.4),
+        p("只有「按目的地树」min-max 才会让少数 dest 的 φ=0/1 分叉"
+          "（本例 %d 条）。要保留 desttree：表扩成 47×2×2 = %d bit；"
+          "否则就用 94 bit 的 M3′ 原表。"
+          % (ps, HW_TBL_DESTTREE),
+          size=7.2, color=GREY, space=0),
     ])
     sx = 4.24
     d.text(sx, ty + 0.32, tw - sx + 0.20, 0.40, [
@@ -701,8 +712,8 @@ def build_impl() -> Deck:
     table(d, sx, ty + 0.70, widths, header, rows, accent=GREEN, fs=6.8,
           hdr_h=0.22, row_h=0.19, aligns=["l", "c", "c", "c"])
     d.text(sx, ty + 2.00, tw - sx + 0.20, 0.26, [
-        p("注：逐对 min-max 有 %d 个键冲突（同一节点到同一目的要两个出端口），"
-          "根本装不进按目的地的表；改成「按目的地树」重选路后 %d 冲突。"
+        p("注：M3′ 原表 φ=0/1 同口（本页最小 94 bit）。逐对 min-max 有 %d 个 "
+          "dest 冲突、装不进；desttree 后 conflict_vpd=%d，只需再加一相位。"
           % (ID["conflicts_minmax"]["conflict_vd"],
              ID["conflicts_desttree"]["conflict_vpd"]),
           size=6.8, color=ORANGE, space=0),
@@ -711,30 +722,30 @@ def build_impl() -> Deck:
     # --- ③ hardware delta -------------------------------------------------
     cx3 = 0.30 + tw + 0.14
     cw3 = SLIDE_W - cx3 - 0.30
-    card(d, cx3, ty, cw3, th, "③ 硬件代价（新增部分，同为 1 VC）",
+    card(d, cx3, ty, cw3, th, "③ 两种落地：查表最小增量 vs 源路由",
          accent=RED, hdr_h=0.28)
-    w3 = [1.36, 1.62, 1.24, 0.86]
-    hdr3 = ["模块", "baseline（分组交换 mesh）", "M3′+min-max", "增量"]
+    w3 = [1.08, 1.18, 1.34, 1.34]
+    hdr3 = ["", "XY 基线", "查表（最小）", "源路由"]
     rows3 = [
-        ["路由计算", "XY 比较器（组合）", "%d 项 × 3 bit 查表" % (n_dest * 2),
-         "+%d bit" % tbl_bits],
-        ["端口 up/down 标记", "—", "每端口 1 bit", "+5 bit"],
-        ["相位 φ", "—", "入端口本地推出", "0"],
-        ["VC 数 / 输入缓冲", "1 VC × %d flit × %d b" % (BA["buf_depth"],
-                                                       BA["w_flit"]),
-         "完全不变", "0"],
-        ["credit / 仲裁 / 开关", "iSLIP + credit", "完全不变", "0"],
-        ["重排序缓冲", "不需要", "不需要", "0"],
-        ["合计（每节点）", "%d bit" % base_bits, "+%d bit" % extra,
-         "+%.1f%%" % (100 * extra / base_bits)],
+        ["router SRAM", "0（比较器）", "%d bit" % HW_TBL_M3, "0"],
+        ["包头增量", "dest 6 bit", "0（沿用 dest）",
+         "+%d bit" % HW_SR_HDR],
+        ["额外 flit", "0", "0", "0（塞进 512b 头）"],
+        ["VC / 输入缓冲", "1 VC", "不变", "不变"],
+        ["重排序", "不需要", "不需要", "不需要"],
+        ["合计 / router", "—", "+%d bit  (+%.2f%%)" % (extra, rom_pct),
+         "+0"],
     ]
-    table(d, cx3 + 0.12, ty + 0.32, w3, hdr3, rows3, accent=RED, fs=6.6,
-          hdr_h=0.22, row_h=0.202, aligns=["l", "l", "l", "c"], mark=(6,))
-    d.text(cx3 + 0.12, ty + 1.98, cw3 - 0.24, 0.28, [
-        p("按本项目 bit 等价口径（ROM/SRAM 位 = %.2f 触发器位）≈ %.2f%%；"
-          "配置通路复用已有 CSR / JTAG，无新增。"
-          % (BA["rom_bit"], 100 * extra * BA["rom_bit"] / base_bits),
-          size=6.8, color=GREY, space=0),
+    table(d, cx3 + 0.12, ty + 0.32, w3, hdr3, rows3, accent=RED, fs=6.4,
+          hdr_h=0.20, row_h=0.195, aligns=["l", "l", "c", "c"], mark=(5,))
+    d.text(cx3 + 0.12, ty + 1.90, cw3 - 0.24, 0.36, [
+        p("源路由头 = %d bit 长度 + 2 bit×H，H_max=%d（预算最差）⇒ %d bit "
+          "= %.1f%% 个 512b flit；m=1 报文 +%.1f%%，m=13 +%.2f%%。"
+          "desttree min-max 要把查表扩到 %d bit，源路由头不变。"
+          % (HW_LEN_BITS, HW_HMAX, HW_SR_HDR, 100 * HW_SR_HDR / HW_FLIT,
+             100 * HW_SR_HDR / HW_FLIT,
+             100 * HW_SR_HDR / (13 * HW_FLIT), HW_TBL_DESTTREE),
+          size=6.5, color=GREY, space=0),
     ])
 
     # --- ④ software cost --------------------------------------------------
@@ -745,10 +756,11 @@ def build_impl() -> Deck:
         p("离线（每张故障图一次，单核 Python 实测）", size=7.8, bold=True,
           color=ORANGE, space=1.4),
         p("枚举 48 个根建表 %.1f s → 按目的地 min-max 重选路 %.1f s → 三项复验 "
-          "<0.1 s，合计约 %.1f s。产物：%.1f KB 表镜像 + 每 router 5 bit 端口"
-          "掩码。C 实现可到毫秒级。"
+          "<0.1 s，合计约 %.1f s。产物：%.2f KB dest→端口镜像（或源路由的 "
+          "47×%db = %d B/PE 路径表）。C 实现可到毫秒级。"
           % (IH["t_bestroot_s"], max(IH["t_desttree_s"], 0.1), t_total,
-             chip_bytes / 1024), size=7.4, color=GREY, space=1.6),
+             chip_bytes / 1024, HW_SR_HDR, (47 * HW_SR_HDR + 7) // 8),
+          size=7.4, color=GREY, space=1.6),
         p("上线与运行时", size=7.8, bold=True, color=ORANGE, space=1.4),
         p("复位后由管理核经 CSR 写一遍表，之后运行时软件参与 = 0：无 barrier、"
           "无同步、无自适应决策。", size=7.4, color=GREY, space=0),
@@ -760,8 +772,8 @@ def build_impl() -> Deck:
           size=7.4, color=GREY, space=1.6),
         p("什么时候要重跑", size=7.8, bold=True, color=RED, space=1.4),
         p("只在故障图变化时：上电自检、现场降级事件。常见故障模式可预生成镜像"
-          "直接选用。镜像里再带一份 M3′ 原表（+%d B/router）作兜底：复验任一项"
-          "不过就用它。" % (n_dest * 3 / 8), size=7.4, color=GREY, space=0),
+          "直接选用。兜底再带一份 94 bit 的 M3′ 原表（+%.0f B/router）。"
+          % (HW_TBL_M3 / 8), size=7.4, color=GREY, space=0),
     ])
 
     # --- ⑤ why it is still correct ---------------------------------------
@@ -775,8 +787,10 @@ def build_impl() -> Deck:
         p("无死锁　「φ=1 行只填 down」⇔ 禁 down→up ⇒ CDG 无环（实测 acyclic=%s），"
           "1 个 VC 即可。" % ID["desttree_cdg_acyclic"], size=7.4, color=GREY,
           space=1.6),
-        p("保序　表是 (d,φ) 的函数 ⇒ 每对唯一路径；单 VC 不换道 + 每跳 FIFO ⇒ "
-          "不需要重排序缓冲。", size=7.4, color=GREY, space=1.6),
+        p("保序　查表是 dest 的函数、源路由是同一条离线路径 ⇒ 每对唯一；"
+          "单 VC 不换道 + 每跳 FIFO ⇒ 不需要重排序缓冲。源路由不改 CDG："
+          "无死锁是路径集的性质，与查表还是带头无关。",
+          size=7.4, color=GREY, space=1.6),
         p("均衡　峰值 %d→%d（残图，与逐对 min-max 同值）、%d→%d（无故障）；"
           "总跳数只多 %.1f%%。残图重载 makespan %s cy，反而优于逐对 min-max 的 "
           "%s cy —— 可实现的那一版并没有更差。"
