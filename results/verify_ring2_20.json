@@ -1,0 +1,64 @@
+{
+  "n_total": 14,
+  "n_ok": 14,
+  "all_ok": true,
+  "rows": [
+    {
+      "name": "topo_roles_and_wrap",
+      "ok": true
+    },
+    {
+      "name": "workload_counts",
+      "ok": true
+    },
+    {
+      "name": "s0_completes_and_conserves",
+      "ok": true
+    },
+    {
+      "name": "s1_completes_and_conserves",
+      "ok": true
+    },
+    {
+      "name": "three_schemes_same_flits",
+      "ok": true
+    },
+    {
+      "name": "makespan_ge_bound",
+      "ok": true
+    },
+    {
+      "name": "inring_never_blocked",
+      "ok": true
+    },
+    {
+      "name": "itag_starve_finite",
+      "ok": true
+    },
+    {
+      "name": "etag_deflect_bounded",
+      "ok": true
+    },
+    {
+      "name": "rg_replay_conflict_free",
+      "ok": true
+    },
+    {
+      "name": "rg_req_before_resp",
+      "ok": true
+    },
+    {
+      "name": "uniform_multi_seed_s0",
+      "ok": true
+    },
+    {
+      "name": "cost_ring2_preserves_mesh_cal",
+      "ok": true
+    },
+    {
+      "name": "plane_sel_all_work",
+      "ok": true
+    }
+  ],
+  "generated_at": "2026-08-18T12:15:39Z"
+}

@@ -1,0 +1,10 @@
+{
+  "purpose": "ring2pareto",
+  "round": 2,
+  "unchanged": 2,
+  "n_front": 1,
+  "front_tags": ["S0"],
+  "n_rows": 169,
+  "stopped": true,
+  "note": "Two consecutive refine rounds added no new non-dominated point. Front remains S0 at area_norm 0.0207 / makespan 92. Loop stopped."
+}

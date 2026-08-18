@@ -57,10 +57,20 @@ def _ceil_log2(x: int) -> int:
     return max(1, math.ceil(math.log2(max(2, x))))
 
 
+def _ring2_kind(algo: str) -> str | None:
+    """Strip the `_ring2` suffix; None if this is not a dual-plane-ring algo."""
+    if algo.endswith("_ring2"):
+        return algo[: -len("_ring2")]
+    return None
+
+
 def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
                n_rounds: int | None, iters: int,
                n_ports: int = 0, n_rings: int = 0,
-               conflict_domain: str = "free_at") -> dict[str, float]:
+               conflict_domain: str = "free_at",
+               n_cores: int = 0, n_has: int = 0, n_planes: int = 0,
+               voq_granularity: str = "per_dst",
+               arbiter: str = "central") -> dict[str, float]:
     """Bit-equivalent breakdown of the centralized scheduler's state.
 
     `n_ports` and `n_rings` are the ring fabric's extra resource classes: D-R
@@ -78,6 +88,42 @@ def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
     R_max = max(1, n_rounds or 1)
 
     b: dict[str, float] = {}
+    rk = _ring2_kind(algo)
+    if rk is not None:
+        # Bipartite 10x10 x {req,resp} residual, not Nx(N-1).
+        nc = n_cores or n_nodes // 2
+        nh = n_has or n_nodes // 2
+        np_ = n_planes or max(1, n_rings // 2)
+        voq = nc * nh * 2
+        if voq_granularity == "per_plane_dir":
+            voq *= max(1, np_) * 2
+        elif voq_granularity == "grouped":
+            voq = nc * max(1, (nh + 1) // 2) * 2
+        b["residual_voq_bitmap"] = voq
+        b["accept_pointers"] = nc * _ceil_log2(nh)
+        if arbiter == "per_plane":
+            b["grant_pointers"] = np_ * 2 * _ceil_log2(nc)
+        elif arbiter == "distributed_token":
+            b["grant_pointers"] = n_nodes * _ceil_log2(nh)
+            b["token_state"] = n_nodes * W_T
+        else:
+            b["grant_pointers"] = 2 * max(1, n_rings) * _ceil_log2(nc)
+        if rk in ("islip", "pim"):
+            b["round_match_bitmap"] = voq
+        if rk == "bvn":
+            b["demand_matrix"] = nc * nh * W_D
+        if rk == "batched_bcfs":
+            b["pressure_weights"] = F * W_D
+            b["working_copy"] = (L + 2 * N + n_ports) * DEPTH * 2 * W_T
+        if rk == "wavefront":
+            b["wave_index"] = _ceil_log2(N)
+        if conflict_domain == "interval":
+            b["interval_tables"] = interval_tbl
+        else:
+            b["free_at_registers"] = free_at_reg
+        if rk in ("greedy_ff", "batched_bcfs"):
+            b["candidate_list"] = cand_list
+        return b
     if algo in ("islip2d_mesh", "islip2d_ring"):
         # The residual VOQ bitmap is the request format: one bit per (source,
         # destination), re-sent every round until granted. It is the single
@@ -151,11 +197,29 @@ def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
 
 def comparators(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
                 iters: int, n_ports: int = 0, n_rings: int = 0,
-                conflict_domain: str = "free_at") -> dict[str, int]:
+                conflict_domain: str = "free_at",
+                n_cores: int = 0, n_has: int = 0, n_planes: int = 0,
+                voq_granularity: str = "per_dst",
+                arbiter: str = "central") -> dict[str, int]:
     """Parallel comparator slices instantiated (counted in bits of width)."""
     L, N, F = n_links, n_nodes, max(1, n_flows)
     ramps = 2 * N
     c: dict[str, int] = {}
+    rk = _ring2_kind(algo)
+    if rk is not None:
+        R = L + ramps + n_ports
+        nc = n_cores or n_nodes // 2
+        if conflict_domain == "interval":
+            c["interval_compare"] = R * DEPTH * W_T
+        c["free_at_compare"] = R * W_T
+        n_arb = 2 * max(1, n_rings)
+        if arbiter == "per_plane":
+            n_arb = max(1, n_planes or n_rings // 2) * 2
+        c["grant_arbiters"] = n_arb * max(1, iters) * _ceil_log2(nc)
+        c["accept_arbiters"] = nc * max(1, iters) * _ceil_log2(nc)
+        if rk in ("lqf", "batched_bcfs"):
+            c["weight_sort"] = F * W_D
+        return c
     if algo in ("islip2d_mesh", "islip2d_ring"):
         R = L + ramps + n_ports
         if conflict_domain == "interval":
@@ -202,6 +266,16 @@ def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
     document by their absence that they ignore it.
     """
     F = max(2, n_flows)
+    rk = _ring2_kind(algo)
+    if rk is not None:
+        d = _ceil_log2(n_nodes) + _ceil_log2(int(mean_hops) + 1)
+        if conflict_domain == "interval":
+            d += _ceil_log2(DEPTH)
+        if rk == "pim":
+            d += 2
+        if rk in ("greedy_ff", "batched_bcfs"):
+            d = _ceil_log2(DEPTH) + W_T // 3 + _ceil_log2(int(mean_hops) + 1)
+        return d
     if algo in ("islip2d_mesh", "islip2d_ring"):
         # grant RR tree over sources, then the path-wide AND that makes an
         # accept, then (interval domain) the DEPTH-way interval compare
@@ -234,6 +308,14 @@ def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
 def dependent_steps(algo: str, *, n_flows: int, n_rounds: int | None,
                     iters: int) -> int:
     """Arbitration steps that cannot be overlapped (see module docstring)."""
+    rk = _ring2_kind(algo)
+    if rk is not None:
+        if rk in ("greedy_ff",):
+            return max(1, n_flows)
+        if rk == "batched_bcfs":
+            return max(1, n_flows) * 5
+        it = max(1, iters) if rk in ("islip", "pim") else 1
+        return max(1, n_rounds or 1) * it
     if algo in ("greedy_ff", "bcfs"):
         mult = 5 if algo == "bcfs" else 1     # bcfs re-runs multi-start
         return max(1, n_flows) * mult
@@ -260,7 +342,9 @@ def _calibrate(n_links: int, n_nodes: int) -> float:
 def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
                n_rounds: int | None = None, mean_hops: float = 6.0,
                lam: float = 1.0,
-               conflict_domain: str = "free_at") -> dict[str, Any]:
+               conflict_domain: str = "free_at",
+               voq_granularity: str = "per_dst",
+               arbiter: str = "central") -> dict[str, Any]:
     """Area + timing cost of the centralized scheduler for one workload."""
     L = len(topo.directed_links)
     N = topo.n
@@ -269,8 +353,13 @@ def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
     # every node sits on one row ring and one column ring, each with its own
     # insertion and extraction point
     n_ports = 2 * 2 * N if n_rings else 0
-    kw = {"n_ports": n_ports, "n_rings": n_rings,
-          "conflict_domain": conflict_domain}
+    kw: dict[str, Any] = {"n_ports": n_ports, "n_rings": n_rings,
+                          "conflict_domain": conflict_domain,
+                          "n_cores": getattr(topo, "n_cores", 0),
+                          "n_has": getattr(topo, "n_has", 0),
+                          "n_planes": getattr(topo, "n_planes", 0),
+                          "voq_granularity": voq_granularity,
+                          "arbiter": arbiter}
     bits = state_bits(algo, n_links=L, n_nodes=N, n_flows=n_flows,
                       n_rounds=n_rounds, iters=iters, **kw)
     cmps = comparators(algo, n_links=L, n_nodes=N, n_flows=n_flows,
@@ -303,6 +392,14 @@ def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
     }
 
 
+def area_from_bits(n_bits: float, topo) -> float:
+    """Normalize a raw bit count to per-node IQ-XY area, same coeff as sched."""
+    L = len(topo.directed_links)
+    N = max(1, topo.n)
+    coeff = _calibrate(L, N)
+    return round(coeff * n_bits / N, 4)
+
+
 # ---------------------------------------------------------------------------
 # What centralization removes: the distributed hardware, in the same currency
 # ---------------------------------------------------------------------------
@@ -310,7 +407,8 @@ def sched_cost(algo: str, topo, n_flows: int, *, iters: int = 1,
 def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
                      num_vc: int = 1, n_ports_per_node: int = 5,
                      fifo_depth: int = 4, resv_tx: int = 1,
-                     eject_depth: int = 4, reasm_depth: int = 16
+                     eject_depth: int = 4, reasm_depth: int = 16,
+                     n_planes: int = 2, resv_ej: int = 1
                      ) -> dict[str, Any]:
     """Per-node storage and control the distributed baselines need.
 
@@ -349,11 +447,24 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         b["starvation_counters"] = n_nodes * 3 * W_T
         b["itag_etag_state"] = n_nodes * 2 * 2       # per ring-direction flags
         b["swap_bypass_muxes"] = n_nodes * 2 * W_FLIT
-    elif config in ("mesh_islip2d", "ring_islip2d"):
+    elif config in ("mesh_islip2d", "ring_islip2d", "ring2_rg"):
         # Zero station storage by construction: a granted transfer is rigid, so
         # nothing is ever held anywhere in the fabric. Sources hold packets in
         # queues they need anyway.
         pass
+    elif config in ("ring2_base", "ring2_aimd"):
+        # No transfer FIFO and no Swap Rule: the only on-station storage is
+        # the per-plane shared eject queue, reserved E-tag slots, reassembly
+        # (response flits of a txn), and the I-tag / E-tag counters.
+        b["eject_queues"] = n_nodes * n_planes * eject_depth * W_FLIT
+        b["reserved_eject"] = n_nodes * n_planes * resv_ej * W_FLIT
+        b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT
+        b["starvation_counters"] = n_nodes * n_planes * W_T
+        b["itag_etag_state"] = n_nodes * n_planes * 2
+        if config == "ring2_aimd":
+            b["aimd_rate_tokens"] = n_nodes * 2 * W_T
+            b["aimd_fail_counters"] = n_nodes * W_T
+            b["piggyback_fields"] = n_nodes * 2 * W_D
     else:
         raise ValueError(config)
     return {"config": config, "bits": round(sum(b.values())),

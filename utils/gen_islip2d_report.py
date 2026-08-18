@@ -23,6 +23,7 @@ BATCH = ROOT / "results" / "islip2d_8x6.json"
 SWEEP = ROOT / "results" / "load_sweep_8x6.json"
 VERIFY = ROOT / "results" / "verify_islip2d_8x6.json"
 BISECT = ROOT / "results" / "bisect_lat_8x6.json"
+SIMPLE = ROOT / "results" / "simple2d_8x6.json"
 OUT = ROOT / "results" / "report_islip2d_8x6.html"
 
 MX, MY, N = 8, 6, 48
@@ -33,11 +34,11 @@ H, V = 7, 9
 # 1. Data access
 # ---------------------------------------------------------------------------
 
-def load() -> tuple[dict, dict, dict, dict]:
+def load() -> tuple[dict, dict, dict, dict, dict]:
     def rd(p: Path) -> dict:
         with open(p, encoding="utf-8") as f:
             return json.load(f)
-    return rd(BATCH), rd(SWEEP), rd(VERIFY), rd(BISECT)
+    return rd(BATCH), rd(SWEEP), rd(VERIFY), rd(BISECT), rd(SIMPLE)
 
 
 def xrow(x: dict, config: str) -> list[dict]:
@@ -499,9 +500,11 @@ def fig_curve(s: dict) -> str:
 
 XCFG = [("mesh_base", "cA", "mesh_base（有缓冲 + 信用反压）"),
         ("mesh_islip2d", "cB", "mesh_islip2d（集中式）"),
+        ("mesh_simple2d", "cE", "mesh_simple2d（简化集中式）"),
         ("ring_base", "cC", "ring_base（E-tag/I-tag + 偏转）"),
         ("ring_islip2d", "cD", "ring_islip2d（集中式）")]
 XLBL = {"mesh_base": "mesh_base", "mesh_islip2d": "mesh_islip2d",
+        "mesh_simple2d": "mesh_simple2d",
         "ring_base": "ring_base", "ring_islip2d": "ring_islip2d"}
 
 
@@ -509,8 +512,8 @@ def _xframe(x: dict, b: list[str], ox: int, oy: int, pw: int, ph: int,
             Y, yticks: list[tuple[float, str]]) -> None:
     """Plot box, grid, both axes' ticks, and a dotted marker at each lambda*.
 
-    Four lambda* labels would collide (mesh_base 0.41 and mesh_islip2d 0.47 sit
-    a grid step apart), so they alternate between two heights above the box.
+    Five lambda* labels would collide (the three mesh knees sit a grid step
+    apart), so they cycle across three heights above the box.
     """
     b.append(f'<rect class="plot" x="{ox}" y="{oy}" width="{pw}" '
              f'height="{ph}"/>')
@@ -527,7 +530,7 @@ def _xframe(x: dict, b: list[str], ox: int, oy: int, pw: int, ph: int,
         b.append(f'<line class="lstar" x1="{ox+ls*pw:.1f}" y1="{oy}" '
                  f'x2="{ox+ls*pw:.1f}" y2="{oy+ph}"/>')
         b.append(f'<text class="tick {cls}" fill="currentColor" '
-                 f'x="{ox+ls*pw-16:.1f}" y="{oy-6-(i % 2)*15}">'
+                 f'x="{ox+ls*pw-16:.1f}" y="{oy-6-(i % 3)*14}">'
                  f'λ*={ls}</text>')
     b.append(f'<text class="axl" x="{ox+pw//2-60}" y="{oy+ph+40}">'
              f'注入率 λ（包/节点/拍）</text>')
@@ -536,22 +539,25 @@ def _xframe(x: dict, b: list[str], ox: int, oy: int, pw: int, ph: int,
 def _xlegend(b: list[str], ox: int, y: int, pw: int, note: str = "") -> None:
     """One horizontal legend row BELOW the plot box, plus an optional note.
 
-    With four curves there is no empty corner left inside the box that does not
+    With five curves there is no empty corner left inside the box that does not
     collide with one of them at some lambda, so the legend goes outside.
     """
-    step = pw // len(XCFG)
-    for i, (_cfg, cls, lbl) in enumerate(XCFG):
-        xx = ox + i * step
+    ncols = 3 if len(XCFG) > 4 else len(XCFG)
+    step = pw // ncols
+    for i, (_cfg, cls, _lbl) in enumerate(XCFG):
+        col, row = i % ncols, i // ncols
+        xx, yy = ox + col * step, y + row * 18
         w = " cvw" if "base" in _cfg else ""
         if w:
-            b.append(f'<line class="cv{w} {cls}" x1="{xx}" y1="{y}" '
-                     f'x2="{xx+26}" y2="{y}"/>')
-        b.append(f'<line class="cv {cls}" x1="{xx}" y1="{y}" '
-                 f'x2="{xx+26}" y2="{y}"/>')
-        b.append(f'<text class="bxl" x="{xx+32}" y="{y+4}">'
+            b.append(f'<line class="cv{w} {cls}" x1="{xx}" y1="{yy}" '
+                     f'x2="{xx+26}" y2="{yy}"/>')
+        b.append(f'<line class="cv {cls}" x1="{xx}" y1="{yy}" '
+                 f'x2="{xx+26}" y2="{yy}"/>')
+        b.append(f'<text class="bxl" x="{xx+32}" y="{yy+4}">'
                  f'{XLBL[_cfg]}</text>')
+    extra = 18 * ((len(XCFG) - 1) // ncols)
     if note:
-        b.append(f'<text class="bxl dim" x="{ox}" y="{y+22}">{note}</text>')
+        b.append(f'<text class="bxl dim" x="{ox}" y="{y + 22 + extra}">{note}</text>')
 
 
 def xcross(x: dict, cfg: str) -> dict[float, float]:
@@ -615,8 +621,8 @@ def _xcurve(b: list[str], rows: list[dict], cls: str, ox: int, pw: int,
 
 def fig_bisect(x: dict) -> str:
     """Bisection utilization: only the centralized mesh ever fills its cut."""
-    w, h = 940, 426
-    ox, oy, pw, ph = 74, 48, 760, 258
+    w, h = 940, 468
+    ox, oy, pw, ph = 74, 62, 760, 248
     ymax = 1.1
 
     def Y(u: float) -> float:
@@ -642,7 +648,7 @@ def fig_bisect(x: dict) -> str:
                 "虚线段表示已越过 λ*。同一 fabric 的两条曲线共用一个分母"
                 f"（mesh 切面 {mi['bisect_links']} 条有向链路，"
                 f"环 {ri['bisect_links']} 条——行环绕回，必须切两处）。"
-                "四条曲线在低负载完全重合：这时谁都没到瓶颈，"
+                "五条曲线在低负载完全重合：这时谁都没到瓶颈，"
                 "切面负载只由流量决定。")
 
 
@@ -653,8 +659,8 @@ def _fig_lat(x: dict, key: str, num: int, title: str, note: str) -> str:
     point of the pair is that p99 sits just above the mean everywhere inside the
     stable region.
     """
-    w, h = 940, 426
-    ox, oy, pw, ph = 74, 48, 760, 258
+    w, h = 940, 468
+    ox, oy, pw, ph = 74, 62, 760, 248
     lo, hi = 20.0, 10000.0
     lg_lo, lg_hi = math.log10(lo), math.log10(hi)
 
@@ -700,8 +706,8 @@ def fig_mean_lat(x: dict) -> str:
     return _fig_lat(
         x, "mean_lat", 9, "平均时延",
         f"平均时延：空载相差 {hi - lo:.0f} 拍（{lo:.0f}→{hi:.0f}），"
-        "那就是请求-授权环路的价钱；集中式两条曲线在各自 λ* 前几乎水平，"
-        "两条基线则早早开始爬坡。四条线都在自己的 λ* 处近乎垂直拐起。")
+        "那就是请求-授权环路的价钱；三条集中式曲线在各自 λ* 前几乎水平，"
+        "两条基线则早早开始爬坡。五条线都在自己的 λ* 处近乎垂直拐起。")
 
 
 def fig_p99_lat(x: dict) -> str:
@@ -713,7 +719,7 @@ def fig_p99_lat(x: dict) -> str:
         x, "p99", 10, "p99 时延",
         "p99 时延：与图 9 同一纵轴范围。稳定区内 p99/平均最坏值——"
         f"基线 {worst('mesh_base'):.2f}×（mesh）／{worst('ring_base'):.2f}×（环），"
-        f"集中式 {worst('mesh_islip2d'):.2f}× ／ {worst('ring_islip2d'):.2f}×。"
+        f"集中式 {worst('mesh_islip2d'):.2f}× ／ {worst('mesh_simple2d'):.2f}× ／ {worst('ring_islip2d'):.2f}×。"
         "授权制的刚性把长尾压掉了：包一旦被授权就不会在网络里被任何东西阻塞。")
 
 
@@ -1055,8 +1061,10 @@ svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
 .cv { fill: none; stroke-width: 2.6; }
 .cA { stroke: #7eb6ff; } .cB { stroke: #6ee7a8; }
 .cC { stroke: #f0a0a0; } .cD { stroke: #c9a6ff; }
+.cE { stroke: #f5c16c; }
 .star.cA { fill: #7eb6ff; } .star.cB { fill: #6ee7a8; }
 .star.cC { fill: #f0a0a0; } .star.cD { fill: #c9a6ff; }
+.star.cE { fill: #f5c16c; }
 .axl { fill: #9aa3b5; font-size: 12px; }
 .cvu { fill: none; stroke-width: 2.6; stroke-dasharray: 4 4; opacity: .75; }
 .cvw { stroke-width: 7; opacity: .34; }
@@ -1108,6 +1116,7 @@ def cards(b: dict, s: dict, v: dict) -> str:
 def s_bisect(x: dict) -> str:
     """9.3-9.5: what limits each configuration, and how the tails behave."""
     mb, mi = x["summary"]["mesh_base"], x["summary"]["mesh_islip2d"]
+    ms = x["summary"]["mesh_simple2d"]
     rb, ri = x["summary"]["ring_base"], x["summary"]["ring_islip2d"]
     cm = xcrossover(x, "mesh_islip2d", "mesh_base", "mean_lat")
     cr = xcrossover(x, "ring_islip2d", "ring_base", "mean_lat")
@@ -1119,8 +1128,8 @@ def s_bisect(x: dict) -> str:
 <h3>9.3 二分带宽利用率：谁被金属卡住，谁被自己卡住</h3>
 <p>λ* 是「多少」，这一节回答「<b>被什么卡住</b>」。
 把每个包在二分切面链路上的占用拍数记账下来除以切面容量，
-就得到切面的忙闲比例。四个配置用<b>同一套记账</b>：
-集中式按授权预留记，两个基线按<b>实际逐跳</b>记——
+就得到切面的忙闲比例。五个配置用<b>同一套记账</b>：
+集中式（含 simple2d）按授权预留记，两个基线按<b>实际逐跳</b>记——
 反应式 fabric 的下一跳是逐拍决定的，只能这样记。</p>
 {fig_bisect(x)}
 {t_bisect(x)}
@@ -1129,6 +1138,15 @@ def s_bisect(x: dict) -> str:
 {pct(mi['bisect_util_at_lam_star'])}，λ≥{mi['peak_bisect_util_at_lam']}
 贴住 {f(mi['peak_bisect_util'], 3)} 不动。它<b>是二分带宽受限</b>——
 再改调度也榨不出东西，只能改路由让流量离开热切面（§5.3 的 ROMM）或者加金属。</li>
+<li><b>mesh_simple2d 的 λ*={ms['lam_star']}，甚至低于 mesh_base 的 {mbl}</b>。
+λ* 处切面只用了 {pct(ms['bisect_util_at_lam_star'])}，峰值
+{pct(ms['peak_bisect_util'])}。它不搜索空隙、固定 t0 = now+RTT，
+打包比 iSLIP-2D 松，吞吐买不过有缓冲基线，也到不了金属上限——
+但远高于把占用塌成 free_at 前沿再滑动 t0 时的 ~0.11（§6）。
+简化调度买到的<b>不是吞吐</b>，是授权制那条平的时延曲线（§9.4–9.5）；
+区间搜索才把 λ* 从 {ms['lam_star']} 推到 {mi['lam_star']}，
+并把切面从 {pct(ms['bisect_util_at_lam_star'])} 推到
+{pct(mi['bisect_util_at_lam_star'])}。</li>
 <li><b>mesh_base 在切面还空着 {pct(1 - mb['bisect_util_at_lam_star'])} 时就先失稳</b>：
 λ*={mbl}，峰值只到 {pct(mb['peak_bisect_util'])} 就回落。
 卡住它的不是金属而是信用环路（缓冲深 20 也只够盖住 15–19 拍的信用往返）。
@@ -1152,15 +1170,16 @@ ring_islip2d 峰值 {pct(ri['peak_bisect_util'])}、λ* 处
 <li><b>对解析值</b>：均匀流量下一对 (src,dst) 跨切概率 =
 2·(24/48)·(24/47) = {x['summary']['crossing_fraction']:.4f}，
 最小路由下跨切恰好一次。在「基本全收」区间内（accept_ratio ≥ 0.999）
-四个配置与解析值的最大偏差是
+五个配置与解析值的最大偏差是
 {f(mb['analytic_max_abs_err_accepting'], 4)} /
 {f(mi['analytic_max_abs_err_accepting'], 4)} /
+{f(ms['analytic_max_abs_err_accepting'], 4)} /
 {f(rb['analytic_max_abs_err_accepting'], 4)} /
 {f(ri['analytic_max_abs_err_accepting'], 4)}。</li>
-<li><b>四配置互校</b>：把切面宽度除掉后，每包跨切次数四者都落在
+<li><b>五配置互校</b>：把切面宽度除掉后，每包跨切次数五者都落在
 {min(cross):.4f}–{max(cross):.4f}，与解析值一致。
 <b>绝对跨切流量与仲裁方式无关</b>，只由流量决定——
-这正是应该的结果，也说明四条记账路径没有各自跑偏。</li>
+这正是应该的结果，也说明五条记账路径没有各自跑偏。</li>
 <li><b>逼近 λ* 时实测略高于解析值</b>（ring_base 最明显，到 λ*={rbl}
 时偏差 {f(rb['analytic_max_abs_err_stable'], 4)}）：解析值按<b>已交付</b>的包算，
 而切面占用里还含着已注入未交付的包。不是偏转多绕了圈——
@@ -1176,11 +1195,11 @@ ring_islip2d 峰值 {pct(ri['peak_bisect_util'])}、λ* 处
 {fig_mean_lat(x)}
 {t_lat(x)}
 <p><b>空载时集中式更差</b>：mesh {mb['mean_lat_unloaded']:.0f}→
-{mi['mean_lat_unloaded']:.0f} 拍、环 {rb['mean_lat_unloaded']:.0f}→
-{ri['mean_lat_unloaded']:.0f} 拍，各多出约
-{mi['mean_lat_unloaded'] - mb['mean_lat_unloaded']:.0f} 与
-{ri['mean_lat_unloaded'] - rb['mean_lat_unloaded']:.0f} 拍。
-这就是请求-授权环路的价钱，不该藏起来：
+simple2d {ms['mean_lat_unloaded']:.0f}／islip2d {mi['mean_lat_unloaded']:.0f} 拍、
+环 {rb['mean_lat_unloaded']:.0f}→
+{ri['mean_lat_unloaded']:.0f} 拍。simple2d 与 islip2d 几乎同一空载
+（{ms['mean_lat_unloaded']:.0f} vs {mi['mean_lat_unloaded']:.0f}）——
+两者付的是同一笔请求-授权 RTT，差别只在匹配松紧。
 空载时没人要抢资源，集中仲裁纯属多跑一趟。</p>
 <p><b>但基线爬坡早得多。</b>集中式在 λ* 之前近乎水平——
 无缓冲 + 刚性授权把排队<b>全部</b>挤到源端队列，
@@ -1191,7 +1210,7 @@ ring_islip2d 峰值 {pct(ri['peak_bisect_util'])}、λ* 处
 mesh 在 λ={cm[0]}（{cm[2]:.0f}→{cm[1]:.0f} 拍）、
 环在 λ={cr[0]}（{cr[2]:.0f}→{cr[1]:.0f} 拍）之后集中式反超。</p>
 <p class="muted">一个读法陷阱：λ* 处的平均时延<b>不能横向比</b>，
-因为四个配置的 λ* 不同（{mbl} / {mi['lam_star']} / {rbl} /
+因为五个配置的 λ* 不同（{mbl} / {ms['lam_star']} / {mi['lam_star']} / {rbl} /
 {ri['lam_star']}），那是各自在自己极限处的数字。
 要比就固定同一个 λ——上一段的交叉点就是这么算的。</p>
 
@@ -1200,14 +1219,19 @@ mesh 在 λ={cm[0]}（{cm[2]:.0f}→{cm[1]:.0f} 拍）、
 <p>看上表最后一列。稳定区内最坏的 p99/平均：基线是
 {mb['worst_p99_over_mean_stable']:.2f}×（mesh）／
 {rb['worst_p99_over_mean_stable']:.2f}×（环），
-集中式只有 {mi['worst_p99_over_mean_stable']:.2f}× ／
-{ri['worst_p99_over_mean_stable']:.2f}×。
-在 mesh_base 自己的 λ*={mbl} 上直接对比更直观：p99
-{xat(x, 'mesh_base', mbl, 'p99'):.0f} 拍 vs
-{xat(x, 'mesh_islip2d', mbl, 'p99'):.0f} 拍，
+集中式只有 {mi['worst_p99_over_mean_stable']:.2f}×（islip2d）／
+{ms['worst_p99_over_mean_stable']:.2f}×（simple2d）／
+{ri['worst_p99_over_mean_stable']:.2f}×（环）。
+在 mesh_base 自己的 λ*={mbl} 上，islip2d 的 p99
+{xat(x, 'mesh_islip2d', mbl, 'p99'):.0f} 拍对基线
+{xat(x, 'mesh_base', mbl, 'p99'):.0f} 拍，
 <b>差 {xat(x, 'mesh_base', mbl, 'p99') / xat(x, 'mesh_islip2d', mbl, 'p99'):.1f}×</b>，
 而同一点上平均只差
 {xat(x, 'mesh_base', mbl, 'mean_lat') / xat(x, 'mesh_islip2d', mbl, 'mean_lat'):.2f}×。
+simple2d 自己的膝部更早（λ*={ms['lam_star']}），
+三者都还稳定时它的 p99 是 {xat(x, 'mesh_simple2d', ms['lam_star'], 'p99'):.0f} 拍
+（基线同 λ 为 {xat(x, 'mesh_base', ms['lam_star'], 'p99'):.0f}），
+过了自己的 λ* 再比没有意义。
 尾部的差距远大于平均的差距，这正是刚性授权的特征：
 包一旦被授权，路径上每条链路每个端口都已按拍预留，
 不会在网络里被任何东西阻塞，于是没有逐跳争用那种长尾。
@@ -1276,7 +1300,9 @@ mesh_base 在二分切面还空着
 {pct(1 - x['summary']['mesh_base']['bisect_util_at_lam_star'])} 时就失稳
 （λ*={x['summary']['mesh_base']['lam_star']}，切面峰值
 {pct(x['summary']['mesh_base']['peak_bisect_util'])} 就回落）；
-mesh_islip2d 把切面推到 100% 并停在那里，λ* 变成
+mesh_simple2d 吞吐还不如基线（λ*={x['summary']['mesh_simple2d']['lam_star']}，
+切面只到 {pct(x['summary']['mesh_simple2d']['bisect_util_at_lam_star'])}）——
+不搜索空隙就打包不紧；mesh_islip2d 才把切面推到 100% 并停在那里，λ* 变成
 {x['summary']['mesh_islip2d']['lam_star']}——它<b>是二分带宽受限</b>，
 再改调度也没用了。环上两者都没用满切面
 （峰值 {pct(x['summary']['ring_base']['peak_bisect_util'])} /
@@ -1291,6 +1317,7 @@ mesh_islip2d 把切面推到 100% 并停在那里，λ* 变成
 {x['summary']['mesh_base']['worst_p99_over_mean_stable']:.1f}× /
 {x['summary']['ring_base']['worst_p99_over_mean_stable']:.1f}×，
 集中式只有 {x['summary']['mesh_islip2d']['worst_p99_over_mean_stable']:.1f}× /
+{x['summary']['mesh_simple2d']['worst_p99_over_mean_stable']:.1f}× /
 {x['summary']['ring_islip2d']['worst_p99_over_mean_stable']:.1f}×——
 包一旦被授权就不会在网络里被阻塞（§9.4–9.5）。</li>
 </ol></div>
@@ -1304,9 +1331,10 @@ mesh_islip2d 把切面推到 100% 并停在那里，λ* 变成
 <a href="#s6">6 · 冲突域：free_at 与 interval</a><br/>
 <a href="#s7">7 · Part B：islip2d_ring 与「集中化的必要性」</a><br/>
 <a href="#s8">8 · 两个分布式基线</a><br/>
-<a href="#s9">9 · 稳态注入率扫描（四配置头对头 · 二分带宽 · 平均/p99 时延）</a><br/>
+<a href="#s9">9 · 稳态注入率扫描（四配置头对头 · 加 simple2d 的二分/时延）</a><br/>
 <a href="#s10">10 · 保序、流水与 RTT 敏感度</a><br/>
 <a href="#s11">11 · 面积与调度时间</a><br/>
+<a href="#s11a">11a · 资源受限简化调度 simple2d + 单坏点</a><br/>
 <a href="#s12">12 · 验证清单与已知局限</a>
 </div>
 
@@ -1906,7 +1934,9 @@ def s_steady(s: dict, x: dict) -> str:
 <p>四种配置跑在<b>同一个</b>开环稳态 DES 里（同注入器、同统计器、
 源端无限队列、warmup 后测量、按源队列斜率判稳），
 所以曲线之间的差异只来自 fabric 与仲裁方式。
-流量是 all-to-all，λ 从 0.01 扫到 1.0。</p>
+流量是 all-to-all，λ 从 0.01 扫到 1.0。
+§9.3–9.5 的二分 / 时延图另加第五条
+<code>mesh_simple2d</code>（§11a 的简化调度）。</p>
 {fig_curve(s)}
 {t_main(s)}
 <p>读法：</p>
@@ -1969,11 +1999,11 @@ def t_bisect(x: dict) -> str:
     rows = []
     for cfg, _, lbl in XCFG:
         u = x["summary"][cfg]
-        cen = "islip2d" in cfg
-        rows.append([("!" if cen else "") + lbl.split("（")[0],
+        fills = u["bisect_util_at_lam_star"] >= 0.9
+        rows.append([("!" if fills else "") + lbl.split("（")[0],
                      f"{u['bisect_links']}",
                      f"{u['lam_star']}",
-                     f"<b class='{'win' if cen else 'lose'}'>"
+                     f"<b class='{'win' if fills else 'lose'}'>"
                      f"{pct(u['bisect_util_at_lam_star'])}</b>",
                      f"{pct(u['peak_bisect_util'])}"
                      f"<br><span class='muted'>@λ="
@@ -1991,7 +2021,7 @@ def t_lat(x: dict) -> str:
         m0, m1 = st[0]["mean_lat"], st[-1]["mean_lat"]
         p0, p1 = st[0]["p99"], st[-1]["p99"]
         worst = max(r["p99"] / r["mean_lat"] for r in st)
-        cen = "islip2d" in cfg
+        cen = "islip2d" in cfg or "simple2d" in cfg
         rows.append([("!" if cen else "") + lbl.split("（")[0],
                      f"{m0:.0f}", f"{p0:.0f}",
                      f"{m1:.0f}<br><span class='muted'>×{m1/m0:.2f}</span>",
@@ -2144,6 +2174,117 @@ interval {mi['t_sched_interval']} 拍），
 """
 
 
+def _mix(m: dict) -> str:
+    parts = []
+    for k in ("xy", "yx", "detour"):
+        if m.get(k):
+            parts.append(f"{k} {m[k]}")
+    return " / ".join(parts) if parts else "—"
+
+
+def s_simple2d(sm: dict) -> str:
+    """Limited-resource scheduler + single-fault results."""
+    by = {r["site"]: r for r in sm["rows"]}
+    extra = {r["site"]: r for r in sm.get("extra_sites", [])}
+    vs = sm["vs_islip2d"]
+    cost = sm["cost"]
+    bits = sm["simple2d_bits"]
+    h, c, e, n = by["healthy"], by["corner"], by["edge"], by["center"]
+    c2, e2, n2 = extra["corner2"], extra["edge2"], extra["center2"]
+    ci = cost["islip2d_mesh:interval:110"]
+    cf = cost["islip2d_mesh:free_at:110"]
+    cs = cost["simple2d:free_at:105"]
+
+    def row(r: dict, label: str, loc: str) -> list[str]:
+        hl = "!" if r["site"] == "healthy" else ""
+        return [hl + label, loc, f"{r['failed']}", f"{r['alive']}",
+                f"{r['cut_bound']}", f"<b>{r['n_rounds']}</b>",
+                f"{r['over_cut']:.2f}×", _mix(r["route_mix"])]
+
+    sites = tbl(
+        ["位置", "坐标", "F", "存活流", "割界", "轮次", "×割界", "路径构成"],
+        [row(h, "健康", "—"),
+         row(c, "角", "(0,0)"),
+         row(e, "边", "(3,0)"),
+         row(n, "心", "(3,2)")])
+    extras = tbl(
+        ["位置", "坐标", "F", "割界", "轮次", "路径构成", "冲突/漏授"],
+        [[c2["site"], "(7,5)", f"{c2['failed']}", f"{c2['cut_bound']}",
+          f"{c2['n_rounds']}", _mix(c2["route_mix"]),
+          "0" if c2["verify"]["ok"] else "FAIL"],
+         [e2["site"], "(7,2)", f"{e2['failed']}", f"{e2['cut_bound']}",
+          f"{e2['n_rounds']}", _mix(e2["route_mix"]),
+          "0" if e2["verify"]["ok"] else "FAIL"],
+         [n2["site"], "(4,3)", f"{n2['failed']}", f"{n2['cut_bound']}",
+          f"{n2['n_rounds']}", _mix(n2["route_mix"]),
+          "0" if n2["verify"]["ok"] else "FAIL"]])
+    costs = tbl(
+        ["", "状态 bit", "门级深度", "相关步", "T_sched"],
+        [["islip2d 区间域", f"{ci['bits']:,}", f"{ci['gate_levels']}",
+          f"{ci['dependent_steps']}", f"{ci['t_sched_cycles']}"],
+         ["islip2d free_at", f"{cf['bits']:,}", f"{cf['gate_levels']}",
+          f"{cf['dependent_steps']}", f"{cf['t_sched_cycles']}"],
+         ["!simple2d", f"<b class='win'>{cs['bits']:,}</b>",
+          f"{cs['gate_levels']}", f"{cs['dependent_steps']}",
+          f"<b class='win'>{cs['t_sched_cycles']}</b>"]])
+    return f"""
+<h2 id="s11a">11a · 资源受限简化调度 simple2d + 单坏点</h2>
+<p>iSLIP-2D 的调度时间复杂，不是匹配难，而是三件事叠在一起：
+全路径一致授予、区间表挖洞、两级指针迭代。
+区间表单独占 CA 状态的 96%（约 99,840 bit）。
+有限资源下能删的就是这三件；数据面真正需要的只剩一句：
+<b>一轮 = 一组互不撞链路的路径</b>。</p>
+<p><code>simple2d</code> 只做这一句。每源每轮从残余 VOQ 里按指针拿出
+<b>1 个目的</b>，路径按下面的静态规则算出来，和本轮已占用链路做一次 AND，
+能放下就授权。没有区间表、没有每条链路的 grant 指针、没有 iSLIP 迭代。</p>
+
+<h3>路径规则（最多一个坏节点 F）</h3>
+<ol>
+<li><code>s</code> 或 <code>d</code> 就是 F：这条流不存在（94 条，2×47）。</li>
+<li>否则走 XY；XY 穿过 F 则改走 YX。</li>
+<li>只有 <code>s、d、F</code> 共线时 XY 与 YX 是同一条线，这时走 U 绕行：
+先垂直离开该线一格，平行走过 F，再回到原线。
+8×6 上任何一行/列都至少有一侧可走，所以角、边、心三种度数都能绕开。</li>
+</ol>
+<p>路径由 <code>(s, d, F)</code> 决定，F 固定后不再换路，所以仍然保序。
+绕行多 2 跳，只发生在共线被挡住的时候。</p>
+
+<h3>健康网 vs 三种坏点（all-to-all，grants_per_src=1）</h3>
+{sites}
+<p>对照同一套 slot 纪律：<code>islip2d</code> <code>iters=0</code>（纯贪心）
+{vs['islip2d_I0']['n_rounds']} 轮，<code>iters=1</code>
+{vs['islip2d_I1']['n_rounds']} 轮。简化算法健康网
+<b>{vs['simple2d']['n_rounds']} 轮</b>，夹在两者之间——
+删掉两级指针几乎不损失打包。角点坏了之后割界不变（YX 就能躲开）；
+边和心把相邻行/列抬到 {e['cut_bound']}–{n['cut_bound']}，轮次跟上去，
+但更贴割界。四组都是 0 链路冲突、0 条路径穿过坏点、0 条存活流漏授权。</p>
+
+<h3>同一规则、另一组角 / 边 / 心</h3>
+<p>路径规则不是只对上面三个点成立。对角、右边、另一心同样能调度完：</p>
+{extras}
+<p class="muted">右边坏了割界仍是 {e2['cut_bound']}（比顶边那个轻），
+两个中心点的绕行构成一致（YX {n2['route_mix'].get('yx', 0)} + 绕行
+{n2['route_mix'].get('detour', 0)}）。</p>
+
+<h3>CA 资源</h3>
+{costs}
+<p>状态少 <b class="win">{ci['bits'] / cs['bits']:.0f}×</b>（相对区间域），
+T_sched 与 <code>free_at</code> 同量级。
+省下来的不是匹配深度，是那张区间表。
+§6 的「掉到约 0.11」是 islip2d 在 <code>free_at</code> 上<b>滑动 t0</b>
+把热链路的迟到导出到整条路径的税。
+<code>simple2d</code> 不滑动——只问「当前 t0 这一拍空不空」。
+§9.3–9.5 的曲线是这笔交易的稳态标价：λ* 甚至低于有缓冲基线、切面到不了 100%，
+但远高于 0.11。批量 all-to-all 用轮次模型本来就不挖洞，
+有限资源下先把一批调度做完，并且坏一个节点还能做完。</p>
+<p class="muted">状态拆开：VOQ 位图 {bits['residual_voq_bitmap']} +
+链路位图 {bits['round_link_bitmap']} + 源指针 {bits['source_pointer']} +
+accept 指针 {bits['accept_pointers']} + 坏点寄存器
+{bits['fault_register']} = {sum(bits.values())} bit。
+数据 <code>results/simple2d_8x6.json</code>。</p>
+"""
+
+
 def s_tail(b: dict, s: dict, v: dict) -> str:
     ac = s.get("anchor_check", {}) or {}
     all_ok = all(x.get("ok") for x in ac.values()) if ac else False
@@ -2200,12 +2341,14 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <td>开环稳态 DES 内核，四配置共用注入器与统计器</td></tr>
 <tr><td><code>utils/rg_sched_cost.py</code></td>
 <td>状态位 / 比较器 / 门级深度 + 集中化面积台账</td></tr>
+<tr><td><code>results/simple2d_8x6.json</code></td>
+<td>简化调度 simple2d：健康 / 角 / 边 / 心 + 第二组坏点、对照 islip2d、CA 状态（§11a）</td></tr>
 <tr><td><code>utils/dse_islip2d_8x6.py</code></td>
 <td>批量 makespan 扫描 → <code>results/islip2d_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
 <td>稳态注入率扫描 → <code>results/load_sweep_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_bisect_lat_8x6.py</code></td>
-<td>四配置的二分带宽 / 平均时延 / p99 扫描（四个膝部都加密）→
+<td>五配置的二分带宽 / 平均时延 / p99 扫描（含 mesh_simple2d）→
 <code>results/bisect_lat_8x6.json</code>（§9.3–9.5）。
 <code>--from-json</code> 只重算汇总、不重跑仿真</td></tr>
 <tr><td><code>utils/gen_bisect_lat_plots.py</code></td>
@@ -2220,7 +2363,7 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 """
 
 
-def build(b: dict, s: dict, v: dict, x: dict, led: dict) -> str:
+def build(b: dict, s: dict, v: dict, x: dict, led: dict, sm: dict) -> str:
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -2240,7 +2383,7 @@ def build(b: dict, s: dict, v: dict, x: dict, led: dict) -> str:
 <span class="pill">{v['n_checks']} 条断言</span>
 <span class="pill">数据 results/islip2d_8x6.json ·
 load_sweep_8x6.json · verify_islip2d_8x6.json ·
-bisect_lat_8x6.json</span>
+bisect_lat_8x6.json · simple2d_8x6.json</span>
 </p>
 {cards(b, s, v)}
 {s_intro(b, s, v, x)}
@@ -2254,6 +2397,7 @@ bisect_lat_8x6.json</span>
 {s_steady(s, x)}
 {s_order(b, s)}
 {s_area(led, s, b)}
+{s_simple2d(sm)}
 {s_tail(b, s, v)}
 <p class="muted" style="margin-top:2.5rem">
 批量扫描 {f(b['wall_secs'], 1)} 秒 · 稳态扫描 {f(s['wall_secs'], 1)} 秒 ·
@@ -2268,9 +2412,9 @@ def main() -> None:
     sys.path.insert(0, str(ROOT / "utils"))
     import rg_sched_cost
 
-    b, s, v, x = load()
+    b, s, v, x, sm = load()
     led = rg_sched_cost.centralization_ledger()
-    OUT.write_text(build(b, s, v, x, led), encoding="utf-8")
+    OUT.write_text(build(b, s, v, x, led, sm), encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)} "
           f"({OUT.stat().st_size / 1024:.0f} KB)")
 

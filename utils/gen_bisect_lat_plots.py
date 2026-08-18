@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three injection-rate curves for all four configurations.
+"""Three injection-rate curves for all five configurations.
 
 Reads results/bisect_lat_8x6.json and writes
 
@@ -35,10 +35,11 @@ SRC = ROOT / "results" / "bisect_lat_8x6.json"
 STYLE = {
     "mesh_base": ("#93c5fd", "^", "mesh_base (buffered + credits)"),
     "mesh_islip2d": ("#1d4ed8", "o", "mesh_islip2d (central, 12-link cut)"),
+    "mesh_simple2d": ("#d97706", "D", "mesh_simple2d (cheap CA, no t0 search)"),
     "ring_base": ("#fca5a5", "v", "ring_base (E-tag/I-tag + deflection)"),
     "ring_islip2d": ("#b91c1c", "s", "ring_islip2d (central, 24-link cut)"),
 }
-CEN = ("mesh_islip2d", "ring_islip2d")
+CEN = ("mesh_islip2d", "mesh_simple2d", "ring_islip2d")
 
 
 def load() -> dict[str, Any]:
@@ -80,13 +81,14 @@ def _draw(ax, d: dict, key: str) -> None:
     # Below the axes: with four curves no corner stays empty across the sweep,
     # and a log-scaled latency panel has nowhere safe to put a legend.
     ax.legend(fontsize=7.5, loc="upper center", bbox_to_anchor=(0.5, -0.145),
-              ncol=2, framealpha=0.95)
+              ncol=3, framealpha=0.95)
 
 
 def _lamstar_note(d: dict) -> str:
     """Compact enough to fit one title line at this figure width."""
     s = d["summary"]
     return (f"λ* mesh {s['mesh_base']['lam_star']}→"
+            f"{s['mesh_simple2d']['lam_star']}→"
             f"{s['mesh_islip2d']['lam_star']}, "
             f"ring {s['ring_base']['lam_star']}→"
             f"{s['ring_islip2d']['lam_star']}")
@@ -102,9 +104,10 @@ def fig_bisect(d: dict, ax=None) -> Any:
     ax.set_ylim(0, 1.12)
     mi, mb = d["summary"]["mesh_islip2d"], d["summary"]["mesh_base"]
     rb = d["summary"]["ring_base"]
+    ms = d["summary"]["mesh_simple2d"]
     ax.annotate(f"only mesh_islip2d fills the cut ({mi['peak_bisect_util']:.3f});"
-                f"\n{mi['bisect_util_at_lam_star']:.3f} already at its λ*, so"
-                f"\nits λ* IS the bisection bound",
+                f"\nsimple2d peaks at {ms['peak_bisect_util']:.3f} "
+                f"(λ*={ms['lam_star']})",
                 xy=(mi["peak_bisect_util_at_lam"], 1.0), xytext=(0.05, 0.80),
                 fontsize=8, color=STYLE["mesh_islip2d"][0],
                 arrowprops=dict(arrowstyle="->", lw=0.9,

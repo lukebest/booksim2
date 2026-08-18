@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>2-full-ring 20-node — three schemes + RG Pareto</title>
+<style>
+body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem auto;
+       max-width: 980px; color: #111; }
+h1,h2,h3 { font-weight: 650; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th,td { border: 1px solid #e5e7eb; padding: 0.35rem 0.5rem; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { background: #f8fafc; }
+code { background: #f1f5f9; padding: 0.1rem 0.3rem; }
+img { max-width: 100%; border: 1px solid #e5e7eb; }
+.note { color: #475569; font-size: 0.9rem; }
+</style></head><body>
+<h1>2-full-ring, 20 nodes: makespan of three schemes + RG Pareto</h1>
+<p class="note">Even indices are AI cores, odd indices are memory Home Agents.
+Two independent bidirectional ring planes; each node has one port per plane
+and the two directions of a plane share that port's buffer. Traffic is
+read-return (1-flit request, R-flit response). Makespan is the cycle the
+last response flit is drained at the requesting core.</p>
+
+<h2>1. Verification</h2>
+<p>14/14 checks passed.</p>
+<table><thead><tr><th>check</th><th>result</th></tr></thead><tbody><tr><td>topo_roles_and_wrap</td><td>ok</td></tr><tr><td>workload_counts</td><td>ok</td></tr><tr><td>s0_completes_and_conserves</td><td>ok</td></tr><tr><td>s1_completes_and_conserves</td><td>ok</td></tr><tr><td>three_schemes_same_flits</td><td>ok</td></tr><tr><td>makespan_ge_bound</td><td>ok</td></tr><tr><td>inring_never_blocked</td><td>ok</td></tr><tr><td>itag_starve_finite</td><td>ok</td></tr><tr><td>etag_deflect_bounded</td><td>ok</td></tr><tr><td>rg_replay_conflict_free</td><td>ok</td></tr><tr><td>rg_req_before_resp</td><td>ok</td></tr><tr><td>uniform_multi_seed_s0</td><td>ok</td></tr><tr><td>cost_ring2_preserves_mesh_cal</td><td>ok</td></tr><tr><td>plane_sel_all_work</td><td>ok</td></tr></tbody></table>
+
+<h2>2. Three-scheme makespan (default plane_sel=least_occupied, eject_depth=4)</h2>
+<p class="note">S0 = RR + I-tag/E-tag, no source rate control.
+S1 = S0 + piggybacked failure counts + AIMD.
+S2 = request-grant iSLIP (I=2, interval, arc). Bound is the analytic floor
+(link / port / cut / single-txn).</p>
+<table><thead><tr><th>scheme</th><th>pattern</th><th>R</th><th>m or K</th><th>mean</th><th>min</th><th>max</th><th>bound</th><th>ok</th></tr></thead><tbody><tr><td>S0</td><td>allpairs</td><td>1</td><td>2</td><td>74.0</td><td>74</td><td>74</td><td>25</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>4</td><td>124.0</td><td>124</td><td>124</td><td>50</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>1</td><td>44.0</td><td>44</td><td>44</td><td>20</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>4</td><td>323.0</td><td>323</td><td>323</td><td>140</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>2</td><td>169.0</td><td>169</td><td>169</td><td>70</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>1</td><td>92.0</td><td>92</td><td>92</td><td>35</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>1</td><td>168.0</td><td>168</td><td>168</td><td>65</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>2</td><td>319.0</td><td>319</td><td>319</td><td>130</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>4</td><td>611.0</td><td>611</td><td>611</td><td>260</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>50</td><td>127.7</td><td>122</td><td>133</td><td>67</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>100</td><td>234.0</td><td>231</td><td>238</td><td>135</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>20</td><td>76.7</td><td>73</td><td>83</td><td>33</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>100</td><td>671.7</td><td>661</td><td>692</td><td>376</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>20</td><td>166.0</td><td>162</td><td>169</td><td>95</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>50</td><td>342.0</td><td>337</td><td>351</td><td>192</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>100</td><td>1289.7</td><td>1238</td><td>1321</td><td>698</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>20</td><td>304.0</td><td>290</td><td>312</td><td>177</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>50</td><td>676.7</td><td>637</td><td>719</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>2</td><td>153.3</td><td>99</td><td>224</td><td>25</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>4</td><td>414.7</td><td>269</td><td>503</td><td>50</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>1</td><td>53.0</td><td>49</td><td>57</td><td>20</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>4</td><td>805.3</td><td>548</td><td>1214</td><td>140</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>1</td><td>122.3</td><td>92</td><td>176</td><td>35</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>2</td><td>364.7</td><td>256</td><td>572</td><td>70</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>2</td><td>643.0</td><td>328</td><td>1225</td><td>130</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>4</td><td>1415.3</td><td>744</td><td>2582</td><td>260</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>1</td><td>263.0</td><td>159</td><td>468</td><td>65</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>100</td><td>1242.7</td><td>1221</td><td>1272</td><td>135</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>20</td><td>109.0</td><td>105</td><td>117</td><td>33</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>50</td><td>524.7</td><td>501</td><td>548</td><td>67</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>100</td><td>1784.7</td><td>1774</td><td>1798</td><td>376</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>20</td><td>259.0</td><td>184</td><td>304</td><td>95</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>50</td><td>757.0</td><td>692</td><td>829</td><td>192</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>20</td><td>408.7</td><td>360</td><td>456</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>50</td><td>1146.0</td><td>990</td><td>1260</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>100</td><td>2226.7</td><td>2206</td><td>2246</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>2</td><td>51.0</td><td>51</td><td>51</td><td>25</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>4</td><td>91.0</td><td>91</td><td>91</td><td>50</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>1</td><td>38.0</td><td>38</td><td>38</td><td>20</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>1</td><td>85.0</td><td>85</td><td>85</td><td>35</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>2</td><td>165.0</td><td>165</td><td>165</td><td>70</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>4</td><td>286.0</td><td>286</td><td>286</td><td>140</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>2</td><td>308.0</td><td>308</td><td>308</td><td>130</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>4</td><td>549.0</td><td>549</td><td>549</td><td>260</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>1</td><td>158.0</td><td>158</td><td>158</td><td>65</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>50</td><td>107.0</td><td>104</td><td>109</td><td>67</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>100</td><td>197.0</td><td>195</td><td>199</td><td>135</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>20</td><td>57.3</td><td>56</td><td>58</td><td>33</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>20</td><td>181.0</td><td>174</td><td>192</td><td>95</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>50</td><td>357.0</td><td>351</td><td>368</td><td>192</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>100</td><td>671.0</td><td>655</td><td>686</td><td>376</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>50</td><td>689.0</td><td>676</td><td>698</td><td>362</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>100</td><td>1359.0</td><td>1344</td><td>1380</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>20</td><td>334.0</td><td>324</td><td>348</td><td>177</td><td>yes</td></tr></tbody></table>
+<p class="note">Wall 216.4s, 864 rows.
+Quick=False.</p>
+
+<h2>3. Per-core receive bandwidth vs time</h2>
+<p class="note">y = response flits drained at that AI core per cycle
+(bin = 4 cycles). Each coloured line is one core; the dashed line is
+the 10-core mean. Same closed batch and <code>plane_sel=least_occupied</code>
+as the table above. Peak per core is 2 flit/cycle (one leave port × two
+planes).</p>
+<h3>allpairs m=1 R=4</h3>
+<p><img src="ring2_core_recv_bw_allpairs.png" alt="per-core recv bw allpairs"></p>
+<h3>uniform K=20 R=4 seed=0</h3>
+<p><img src="ring2_core_recv_bw_uniform.png" alt="per-core recv bw uniform"></p>
+
+<h2>4. Request-grant area / makespan Pareto</h2>
+<p class="note">y = makespan_des + t_sched_cycles (scheduler delay charged
+back). x = area_norm (IQ-XY router = 1.0, per node). S0 and S1 sit on the
+same plot as reference points. Area is a bit-equivalent model calibrated
+so mesh <code>greedy_ff = 0.05</code>; not mm².</p>
+<p><img src="ring2_rg_pareto.png" alt="Pareto front"></p>
+<table><thead><tr><th>tag</th><th>area_norm</th><th>makespan</th></tr></thead><tbody><tr><td>S0</td><td>0.0207</td><td>92</td></tr></tbody></table>
+<p class="note">1 non-dominated points,
+169 evaluated, wall 2.3s.</p>
+
+<h2>5. How to read the comparison</h2>
+<ul>
+<li>S0 is the reactive baseline: in-ring never stalls, I-tag bounds inject
+starvation, E-tag (rebound onto reserved <em>eject</em> entries — an
+adaptation, not HiRD) bounds leave livelock.</li>
+<li>S1 feeds board/leave failure counts back to the source and AIMDs the
+token-bucket rate. On a closed burst this often <em>hurts</em> makespan
+because every source sees board NACK in the first epoch and the rate
+collapses; that is a result, not a bug.</li>
+<li>S2 deletes station storage (zero distributed bits) and pays an arbiter
+plus a small control-plane tax. Whether it lands on the Pareto front
+depends on <code>t_sched_cycles</code> — an algorithm that is only fast
+because it is unbuildable is charged for that.</li>
+</ul>
+<p class="note">Write-up: <code>docs/phase-7-exploration/ring2-20node-core-ha.md</code></p>
+</body></html>

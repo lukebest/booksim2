@@ -19,8 +19,10 @@ rides past its turn and crosses the cut again is charged again. That is the
 intended accounting: it is how wasted cut bandwidth becomes visible.
 
     python3 utils/dse_bisect_lat_8x6.py [--quick] [--jobs 6]
+    python3 utils/dse_bisect_lat_8x6.py --only mesh_simple2d --jobs 6
 
-Writes results/bisect_lat_8x6.json.
+Writes results/bisect_lat_8x6.json. `--only` re-runs just those configs and
+merges into the existing JSON so the other curves are not recomputed.
 """
 
 from __future__ import annotations
@@ -41,7 +43,8 @@ from rg_steady_des import (SteadyParams, anchors, bisection_links,  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "bisect_lat_8x6.json"
 
-CONFIGS = ("mesh_base", "mesh_islip2d", "ring_base", "ring_islip2d")
+CONFIGS = ("mesh_base", "mesh_islip2d", "mesh_simple2d",
+           "ring_base", "ring_islip2d")
 BUF_DEPTH = 20                       # mesh_base only; matches the main sweep
 
 
@@ -85,8 +88,8 @@ ACCEPTING = 0.999      # accept_ratio above which nothing is queueing up yet
 
 
 def run_grid(lams: tuple[float, ...], warmup: int, measure: int,
-             jobs: int) -> list[dict[str, Any]]:
-    grid = [(c, lam, warmup, measure) for c in CONFIGS for lam in lams]
+             jobs: int, configs: tuple[str, ...] = CONFIGS) -> list[dict[str, Any]]:
+    grid = [(c, lam, warmup, measure) for c in configs for lam in lams]
     rows: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         for r in ex.map(one, grid):
@@ -109,6 +112,8 @@ def summarize(rows: list[dict[str, Any]], lams: Any, warmup: int,
     summary: dict[str, Any] = {"crossing_fraction": round(frac, 5)}
     for c in CONFIGS:
         rs = sorted([r for r in rows if r["config"] == c], key=lambda r: r["lam"])
+        if not rs:
+            continue
         st = [r for r in rs if r["stable"]]
         peak = max(rs, key=lambda r: r["bisect_util"])
         nb = rs[0]["bisect_links"]
@@ -171,7 +176,9 @@ def summarize(rows: list[dict[str, Any]], lams: Any, warmup: int,
     return {
         "meta": {
             "generated": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "configs": list(CONFIGS), "lams": list(lams),
+            "configs": [c for c in CONFIGS
+                        if any(r["config"] == c for r in rows)],
+            "lams": list(lams),
             "warmup": warmup, "measure": measure, "buf_depth": BUF_DEPTH,
             "bisection": {c: len(bisection_links(fabric(c)))
                           for c in CONFIGS},
@@ -184,10 +191,11 @@ def summarize(rows: list[dict[str, Any]], lams: Any, warmup: int,
     }
 
 
-def sweep(quick: bool = False, jobs: int = 6) -> dict[str, Any]:
+def sweep(quick: bool = False, jobs: int = 6,
+          configs: tuple[str, ...] = CONFIGS) -> dict[str, Any]:
     lams = QUICK if quick else LAMS
     warmup, measure = (1500, 4000) if quick else (3000, 12000)
-    return summarize(run_grid(lams, warmup, measure, jobs),
+    return summarize(run_grid(lams, warmup, measure, jobs, configs),
                      lams, warmup, measure)
 
 
@@ -196,23 +204,36 @@ def main() -> None:
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--only", nargs="+", default=None,
+                    help="simulate only these configs (merges into --out)")
     ap.add_argument("--from-json", default=None,
                     help="recompute the summary from existing rows, no sim")
     a = ap.parse_args()
     t0 = time.time()
+    only = tuple(a.only) if a.only else None
     if a.from_json:
         old = json.loads(Path(a.from_json).read_text())
         m = old["meta"]
         data = summarize(old["rows"], m["lams"], m["warmup"], m["measure"])
         data["meta"]["resummarized_from"] = a.from_json
     else:
-        data = sweep(quick=a.quick, jobs=a.jobs)
+        data = sweep(quick=a.quick, jobs=a.jobs,
+                     configs=only or CONFIGS)
+        dest = Path(a.out)
+        if only and dest.exists():
+            old = json.loads(dest.read_text())
+            keep = [r for r in old["rows"] if r["config"] not in only]
+            data = summarize(keep + data["rows"],
+                             data["meta"]["lams"],
+                             data["meta"]["warmup"],
+                             data["meta"]["measure"])
+            data["meta"]["merged_configs"] = list(only)
     data["wall_secs"] = round(time.time() - t0, 1)
     p = Path(a.out)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2))
     print(f"\nwrote {p}  ({len(data['rows'])} rows, {data['wall_secs']}s)")
-    for c in CONFIGS:
+    for c in data["meta"]["configs"]:
         s = data["summary"][c]
         print(f"  {c:13} cut={s['bisect_links']:>2} links  "
               f"lam*={s['lam_star']}  anchor={s['anchor']:.3f}  "

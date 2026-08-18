@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""Same-pattern, ~40000 response flits/core: S0 vs S1 vs S2.
+
+Workload: uniform random HA, K=10000 txns/core, R=4 → 40000 recv flits/core.
+Compares receive-bandwidth time series and per-destination-core on-ramp
+counts (CW / CCW successes and failures).
+
+Writes results/ring2_core40k.json and the comparison PNGs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+_UTILS = Path(__file__).resolve().parent
+if str(_UTILS) not in sys.path:
+    sys.path.insert(0, str(_UTILS))
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+from rg_ring2_aimd import run_batch as run_aimd
+from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_rg import RGConfig, run_batch as run_rg
+from rg_ring2_topo import Ring2Topology, build_uniform, cores
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "results" / "ring2_core40k.json"
+R_FLITS = 4
+K_PER_CORE = 10_000          # 10000 * 4 = 40000 recv flits / core
+BIN_W = 64
+FLITS_PER_CORE = K_PER_CORE * R_FLITS
+
+
+def _bin_rate(times: list[int], t_max: int, bin_w: int = BIN_W
+              ) -> tuple[list[int], list[float]]:
+    nbin = max(1, (t_max + bin_w) // bin_w)
+    rate = [0.0] * nbin
+    for t in times:
+        rate[min(max(int(t), 0) // bin_w, nbin - 1)] += 1.0 / bin_w
+    return [i * bin_w for i in range(nbin)], rate
+
+
+def _run(scheme: str, topo, txns, seed: int) -> dict:
+    p = Ring2BaseParams(plane_sel="least_occupied")
+    t0 = time.perf_counter()
+    print(f"  running {scheme}  n_txn={len(txns)} ...", flush=True)
+    if scheme == "S0":
+        r = run_base(topo, txns, params=p, seed=seed)
+    elif scheme == "S1":
+        r = run_aimd(topo, txns, params=p, seed=seed)
+    else:
+        r = run_rg(topo, txns, cfg=RGConfig(
+            algo="islip", iters=2, plane_sel="least_occupied", seed=seed))
+    recv = {int(k): v for k, v in (r.get("recv_by_core") or {}).items()}
+    board = {int(k): v for k, v in (r.get("board_by_core") or {}).items()}
+    print(f"    {scheme} mk={r.get('makespan')} ok={r.get('completed')} "
+          f"{time.perf_counter() - t0:.1f}s  "
+          f"recv0={len(recv.get(0, []))}", flush=True)
+    return {
+        "scheme": scheme,
+        "makespan": r.get("makespan"),
+        "completed": r.get("completed"),
+        "n_delivered_flits": r.get("n_delivered_flits"),
+        "n_txn_done": r.get("n_txn_done"),
+        "n_board_fail": r.get("n_board_fail", 0),
+        "recv_by_core": recv,
+        "board_by_core": board,
+        "wall_secs": round(time.perf_counter() - t0, 1),
+    }
+
+
+def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
+                k: int, r_flits: int, flits_per_core: int) -> None:
+    cs = cores()
+    cmap = plt.get_cmap("tab10")
+    t_max_all = max(
+        (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
+         for tr in traces.values()),
+        default=1)
+    fig, axes = plt.subplots(3, 1, figsize=(9.6, 8.6), sharex=True)
+    for ax, scheme in zip(axes, ("S0", "S1", "S2")):
+        tr = traces[scheme]
+        t_max = max((max(ts) for ts in tr["recv_by_core"].values()), default=1)
+        mean = None
+        xs = []
+        for i, c in enumerate(cs):
+            xs, ys = _bin_rate(tr["recv_by_core"].get(c, []), t_max, bin_w)
+            ax.plot(xs, ys, color=cmap(i % 10), lw=0.9, alpha=0.8,
+                    label=f"core {c}")
+            if mean is None:
+                mean = [0.0] * len(ys)
+            for j, y in enumerate(ys):
+                mean[j] += y / len(cs)
+        if mean:
+            ax.plot(xs, mean, color="#111827", lw=1.6, ls="--",
+                    label="mean", zorder=5)
+        ax.set_ylabel("recv flit / cycle")
+        ax.set_title(f"{scheme}  makespan={tr['makespan']}", loc="left",
+                     fontsize=10)
+        ax.set_xlim(0, t_max_all)
+        ax.set_ylim(bottom=0)
+        ax.grid(True, ls=":", alpha=0.45)
+        if scheme == "S0":
+            ax.legend(ncol=6, fontsize=7, frameon=False, loc="upper right")
+    axes[-1].set_xlabel("cycle")
+    fig.suptitle(
+        f"Per-core receive bandwidth  ·  uniform K={k} R={r_flits}  "
+        f"({flits_per_core} flits/core)",
+        fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
+                 flits_per_core: int) -> None:
+    """Same axes: mean recv bandwidth of the three schemes."""
+    colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626"}
+    fig, ax = plt.subplots(figsize=(9.2, 4.2))
+    t_max_all = max(
+        (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
+         for tr in traces.values()),
+        default=1)
+    cs = cores()
+    for scheme in ("S0", "S1", "S2"):
+        tr = traces[scheme]
+        acc = None
+        xs = []
+        for c in cs:
+            xs, ys = _bin_rate(tr["recv_by_core"].get(c, []), t_max_all, bin_w)
+            if acc is None:
+                acc = [0.0] * len(ys)
+            for j, y in enumerate(ys):
+                acc[j] += y / len(cs)
+        ax.plot(xs, acc, color=colors[scheme], lw=1.8,
+                label=f"{scheme}  mk={tr['makespan']}")
+    ax.set_xlabel("cycle")
+    ax.set_ylabel("mean recv flit / cycle / core")
+    ax.set_title(
+        f"S0 / S1 / S2 on the same uniform batch  "
+        f"({flits_per_core} flits/core, bin={bin_w})")
+    ax.set_xlim(0, t_max_all)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, ls=":", alpha=0.45)
+    ax.legend(frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--k", type=int, default=K_PER_CORE)
+    ap.add_argument("--R", type=int, default=R_FLITS)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--quick", action="store_true",
+                    help="K=500 (2000 flits/core) smoke")
+    args = ap.parse_args()
+    k = 500 if args.quick else args.k
+    R = args.R
+    flits = k * R
+    bin_w = 16 if args.quick else 64
+
+    topo = Ring2Topology()
+    txns = build_uniform(k=k, m_resp=R, seed=args.seed)
+    t0 = time.perf_counter()
+    traces = {}
+    for scheme in ("S0", "S1", "S2"):
+        traces[scheme] = _run(scheme, topo, txns, args.seed)
+
+    panel = ROOT / "results" / "ring2_core_recv_bw_40k.png"
+    overlay = ROOT / "results" / "ring2_core_recv_bw_40k_overlay.png"
+    plot_panels(traces, panel, bin_w=bin_w, k=k, r_flits=R,
+                flits_per_core=flits)
+    plot_overlay(traces, overlay, bin_w=bin_w, flits_per_core=flits)
+
+    slim = {
+        "meta": {
+            "pattern": "uniform", "K": k, "R": R, "seed": args.seed,
+            "flits_per_core": flits, "bin_w": bin_w,
+            "plane_sel": "least_occupied",
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        },
+        "schemes": {},
+        "wall_secs": round(time.perf_counter() - t0, 1),
+    }
+    for name, tr in traces.items():
+        rates = {}
+        t_max = tr["makespan"] or 1
+        for c, ts in tr["recv_by_core"].items():
+            xs, ys = _bin_rate(ts, t_max, bin_w)
+            rates[str(c)] = {"t": xs, "rate": [round(y, 4) for y in ys],
+                             "n_recv": len(ts)}
+        slim["schemes"][name] = {
+            "makespan": tr["makespan"],
+            "completed": tr["completed"],
+            "n_delivered_flits": tr["n_delivered_flits"],
+            "n_txn_done": tr["n_txn_done"],
+            "wall_secs": tr["wall_secs"],
+            "board_by_core": {str(c): v for c, v in tr["board_by_core"].items()},
+            "recv_binned": rates,
+        }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(slim, indent=1))
+    print(f"wrote {OUT}  {slim['wall_secs']}s")
+    print(f"{'scheme':6} {'mk':>8} {'ok':>3}  board  fail   cw    ccw")
+    for name, tr in traces.items():
+        b = tr["board_by_core"]
+        board = sum(v["board"] for v in b.values())
+        fail = sum(v["board_fail"] for v in b.values())
+        cw = sum(v["board_cw"] for v in b.values())
+        ccw = sum(v["board_ccw"] for v in b.values())
+        print(f"{name:6} {tr['makespan']:>8} {int(tr['completed']):>3}  "
+              f"{board:>6} {fail:>6} {cw:>5} {ccw:>5}")
+
+
+if __name__ == "__main__":
+    main()

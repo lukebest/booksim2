@@ -82,7 +82,7 @@ from __future__ import annotations
 import math
 import random
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace, field
 from typing import Any
 
 from rg_topo import RAMP, RAMP_BW, Topology, coord
@@ -90,7 +90,8 @@ from rg_mesh_paths import build_plan
 from rg_ring_topo import RingTopology, board_key, build_ring_plan, leave_key
 from rg_ring_base import RingBaseParams, RingBaseSim
 
-CONFIGS = ("mesh_base", "ring_base", "mesh_islip2d", "ring_islip2d")
+CONFIGS = ("mesh_base", "ring_base", "mesh_islip2d", "mesh_simple2d",
+           "ring_islip2d")
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +129,7 @@ class SteadyParams:
     ca_probe: int = 6                 # bitmap bits probed per source per round
     horizon: int = 128                # how far ahead the arbiter may book
     conflict_domain: str = "interval"  # interval / free_at
+    match: str = "islip2d"            # islip2d / simple2d
     path_mode: str = "xy"             # mesh: xy / romm_static / romm_dyn
     ring_path_mode: str = "fixed"     # ring: fixed / balanced
     board_ports: int = 1
@@ -435,6 +437,13 @@ class _CapFreeAt:
         i = min(range(self.cap), key=lambda j: srv[j])
         srv[i] = e
 
+    def free(self, key: Any, s: int, e: int) -> bool:
+        """True iff some server is idle for the whole of [s, e)."""
+        if e <= s:
+            return True
+        srv = self.f.get(key)
+        return srv is None or min(srv) <= s
+
     def rebase(self, base: int) -> None:
         pass
 
@@ -526,6 +535,19 @@ class _SlotMap:
         # in a separate pass, so no run can silently produce a bad schedule.
         raise AssertionError(f"capacity {self.cap} exceeded on {key} at {s}")
 
+    def free(self, key: Any, s: int, e: int) -> bool:
+        """True iff some server is idle for the whole of [s, e)."""
+        if e <= s:
+            return True
+        rs, re = s - self.base, e - self.base
+        if rs < 0 or re > self.span:
+            return False
+        srv = self.occ.get(key)
+        if srv is None:
+            return True
+        m = ((1 << (re - rs)) - 1) << rs
+        return any(not (x & m) for x in srv)
+
 
 @dataclass
 class _Req:
@@ -563,9 +585,16 @@ class RGSim:
 
         pairs = [(s, d) for s in range(self.n) for d in range(self.n) if s != d]
         span = p.t_rtt + max(p.horizon, p.ca_period) + 128 + 2 * self.dur + 64
+        # simple2d still tracks physical occupancy (a slot is busy or not)
+        # but never SEARCHES it: `_fits_at` tests one t0 and otherwise waits.
+        # Forcing free_at here reintroduces the frontier ratchet — a later
+        # hop reservation poisons earlier holes on the same link, and the
+        # accepted rate collapses to ~0.11. Interval occupancy + no slide
+        # is the "cheap CA, honest metal" model.
+        domain = p.conflict_domain
 
         def mk(cap: int):
-            return (_SlotMap(cap, span) if p.conflict_domain == "interval"
+            return (_SlotMap(cap, span) if domain == "interval"
                     else _CapFreeAt(cap))
 
         self.m_link, self.m_inj, self.m_ej = mk(1), mk(RAMP_BW), mk(RAMP_BW)
@@ -702,6 +731,24 @@ class RGSim:
         self.voq_next[(s, d)] = t0 + dur
         return t0 + wire + dur + RAMP
 
+    def _fits_at(self, s: int, d: int, t0: int) -> bool:
+        """True iff the whole rigid path is free starting at this one t0.
+
+        simple2d does not slide t0. A miss just waits for the next CA cycle,
+        which is what keeps the frontier from exporting one hot link's lateness
+        onto every other link on the path.
+        """
+        dur = self.dur
+        res, _ = self._res_of(s, d)
+        if t0 < self.voq_next[(s, d)]:
+            return False
+        return all(mp.free(key, t0 + pref, t0 + pref + dur)
+                   for mp, key, pref in res)
+
+    def _path_links(self, s: int, d: int) -> list:
+        return [key for mp, key, _pref in self._res_of(s, d)[0]
+                if mp is self.m_link]
+
     # -- one cycle ---------------------------------------------------------
 
     def step(self) -> None:
@@ -711,8 +758,70 @@ class RGSim:
         for mp in self.maps:
             mp.rebase(self.t)
         if self.t % self.p.ca_period == 0:
-            self._round()
+            if self.p.match == "simple2d":
+                self._round_simple2d()
+            else:
+                self._round()
         self.t += 1
+
+    def _round_simple2d(self) -> None:
+        """One LDPS at a single t0. No interval search, no per-link pointers.
+
+        Every source offers its next residual dest (RR from a_s). A grant
+        happens only if the whole path is free at t0 = now + RTT and shares no
+        link with another grant in this same round. Misses stay in the bitmap.
+        """
+        p = self.p
+        t0 = self.t + p.t_rtt
+        self.st["n_rounds"] += 1
+        self.st["n_ctrl_msgs"] += 2 * self.n
+        used: set = set()
+        for i in range(self.n):
+            s = (self.sptr + i) % self.n
+            if p.pipeline_depth and self.outstanding[s] >= p.pipeline_depth:
+                continue
+            row = self.voq[s]
+            keys = [d for d, q in row.items() if q]
+            if not keys:
+                continue
+            self.st["n_bitmap_bits"] += len(keys)
+            a = self.aptr[s]
+            keys.sort(key=lambda d: (d - a) % self.n)
+            n_acc = 0
+            last: int | None = None
+            # One GRANT per source. Extra residual bits are only consulted
+            # when the offered dest is blocked by a *previous* pipelined
+            # round (batch simple2d never sees that: its fabric is empty
+            # at the start of a round). Intra-round conflicts still skip.
+            for d in keys[:p.ca_probe]:
+                last = d
+                if p.pipeline_depth and \
+                        self.outstanding[s] + n_acc >= p.pipeline_depth:
+                    break
+                links = self._path_links(s, d)
+                if any(e in used for e in links):
+                    self.st["n_defer_used"] += 1
+                    self.st["n_deferred"] += 1
+                    continue
+                if not self._fits_at(s, d, t0):
+                    self.st["n_defer_occ"] += 1
+                    self.st["n_deferred"] += 1
+                    continue
+                req = row[d].popleft()
+                self._n_queued -= 1
+                t_done = self._commit(s, d, t0)
+                used.update(links)
+                n_acc += 1
+                self.outstanding[s] += 1
+                self.done_at[t_done].append((req.pid, s, d, req.t_gen, t_done))
+                self.retire_at[t0 + self.dur].append(s)
+                self.grant_wait.append(t0 - req.t_gen)
+                self.st["n_grants"] += 1
+                if n_acc >= p.grants_per_src:
+                    break
+            if last is not None:
+                self.aptr[s] = (last + 1) % self.n
+        self.sptr = (self.sptr + 1) % self.n
 
     def _round(self) -> None:
         p = self.p
@@ -868,6 +977,9 @@ def build(config: str, p: SteadyParams, seed: int = 0):
         return RingBaseAdapter(p, seed=seed)
     if config == "mesh_islip2d":
         return RGSim("mesh", p, seed=seed)
+    if config == "mesh_simple2d":
+        return RGSim("mesh", replace(p, match="simple2d",
+                                     conflict_domain="interval"), seed=seed)
     if config == "ring_islip2d":
         return RGSim("ring", p, seed=seed)
     raise ValueError(f"unknown config: {config}")
@@ -919,7 +1031,11 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
         "config": config, "lam": p.lam, "m": p.m, "sigma": p.sigma,
         "buf_depth": p.buf_depth, "num_vc": p.num_vc, "t_rtt": p.t_rtt,
         "grants_per_src": p.grants_per_src,
-        "conflict_domain": p.conflict_domain, "horizon": p.horizon,
+        "conflict_domain": (sim.p.conflict_domain if isinstance(sim, RGSim)
+                            else p.conflict_domain),
+        "match": getattr(sim.p, "match", p.match) if hasattr(sim, "p")
+                 else p.match,
+        "horizon": p.horizon,
         "ca_period": p.ca_period, "ca_probe": p.ca_probe,
         "pipeline_depth": p.pipeline_depth,
         "path_mode": p.path_mode, "ring_path_mode": p.ring_path_mode,
@@ -951,6 +1067,10 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
             sim.st["n_grants"] / max(1, sim.st["n_rounds"]), 3)
         out["defer_per_round"] = round(
             sim.st["n_deferred"] / max(1, sim.st["n_rounds"]), 2)
+        out["defer_used_per_round"] = round(
+            sim.st["n_defer_used"] / max(1, sim.st["n_rounds"]), 2)
+        out["defer_occ_per_round"] = round(
+            sim.st["n_defer_occ"] / max(1, sim.st["n_rounds"]), 2)
         out["bitmap_bits_per_round"] = round(
             sim.st["n_bitmap_bits"] / max(1, sim.st["n_rounds"]), 1)
     if hasattr(sim, "bisect"):
