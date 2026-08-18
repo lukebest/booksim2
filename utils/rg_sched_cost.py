@@ -78,6 +78,16 @@ def state_bits(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
     R_max = max(1, n_rounds or 1)
 
     b: dict[str, float] = {}
+    if algo == "simple2d":
+        # One rotating source pointer, one accept pointer per node, the residual
+        # VOQ bitmap, the 164-bit link-used mask, and a 7-bit fault register.
+        # The interval table is the thing this algorithm exists to delete.
+        b["residual_voq_bitmap"] = N * (N - 1)
+        b["round_link_bitmap"] = link_bitmap
+        b["source_pointer"] = _ceil_log2(N)
+        b["accept_pointers"] = N * _ceil_log2(N)
+        b["fault_register"] = _ceil_log2(N) + 1
+        return b
     if algo in ("islip2d_mesh", "islip2d_ring"):
         # The residual VOQ bitmap is the request format: one bit per (source,
         # destination), re-sent every round until granted. It is the single
@@ -156,6 +166,11 @@ def comparators(algo: str, *, n_links: int, n_nodes: int, n_flows: int,
     L, N, F = n_links, n_nodes, max(1, n_flows)
     ramps = 2 * N
     c: dict[str, int] = {}
+    if algo == "simple2d":
+        # 8-wide row grant + a 14-hop path AND. No interval comparators.
+        c["row_grant"] = 8 * _ceil_log2(N)
+        c["path_and"] = 14
+        return c
     if algo in ("islip2d_mesh", "islip2d_ring"):
         R = L + ramps + n_ports
         if conflict_domain == "interval":
@@ -202,6 +217,12 @@ def gate_levels(algo: str, *, n_links: int, n_flows: int, iters: int,
     document by their absence that they ignore it.
     """
     F = max(2, n_flows)
+    if algo == "simple2d":
+        # Each source offers one dest: a 48-wide eligible mask, then the
+        # path-wide AND. No interval compare. Folding this into 8-wide row
+        # waves is optional and is not charged here -- it is an area/time
+        # trade the implementer can take, not part of the algorithm.
+        return _ceil_log2(n_nodes) + _ceil_log2(int(mean_hops) + 1)
     if algo in ("islip2d_mesh", "islip2d_ring"):
         # grant RR tree over sources, then the path-wide AND that makes an
         # accept, then (interval domain) the DEPTH-way interval compare

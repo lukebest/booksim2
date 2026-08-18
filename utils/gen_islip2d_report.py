@@ -23,6 +23,7 @@ BATCH = ROOT / "results" / "islip2d_8x6.json"
 SWEEP = ROOT / "results" / "load_sweep_8x6.json"
 VERIFY = ROOT / "results" / "verify_islip2d_8x6.json"
 BISECT = ROOT / "results" / "bisect_lat_8x6.json"
+SIMPLE = ROOT / "results" / "simple2d_8x6.json"
 OUT = ROOT / "results" / "report_islip2d_8x6.html"
 
 MX, MY, N = 8, 6, 48
@@ -33,11 +34,11 @@ H, V = 7, 9
 # 1. Data access
 # ---------------------------------------------------------------------------
 
-def load() -> tuple[dict, dict, dict, dict]:
+def load() -> tuple[dict, dict, dict, dict, dict]:
     def rd(p: Path) -> dict:
         with open(p, encoding="utf-8") as f:
             return json.load(f)
-    return rd(BATCH), rd(SWEEP), rd(VERIFY), rd(BISECT)
+    return rd(BATCH), rd(SWEEP), rd(VERIFY), rd(BISECT), rd(SIMPLE)
 
 
 def xrow(x: dict, config: str) -> list[dict]:
@@ -929,7 +930,8 @@ def t_verify(v: dict) -> str:
             seen[g] = []
             order.append(g)
         seen[g].append(r)
-    GN = {"common": "共同（两 fabric 都必须成立）",
+    GN = {"simple": "simple2d（资源受限 + 单坏点）",
+          "common": "共同（两 fabric 都必须成立）",
           "D-M": "D-M 专项（mesh 判据）",
           "D-R": "D-R 专项（环判据）",
           "base": "ring_base 基线专项",
@@ -1307,6 +1309,7 @@ mesh_islip2d 把切面推到 100% 并停在那里，λ* 变成
 <a href="#s9">9 · 稳态注入率扫描（四配置头对头 · 二分带宽 · 平均/p99 时延）</a><br/>
 <a href="#s10">10 · 保序、流水与 RTT 敏感度</a><br/>
 <a href="#s11">11 · 面积与调度时间</a><br/>
+<a href="#s11a">11.x · 资源受限简化调度 simple2d + 单坏点</a><br/>
 <a href="#s12">12 · 验证清单与已知局限</a>
 </div>
 
@@ -2144,6 +2147,73 @@ interval {mi['t_sched_interval']} 拍），
 """
 
 
+def s_simple2d(sm: dict) -> str:
+    """11.x: resource-bounded simple2d + one hole, from simple2d_8x6.json."""
+    mix_lbl = {"xy": "XY", "yx": "YX", "detour": "绕行", "dead": "死流"}
+    rows = []
+    for r in sm["rows"]:
+        mix = " / ".join(f"{mix_lbl.get(k, k)} {v}"
+                         for k, v in r["route_mix"].items())
+        rows.append([
+            r["site"],
+            "—" if r["failed"] < 0 else str(r["failed"]),
+            "—" if r["failed"] < 0 else str(r["degree"]),
+            f(r["alive"]), f(r["cut_bound"]),
+            f"<b>{f(r['n_rounds'])}</b>",
+            f(r["over_cut"], 2), mix,
+        ])
+    extra = sm.get("extra_sites") or []
+    extra_ok = bool(extra) and all(r.get("verify", {}).get("ok") for r in extra)
+    extra_note = "、".join(
+        f"{r['site']} F={r['failed']}（{r['n_rounds']} 轮）" for r in extra)
+    cost_lbl = {
+        "simple2d:free_at:105": "<b>simple2d</b>",
+        "islip2d_mesh:interval:110": "islip2d 区间域",
+        "islip2d_mesh:free_at:110": "islip2d free_at",
+    }
+    cost_rows = []
+    for k, c in sm.get("cost", {}).items():
+        cost_rows.append([cost_lbl.get(k, k), f(c["bits"]),
+                          f(c["gate_levels"]), f(c["dependent_steps"]),
+                          f(c["t_sched_cycles"])])
+    vs = sm.get("vs_islip2d") or {}
+    s2, i0, i1 = vs.get("simple2d") or {}, vs.get("islip2d_I0") or {}, vs.get("islip2d_I1") or {}
+    bits = sm.get("simple2d_bits") or {}
+    n_bits = sum(bits.values()) if bits else 0
+    iv_bits = next((c["bits"] for k, c in sm.get("cost", {}).items()
+                    if "interval" in k), 0)
+    fold = (f"{iv_bits / n_bits:.0f}×" if n_bits and iv_bits else "—")
+    return f"""
+<h2 id="s11a">11.x · 资源受限简化调度 simple2d + 单坏点</h2>
+<p>iSLIP-2D 的调度时间复杂，不是因为匹配本身难，而是三件事叠在一起：
+全路径一致授予、区间表挖洞、两级指针迭代。区间表单独占 CA 状态的绝大部分。
+在 CA 预算有限时，能删的就是这三件；数据面真正需要的只剩一句：
+<b>一轮 = 一组链路互斥的路径</b>。</p>
+<p><code>simple2d</code> 只做这一句。每源每轮从残余 VOQ 里按指针拿出 1 个目的，
+路径按静态规则算出，和本轮已占用链路做一次 AND，能放下就授权。
+<b>没有区间表、没有每条链路的 grant 指针、没有 iSLIP 迭代。</b></p>
+<p>路径规则（最多一个坏节点 F）：<code>s</code> 或 <code>d</code> 就是 F
+则这条流不存在；否则走 XY，XY 穿过 F 则改走 YX；
+只有 <code>s、d、F</code> 共线时 XY 与 YX 是同一条线，这时走 U 绕行。
+路径由 <code>(s, d, F)</code> 决定，F 固定后不再换路，所以仍然保序。</p>
+{tbl(["位置", "F", "度数", "存活流", "割界", "轮次", "×割界", "路径构成"], rows)}
+<p>对照同一套 slot 纪律：<code>islip2d</code> <code>iters=0</code>
+{f(i0.get("n_rounds"))} 轮，<code>iters=1</code> {f(i1.get("n_rounds"))} 轮。
+简化算法健康网 <b>{f(s2.get("n_rounds"))} 轮</b>，夹在两者之间——
+删掉两级指针几乎不损失打包质量。</p>
+<div class="note {'good' if extra_ok else 'bad'}">
+<b>额外坏点（同一条路由规则）</b>：{extra_note or "无"}。
+{"全部可达、0 冲突、0 条路径穿过坏点。" if extra_ok else "存在失败。"}
+</div>
+{tbl(["", "状态 bit", "组合深度", "相关步", "T_sched"], cost_rows)}
+<p>状态 <b>{f(n_bits)}</b> bit（相对区间域少 {fold}），
+T_sched 与 <code>free_at</code> 同量级。省下来的不是匹配深度，是那张区间表：
+CA 不再为每条资源留一组 <code>(start,end)</code>。
+<code>simple2d</code> 接受这笔交易：批量 all-to-all 用轮次模型本来就不挖洞，
+有限资源下先把一批调度做完，并且坏一个节点还能做完。</p>
+"""
+
+
 def s_tail(b: dict, s: dict, v: dict) -> str:
     ac = s.get("anchor_check", {}) or {}
     all_ok = all(x.get("ok") for x in ac.values()) if ac else False
@@ -2200,6 +2270,10 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <td>开环稳态 DES 内核，四配置共用注入器与统计器</td></tr>
 <tr><td><code>utils/rg_sched_cost.py</code></td>
 <td>状态位 / 比较器 / 门级深度 + 集中化面积台账</td></tr>
+<tr><td><code>utils/rg_simple2d.py</code></td>
+<td>资源受限简化调度：一轮 = 一组链路互斥路径；XY / YX / U 绕行；最多一个坏节点</td></tr>
+<tr><td><code>results/simple2d_8x6.json</code></td>
+<td>simple2d 健康 / 角 / 边 / 心 + 额外坏点的轮次、割界、绕行构成与 CA 代价</td></tr>
 <tr><td><code>utils/dse_islip2d_8x6.py</code></td>
 <td>批量 makespan 扫描 → <code>results/islip2d_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
@@ -2213,14 +2287,14 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <tr><td><code>utils/verify_islip2d_8x6.py</code></td>
 <td>{v['n_checks']} 条可执行断言 → <code>results/verify_islip2d_8x6.json</code></td></tr>
 <tr><td><code>utils/gen_islip2d_report.py</code></td>
-<td>本报告生成器（所有数字均从四个 JSON 读出，无手写常数）</td></tr>
+<td>本报告生成器（所有数字均从五个 JSON 读出，无手写常数）</td></tr>
 <tr><td><code>docs/phase-7-exploration/islip2d-mesh-ring-8x6.md</code></td>
 <td>同一研究的 Markdown 版（更侧重结论与判据条文）</td></tr>
 </tbody></table>
 """
 
 
-def build(b: dict, s: dict, v: dict, x: dict, led: dict) -> str:
+def build(b: dict, s: dict, v: dict, x: dict, led: dict, sm: dict) -> str:
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -2240,7 +2314,7 @@ def build(b: dict, s: dict, v: dict, x: dict, led: dict) -> str:
 <span class="pill">{v['n_checks']} 条断言</span>
 <span class="pill">数据 results/islip2d_8x6.json ·
 load_sweep_8x6.json · verify_islip2d_8x6.json ·
-bisect_lat_8x6.json</span>
+bisect_lat_8x6.json · simple2d_8x6.json</span>
 </p>
 {cards(b, s, v)}
 {s_intro(b, s, v, x)}
@@ -2254,6 +2328,7 @@ bisect_lat_8x6.json</span>
 {s_steady(s, x)}
 {s_order(b, s)}
 {s_area(led, s, b)}
+{s_simple2d(sm)}
 {s_tail(b, s, v)}
 <p class="muted" style="margin-top:2.5rem">
 批量扫描 {f(b['wall_secs'], 1)} 秒 · 稳态扫描 {f(s['wall_secs'], 1)} 秒 ·
@@ -2268,9 +2343,9 @@ def main() -> None:
     sys.path.insert(0, str(ROOT / "utils"))
     import rg_sched_cost
 
-    b, s, v, x = load()
+    b, s, v, x, sm = load()
     led = rg_sched_cost.centralization_ledger()
-    OUT.write_text(build(b, s, v, x, led), encoding="utf-8")
+    OUT.write_text(build(b, s, v, x, led, sm), encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)} "
           f"({OUT.stat().st_size / 1024:.0f} KB)")
 

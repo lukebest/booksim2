@@ -131,7 +131,7 @@ svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
 <span class="pill">51 条断言</span>
 <span class="pill">数据 results/islip2d_8x6.json ·
 load_sweep_8x6.json · verify_islip2d_8x6.json ·
-bisect_lat_8x6.json</span>
+bisect_lat_8x6.json · simple2d_8x6.json</span>
 </p>
 <div class="cards"><div class="card ok"><div class="k">集中式 mesh λ*</div><div class="v">0.48</div><div class="s">基线 mesh_base 0.40（缓冲深 20）</div></div><div class="card ok"><div class="k">集中式环 λ*</div><div class="v">0.75</div><div class="s">基线 ring_base 0.55（偏转损耗）</div></div><div class="card ok"><div class="k">冲突域决定生死</div><div class="v">25.3×</div><div class="s">interval 相对 free_at 的 data_span（批量口径）</div></div><div class="card "><div class="k">D-M 轮数 / 割界</div><div class="v">111 / 96</div><div class="s">比 = 1.156，96 来自中切 6 链路</div></div><div class="card bad"><div class="k">交叉开关判据不安全</div><div class="v">4.99%</div><div class="s">mesh 上 src≠src∧dst≠dst 仍冲突的比例</div></div><div class="card ok"><div class="k">环上转环驻留</div><div class="v">0 拍</div><div class="s">R4 刚性对齐，实测 max_turn_residency=0</div></div><div class="card ok"><div class="k">验证断言</div><div class="v">51 / 51</div><div class="s">全部通过</div></div><div class="card "><div class="k">环金属开销</div><div class="v">1.17×</div><div class="s">96 无向环链路 vs mesh 82</div></div></div>
 
@@ -206,6 +206,7 @@ mesh_islip2d 把切面推到 100% 并停在那里，λ* 变成
 <a href="#s9">9 · 稳态注入率扫描（四配置头对头 · 二分带宽 · 平均/p99 时延）</a><br/>
 <a href="#s10">10 · 保序、流水与 RTT 敏感度</a><br/>
 <a href="#s11">11 · 面积与调度时间</a><br/>
+<a href="#s11a">11.x · 资源受限简化调度 simple2d + 单坏点</a><br/>
 <a href="#s12">12 · 验证清单与已知局限</a>
 </div>
 
@@ -923,6 +924,35 @@ interval 220 拍），
 §10.2 的控制/数据流水只会让 <code>iters=2</code> 更有利。</p>
 
 
+<h2 id="s11a">11.x · 资源受限简化调度 simple2d + 单坏点</h2>
+<p>iSLIP-2D 的调度时间复杂，不是因为匹配本身难，而是三件事叠在一起：
+全路径一致授予、区间表挖洞、两级指针迭代。区间表单独占 CA 状态的绝大部分。
+在 CA 预算有限时，能删的就是这三件；数据面真正需要的只剩一句：
+<b>一轮 = 一组链路互斥的路径</b>。</p>
+<p><code>simple2d</code> 只做这一句。每源每轮从残余 VOQ 里按指针拿出 1 个目的，
+路径按静态规则算出，和本轮已占用链路做一次 AND，能放下就授权。
+<b>没有区间表、没有每条链路的 grant 指针、没有 iSLIP 迭代。</b></p>
+<p>路径规则（最多一个坏节点 F）：<code>s</code> 或 <code>d</code> 就是 F
+则这条流不存在；否则走 XY，XY 穿过 F 则改走 YX；
+只有 <code>s、d、F</code> 共线时 XY 与 YX 是同一条线，这时走 U 绕行。
+路径由 <code>(s, d, F)</code> 决定，F 固定后不再换路，所以仍然保序。</p>
+<table class=""><thead><tr><th>位置</th><th>F</th><th>度数</th><th>存活流</th><th>割界</th><th>轮次</th><th>×割界</th><th>路径构成</th></tr></thead><tbody><tr><td>healthy</td><td>—</td><td>—</td><td>2,256</td><td>96</td><td><b>105</b></td><td>1.09</td><td>XY 2256</td></tr><tr><td>corner</td><td>0</td><td>2</td><td>2,162</td><td>96</td><td><b>105</b></td><td>1.09</td><td>XY 2127 / YX 35</td></tr><tr><td>edge</td><td>3</td><td>3</td><td>2,162</td><td>120</td><td><b>124</b></td><td>1.03</td><td>XY 1983 / 绕行 24 / YX 155</td></tr><tr><td>center</td><td>19</td><td>4</td><td>2,162</td><td>122</td><td><b>124</b></td><td>1.02</td><td>XY 1887 / YX 239 / 绕行 36</td></tr></tbody></table>
+<p>对照同一套 slot 纪律：<code>islip2d</code> <code>iters=0</code>
+101 轮，<code>iters=1</code> 111 轮。
+简化算法健康网 <b>105 轮</b>，夹在两者之间——
+删掉两级指针几乎不损失打包质量。</p>
+<div class="note good">
+<b>额外坏点（同一条路由规则）</b>：corner2 F=47（103 轮）、edge2 F=23（104 轮）、center2 F=28（124 轮）。
+全部可达、0 冲突、0 条路径穿过坏点。
+</div>
+<table class=""><thead><tr><th></th><th>状态 bit</th><th>组合深度</th><th>相关步</th><th>T_sched</th></tr></thead><tbody><tr><td><b>simple2d</b></td><td>2,721</td><td>9</td><td>105</td><td>105</td></tr><tr><td>islip2d 区间域</td><td>103,532</td><td>13</td><td>110</td><td>220</td></tr><tr><td>islip2d free_at</td><td>6,812</td><td>9</td><td>110</td><td>110</td></tr></tbody></table>
+<p>状态 <b>2,721</b> bit（相对区间域少 38×），
+T_sched 与 <code>free_at</code> 同量级。省下来的不是匹配深度，是那张区间表：
+CA 不再为每条资源留一组 <code>(start,end)</code>。
+<code>simple2d</code> 接受这笔交易：批量 all-to-all 用轮次模型本来就不挖洞，
+有限资源下先把一批调度做完，并且坏一个节点还能做完。</p>
+
+
 <h2 id="s12">12 · 验证清单与已知局限</h2>
 <h3>12.1 可执行断言</h3>
 <p>所有结论都由 <code>utils/verify_islip2d_8x6.py</code> 里的断言守卫，
@@ -974,6 +1004,10 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <td>开环稳态 DES 内核，四配置共用注入器与统计器</td></tr>
 <tr><td><code>utils/rg_sched_cost.py</code></td>
 <td>状态位 / 比较器 / 门级深度 + 集中化面积台账</td></tr>
+<tr><td><code>utils/rg_simple2d.py</code></td>
+<td>资源受限简化调度：一轮 = 一组链路互斥路径；XY / YX / U 绕行；最多一个坏节点</td></tr>
+<tr><td><code>results/simple2d_8x6.json</code></td>
+<td>simple2d 健康 / 角 / 边 / 心 + 额外坏点的轮次、割界、绕行构成与 CA 代价</td></tr>
 <tr><td><code>utils/dse_islip2d_8x6.py</code></td>
 <td>批量 makespan 扫描 → <code>results/islip2d_8x6.json</code></td></tr>
 <tr><td><code>utils/dse_load_sweep_8x6.py</code></td>
@@ -987,7 +1021,7 @@ bufferless 场景 max_residency = 0、轮数 ≥ 割界 / 端口界、
 <tr><td><code>utils/verify_islip2d_8x6.py</code></td>
 <td>51 条可执行断言 → <code>results/verify_islip2d_8x6.json</code></td></tr>
 <tr><td><code>utils/gen_islip2d_report.py</code></td>
-<td>本报告生成器（所有数字均从四个 JSON 读出，无手写常数）</td></tr>
+<td>本报告生成器（所有数字均从五个 JSON 读出，无手写常数）</td></tr>
 <tr><td><code>docs/phase-7-exploration/islip2d-mesh-ring-8x6.md</code></td>
 <td>同一研究的 Markdown 版（更侧重结论与判据条文）</td></tr>
 </tbody></table>

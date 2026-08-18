@@ -114,6 +114,48 @@ def check(group: str, name: str, ok: bool, **detail: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# simple2d (resource-bounded mesh + one hole)
+# ---------------------------------------------------------------------------
+
+def simple() -> None:
+    print("== simple2d ==")
+    from rg_simple2d import (EXTRA_SITES, N as SN, SITES, cost_bits,
+                             reachability, schedule_simple2d, site_kind,
+                             verify_round)
+
+    sch = schedule_simple2d()
+    check("simple", "healthy_within_cut",
+          sch["n_rounds"] <= 110 and sch["n_rounds"] >= sch["cut_bound"]
+          and sch["cut_bound"] == 96,
+          n_rounds=sch["n_rounds"], cut_bound=sch["cut_bound"])
+    bits = sum(cost_bits().values())
+    check("simple", "state_under_3k", bits < 3000, bits=bits)
+
+    extra_ok = True
+    sites = [(n, f) for n, f in SITES.items() if n != "healthy" and f >= 0]
+    sites += list(EXTRA_SITES.items())
+    for name, failed in sites:
+        rch = reachability(failed)
+        alive_ok = rch["alive_pairs"] == (SN - 1) * (SN - 2)
+        dead_ok = rch["dead_pairs"] == 2 * (SN - 1)
+        check("simple", f"reachable_{name}",
+              alive_ok and dead_ok,
+              alive=rch["alive_pairs"], dead=rch["dead_pairs"],
+              kind=site_kind(failed))
+        sch_f = schedule_simple2d(failed=failed)
+        v = verify_round(sch_f["rounds"], sch_f["path_of"], failed=failed)
+        check("simple", f"sched_{name}",
+              v["ok"] and sch_f["n_rounds"] >= sch_f["cut_bound"]
+              and v["n_paths_through_hole"] == 0,
+              n_rounds=sch_f["n_rounds"], cut_bound=sch_f["cut_bound"],
+              through_hole=v["n_paths_through_hole"], verify_ok=v["ok"],
+              kind=site_kind(failed))
+        if name in EXTRA_SITES:
+            extra_ok = extra_ok and alive_ok and dead_ok and v["ok"]
+    check("simple", "extra_same_rule", extra_ok)
+
+
+# ---------------------------------------------------------------------------
 # common
 # ---------------------------------------------------------------------------
 
@@ -454,6 +496,7 @@ def steady() -> None:
 
 if __name__ == "__main__":
     t0 = time.perf_counter()
+    simple()
     common()
     dm()
     dr()

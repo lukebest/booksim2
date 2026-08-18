@@ -573,7 +573,44 @@ FIFO 从 4 减到 1，偏转暴涨 50×、吞吐掉 **14%**、p99 涨 16×。**�
 7. **`m` 与 `σ` 只扫到 {1,4,16} 与 {1,2}。** 轮次对 `m` 完全不敏感（负载计数决定），但稳态的多 flit 包在 `interval` 域下触发了 `avail_run` 的量词顺序问题（已修，见 §1）；更长的包（m ≥ 32）与 σ ≥ 4 未测。
 8. **流量只覆盖 alltoall 与 7 个 any-to-any pattern。** 突发性（burstiness）、局部性（邻近通信占比）、混合包长都未扫。稳态扫描全部是 Bernoulli 到达 + 均匀目的。
 
-## 15. 文件索引
+## 15. 资源受限的简化调度（`simple2d`）+ 单坏点
+
+iSLIP-2D 的调度时间复杂，不是因为匹配本身难，而是三件事叠在一起：全路径一致授予、区间表挖洞、两级指针迭代。区间表单独占 CA 状态的 96%（99,840 bit）。在 CA 预算有限时，能删的就是这三件；数据面真正需要的只剩一句：**一轮 = 一组链路互斥的路径**。
+
+`simple2d` 只做这一句。每源每轮从残余 VOQ 里按指针拿出 **1 个目的**，路径按下面的静态规则算出来，和本轮已占用链路做一次 AND，能放下就授权。没有区间表、没有每条链路的 grant 指针、没有 iSLIP 迭代。
+
+**路径规则（最多一个坏节点 F）**
+
+1. `s` 或 `d` 就是 F：这条流不存在（94 条，2×47）。
+2. 否则走 XY；XY 穿过 F 则改走 YX。
+3. 只有 `s、d、F` 共线时 XY 与 YX 是同一条线，这时走 U 绕行：先垂直离开该线一格，平行走过 F，再回到原线。8×6 上任何一行/列都至少有一侧可走，所以角、边、心三种度数都能绕开。
+
+路径由 `(s, d, F)` 组合决定，F 固定后不再换路，所以仍然保序。绕行多 2 跳，只发生在共线被挡住的时候。
+
+**健康网 vs 三种坏点（all-to-all，`grants_per_src=1`）**
+
+| 位置 | F | 度数 | 存活流 | 割界 | 轮次 | ×割界 | 路径构成 |
+|---|---|---|---|---|---|---|---|
+| 健康 | — | — | 2256 | 96 | **105** | 1.09 | XY 2256 |
+| 角 `(0,0)` | 0 | 2 | 2162 | 96 | **105** | 1.09 | XY 2127 / YX 35 |
+| 边 `(3,0)` | 3 | 3 | 2162 | 120 | **124** | 1.03 | XY 1983 / YX 155 / 绕行 24 |
+| 心 `(3,2)` | 19 | 4 | 2162 | 122 | **124** | 1.02 | XY 1887 / YX 239 / 绕行 36 |
+
+对照同一套 slot 纪律：`islip2d` `iters=0`（纯贪心补齐）101 轮，`iters=1` 111 轮。简化算法健康网 **105 轮**，夹在两者之间——删掉两级指针几乎不损失打包质量。角点坏了之后割界不变（YX 就能躲开），边和心把相邻行/列的负载抬到 120–122，轮次跟上去，但打包比健康网更贴割界（1.02–1.03×）。四组调度全部 0 链路冲突、0 条路径穿过坏点、0 条存活流漏授权。
+
+**CA 资源对照（2256 流、110 / 105 轮）**
+
+| | 状态 bit | 组合深度 | 相关步 | T_sched |
+|---|---|---|---|---|
+| `islip2d` 区间域 | 103,532（表 99,840） | 13 | 110 | 220 |
+| `islip2d` `free_at` | 6,812 | 9 | 110 | 110 |
+| **`simple2d`** | **2,721** | 9 | 105 | **105** |
+
+状态少 **38×**（相对区间域），T_sched 与 `free_at` 同量级。省下来的不是匹配深度，是那张区间表：CA 不再为每条资源留 16 个 `(start,end)`。代价已经在 §0.1 量化过——没有区间域，稳态吞吐会掉到 0.11。`simple2d` 接受这笔交易：批量 all-to-all 用轮次模型本来就不挖洞，有限资源下先把一批调度做完，并且坏一个节点还能做完。
+
+实现：`utils/rg_simple2d.py`，产物 `results/simple2d_8x6.json`。
+
+## 16. 文件索引
 
 **实现**
 
@@ -586,7 +623,8 @@ FIFO 从 4 减到 1，偏转暴涨 50×、吞吐掉 **14%**、p99 涨 16×。**�
 | [utils/rg_steady_des.py](utils/rg_steady_des.py) | 开环稳态 DES 内核：四配置共用注入器与统计器；`MeshBaseSim`（VC + CBFC + 输入队列 iSLIP）、`RGSim`（集中式，两种冲突域）、`RingBaseAdapter`、解析锚点 |
 | [utils/rg_mesh_sched.py](utils/rg_mesh_sched.py) | `islip2d_mesh`（新成员）：`request_unit="voq_bitmap"` + 常数 RTT、`_islip2d_round` 两级指针、`conflict_domain` 分支、M3 串行化 |
 | [utils/rg_collectives.py](utils/rg_collectives.py) | `anytoany` 族 pattern：`permutation` / `k_permutation`（去重）/ `transpose` / `cluster` / `hotspot` |
-| [utils/rg_sched_cost.py](utils/rg_sched_cost.py) | 两变种的 `state_bits` / `comparators` / `gate_levels`；`distributed_cost` 与 `centralization_ledger` |
+| [utils/rg_sched_cost.py](utils/rg_sched_cost.py) | 两变种的 `state_bits` / `comparators` / `gate_levels`；`distributed_cost` 与 `centralization_ledger`；`simple2d` |
+| [utils/rg_simple2d.py](utils/rg_simple2d.py) | 资源受限简化调度：一轮 = 一组链路互斥路径；XY / YX / U 绕行；最多一个坏节点 |
 
 **实验与验证**
 
@@ -599,4 +637,5 @@ FIFO 从 4 减到 1，偏转暴涨 50×、吞吐掉 **14%**、p99 涨 16×。**�
 | [utils/verify_islip2d_8x6.py](utils/verify_islip2d_8x6.py) | `results/verify_islip2d_8x6.json`（51 项断言，全过） |
 | [utils/xval_booksim_8x6.py](utils/xval_booksim_8x6.py) | 8×6 `anynet` 拓扑 + BookSim 配置 + 对比脚本（**本环境未能执行**，见 §14.5） |
 | [utils/gen_islip2d_report.py](utils/gen_islip2d_report.py) | `results/report_islip2d_8x6.html`：面向初读者的 HTML 版，含两个仲裁器一轮的示意图、冲突域时间轴、R4 转环原子性图、稳态曲线，以及二分带宽利用率 / 平均时延 / p99 三张图（§9.3–9.5）；数字全部从上面四个 JSON 读出 |
+| [utils/rg_simple2d.py](utils/rg_simple2d.py)（`python3 utils/rg_simple2d.py`） | `results/simple2d_8x6.json`：健康 / 角 / 边 / 心四个坏点下的轮次、割界、绕行构成，对照 `islip2d` I=0/1 |
 

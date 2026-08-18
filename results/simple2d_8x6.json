@@ -1,0 +1,245 @@
+{
+  "rows": [
+    {
+      "site": "healthy",
+      "failed": -1,
+      "degree": 0,
+      "alive": 2256,
+      "dead": 0,
+      "route_mix": {
+        "xy": 2256
+      },
+      "cut_bound": 96,
+      "n_rounds": 105,
+      "over_cut": 1.094,
+      "mean_hops": 4.667,
+      "max_hops": 12,
+      "mean_round_wire": 70.5,
+      "data_span": 7401,
+      "verify": {
+        "n_granted": 2256,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    },
+    {
+      "site": "corner",
+      "failed": 0,
+      "degree": 2,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 2127,
+        "yx": 35
+      },
+      "cut_bound": 96,
+      "n_rounds": 105,
+      "over_cut": 1.094,
+      "mean_hops": 4.603,
+      "max_hops": 12,
+      "mean_round_wire": 70.4,
+      "data_span": 7396,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    },
+    {
+      "site": "edge",
+      "failed": 3,
+      "degree": 3,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 1983,
+        "detour": 24,
+        "yx": 155
+      },
+      "cut_bound": 120,
+      "n_rounds": 124,
+      "over_cut": 1.033,
+      "mean_hops": 4.692,
+      "max_hops": 12,
+      "mean_round_wire": 70.9,
+      "data_span": 8787,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    },
+    {
+      "site": "center",
+      "failed": 19,
+      "degree": 4,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 1887,
+        "yx": 239,
+        "detour": 36
+      },
+      "cut_bound": 122,
+      "n_rounds": 124,
+      "over_cut": 1.016,
+      "mean_hops": 4.747,
+      "max_hops": 12,
+      "mean_round_wire": 70.4,
+      "data_span": 8725,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    }
+  ],
+  "extra_sites": [
+    {
+      "site": "corner2",
+      "failed": 47,
+      "degree": 2,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 2127,
+        "yx": 35
+      },
+      "cut_bound": 96,
+      "n_rounds": 103,
+      "over_cut": 1.073,
+      "mean_hops": 4.603,
+      "max_hops": 12,
+      "mean_round_wire": 69.7,
+      "data_span": 7184,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    },
+    {
+      "site": "edge2",
+      "failed": 23,
+      "degree": 3,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 2031,
+        "yx": 119,
+        "detour": 12
+      },
+      "cut_bound": 96,
+      "n_rounds": 104,
+      "over_cut": 1.083,
+      "mean_hops": 4.659,
+      "max_hops": 12,
+      "mean_round_wire": 70.6,
+      "data_span": 7341,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    },
+    {
+      "site": "center2",
+      "failed": 28,
+      "degree": 4,
+      "alive": 2162,
+      "dead": 94,
+      "route_mix": {
+        "xy": 1887,
+        "yx": 239,
+        "detour": 36
+      },
+      "cut_bound": 120,
+      "n_rounds": 124,
+      "over_cut": 1.033,
+      "mean_hops": 4.747,
+      "max_hops": 12,
+      "mean_round_wire": 69.8,
+      "data_span": 8650,
+      "verify": {
+        "n_granted": 2162,
+        "n_missing": 0,
+        "n_link_conflicts": 0,
+        "n_paths_through_hole": 0,
+        "ok": true
+      }
+    }
+  ],
+  "vs_islip2d": {
+    "simple2d": {
+      "algo": "simple2d",
+      "failed": -1,
+      "site": "healthy",
+      "n_pairs": 2256,
+      "n_rounds": 105,
+      "cut_bound": 96,
+      "over_cut": 1.094,
+      "route_mix": {
+        "xy": 2256
+      },
+      "mean_hops": 4.667,
+      "max_hops": 12,
+      "mean_round_wire": 70.5,
+      "data_span": 7401,
+      "grants_per_src": 1,
+      "n_grant_ops": 52027,
+      "max_link_load": 96
+    },
+    "islip2d_I0": {
+      "n_rounds": 101,
+      "round_lb": 96,
+      "round_ratio": 1.052
+    },
+    "islip2d_I1": {
+      "n_rounds": 111,
+      "round_lb": 96,
+      "round_ratio": 1.156
+    }
+  },
+  "cost": {
+    "simple2d:free_at:105": {
+      "bits": 2721,
+      "area_norm": 0.0009,
+      "gate_levels": 9,
+      "dependent_steps": 105,
+      "t_sched_cycles": 105
+    },
+    "islip2d_mesh:interval:110": {
+      "bits": 103532,
+      "area_norm": 0.0429,
+      "gate_levels": 13,
+      "dependent_steps": 110,
+      "t_sched_cycles": 220
+    },
+    "islip2d_mesh:free_at:110": {
+      "bits": 6812,
+      "area_norm": 0.003,
+      "gate_levels": 9,
+      "dependent_steps": 110,
+      "t_sched_cycles": 110
+    }
+  },
+  "simple2d_bits": {
+    "residual_voq_bitmap": 2256,
+    "round_link_bitmap": 164,
+    "source_pointer": 6,
+    "accept_pointers": 288,
+    "fault_register": 7
+  }
+}
