@@ -3,9 +3,12 @@
 
 A closed batch of read-return transactions is scheduled in two waves
 (requests, then responses whose release is the request's eject + t_ha).
-Each wave is a table-driven matching / packing algorithm; a granted
-transfer is a rigid reservation (zero station storage). Replay checks
-R1/R2/R3 and reports makespan = last response eject.
+When a core would exceed `core_outstanding` (default 512), the batch is
+split into generations: a core may have at most that many txns in flight,
+and the next request's release is the previous response's eject. Each
+wave is a table-driven matching / packing algorithm; a granted transfer
+is a rigid reservation (zero station storage). Replay checks R1/R2/R3
+and reports makespan = last response eject.
 
 Algorithms
 ----------
@@ -28,6 +31,7 @@ VOQ granularity: `per_dst` | `per_plane_dir` | `grouped`.
 from __future__ import annotations
 
 import bisect
+import heapq
 import random
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -141,6 +145,7 @@ class RGConfig:
     pipeline_depth: int = 1
     grants_per_src: int = 1
     seed: int = 0
+    core_outstanding: int = 512   # 0 = unlimited; aligned with DES schemes
 
 
 def requirements(topo: Ring2Topology, fp: Ring2Footprint
@@ -489,6 +494,32 @@ def _schedule_wave(topo: Ring2Topology, flows: list[_Flow], cfg: RGConfig,
     return grants
 
 
+def _schedule_txn_batch(topo: Ring2Topology, batch: Sequence[Txn],
+                        cfg: RGConfig, placer: _Placer, rng: random.Random,
+                        t_min: dict[int, int], fid: int
+                        ) -> tuple[list[Grant], list[Grant], int]:
+    reqs: list[_Flow] = []
+    for t in batch:
+        dummy = topo.make_path(t.core, t.ha, 0)
+        rel = t_min.get(t.txn_id, 0)
+        fp = topo.footprint(fid, dummy, t.m_req, kind="req", release=rel)
+        reqs.append(_Flow(fid, t.txn_id, "req", t.core, t.ha, t.m_req, rel,
+                          dummy, fp, rel))
+        fid += 1
+    g_req = _schedule_wave(topo, reqs, cfg, placer, rng)
+    done_req = {g.txn_id: g.eject_t for g in g_req}
+    resps: list[_Flow] = []
+    for t in batch:
+        dummy = topo.make_path(t.ha, t.core, 0)
+        rel = done_req[t.txn_id] + cfg.t_ha
+        fp = topo.footprint(fid, dummy, t.m_resp, kind="resp", release=rel)
+        resps.append(_Flow(fid, t.txn_id, "resp", t.ha, t.core, t.m_resp,
+                           rel, dummy, fp, rel))
+        fid += 1
+    g_resp = _schedule_wave(topo, resps, cfg, placer, rng)
+    return g_req, g_resp, fid
+
+
 def schedule(topo: Ring2Topology, txns: Sequence[Txn], *,
              cfg: RGConfig | None = None) -> dict[str, Any]:
     cfg = cfg or RGConfig()
@@ -498,27 +529,55 @@ def schedule(topo: Ring2Topology, txns: Sequence[Txn], *,
     rng = random.Random(cfg.seed)
     placer = _Placer(topo, cfg.conflict_domain)
 
-    reqs: list[_Flow] = []
-    for i, t in enumerate(txns):
-        dummy = topo.make_path(t.core, t.ha, 0)
-        fp = topo.footprint(i, dummy, t.m_req, kind="req")
-        reqs.append(_Flow(i, t.txn_id, "req", t.core, t.ha, t.m_req, 0,
-                          dummy, fp, 0))
-    g_req = _schedule_wave(topo, reqs, cfg, placer, rng)
+    cap = cfg.core_outstanding
+    per_core_n: dict[int, int] = defaultdict(int)
+    for t in txns:
+        per_core_n[t.core] += 1
+    need_gen = cap > 0 and any(n > cap for n in per_core_n.values())
+    if not need_gen:
+        g_req, g_resp, _ = _schedule_txn_batch(
+            topo, list(txns), cfg, placer, rng,
+            {t.txn_id: 0 for t in txns}, 0)
+    else:
+        by_core: dict[int, deque] = defaultdict(deque)
+        for t in sorted(txns, key=lambda x: (x.core, x.txn_id)):
+            by_core[t.core].append(t)
+        slots: dict[int, list[int]] = {
+            c: [0] * min(cap, len(q)) for c, q in by_core.items()}
+        for c in slots:
+            heapq.heapify(slots[c])
+        g_req, g_resp = [], []
+        fid = 0
+        while any(by_core.values()):
+            batch: list[Txn] = []
+            t_min: dict[int, int] = {}
+            for c, q in by_core.items():
+                n = min(len(q), len(slots[c]))
+                frees = sorted(slots[c])[:n]
+                for i in range(n):
+                    t = q.popleft()
+                    t_min[t.txn_id] = frees[i]
+                    batch.append(t)
+            br, bs, fid = _schedule_txn_batch(
+                topo, batch, cfg, placer, rng, t_min, fid)
+            g_req.extend(br)
+            g_resp.extend(bs)
+            eject = {g.txn_id: g.eject_t for g in bs}
+            used: dict[int, list[int]] = defaultdict(list)
+            for t in batch:
+                used[t.core].append(eject[t.txn_id])
+            for c, es in used.items():
+                for _ in es:
+                    heapq.heappop(slots[c])
+                for e in es:
+                    heapq.heappush(slots[c], e)
+            if len(txns) >= 20_000:
+                left = sum(len(q) for q in by_core.values())
+                print(f"    S2 outstanding-gen {len(g_req)} reqs, "
+                      f"{left} residual", flush=True)
+
     if len(txns) >= 20_000:
         print(f"    S2 scheduled {len(g_req)} requests", flush=True)
-    done_req = {g.txn_id: g.eject_t for g in g_req}
-
-    resps: list[_Flow] = []
-    off = len(txns)
-    for i, t in enumerate(txns):
-        dummy = topo.make_path(t.ha, t.core, 0)
-        rel = done_req[t.txn_id] + cfg.t_ha
-        fp = topo.footprint(off + i, dummy, t.m_resp, kind="resp", release=rel)
-        resps.append(_Flow(off + i, t.txn_id, "resp", t.ha, t.core, t.m_resp,
-                           rel, dummy, fp, rel))
-    g_resp = _schedule_wave(topo, resps, cfg, placer, rng)
-    if len(txns) >= 20_000:
         print(f"    S2 scheduled {len(g_resp)} responses", flush=True)
 
     grants = g_req + g_resp
@@ -545,6 +604,8 @@ def schedule(topo: Ring2Topology, txns: Sequence[Txn], *,
         "voq_granularity": cfg.voq_granularity,
         "arbiter": cfg.arbiter,
         "plane_sel": cfg.plane_sel,
+        "core_outstanding": cap,
+        "max_core_outstanding": _peak_core_outstanding(grants),
     }
 
 
@@ -562,6 +623,27 @@ def replay_ok(topo: Ring2Topology, grants: Sequence[Grant]) -> bool:
                 return False
         p.place(g.fp, t0)
     return True
+
+
+def _peak_core_outstanding(grants: Sequence[Grant]) -> int:
+    """Peak in-flight reads per core: req boards at t0, frees at resp eject.
+
+    Same-cycle free-then-reuse counts as 512, not 513 (completions first).
+    """
+    ev: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for g in grants:
+        if g.kind == "req":
+            ev[g.src].append((g.t0, 1))
+        else:
+            ev[g.dst].append((g.eject_t, -1))
+    peak = 0
+    for es in ev.values():
+        es.sort(key=lambda x: (x[0], x[1]))
+        cur = 0
+        for _, d in es:
+            cur += d
+            peak = max(peak, cur)
+    return peak
 
 
 def _max_src_wait(grants: Sequence[Grant]) -> int:

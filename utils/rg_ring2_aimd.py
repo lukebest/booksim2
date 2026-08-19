@@ -46,7 +46,9 @@ class Ring2AimdSim(Ring2BaseSim):
             return True
         return is_core(node)
 
-    def _may_inject(self, node: int, plane: int) -> bool:
+    def _may_inject(self, node: int, plane: int, f=None) -> bool:
+        if not super()._may_inject(node, plane, f):
+            return False
         if not self._controlled(node):
             return True
         if self.tokens[node] >= 1.0:

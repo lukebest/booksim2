@@ -50,15 +50,22 @@ class Ring2BaseParams:
     eject_bw: int = 1             # PE drain per (node, plane) per cycle
     t_ha_service: int = 0         # cycles HA waits before emitting responses
     plane_sel: PlaneSel = "least_occupied"
+    # Aligned across S0/S1/S2/S3: max in-flight reads per AI core
+    # (request injected, last response not yet PE-drained). 0 = unlimited.
+    core_outstanding: int = 512
     # AIMD knobs (ignored by S0; consumed by Ring2AimdSim)
     aimd: bool = False
-    alpha: float = 0.05
-    beta: float = 0.5
-    epoch: int = 32
-    rate_min: float = 0.05
+    alpha: float = 0.15
+    beta: float = 0.85
+    epoch: int = 64
+    rate_min: float = 0.30
     rate_max: float = 1.0
     rate_init: float = 1.0
     aimd_scope: str = "core_only"     # "core_only" | "both"
+    # Push-on-pull knobs (ignored by S0/S1; consumed by Ring2PopSim)
+    pop: bool = False
+    pop_window: int = 0              # extra S3 per-(core, plane) cap; 0 = off
+    pop_scope: str = "req_as_grant"  # "req_as_grant" | "resp_only"
 
 
 @dataclass
@@ -139,11 +146,14 @@ class Ring2BaseSim:
             "n_board_fail": 0, "max_inj_starve": 0,
             "max_deflections": 0, "max_ejectq": 0,
             "max_srcq": 0, "max_pending": 0, "n_admit_stall": 0,
+            "n_pull_wait": 0, "n_pull_issued": 0, "max_pull_outstanding": 0,
+            "n_outst_wait": 0, "max_core_outstanding": 0,
             "n_aimd_increase": 0, "n_aimd_decrease": 0,
         }
         self._pid = 0
         self._n_txn_target = 0
         self._resp_stash: dict[tuple, Flit] = {}
+        self.core_outst: dict[int, int] = defaultdict(int)  # per-core in-flight reads
 
     # -- routing / plane ----------------------------------------------------
 
@@ -298,8 +308,33 @@ class Ring2BaseSim:
 
     # -- AIMD hooks (no-ops in S0) ------------------------------------------
 
-    def _may_inject(self, node: int, plane: PlaneId) -> bool:
+    def _outst_full(self, core: int) -> bool:
+        cap = self.p.core_outstanding
+        return cap > 0 and self.core_outst[core] >= cap
+
+    def _may_inject(self, node: int, plane: PlaneId, f: Flit | None = None
+                    ) -> bool:
+        if f is None or f.kind != "req" or not is_core(f.src):
+            return True
+        if self._outst_full(f.src):
+            self.st["n_outst_wait"] += 1
+            return False
         return True
+
+    def _on_inject(self, f: Flit) -> None:
+        if f.kind != "req" or not is_core(f.src):
+            return
+        if self.p.core_outstanding <= 0:
+            return
+        self.core_outst[f.src] += 1
+        self.st["max_core_outstanding"] = max(
+            self.st["max_core_outstanding"], self.core_outst[f.src])
+
+    def _ctrl_deliver(self) -> None:
+        return
+
+    def _ctrl_issue(self) -> None:
+        return
 
     def _note_board(self, f: Flit, *, ok: bool) -> None:
         if f.kind != "resp":
@@ -331,6 +366,7 @@ class Ring2BaseSim:
 
     def step(self) -> None:
         self._ensure_stash()
+        self._ctrl_deliver()
         t = self.t
         arrivals = self.arrivals.pop(t, [])
         for f in arrivals:
@@ -377,10 +413,15 @@ class Ring2BaseSim:
                 self.inj_starve[key] = 0
                 self.active_src.discard(key)
                 continue
-            if not self._may_inject(node, plane):
-                self.inj_starve[key] += 1
-                continue
             f = q[0]
+            if not self._may_inject(node, plane, f):
+                # Policy denial (AIMD token, S3 receive window) is not hop
+                # starvation. A leftover I-tag would lock out HA responses
+                # on this (plane, dir) while the source is not even trying
+                # to board — the ring goes empty. Drop it and reset starve.
+                self.i_tag[(f.plane, f.dir)].discard(node)
+                self.inj_starve[key] = 0
+                continue
             if self._itag_blocks(f, node) or \
                     not self._can_board(f.plane, f.dir, f.idx):
                 self._on_board_fail(node, f)
@@ -402,6 +443,7 @@ class Ring2BaseSim:
             f.t_inject = t
             self.st["n_injected"] += 1
             self._note_board(f, ok=True)
+            self._on_inject(f)
             self._launch(f, inring=False)
 
         # PE drains the per-plane eject queue
@@ -420,6 +462,7 @@ class Ring2BaseSim:
         # responses with t_ha=0 become ready in this same cycle
         self._release_ready_resps()
         self._aimd_tick()
+        self._ctrl_issue()
         self.t += 1
 
     def _on_arrive_station(self, f: Flit) -> None:
@@ -445,7 +488,11 @@ class Ring2BaseSim:
             if left == 0:
                 self.st["n_txn_done"] += 1
                 self.txn_done.append((f.txn_id, self.t))
-                self._on_txn_done(self.txn_by_id[f.txn_id], f)
+                txn = self.txn_by_id[f.txn_id]
+                if self.p.core_outstanding > 0:
+                    self.core_outst[txn.core] = max(
+                        0, self.core_outst[txn.core] - 1)
+                self._on_txn_done(txn, f)
 
     # -- introspection ------------------------------------------------------
 
@@ -478,6 +525,8 @@ class Ring2BaseSim:
             out["lat_p99"] = lat[min(len(lat) - 1, int(0.99 * len(lat)))]
             out["lat_max"] = lat[-1]
         out["board_by_core"] = self.board_by_core()
+        out["core_outstanding"] = self.p.core_outstanding
+        out["core_outst"] = dict(self.core_outst)
         return out
 
     def recv_by_core(self) -> dict[int, list[int]]:

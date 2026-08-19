@@ -451,12 +451,15 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         # 8x6 centralized variants: a granted transfer is rigid, so the
         # study prices only the arbiter (station storage counted as 0).
         pass
-    elif config in ("ring2_base", "ring2_aimd", "ring2_rg"):
-        # Common datapath for all three 20-node schemes: point-to-point
+    elif config in ("ring2_base", "ring2_aimd", "ring2_rg", "ring2_pop"):
+        # Common datapath for all four 20-node schemes: point-to-point
         # credit on each directed hop (80 segments), I-tag / E-tag, the
         # `inj_depth`-deep boarding queue, shared per-plane eject queue +
-        # reserved E-tag slots, reassembly. S0/S1/S2 differ in injection /
-        # matching policy, not in this layer.
+        # reserved E-tag slots, reassembly, and the aligned per-core
+        # outstanding-read scoreboard (512). S0/S1/S2/S3 differ in
+        # injection / matching policy, not in this layer.
+        n_cores = n_nodes // 2
+        n_has = n_nodes - n_cores
         b["credit_counters"] = n_nodes * n_planes * 2 * W_D
         b["boarding_queues"] = n_nodes * n_planes * inj_depth * W_FLIT
         b["eject_queues"] = n_nodes * n_planes * eject_depth * W_FLIT
@@ -464,10 +467,17 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT
         b["starvation_counters"] = n_nodes * n_planes * W_T
         b["itag_etag_state"] = n_nodes * n_planes * 2
+        b["core_outstanding"] = n_cores * _ceil_log2(512 + 1)
         if config == "ring2_aimd":
             b["aimd_rate_tokens"] = n_nodes * 2 * W_T
             b["aimd_fail_counters"] = n_nodes * W_T
             b["piggyback_fields"] = n_nodes * 2 * W_D
+        elif config == "ring2_pop":
+            # HA request RR. The read request itself is the grant; no
+            # dedicated pull-token plane. Receive-window bits live in the
+            # shared core_outstanding scoreboard, not a separate dest_window.
+            b["ha_req_rr"] = n_has * n_planes * _ceil_log2(n_cores)
+            b["ha_pending"] = n_has * n_planes * n_cores * W_D
     else:
         raise ValueError(config)
     return {"config": config, "bits": round(sum(b.values())),

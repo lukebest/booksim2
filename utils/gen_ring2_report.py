@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
 from rg_ring2_topo import (
     Ring2Topology, build_allpairs, build_uniform, cores, paths_for_txns,
@@ -60,8 +61,9 @@ def _collect_traces(topo: Ring2Topology, txns, *, seed: int = 0
     s2 = run_rg(topo, txns, cfg=RGConfig(algo="islip", iters=2,
                                         plane_sel="least_occupied",
                                         seed=seed))
+    s3 = run_pop(topo, txns, params=p, seed=seed)
     out = {}
-    for name, r in (("S0", s0), ("S1", s1), ("S2", s2)):
+    for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3)):
         recv = {int(k): v for k, v in (r.get("recv_by_core") or {}).items()}
         out[name] = {
             "makespan": r.get("makespan"),
@@ -75,12 +77,12 @@ def plot_core_recv_bw(traces: dict[str, dict], path: Path, *,
                       title: str, bin_w: int = BIN_W) -> None:
     cs = cores()
     cmap = plt.get_cmap("tab10")
-    fig, axes = plt.subplots(3, 1, figsize=(9.2, 8.4), sharex=False)
+    fig, axes = plt.subplots(4, 1, figsize=(9.2, 11.0), sharex=False)
     t_max_all = max(
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
-    for ax, scheme in zip(axes, ("S0", "S1", "S2")):
+    for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3")):
         tr = traces[scheme]
         t_max = max(
             (max(ts) for ts in tr["recv_by_core"].values()), default=1)
@@ -143,7 +145,7 @@ def _bound_rows(topo: Ring2Topology, big: dict, cmp_: dict
         for label, key in fields:
             hit = " ← 主导" if (key != "bound" and b[key] == b["bound"]) else ""
             rows.append([label, b[key], hit, ""])
-        for sch in ("S0", "S1", "S2"):
+        for sch in ("S0", "S1", "S2", "S3"):
             mk = measured[name].get(sch)
             if mk is None:
                 continue
@@ -176,23 +178,27 @@ def main() -> None:
     board_html = ""
     if big.get("schemes"):
         meta = big.get("meta") or {}
+        SCH = [s for s in ("S0", "S1", "S2", "S3") if s in big["schemes"]]
         board_rows = [["makespan"] + [big["schemes"][s].get("makespan")
-                                      for s in ("S0", "S1", "S2")]]
+                                      for s in SCH]]
         for label, field in (("偏转次数", "n_deflections"),
                              ("上环队列峰值", "max_srcq"),
                              ("下环队列峰值", "max_ejectq"),
                              ("响应时延 p50", "lat_p50"),
-                             ("响应时延 p99", "lat_p99")):
+                             ("响应时延 p99", "lat_p99"),
+                             ("HA 放出响应", "n_pull_issued"),
+                             ("core 窗口峰值", "max_pull_outstanding"),
+                             ("每核 outstanding 峰值", "max_core_outstanding")):
             board_rows.append(
                 [label] + [big["schemes"][s].get(field, "—") if
                            big["schemes"][s].get(field) is not None else "—"
-                           for s in ("S0", "S1", "S2")])
+                           for s in SCH])
         cores_s = sorted({int(c) for s in big["schemes"].values()
                           for c in (s.get("board_by_core") or {})},
                          key=int)
         for c in cores_s:
             rec = [f"core {c}"]
-            for sch in ("S0", "S1", "S2"):
+            for sch in SCH:
                 b = (big["schemes"][sch].get("board_by_core") or {}).get(
                     str(c), {})
                 rec.append(
@@ -203,7 +209,7 @@ def main() -> None:
                     f"CCW {b.get('board_fail_ccw', 0)})")
             board_rows.append(rec)
         tot = ["合计"]
-        for sch in ("S0", "S1", "S2"):
+        for sch in SCH:
             bb = (big["schemes"][sch].get("board_by_core") or {}).values()
             board = sum(v.get("board", 0) for v in bb)
             cw = sum(v.get("board_cw", 0) for v in bb)
@@ -220,14 +226,19 @@ def main() -> None:
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')}，
 <code>plane_sel=least_occupied</code>，hop 时延 {meta.get('hop_lat')} 拍，
 上环队列 {meta.get('inj_depth')} 深，下环队列 {meta.get('eject_depth')}。
-每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0 / S1 / S2 可直接对比。
+每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0 / S1 / S2 / S3 可直接对比。
+512 对齐后 S3 与 S0 的均值曲线重合，叠图里 S3 画成虚线以免把 S0 盖住。
+黑点线是解析下界对应的理想接收：每核 {meta.get('flits_per_core')} flit 在
+<code>bound={meta.get('bound')}</code> 拍内匀速收完
+（{meta.get('ideal_recv_rate')} flit/cycle/core），之后为 0。
 上环统计只针对<b>发往该 core 的响应数据</b>：上环 = 成功注入，CW = 方向 +1，
 CCW = 方向 −1，失败 = 发现 slot 忙或被 I-tag 挡住的注入尝试（<b>不含</b> AIMD
-令牌拒绝）。S2 仍然有 I-tag / E-tag，它的失败数是 0 是因为 grant 只在 hop
-已空时发出，反应式标签在这个闭集中突发里用不上。</p>
-<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="三方案均值接收带宽叠图"></p>
+令牌拒绝、也不含 S3 的接收窗口等待）。S2 的失败数是 0 是因为 hop 已被预约；
+S3 不预约 hop，读请求受每核 512 条 outstanding 限制，HA 按已到请求调度响应。</p>
+<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="四方案均值接收带宽叠图"></p>
 <p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
-{_table(["", "S0 RR", "S1 AIMD", "S2 request-grant"], board_rows)}
+{_table(["", "S0 RR", "S1 AIMD", "S2 request-grant", "S3 push-on-pull"][:1+len(SCH)],
+        board_rows)}
 <p class="note">墙钟 {big.get('wall_secs', '?')}s。</p>
 """
     else:
@@ -252,7 +263,7 @@ CCW = 方向 −1，失败 = 发现 slot 忙或被 I-tag 挡住的注入尝试�
     png = "ring2_rg_pareto.png"
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
-<title>双全环 20 节点 — 三方案 makespan + RG Pareto</title>
+<title>双全环 20 节点 — 四方案 makespan + RG Pareto</title>
 <style>
 body {{ font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
        margin: 2rem auto; max-width: 980px; color: #111; line-height: 1.65; }}
@@ -267,7 +278,7 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
 .def {{ background: #f8fafc; border-left: 3px solid #94a3b8;
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }}
 </style></head><body>
-<h1>双全环 20 节点：三方案 makespan + request-grant Pareto</h1>
+<h1>双全环 20 节点：四方案 makespan + request-grant Pareto</h1>
 <p class="note">偶数 index 是 AI core，奇数是 memory Home Agent。两个独立的双向
 ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端口的 buffer。
 流量是读往返（请求 1 flit，响应 R flit）。<b>makespan = 最后一个响应 flit 在发起
@@ -348,24 +359,26 @@ allpairs 那档 <code>bound</code> 只有 41 的直接原因：100 个事务的�
 依赖约束）会给出更高的下界。</li>
 </ul>
 
-<h2>1. 共同数据面（三方案完全相同）</h2>
-<p class="note">S0 / S1 / S2 <em>不是</em>三种不同的 fabric。它们共用同一条
+<h2>1. 共同数据面（四方案完全相同）</h2>
+<p class="note">S0 / S1 / S2 / S3 <em>不是</em>四种不同的 fabric。它们共用同一条
 点对点 credit 数据面、同样 8 深的上环队列、同样的 I-tag / E-tag 保证。整个
-扫参只改变「一个源被允许如何花掉 credit」：RR、AIMD 速率、或 request-grant
-匹配。</p>
-{_table(["层", "S0 RR", "S1 AIMD", "S2 request-grant"], [
-    ["相邻节点 hop 时延", "2 拍", "2 拍", "2 拍"],
-    ["上环队列（每 node, plane）", "8 flit", "8 flit", "8 flit"],
+扫参只改变「一个源被允许如何花掉 credit」：RR、AIMD 速率、request-grant
+匹配、或把读请求当作 POP 调度信息。</p>
+{_table(["层", "S0 RR", "S1 AIMD", "S2 request-grant", "S3 push-on-pull"], [
+    ["相邻节点 hop 时延", "2 拍", "2 拍", "2 拍", "2 拍"],
+    ["上环队列（每 node, plane）", "8 flit", "8 flit", "8 flit", "8 flit"],
     ["下环队列（每 node, plane）", "4 + 1 E-tag", "4 + 1 E-tag",
-     "4 + 1 E-tag"],
+     "4 + 1 E-tag", "4 + 1 E-tag"],
     ["inject / eject 端口", "每 (node, plane) 1 个", "每 (node, plane) 1 个",
-     "每 (node, plane) 1 个"],
-    ["点对点 credit 流控", "有", "有", "有"],
-    ["I-tag（上环饥饿有界）", "有", "有", "有"],
-    ["E-tag（下环 / 预留 eject）", "有", "有", "有"],
-    ["有 credit 时 RR 上环", "有", "有", "—"],
-    ["AIMD 源端速率（失败 piggyback）", "—", "有", "—"],
-    ["上环前 request-grant 匹配", "—", "—", "有"],
+     "每 (node, plane) 1 个", "每 (node, plane) 1 个"],
+    ["点对点 credit 流控", "有", "有", "有", "有"],
+    ["I-tag（上环饥饿有界）", "有", "有", "有", "有"],
+    ["E-tag（下环 / 预留 eject）", "有", "有", "有", "有"],
+    ["每核 outstanding 读", "512", "512", "512", "512"],
+    ["有 credit 时 RR 上环", "有", "有", "—", "有（读请求受 512/核 outstanding 卡）"],
+    ["AIMD 源端速率（失败 piggyback）", "—", "有", "—", "—"],
+    ["上环前 request-grant 匹配", "—", "—", "有", "—"],
+    ["读请求作 POP 调度信息", "—", "—", "—", "有（HA RR 响应）"],
 ])}
 <ul>
 <li><b>Credit：</b>每条有向 hop 是一对 credit。上游发 flit 前先扣 credit，
@@ -386,11 +399,12 @@ I-tag，抑制该环向上其他节点上环，直到它自己上去。作用是
 <p>{verify.get("n_ok", 0)}/{verify.get("n_total", 0)} 项检查通过。</p>
 {_table(["检查项", "结果"], ver_rows)}
 
-<h2>3. 三方案 makespan 扫参（默认 plane_sel=least_occupied, eject_depth=4）</h2>
+<h2>3. 四方案 makespan 扫参（默认 plane_sel=least_occupied, eject_depth=4）</h2>
 <p class="note">每一行都跑在同一条 credit + I-tag / E-tag 数据面上。
 S0 = RR 上环，无源端速率控制。
-S1 = S0 + 失败计数 piggyback + AIMD 令牌桶。
+S1 = S0 + 失败计数 piggyback + AIMD 令牌桶（默认温和：α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）。
 S2 = 同样的 hop 上做 request-grant iSLIP（I=2, interval, arc）。
+S3 = 读请求本身是 POP 调度信息：每核最多 512 条 outstanding 读，HA 对已到请求 RR 后给响应，不预约 hop。
 bound 列是 §0 的解析下界。</p>
 {_table(["方案", "pattern", "R", "m 或 K", "均值", "最小", "最大", "bound", "完成"],
         sum_rows)}
@@ -401,9 +415,10 @@ Quick={ (cmp_.get("meta") or {}).get("quick") }。</p>
 
 <h2>5. request-grant 的面积 / makespan Pareto</h2>
 <p class="note">y = makespan_des + t_sched_cycles（调度器延迟计回）。
-x = area_norm（IQ-XY router = 1.0，按节点摊）。S0 和 S1 作为参考点画在同一张
-图上。面积对三方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
-数据面；S2 在这之上再加仲裁器和一小笔控制面开销——它<b>没有</b>删掉站点存储。
+x = area_norm（IQ-XY router = 1.0，按节点摊）。S0 / S1 / S3 作为参考点画在同一张
+图上。面积对四方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
+数据面（含每核 512 条 outstanding 记分板）；S2 在这之上再加仲裁器和一小笔控制面开销，S3 加 HA
+pending/RR——都<b>没有</b>删掉站点存储。读请求就是 grant，没有专用 token 平面。
 等效 bit 模型，标定到 mesh <code>greedy_ff = 0.05</code>，不是 mm²。</p>
 <p><img src="{png}" alt="Pareto 前沿"></p>
 {_table(["配置 tag", "area_norm", "makespan"], front_rows)}
@@ -412,7 +427,7 @@ x = area_norm（IQ-XY router = 1.0，按节点摊）。S0 和 S1 作为参考点
 墙钟 {pareto.get("wall_secs", "?")}s。</p>
 
 <h3>5.1 为什么图上 S2 有这么多点</h3>
-<p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0 和 S1 各自只有一种硬件结构，
+<p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0 / S1 / S3 各自只有一种硬件结构，
 所以各出一个点；而 request-grant 的「仲裁器」是一个可设计的对象，每一组旋钮
 取值对应一块<em>不同的、都可实现的</em>电路，面积和调度延迟都不同，因此每一组
 都必须单独评估、单独画点。旋钮空间：</p>
@@ -445,16 +460,20 @@ E-tag 给下环活锁定上界。</li>
 <li><b>S0</b> 是反应式基线：hop 空就用 RR 花掉 credit，除 I-tag 之外没有任何
 源端速率控制。它是<em>工作守恒</em>的，代价是每次成功上环约伴随 2 次重试——
 重试不烧 slot，所以这笔代价落在时延上，不落在 makespan 上。</li>
-<li><b>S1</b> 把上环 / 下环失败计数回传给源端，对令牌桶速率做 AIMD。在闭集中
-突发下这经常<em>损害</em> makespan：第一个 epoch 几乎每个源都看到上环 NACK，
-速率随即崩掉。这是结果，不是 bug。</li>
-<li>但 S1 并不是「坏实现」，它是<b>在拿吞吐换时延</b>：响应时延 p50 比 S0 低
-两个数量级以上，代价是 makespan 差约 2.8×——因为限流让上环队列一直填不满。</li>
+<li><b>S1</b> 把上环 / 下环失败计数回传给源端，对令牌桶速率做 AIMD。默认温和配置
+（α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）在小流量上可以赢 S0；10k 上
+makespan 是 S0 的约 1.22×。教科书组合会一路乘到 0.05 地板，那是旋钮过狠，不是 AIMD 不能用。</li>
+<li>S1 仍是<b>在拿一点吞吐换时延</b>：10k 响应 p50 是 23 拍（S0 是 2758），
+outstanding 峰值 54，碰不到 512 的记分板。</li>
 <li><b>S2</b> 保留同样的 credit + 上环队列 + I-tag / E-tag 数据面，在上环<em>之前
 </em>加一次 request-grant 匹配，使 flit 只在 hop 已被预约时注入。它要付一个
 仲裁器加一小笔控制面开销。端口按 (node, plane) 计价之后（与 S0 的 DES 一致），
 S2 在数据面上取胜，并且即使把 <code>t_sched_cycles</code> 计回，仍有一个配置
 留在 Pareto 前沿上。它用大约 4.5× 的面积买到了 makespan。</li>
+<li><b>S3</b> 用读 memory 的请求当 POP 调度信息：四方案对齐为每核最多
+512 条 outstanding 读，HA 对已到达的多条请求做 RR，再放出该请求的响应。环上 hop
+仍是反应式的，所以它<b>不</b>消除 slot 忙导致的上环失败。没有单独的
+pull-token RTT——请求在数据面上走到 HA，本身就是 grant。</li>
 <li>4 深的下环队列在这些负载下几乎没有作用：峰值占用只有 1。偏转来自
 每 (node, plane) <b>唯一</b>的那个 leave 端口，两个方向都要抢它。真正的限制是
 端口数量，不是队列深度。</li>

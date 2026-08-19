@@ -1,6 +1,6 @@
 {
-  "n_total": 16,
-  "n_ok": 16,
+  "n_total": 18,
+  "n_ok": 18,
   "all_ok": true,
   "rows": [
     {
@@ -20,7 +20,7 @@
       "ok": true
     },
     {
-      "name": "three_schemes_same_flits",
+      "name": "four_schemes_same_flits",
       "ok": true
     },
     {
@@ -64,9 +64,17 @@
       "ok": true
     },
     {
+      "name": "pop_window_and_token",
+      "ok": true
+    },
+    {
+      "name": "core_outstanding_aligned",
+      "ok": true
+    },
+    {
       "name": "plane_sel_all_work",
       "ok": true
     }
   ],
-  "generated_at": "2026-08-19T02:23:37Z"
+  "generated_at": "2026-08-19T08:33:45Z"
 }

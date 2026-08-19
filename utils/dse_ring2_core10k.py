@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Same-pattern, 10000 response flits/core: S0 vs S1 vs S2.
+"""Same-pattern, 10000 response flits/core: S0 vs S1 vs S2 vs S3.
 
 Workload: uniform random HA, K=2500 txns/core, R=4 → 10000 recv flits/core.
 Compares receive-bandwidth time series and per-destination-core on-ramp
 counts (CW / CCW successes and failures).
 
-All three schemes ride the same datapath: 2-cycle hops, 8-deep boarding
-queue per (node, plane), point-to-point credit, I-tag / E-tag.
+All four schemes ride the same datapath: 2-cycle hops, 8-deep boarding
+queue per (node, plane), point-to-point credit, I-tag / E-tag, and a
+512 outstanding-read cap per AI core.
 
 Writes results/ring2_core10k.json and the comparison PNGs.
 """
@@ -29,8 +30,9 @@ import matplotlib.pyplot as plt
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
-from rg_ring2_topo import Ring2Topology, build_uniform, cores
+from rg_ring2_topo import Ring2Topology, build_uniform, cores, paths_for_txns
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "ring2_core10k.json"
@@ -57,6 +59,8 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         r = run_base(topo, txns, params=p, seed=seed)
     elif scheme == "S1":
         r = run_aimd(topo, txns, params=p, seed=seed)
+    elif scheme == "S3":
+        r = run_pop(topo, txns, params=p, seed=seed)
     else:
         r = run_rg(topo, txns, cfg=RGConfig(
             algo="islip", iters=2, plane_sel="least_occupied", seed=seed),
@@ -82,6 +86,10 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         "n_admit_stall": r.get("n_admit_stall", 0),
         "lat_p50": r.get("lat_p50"),
         "lat_p99": r.get("lat_p99"),
+        "n_pull_issued": r.get("n_pull_issued", 0),
+        "max_pull_outstanding": r.get("max_pull_outstanding", 0),
+        "max_core_outstanding": r.get("max_core_outstanding", 0),
+        "n_outst_wait": r.get("n_outst_wait", 0),
         "recv_by_core": recv,
         "board_by_core": board,
         "wall_secs": round(time.perf_counter() - t0, 1),
@@ -96,8 +104,8 @@ def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
-    fig, axes = plt.subplots(3, 1, figsize=(9.6, 8.6), sharex=True)
-    for ax, scheme in zip(axes, ("S0", "S1", "S2")):
+    fig, axes = plt.subplots(4, 1, figsize=(9.6, 11.2), sharex=True)
+    for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3")):
         tr = traces[scheme]
         t_max = max((max(ts) for ts in tr["recv_by_core"].values()), default=1)
         mean = None
@@ -132,16 +140,21 @@ def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
 
 
 def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
-                 flits_per_core: int) -> None:
-    """Same axes: mean recv bandwidth of the three schemes."""
-    colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626"}
+                 flits_per_core: int, bound: int | None = None) -> None:
+    """Same axes: mean recv bandwidth of the four schemes."""
+    colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626",
+              "S3": "#9333ea"}
+    # S3 is drawn dashed on top of S0: after the 512-outstanding
+    # alignment the two means coincide, and a second solid line would
+    # hide S0 completely.
+    styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5))}
     fig, ax = plt.subplots(figsize=(9.2, 4.2))
     t_max_all = max(
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
     cs = cores()
-    for scheme in ("S0", "S1", "S2"):
+    for scheme in ("S1", "S2", "S0", "S3"):
         tr = traces[scheme]
         acc = None
         xs = []
@@ -151,12 +164,21 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
                 acc = [0.0] * len(ys)
             for j, y in enumerate(ys):
                 acc[j] += y / len(cs)
-        ax.plot(xs, acc, color=colors[scheme], lw=1.8,
+        ax.plot(xs, acc, color=colors[scheme], lw=1.8, linestyle=styles[scheme],
                 label=f"{scheme}  mk={tr['makespan']}")
+    if bound and bound > 0:
+        # Constant-rate drain that meets the analytic makespan floor:
+        # flits_per_core delivered in `bound` cycles, then drop to 0.
+        rate_lb = flits_per_core / bound
+        ax.plot([0, bound, bound, t_max_all],
+                [rate_lb, rate_lb, 0.0, 0.0],
+                color="#111827", lw=1.4, ls=":",
+                label=f"bound  mk≥{bound}  {rate_lb:.2f} flit/cyc")
+        ax.axvline(bound, color="#111827", lw=0.7, ls=":", alpha=0.45)
     ax.set_xlabel("cycle")
     ax.set_ylabel("mean recv flit / cycle / core")
     ax.set_title(
-        f"S0 / S1 / S2 on the same uniform batch  "
+        f"S0 / S1 / S2 / S3 on the same uniform batch  "
         f"({flits_per_core} flits/core, bin={bin_w})")
     ax.set_xlim(0, t_max_all)
     ax.set_ylim(bottom=0)
@@ -182,16 +204,19 @@ def main() -> None:
 
     topo = Ring2Topology()
     txns = build_uniform(k=k, m_resp=R, seed=args.seed)
+    rp, sp = paths_for_txns(topo, txns, strategy="least_occupied")
+    bounds = topo.analytic_bounds(rp, sp, m_req=1, m_resp=R)
     t0 = time.perf_counter()
     traces = {}
-    for scheme in ("S0", "S1", "S2"):
+    for scheme in ("S0", "S1", "S2", "S3"):
         traces[scheme] = _run(scheme, topo, txns, args.seed)
 
     panel = ROOT / "results" / "ring2_core_recv_bw_10k.png"
     overlay = ROOT / "results" / "ring2_core_recv_bw_10k_overlay.png"
     plot_panels(traces, panel, bin_w=bin_w, k=k, r_flits=R,
                 flits_per_core=flits)
-    plot_overlay(traces, overlay, bin_w=bin_w, flits_per_core=flits)
+    plot_overlay(traces, overlay, bin_w=bin_w, flits_per_core=flits,
+                 bound=bounds["bound"])
 
     slim = {
         "meta": {
@@ -201,6 +226,20 @@ def main() -> None:
             "hop_lat": topo.hop_lat,
             "inj_depth": Ring2BaseParams().inj_depth,
             "eject_depth": Ring2BaseParams().eject_depth,
+            "pop_window": Ring2BaseParams().pop_window,
+            "core_outstanding": Ring2BaseParams().core_outstanding,
+            "bound": bounds["bound"],
+            "link_lb": bounds["link_lb"],
+            "port_lb": bounds["port_lb"],
+            "cut_lb": bounds["cut_lb"],
+            "single_txn_lb": bounds["single_txn_lb"],
+            "ideal_recv_rate": round(flits / bounds["bound"], 4),
+            "aimd": {
+                "alpha": Ring2BaseParams().alpha,
+                "beta": Ring2BaseParams().beta,
+                "epoch": Ring2BaseParams().epoch,
+                "rate_min": Ring2BaseParams().rate_min,
+            },
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
         "schemes": {},
@@ -226,6 +265,10 @@ def main() -> None:
             "n_admit_stall": tr["n_admit_stall"],
             "lat_p50": tr["lat_p50"],
             "lat_p99": tr["lat_p99"],
+            "n_pull_issued": tr["n_pull_issued"],
+            "max_pull_outstanding": tr["max_pull_outstanding"],
+            "max_core_outstanding": tr["max_core_outstanding"],
+            "n_outst_wait": tr["n_outst_wait"],
             "board_by_core": {str(c): v for c, v in tr["board_by_core"].items()},
             "recv_binned": rates,
         }
