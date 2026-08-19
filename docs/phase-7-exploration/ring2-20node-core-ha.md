@@ -29,7 +29,35 @@
 | `least_occupied` | 当前占用更少的 plane（默认） |
 | `req_resp_split` | 请求 plane 0，响应 plane 1 |
 
-单事务下界：`hops_req·lat + m_req·σ + t_ha + hops_resp·lat + m_resp·σ`。资源下界把请求波与响应波当成先后两个 convoy（链路峰值 + 端口峰值 + 直径割）。
+## 1.5 makespan 的理论下界（形式化）
+
+记号：`N=20` 节点，`P=2` plane，`σ=1` 拍/flit（同一有向段上连续两 flit 的最小间隔），`λ=2` 拍（相邻节点 hop 时延），有向段 `2PN=80`。事务集合 `T`，每个 `t` 是 core→HA 的 `m_req` flit 请求 + HA→core 的 `m_resp` flit 响应，路径 `π(t)` 取最短方向。
+
+四条下界都是「某资源必须搬的总量 ÷ 该资源容量」的计数论证，对**任何**调度策略成立，包括离线最优：
+
+**LB_link（段带宽）** 对每条不区分 plane 的有向邻接 `(u,v)`，令
+`L(u,v) = Σ_t m_req·[⟨u,v⟩∈π_req(t)] + m_resp·[⟨u,v⟩∈π_resp(t)]`，则
+`makespan ≥ σ·⌈ max_(u,v) L(u,v) / P ⌉`。
+必须除以 `P`：plane 分配是策略不是物理约束，同一有向 hop 两个 plane 都能承载。用某个具体 `plane_sel` 的单 plane 峰值会在仿真器平衡得更好时反过来超过实测值，那就不是下界。
+
+**LB_port（端口）** 令 `B(n)` / `E(n)` 为节点 `n` 上必须上环 / 下环的 flit 总数（跨 plane 合并、请求+响应合并），每节点每 plane 各 1 个 inject / eject 口，则
+`makespan ≥ σ·⌈ max_n max(B(n), E(n)) / P ⌉`。
+
+**LB_cut（二等分割）** 环的二等分要切**两个**缺口。取 `X = {⟨N/2−1,N/2⟩, ⟨N/2,N/2−1⟩, ⟨N−1,0⟩, ⟨0,N−1⟩} × P`，共 8 条有向段；`C` 为路径穿过 `X` 的 flit-段数，则 `makespan ≥ σ·⌈C/|X|⌉`。数实际穿越次数——core/HA 交错布局下大量路径只有 1 跳，套用「一半流量过割」会高估到超过实测。
+
+**LB_txn（单事务串行）** 事务内部严格串行，取最深的那个：
+`makespan ≥ max_t [ hops(π_req(t))·λ + m_req·σ + t_ha + hops(π_resp(t))·λ + m_resp·σ ]`。
+
+`bound = max(LB_link, LB_port, LB_cut, LB_txn)`。实测对照：
+
+| 档位 | LB_link | LB_port | LB_cut | LB_txn | bound | S0 | S1 | S2 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| allpairs m=1 R=4（100 事务） | 35 | 20 | 32 | **41** | 41 | 129 (3.15×) | 130 (3.18×) | 88 (2.15×) |
+| uniform K=2500 R=4（25000 事务） | **8939** | 5168 | 7788 | 41 | 8939 | 15435 (1.73×) | 42664 (4.77×) | **11350 (1.27×)** |
+
+两档的主导项不同：allpairs 事务太少、资源计数没饱和，瓶颈是单事务往返时延；10k 那档段带宽主导，S2 做到 1.27× 物理极限。
+
+**为什么不紧。** 每条都是一次松弛：(1) 除 `LB_txn` 外丢掉了请求→响应依赖，把两波当独立车队——这是 allpairs 那档 bound 只有 41 的直接原因；(2) 不含偏转，假设每 flit 只走最短路，S0 实测 flit-hop 比最短路多约 40%；(3) plane 分配当自由变量；(4) 不含上环队列深度、leave 端口冲突、I/E-tag 抑制；(5) 四项各自取 max，没有联立，真正的 LP 松弛会更高。
 
 ## 2. 共同数据面，然后才是 S0 / S1 / S2
 
@@ -126,6 +154,8 @@ rate ∈ [rate_min, rate_max]
 | S1 | 130（AIMD 配置均值；最好 115） | 258 | 1763 |
 | S2 iSLIP I=2 | **88** | **145** | **526** |
 | 解析下界 | 41 | 95 | 376 |
+
+**Pareto 图上 S2 有 109 个点，S0 / S1 各 1 个。** 不是画重了：S0 和 S1 各自只有一种硬件结构，而 request-grant 的仲裁器是可设计对象，每组旋钮取值对应一块不同的、都可实现的电路，面积和调度延迟都不同，必须单独评估。旋钮空间 = 算法 9 种（`islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs`）× 迭代轮数（islip/pim 取 1,2,4，其余仅 1）→ 13 种组合，× 冲突域 2（`arc` / `whole_ring`）× 占用表示 2（`interval` / `free_at`）× 仲裁器 2 = 104，再加一片补充切片（VOQ 粒度、token 仲裁器、带 RTT 流水线）去重后 109。这些点绝大多数被支配，作用是把前沿撑出来——一个只画自己最好配置的 S2 无法反驳，画满 109 个之后仍只有一个配置留在前沿，结论才有分量。y 轴已把 `t_sched_cycles` 计回，所以 `batched_bcfs` 这类纯数据面极快（DES 几十拍）但组合深度换算出上千拍调度延迟的算法，会自己把自己罚出前沿。
 
 hop 时延 2 拍、上环队列 8 深、端口口径对齐之后，**S2 在数据面上稳定赢 S0**：allpairs 88 vs 129，uniform K=100 是 526 vs 669。把 `t_sched_cycles` 计回之后仍有配置留在前沿——`rr_oldest/I1/arc/int/central/per_plane` 在 area 0.1996 拿到 makespan 106，S0 是 area 0.0443 / makespan 129。**Pareto 前沿现在是三点：S0、S1、S2 的 rr_oldest。** 换 makespan 要付约 4.5× 面积，值不值取决于系统层。
 

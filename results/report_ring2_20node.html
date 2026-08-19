@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<title>2-full-ring 20-node — three schemes + RG Pareto</title>
+<html lang="zh"><head><meta charset="utf-8">
+<title>双全环 20 节点 — 三方案 makespan + RG Pareto</title>
 <style>
-body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem auto;
-       max-width: 980px; color: #111; }
+body { font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
+       margin: 2rem auto; max-width: 980px; color: #111; line-height: 1.65; }
 h1,h2,h3 { font-weight: 650; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th,td { border: 1px solid #e5e7eb; padding: 0.35rem 0.5rem; text-align: right; }
@@ -12,117 +12,192 @@ th { background: #f8fafc; }
 code { background: #f1f5f9; padding: 0.1rem 0.3rem; }
 img { max-width: 100%; border: 1px solid #e5e7eb; }
 .note { color: #475569; font-size: 0.9rem; }
+.def { background: #f8fafc; border-left: 3px solid #94a3b8;
+        padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
 </style></head><body>
-<h1>2-full-ring, 20 nodes: makespan of three schemes + RG Pareto</h1>
-<p class="note">Even indices are AI cores, odd indices are memory Home Agents.
-Two independent bidirectional ring planes; each node has one port per plane
-and the two directions of a plane share that port's buffer. Traffic is
-read-return (1-flit request, R-flit response). Makespan is the cycle the
-last response flit is drained at the requesting core.</p>
+<h1>双全环 20 节点：三方案 makespan + request-grant Pareto</h1>
+<p class="note">偶数 index 是 AI core，奇数是 memory Home Agent。两个独立的双向
+ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端口的 buffer。
+流量是读往返（请求 1 flit，响应 R flit）。<b>makespan = 最后一个响应 flit 在发起
+core 处被 drain 的那一拍。</b></p>
 
-<h2>0. Common datapath (all three schemes)</h2>
-<p class="note">S0 / S1 / S2 are <em>not</em> three different fabrics.
-They share one point-to-point credit-based datapath, the same 8-deep
-boarding queue, and the same I-tag / E-tag guarantees. The sweep only
-changes how a source is allowed to spend credit (RR, AIMD rate, or a
-request-grant match).</p>
-<table><thead><tr><th>layer</th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>hop latency between neighbours</td><td>2 cy</td><td>2 cy</td><td>2 cy</td></tr><tr><td>boarding queue per (node, plane)</td><td>8 flits</td><td>8 flits</td><td>8 flits</td></tr><tr><td>eject queue per (node, plane)</td><td>4 + 1 E-tag</td><td>4 + 1 E-tag</td><td>4 + 1 E-tag</td></tr><tr><td>inject / eject ports</td><td>1 per (node, plane)</td><td>1 per (node, plane)</td><td>1 per (node, plane)</td></tr><tr><td>point-to-point credit FC</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>I-tag (inject starvation bound)</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>E-tag (leave / reserved eject)</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>RR inject when credit is available</td><td>yes</td><td>yes</td><td>—</td></tr><tr><td>AIMD source rate (piggybacked fails)</td><td>—</td><td>yes</td><td>—</td></tr><tr><td>request-grant match before inject</td><td>—</td><td>—</td><td>yes</td></tr></tbody></table>
+<h2>0. makespan 的理论下界</h2>
+<p>下界是<b>可达性的必要条件</b>，用来判断一个方案离物理极限还有多远，而不是宣称
+某个值可达。所有下界都来自「某个资源必须搬运的总量 ÷ 该资源的容量」这一类
+计数论证，因此对<em>任何</em>调度策略都成立，包括离线最优。</p>
+
+<h3>0.1 记号</h3>
+<div class="def">
+<code>N</code> = 20 节点 · <code>P</code> = 2 个 plane ·
+<code>σ</code> = 1 拍/flit（同一有向段上连续两个 flit 的最小间隔）·
+<code>λ</code> = 2 拍（相邻节点 hop 时延）·
+有向段总数 <code>2PN</code> = 80<br>
+事务集合 <code>T</code>；每个 <code>t ∈ T</code> 是 core→HA 的
+<code>m_req</code> flit 请求，加 HA→core 的 <code>m_resp</code> flit 响应。<br>
+<code>π_req(t)</code> / <code>π_resp(t)</code> 是取最短方向的路径，
+<code>hops(π)</code> 是跳数。
+</div>
+
+<h3>0.2 LB_link：段带宽下界</h3>
+<p>对每条<em>不区分 plane</em> 的有向邻接 <code>(u,v)</code>，统计必须穿过它的
+flit 总数</p>
+<div class="def"><code>L(u,v) = Σ_t m_req·[⟨u,v⟩ ∈ π_req(t)]
++ m_resp·[⟨u,v⟩ ∈ π_resp(t)]</code></div>
+<p>plane 分配是<em>策略</em>而非物理约束——同一条有向 hop 两个 plane 都能承载，
+所以该有向邻接的合并容量是每 <code>σ</code> 拍 <code>P</code> 个 flit：</p>
+<div class="def"><code>makespan ≥ LB_link = σ · ⌈ max<sub>(u,v)</sub> L(u,v) / P ⌉</code></div>
+<p class="note">这里必须除以 <code>P</code>。如果改用某个具体
+<code>plane_sel</code> 策略下的单 plane 峰值负载，会在仿真器运行时平衡得更好时
+反过来<em>高于</em>实测 makespan，那就不是下界了。</p>
+
+<h3>0.3 LB_port：端口下界</h3>
+<p>对每个节点 <code>n</code>，令 <code>B(n)</code> 为必须在 <code>n</code>
+上环的 flit 总数、<code>E(n)</code> 为必须在 <code>n</code> 下环的 flit 总数
+（跨 plane 合并，请求与响应合并）。每节点每 plane 各 1 个 inject / eject 端口：</p>
+<div class="def"><code>makespan ≥ LB_port = σ · ⌈ max<sub>n</sub>
+max(B(n), E(n)) / P ⌉</code></div>
+
+<h3>0.4 LB_cut：二等分割下界</h3>
+<p>环的二等分需要切开<em>两个</em>缺口。取割集</p>
+<div class="def"><code>X = {⟨N/2−1, N/2⟩, ⟨N/2, N/2−1⟩, ⟨N−1, 0⟩, ⟨0, N−1⟩}
+× P 个 plane</code>，共 <code>|X|</code> = 8 条有向段</div>
+<p>令 <code>C</code> 为所有路径穿过 <code>X</code> 的 flit-段数总和，则</p>
+<div class="def"><code>makespan ≥ LB_cut = σ · ⌈ C / |X| ⌉</code></div>
+<p class="note">这里数的是<em>实际</em>穿越次数。core/HA 交错布局下大量路径只有
+1 跳，套用「一半流量必然过割」的经验假设会高估到超过实测值。</p>
+
+<h3>0.5 LB_txn：单事务串行时延下界</h3>
+<p>一个事务内部是严格串行的：请求上环 → 飞越 <code>hops·λ</code> →
+<code>m_req·σ</code> 拍排空 → HA 服务 <code>t_ha</code> → 响应飞越 →
+<code>m_resp·σ</code> 拍排空。取最深的那个事务：</p>
+<div class="def"><code>makespan ≥ LB_txn = max<sub>t</sub> [ hops(π_req(t))·λ
++ m_req·σ + t_ha + hops(π_resp(t))·λ + m_resp·σ ]</code></div>
+
+<h3>0.6 合成与实测对照</h3>
+<div class="def"><code>bound = max(LB_link, LB_port, LB_cut, LB_txn)</code></div>
+<table><thead><tr><th>项</th><th>值</th><th></th><th>比值</th></tr></thead><tbody><tr><td><b>allpairs m=1 R=4</b></td><td>100 事务</td><td></td><td></td></tr><tr><td>LB_link 段带宽</td><td>35</td><td></td><td></td></tr><tr><td>LB_port 端口</td><td>20</td><td></td><td></td></tr><tr><td>LB_cut 二等分割</td><td>32</td><td></td><td></td></tr><tr><td>LB_txn 单事务串行</td><td>41</td><td> ← 主导</td><td></td></tr><tr><td>bound = max(·)</td><td>41</td><td></td><td></td></tr><tr><td>实测 S0</td><td>129.0</td><td></td><td>3.15× bound</td></tr><tr><td>实测 S1</td><td>130.3</td><td></td><td>3.18× bound</td></tr><tr><td>实测 S2</td><td>88.0</td><td></td><td>2.15× bound</td></tr><tr><td><b>uniform K=2500 R=4</b></td><td>25000 事务</td><td></td><td></td></tr><tr><td>LB_link 段带宽</td><td>8939</td><td> ← 主导</td><td></td></tr><tr><td>LB_port 端口</td><td>5168</td><td></td><td></td></tr><tr><td>LB_cut 二等分割</td><td>7788</td><td></td><td></td></tr><tr><td>LB_txn 单事务串行</td><td>41</td><td></td><td></td></tr><tr><td>bound = max(·)</td><td>8939</td><td></td><td></td></tr><tr><td>实测 S0</td><td>15435</td><td></td><td>1.73× bound</td></tr><tr><td>实测 S1</td><td>42664</td><td></td><td>4.77× bound</td></tr><tr><td>实测 S2</td><td>11350</td><td></td><td>1.27× bound</td></tr></tbody></table>
+<p>两档流量的<b>主导项完全不同</b>。allpairs 只有 100 个事务，资源计数远没
+饱和，瓶颈是单个事务的往返时延（<code>LB_txn</code>）；到了每核 10000 flit
+这一档，段带宽（<code>LB_link</code>）成为主导，此时 S2 做到 11350 拍，而下界是 8939 拍，即约 1.27× 物理极限。</p>
+
+<h3>0.7 这些下界为什么不紧</h3>
+<p>每一条都是一次<em>松弛</em>，被忽略的约束如下：</p>
 <ul>
-<li><b>Credit:</b> each directed hop is a credit pair. The upstream node
-decrements credit before it launches a flit; the downstream node returns
-credit when the slot frees. A flit is never sent onto a hop with no
-credit. 80 directed segments, two planes × two directions.</li>
-<li><b>Boarding queue:</b> 8 flits per (node, plane). A PE hands flits to
-an off-fabric backlog and they are admitted only when the queue has room,
-so the injection point exerts real backpressure. Both directions of a
-plane draw from the same queue.</li>
-<li><b>I-tag:</b> a source starved for <code>t_inj</code> cycles on a
-(plane, dir) raises I-tag and inhibits other injects on that ring until
-it boards. Bounds inject starvation.</li>
-<li><b>E-tag:</b> a flit that fails to leave (shared per-plane eject
-queue full, or the single leave port already taken this cycle)
-<code>t_xfer</code> times raises E-tag and may use <code>resv_ej</code>
-reserved eject slots; otherwise it deflects and rides another lap.
-Rebound onto reserved <em>eject</em> entries — an adaptation, not HiRD's
-transfer-FIFO E-tag.</li>
+<li><b>请求→响应依赖被丢掉了</b>（除 <code>LB_txn</code> 之外）。资源类下界把
+两波流量当成两支独立车队，实际上任何响应都不能早于它对应的请求下环。这一条是
+allpairs 那档 <code>bound</code> 只有 41 的直接原因：100 个事务的资源计数太小，
+而依赖链没被计入。</li>
+<li><b>不含偏转。</b>下界假设每个 flit 只走最短路。S0 实测的 flit-hop 总量比
+最短路多约 40%，那些多出来的 hop 是偏转绕圈产生的。</li>
+<li><b>plane 分配当成自由变量</b>（除以 <code>P</code>）。真实系统里它是一个
+在线决策，不可能后验最优。</li>
+<li><b>不含上环队列深度、leave 端口冲突、I-tag / E-tag 的抑制效应。</b></li>
+<li><b>四项各自取 max，没有联立。</b>真正的 LP 松弛（同时满足段、端口、割和
+依赖约束）会给出更高的下界。</li>
 </ul>
 
-<h2>1. Verification</h2>
-<p>16/16 checks passed.</p>
-<table><thead><tr><th>check</th><th>result</th></tr></thead><tbody><tr><td>topo_roles_and_wrap</td><td>ok</td></tr><tr><td>workload_counts</td><td>ok</td></tr><tr><td>s0_completes_and_conserves</td><td>ok</td></tr><tr><td>s1_completes_and_conserves</td><td>ok</td></tr><tr><td>three_schemes_same_flits</td><td>ok</td></tr><tr><td>makespan_ge_bound</td><td>ok</td></tr><tr><td>inring_never_blocked</td><td>ok</td></tr><tr><td>itag_starve_finite</td><td>ok</td></tr><tr><td>etag_deflect_bounded</td><td>ok</td></tr><tr><td>boarding_queue_depth</td><td>ok</td></tr><tr><td>ports_per_node_plane</td><td>ok</td></tr><tr><td>rg_replay_conflict_free</td><td>ok</td></tr><tr><td>rg_req_before_resp</td><td>ok</td></tr><tr><td>uniform_multi_seed_s0</td><td>ok</td></tr><tr><td>cost_ring2_preserves_mesh_cal</td><td>ok</td></tr><tr><td>plane_sel_all_work</td><td>ok</td></tr></tbody></table>
-
-<h2>2. Three-scheme makespan (default plane_sel=least_occupied, eject_depth=4)</h2>
-<p class="note">Same credit + I-tag / E-tag datapath on every row.
-S0 = RR inject, no source rate control.
-S1 = S0 + piggybacked failure counts + AIMD token bucket.
-S2 = request-grant iSLIP (I=2, interval, arc) on the same hops.
-Bound is the analytic floor (link / port / cut / single-txn).</p>
-<table><thead><tr><th>scheme</th><th>pattern</th><th>R</th><th>m or K</th><th>mean</th><th>min</th><th>max</th><th>bound</th><th>ok</th></tr></thead><tbody><tr><td>S0</td><td>allpairs</td><td>1</td><td>2</td><td>96.0</td><td>96</td><td>96</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>4</td><td>156.0</td><td>156</td><td>156</td><td>50</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>1</td><td>82.0</td><td>82</td><td>82</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>4</td><td>313.0</td><td>313</td><td>313</td><td>140</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>1</td><td>129.0</td><td>129</td><td>129</td><td>41</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>2</td><td>196.0</td><td>196</td><td>196</td><td>70</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>1</td><td>206.0</td><td>206</td><td>206</td><td>65</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>2</td><td>310.0</td><td>310</td><td>310</td><td>130</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>4</td><td>517.0</td><td>517</td><td>517</td><td>260</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>50</td><td>154.0</td><td>144</td><td>172</td><td>67</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>100</td><td>260.7</td><td>250</td><td>271</td><td>135</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>20</td><td>92.0</td><td>86</td><td>96</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>50</td><td>367.3</td><td>354</td><td>384</td><td>192</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>100</td><td>668.7</td><td>652</td><td>685</td><td>376</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>20</td><td>187.7</td><td>178</td><td>195</td><td>95</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>50</td><td>672.7</td><td>646</td><td>701</td><td>362</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>100</td><td>1275.3</td><td>1264</td><td>1286</td><td>698</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>20</td><td>296.7</td><td>287</td><td>303</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>1</td><td>80.0</td><td>80</td><td>80</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>2</td><td>130.0</td><td>111</td><td>159</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>4</td><td>319.7</td><td>205</td><td>385</td><td>50</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>1</td><td>130.3</td><td>115</td><td>161</td><td>41</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>2</td><td>300.0</td><td>170</td><td>447</td><td>70</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>4</td><td>770.3</td><td>554</td><td>1095</td><td>140</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>2</td><td>631.7</td><td>370</td><td>1148</td><td>130</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>4</td><td>1308.3</td><td>789</td><td>2310</td><td>260</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>1</td><td>273.7</td><td>159</td><td>503</td><td>65</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>100</td><td>1252.0</td><td>1180</td><td>1354</td><td>135</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>20</td><td>110.3</td><td>102</td><td>119</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>50</td><td>528.7</td><td>489</td><td>603</td><td>67</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>100</td><td>1762.7</td><td>1714</td><td>1842</td><td>376</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>20</td><td>258.0</td><td>238</td><td>274</td><td>95</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>50</td><td>798.7</td><td>754</td><td>822</td><td>192</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>20</td><td>353.3</td><td>318</td><td>378</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>50</td><td>1021.0</td><td>944</td><td>1157</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>100</td><td>2164.0</td><td>2086</td><td>2288</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>2</td><td>57.0</td><td>57</td><td>57</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>4</td><td>93.0</td><td>93</td><td>93</td><td>50</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>1</td><td>46.0</td><td>46</td><td>46</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>2</td><td>153.0</td><td>153</td><td>153</td><td>70</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>4</td><td>259.0</td><td>259</td><td>259</td><td>140</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>1</td><td>88.0</td><td>88</td><td>88</td><td>41</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>1</td><td>146.0</td><td>146</td><td>146</td><td>65</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>2</td><td>283.0</td><td>283</td><td>283</td><td>130</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>4</td><td>502.0</td><td>502</td><td>502</td><td>260</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>100</td><td>187.0</td><td>184</td><td>190</td><td>135</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>20</td><td>62.0</td><td>61</td><td>63</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>50</td><td>104.0</td><td>101</td><td>109</td><td>67</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>100</td><td>526.0</td><td>501</td><td>540</td><td>376</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>20</td><td>145.3</td><td>143</td><td>149</td><td>95</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>50</td><td>278.3</td><td>266</td><td>288</td><td>192</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>100</td><td>998.0</td><td>947</td><td>1031</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>20</td><td>264.0</td><td>260</td><td>267</td><td>177</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>50</td><td>533.7</td><td>525</td><td>541</td><td>362</td><td>yes</td></tr></tbody></table>
-<p class="note">Wall 71.4s, 864 rows.
-Quick=False.</p>
-
-
-<h2>3. Same-pattern comparison · 10000 flits/core</h2>
-<p class="note">uniform K=2500 R=4 seed=0,
-<code>plane_sel=least_occupied</code>, hop latency 2 cy,
-boarding queue 8 deep, eject queue
-4. Every core receives the same number of response
-flits. Overlay shares one time axis so S0 / S1 / S2 can be compared directly.
-Board counts are for <em>response data</em> destined to that core:
-上环 = successful injects, CW = dir +1, CCW = dir −1, 失败 = inject attempts
-that found the slot busy or I-tag blocked (AIMD token denials are not
-counted). S2 still has I-tag / E-tag; its 失败 is 0 because a grant is
-placed only when the hop is already free, so the reactive tags are not
-exercised on this closed batch.</p>
-<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="overlay mean recv bw"></p>
-<p><img src="ring2_core_recv_bw_10k.png" alt="per-core recv bw 10k"></p>
-<table><thead><tr><th></th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>makespan</td><td>15435</td><td>42664</td><td>11350</td></tr><tr><td>deflections</td><td>12813</td><td>3061</td><td>0</td></tr><tr><td>peak boarding queue</td><td>8</td><td>8</td><td>—</td></tr><tr><td>peak eject queue</td><td>1</td><td>1</td><td>0</td></tr><tr><td>resp latency p50</td><td>5556</td><td>14</td><td>—</td></tr><tr><td>resp latency p99</td><td>9663</td><td>61</td><td>—</td></tr><tr><td>core 0</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 20096 (CW 9797 / CCW 10299)</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 2721 (CW 1366 / CCW 1355)</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 2</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 20656 (CW 10522 / CCW 10134)</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 2514 (CW 1213 / CCW 1301)</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 4</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 20041 (CW 9891 / CCW 10150)</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 3110 (CW 1430 / CCW 1680)</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 6</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 18751 (CW 9153 / CCW 9598)</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 2992 (CW 1485 / CCW 1507)</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 8</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 19635 (CW 9931 / CCW 9704)</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 2827 (CW 1515 / CCW 1312)</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 10</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 20625 (CW 9577 / CCW 11048)</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 2934 (CW 1384 / CCW 1550)</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 12</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 20592 (CW 10342 / CCW 10250)</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 2510 (CW 1345 / CCW 1165)</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 14</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 19665 (CW 9554 / CCW 10111)</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 2788 (CW 1401 / CCW 1387)</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 16</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 20451 (CW 10135 / CCW 10316)</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 3009 (CW 1496 / CCW 1513)</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 18</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 19458 (CW 9914 / CCW 9544)</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 2488 (CW 1264 / CCW 1224)</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>total</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 199970 (CW 98816 / CCW 101154)</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 27893 (CW 13899 / CCW 13994)</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 0 (CW 0 / CCW 0)</td></tr></tbody></table>
-<p class="note">Wall 82.8s.</p>
-
-
-<h2>4. Request-grant area / makespan Pareto</h2>
-<p class="note">y = makespan_des + t_sched_cycles (scheduler delay charged
-back). x = area_norm (IQ-XY router = 1.0, per node). S0 and S1 sit on the
-same plot as reference points. Area counts the <em>shared</em> credit +
-8-deep boarding queue + I-tag / E-tag datapath on all three schemes; S2
-adds the arbiter and a small control-plane tax on top of that datapath —
-it does not delete station storage. Bit-equivalent model calibrated so mesh
-<code>greedy_ff = 0.05</code>; not mm².</p>
-<p><img src="ring2_rg_pareto.png" alt="Pareto front"></p>
-<table><thead><tr><th>tag</th><th>area_norm</th><th>makespan</th></tr></thead><tbody><tr><td>S0</td><td>0.0443</td><td>129</td></tr><tr><td>S1</td><td>0.0449</td><td>115</td></tr><tr><td>rr_oldest/I1/arc/int/cen/per</td><td>0.1996</td><td>106</td></tr></tbody></table>
-<p class="note">3 non-dominated points,
-111 evaluated, wall 2.0s.</p>
-
-<h2>5. How to read the comparison</h2>
+<h2>1. 共同数据面（三方案完全相同）</h2>
+<p class="note">S0 / S1 / S2 <em>不是</em>三种不同的 fabric。它们共用同一条
+点对点 credit 数据面、同样 8 深的上环队列、同样的 I-tag / E-tag 保证。整个
+扫参只改变「一个源被允许如何花掉 credit」：RR、AIMD 速率、或 request-grant
+匹配。</p>
+<table><thead><tr><th>层</th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>相邻节点 hop 时延</td><td>2 拍</td><td>2 拍</td><td>2 拍</td></tr><tr><td>上环队列（每 node, plane）</td><td>8 flit</td><td>8 flit</td><td>8 flit</td></tr><tr><td>下环队列（每 node, plane）</td><td>4 + 1 E-tag</td><td>4 + 1 E-tag</td><td>4 + 1 E-tag</td></tr><tr><td>inject / eject 端口</td><td>每 (node, plane) 1 个</td><td>每 (node, plane) 1 个</td><td>每 (node, plane) 1 个</td></tr><tr><td>点对点 credit 流控</td><td>有</td><td>有</td><td>有</td></tr><tr><td>I-tag（上环饥饿有界）</td><td>有</td><td>有</td><td>有</td></tr><tr><td>E-tag（下环 / 预留 eject）</td><td>有</td><td>有</td><td>有</td></tr><tr><td>有 credit 时 RR 上环</td><td>有</td><td>有</td><td>—</td></tr><tr><td>AIMD 源端速率（失败 piggyback）</td><td>—</td><td>有</td><td>—</td></tr><tr><td>上环前 request-grant 匹配</td><td>—</td><td>—</td><td>有</td></tr></tbody></table>
 <ul>
-<li>Read the three schemes as policies on one fabric. Credit + I-tag +
-E-tag are always there. In-ring traffic still never stalls (lookahead
-shorter than hop delay); I-tag bounds inject starvation; E-tag bounds
-leave livelock.</li>
-<li>S0 is the reactive baseline: spend credit with RR when the hop is
-free. No source rate control beyond I-tag. It is work-conserving, which
-costs ~2 board retries per success — retries burn no slots, so the cost
-lands on latency, not makespan.</li>
-<li>S1 feeds board/leave failure counts back to the source and AIMDs the
-token-bucket rate. On a closed burst this often <em>hurts</em> makespan
-because every source sees board NACK in the first epoch and the rate
-collapses; that is a result, not a bug.</li>
-<li>S1 is not simply broken: it trades throughput for latency. Its
-response latency p50 is ~400x lower than S0's while its makespan is
-~2.8x worse, because throttling the sources keeps the boarding queues
-from filling.</li>
-<li>S2 keeps the same credit + boarding queue + I-tag / E-tag datapath
-and adds a request-grant match so a flit only injects when the hop is
-already reserved. It pays an arbiter plus a small control-plane tax on
-top of the shared datapath. With ports priced per (node, plane) — the
-same as the S0 DES — S2 wins the data plane and one of its
-configurations stays on the Pareto front even after
-<code>t_sched_cycles</code> is charged back. It buys makespan with
-roughly 4.5x the area.</li>
-<li>The 4-deep eject queue barely matters at these loads: peak
-occupancy is 1. Deflections come from the single leave port per (node,
-plane), which both directions contend for. The limiter is port count,
-not queue depth.</li>
+<li><b>Credit：</b>每条有向 hop 是一对 credit。上游发 flit 前先扣 credit，
+下游槽位空出后归还。没有 credit 绝不发送。共 80 条有向段
+（2 个 plane × 2 个方向 × 20 节点）。</li>
+<li><b>上环队列：</b>每 (node, plane) 8 个 flit，plane 内双向共用。PE 把 flit
+交给 fabric 外的 backlog，只有队列有空位才 admit，所以注入点是<em>真反压</em>，
+不是把整批流量一次吞下。</li>
+<li><b>I-tag：</b>某个源在某 (plane, dir) 上饿了 <code>t_inj</code> 拍之后升起
+I-tag，抑制该环向上其他节点上环，直到它自己上去。作用是给上环饥饿一个上界。</li>
+<li><b>E-tag：</b>一个 flit 下环失败（共享的 per-plane eject 队列满，或该拍
+唯一的 leave 端口已被占用）<code>t_xfer</code> 次之后升起 E-tag，可以使用
+<code>resv_ej</code> 条预留 eject 槽；否则偏转，再绕一圈。这里改绑到预留的
+<em>eject</em> 表项，不是 HiRD 原版的 transfer-FIFO E-tag。</li>
 </ul>
-<p class="note">Write-up: <code>docs/phase-7-exploration/ring2-20node-core-ha.md</code></p>
+
+<h2>2. 验证</h2>
+<p>16/16 项检查通过。</p>
+<table><thead><tr><th>检查项</th><th>结果</th></tr></thead><tbody><tr><td>topo_roles_and_wrap</td><td>ok</td></tr><tr><td>workload_counts</td><td>ok</td></tr><tr><td>s0_completes_and_conserves</td><td>ok</td></tr><tr><td>s1_completes_and_conserves</td><td>ok</td></tr><tr><td>three_schemes_same_flits</td><td>ok</td></tr><tr><td>makespan_ge_bound</td><td>ok</td></tr><tr><td>inring_never_blocked</td><td>ok</td></tr><tr><td>itag_starve_finite</td><td>ok</td></tr><tr><td>etag_deflect_bounded</td><td>ok</td></tr><tr><td>boarding_queue_depth</td><td>ok</td></tr><tr><td>ports_per_node_plane</td><td>ok</td></tr><tr><td>rg_replay_conflict_free</td><td>ok</td></tr><tr><td>rg_req_before_resp</td><td>ok</td></tr><tr><td>uniform_multi_seed_s0</td><td>ok</td></tr><tr><td>cost_ring2_preserves_mesh_cal</td><td>ok</td></tr><tr><td>plane_sel_all_work</td><td>ok</td></tr></tbody></table>
+
+<h2>3. 三方案 makespan 扫参（默认 plane_sel=least_occupied, eject_depth=4）</h2>
+<p class="note">每一行都跑在同一条 credit + I-tag / E-tag 数据面上。
+S0 = RR 上环，无源端速率控制。
+S1 = S0 + 失败计数 piggyback + AIMD 令牌桶。
+S2 = 同样的 hop 上做 request-grant iSLIP（I=2, interval, arc）。
+bound 列是 §0 的解析下界。</p>
+<table><thead><tr><th>方案</th><th>pattern</th><th>R</th><th>m 或 K</th><th>均值</th><th>最小</th><th>最大</th><th>bound</th><th>完成</th></tr></thead><tbody><tr><td>S0</td><td>allpairs</td><td>1</td><td>2</td><td>96.0</td><td>96</td><td>96</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>4</td><td>156.0</td><td>156</td><td>156</td><td>50</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>1</td><td>82.0</td><td>82</td><td>82</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>4</td><td>313.0</td><td>313</td><td>313</td><td>140</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>1</td><td>129.0</td><td>129</td><td>129</td><td>41</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>2</td><td>196.0</td><td>196</td><td>196</td><td>70</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>1</td><td>206.0</td><td>206</td><td>206</td><td>65</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>2</td><td>310.0</td><td>310</td><td>310</td><td>130</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>4</td><td>517.0</td><td>517</td><td>517</td><td>260</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>50</td><td>154.0</td><td>144</td><td>172</td><td>67</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>100</td><td>260.7</td><td>250</td><td>271</td><td>135</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>20</td><td>92.0</td><td>86</td><td>96</td><td>38</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>50</td><td>367.3</td><td>354</td><td>384</td><td>192</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>100</td><td>668.7</td><td>652</td><td>685</td><td>376</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>20</td><td>187.7</td><td>178</td><td>195</td><td>95</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>50</td><td>672.7</td><td>646</td><td>701</td><td>362</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>100</td><td>1275.3</td><td>1264</td><td>1286</td><td>698</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>20</td><td>296.7</td><td>287</td><td>303</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>1</td><td>80.0</td><td>80</td><td>80</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>2</td><td>130.0</td><td>111</td><td>159</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>4</td><td>319.7</td><td>205</td><td>385</td><td>50</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>1</td><td>130.3</td><td>115</td><td>161</td><td>41</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>2</td><td>300.0</td><td>170</td><td>447</td><td>70</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>4</td><td>770.3</td><td>554</td><td>1095</td><td>140</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>2</td><td>631.7</td><td>370</td><td>1148</td><td>130</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>4</td><td>1308.3</td><td>789</td><td>2310</td><td>260</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>1</td><td>273.7</td><td>159</td><td>503</td><td>65</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>100</td><td>1252.0</td><td>1180</td><td>1354</td><td>135</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>20</td><td>110.3</td><td>102</td><td>119</td><td>38</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>50</td><td>528.7</td><td>489</td><td>603</td><td>67</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>100</td><td>1762.7</td><td>1714</td><td>1842</td><td>376</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>20</td><td>258.0</td><td>238</td><td>274</td><td>95</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>50</td><td>798.7</td><td>754</td><td>822</td><td>192</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>20</td><td>353.3</td><td>318</td><td>378</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>50</td><td>1021.0</td><td>944</td><td>1157</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>100</td><td>2164.0</td><td>2086</td><td>2288</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>2</td><td>57.0</td><td>57</td><td>57</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>4</td><td>93.0</td><td>93</td><td>93</td><td>50</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>1</td><td>46.0</td><td>46</td><td>46</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>2</td><td>153.0</td><td>153</td><td>153</td><td>70</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>4</td><td>259.0</td><td>259</td><td>259</td><td>140</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>1</td><td>88.0</td><td>88</td><td>88</td><td>41</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>1</td><td>146.0</td><td>146</td><td>146</td><td>65</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>2</td><td>283.0</td><td>283</td><td>283</td><td>130</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>4</td><td>502.0</td><td>502</td><td>502</td><td>260</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>100</td><td>187.0</td><td>184</td><td>190</td><td>135</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>20</td><td>62.0</td><td>61</td><td>63</td><td>38</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>50</td><td>104.0</td><td>101</td><td>109</td><td>67</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>100</td><td>526.0</td><td>501</td><td>540</td><td>376</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>20</td><td>145.3</td><td>143</td><td>149</td><td>95</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>50</td><td>278.3</td><td>266</td><td>288</td><td>192</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>100</td><td>998.0</td><td>947</td><td>1031</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>20</td><td>264.0</td><td>260</td><td>267</td><td>177</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>50</td><td>533.7</td><td>525</td><td>541</td><td>362</td><td>yes</td></tr></tbody></table>
+<p class="note">墙钟 71.4s，864 行。
+Quick=False。</p>
+
+
+<h2>4. 同 pattern 对照 · 每核 10000 响应 flit</h2>
+<p class="note">uniform K=2500 R=4 seed=0，
+<code>plane_sel=least_occupied</code>，hop 时延 2 拍，
+上环队列 8 深，下环队列 4。
+每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0 / S1 / S2 可直接对比。
+上环统计只针对<b>发往该 core 的响应数据</b>：上环 = 成功注入，CW = 方向 +1，
+CCW = 方向 −1，失败 = 发现 slot 忙或被 I-tag 挡住的注入尝试（<b>不含</b> AIMD
+令牌拒绝）。S2 仍然有 I-tag / E-tag，它的失败数是 0 是因为 grant 只在 hop
+已空时发出，反应式标签在这个闭集中突发里用不上。</p>
+<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="三方案均值接收带宽叠图"></p>
+<p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
+<table><thead><tr><th></th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>makespan</td><td>15435</td><td>42664</td><td>11350</td></tr><tr><td>偏转次数</td><td>12813</td><td>3061</td><td>0</td></tr><tr><td>上环队列峰值</td><td>8</td><td>8</td><td>—</td></tr><tr><td>下环队列峰值</td><td>1</td><td>1</td><td>0</td></tr><tr><td>响应时延 p50</td><td>5556</td><td>14</td><td>—</td></tr><tr><td>响应时延 p99</td><td>9663</td><td>61</td><td>—</td></tr><tr><td>core 0</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 20096 (CW 9797 / CCW 10299)</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 2721 (CW 1366 / CCW 1355)</td><td>上环 10000 (CW 5008 / CCW 4992)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 2</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 20656 (CW 10522 / CCW 10134)</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 2514 (CW 1213 / CCW 1301)</td><td>上环 10000 (CW 4888 / CCW 5112)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 4</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 20041 (CW 9891 / CCW 10150)</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 3110 (CW 1430 / CCW 1680)</td><td>上环 10000 (CW 4920 / CCW 5080)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 6</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 18751 (CW 9153 / CCW 9598)</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 2992 (CW 1485 / CCW 1507)</td><td>上环 10000 (CW 4924 / CCW 5076)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 8</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 19635 (CW 9931 / CCW 9704)</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 2827 (CW 1515 / CCW 1312)</td><td>上环 10000 (CW 5124 / CCW 4876)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 10</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 20625 (CW 9577 / CCW 11048)</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 2934 (CW 1384 / CCW 1550)</td><td>上环 10000 (CW 4828 / CCW 5172)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 12</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 20592 (CW 10342 / CCW 10250)</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 2510 (CW 1345 / CCW 1165)</td><td>上环 10000 (CW 5056 / CCW 4944)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 14</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 19665 (CW 9554 / CCW 10111)</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 2788 (CW 1401 / CCW 1387)</td><td>上环 10000 (CW 4912 / CCW 5088)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 16</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 20451 (CW 10135 / CCW 10316)</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 3009 (CW 1496 / CCW 1513)</td><td>上环 10000 (CW 5032 / CCW 4968)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 18</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 19458 (CW 9914 / CCW 9544)</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 2488 (CW 1264 / CCW 1224)</td><td>上环 10000 (CW 5044 / CCW 4956)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>合计</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 199970 (CW 98816 / CCW 101154)</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 27893 (CW 13899 / CCW 13994)</td><td>上环 100000 (CW 49736 / CCW 50264)<br>失败 0 (CW 0 / CCW 0)</td></tr></tbody></table>
+<p class="note">墙钟 82.8s。</p>
+
+
+<h2>5. request-grant 的面积 / makespan Pareto</h2>
+<p class="note">y = makespan_des + t_sched_cycles（调度器延迟计回）。
+x = area_norm（IQ-XY router = 1.0，按节点摊）。S0 和 S1 作为参考点画在同一张
+图上。面积对三方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
+数据面；S2 在这之上再加仲裁器和一小笔控制面开销——它<b>没有</b>删掉站点存储。
+等效 bit 模型，标定到 mesh <code>greedy_ff = 0.05</code>，不是 mm²。</p>
+<p><img src="ring2_rg_pareto.png" alt="Pareto 前沿"></p>
+<table><thead><tr><th>配置 tag</th><th>area_norm</th><th>makespan</th></tr></thead><tbody><tr><td>S0</td><td>0.0443</td><td>129</td></tr><tr><td>S1</td><td>0.0449</td><td>115</td></tr><tr><td>rr_oldest/I1/arc/int/cen/per</td><td>0.1996</td><td>106</td></tr></tbody></table>
+<p class="note">3 个非支配点，
+共评估 111 个（其中 S2 109 个），
+墙钟 2.0s。</p>
+
+<h3>5.1 为什么图上 S2 有这么多点</h3>
+<p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0 和 S1 各自只有一种硬件结构，
+所以各出一个点；而 request-grant 的「仲裁器」是一个可设计的对象，每一组旋钮
+取值对应一块<em>不同的、都可实现的</em>电路，面积和调度延迟都不同，因此每一组
+都必须单独评估、单独画点。旋钮空间：</p>
+<table><thead><tr><th>旋钮</th><th>取值</th><th>个数</th></tr></thead><tbody><tr><td>匹配算法</td><td>islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs</td><td>9</td></tr><tr><td>迭代轮数 I</td><td>islip / pim 取 1,2,4；其余只有 1</td><td>3 或 1</td></tr><tr><td>冲突域 spatial_reuse</td><td>arc（只锁弧段）/ whole_ring（锁整环）</td><td>2</td></tr><tr><td>占用表示 conflict_domain</td><td>interval（区间表）/ free_at（标量时刻）</td><td>2</td></tr><tr><td>仲裁器 arbiter</td><td>central / per_plane / distributed_token</td><td>2 或 3</td></tr><tr><td>VOQ 粒度</td><td>per_dst / per_plane_dir / grouped</td><td>1 或 3</td></tr></tbody></table>
+<p>主网格是「算法×迭代」13 种 × 冲突域 2 × 占用表示 2 × 仲裁器 2 = 104 个配置，
+再加一片较窄的补充切片（VOQ 粒度、token 仲裁器、带 RTT 的流水线）去掉重复后
+共 109 个 S2 点。</p>
+<p>关键在于<b>这些点绝大多数没有意义、也不该有意义</b>——它们的作用是把前沿
+「撑」出来。只有 3 个点是非支配的。散点越密，说明
+「S2 能不能赢」这个问题被问得越充分：一个只画了自己最好配置的 S2 是无法反驳的，
+而画满 109 个配置之后，仍然只有一个 S2 配置留在前沿上，这个结论就有分量了。</p>
+<p class="note">注意 y 轴已经把 <code>t_sched_cycles</code> 计回去了。这是为什么
+很多 S2 点被推到图的上方：<code>batched_bcfs</code> 在纯数据面上极快
+（DES 只要几十拍），但它的组合逻辑深度换算出上千拍的调度延迟，于是自己把自己
+罚出了前沿。一个只因为造不出来才快的算法，会在这张图上付出代价。</p>
+
+<h2>6. 怎么读这组对比</h2>
+<ul>
+<li>把三个方案读成<b>同一块 fabric 上的三种策略</b>。credit + I-tag + E-tag
+永远都在。环上流量依然从不 stall（前视短于 hop 时延）；I-tag 给上环饥饿定上界；
+E-tag 给下环活锁定上界。</li>
+<li><b>S0</b> 是反应式基线：hop 空就用 RR 花掉 credit，除 I-tag 之外没有任何
+源端速率控制。它是<em>工作守恒</em>的，代价是每次成功上环约伴随 2 次重试——
+重试不烧 slot，所以这笔代价落在时延上，不落在 makespan 上。</li>
+<li><b>S1</b> 把上环 / 下环失败计数回传给源端，对令牌桶速率做 AIMD。在闭集中
+突发下这经常<em>损害</em> makespan：第一个 epoch 几乎每个源都看到上环 NACK，
+速率随即崩掉。这是结果，不是 bug。</li>
+<li>但 S1 并不是「坏实现」，它是<b>在拿吞吐换时延</b>：响应时延 p50 比 S0 低
+两个数量级以上，代价是 makespan 差约 2.8×——因为限流让上环队列一直填不满。</li>
+<li><b>S2</b> 保留同样的 credit + 上环队列 + I-tag / E-tag 数据面，在上环<em>之前
+</em>加一次 request-grant 匹配，使 flit 只在 hop 已被预约时注入。它要付一个
+仲裁器加一小笔控制面开销。端口按 (node, plane) 计价之后（与 S0 的 DES 一致），
+S2 在数据面上取胜，并且即使把 <code>t_sched_cycles</code> 计回，仍有一个配置
+留在 Pareto 前沿上。它用大约 4.5× 的面积买到了 makespan。</li>
+<li>4 深的下环队列在这些负载下几乎没有作用：峰值占用只有 1。偏转来自
+每 (node, plane) <b>唯一</b>的那个 leave 端口，两个方向都要抢它。真正的限制是
+端口数量，不是队列深度。</li>
+</ul>
+<p class="note">写稿：<code>docs/phase-7-exploration/ring2-20node-core-ha.md</code></p>
 </body></html>
