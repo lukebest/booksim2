@@ -174,7 +174,7 @@ def main() -> None:
                 f"<br>失败 {fail} (CW {fcw} / CCW {fccw})")
         board_rows.append(tot)
         board_html = f"""
-<h2>3. Same-pattern comparison · {meta.get('flits_per_core', 40000)} flits/core</h2>
+<h2>3. Same-pattern comparison · {meta.get('flits_per_core', 10000)} flits/core</h2>
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')},
 <code>plane_sel=least_occupied</code>, hop latency {meta.get('hop_lat')} cy,
 boarding queue {meta.get('inj_depth')} deep, eject queue
@@ -278,9 +278,9 @@ Quick={ (cmp_.get("meta") or {}).get("quick") }.</p>
 <p class="note">y = makespan_des + t_sched_cycles (scheduler delay charged
 back). x = area_norm (IQ-XY router = 1.0, per node). S0 and S1 sit on the
 same plot as reference points. Area counts the <em>shared</em> credit +
-I-tag / E-tag datapath on all three schemes; S2 adds the arbiter and a
-small control-plane tax on top of that datapath — it does not delete
-station storage. Bit-equivalent model calibrated so mesh
+8-deep boarding queue + I-tag / E-tag datapath on all three schemes; S2
+adds the arbiter and a small control-plane tax on top of that datapath —
+it does not delete station storage. Bit-equivalent model calibrated so mesh
 <code>greedy_ff = 0.05</code>; not mm².</p>
 <p><img src="{png}" alt="Pareto front"></p>
 {_table(["tag", "area_norm", "makespan"], front_rows)}
@@ -294,17 +294,29 @@ E-tag are always there. In-ring traffic still never stalls (lookahead
 shorter than hop delay); I-tag bounds inject starvation; E-tag bounds
 leave livelock.</li>
 <li>S0 is the reactive baseline: spend credit with RR when the hop is
-free. No source rate control beyond I-tag.</li>
+free. No source rate control beyond I-tag. It is work-conserving, which
+costs ~2 board retries per success — retries burn no slots, so the cost
+lands on latency, not makespan.</li>
 <li>S1 feeds board/leave failure counts back to the source and AIMDs the
 token-bucket rate. On a closed burst this often <em>hurts</em> makespan
 because every source sees board NACK in the first epoch and the rate
 collapses; that is a result, not a bug.</li>
-<li>S2 keeps the same credit + I-tag / E-tag datapath and adds a
-request-grant match so a flit only injects when the hop already has
-credit reserved. It pays an arbiter plus a small control-plane tax on
-top of the shared datapath. Whether it lands on the Pareto front
-depends on <code>t_sched_cycles</code> — an algorithm that is only fast
-because it is unbuildable is charged for that.</li>
+<li>S1 is not simply broken: it trades throughput for latency. Its
+response latency p50 is ~400x lower than S0's while its makespan is
+~2.8x worse, because throttling the sources keeps the boarding queues
+from filling.</li>
+<li>S2 keeps the same credit + boarding queue + I-tag / E-tag datapath
+and adds a request-grant match so a flit only injects when the hop is
+already reserved. It pays an arbiter plus a small control-plane tax on
+top of the shared datapath. With ports priced per (node, plane) — the
+same as the S0 DES — S2 wins the data plane and one of its
+configurations stays on the Pareto front even after
+<code>t_sched_cycles</code> is charged back. It buys makespan with
+roughly 4.5x the area.</li>
+<li>The 4-deep eject queue barely matters at these loads: peak
+occupancy is 1. Deflections come from the single leave port per (node,
+plane), which both directions contend for. The limiter is port count,
+not queue depth.</li>
 </ul>
 <p class="note">Write-up: <code>docs/phase-7-exploration/ring2-20node-core-ha.md</code></p>
 </body></html>
