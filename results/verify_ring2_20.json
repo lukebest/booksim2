@@ -1,6 +1,6 @@
 {
-  "n_total": 18,
-  "n_ok": 18,
+  "n_total": 19,
+  "n_ok": 19,
   "all_ok": true,
   "rows": [
     {
@@ -20,7 +20,7 @@
       "ok": true
     },
     {
-      "name": "four_schemes_same_flits",
+      "name": "five_schemes_same_flits",
       "ok": true
     },
     {
@@ -74,7 +74,11 @@
     {
       "name": "plane_sel_all_work",
       "ok": true
+    },
+    {
+      "name": "s4_leave_beats_s0_allpairs",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-19T08:33:45Z"
+  "generated_at": "2026-08-19T09:56:51Z"
 }

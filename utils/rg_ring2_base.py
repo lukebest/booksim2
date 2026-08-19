@@ -306,6 +306,20 @@ class Ring2BaseSim:
         holders = self.i_tag[(f.plane, f.dir)]
         return bool(holders) and boarding_node not in holders
 
+    def _should_raise_itag(self, node: int, f: Flit) -> bool:
+        return True
+
+    def _leave_order(self, node: int, plane: PlaneId, reqs: list[Flit]
+                     ) -> list[Flit]:
+        """Who tries the shared leave port first. Default: RR on direction."""
+        if len(reqs) <= 1:
+            return reqs
+        key = (node, plane)
+        pref = self.eject_rr[key] % 2
+        reqs.sort(key=lambda f: 0 if ((f.dir > 0) == (pref == 0)) else 1)
+        self.eject_rr[key] += 1
+        return reqs
+
     # -- AIMD hooks (no-ops in S0) ------------------------------------------
 
     def _outst_full(self, core: int) -> bool:
@@ -383,14 +397,7 @@ class Ring2BaseSim:
         # at most one leave per (node, plane): RR across the two dirs
         for key, reqs in leave_req.items():
             node, plane = key
-            if len(reqs) == 1:
-                order = reqs
-            else:
-                # opposite dirs can both arrive; RR picks who tries first
-                pref = self.eject_rr[key] % 2
-                reqs.sort(key=lambda f: 0 if ((f.dir > 0) == (pref == 0)) else 1)
-                self.eject_rr[key] += 1
-                order = reqs
+            order = self._leave_order(node, plane, reqs)
             ejected = False
             for f in order:
                 if not ejected and self._try_eject(f):
@@ -428,7 +435,8 @@ class Ring2BaseSim:
                 self.inj_starve[key] += 1
                 self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
                                                 self.inj_starve[key])
-                if self.inj_starve[key] >= self.p.t_inj:
+                if self.inj_starve[key] >= self.p.t_inj and \
+                        self._should_raise_itag(node, f):
                     rk = (f.plane, f.dir)
                     if node not in self.i_tag[rk]:
                         self.i_tag[rk].add(node)

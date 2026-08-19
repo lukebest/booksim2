@@ -4,7 +4,7 @@
   "n_txns": 100,
   "quick": false,
   "refine": false,
-  "generated_at": "2026-08-19T08:34:31Z"
+  "generated_at": "2026-08-19T09:56:58Z"
  },
  "rows": [
   {
@@ -23,7 +23,7 @@
    "completed": true,
    "n_deflections": 52,
    "tag": "S0",
-   "on_front": true
+   "on_front": false
   },
   {
    "scheme": "S1",
@@ -60,6 +60,24 @@
    "n_deflections": 52,
    "tag": "S3",
    "on_front": false
+  },
+  {
+   "scheme": "S4",
+   "algo": "ring2_dist",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 122,
+   "t_sched_cycles": 0,
+   "makespan": 122,
+   "area_norm": 0.0444,
+   "area_bits": 77940,
+   "completed": true,
+   "n_deflections": 59,
+   "tag": "S4",
+   "on_front": true
   },
   {
    "scheme": "S2",
@@ -2572,8 +2590,8 @@
  "pareto": [
   {
    "area_norm": 0.0444,
-   "makespan": 129,
-   "tag": "S0"
+   "makespan": 122,
+   "tag": "S4"
   },
   {
    "area_norm": 0.0449,
@@ -2587,5 +2605,5 @@
   }
  ],
  "n_front": 3,
- "wall_secs": 2.4
+ "wall_secs": 2.5
 }

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Four-scheme makespan comparison on the 20-node dual-plane ring.
+"""Five-scheme makespan comparison on the 20-node dual-plane ring.
 
 Schemes
 -------
-Common datapath (all four): 2-cycle hops, 8-deep boarding queue per
+Common datapath (all five): 2-cycle hops, 8-deep boarding queue per
 (node, plane), point-to-point credit FC + I-tag + E-tag, and a 512
 outstanding-read cap per AI core.
 S0  ring2_base   RR inject on that datapath, no source rate control
 S1  ring2_aimd   S0 + piggybacked failure counts + AIMD token bucket
 S2  ring2_rg     same datapath + request-grant (default islip, interval, arc)
 S3  ring2_pop    same datapath + read-request-as-POP (HA schedules resps)
+S4  ring2_dist   same datapath + kind-aware leave (resp at core, req at HA)
 
 Workloads: allpairs (deterministic 10x10 x m) and uniform (K per core,
 uniform HA, multi-seed). Makespan is the cycle the last response flit is
@@ -33,6 +34,7 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_dist import Ring2DistParams, run_batch as run_dist
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
 from rg_ring2_topo import (
@@ -66,6 +68,12 @@ def run_one(scheme: str, topo: Ring2Topology, txns, *,
         r = run_rg(topo, txns, cfg=cfg)
     elif scheme == "S3":
         r = run_pop(topo, txns, params=params, seed=seed)
+    elif scheme == "S4":
+        dp = Ring2DistParams(plane_sel=params.plane_sel,
+                             eject_depth=params.eject_depth,
+                             core_outstanding=params.core_outstanding,
+                             leave_useful=True)
+        r = run_dist(topo, txns, params=dp, seed=seed)
     else:
         raise ValueError(scheme)
     keep = ("completed", "makespan", "makespan_des", "n_txn_done",
@@ -117,7 +125,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ed in ejects:
                     p = Ring2BaseParams(plane_sel=ps, eject_depth=ed)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3"):
+                    for scheme in ("S0", "S1", "S2", "S3", "S4"):
                         extra = {}
                         if scheme == "S1":
                             for ac in aimd_cfgs:
@@ -159,7 +167,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ps in plane_sels:
                     p = Ring2BaseParams(plane_sel=ps)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3"):
+                    for scheme in ("S0", "S1", "S2", "S3", "S4"):
                         if scheme == "S1":
                             ac = aimd_cfgs[0]
                             pp = Ring2BaseParams(plane_sel=ps, **ac)
@@ -188,7 +196,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                               f"ok={r.get('completed')}", flush=True)
 
     # compact summary: mean makespan per (scheme, pattern, R) on the default
-    # plane_sel / eject_depth so the three schemes can be compared directly
+    # plane_sel / eject_depth so the five schemes can be compared directly
     summary: list[dict[str, Any]] = []
     keys = set()
     for r in rows:

@@ -20,6 +20,7 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, Ring2BaseSim, run_batch as run_base
+from rg_ring2_dist import Ring2DistParams, Ring2DistSim, run_batch as run_dist
 from rg_ring2_pop import Ring2PopSim, run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, replay_ok, run_batch as run_rg
 from rg_ring2_rg import requirements, schedule
@@ -115,8 +116,10 @@ def test_three_schemes_same_flits() -> None:
     s1 = run_aimd(topo, txns)
     s2 = run_rg(topo, txns, cfg=RGConfig(algo="islip", iters=2))
     s3 = run_pop(topo, txns)
+    s4 = run_dist(topo, txns)
     exp = _expected_flits(txns)
-    for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3)):
+    for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3),
+                    ("S4", s4)):
         assert r["completed"], name
         assert r["n_delivered_flits"] == exp, (name, r["n_delivered_flits"])
         assert r["n_txn_done"] == len(txns), name
@@ -132,7 +135,8 @@ def test_makespan_ge_bound() -> None:
             ("S0", run_base(topo, txns)),
             ("S1", run_aimd(topo, txns)),
             ("S2", run_rg(topo, txns, cfg=RGConfig(algo="greedy_ff"))),
-            ("S3", run_pop(topo, txns))):
+            ("S3", run_pop(topo, txns)),
+            ("S4", run_dist(topo, txns))):
         assert r["makespan"] >= b["bound"], (
             f"{name} makespan {r['makespan']} < bound {b['bound']}")
 
@@ -249,10 +253,13 @@ def test_cost_ring2_does_not_break_mesh() -> None:
     da = distributed_cost("ring2_aimd", n_nodes=20)
     dr = distributed_cost("ring2_rg", n_nodes=20)
     dp = distributed_cost("ring2_pop", n_nodes=20)
+    dd = distributed_cost("ring2_dist", n_nodes=20)
     assert da["bits"] > db["bits"]
     assert dp["bits"] > db["bits"]
     # S0 and S2 share the credit + I/E-tag datapath; S2 does not drop it
     assert dr["bits"] == db["bits"], (dr["bits"], db["bits"])
+    # S4 kind-aware leave is mux preference only — same bits as S0
+    assert dd["bits"] == db["bits"], (dd["bits"], db["bits"])
     assert "credit_counters" in db["breakdown"]
     assert "itag_etag_state" in db["breakdown"]
     assert "core_outstanding" in db["breakdown"]
@@ -316,7 +323,7 @@ def test_pop_window_and_token() -> None:
 
 
 def test_core_outstanding_aligned() -> None:
-    """S0/S1/S2/S3 share a 512-per-core outstanding-read cap."""
+    """S0/S1/S2/S3/S4 share a 512-per-core outstanding-read cap."""
     from rg_ring2_aimd import Ring2AimdSim
 
     cap = 512
@@ -335,7 +342,10 @@ def test_core_outstanding_aligned() -> None:
                 aimd=True), seed=0)),
             ("S3", Ring2PopSim(topo, Ring2BaseParams(
                 core_outstanding=bind, plane_sel="least_occupied",
-                pop_window=0), seed=0))):
+                pop_window=0), seed=0)),
+            ("S4", Ring2DistSim(topo, Ring2DistParams(
+                core_outstanding=bind, plane_sel="least_occupied",
+                leave_useful=True), seed=0))):
         sim.offer_batch(tx_bind)
         while sim.t < 200_000 and not sim.done():
             sim.step()
@@ -395,6 +405,18 @@ def test_core_outstanding_aligned() -> None:
     assert replay_ok(topo, out512["grants"])
 
 
+def test_s4_leave_beats_s0_allpairs() -> None:
+    """Kind-aware leave is mux-only and should cut allpairs makespan."""
+    topo = Ring2Topology()
+    txns = build_allpairs(m=1, m_resp=4)
+    s0 = run_base(topo, txns)
+    s4 = run_dist(topo, txns, params=Ring2DistParams(leave_useful=True))
+    assert s0["completed"] and s4["completed"]
+    assert s4["n_delivered_flits"] == s0["n_delivered_flits"]
+    assert s4["makespan"] < s0["makespan"], (
+        s4["makespan"], s0["makespan"])
+
+
 def test_plane_sel_all_work() -> None:
     topo = Ring2Topology()
     txns = build_allpairs(m=1, m_resp=2)
@@ -410,7 +432,7 @@ def main() -> None:
     c.add("workload_counts", test_workload_counts)
     c.add("s0_completes_and_conserves", test_s0_completes_and_conserves)
     c.add("s1_completes_and_conserves", test_s1_completes_and_conserves)
-    c.add("four_schemes_same_flits", test_three_schemes_same_flits)
+    c.add("five_schemes_same_flits", test_three_schemes_same_flits)
     c.add("makespan_ge_bound", test_makespan_ge_bound)
     c.add("inring_never_blocked", test_inring_never_blocked_under_load)
     c.add("itag_starve_finite", test_itag_bounds_starve)
@@ -424,6 +446,7 @@ def main() -> None:
     c.add("pop_window_and_token", test_pop_window_and_token)
     c.add("core_outstanding_aligned", test_core_outstanding_aligned)
     c.add("plane_sel_all_work", test_plane_sel_all_work)
+    c.add("s4_leave_beats_s0_allpairs", test_s4_leave_beats_s0_allpairs)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

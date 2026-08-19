@@ -7,8 +7,9 @@ y   makespan = makespan_des + t_sched_cycles   (scheduler delay charged back)
 x   area_norm  = shared credit+I/E-tag datapath + arbiter + control-plane
                 (IQ-XY router = 1.0, amortized per node)
 
-S0, S1 and S3 are plotted as reference points so the front is cross-scheme.
-S3 is request-as-POP (512/core outstanding + HA RR), one hardware point.
+S0, S1, S3 and S4 are plotted as reference points so the front is
+cross-scheme. S3 is request-as-POP; S4 is kind-aware leave on the S0
+datapath (same bits, lower allpairs makespan).
 `--refine` densifies around the current knee and tries leftover algorithm
 variants; used by the self-paced search loop.
 
@@ -34,6 +35,7 @@ import matplotlib.pyplot as plt
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_dist import Ring2DistParams, run_batch as run_dist
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, run_batch as run_rg
 from rg_ring2_topo import Ring2Topology, build_allpairs, build_uniform
@@ -62,11 +64,13 @@ def _tag(r: dict[str, Any]) -> str:
 def _s0_s1_refs(topo: Ring2Topology, txns, *, m_resp: int) -> list[dict]:
     out = []
     p = Ring2BaseParams(plane_sel="least_occupied")
-    for scheme, runner, cfg in (
-            ("S0", run_base, "ring2_base"),
-            ("S1", run_aimd, "ring2_aimd"),
-            ("S3", run_pop, "ring2_pop")):
-        r = runner(topo, txns, params=p, seed=0)
+    for scheme, runner, cfg, params in (
+            ("S0", run_base, "ring2_base", p),
+            ("S1", run_aimd, "ring2_aimd", p),
+            ("S3", run_pop, "ring2_pop", p),
+            ("S4", run_dist, "ring2_dist",
+             Ring2DistParams(plane_sel="least_occupied", leave_useful=True))):
+        r = runner(topo, txns, params=params, seed=0)
         d = distributed_cost(cfg, n_nodes=topo.n, n_planes=topo.n_planes,
                              eject_depth=p.eject_depth, resv_ej=p.resv_ej,
                              reasm_depth=m_resp)
@@ -211,13 +215,15 @@ def sweep(*, quick: bool = False, refine: bool = False,
     rows: list[dict[str, Any]] = []
     if not refine:
         rows.extend(_s0_s1_refs(topo, txns, m_resp=4))
-        print(f"  refs S0 mk={rows[0]['makespan']} "
-              f"S1 mk={rows[1]['makespan']} "
-              f"S3 mk={rows[2]['makespan']}", flush=True)
+        by_sch = {r["scheme"]: r["makespan"] for r in rows}
+        print(f"  refs S0 mk={by_sch.get('S0')} "
+              f"S1 mk={by_sch.get('S1')} "
+              f"S3 mk={by_sch.get('S3')} "
+              f"S4 mk={by_sch.get('S4')}", flush=True)
     else:
-        # keep previous S0/S1/S3 refs
+        # keep previous S0/S1/S3/S4 refs
         rows.extend([r for r in prior_rows
-                     if r.get("scheme") in ("S0", "S1", "S3")])
+                     if r.get("scheme") in ("S0", "S1", "S3", "S4")])
 
     cfgs = _space(refine=refine, prior=prior_rows)
     if quick:
@@ -272,7 +278,8 @@ def sweep(*, quick: bool = False, refine: bool = False,
 def plot(res: dict[str, Any], path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8.2, 5.4))
     by = {"S0": ([], [], []), "S1": ([], [], []),
-          "S2": ([], [], []), "S3": ([], [], [])}
+          "S2": ([], [], []), "S3": ([], [], []),
+          "S4": ([], [], [])}
     for r in res["rows"]:
         if r.get("makespan") is None:
             continue
@@ -291,6 +298,9 @@ def plot(res: dict[str, Any], path: Path) -> None:
     if by["S3"][0]:
         ax.scatter(by["S3"][0], by["S3"][1], s=80, c="#9333ea", marker="^",
                    label="S3 push-on-pull", zorder=4)
+    if by["S4"][0]:
+        ax.scatter(by["S4"][0], by["S4"][1], s=90, c="#ea580c", marker="p",
+                   label="S4 kind-aware leave", zorder=4)
     front = res.get("pareto") or []
     if front:
         xs = [p["area_norm"] for p in front]

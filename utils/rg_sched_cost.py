@@ -451,13 +451,14 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         # 8x6 centralized variants: a granted transfer is rigid, so the
         # study prices only the arbiter (station storage counted as 0).
         pass
-    elif config in ("ring2_base", "ring2_aimd", "ring2_rg", "ring2_pop"):
-        # Common datapath for all four 20-node schemes: point-to-point
+    elif config in ("ring2_base", "ring2_aimd", "ring2_rg", "ring2_pop",
+                    "ring2_dist"):
+        # Common datapath for all five 20-node schemes: point-to-point
         # credit on each directed hop (80 segments), I-tag / E-tag, the
         # `inj_depth`-deep boarding queue, shared per-plane eject queue +
         # reserved E-tag slots, reassembly, and the aligned per-core
-        # outstanding-read scoreboard (512). S0/S1/S2/S3 differ in
-        # injection / matching policy, not in this layer.
+        # outstanding-read scoreboard (512). S0–S4 differ in
+        # injection / matching / leave policy, not in this layer.
         n_cores = n_nodes // 2
         n_has = n_nodes - n_cores
         b["credit_counters"] = n_nodes * n_planes * 2 * W_D

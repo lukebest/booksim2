@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Same-pattern, 10000 response flits/core: S0 vs S1 vs S2 vs S3.
+"""Same-pattern, 10000 response flits/core: S0 vs S1 vs S2 vs S3 vs S4.
 
 Workload: uniform random HA, K=2500 txns/core, R=4 → 10000 recv flits/core.
 Compares receive-bandwidth time series and per-destination-core on-ramp
 counts (CW / CCW successes and failures).
 
-All four schemes ride the same datapath: 2-cycle hops, 8-deep boarding
+All five schemes ride the same datapath: 2-cycle hops, 8-deep boarding
 queue per (node, plane), point-to-point credit, I-tag / E-tag, and a
 512 outstanding-read cap per AI core.
 
@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
+from rg_ring2_dist import Ring2DistParams, run_batch as run_dist
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
 from rg_ring2_topo import Ring2Topology, build_uniform, cores, paths_for_txns
@@ -61,6 +62,9 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         r = run_aimd(topo, txns, params=p, seed=seed)
     elif scheme == "S3":
         r = run_pop(topo, txns, params=p, seed=seed)
+    elif scheme == "S4":
+        r = run_dist(topo, txns, params=Ring2DistParams(
+            plane_sel="least_occupied", leave_useful=True), seed=seed)
     else:
         r = run_rg(topo, txns, cfg=RGConfig(
             algo="islip", iters=2, plane_sel="least_occupied", seed=seed),
@@ -104,8 +108,8 @@ def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
-    fig, axes = plt.subplots(4, 1, figsize=(9.6, 11.2), sharex=True)
-    for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3")):
+    fig, axes = plt.subplots(5, 1, figsize=(9.6, 13.2), sharex=True)
+    for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3", "S4")):
         tr = traces[scheme]
         t_max = max((max(ts) for ts in tr["recv_by_core"].values()), default=1)
         mean = None
@@ -141,20 +145,21 @@ def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
 
 def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
                  flits_per_core: int, bound: int | None = None) -> None:
-    """Same axes: mean recv bandwidth of the four schemes."""
+    """Same axes: mean recv bandwidth of the five schemes."""
     colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626",
-              "S3": "#9333ea"}
+              "S3": "#9333ea", "S4": "#ea580c"}
     # S3 is drawn dashed on top of S0: after the 512-outstanding
     # alignment the two means coincide, and a second solid line would
     # hide S0 completely.
-    styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5))}
+    styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5)),
+              "S4": "-"}
     fig, ax = plt.subplots(figsize=(9.2, 4.2))
     t_max_all = max(
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
     cs = cores()
-    for scheme in ("S1", "S2", "S0", "S3"):
+    for scheme in ("S1", "S2", "S0", "S3", "S4"):
         tr = traces[scheme]
         acc = None
         xs = []
@@ -178,7 +183,7 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
     ax.set_xlabel("cycle")
     ax.set_ylabel("mean recv flit / cycle / core")
     ax.set_title(
-        f"S0 / S1 / S2 / S3 on the same uniform batch  "
+        f"S0 / S1 / S2 / S3 / S4 on the same uniform batch  "
         f"({flits_per_core} flits/core, bin={bin_w})")
     ax.set_xlim(0, t_max_all)
     ax.set_ylim(bottom=0)
@@ -208,7 +213,7 @@ def main() -> None:
     bounds = topo.analytic_bounds(rp, sp, m_req=1, m_resp=R)
     t0 = time.perf_counter()
     traces = {}
-    for scheme in ("S0", "S1", "S2", "S3"):
+    for scheme in ("S0", "S1", "S2", "S3", "S4"):
         traces[scheme] = _run(scheme, topo, txns, args.seed)
 
     panel = ROOT / "results" / "ring2_core_recv_bw_10k.png"
