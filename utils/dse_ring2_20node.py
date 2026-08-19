@@ -3,7 +3,8 @@
 
 Schemes
 -------
-Common datapath (all three): point-to-point credit FC + I-tag + E-tag.
+Common datapath (all three): 2-cycle hops, 8-deep boarding queue per
+(node, plane), point-to-point credit FC + I-tag + E-tag.
 S0  ring2_base   RR inject on that datapath, no source rate control
 S1  ring2_aimd   S0 + piggybacked failure counts + AIMD token bucket
 S2  ring2_rg     same datapath + request-grant (default islip, interval, arc)
