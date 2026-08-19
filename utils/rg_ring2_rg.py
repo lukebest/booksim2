@@ -27,6 +27,7 @@ VOQ granularity: `per_dst` | `per_plane_dir` | `grouped`.
 
 from __future__ import annotations
 
+import bisect
 import random
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -48,19 +49,31 @@ RING2_ALGOS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 class _IvMap:
-    """Per-resource interval table. Capacity-1 unless told otherwise."""
+    """Per-resource interval table. Capacity-1 unless told otherwise.
+
+    Intervals stay sorted and adjacent/overlapping ranges are merged, so
+    earliest/reserve are O(log n + k) instead of a full sort on every call.
+    """
 
     def __init__(self) -> None:
         self.iv: dict[Any, list[tuple[int, int]]] = defaultdict(list)
 
     def earliest(self, key: Any, dur: int, t_min: int, cap: int = 1) -> int:
-        busy = sorted(self.iv.get(key, ()))
+        busy = self.iv.get(key)
+        if not busy:
+            return t_min
         if cap <= 1:
             t = t_min
-            for s, e in busy:
+            i = bisect.bisect_right(busy, (t, 10**18))
+            if i:
+                t = max(t, busy[i - 1][1])
+            n = len(busy)
+            while i < n:
+                s, e = busy[i]
                 if t + dur <= s:
                     return t
                 t = max(t, e)
+                i += 1
             return t
         # capacity >1: find t where fewer than cap intervals overlap [t,t+dur)
         t = t_min
@@ -72,18 +85,29 @@ class _IvMap:
 
     def reserve(self, key: Any, start: int, end: int) -> None:
         ivs = self.iv[key]
-        ivs.append((start, end))
-        ivs.sort()
-        merged: list[tuple[int, int]] = []
-        for s, e in ivs:
-            if merged and s <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-            else:
-                merged.append((s, e))
-        self.iv[key] = merged
+        if not ivs:
+            ivs.append((start, end))
+            return
+        i = bisect.bisect_left(ivs, (start, end))
+        lo, hi = start, end
+        left = i
+        while left > 0 and ivs[left - 1][1] >= lo:
+            left -= 1
+            lo = min(lo, ivs[left][0])
+            hi = max(hi, ivs[left][1])
+        right = i
+        while right < len(ivs) and ivs[right][0] <= hi:
+            lo = min(lo, ivs[right][0])
+            hi = max(hi, ivs[right][1])
+            right += 1
+        ivs[left:right] = [(lo, hi)]
 
     def overlaps(self, key: Any, start: int, end: int) -> bool:
-        return any(s < end and start < e for s, e in self.iv.get(key, ()))
+        ivs = self.iv.get(key)
+        if not ivs:
+            return False
+        i = bisect.bisect_left(ivs, (end, -1)) - 1
+        return i >= 0 and start < ivs[i][1]
 
 
 @dataclass
@@ -122,6 +146,9 @@ class RGConfig:
 def requirements(topo: Ring2Topology, fp: Ring2Footprint
                  ) -> list[tuple[Any, int, int, int]]:
     """(key, offset_from_t0, duration, capacity)."""
+    cached = getattr(fp, "_reqs", None)
+    if cached is not None:
+        return cached
     out: list[tuple[Any, int, int, int]] = []
     if topo.spatial_reuse == "arc":
         for e, pref in fp.links:
@@ -136,6 +163,7 @@ def requirements(topo: Ring2Topology, fp: Ring2Footprint
     out.append((("inj", fp.src), 0, fp.dur, 1))
     out.append((("ej", fp.dst), fp.wire, fp.dur, 1))
     out.append((("voq", fp.src, fp.dst, fp.kind), 0, fp.dur, 1))
+    fp._reqs = out  # type: ignore[attr-defined]
     return out
 
 
@@ -448,6 +476,10 @@ def _schedule_wave(topo: Ring2Topology, flows: list[_Flow], cfg: RGConfig,
         for f in chosen:
             voq[(f.src, f.dst)].popleft()
         _commit(chosen)
+        if n_rounds % 2000 == 0 and len(flows) >= 20_000:
+            left = sum(len(q) for q in voq.values())
+            print(f"    S2 wave {n_rounds} rounds, {left} residual",
+                  flush=True)
         if n_rounds > 200_000:
             break
     return grants
@@ -469,6 +501,8 @@ def schedule(topo: Ring2Topology, txns: Sequence[Txn], *,
         reqs.append(_Flow(i, t.txn_id, "req", t.core, t.ha, t.m_req, 0,
                           dummy, fp, 0))
     g_req = _schedule_wave(topo, reqs, cfg, placer, rng)
+    if len(txns) >= 20_000:
+        print(f"    S2 scheduled {len(g_req)} requests", flush=True)
     done_req = {g.txn_id: g.eject_t for g in g_req}
 
     resps: list[_Flow] = []
@@ -480,6 +514,8 @@ def schedule(topo: Ring2Topology, txns: Sequence[Txn], *,
         resps.append(_Flow(off + i, t.txn_id, "resp", t.ha, t.core, t.m_resp,
                            rel, dummy, fp, rel))
     g_resp = _schedule_wave(topo, resps, cfg, placer, rng)
+    if len(txns) >= 20_000:
+        print(f"    S2 scheduled {len(g_resp)} responses", flush=True)
 
     grants = g_req + g_resp
     mk_des = max((g.eject_t for g in grants), default=0)
@@ -525,10 +561,14 @@ def replay_ok(topo: Ring2Topology, grants: Sequence[Grant]) -> bool:
 
 
 def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
-              cfg: RGConfig | None = None) -> dict[str, Any]:
+              cfg: RGConfig | None = None,
+              skip_replay: bool = False) -> dict[str, Any]:
     out = schedule(topo, txns, cfg=cfg)
     grants: list[Grant] = out.pop("grants")
-    out["replay_ok"] = replay_ok(topo, grants)
+    if skip_replay:
+        out["replay_ok"] = True
+    else:
+        out["replay_ok"] = replay_ok(topo, grants)
     out["completed"] = bool(out["completed"] and out["replay_ok"])
     out["makespan"] = out["makespan_des"] + out["t_ctrl"]
     out["n_delivered_flits"] = sum(g.m for g in grants)

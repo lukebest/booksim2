@@ -20,51 +20,88 @@ and the two directions of a plane share that port's buffer. Traffic is
 read-return (1-flit request, R-flit response). Makespan is the cycle the
 last response flit is drained at the requesting core.</p>
 
+<h2>0. Common datapath (all three schemes)</h2>
+<p class="note">S0 / S1 / S2 are <em>not</em> three different fabrics.
+They share one point-to-point credit-based datapath and the same I-tag /
+E-tag guarantees. The sweep only changes how a source is allowed to spend
+credit (RR, AIMD rate, or a request-grant match).</p>
+<table><thead><tr><th>layer</th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>point-to-point credit FC</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>I-tag (inject starvation bound)</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>E-tag (leave / reserved eject)</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>RR inject when credit is available</td><td>yes</td><td>yes</td><td>—</td></tr><tr><td>AIMD source rate (piggybacked fails)</td><td>—</td><td>yes</td><td>—</td></tr><tr><td>request-grant match before inject</td><td>—</td><td>—</td><td>yes</td></tr></tbody></table>
+<ul>
+<li><b>Credit:</b> each directed hop is a credit pair. The upstream node
+decrements credit before it launches a flit; the downstream node returns
+credit when the slot frees. A flit is never sent onto a hop with no
+credit. 80 directed segments, two planes × two directions.</li>
+<li><b>I-tag:</b> a source starved for <code>t_inj</code> cycles on a
+(plane, dir) raises I-tag and inhibits other injects on that ring until
+it boards. Bounds inject starvation.</li>
+<li><b>E-tag:</b> a flit that fails to leave (shared per-plane eject
+queue full) <code>t_xfer</code> times raises E-tag and may use
+<code>resv_ej</code> reserved eject slots; otherwise it deflects and
+rides another lap. Rebound onto reserved <em>eject</em> entries — an
+adaptation, not HiRD's transfer-FIFO E-tag.</li>
+</ul>
+
 <h2>1. Verification</h2>
 <p>14/14 checks passed.</p>
 <table><thead><tr><th>check</th><th>result</th></tr></thead><tbody><tr><td>topo_roles_and_wrap</td><td>ok</td></tr><tr><td>workload_counts</td><td>ok</td></tr><tr><td>s0_completes_and_conserves</td><td>ok</td></tr><tr><td>s1_completes_and_conserves</td><td>ok</td></tr><tr><td>three_schemes_same_flits</td><td>ok</td></tr><tr><td>makespan_ge_bound</td><td>ok</td></tr><tr><td>inring_never_blocked</td><td>ok</td></tr><tr><td>itag_starve_finite</td><td>ok</td></tr><tr><td>etag_deflect_bounded</td><td>ok</td></tr><tr><td>rg_replay_conflict_free</td><td>ok</td></tr><tr><td>rg_req_before_resp</td><td>ok</td></tr><tr><td>uniform_multi_seed_s0</td><td>ok</td></tr><tr><td>cost_ring2_preserves_mesh_cal</td><td>ok</td></tr><tr><td>plane_sel_all_work</td><td>ok</td></tr></tbody></table>
 
 <h2>2. Three-scheme makespan (default plane_sel=least_occupied, eject_depth=4)</h2>
-<p class="note">S0 = RR + I-tag/E-tag, no source rate control.
-S1 = S0 + piggybacked failure counts + AIMD.
-S2 = request-grant iSLIP (I=2, interval, arc). Bound is the analytic floor
-(link / port / cut / single-txn).</p>
+<p class="note">Same credit + I-tag / E-tag datapath on every row.
+S0 = RR inject, no source rate control.
+S1 = S0 + piggybacked failure counts + AIMD token bucket.
+S2 = request-grant iSLIP (I=2, interval, arc) on the same hops.
+Bound is the analytic floor (link / port / cut / single-txn).</p>
 <table><thead><tr><th>scheme</th><th>pattern</th><th>R</th><th>m or K</th><th>mean</th><th>min</th><th>max</th><th>bound</th><th>ok</th></tr></thead><tbody><tr><td>S0</td><td>allpairs</td><td>1</td><td>2</td><td>74.0</td><td>74</td><td>74</td><td>25</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>4</td><td>124.0</td><td>124</td><td>124</td><td>50</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>1</td><td>1</td><td>44.0</td><td>44</td><td>44</td><td>20</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>4</td><td>323.0</td><td>323</td><td>323</td><td>140</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>2</td><td>169.0</td><td>169</td><td>169</td><td>70</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>4</td><td>1</td><td>92.0</td><td>92</td><td>92</td><td>35</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>1</td><td>168.0</td><td>168</td><td>168</td><td>65</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>2</td><td>319.0</td><td>319</td><td>319</td><td>130</td><td>yes</td></tr><tr><td>S0</td><td>allpairs</td><td>8</td><td>4</td><td>611.0</td><td>611</td><td>611</td><td>260</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>50</td><td>127.7</td><td>122</td><td>133</td><td>67</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>100</td><td>234.0</td><td>231</td><td>238</td><td>135</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>1</td><td>20</td><td>76.7</td><td>73</td><td>83</td><td>33</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>100</td><td>671.7</td><td>661</td><td>692</td><td>376</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>20</td><td>166.0</td><td>162</td><td>169</td><td>95</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>4</td><td>50</td><td>342.0</td><td>337</td><td>351</td><td>192</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>100</td><td>1289.7</td><td>1238</td><td>1321</td><td>698</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>20</td><td>304.0</td><td>290</td><td>312</td><td>177</td><td>yes</td></tr><tr><td>S0</td><td>uniform</td><td>8</td><td>50</td><td>676.7</td><td>637</td><td>719</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>2</td><td>153.3</td><td>99</td><td>224</td><td>25</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>4</td><td>414.7</td><td>269</td><td>503</td><td>50</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>1</td><td>1</td><td>53.0</td><td>49</td><td>57</td><td>20</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>4</td><td>805.3</td><td>548</td><td>1214</td><td>140</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>1</td><td>122.3</td><td>92</td><td>176</td><td>35</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>4</td><td>2</td><td>364.7</td><td>256</td><td>572</td><td>70</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>2</td><td>643.0</td><td>328</td><td>1225</td><td>130</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>4</td><td>1415.3</td><td>744</td><td>2582</td><td>260</td><td>yes</td></tr><tr><td>S1</td><td>allpairs</td><td>8</td><td>1</td><td>263.0</td><td>159</td><td>468</td><td>65</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>100</td><td>1242.7</td><td>1221</td><td>1272</td><td>135</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>20</td><td>109.0</td><td>105</td><td>117</td><td>33</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>1</td><td>50</td><td>524.7</td><td>501</td><td>548</td><td>67</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>100</td><td>1784.7</td><td>1774</td><td>1798</td><td>376</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>20</td><td>259.0</td><td>184</td><td>304</td><td>95</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>4</td><td>50</td><td>757.0</td><td>692</td><td>829</td><td>192</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>20</td><td>408.7</td><td>360</td><td>456</td><td>177</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>50</td><td>1146.0</td><td>990</td><td>1260</td><td>362</td><td>yes</td></tr><tr><td>S1</td><td>uniform</td><td>8</td><td>100</td><td>2226.7</td><td>2206</td><td>2246</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>2</td><td>51.0</td><td>51</td><td>51</td><td>25</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>4</td><td>91.0</td><td>91</td><td>91</td><td>50</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>1</td><td>1</td><td>38.0</td><td>38</td><td>38</td><td>20</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>1</td><td>85.0</td><td>85</td><td>85</td><td>35</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>2</td><td>165.0</td><td>165</td><td>165</td><td>70</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>4</td><td>4</td><td>286.0</td><td>286</td><td>286</td><td>140</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>2</td><td>308.0</td><td>308</td><td>308</td><td>130</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>4</td><td>549.0</td><td>549</td><td>549</td><td>260</td><td>yes</td></tr><tr><td>S2</td><td>allpairs</td><td>8</td><td>1</td><td>158.0</td><td>158</td><td>158</td><td>65</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>50</td><td>107.0</td><td>104</td><td>109</td><td>67</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>100</td><td>197.0</td><td>195</td><td>199</td><td>135</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>1</td><td>20</td><td>57.3</td><td>56</td><td>58</td><td>33</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>20</td><td>181.0</td><td>174</td><td>192</td><td>95</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>50</td><td>357.0</td><td>351</td><td>368</td><td>192</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>4</td><td>100</td><td>671.0</td><td>655</td><td>686</td><td>376</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>50</td><td>689.0</td><td>676</td><td>698</td><td>362</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>100</td><td>1359.0</td><td>1344</td><td>1380</td><td>698</td><td>yes</td></tr><tr><td>S2</td><td>uniform</td><td>8</td><td>20</td><td>334.0</td><td>324</td><td>348</td><td>177</td><td>yes</td></tr></tbody></table>
 <p class="note">Wall 216.4s, 864 rows.
 Quick=False.</p>
 
-<h2>3. Per-core receive bandwidth vs time</h2>
-<p class="note">y = response flits drained at that AI core per cycle
-(bin = 4 cycles). Each coloured line is one core; the dashed line is
-the 10-core mean. Same closed batch and <code>plane_sel=least_occupied</code>
-as the table above. Peak per core is 2 flit/cycle (one leave port × two
-planes).</p>
-<h3>allpairs m=1 R=4</h3>
-<p><img src="ring2_core_recv_bw_allpairs.png" alt="per-core recv bw allpairs"></p>
-<h3>uniform K=20 R=4 seed=0</h3>
-<p><img src="ring2_core_recv_bw_uniform.png" alt="per-core recv bw uniform"></p>
+
+<h2>3. Same-pattern comparison · 40000 flits/core</h2>
+<p class="note">uniform K=10000 R=4 seed=0,
+<code>plane_sel=least_occupied</code>. Every core receives the same number of
+response flits. Overlay shares one time axis so S0 / S1 / S2 can be compared
+directly. All three ride the same credit + I-tag / E-tag datapath.
+Board counts are for <em>response data</em> destined to that core:
+上环 = successful injects, CW = dir +1, CCW = dir −1, 失败 = inject attempts
+that found the slot busy or I-tag blocked (AIMD token denials are not
+counted). S2 still has I-tag / E-tag; its 失败 is 0 because a grant is
+placed only when the hop already has credit, so the reactive tags are not
+exercised on this closed batch.</p>
+<p><img src="ring2_core_recv_bw_40k_overlay.png" alt="overlay mean recv bw"></p>
+<p><img src="ring2_core_recv_bw_40k.png" alt="per-core recv bw 40k"></p>
+<table><thead><tr><th></th><th>S0 RR</th><th>S1 AIMD</th><th>S2 request-grant</th></tr></thead><tbody><tr><td>makespan</td><td>60800</td><td>170600</td><td>65335</td></tr><tr><td>core 0</td><td>上环 40000 (CW 19880 / CCW 20120)<br>失败 79969 (CW 39993 / CCW 39976)</td><td>上环 40000 (CW 19880 / CCW 20120)<br>失败 9332 (CW 4481 / CCW 4851)</td><td>上环 40000 (CW 19880 / CCW 20120)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 2</td><td>上环 40000 (CW 20044 / CCW 19956)<br>失败 78459 (CW 39553 / CCW 38906)</td><td>上环 40000 (CW 20044 / CCW 19956)<br>失败 8896 (CW 4402 / CCW 4494)</td><td>上环 40000 (CW 20044 / CCW 19956)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 4</td><td>上环 40000 (CW 19580 / CCW 20420)<br>失败 82368 (CW 39791 / CCW 42577)</td><td>上环 40000 (CW 19580 / CCW 20420)<br>失败 10337 (CW 4963 / CCW 5374)</td><td>上环 40000 (CW 19580 / CCW 20420)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 6</td><td>上环 40000 (CW 20160 / CCW 19840)<br>失败 78100 (CW 39439 / CCW 38661)</td><td>上环 40000 (CW 20160 / CCW 19840)<br>失败 9660 (CW 4793 / CCW 4867)</td><td>上环 40000 (CW 20160 / CCW 19840)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 8</td><td>上环 40000 (CW 20164 / CCW 19836)<br>失败 80213 (CW 40015 / CCW 40198)</td><td>上环 40000 (CW 20164 / CCW 19836)<br>失败 9922 (CW 5057 / CCW 4865)</td><td>上环 40000 (CW 20164 / CCW 19836)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 10</td><td>上环 40000 (CW 20156 / CCW 19844)<br>失败 80149 (CW 40665 / CCW 39484)</td><td>上环 40000 (CW 20156 / CCW 19844)<br>失败 10183 (CW 5121 / CCW 5062)</td><td>上环 40000 (CW 20156 / CCW 19844)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 12</td><td>上环 40000 (CW 20104 / CCW 19896)<br>失败 82014 (CW 41408 / CCW 40606)</td><td>上环 40000 (CW 20104 / CCW 19896)<br>失败 9193 (CW 4629 / CCW 4564)</td><td>上环 40000 (CW 20104 / CCW 19896)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 14</td><td>上环 40000 (CW 20348 / CCW 19652)<br>失败 77358 (CW 39481 / CCW 37877)</td><td>上环 40000 (CW 20348 / CCW 19652)<br>失败 9016 (CW 4692 / CCW 4324)</td><td>上环 40000 (CW 20348 / CCW 19652)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 16</td><td>上环 40000 (CW 19680 / CCW 20320)<br>失败 78993 (CW 39283 / CCW 39710)</td><td>上环 40000 (CW 19680 / CCW 20320)<br>失败 9156 (CW 4713 / CCW 4443)</td><td>上环 40000 (CW 19680 / CCW 20320)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>core 18</td><td>上环 40000 (CW 20076 / CCW 19924)<br>失败 79158 (CW 39140 / CCW 40018)</td><td>上环 40000 (CW 20076 / CCW 19924)<br>失败 9108 (CW 4687 / CCW 4421)</td><td>上环 40000 (CW 20076 / CCW 19924)<br>失败 0 (CW 0 / CCW 0)</td></tr><tr><td>total</td><td>上环 400000 (CW 200192 / CCW 199808)<br>失败 796781 (CW 398768 / CCW 398013)</td><td>上环 400000 (CW 200192 / CCW 199808)<br>失败 94803 (CW 47538 / CCW 47265)</td><td>上环 400000 (CW 200192 / CCW 199808)<br>失败 0 (CW 0 / CCW 0)</td></tr></tbody></table>
+<p class="note">Wall 1420.5s.</p>
+
 
 <h2>4. Request-grant area / makespan Pareto</h2>
 <p class="note">y = makespan_des + t_sched_cycles (scheduler delay charged
 back). x = area_norm (IQ-XY router = 1.0, per node). S0 and S1 sit on the
-same plot as reference points. Area is a bit-equivalent model calibrated
-so mesh <code>greedy_ff = 0.05</code>; not mm².</p>
+same plot as reference points. Area counts the <em>shared</em> credit +
+I-tag / E-tag datapath on all three schemes; S2 adds the arbiter and a
+small control-plane tax on top of that datapath — it does not delete
+station storage. Bit-equivalent model calibrated so mesh
+<code>greedy_ff = 0.05</code>; not mm².</p>
 <p><img src="ring2_rg_pareto.png" alt="Pareto front"></p>
-<table><thead><tr><th>tag</th><th>area_norm</th><th>makespan</th></tr></thead><tbody><tr><td>S0</td><td>0.0207</td><td>92</td></tr></tbody></table>
+<table><thead><tr><th>tag</th><th>area_norm</th><th>makespan</th></tr></thead><tbody><tr><td>S0</td><td>0.021</td><td>89</td></tr></tbody></table>
 <p class="note">1 non-dominated points,
-169 evaluated, wall 2.3s.</p>
+111 evaluated, wall 1.9s.</p>
 
 <h2>5. How to read the comparison</h2>
 <ul>
-<li>S0 is the reactive baseline: in-ring never stalls, I-tag bounds inject
-starvation, E-tag (rebound onto reserved <em>eject</em> entries — an
-adaptation, not HiRD) bounds leave livelock.</li>
+<li>Read the three schemes as policies on one fabric. Credit + I-tag +
+E-tag are always there. In-ring traffic still never stalls (lookahead
+shorter than hop delay); I-tag bounds inject starvation; E-tag bounds
+leave livelock.</li>
+<li>S0 is the reactive baseline: spend credit with RR when the hop is
+free. No source rate control beyond I-tag.</li>
 <li>S1 feeds board/leave failure counts back to the source and AIMDs the
 token-bucket rate. On a closed burst this often <em>hurts</em> makespan
 because every source sees board NACK in the first epoch and the rate
 collapses; that is a result, not a bug.</li>
-<li>S2 deletes station storage (zero distributed bits) and pays an arbiter
-plus a small control-plane tax. Whether it lands on the Pareto front
+<li>S2 keeps the same credit + I-tag / E-tag datapath and adds a
+request-grant match so a flit only injects when the hop already has
+credit reserved. It pays an arbiter plus a small control-plane tax on
+top of the shared datapath. Whether it lands on the Pareto front
 depends on <code>t_sched_cycles</code> — an algorithm that is only fast
 because it is unbuildable is charged for that.</li>
 </ul>

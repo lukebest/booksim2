@@ -3,9 +3,10 @@
 
 Schemes
 -------
-S0  ring2_base   RR inject, I-tag / E-tag, no source rate control
+Common datapath (all three): point-to-point credit FC + I-tag + E-tag.
+S0  ring2_base   RR inject on that datapath, no source rate control
 S1  ring2_aimd   S0 + piggybacked failure counts + AIMD token bucket
-S2  ring2_rg     request-grant (default islip, interval, arc)
+S2  ring2_rg     same datapath + request-grant (default islip, interval, arc)
 
 Workloads: allpairs (deterministic 10x10 x m) and uniform (K per core,
 uniform HA, multi-seed). Makespan is the cycle the last response flit is

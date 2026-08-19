@@ -4,7 +4,7 @@
 Axes
 ----
 y   makespan = makespan_des + t_sched_cycles   (scheduler delay charged back)
-x   area_norm  = arbiter + control-plane + leftover station storage
+x   area_norm  = shared credit+I/E-tag datapath + arbiter + control-plane
                 (IQ-XY router = 1.0, amortized per node)
 
 S0 and S1 are plotted as reference points so the front is cross-scheme.
@@ -94,8 +94,10 @@ def _s2_row(topo: Ring2Topology, txns, cfg: RGConfig) -> dict[str, Any]:
         conflict_domain=cfg.conflict_domain,
         voq_granularity=cfg.voq_granularity,
         arbiter=cfg.arbiter)
-    d = distributed_cost("ring2_rg", n_nodes=topo.n)
-    area = cost["area_norm"] + CTRL_NOC.get(cfg.arbiter, 0.08)
+    d = distributed_cost("ring2_rg", n_nodes=topo.n, n_planes=topo.n_planes)
+    # S2 keeps the shared credit + I/E-tag datapath; arbiter is extra
+    area = (area_from_bits(d["bits"], topo) + cost["area_norm"]
+            + CTRL_NOC.get(cfg.arbiter, 0.08))
     mk = r["makespan_des"] + cost["t_sched_cycles"]
     row = {
         "scheme": "S2", "algo": cfg.algo, "iters": cfg.iters,

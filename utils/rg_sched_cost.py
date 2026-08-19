@@ -447,15 +447,17 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         b["starvation_counters"] = n_nodes * 3 * W_T
         b["itag_etag_state"] = n_nodes * 2 * 2       # per ring-direction flags
         b["swap_bypass_muxes"] = n_nodes * 2 * W_FLIT
-    elif config in ("mesh_islip2d", "ring_islip2d", "ring2_rg"):
-        # Zero station storage by construction: a granted transfer is rigid, so
-        # nothing is ever held anywhere in the fabric. Sources hold packets in
-        # queues they need anyway.
+    elif config in ("mesh_islip2d", "ring_islip2d"):
+        # 8x6 centralized variants: a granted transfer is rigid, so the
+        # study prices only the arbiter (station storage counted as 0).
         pass
-    elif config in ("ring2_base", "ring2_aimd"):
-        # No transfer FIFO and no Swap Rule: the only on-station storage is
-        # the per-plane shared eject queue, reserved E-tag slots, reassembly
-        # (response flits of a txn), and the I-tag / E-tag counters.
+    elif config in ("ring2_base", "ring2_aimd", "ring2_rg"):
+        # Common datapath for all three 20-node schemes: point-to-point
+        # credit on each directed hop (80 segments), I-tag / E-tag, shared
+        # per-plane eject queue + reserved E-tag slots, reassembly.
+        # S0/S1/S2 differ in injection / matching policy, not in this layer.
+        # hop_lat=1 → credit RTT is a few cycles; counter width is W_D.
+        b["credit_counters"] = n_nodes * n_planes * 2 * W_D
         b["eject_queues"] = n_nodes * n_planes * eject_depth * W_FLIT
         b["reserved_eject"] = n_nodes * n_planes * resv_ej * W_FLIT
         b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT

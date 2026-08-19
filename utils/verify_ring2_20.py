@@ -217,7 +217,12 @@ def test_cost_ring2_does_not_break_mesh() -> None:
     da = distributed_cost("ring2_aimd", n_nodes=20)
     dr = distributed_cost("ring2_rg", n_nodes=20)
     assert da["bits"] > db["bits"]
-    assert dr["bits"] == 0
+    # S0 and S2 share the credit + I/E-tag datapath; S2 does not drop it
+    assert dr["bits"] == db["bits"], (dr["bits"], db["bits"])
+    assert "credit_counters" in db["breakdown"]
+    assert "itag_etag_state" in db["breakdown"]
+    assert "credit_counters" in dr["breakdown"]
+    assert "itag_etag_state" in dr["breakdown"]
 
 
 def test_plane_sel_all_work() -> None:

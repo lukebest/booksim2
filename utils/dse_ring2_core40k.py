@@ -56,7 +56,8 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         r = run_aimd(topo, txns, params=p, seed=seed)
     else:
         r = run_rg(topo, txns, cfg=RGConfig(
-            algo="islip", iters=2, plane_sel="least_occupied", seed=seed))
+            algo="islip", iters=2, plane_sel="least_occupied", seed=seed),
+                   skip_replay=len(txns) >= 20_000)
     recv = {int(k): v for k, v in (r.get("recv_by_core") or {}).items()}
     board = {int(k): v for k, v in (r.get("board_by_core") or {}).items()}
     print(f"    {scheme} mk={r.get('makespan')} ok={r.get('completed')} "

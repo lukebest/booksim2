@@ -4,7 +4,8 @@
 **Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。
 **流量：** 读往返。core→HA 请求 1 flit，HA→core 响应 R flit。**makespan = 最后一个响应 flit 被 core PE drain 的拍。**
 **Workload：** `allpairs`（10×10 每对 m 个事务，确定性）+ `uniform`（每 core 发 K 个事务，目的地在 10 个 HA 中均匀随机，多 seed）。
-**三方案：** S0 RR + I-tag/E-tag；S1 失败计数 piggyback + AIMD 源端速率；S2 request-grant（iSLIP 族移植）。
+**共同数据面（三方案相同）：** 点对点 credit-based flow control + I-tag + E-tag。
+**三方案只改注入/调度策略：** S0 在有 credit 时 RR 上环；S1 再加失败计数 piggyback + AIMD 源端速率；S2 同一数据面上做 request-grant（iSLIP 族）。
 **验证：** `results/verify_ring2_20.json`，检查项可执行、失败即点名具体量。
 
 ## 0. 和仓库里已有 ring 研究的关系
@@ -30,15 +31,26 @@
 
 单事务下界：`hops_req·lat + m_req·σ + t_ha + hops_resp·lat + m_resp·σ`。资源下界把请求波与响应波当成先后两个 convoy（链路峰值 + 端口峰值 + 直径割）。
 
-## 2. S0 基线（`rg_ring2_base.py`）
+## 2. 共同数据面，然后才是 S0 / S1 / S2
 
-周期精确 DES。优先级 **in-ring > inject**。上环只允许进入整个 flit 时长都空的 slot（in-ring 流量已经在线上，lookahead < hop delay，所以「in-ring 永不被堵」是不变量而不是愿望）。
+三方案跑在**同一条**点对点 credit + I-tag / E-tag 数据面上，不是三种 fabric。
 
-- **I-tag：** 某源在某 (plane, dir) 上饿 `t_inj` 拍后升 I-tag，抑制该环向上其他节点上环，直到自己上去。
-- **E-tag：** 下环失败（共享 eject 队列满）`t_xfer` 次后升 E-tag，可以使用 `resv_ej` 条预留 eject 槽。失败则偏转，再绕一圈。
-- 每 (node, plane) 每拍最多 1 次上环、1 次下环；两方向 RR 争 leave 端口。
+| 层 | S0 RR | S1 AIMD | S2 request-grant |
+|---|---|---|---|
+| 点对点 credit FC | 有 | 有 | 有 |
+| I-tag（上环饥饿有界） | 有 | 有 | 有 |
+| E-tag（下环 / 预留 eject） | 有 | 有 | 有 |
+| 有 credit 时 RR 上环 | 有 | 有 | — |
+| AIMD 源端速率（失败 piggyback） | — | 有 | — |
+| 上环前 request-grant 匹配 | — | — | 有 |
 
-失效模式是活锁 / 延迟长尾，不是死锁：每节点每 plane 每方向每拍最多到达 1 个 flit，偏转无条件可用。
+**Credit：** 每条有向 hop 是一对 credit。上游发 flit 先扣 credit，下游槽位空出后归还。没有 credit 不准发。80 条有向段（20 × 2 plane × 2 方向）。
+
+**I-tag：** 某源在某 (plane, dir) 上饿 `t_inj` 拍后升 I-tag，抑制该环向上其他节点上环，直到自己上去。
+
+**E-tag：** 下环失败（共享 eject 队列满）`t_xfer` 次后升 E-tag，可以使用 `resv_ej` 条预留 eject 槽。失败则偏转，再绕一圈。改绑到预留 eject，不是 HiRD 的 transfer-FIFO E-tag。
+
+S0（`rg_ring2_base.py`）是这条数据面上的反应式基线：周期精确 DES，优先级 **in-ring > inject**，有 credit 且 slot 空才 RR 上环。每 (node, plane) 每拍最多 1 次上环、1 次下环；两方向 RR 争 leave 端口。失效模式是活锁 / 延迟长尾，不是死锁：每节点每 plane 每方向每拍最多到达 1 个 flit，偏转无条件可用。
 
 ## 3. S1 AIMD（`rg_ring2_aimd.py`）
 
@@ -56,7 +68,7 @@ rate ∈ [rate_min, rate_max]
 
 ## 4. S2 request-grant（`rg_ring2_rg.py`）
 
-已知 workload，两波调度：先请求，响应的 `release = request_eject + t_ha`。授权后传输刚性，站点零存储。算法表驱动：
+已知 workload，两波调度：先请求，响应的 `release = request_eject + t_ha`。授权后传输刚性，但 **credit 计数、I-tag、E-tag、共享 eject 仍在**：grant 只保证上环时 hop 已有 credit，所以本闭集中突发里 I/E-tag 几乎不被触发（上环失败 = 0），不是把它们从微结构里拿掉。算法表驱动：
 
 `islip(I) | pim(I) | rr_oldest | lqf | ocf | bvn | greedy_ff | wavefront | batched_bcfs`
 
@@ -66,11 +78,13 @@ rate ∈ [rate_min, rate_max]
 
 ## 5. 面积
 
-`distributed_cost("ring2_base")`：每 plane 共享 eject 队列 + E-tag 预留 + 重组缓冲 + I/E-tag 计数。没有 transfer FIFO，没有 Swap bypass。
+三方案先付同一笔数据面：`credit_counters`（80 有向 hop）+ 每 plane 共享 eject + E-tag 预留 + 重组缓冲 + I/E-tag 状态。没有 transfer FIFO，没有 Swap bypass。
 
-`distributed_cost("ring2_aimd")`：S0 + 速率/令牌寄存器 + 失败计数 + piggyback 字段。
+`distributed_cost("ring2_base")`：上述共同数据面。
 
-`distributed_cost("ring2_rg")`：站点存储 0。仲裁器按 `sched_cost(*_ring2)` 计价，外加一小笔控制面（central 0.08 / per_plane 0.05 / token 0.03，归一化/节点）。
+`distributed_cost("ring2_aimd")`：共同数据面 + 速率/令牌寄存器 + 失败计数 + piggyback 字段。
+
+`distributed_cost("ring2_rg")`：共同数据面 + 仲裁器 `sched_cost(*_ring2)` + 一小笔控制面（central 0.08 / per_plane 0.05 / token 0.03，归一化/节点）。**不是站点存储 0。**
 
 ## 6. 产物
 
@@ -89,6 +103,10 @@ rate ∈ [rate_min, rate_max]
 | `results/report_ring2_20node.html` | 报告 |
 | `results/ring2_core_recv_bw_allpairs.png` | 三方案每核接收带宽（allpairs） |
 | `results/ring2_core_recv_bw_uniform.png` | 三方案每核接收带宽（uniform K=20） |
+| `utils/dse_ring2_core40k.py` | 同 pattern、每核 40000 响应 flit 的 S0/S1/S2 对比 |
+| `results/ring2_core40k.json` | 40k 每核接收曲线（分箱）+ 上环统计 |
+| `results/ring2_core_recv_bw_40k.png` | 三方案每核接收带宽（aligned x） |
+| `results/ring2_core_recv_bw_40k_overlay.png` | 三方案均值叠图 |
 
 ## 7. 实测（allpairs m=1 R=4 / uniform 多 seed，plane_sel=least_occupied）
 
@@ -100,7 +118,7 @@ rate ∈ [rate_min, rate_max]
 | S1 | 122（AIMD 配置均值；默认 92） | 259 | 1785 |
 | S2 iSLIP I=2 | 85 | 181 | 671 |
 
-S2 在数据面上能略赢 S0（allpairs 85 vs 92；`batched_bcfs` DES 82），但把 `t_sched_cycles` 计回之后全部掉到 105 以上，面积还比 S0 的 0.0207 贵 2–9×。**Pareto 前沿目前只有 S0。** 原因是这个拓扑没有 transfer FIFO，分布式基线已经很便宜——和 8×6 维度切片环「集中化省面积」的故事相反，必须分开说。
+S2 在数据面上能略赢 S0（allpairs 85 vs 92；`batched_bcfs` DES 82），但把 `t_sched_cycles` 计回之后全部掉到 105 以上。面积上 S2 还要在共同 credit + I/E-tag 数据面之外再付仲裁器，所以比 S0 更贵。**Pareto 前沿目前只有 S0。** 这和 8×6 维度切片环「集中化删掉站点存储、因而省面积」的故事相反：这里 S2 没有删掉 credit / I-tag / E-tag，只是多了一层匹配。
 
 S1 在闭集中突发下经常更差：第一个 epoch 几乎人人上环 NACK，速率被打下去。这是可复现的结果，不是实现错误。
 
@@ -110,5 +128,36 @@ S1 在闭集中突发下经常更差：第一个 epoch 几乎人人上环 NACK�
 python3 utils/verify_ring2_20.py
 python3 utils/dse_ring2_20node.py          # --quick 做冒烟
 python3 utils/dse_ring2_rg_pareto.py       # --refine 加密当前前沿
+python3 utils/dse_ring2_core40k.py         # 同 pattern 40000 flit/core；--quick 冒烟
 python3 utils/gen_ring2_report.py
 ```
+
+## 9. 同 pattern、40000 响应 flit / core
+
+Workload 固定：`uniform` K=10000、R=4、seed=0，`plane_sel=least_occupied`。每个 core 收 **40000** 个响应 flit（10 core × 10000 txn × 4 flit）。三方案吃同一批事务。
+
+Makespan（最后一拍响应 drain）：
+
+| 方案 | makespan | 上环成功 | 上环失败 | CW / CCW |
+|---|---|---|---|---|
+| S0 RR | **60800** | 400000 | 796781 | 200192 / 199808 |
+| S1 AIMD | 170600 | 400000 | 94803 | 200192 / 199808 |
+| S2 iSLIP I=2 | 65335 | 400000 | 0 | 200192 / 199808 |
+
+按目的 core 的响应上环（方向由 HA→core 最短路决定，三方案 CW/CCW 逐核相同；失败只计 slot 忙或 I-tag，**不含** AIMD 令牌拒绝）：
+
+| core | 上环 (CW / CCW) | S0 失败 (CW / CCW) | S1 失败 (CW / CCW) | S2 失败 |
+|---|---|---|---|---|
+| 0 | 40000 (19880 / 20120) | 79969 (39993 / 39976) | 9332 (4481 / 4851) | 0 |
+| 2 | 40000 (20044 / 19956) | 78459 (39553 / 38906) | 8896 (4402 / 4494) | 0 |
+| 4 | 40000 (19580 / 20420) | 82368 (39791 / 42577) | 10337 (4963 / 5374) | 0 |
+| 6 | 40000 (20160 / 19840) | 78100 (39439 / 38661) | 9660 (4793 / 4867) | 0 |
+| 8 | 40000 (20164 / 19836) | 80213 (40015 / 40198) | 9922 (5057 / 4865) | 0 |
+| 10 | 40000 (20156 / 19844) | 80149 (40665 / 39484) | 10183 (5121 / 5062) | 0 |
+| 12 | 40000 (20104 / 19896) | 82014 (41408 / 40606) | 9193 (4629 / 4564) | 0 |
+| 14 | 40000 (20348 / 19652) | 77358 (39481 / 37877) | 9016 (4692 / 4324) | 0 |
+| 16 | 40000 (19680 / 20320) | 78993 (39283 / 39710) | 9156 (4713 / 4443) | 0 |
+| 18 | 40000 (20076 / 19924) | 79158 (39140 / 40018) | 9108 (4687 / 4421) | 0 |
+| **合计** | **400000 (200192 / 199808)** | **796781 (398768 / 398013)** | **94803 (47538 / 47265)** | **0** |
+
+这一档上 S0 仍是数据面最快。S2 刚性预约略慢（65335 vs 60800）；失败为 0 不是因为没有 I-tag / E-tag，而是 grant 只在 hop 已有 credit 时发出，反应式标签在本闭集中突发里用不上。S1 失败少一个数量级（令牌桶把注入拉开），但 makespan 是 S0 的 2.8×——闭集中突发下 AIMD 把速率打下去，和 §3 的预期一致。接收带宽图：`results/ring2_core_recv_bw_40k.png`（三面板、共用 x）和 `results/ring2_core_recv_bw_40k_overlay.png`（均值叠图）。

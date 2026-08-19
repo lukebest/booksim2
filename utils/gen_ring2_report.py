@@ -170,13 +170,16 @@ def main() -> None:
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')},
 <code>plane_sel=least_occupied</code>. Every core receives the same number of
 response flits. Overlay shares one time axis so S0 / S1 / S2 can be compared
-directly. Board counts are for <em>response data</em> destined to that core:
+directly. All three ride the same credit + I-tag / E-tag datapath.
+Board counts are for <em>response data</em> destined to that core:
 上环 = successful injects, CW = dir +1, CCW = dir −1, 失败 = inject attempts
-that found the slot busy or I-tag blocked. S2 is reservation-based, so 失败 is
-identically 0.</p>
+that found the slot busy or I-tag blocked (AIMD token denials are not
+counted). S2 still has I-tag / E-tag; its 失败 is 0 because a grant is
+placed only when the hop already has credit, so the reactive tags are not
+exercised on this closed batch.</p>
 <p><img src="ring2_core_recv_bw_40k_overlay.png" alt="overlay mean recv bw"></p>
 <p><img src="ring2_core_recv_bw_40k.png" alt="per-core recv bw 40k"></p>
-{_table(["", "S0 RR+I/E-tag", "S1 AIMD", "S2 request-grant"], board_rows)}
+{_table(["", "S0 RR", "S1 AIMD", "S2 request-grant"], board_rows)}
 <p class="note">Wall {big.get('wall_secs', '?')}s.</p>
 """
     else:
@@ -205,15 +208,44 @@ and the two directions of a plane share that port's buffer. Traffic is
 read-return (1-flit request, R-flit response). Makespan is the cycle the
 last response flit is drained at the requesting core.</p>
 
+<h2>0. Common datapath (all three schemes)</h2>
+<p class="note">S0 / S1 / S2 are <em>not</em> three different fabrics.
+They share one point-to-point credit-based datapath and the same I-tag /
+E-tag guarantees. The sweep only changes how a source is allowed to spend
+credit (RR, AIMD rate, or a request-grant match).</p>
+{_table(["layer", "S0 RR", "S1 AIMD", "S2 request-grant"], [
+    ["point-to-point credit FC", "yes", "yes", "yes"],
+    ["I-tag (inject starvation bound)", "yes", "yes", "yes"],
+    ["E-tag (leave / reserved eject)", "yes", "yes", "yes"],
+    ["RR inject when credit is available", "yes", "yes", "—"],
+    ["AIMD source rate (piggybacked fails)", "—", "yes", "—"],
+    ["request-grant match before inject", "—", "—", "yes"],
+])}
+<ul>
+<li><b>Credit:</b> each directed hop is a credit pair. The upstream node
+decrements credit before it launches a flit; the downstream node returns
+credit when the slot frees. A flit is never sent onto a hop with no
+credit. 80 directed segments, two planes × two directions.</li>
+<li><b>I-tag:</b> a source starved for <code>t_inj</code> cycles on a
+(plane, dir) raises I-tag and inhibits other injects on that ring until
+it boards. Bounds inject starvation.</li>
+<li><b>E-tag:</b> a flit that fails to leave (shared per-plane eject
+queue full) <code>t_xfer</code> times raises E-tag and may use
+<code>resv_ej</code> reserved eject slots; otherwise it deflects and
+rides another lap. Rebound onto reserved <em>eject</em> entries — an
+adaptation, not HiRD's transfer-FIFO E-tag.</li>
+</ul>
+
 <h2>1. Verification</h2>
 <p>{verify.get("n_ok", 0)}/{verify.get("n_total", 0)} checks passed.</p>
 {_table(["check", "result"], ver_rows)}
 
 <h2>2. Three-scheme makespan (default plane_sel=least_occupied, eject_depth=4)</h2>
-<p class="note">S0 = RR + I-tag/E-tag, no source rate control.
-S1 = S0 + piggybacked failure counts + AIMD.
-S2 = request-grant iSLIP (I=2, interval, arc). Bound is the analytic floor
-(link / port / cut / single-txn).</p>
+<p class="note">Same credit + I-tag / E-tag datapath on every row.
+S0 = RR inject, no source rate control.
+S1 = S0 + piggybacked failure counts + AIMD token bucket.
+S2 = request-grant iSLIP (I=2, interval, arc) on the same hops.
+Bound is the analytic floor (link / port / cut / single-txn).</p>
 {_table(["scheme", "pattern", "R", "m or K", "mean", "min", "max", "bound", "ok"],
         sum_rows)}
 <p class="note">Wall {cmp_.get("wall_secs", "?")}s, {len(cmp_.get("rows") or [])} rows.
@@ -224,8 +256,11 @@ Quick={ (cmp_.get("meta") or {}).get("quick") }.</p>
 <h2>4. Request-grant area / makespan Pareto</h2>
 <p class="note">y = makespan_des + t_sched_cycles (scheduler delay charged
 back). x = area_norm (IQ-XY router = 1.0, per node). S0 and S1 sit on the
-same plot as reference points. Area is a bit-equivalent model calibrated
-so mesh <code>greedy_ff = 0.05</code>; not mm².</p>
+same plot as reference points. Area counts the <em>shared</em> credit +
+I-tag / E-tag datapath on all three schemes; S2 adds the arbiter and a
+small control-plane tax on top of that datapath — it does not delete
+station storage. Bit-equivalent model calibrated so mesh
+<code>greedy_ff = 0.05</code>; not mm².</p>
 <p><img src="{png}" alt="Pareto front"></p>
 {_table(["tag", "area_norm", "makespan"], front_rows)}
 <p class="note">{pareto.get("n_front", 0)} non-dominated points,
@@ -233,15 +268,20 @@ so mesh <code>greedy_ff = 0.05</code>; not mm².</p>
 
 <h2>5. How to read the comparison</h2>
 <ul>
-<li>S0 is the reactive baseline: in-ring never stalls, I-tag bounds inject
-starvation, E-tag (rebound onto reserved <em>eject</em> entries — an
-adaptation, not HiRD) bounds leave livelock.</li>
+<li>Read the three schemes as policies on one fabric. Credit + I-tag +
+E-tag are always there. In-ring traffic still never stalls (lookahead
+shorter than hop delay); I-tag bounds inject starvation; E-tag bounds
+leave livelock.</li>
+<li>S0 is the reactive baseline: spend credit with RR when the hop is
+free. No source rate control beyond I-tag.</li>
 <li>S1 feeds board/leave failure counts back to the source and AIMDs the
 token-bucket rate. On a closed burst this often <em>hurts</em> makespan
 because every source sees board NACK in the first epoch and the rate
 collapses; that is a result, not a bug.</li>
-<li>S2 deletes station storage (zero distributed bits) and pays an arbiter
-plus a small control-plane tax. Whether it lands on the Pareto front
+<li>S2 keeps the same credit + I-tag / E-tag datapath and adds a
+request-grant match so a flit only injects when the hop already has
+credit reserved. It pays an arbiter plus a small control-plane tax on
+top of the shared datapath. Whether it lands on the Pareto front
 depends on <code>t_sched_cycles</code> — an algorithm that is only fast
 because it is unbuildable is charged for that.</li>
 </ul>
