@@ -33,10 +33,14 @@
 
 ## 2. 共同数据面，然后才是 S0 / S1 / S2
 
-三方案跑在**同一条**点对点 credit + I-tag / E-tag 数据面上，不是三种 fabric。
+三方案跑在**同一条**数据面上，不是三种 fabric。
 
 | 层 | S0 RR | S1 AIMD | S2 request-grant |
 |---|---|---|---|
+| 相邻节点 hop 时延 | 2 拍 | 2 拍 | 2 拍 |
+| 上环队列（每 node, plane） | 8 flit | 8 flit | 8 flit |
+| 下环队列（每 node, plane） | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag |
+| inject / eject 端口 | 每 (node, plane) 1 个 | 同左 | 同左 |
 | 点对点 credit FC | 有 | 有 | 有 |
 | I-tag（上环饥饿有界） | 有 | 有 | 有 |
 | E-tag（下环 / 预留 eject） | 有 | 有 | 有 |
@@ -46,11 +50,15 @@
 
 **Credit：** 每条有向 hop 是一对 credit。上游发 flit 先扣 credit，下游槽位空出后归还。没有 credit 不准发。80 条有向段（20 × 2 plane × 2 方向）。
 
+**上环队列：** 每 (node, plane) 8 flit，plane 内双向共用。PE 把 flit 交给 fabric 外的 backlog，只有队列有空位才 admit，所以注入点是**真反压**，不是把整批流量一次吞下。
+
 **I-tag：** 某源在某 (plane, dir) 上饿 `t_inj` 拍后升 I-tag，抑制该环向上其他节点上环，直到自己上去。
 
-**E-tag：** 下环失败（共享 eject 队列满）`t_xfer` 次后升 E-tag，可以使用 `resv_ej` 条预留 eject 槽。失败则偏转，再绕一圈。改绑到预留 eject，不是 HiRD 的 transfer-FIFO E-tag。
+**E-tag：** 下环失败（共享 eject 队列满，或该拍唯一的 leave 端口已被占）`t_xfer` 次后升 E-tag，可以使用 `resv_ej` 条预留 eject 槽。失败则偏转，再绕一圈。改绑到预留 eject，不是 HiRD 的 transfer-FIFO E-tag。
 
-S0（`rg_ring2_base.py`）是这条数据面上的反应式基线：周期精确 DES，优先级 **in-ring > inject**，有 credit 且 slot 空才 RR 上环。每 (node, plane) 每拍最多 1 次上环、1 次下环；两方向 RR 争 leave 端口。失效模式是活锁 / 延迟长尾，不是死锁：每节点每 plane 每方向每拍最多到达 1 个 flit，偏转无条件可用。
+**端口口径三方案一致：** 每 (node, plane) 每拍 1 次上环、1 次下环，即每节点每拍可上 2 个 flit（两个 plane 各 1）。S2 的 `("inj", node, plane)` / `("ej", node, plane)` 资源 key 与 S0 的 DES 对齐——早期版本按**节点**记 cap 1，等于把 S2 的端口天花板砍半，那是一个记账错误，已修。
+
+S0（`rg_ring2_base.py`）是这条数据面上的反应式基线：周期精确 DES，优先级 **in-ring > inject**，有 credit 且 slot 空才 RR 上环。两方向 RR 争 leave 端口。失效模式是活锁 / 延迟长尾，不是死锁：每节点每 plane 每方向每拍最多到达 1 个 flit，偏转无条件可用。
 
 ## 3. S1 AIMD（`rg_ring2_aimd.py`）
 
@@ -103,14 +111,14 @@ rate ∈ [rate_min, rate_max]
 | `results/report_ring2_20node.html` | 报告 |
 | `results/ring2_core_recv_bw_allpairs.png` | 三方案每核接收带宽（allpairs） |
 | `results/ring2_core_recv_bw_uniform.png` | 三方案每核接收带宽（uniform K=20） |
-| `utils/dse_ring2_core40k.py` | 同 pattern、每核 40000 响应 flit 的 S0/S1/S2 对比 |
-| `results/ring2_core40k.json` | 40k 每核接收曲线（分箱）+ 上环统计 |
-| `results/ring2_core_recv_bw_40k.png` | 三方案每核接收带宽（aligned x） |
-| `results/ring2_core_recv_bw_40k_overlay.png` | 三方案均值叠图 |
+| `utils/dse_ring2_core10k.py` | 同 pattern、每核 10000 响应 flit 的 S0/S1/S2 对比 |
+| `results/ring2_core10k.json` | 10k 每核接收曲线（分箱）+ 上环 / 队列统计 |
+| `results/ring2_core_recv_bw_10k.png` | 三方案每核接收带宽（aligned x） |
+| `results/ring2_core_recv_bw_10k_overlay.png` | 三方案均值叠图 |
 
 ## 7. 实测（allpairs m=1 R=4 / uniform 多 seed，plane_sel=least_occupied）
 
-闭集中突发、验证 14/14 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
+闭集中突发、验证 16/16 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
 
 | 方案 | allpairs m=1 R=4 | uniform K=20 R=4 | uniform K=100 R=4 |
 |---|---|---|---|
@@ -128,7 +136,7 @@ S1 在闭集中突发下经常更差：第一个 epoch 几乎人人上环 NACK�
 python3 utils/verify_ring2_20.py
 python3 utils/dse_ring2_20node.py          # --quick 做冒烟
 python3 utils/dse_ring2_rg_pareto.py       # --refine 加密当前前沿
-python3 utils/dse_ring2_core40k.py         # 同 pattern 40000 flit/core；--quick 冒烟
+python3 utils/dse_ring2_core10k.py         # 同 pattern 10000 flit/core；--quick 冒烟
 python3 utils/gen_ring2_report.py
 ```
 
