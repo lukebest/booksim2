@@ -6,6 +6,13 @@ therefore no transfer FIFO and no Swap Rule. The two remaining failure points
 are boarding (slot occupied) and leaving (shared per-plane eject queue full);
 those are exactly what I-tag and E-tag bound.
 
+Boarding queue
+--------------
+Each (node, plane) has an `inj_depth`-deep boarding queue. A PE hands flits to
+`pending` (off-fabric backlog) and they are admitted into that queue only when
+it has room, so the injection point exerts real backpressure instead of
+absorbing the whole batch.
+
 E-tag semantics (adapted, not HiRD)
 -----------------------------------
 The 2D ring bound E-tag to reserved *transfer-FIFO* entries. Here there is no
@@ -34,8 +41,8 @@ from rg_ring2_topo import (
 
 @dataclass
 class Ring2BaseParams:
-    hop_lat: int = 1
     sigma: int = 1
+    inj_depth: int = 8            # boarding queue per (node, plane)
     eject_depth: int = 4          # shared by both dirs of one plane
     resv_ej: int = 1              # extra eject slots only an E-tagged flit uses
     t_inj: int = 64               # inject starve cycles -> I-tag
@@ -93,7 +100,9 @@ class Ring2BaseSim:
         self.arrivals: dict[int, list[Flit]] = defaultdict(list)
         self.arr_set: dict[Any, set[int]] = defaultdict(set)
 
+        # boarding queue (`inj_depth` deep) and the PE-side backlog behind it
         self.srcq: dict[Any, deque[Flit]] = defaultdict(deque)   # (node, plane)
+        self.pending: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)       # (p, dir)
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
@@ -129,6 +138,7 @@ class Ring2BaseSim:
             "n_inring_blocked": 0, "n_eject_full_deflect": 0,
             "n_board_fail": 0, "max_inj_starve": 0,
             "max_deflections": 0, "max_ejectq": 0,
+            "max_srcq": 0, "max_pending": 0, "n_admit_stall": 0,
             "n_aimd_increase": 0, "n_aimd_decrease": 0,
         }
         self._pid = 0
@@ -161,8 +171,7 @@ class Ring2BaseSim:
                  plane=plane)
         self._pid += 1
         self._place(f)
-        self.srcq[(txn.core, plane)].append(f)
-        self.active_src.add((txn.core, plane))
+        self._offer_flit(f)
         self.st["n_offered_req"] += 1
 
     def offer_batch(self, txns: Sequence[Txn]) -> None:
@@ -185,9 +194,29 @@ class Ring2BaseSim:
     def _release_ready_resps(self) -> None:
         ready = [k for k in list(self._resp_stash) if k[0] <= self.t]
         for k in ready:
-            f = self._resp_stash.pop(k)
-            self.srcq[(f.src, f.plane)].append(f)
-            self.active_src.add((f.src, f.plane))
+            self._offer_flit(self._resp_stash.pop(k))
+
+    # -- boarding queue admission -------------------------------------------
+
+    def _offer_flit(self, f: Flit) -> None:
+        """A PE hands a flit over; it waits behind the boarding queue."""
+        key = (f.src, f.plane)
+        self.pending[key].append(f)
+        self.st["max_pending"] = max(self.st["max_pending"],
+                                     len(self.pending[key]))
+        self.active_src.add(key)
+        self._admit(key)
+
+    def _admit(self, key: Any) -> None:
+        """Move flits into the `inj_depth`-deep boarding queue while it fits."""
+        q, pend = self.srcq[key], self.pending[key]
+        while pend and len(q) < self.p.inj_depth:
+            q.append(pend.popleft())
+        if q:
+            self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
+
+    def _src_idle(self, key: Any) -> bool:
+        return not self.srcq[key] and not self.pending[key]
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
@@ -340,6 +369,9 @@ class Ring2BaseSim:
         # local injection: one flit per (node, plane) if the slot is free
         for key in list(self.active_src):
             node, plane = key
+            self._admit(key)
+            if self.pending[key]:
+                self.st["n_admit_stall"] += 1
             q = self.srcq[key]
             if not q:
                 self.inj_starve[key] = 0
@@ -362,7 +394,8 @@ class Ring2BaseSim:
                         self.st["n_itag_raised"] += 1
                 continue
             q.popleft()
-            if not q:
+            self._admit(key)
+            if self._src_idle(key):
                 self.active_src.discard(key)
             self.i_tag[(f.plane, f.dir)].discard(node)
             self.inj_starve[key] = 0
@@ -422,7 +455,8 @@ class Ring2BaseSim:
                 + len(getattr(self, "_resp_stash", {})))
 
     def backlog(self) -> int:
-        return sum(len(q) for q in self.srcq.values())
+        return (sum(len(q) for q in self.srcq.values())
+                + sum(len(q) for q in self.pending.values()))
 
     def done(self) -> bool:
         return self.st["n_txn_done"] >= self._n_txn_target and self._n_txn_target > 0
@@ -507,5 +541,6 @@ if __name__ == "__main__":
             "n_delivered_flits", "n_delivered_req", "n_delivered_resp",
             "n_deflections", "n_etag_raised", "n_itag_raised",
             "n_inring_blocked", "n_eject_full_deflect", "n_board_fail",
-            "max_inj_starve", "lat_p50", "lat_p99", "lat_max")
+            "max_inj_starve", "max_srcq", "max_ejectq", "n_admit_stall",
+            "lat_p50", "lat_p99", "lat_max")
     print(json.dumps({k: r.get(k) for k in keep}, indent=2))

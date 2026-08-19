@@ -1,6 +1,6 @@
 {
-  "n_total": 14,
-  "n_ok": 14,
+  "n_total": 16,
+  "n_ok": 16,
   "all_ok": true,
   "rows": [
     {
@@ -40,6 +40,14 @@
       "ok": true
     },
     {
+      "name": "boarding_queue_depth",
+      "ok": true
+    },
+    {
+      "name": "ports_per_node_plane",
+      "ok": true
+    },
+    {
       "name": "rg_replay_conflict_free",
       "ok": true
     },
@@ -60,5 +68,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-18T13:55:12Z"
+  "generated_at": "2026-08-19T01:20:19Z"
 }

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Same-pattern, ~40000 response flits/core: S0 vs S1 vs S2.
+"""Same-pattern, 10000 response flits/core: S0 vs S1 vs S2.
 
-Workload: uniform random HA, K=10000 txns/core, R=4 → 40000 recv flits/core.
+Workload: uniform random HA, K=2500 txns/core, R=4 → 10000 recv flits/core.
 Compares receive-bandwidth time series and per-destination-core on-ramp
 counts (CW / CCW successes and failures).
 
-Writes results/ring2_core40k.json and the comparison PNGs.
+All three schemes ride the same datapath: 2-cycle hops, 8-deep boarding
+queue per (node, plane), point-to-point credit, I-tag / E-tag.
+
+Writes results/ring2_core10k.json and the comparison PNGs.
 """
 
 from __future__ import annotations
@@ -30,9 +33,9 @@ from rg_ring2_rg import RGConfig, run_batch as run_rg
 from rg_ring2_topo import Ring2Topology, build_uniform, cores
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "results" / "ring2_core40k.json"
+OUT = ROOT / "results" / "ring2_core10k.json"
 R_FLITS = 4
-K_PER_CORE = 10_000          # 10000 * 4 = 40000 recv flits / core
+K_PER_CORE = 2_500           # 2500 * 4 = 10000 recv flits / core
 BIN_W = 64
 FLITS_PER_CORE = K_PER_CORE * R_FLITS
 
@@ -70,6 +73,15 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         "n_delivered_flits": r.get("n_delivered_flits"),
         "n_txn_done": r.get("n_txn_done"),
         "n_board_fail": r.get("n_board_fail", 0),
+        "n_deflections": r.get("n_deflections", 0),
+        "max_srcq": r.get("max_srcq"),
+        # S2 only: flits released but not yet boarded. A granted source knows
+        # its own t0, so this is backlog demand, not required queue depth.
+        "max_src_wait": r.get("max_src_wait"),
+        "max_ejectq": r.get("max_ejectq", 0),
+        "n_admit_stall": r.get("n_admit_stall", 0),
+        "lat_p50": r.get("lat_p50"),
+        "lat_p99": r.get("lat_p99"),
         "recv_by_core": recv,
         "board_by_core": board,
         "wall_secs": round(time.perf_counter() - t0, 1),
@@ -175,8 +187,8 @@ def main() -> None:
     for scheme in ("S0", "S1", "S2"):
         traces[scheme] = _run(scheme, topo, txns, args.seed)
 
-    panel = ROOT / "results" / "ring2_core_recv_bw_40k.png"
-    overlay = ROOT / "results" / "ring2_core_recv_bw_40k_overlay.png"
+    panel = ROOT / "results" / "ring2_core_recv_bw_10k.png"
+    overlay = ROOT / "results" / "ring2_core_recv_bw_10k_overlay.png"
     plot_panels(traces, panel, bin_w=bin_w, k=k, r_flits=R,
                 flits_per_core=flits)
     plot_overlay(traces, overlay, bin_w=bin_w, flits_per_core=flits)
@@ -186,6 +198,9 @@ def main() -> None:
             "pattern": "uniform", "K": k, "R": R, "seed": args.seed,
             "flits_per_core": flits, "bin_w": bin_w,
             "plane_sel": "least_occupied",
+            "hop_lat": topo.hop_lat,
+            "inj_depth": Ring2BaseParams().inj_depth,
+            "eject_depth": Ring2BaseParams().eject_depth,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
         "schemes": {},
@@ -204,21 +219,34 @@ def main() -> None:
             "n_delivered_flits": tr["n_delivered_flits"],
             "n_txn_done": tr["n_txn_done"],
             "wall_secs": tr["wall_secs"],
+            "n_deflections": tr["n_deflections"],
+            "max_srcq": tr["max_srcq"],
+            "max_src_wait": tr["max_src_wait"],
+            "max_ejectq": tr["max_ejectq"],
+            "n_admit_stall": tr["n_admit_stall"],
+            "lat_p50": tr["lat_p50"],
+            "lat_p99": tr["lat_p99"],
             "board_by_core": {str(c): v for c, v in tr["board_by_core"].items()},
             "recv_binned": rates,
         }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(slim, indent=1))
     print(f"wrote {OUT}  {slim['wall_secs']}s")
-    print(f"{'scheme':6} {'mk':>8} {'ok':>3}  board  fail   cw    ccw")
+    print(f"{'scheme':6} {'mk':>8} {'ok':>3} {'board':>7} {'fail':>8} "
+          f"{'cw':>6} {'ccw':>6} {'defl':>6} {'srcq':>5} {'wait':>6} "
+          f"{'ejq':>4} {'p50':>7} {'p99':>7}")
     for name, tr in traces.items():
         b = tr["board_by_core"]
         board = sum(v["board"] for v in b.values())
         fail = sum(v["board_fail"] for v in b.values())
         cw = sum(v["board_cw"] for v in b.values())
         ccw = sum(v["board_ccw"] for v in b.values())
-        print(f"{name:6} {tr['makespan']:>8} {int(tr['completed']):>3}  "
-              f"{board:>6} {fail:>6} {cw:>5} {ccw:>5}")
+        print(f"{name:6} {tr['makespan']:>8} {int(tr['completed']):>3} "
+              f"{board:>7} {fail:>8} {cw:>6} {ccw:>6} "
+              f"{tr['n_deflections']:>6} {str(tr['max_srcq']):>5} "
+              f"{str(tr['max_src_wait']):>6} "
+              f"{tr['max_ejectq']:>4} {str(tr['lat_p50']):>7} "
+              f"{str(tr['lat_p99']):>7}")
 
 
 if __name__ == "__main__":

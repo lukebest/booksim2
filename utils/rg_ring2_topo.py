@@ -35,7 +35,7 @@ from typing import Any, Iterable, Literal, Sequence
 
 N_NODES = 20
 N_PLANES = 2
-HOP_LAT = 1
+HOP_LAT = 2                            # cycles between adjacent nodes
 SIGMA = 1
 RAMP = 1
 

@@ -408,7 +408,7 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
                      num_vc: int = 1, n_ports_per_node: int = 5,
                      fifo_depth: int = 4, resv_tx: int = 1,
                      eject_depth: int = 4, reasm_depth: int = 16,
-                     n_planes: int = 2, resv_ej: int = 1
+                     n_planes: int = 2, resv_ej: int = 1, inj_depth: int = 8
                      ) -> dict[str, Any]:
     """Per-node storage and control the distributed baselines need.
 
@@ -453,11 +453,12 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         pass
     elif config in ("ring2_base", "ring2_aimd", "ring2_rg"):
         # Common datapath for all three 20-node schemes: point-to-point
-        # credit on each directed hop (80 segments), I-tag / E-tag, shared
-        # per-plane eject queue + reserved E-tag slots, reassembly.
-        # S0/S1/S2 differ in injection / matching policy, not in this layer.
-        # hop_lat=1 → credit RTT is a few cycles; counter width is W_D.
+        # credit on each directed hop (80 segments), I-tag / E-tag, the
+        # `inj_depth`-deep boarding queue, shared per-plane eject queue +
+        # reserved E-tag slots, reassembly. S0/S1/S2 differ in injection /
+        # matching policy, not in this layer.
         b["credit_counters"] = n_nodes * n_planes * 2 * W_D
+        b["boarding_queues"] = n_nodes * n_planes * inj_depth * W_FLIT
         b["eject_queues"] = n_nodes * n_planes * eject_depth * W_FLIT
         b["reserved_eject"] = n_nodes * n_planes * resv_ej * W_FLIT
         b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT

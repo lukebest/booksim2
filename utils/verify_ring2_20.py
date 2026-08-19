@@ -21,7 +21,7 @@ if str(_UTILS) not in sys.path:
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, Ring2BaseSim, run_batch as run_base
 from rg_ring2_rg import RING2_ALGOS, RGConfig, replay_ok, run_batch as run_rg
-from rg_ring2_rg import schedule
+from rg_ring2_rg import requirements, schedule
 from rg_ring2_topo import (
     Ring2Topology, build_allpairs, build_uniform, hop_count, is_core, is_ha,
     paths_for_txns, shortest_dir,
@@ -168,6 +168,34 @@ def test_etag_and_deflect_bounded() -> None:
     assert r["max_deflections"] < 200, r["max_deflections"]
 
 
+def test_boarding_queue_depth_respected() -> None:
+    """The boarding queue never exceeds inj_depth, and it does fill up."""
+    topo = Ring2Topology()
+    txns = build_uniform(k=200, m_resp=4, seed=0)
+    for depth in (2, 8):
+        p = Ring2BaseParams(inj_depth=depth, plane_sel="least_occupied")
+        r = run_base(topo, txns, params=p)
+        assert r["completed"], depth
+        assert r["max_srcq"] <= depth, (depth, r["max_srcq"])
+        assert r["max_srcq"] == depth, (depth, r["max_srcq"])
+        # backpressure actually engaged: PEs had to wait behind the queue
+        assert r["n_admit_stall"] > 0, depth
+
+
+def test_ports_are_per_node_plane() -> None:
+    """S2 prices inject/eject per (node, plane), same as the S0 DES."""
+    topo = Ring2Topology()
+    txns = build_allpairs(m=1, m_resp=4)
+    fp = topo.footprint(0, topo.make_path(0, 3, 1), 4, kind="resp")
+    keys = {k for k, _, _, _ in requirements(topo, fp)}
+    assert ("inj", 0, 1) in keys, keys
+    assert ("ej", 3, 1) in keys, keys
+    assert ("inj", 0) not in keys and ("ej", 3) not in keys
+    # a node may board on both planes in the same cycle
+    r = run_rg(topo, txns, cfg=RGConfig(algo="islip", iters=2))
+    assert r["completed"] and r["n_conflicts"] == 0
+
+
 def test_rg_replay_conflict_free() -> None:
     topo = Ring2Topology()
     txns = build_allpairs(m=1, m_resp=4)
@@ -245,6 +273,8 @@ def main() -> None:
     c.add("inring_never_blocked", test_inring_never_blocked_under_load)
     c.add("itag_starve_finite", test_itag_bounds_starve)
     c.add("etag_deflect_bounded", test_etag_and_deflect_bounded)
+    c.add("boarding_queue_depth", test_boarding_queue_depth_respected)
+    c.add("ports_per_node_plane", test_ports_are_per_node_plane)
     c.add("rg_replay_conflict_free", test_rg_replay_conflict_free)
     c.add("rg_req_before_resp", test_rg_req_before_resp)
     c.add("uniform_multi_seed_s0", test_uniform_multi_seed_s0)

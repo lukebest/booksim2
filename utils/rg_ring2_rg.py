@@ -160,8 +160,12 @@ def requirements(topo: Ring2Topology, fp: Ring2Footprint
         out.append((k, off, fp.dur, topo.board_ports))
     for k, off in fp.leaves:
         out.append((k, off, fp.dur, topo.leave_ports))
-    out.append((("inj", fp.src), 0, fp.dur, 1))
-    out.append((("ej", fp.dst), fp.wire, fp.dur, 1))
+    # Ports are per (node, plane), matching the S0 DES: each plane has its own
+    # inject/eject port, so a node can board 2 flits per cycle, not 1. These
+    # are the cap-1 keys `conflicts()` / `replay_ok` actually verify; the
+    # board/leave keys above are the (possibly cap>1) generalization.
+    out.append((("inj", fp.src, fp.path.plane), 0, fp.dur, 1))
+    out.append((("ej", fp.dst, fp.path.plane), fp.wire, fp.dur, 1))
     out.append((("voq", fp.src, fp.dst, fp.kind), 0, fp.dur, 1))
     fp._reqs = out  # type: ignore[attr-defined]
     return out
@@ -560,6 +564,28 @@ def replay_ok(topo: Ring2Topology, grants: Sequence[Grant]) -> bool:
     return True
 
 
+def _max_src_wait(grants: Sequence[Grant]) -> int:
+    """Peak flits released but not yet boarded, per (node, plane).
+
+    A granted source knows its own t0, so it only has to move a flit into the
+    boarding queue just before it boards; everything else can sit in the PE
+    backlog. This is therefore a demand figure, not a required queue depth.
+    """
+    ev: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    for g in grants:
+        key = (g.src, g.path.plane)
+        ev[key].append((g.fp.release, 1))
+        ev[key].append((g.t0, -1))
+    peak = 0
+    for es in ev.values():
+        es.sort()
+        cur = 0
+        for _, d in es:
+            cur += d
+            peak = max(peak, cur)
+    return peak
+
+
 def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
               cfg: RGConfig | None = None,
               skip_replay: bool = False) -> dict[str, Any]:
@@ -584,6 +610,7 @@ def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
         for k in range(g.m):
             recv[g.dst].append(g.t0 + g.fp.wire + k * g.fp.sigma + RAMP)
     out["recv_by_core"] = {c: sorted(ts) for c, ts in recv.items()}
+    out["max_src_wait"] = _max_src_wait(grants)
     board: dict[int, dict[str, int]] = {}
     for g in grants:
         if g.kind != "resp":

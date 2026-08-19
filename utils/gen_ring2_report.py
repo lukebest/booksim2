@@ -130,13 +130,21 @@ def main() -> None:
     ver_rows = [[r["name"], "ok" if r["ok"] else "FAIL"]
                 for r in (verify.get("rows") or [])]
 
-    big = _load("ring2_core40k.json")
+    big = _load("ring2_core10k.json")
     board_html = ""
     if big.get("schemes"):
         meta = big.get("meta") or {}
-        mk_row = ["makespan"] + [big["schemes"][s].get("makespan")
-                                 for s in ("S0", "S1", "S2")]
-        board_rows = [mk_row]
+        board_rows = [["makespan"] + [big["schemes"][s].get("makespan")
+                                      for s in ("S0", "S1", "S2")]]
+        for label, field in (("deflections", "n_deflections"),
+                             ("peak boarding queue", "max_srcq"),
+                             ("peak eject queue", "max_ejectq"),
+                             ("resp latency p50", "lat_p50"),
+                             ("resp latency p99", "lat_p99")):
+            board_rows.append(
+                [label] + [big["schemes"][s].get(field, "—") if
+                           big["schemes"][s].get(field) is not None else "—"
+                           for s in ("S0", "S1", "S2")])
         cores_s = sorted({int(c) for s in big["schemes"].values()
                           for c in (s.get("board_by_core") or {})},
                          key=int)
@@ -168,22 +176,23 @@ def main() -> None:
         board_html = f"""
 <h2>3. Same-pattern comparison · {meta.get('flits_per_core', 40000)} flits/core</h2>
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')},
-<code>plane_sel=least_occupied</code>. Every core receives the same number of
-response flits. Overlay shares one time axis so S0 / S1 / S2 can be compared
-directly. All three ride the same credit + I-tag / E-tag datapath.
+<code>plane_sel=least_occupied</code>, hop latency {meta.get('hop_lat')} cy,
+boarding queue {meta.get('inj_depth')} deep, eject queue
+{meta.get('eject_depth')}. Every core receives the same number of response
+flits. Overlay shares one time axis so S0 / S1 / S2 can be compared directly.
 Board counts are for <em>response data</em> destined to that core:
 上环 = successful injects, CW = dir +1, CCW = dir −1, 失败 = inject attempts
 that found the slot busy or I-tag blocked (AIMD token denials are not
 counted). S2 still has I-tag / E-tag; its 失败 is 0 because a grant is
-placed only when the hop already has credit, so the reactive tags are not
+placed only when the hop is already free, so the reactive tags are not
 exercised on this closed batch.</p>
-<p><img src="ring2_core_recv_bw_40k_overlay.png" alt="overlay mean recv bw"></p>
-<p><img src="ring2_core_recv_bw_40k.png" alt="per-core recv bw 40k"></p>
+<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="overlay mean recv bw"></p>
+<p><img src="ring2_core_recv_bw_10k.png" alt="per-core recv bw 10k"></p>
 {_table(["", "S0 RR", "S1 AIMD", "S2 request-grant"], board_rows)}
 <p class="note">Wall {big.get('wall_secs', '?')}s.</p>
 """
     else:
-        board_html = "<h2>3. Same-pattern 40000 flits/core</h2><p class='note'>Run <code>python3 utils/dse_ring2_core40k.py</code> to fill this section.</p>"
+        board_html = "<h2>3. Same-pattern 10000 flits/core</h2><p class='note'>Run <code>python3 utils/dse_ring2_core10k.py</code> to fill this section.</p>"
 
     png = "ring2_rg_pareto.png"
     html = f"""<!doctype html>
@@ -210,10 +219,17 @@ last response flit is drained at the requesting core.</p>
 
 <h2>0. Common datapath (all three schemes)</h2>
 <p class="note">S0 / S1 / S2 are <em>not</em> three different fabrics.
-They share one point-to-point credit-based datapath and the same I-tag /
-E-tag guarantees. The sweep only changes how a source is allowed to spend
-credit (RR, AIMD rate, or a request-grant match).</p>
+They share one point-to-point credit-based datapath, the same 8-deep
+boarding queue, and the same I-tag / E-tag guarantees. The sweep only
+changes how a source is allowed to spend credit (RR, AIMD rate, or a
+request-grant match).</p>
 {_table(["layer", "S0 RR", "S1 AIMD", "S2 request-grant"], [
+    ["hop latency between neighbours", "2 cy", "2 cy", "2 cy"],
+    ["boarding queue per (node, plane)", "8 flits", "8 flits", "8 flits"],
+    ["eject queue per (node, plane)", "4 + 1 E-tag", "4 + 1 E-tag",
+     "4 + 1 E-tag"],
+    ["inject / eject ports", "1 per (node, plane)", "1 per (node, plane)",
+     "1 per (node, plane)"],
     ["point-to-point credit FC", "yes", "yes", "yes"],
     ["I-tag (inject starvation bound)", "yes", "yes", "yes"],
     ["E-tag (leave / reserved eject)", "yes", "yes", "yes"],
@@ -226,14 +242,19 @@ credit (RR, AIMD rate, or a request-grant match).</p>
 decrements credit before it launches a flit; the downstream node returns
 credit when the slot frees. A flit is never sent onto a hop with no
 credit. 80 directed segments, two planes × two directions.</li>
+<li><b>Boarding queue:</b> 8 flits per (node, plane). A PE hands flits to
+an off-fabric backlog and they are admitted only when the queue has room,
+so the injection point exerts real backpressure. Both directions of a
+plane draw from the same queue.</li>
 <li><b>I-tag:</b> a source starved for <code>t_inj</code> cycles on a
 (plane, dir) raises I-tag and inhibits other injects on that ring until
 it boards. Bounds inject starvation.</li>
 <li><b>E-tag:</b> a flit that fails to leave (shared per-plane eject
-queue full) <code>t_xfer</code> times raises E-tag and may use
-<code>resv_ej</code> reserved eject slots; otherwise it deflects and
-rides another lap. Rebound onto reserved <em>eject</em> entries — an
-adaptation, not HiRD's transfer-FIFO E-tag.</li>
+queue full, or the single leave port already taken this cycle)
+<code>t_xfer</code> times raises E-tag and may use <code>resv_ej</code>
+reserved eject slots; otherwise it deflects and rides another lap.
+Rebound onto reserved <em>eject</em> entries — an adaptation, not HiRD's
+transfer-FIFO E-tag.</li>
 </ul>
 
 <h2>1. Verification</h2>
