@@ -4,7 +4,7 @@
 Schemes
 -------
 Common datapath (all fifteen): per-link hop delays (1–4 cycles), 8-deep boarding queue per
-(node, plane), point-to-point credit FC + I-tag + E-tag, and a 512
+(node, plane), point-to-point credit FC + I-tag + E-tag, and a 100
 outstanding-read cap per AI core.
 S0  ring2_base   RR inject on that datapath, no source rate control
 S1  ring2_aimd   S0 + piggybacked failure counts + AIMD token bucket

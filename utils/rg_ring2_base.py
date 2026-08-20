@@ -38,6 +38,9 @@ from rg_ring2_topo import (
     shortest_dir,
 )
 
+# Max in-flight reads per AI core (request injected, last resp not drained).
+CORE_OUTSTANDING = 100
+
 
 @dataclass
 class Ring2BaseParams:
@@ -52,7 +55,7 @@ class Ring2BaseParams:
     plane_sel: PlaneSel = "least_occupied"
     # Aligned across S0/S1/S2/S3: max in-flight reads per AI core
     # (request injected, last response not yet PE-drained). 0 = unlimited.
-    core_outstanding: int = 512
+    core_outstanding: int = CORE_OUTSTANDING
     # AIMD knobs (ignored by S0; consumed by Ring2AimdSim)
     aimd: bool = False
     alpha: float = 0.15

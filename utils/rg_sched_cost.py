@@ -457,10 +457,11 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         # credit on each directed hop (80 segments), I-tag / E-tag, the
         # `inj_depth`-deep boarding queue, shared per-plane eject queue +
         # reserved E-tag slots, reassembly, and the aligned per-core
-        # outstanding-read scoreboard (512). S0–S10 differ in
-        # injection / matching / leave policy, not in this layer.
+        # outstanding-read scoreboard. S0–S14 differ in injection /
+        # matching / leave policy, not in this layer.
         n_cores = n_nodes // 2
         n_has = n_nodes - n_cores
+        from rg_ring2_base import CORE_OUTSTANDING
         b["credit_counters"] = n_nodes * n_planes * 2 * W_D
         b["boarding_queues"] = n_nodes * n_planes * inj_depth * W_FLIT
         b["eject_queues"] = n_nodes * n_planes * eject_depth * W_FLIT
@@ -468,7 +469,7 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         b["reassembly_buffers"] = n_nodes * reasm_depth * W_FLIT
         b["starvation_counters"] = n_nodes * n_planes * W_T
         b["itag_etag_state"] = n_nodes * n_planes * 2
-        b["core_outstanding"] = n_cores * _ceil_log2(512 + 1)
+        b["core_outstanding"] = n_cores * _ceil_log2(CORE_OUTSTANDING + 1)
         if config == "ring2_aimd":
             b["aimd_rate_tokens"] = n_nodes * 2 * W_T
             b["aimd_fail_counters"] = n_nodes * W_T

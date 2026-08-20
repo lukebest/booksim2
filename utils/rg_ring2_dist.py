@@ -19,7 +19,7 @@ hol_bypass         dir-VOQ: if the FIFO head cannot board, try the
 lqf                when both dirs can board, inject the longer VOQ
 dest_voq           per-destination VOQ + RR (skip a dest that cannot
                    board). Prevents an easy dest from filling the
-                   512 outstanding scoreboard.
+                   outstanding scoreboard.
 dest_credit        in-flight flits allowed toward a destination
                    (0 = off). Credit returns when the flit PE-drains.
 kind_req / kind_resp

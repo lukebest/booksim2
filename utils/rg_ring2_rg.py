@@ -3,7 +3,7 @@
 
 A closed batch of read-return transactions is scheduled in two waves
 (requests, then responses whose release is the request's eject + t_ha).
-When a core would exceed `core_outstanding` (default 512), the batch is
+When a core would exceed `core_outstanding` (default 100), the batch is
 split into generations: a core may have at most that many txns in flight,
 and the next request's release is the previous response's eject. Each
 wave is a table-driven matching / packing algorithm; a granted transfer
@@ -41,6 +41,7 @@ from rg_ring2_topo import (
     Kind, PlaneSel, RAMP, Ring2Footprint, Ring2Path, Ring2Topology, Txn,
     board_key, leave_key,
 )
+from rg_ring2_base import CORE_OUTSTANDING
 
 RING2_ALGOS: tuple[str, ...] = (
     "islip", "pim", "rr_oldest", "lqf", "ocf", "bvn",
@@ -145,7 +146,7 @@ class RGConfig:
     pipeline_depth: int = 1
     grants_per_src: int = 1
     seed: int = 0
-    core_outstanding: int = 512   # 0 = unlimited; aligned with DES schemes
+    core_outstanding: int = CORE_OUTSTANDING  # 0 = unlimited; aligned with DES
 
 
 def requirements(topo: Ring2Topology, fp: Ring2Footprint
@@ -628,7 +629,7 @@ def replay_ok(topo: Ring2Topology, grants: Sequence[Grant]) -> bool:
 def _peak_core_outstanding(grants: Sequence[Grant]) -> int:
     """Peak in-flight reads per core: req boards at t0, frees at resp eject.
 
-    Same-cycle free-then-reuse counts as 512, not 513 (completions first).
+    Same-cycle free-then-reuse counts as the cap, not cap+1 (completions first).
     """
     ev: dict[int, list[tuple[int, int]]] = defaultdict(list)
     for g in grants:

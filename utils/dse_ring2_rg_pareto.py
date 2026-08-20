@@ -440,7 +440,7 @@ def plot(res: dict[str, Any], path: Path) -> None:
     ax.set_xlim(min(xs_all) - pad_x, max(xs_all) + 0.00085)
     ax.set_ylim(min(ys_all) - 8, max(ys_all) + 12)
     ax.set_xlabel("area_norm  (IQ-XY router = 1.0, per node)")
-    ax.set_ylabel("makespan  (DES + t_sched_cycles)")
+    ax.set_ylabel("makespan  (last resp drain + t_sched; not mean E2E lat)")
     ax.grid(True, ls=":", alpha=0.5)
     ax.legend(frameon=False, fontsize=7.5, loc="lower left")
     ax.spines["right"].set_visible(False)

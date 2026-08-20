@@ -7,7 +7,7 @@ counts (CW / CCW successes and failures).
 
 All fifteen schemes ride the same datapath: per-link hop delays (1–4 cycles), 8-deep boarding
 queue per (node, plane), point-to-point credit, I-tag / E-tag, and a
-512 outstanding-read cap per AI core.
+100 outstanding-read cap per AI core.
 
 Writes results/ring2_core10k.json and the comparison PNGs.
 """
@@ -187,7 +187,7 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
               "S6": "#c026d3", "S7": "#7c3aed", "S8": "#ca8a04",
               "S9": "#be123c", "S10": "#047857", "S11": "#9a3412",
               "S12": "#4338ca", "S13": "#0369a1", "S14": "#db2777"}
-    # S3 is drawn dashed on top of S0: after the 512-outstanding
+    # S3 is drawn dashed on top of S0: after the outstanding-cap
     # alignment the two means coincide, and a second solid line would
     # hide S0 completely.
     styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5)),

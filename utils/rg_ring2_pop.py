@@ -10,7 +10,7 @@ A memory-read request *is* the scheduling information. There is no extra
     core PE-drains a response        ->  frees one receive-window credit
 
 Admission uses the aligned per-core outstanding cap
-(`core_outstanding`, default 512) from the base datapath. `pop_window`
+(`core_outstanding`, default 100) from the base datapath. `pop_window`
 is an optional extra per-(core, resp plane) cap (0 = off). The HA then
 sees arrived requests and RR-schedules which one gets its response burst.
 
