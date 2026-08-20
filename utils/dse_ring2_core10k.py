@@ -5,7 +5,7 @@ Workload: uniform random HA, K=2500 txns/core, R=4 → 10000 recv flits/core.
 Compares receive-bandwidth time series and per-destination-core on-ramp
 counts (CW / CCW successes and failures).
 
-All fifteen schemes ride the same datapath: 2-cycle hops, 8-deep boarding
+All fifteen schemes ride the same datapath: per-link hop delays (1–4 cycles), 8-deep boarding
 queue per (node, plane), point-to-point credit, I-tag / E-tag, and a
 512 outstanding-read cap per AI core.
 
@@ -272,6 +272,7 @@ def main() -> None:
             "flits_per_core": flits, "bin_w": bin_w,
             "plane_sel": "least_occupied",
             "hop_lat": topo.hop_lat,
+            "link_lats": list(topo.link_lats),
             "inj_depth": Ring2BaseParams().inj_depth,
             "eject_depth": Ring2BaseParams().eject_depth,
             "pop_window": Ring2BaseParams().pop_window,

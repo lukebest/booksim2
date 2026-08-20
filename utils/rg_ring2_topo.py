@@ -10,6 +10,11 @@ per plane; the two directions of a plane share that port and its buffer.
     even index  -> AI core          {0, 2, ..., 18}
     odd  index  -> memory Home Agent {1, 3, ..., 19}
 
+Hop delay is per undirected edge (same both directions). Default
+`RING2_LINK_LATS[i]` is the delay between node i and (i+1) mod 20;
+the last entry is mem HA 19 ↔ core 0. Routing is still hop-count
+shortest path (CW on a hop-count tie).
+
 A transfer is a single arc: pick a plane, pick the shortest direction (CW on a
 tie), ride until the destination, leave. There is no turn and therefore no
 transfer FIFO and no R4.
@@ -35,7 +40,13 @@ from typing import Any, Iterable, Literal, Sequence
 
 N_NODES = 20
 N_PLANES = 2
-HOP_LAT = 2                            # cycles between adjacent nodes
+HOP_LAT = 2                            # nominal / fallback hop delay
+# Undirected ring edges: link_lats[i] = delay between i and (i+1)%N.
+# Last entry is mem HA 19 ↔ core 0.
+RING2_LINK_LATS: tuple[int, ...] = (
+    2, 2, 2, 3, 1, 3, 1, 1, 2, 4,
+    1, 1, 3, 1, 3, 2, 2, 2, 3, 3,
+)
 SIGMA = 1
 RAMP = 1
 
@@ -164,7 +175,8 @@ class Ring2Topology:
     def __init__(self, n: int = N_NODES, n_planes: int = N_PLANES, *,
                  hop_lat: int = HOP_LAT, sigma: int = SIGMA,
                  board_ports: int = 1, leave_ports: int = 1,
-                 spatial_reuse: SpatialReuse = "arc"):
+                 spatial_reuse: SpatialReuse = "arc",
+                 link_lats: Sequence[int] | None = None):
         if n < 4 or n % 2:
             raise ValueError("n must be even and >= 4")
         if n_planes < 1:
@@ -174,6 +186,13 @@ class Ring2Topology:
         self.n = n
         self.n_planes = n_planes
         self.hop_lat = hop_lat
+        if link_lats is None:
+            link_lats = RING2_LINK_LATS if n == N_NODES else (hop_lat,) * n
+        if len(link_lats) != n:
+            raise ValueError(f"link_lats must have {n} entries")
+        self.link_lats = tuple(int(x) for x in link_lats)
+        if any(x < 1 for x in self.link_lats):
+            raise ValueError("link_lats must be >= 1")
         self.sigma = sigma
         self.board_ports = board_ports
         self.leave_ports = leave_ports
@@ -197,6 +216,43 @@ class Ring2Topology:
                 out.append((p, i, j))
                 out.append((p, j, i))
         return out
+
+    def hop_lat_from(self, node: int, direction: Dir) -> int:
+        """Travel time of the outgoing hop from `node` in `direction`."""
+        if direction > 0:
+            return self.link_lats[node % self.n]
+        return self.link_lats[(node - 1) % self.n]
+
+    def link_lat(self, u: int, v: int) -> int:
+        """Delay of the undirected edge between adjacent nodes u and v."""
+        if v == (u + 1) % self.n:
+            return self.link_lats[u]
+        if u == (v + 1) % self.n:
+            return self.link_lats[v]
+        raise ValueError(f"not adjacent: {u}, {v}")
+
+    def path_lat(self, src: int, dst: int, direction: Dir | None = None
+                 ) -> int:
+        """Sum of link delays along the (shortest, or given) path."""
+        if src == dst:
+            return 0
+        d = shortest_dir(src, dst, self.n) if direction is None else direction
+        hops = hop_count(src, dst, d, self.n)
+        acc = 0
+        node = src
+        for _ in range(hops):
+            acc += self.hop_lat_from(node, d)
+            node = (node + d) % self.n
+        return acc
+
+    def remaining_lat(self, node: int, direction: Dir, hops: int) -> int:
+        """Sum of the next `hops` outgoing delays from `node`."""
+        acc = 0
+        cur = node
+        for _ in range(max(0, hops)):
+            acc += self.hop_lat_from(cur, direction)
+            cur = (cur + direction) % self.n
+        return acc
 
     def ring_nodes(self, plane: PlaneId) -> list[int]:
         return list(range(self.n))
@@ -281,7 +337,8 @@ class Ring2Topology:
         acc = t
         for e in path.links():
             fp.links.append((e, acc))
-            acc += self.hop_lat
+            _p, u, v = e
+            acc += self.link_lat(u, v)
         fp.rings.append((path.key(), t, (acc - t) + dur))
         fp.leaves.append((leave_key(path.dst, path.plane), acc))
         fp.wire = acc
@@ -323,6 +380,7 @@ class Ring2Topology:
         sb, sl = self.port_load(resp_paths, m_resp)
         hop = self.hop_lat
         sig = self.sigma
+        min_hop = min(self.link_lats) if self.link_lats else hop
 
         def _max_load(d: dict) -> int:
             return max(d.values()) if d else 0
@@ -366,9 +424,11 @@ class Ring2Topology:
             / max(1, self.n_planes)) * sig
         # a single txn: hops_req*lat + m_req*sig + t_ha + hops_resp*lat + m_resp*sig
         if req_paths and resp_paths:
-            single = (max(p.hops for p in req_paths) * hop + m_req * sig
+            single = (max(self.path_lat(p.src, p.dst, p.dir)
+                          for p in req_paths) + m_req * sig
                       + t_ha
-                      + max(p.hops for p in resp_paths) * hop + m_resp * sig)
+                      + max(self.path_lat(p.src, p.dst, p.dir)
+                            for p in resp_paths) + m_resp * sig)
         else:
             single = 0
         # A ring bisection cuts TWO gaps (e.g. 9-10 and 19-0). Each gap has
@@ -388,8 +448,8 @@ class Ring2Topology:
                 cut_load += mm * sum(1 for e in path.links() if e in cut)
         cut_cap = len(cut)
         cut_lb = math.ceil(cut_load / max(1, cut_cap)) * sig
-        bound = max(link_lb, port_lb, single, cut_lb, hop + m_req * sig
-                    + t_ha + hop + m_resp * sig)
+        bound = max(link_lb, port_lb, single, cut_lb, min_hop + m_req * sig
+                    + t_ha + min_hop + m_resp * sig)
         return {
             "link_req": link_req, "link_resp": link_resp,
             "board_req": board_req, "leave_req": leave_req,
@@ -469,6 +529,11 @@ if __name__ == "__main__":
     assert topo.make_path(0, 1, 0).hops == 1
     assert topo.make_path(0, 19, 0).hops == 1      # wrap
     assert topo.make_path(0, 10, 0).dir == 1       # tie -> CW
+    assert topo.link_lats[0] == 2 and topo.link_lats[19] == 3
+    assert topo.hop_lat_from(0, 1) == 2
+    assert topo.hop_lat_from(0, -1) == 3           # 19 ↔ 0
+    assert topo.path_lat(0, 1) == 2
+    assert topo.path_lat(0, 19) == 3
     tx = build_allpairs(m=1, m_resp=4)
     assert len(tx) == 100
     rp, sp = paths_for_txns(topo, tx)

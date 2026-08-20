@@ -3,7 +3,7 @@
 
 Schemes
 -------
-Common datapath (all fifteen): 2-cycle hops, 8-deep boarding queue per
+Common datapath (all fifteen): per-link hop delays (1–4 cycles), 8-deep boarding queue per
 (node, plane), point-to-point credit FC + I-tag + E-tag, and a 512
 outstanding-read cap per AI core.
 S0  ring2_base   RR inject on that datapath, no source rate control
@@ -300,7 +300,8 @@ def sweep(*, quick: bool = False, only: str = "") -> dict[str, Any]:
         "meta": {
             "n": topo.n, "n_planes": topo.n_planes,
             "n_directed": len(topo.directed_links),
-            "hop_lat": topo.hop_lat, "quick": quick,
+            "hop_lat": topo.hop_lat,
+            "link_lats": list(topo.link_lats), "quick": quick,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
         "rows": rows,

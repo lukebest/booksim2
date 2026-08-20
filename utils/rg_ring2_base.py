@@ -262,7 +262,7 @@ class Ring2BaseSim:
             return False
         self.seg_free[seg] = self.t + self.sigma
         nxt = (f.idx + f.dir) % self.n
-        lat = self.hop_lat
+        lat = self.topo.hop_lat_from(f.idx, f.dir)
         f.idx = nxt
         f.target -= 1
         self.arrivals[self.t + lat].append(f)

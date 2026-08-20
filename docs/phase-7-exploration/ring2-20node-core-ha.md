@@ -1,7 +1,7 @@
 # 2-full-ring 20 节点：九方案 makespan + request-grant Pareto
 
 **几何：** 20 节点；偶数 index = AI core，奇数 = memory Home Agent；节点 19 与 0 相邻。
-**Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。相邻节点 **hop 时延 2 拍**。
+**Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。相邻 hop 时延按边：`2,2,2,3,1,3,1,1,2,4,1,1,3,1,3,2,2,2,3,3`（最后一项是 HA19 ↔ C0）。
 **流量：** 读往返。core→HA 请求 1 flit，HA→core 响应 R flit。**makespan = 最后一个响应 flit 被 core PE drain 的拍。**
 **Workload：** `allpairs`（10×10 每对 m 个事务，确定性）+ `uniform`（每 core 发 K 个事务，目的地在 10 个 HA 中均匀随机，多 seed）。
 **共同数据面（九方案相同）：** 点对点 credit-based flow control + **8 深上环队列** + I-tag + E-tag。

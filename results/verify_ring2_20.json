@@ -1,7 +1,7 @@
 {
   "n_total": 29,
-  "n_ok": 29,
-  "all_ok": true,
+  "n_ok": 27,
+  "all_ok": false,
   "rows": [
     {
       "name": "topo_roles_and_wrap",
@@ -77,7 +77,9 @@
     },
     {
       "name": "s4_leave_beats_s0_allpairs",
-      "ok": true
+      "ok": false,
+      "error": "(114, 111)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/booksim2/utils/verify_ring2_20.py\", line 46, in add\n    fn()\n    ~~^^\n  File \"/home/luke/booksim2/utils/verify_ring2_20.py\", line 470, in test_s4_leave_beats_s0_allpairs\n    assert s4[\"makespan\"] < s0[\"makespan\"], (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (114, 111)\n"
     },
     {
       "name": "s5_ej_beats_s0_allpairs",
@@ -101,7 +103,9 @@
     },
     {
       "name": "s10_resp_late_dir_beats_s9",
-      "ok": true
+      "ok": false,
+      "error": "(80, 76)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/booksim2/utils/verify_ring2_20.py\", line 46, in add\n    fn()\n    ~~^^\n  File \"/home/luke/booksim2/utils/verify_ring2_20.py\", line 574, in test_s10_resp_late_dir_beats_s9\n    assert s10a[\"makespan\"] < s9a[\"makespan\"], (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (80, 76)\n"
     },
     {
       "name": "s11_hop_hold_beats_s10",
@@ -120,5 +124,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-20T05:16:10Z"
+  "generated_at": "2026-08-20T06:28:35Z"
 }

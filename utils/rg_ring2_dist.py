@@ -98,7 +98,21 @@ late_plane_sib     after late_plane, if the other srcq at this node
                    10k 11043/11224/11201. core = cores only:
                    ap 70 K500 2361 10k 11382. Do not ship
                    1 / core.
-                   age/age_hol: occ only if oldest at node; 10k 12135.
+late_plane_inj     inject-time late_plane. "" = always (S14).
+                   match = skip for dest-then-hop sources that are
+                   not ej_held/hop_held; persist peek plane only
+                   (not dir/target). off = skip inject late_plane
+                   for everyone; persist peek plane on not-held.
+                   Peek already mutexed that plane; inject re-bind
+                   can land on a hop dest-then-hop did not reserve.
+                   Not hop_grant freeze of winner routes (10k
+                   11679), not hop_islip_peek, not late_plane_sib,
+                   not ej_hold_retry.
+                   match: ap 78 K500 2307 10k 11358.
+                   off: ap 71 K500 2393 10k 11241.
+                   K500 wins on match; allpairs +14/+7 and
+                   10k lose. Do not ship / retry.
+late_plane         age/age_hol: occ only if oldest at node; 10k 12135.
                    live/livedir/liveocc/occlive/injlive/hop0occ:
                    real occupancy tie-breaks; livedir 11986, others
                    worse. resp_live 12002, resp_occ 12111.
@@ -392,6 +406,7 @@ class Ring2DistParams(Ring2BaseParams):
     hop_book: int = 0           # book first N path hops (0 = off)
     late_plane: str = ""        # occ=S8; age/live*/hop0occ/resp_* optional
     late_plane_sib: str = ""    # "" | 1 | ha | core — sibling plane yield
+    late_plane_inj: str = ""    # "" | match | off — skip inject late_plane
     hop_yield: bool = False     # yield if neighbor HOL is older (no book)
     hop_yield_free: bool = False  # hop_yield only if neighbor hop still free
     hop_cred: int = 0           # deny if live dir occupancy >= N (0 = off)
@@ -729,7 +744,15 @@ class Ring2DistSim(Ring2BaseSim):
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "late_plane", "") and f.dir is not None:
-            self._late_bind_plane(node, f)
+            inj = getattr(self.p, "late_plane_inj", "") or ""
+            skip_inj = False
+            if inj == "off":
+                skip_inj = True
+            elif inj == "match":
+                skip_inj = ((node, plane) not in self.ej_hold
+                            and (node, plane) not in self.hop_hold)
+            if not skip_inj:
+                self._late_bind_plane(node, f)
         grant = self.hop_grant.get((node, plane))
         if grant is not None:
             f.plane, f.dir, f.target = grant
@@ -770,7 +793,7 @@ class Ring2DistSim(Ring2BaseSim):
                 return False
         if getattr(self.p, "hop_peek", False):
             nxt = (f.idx + f.dir) % self.n
-            if (self.t + self.hop_lat) in self.arr_set[(f.plane, f.dir, nxt)]:
+            if (self.t + self.topo.hop_lat_from(f.idx, f.dir)) in self.arr_set[(f.plane, f.dir, nxt)]:
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "dest_peek", False):
@@ -1022,11 +1045,14 @@ class Ring2DistSim(Ring2BaseSim):
         """In-flight arrivals on this flit's next hops (no ghost book)."""
         n = 0
         take = min(4, max(0, f.target))
+        node = f.idx
+        tau = self.t
         for k in range(take):
-            node = (f.idx + k * f.dir) % self.n
-            tau = self.t + k * self.hop_lat
             if tau in self.arr_set[(pl, f.dir, node)]:
                 n += 1
+            if k + 1 < take:
+                tau += self.topo.hop_lat_from(node, f.dir)
+                node = (node + f.dir) % self.n
         return n
 
     def _can_board_at(self, plane: int, direction: int, idx: int,
@@ -1111,7 +1137,7 @@ class Ring2DistSim(Ring2BaseSim):
         if not (q and q[0].t_gen < f.t_gen):
             return False
         if getattr(self.p, "hop_yield_free", False):
-            arrive = self.t + self.hop_lat
+            arrive = self.t + self.topo.hop_lat_from(f.idx, f.dir)
             key = (f.plane, f.dir, nxt)
             if arrive in self.arr_set[key]:
                 return False
@@ -1134,9 +1160,11 @@ class Ring2DistSim(Ring2BaseSim):
         """Downstream hops after inject, excluding dest leave."""
         hops = max(0, f.target - 1)
         take = min(nbook, hops)
-        for k in range(1, take + 1):
-            node = (f.idx + k * f.dir) % self.n
-            tau = self.t + k * self.hop_lat
+        node = f.idx
+        tau = self.t
+        for _ in range(take):
+            tau += self.topo.hop_lat_from(node, f.dir)
+            node = (node + f.dir) % self.n
             yield (f.plane, f.dir, node, tau)
 
     def _hop_booked(self, f: Flit, nbook: int) -> bool:
@@ -1171,11 +1199,14 @@ class Ring2DistSim(Ring2BaseSim):
         hops = max(1, f.target)
         end = hops + 1 if include_dest else hops
         start_k = max(1, hops - last_n + (1 if include_dest else 0))
-        for k in range(start_k, end):
-            node = (f.idx + k * f.dir) % self.n
-            tau = self.t + k * self.hop_lat
-            if tau in self.arr_set[(f.plane, f.dir, node)]:
+        node = f.idx
+        tau = self.t
+        for k in range(end):
+            if k >= start_k and tau in self.arr_set[(f.plane, f.dir, node)]:
                 return True
+            if k + 1 < end:
+                tau += self.topo.hop_lat_from(node, f.dir)
+                node = (node + f.dir) % self.n
         return False
 
 
@@ -1191,7 +1222,8 @@ class Ring2DistSim(Ring2BaseSim):
         return None
 
     def _ej_eta(self, f: Flit) -> int:
-        return self.t + max(1, f.target) * self.hop_lat
+        hops = max(1, 0 if f.target is None else f.target)
+        return self.t + self.topo.remaining_lat(f.idx, f.dir, hops)
 
     def _ej_is_hot(self, dst: int, plane: int) -> bool:
         win = getattr(self.p, "ej_hot", 0)
@@ -1239,7 +1271,7 @@ class Ring2DistSim(Ring2BaseSim):
         """True if a flit already in flight will occupy the next hop
         in the same cycle this inject would arrive there."""
         nxt = (f.idx + f.dir) % self.n
-        arrive = self.t + self.hop_lat
+        arrive = self.t + self.topo.hop_lat_from(f.idx, f.dir)
         node_key = (f.plane, f.dir, nxt)
         if arrive in self.arr_set[node_key]:
             return True
@@ -2223,6 +2255,17 @@ class Ring2DistSim(Ring2BaseSim):
                     dnext.add(((r["dest_slot"][0], r["dest_slot"][1]),
                                r["node"], r["src_pl"]))
         self.dest_sticky = dnext
+        inj = getattr(self.p, "late_plane_inj", "") or ""
+        if inj in ("match", "off"):
+            for r in recs:
+                if r["hop"] is None:
+                    continue
+                if ((r["node"], r["src_pl"]) in self.ej_hold
+                        or (r["node"], r["src_pl"]) in self.hop_hold):
+                    continue
+                q = self.srcq.get(r["key"])
+                if q:
+                    q[0].plane = r["hop"][0]
 
     def _ej_hold_retry_plane(
             self, recs: list[dict], taken_dest: set[tuple],
@@ -2417,7 +2460,8 @@ class Ring2DistSim(Ring2BaseSim):
                 continue
             nxt = (node + d) % self.n
             self.ctrl_at[self.t + 1].append(
-                (nxt, plane, d, block_t + self.hop_lat, ttl - 1))
+                (nxt, plane, d, block_t + self.topo.hop_lat_from(node, d),
+                 ttl - 1))
         # drop past blocks so the sets stay small
         if self.t % 64 == 0:
             cut = self.t
@@ -2433,7 +2477,8 @@ class Ring2DistSim(Ring2BaseSim):
         if ok and getattr(self.p, "hop_tab", False):
             self.hop_at[(plane, d, node)].add(self.t)
             if f.target > 0:
-                self.hop_next[(plane, d, f.idx)].add(self.t + self.hop_lat)
+                self.hop_next[(plane, d, f.idx)].add(
+                    self.t + self.topo.hop_lat_from(node, d))
             if self.t % 64 == 0:
                 cut = self.t
                 for key, times in list(self.hop_at.items()):
@@ -2452,17 +2497,21 @@ class Ring2DistSim(Ring2BaseSim):
         if mode == "neighbor":
             nxt = (f.idx + d) % n
             self.ctrl_at[self.t + 1].append(
-                (nxt, p, d, self.t + self.hop_lat, 1))
+                (nxt, p, d, self.t + self.topo.hop_lat_from(f.idx, d), 1))
             return
         if mode == "instant":
-            for k in range(1, f.target):
-                node = (f.idx + k * d) % n
-                self.arc_block[(node, p, d)].add(self.t + k * self.hop_lat)
+            node = f.idx
+            tau = self.t
+            for _ in range(1, f.target):
+                tau += self.topo.hop_lat_from(node, d)
+                node = (node + d) % n
+                self.arc_block[(node, p, d)].add(tau)
             return
         if mode == "ctrl1":
             nxt = (f.idx + d) % n
             self.ctrl_at[self.t + 1].append(
-                (nxt, p, d, self.t + self.hop_lat, f.target - 1))
+                (nxt, p, d, self.t + self.topo.hop_lat_from(f.idx, d),
+                 f.target - 1))
 
     def _release_hop0(self, f: Flit) -> None:
         key = self.hop0_of.pop(f.pid, None)
@@ -2516,10 +2565,12 @@ class Ring2DistSim(Ring2BaseSim):
                 self.cut_in[key] += 1
                 a, b = self.cut_gaps[gi]
                 u = f.idx
-                for k in range(max(0, f.target)):
+                acc = 0
+                for _ in range(max(0, f.target)):
+                    acc += self.topo.hop_lat_from(u, f.dir)
                     v = (u + f.dir) % self.n
                     if {u, v} == {a, b}:
-                        self.cut_free_at[self.t + (k + 1) * self.hop_lat].append(key)
+                        self.cut_free_at[self.t + acc].append(key)
                         break
                     u = v
         if f.kind == "req" and is_core(f.src):
@@ -2614,6 +2665,7 @@ class Ring2DistSim(Ring2BaseSim):
         out["hop_book"] = getattr(self.p, "hop_book", 0)
         out["late_plane"] = getattr(self.p, "late_plane", "")
         out["late_plane_sib"] = getattr(self.p, "late_plane_sib", "")
+        out["late_plane_inj"] = getattr(self.p, "late_plane_inj", "")
         out["hop_yield"] = getattr(self.p, "hop_yield", False)
         out["hop_cred"] = getattr(self.p, "hop_cred", 0)
         out["hop0_cred"] = getattr(self.p, "hop0_cred", 0)

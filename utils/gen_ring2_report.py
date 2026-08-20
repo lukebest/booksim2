@@ -30,7 +30,73 @@ from rg_ring2_topo import (
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "report_ring2_20node.html"
+TOPO_PNG = ROOT / "results" / "ring2_topo.png"
 BIN_W = 4                                  # cycles per bandwidth sample
+
+
+def plot_ring2_topo(topo: Ring2Topology, path: Path) -> None:
+    """Circular 20-node ring with per-link hop delays labeled."""
+    import math
+    n = topo.n
+    fig, ax = plt.subplots(figsize=(8.4, 8.4))
+    ax.set_aspect("equal")
+    ax.axis("off")
+    r = 1.0
+    pts = []
+    for i in range(n):
+        ang = -math.pi / 2 + i * 2 * math.pi / n
+        pts.append((r * math.cos(ang), r * math.sin(ang)))
+    for i in range(n):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % n]
+        lat = topo.link_lats[i]
+        wrap = i == n - 1
+        ax.plot([x0, x1], [y0, y1],
+                color="#be123c" if wrap else "#64748b",
+                lw=3.2 if wrap else 1.8, zorder=1,
+                solid_capstyle="round")
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        # push label slightly outward
+        mag = math.hypot(mx, my) or 1.0
+        lx, ly = mx * (1.0 + 0.16 / mag), my * (1.0 + 0.16 / mag)
+        ax.text(lx, ly, str(lat), ha="center", va="center", fontsize=10,
+                fontweight="700",
+                color="#9f1239" if wrap else "#0f172a",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                          ec="#fecaca" if wrap else "#e2e8f0", lw=0.8),
+                zorder=3)
+    for i, (x, y) in enumerate(pts):
+        core = (i % 2) == 0
+        fc = "#2563eb" if core else "#ea580c"
+        circ = plt.Circle((x, y), 0.105, fc=fc, ec="white", lw=1.6, zorder=4)
+        ax.add_patch(circ)
+        label = f"C{i}" if core else f"HA{i}"
+        ax.text(x, y, label, ha="center", va="center", fontsize=7.2,
+                color="white", fontweight="700", zorder=5)
+    ax.text(0, 0.08, "plane ×2", ha="center", va="center", fontsize=11,
+            color="#334155")
+    ax.text(0, -0.06, "双向全环", ha="center", va="center", fontsize=11,
+            color="#334155")
+    ax.set_xlim(-1.45, 1.45)
+    ax.set_ylim(-1.45, 1.45)
+    ax.set_title("20 节点双 plane 环 · 边上数字 = hop 时延（拍）\n"
+                 "蓝 = AI core，橙 = memory HA；红边 = HA19 ↔ C0",
+                 fontsize=12, pad=8)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def _link_delay_table(topo: Ring2Topology) -> str:
+    rows = []
+    for i, lat in enumerate(topo.link_lats):
+        j = (i + 1) % topo.n
+        a = f"{'C' if i % 2 == 0 else 'HA'}{i}"
+        b = f"{'C' if j % 2 == 0 else 'HA'}{j}"
+        mark = " ← mem HA19 ↔ C0" if i == topo.n - 1 else ""
+        rows.append([f"{a} — {b}", lat, mark])
+    return _table(["无向边", "时延（拍）", ""], rows)
 
 
 def _load(name: str) -> dict:
@@ -259,7 +325,7 @@ def main() -> None:
         board_html = f"""
 <h2>4. 同 pattern 对照 · 每核 {meta.get('flits_per_core', 10000)} 响应 flit</h2>
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')}，
-<code>plane_sel=least_occupied</code>，hop 时延 {meta.get('hop_lat')} 拍，
+<code>plane_sel=least_occupied</code>，hop 时延按边 1–4 拍（见拓扑图），
 上环队列 {meta.get('inj_depth')} 深，下环队列 {meta.get('eject_depth')}。
 每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0–S14 可直接对比。
 512 对齐后 S3 与 S0 的均值曲线重合，叠图里 S3 画成虚线以免把 S0 盖住。
@@ -305,6 +371,9 @@ S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
         board_html = "<h2>4. 同 pattern 每核 10000 flit</h2><p class='note'>跑 <code>python3 utils/dse_ring2_core10k.py</code> 填充本节。</p>"
 
     topo = Ring2Topology()
+    plot_ring2_topo(topo, TOPO_PNG)
+    delay_html = _link_delay_table(topo)
+    lats = ", ".join(str(x) for x in topo.link_lats)
     bnd_rows, bnd = _bound_rows(topo, big, cmp_)
     n_dir = len(topo.directed_links)
     n_s2 = len([r for r in (pareto.get("rows") or [])
@@ -344,6 +413,17 @@ ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端
 流量是读往返（请求 1 flit，响应 R flit）。<b>makespan = 最后一个响应 flit 在发起
 core 处被 drain 的那一拍。</b></p>
 
+<h2>拓扑</h2>
+<p>20 个节点围成一个双向全环；两个 ring plane 共用同一套几何。边上的数字是
+<strong>该无向边的 hop 时延（拍）</strong>，两个方向相同。节点按 index 顺时针
+递增（+1 = CW）。红色边是 mem HA19 与 core 0 之间的闭合边，时延
+<strong>{topo.link_lats[-1]} 拍</strong>。路由仍按跳数最短路（跳数平局走 CW），
+飞越时间是路径上各边时延之和，不再是统一的 2 拍。</p>
+<p><img src="ring2_topo.png" alt="20 节点环拓扑与 hop 时延"></p>
+<p class="note">按边序 <code>i → (i+1) mod 20</code> 的时延：
+<code>{lats}</code>。最后一项是 HA19 ↔ C0。</p>
+{delay_html}
+
 <h2>0. makespan 的理论下界</h2>
 <p>下界是<b>可达性的必要条件</b>，用来判断一个方案离物理极限还有多远，而不是宣称
 某个值可达。所有下界都来自「某个资源必须搬运的总量 ÷ 该资源的容量」这一类
@@ -353,7 +433,7 @@ core 处被 drain 的那一拍。</b></p>
 <div class="def">
 <code>N</code> = {topo.n} 节点 · <code>P</code> = {topo.n_planes} 个 plane ·
 <code>σ</code> = {topo.sigma} 拍/flit（同一有向段上连续两个 flit 的最小间隔）·
-<code>λ</code> = {topo.hop_lat} 拍（相邻节点 hop 时延）·
+<code>λ(u,v)</code> = 相邻无向边 hop 时延（1–4 拍，见图）·
 有向段总数 <code>2PN</code> = {n_dir}<br>
 事务集合 <code>T</code>；每个 <code>t ∈ T</code> 是 core→HA 的
 <code>m_req</code> flit 请求，加 HA→core 的 <code>m_resp</code> flit 响应。<br>
@@ -390,11 +470,12 @@ max(B(n), E(n)) / P ⌉</code></div>
 1 跳，套用「一半流量必然过割」的经验假设会高估到超过实测值。</p>
 
 <h3>0.5 LB_txn：单事务串行时延下界</h3>
-<p>一个事务内部是严格串行的：请求上环 → 飞越 <code>hops·λ</code> →
+<p>一个事务内部是严格串行的：请求上环 → 飞越路径各边时延之和
+<code>delay(π)</code> →
 <code>m_req·σ</code> 拍排空 → HA 服务 <code>t_ha</code> → 响应飞越 →
 <code>m_resp·σ</code> 拍排空。取最深的那个事务：</p>
-<div class="def"><code>makespan ≥ LB_txn = max<sub>t</sub> [ hops(π_req(t))·λ
-+ m_req·σ + t_ha + hops(π_resp(t))·λ + m_resp·σ ]</code></div>
+<div class="def"><code>makespan ≥ LB_txn = max<sub>t</sub> [ delay(π_req(t))
++ m_req·σ + t_ha + delay(π_resp(t)) + m_resp·σ ]</code></div>
 
 <h3>0.6 合成与实测对照</h3>
 <div class="def"><code>bound = max(LB_link, LB_port, LB_cut, LB_txn)</code></div>
@@ -426,8 +507,8 @@ allpairs 那档 <code>bound</code> 只有 41 的直接原因：100 个事务的�
 {_table(["层", "S0 RR", "S1 AIMD", "S2 request-grant", "S3 push-on-pull",
          "S4 kind-aware leave", "S5 leave-slot", "S6 oldest dest",
          "S7 hop bounce"], [
-    ["相邻节点 hop 时延", "2 拍", "2 拍", "2 拍", "2 拍", "2 拍", "2 拍",
-     "2 拍", "2 拍"],
+    ["相邻节点 hop 时延", "按边 1–4 拍", "同左", "同左", "同左", "同左",
+     "同左", "同左", "同左"],
     ["上环队列（每 node, plane）", "8 flit", "8 flit", "8 flit", "8 flit",
      "8 flit", "8 flit", "8 flit", "8 flit"],
     ["下环队列（每 node, plane）", "4 + 1 E-tag", "4 + 1 E-tag",
