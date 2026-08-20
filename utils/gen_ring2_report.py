@@ -20,7 +20,7 @@ from rg_ring2_base import Ring2BaseParams, run_batch as run_base
 from rg_ring2_dist import (
     Ring2DistParams, run_batch as run_dist, s5_params, s6_params,
     s7_params, s8_params, s9_params, s10_params, s11_params, s12_params,
-    s13_params,
+    s13_params, s14_params,
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
@@ -86,12 +86,14 @@ def _collect_traces(topo: Ring2Topology, txns, *, seed: int = 0
     s12 = run_dist(topo, txns, params=s12_params(plane_sel="least_occupied"),
                    seed=seed)
     s13 = run_dist(topo, txns, params=s13_params(plane_sel="least_occupied"),
+                  seed=seed)
+    s14 = run_dist(topo, txns, params=s14_params(plane_sel="least_occupied"),
                    seed=seed)
     out = {}
     for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3),
                     ("S4", s4), ("S5", s5), ("S6", s6), ("S7", s7),
                     ("S8", s8), ("S9", s9), ("S10", s10), ("S11", s11),
-                    ("S12", s12), ("S13", s13)):
+                    ("S12", s12), ("S13", s13), ("S14", s14)):
         recv = {int(k): v for k, v in (r.get("recv_by_core") or {}).items()}
         out[name] = {
             "makespan": r.get("makespan"),
@@ -105,14 +107,14 @@ def plot_core_recv_bw(traces: dict[str, dict], path: Path, *,
                       title: str, bin_w: int = BIN_W) -> None:
     cs = cores()
     cmap = plt.get_cmap("tab10")
-    fig, axes = plt.subplots(14, 1, figsize=(9.2, 34.4), sharex=False)
+    fig, axes = plt.subplots(15, 1, figsize=(9.2, 36.8), sharex=False)
     t_max_all = max(
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
     for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
                                  "S7", "S8", "S9", "S10", "S11", "S12",
-                                 "S13")):
+                                 "S13", "S14")):
         tr = traces[scheme]
         t_max = max(
             (max(ts) for ts in tr["recv_by_core"].values()), default=1)
@@ -176,7 +178,7 @@ def _bound_rows(topo: Ring2Topology, big: dict, cmp_: dict
             hit = " ← 主导" if (key != "bound" and b[key] == b["bound"]) else ""
             rows.append([label, b[key], hit, ""])
         for sch in ("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8",
-                    "S9", "S10", "S11", "S12", "S13"):
+                    "S9", "S10", "S11", "S12", "S13", "S14"):
             mk = measured[name].get(sch)
             if mk is None:
                 continue
@@ -210,7 +212,7 @@ def main() -> None:
     if big.get("schemes"):
         meta = big.get("meta") or {}
         SCH = [s for s in ("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7",
-                           "S8", "S9", "S10", "S11", "S12", "S13")
+                           "S8", "S9", "S10", "S11", "S12", "S13", "S14")
                if s in big["schemes"]]
         board_rows = [["makespan"] + [big["schemes"][s].get("makespan")
                                       for s in SCH]]
@@ -259,7 +261,7 @@ def main() -> None:
 <p class="note">uniform K={meta.get('K')} R={meta.get('R')} seed={meta.get('seed')}，
 <code>plane_sel=least_occupied</code>，hop 时延 {meta.get('hop_lat')} 拍，
 上环队列 {meta.get('inj_depth')} 深，下环队列 {meta.get('eject_depth')}。
-每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0–S13 可直接对比。
+每个 core 收到的响应 flit 数完全相同。叠图共用一条时间轴，S0–S14 可直接对比。
 512 对齐后 S3 与 S0 的均值曲线重合，叠图里 S3 画成虚线以免把 S0 盖住。
 S4 是 kind-aware leave；S5 预约目的 leave 口，消灭双方向同拍到达导致的偏转；
 S6 在 S5 上把同拍 dest 冲突改成 oldest-first；S7 在第一跳被占时换 plane；
@@ -268,7 +270,8 @@ S9 在第一跳仍忙时改走另一环方向（绕路最多 +2 hop）；
 S10 只对响应做这次改向，请求仍走最短路；
 S11 同拍争同一第一跳时只留最老的响应；
 S12 在 dest 与第一跳上做一波 request-grant，dest grant 在 hop 失败后让出；
-S13 在 dest-granted 的 hop grant 里优先剩余 hop 更短的。
+S13 在 dest-granted 的 hop grant 里优先剩余 hop 更短的；
+S14 在 HA 两个 srcq 被 late_plane 绑到同一第一跳时，短/老的留下，另一条换 plane。
 黑点线是解析下界对应的理想接收：每核 {meta.get('flits_per_core')} flit 在
 <code>bound={meta.get('bound')}</code> 拍内匀速收完
 （{meta.get('ideal_recv_rate')} flit/cycle/core），之后为 0。
@@ -285,15 +288,16 @@ S9 同预约表，第一跳仍忙则改走另一方向（≤+2 hop）。
 S10 只对响应改向。
 S11 同拍争同一第一跳时只留最老的响应。
 S12 dest 先 grant、hop 再 accept，hop 失败则 dest 让给下一名。
-S13 hop grant 优先剩余 hop 更短的。</p>
-<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="十四方案均值接收带宽叠图"></p>
+S13 hop grant 优先剩余 hop 更短的。
+S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
+<p><img src="ring2_core_recv_bw_10k_overlay.png" alt="十五方案均值接收带宽叠图"></p>
 <p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
 {_table(["", "S0 RR", "S1 AIMD", "S2 request-grant",
          "S3 push-on-pull", "S4 kind-aware leave",
          "S5 leave-slot lock", "S6 oldest dest",
          "S7 hop bounce", "S8 late plane", "S9 late dir",
          "S10 resp late dir", "S11 hop hold", "S12 hop islip",
-         "S13 hop short"][:1+len(SCH)],
+         "S13 hop short", "S14 HA sib plane"][:1+len(SCH)],
         board_rows)}
 <p class="note">墙钟 {big.get('wall_secs', '?')}s。</p>
 """
@@ -319,7 +323,7 @@ S13 hop grant 优先剩余 hop 更短的。</p>
     png = "ring2_rg_pareto.png"
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
-<title>双全环 20 节点 — 十四方案 makespan + RG Pareto</title>
+<title>双全环 20 节点 — 十五方案 makespan + RG Pareto</title>
 <style>
 body {{ font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
        margin: 2rem auto; max-width: 980px; color: #111; line-height: 1.65; }}
@@ -334,7 +338,7 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
 .def {{ background: #f8fafc; border-left: 3px solid #94a3b8;
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }}
 </style></head><body>
-<h1>双全环 20 节点：十四方案 makespan + request-grant Pareto</h1>
+<h1>双全环 20 节点：十五方案 makespan + request-grant Pareto</h1>
 <p class="note">偶数 index 是 AI core，奇数是 memory Home Agent。两个独立的双向
 ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端口的 buffer。
 流量是读往返（请求 1 flit，响应 R flit）。<b>makespan = 最后一个响应 flit 在发起
@@ -415,7 +419,7 @@ allpairs 那档 <code>bound</code> 只有 41 的直接原因：100 个事务的�
 依赖约束）会给出更高的下界。</li>
 </ul>
 
-<h2>1. 共同数据面（十四方案完全相同）</h2>
+<h2>1. 共同数据面（十五方案完全相同）</h2>
 <p class="note">S0–S8 <em>不是</em>九种不同的 fabric。它们共用同一条
 点对点 credit 数据面、同样 8 深的上环队列、同样的 I-tag / E-tag 保证。整个
 扫参只改变「一个源被允许如何花掉 credit / 谁先占用 leave 口」。</p>
@@ -469,7 +473,7 @@ I-tag，抑制该环向上其他节点上环，直到它自己上去。作用是
 <p>{verify.get("n_ok", 0)}/{verify.get("n_total", 0)} 项检查通过。</p>
 {_table(["检查项", "结果"], ver_rows)}
 
-<h2>3. 十四方案 makespan 扫参（默认 plane_sel=least_occupied, eject_depth=4）</h2>
+<h2>3. 十五方案 makespan 扫参（默认 plane_sel=least_occupied, eject_depth=4）</h2>
 <p class="note">每一行都跑在同一条 credit + I-tag / E-tag 数据面上。
 S0 = RR 上环，无源端速率控制。
 S1 = S0 + 失败计数 piggyback + AIMD 令牌桶（默认温和：α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）。
@@ -485,6 +489,7 @@ S10 = S9 + 只对响应改向。
 S11 = S10 + 同拍争同一第一跳时只留最老的响应。
 S12 = S11 + dest-then-hop request-grant（I=1；hop 失败则 dest 让出）。
 S13 = S12 + hop grant 优先剩余 hop 更短的。
+S14 = S13 + HA 同节点两条 srcq 争同一第一跳时输家换 plane。
 bound 列是 §0 的解析下界。</p>
 {_table(["方案", "pattern", "R", "m 或 K", "均值", "最小", "最大", "bound", "完成"],
         sum_rows)}
@@ -495,19 +500,22 @@ Quick={ (cmp_.get("meta") or {}).get("quick") }。</p>
 
 <h2>5. request-grant 的面积 / makespan Pareto</h2>
 <p class="note">y = makespan_des + t_sched_cycles（调度器延迟计回）。
-x = area_norm（IQ-XY router = 1.0，按节点摊）。S0–S13 作为参考点画在同一张
-图上。面积对十四方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
+x = area_norm（IQ-XY router = 1.0，按节点摊）。S0–S14 作为参考点画在同一张
+图上。面积对十五方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
 数据面（含每核 512 条 outstanding 记分板）；S2 再加仲裁器，S3 加 HA pending/RR，
-S4 与 S0 同位，S5–S13 加 dest leave 时隙窗口——都<b>没有</b>删掉站点存储。
+S4 与 S0 同位，S5–S14 加 dest leave 时隙窗口——都<b>没有</b>删掉站点存储。
 等效 bit 模型，标定到 mesh <code>greedy_ff = 0.05</code>，不是 mm²。</p>
 <p><img src="{png}" alt="Pareto 前沿"></p>
+<p class="note">图只画 S0–S14 左下角膝点；S5–S14 同面积，S14 留在真实 x（前沿顶点），其余点沿 x 稍稍错开以便辨认。
+S2 族只保留距离前沿最近的一个（全图归一化欧氏距离），其余云点不画。
+x 轴在膝点与该 S2 之间断开。</p>
 {_table(["配置 tag", "area_norm", "makespan"], front_rows)}
 <p class="note">{pareto.get("n_front", 0)} 个非支配点，
 共评估 {len(pareto.get("rows") or [])} 个（其中 S2 {n_s2} 个），
 墙钟 {pareto.get("wall_secs", "?")}s。</p>
 
 <h3>5.1 为什么图上 S2 有这么多点</h3>
-<p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0–S13 各自只有一种硬件结构，
+<p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0–S14 各自只有一种硬件结构，
 所以各出一个点；而 request-grant 的「仲裁器」是一个可设计的对象，每一组旋钮
 取值对应一块<em>不同的、都可实现的</em>电路，面积和调度延迟都不同，因此每一组
 都必须单独评估、单独画点。旋钮空间：</p>
@@ -526,8 +534,8 @@ S4 与 S0 同位，S5–S13 加 dest leave 时隙窗口——都<b>没有</b>删
 <p>关键在于<b>这些点绝大多数没有意义、也不该有意义</b>——它们的作用是把前沿
 「撑」出来。只有 {pareto.get("n_front", 0)} 个点是非支配的。散点越密，说明
 「S2 能不能赢」这个问题被问得越充分：一个只画了自己最好配置的 S2 是无法反驳的，
-而画满 {n_s2} 个配置之后，S2 仍被同面积的 S11 压住，这个结论就有分量了。
-S12 / S13 同面积、allpairs 68，被 S11 的 67 支配。</p>
+而画满 {n_s2} 个配置之后，S2 仍被同面积的 S14 压住，这个结论就有分量了。
+S11（67）/ S12 / S13（68）同面积，被 S14 的 64 支配。</p>
 <p class="note">注意 y 轴已经把 <code>t_sched_cycles</code> 计回去了。这是为什么
 很多 S2 点被推到图的上方：<code>batched_bcfs</code> 在纯数据面上极快
 （DES 只要几十拍），但它的组合逻辑深度换算出上千拍的调度延迟，于是自己把自己
@@ -535,7 +543,7 @@ S12 / S13 同面积、allpairs 68，被 S11 的 67 支配。</p>
 
 <h2>6. 怎么读这组对比</h2>
 <ul>
-<li>把十四方案读成<b>同一块 fabric 上的十四种策略</b>。credit + I-tag + E-tag
+<li>把十五方案读成<b>同一块 fabric 上的十五种策略</b>。credit + I-tag + E-tag
 永远都在。环上流量依然从不 stall（前视短于 hop 时延）；I-tag 给上环饥饿定上界；
 E-tag 给下环活锁定上界。</li>
 <li><b>S0</b> 是反应式基线：hop 空就用 RR 花掉 credit，除 I-tag 之外没有任何
@@ -550,7 +558,7 @@ outstanding 峰值 54，碰不到 512 的记分板。</li>
 </em>加一次 request-grant 匹配，使 flit 只在 hop 已被预约时注入。它要付一个
 仲裁器加一小笔控制面开销。端口按 (node, plane) 计价之后（与 S0 的 DES 一致），
 S2 在数据面上仍最快（10k 10044），但把 <code>t_sched_cycles</code> 计回后
-被同面积的 S11（67）压出前沿。S12 / S13 同面积 allpairs 68，不进前沿。</li>
+被同面积的 S14（64）压出前沿。S11（67）/ S12 / S13（68）同面积，不进前沿。</li>
 <li><b>S3</b> 用读 memory 的请求当 POP 调度信息：五方案对齐为每核最多
 512 条 outstanding 读，HA 对已到达的多条请求做 RR，再放出该请求的响应。环上 hop
 仍是反应式的，所以它<b>不</b>消除 slot 忙导致的上环失败。没有单独的
@@ -590,6 +598,12 @@ I=2 在 10k 上回退到 11481，不作为默认。</li>
 <li><b>S13</b> 在 dest-granted 的 hop grant 里优先剩余 hop 更短的。10k
 11402→11288 / 11399 / 11270；allpairs 仍 68；K=500 2419→2362。
 面积仍是 <code>ring2_ej</code>。同面积被 S11 的 67 支配。</li>
+<li><b>S14</b> 在 HA 两个 srcq 被 late_plane 绑到同一第一跳时，短/老的留下，
+另一条换到 hop+dest 都空的另一 plane。allpairs 68→<b>64</b>（压住 S11 的 67）；
+10k 11288→<b>11043 / 11224 / 11201</b>（三 seed 全赢）。面积仍是
+<code>ring2_ej</code>。allpairs Pareto 前沿是 S4 / S1 / <b>S14</b>。
+两端都做（<code>late_plane_sib=1</code>）allpairs 71，只做 core 则 70 / 11382，
+都不作为默认。</li>
 <li>4 深的下环队列在这些负载下几乎没有作用：峰值占用只有 1。偏转来自
 每 (node, plane) <b>唯一</b>的那个 leave 端口，两个方向都要抢它。真正的限制是
 端口数量，不是队列深度。</li>

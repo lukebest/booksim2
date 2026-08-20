@@ -1,6 +1,6 @@
 {
-  "n_total": 28,
-  "n_ok": 28,
+  "n_total": 29,
+  "n_ok": 29,
   "all_ok": true,
   "rows": [
     {
@@ -114,7 +114,11 @@
     {
       "name": "s13_hopkeep_beats_s12_uniform",
       "ok": true
+    },
+    {
+      "name": "s14_sib_ha_beats_s13_allpairs",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-19T22:45:49Z"
+  "generated_at": "2026-08-20T05:16:10Z"
 }

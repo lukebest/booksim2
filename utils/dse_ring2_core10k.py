@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Same-pattern, 10000 response flits/core: S0–S13.
+"""Same-pattern, 10000 response flits/core: S0–S14.
 
 Workload: uniform random HA, K=2500 txns/core, R=4 → 10000 recv flits/core.
 Compares receive-bandwidth time series and per-destination-core on-ramp
 counts (CW / CCW successes and failures).
 
-All fourteen schemes ride the same datapath: 2-cycle hops, 8-deep boarding
+All fifteen schemes ride the same datapath: 2-cycle hops, 8-deep boarding
 queue per (node, plane), point-to-point credit, I-tag / E-tag, and a
 512 outstanding-read cap per AI core.
 
@@ -33,7 +33,7 @@ from rg_ring2_base import Ring2BaseParams, run_batch as run_base
 from rg_ring2_dist import (
     Ring2DistParams, run_batch as run_dist, s5_params, s6_params,
     s7_params, s8_params, s9_params, s10_params, s11_params, s12_params,
-    s13_params,
+    s13_params, s14_params,
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
@@ -96,6 +96,9 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
     elif scheme == "S13":
         r = run_dist(topo, txns, params=s13_params(plane_sel="least_occupied"),
                      seed=seed)
+    elif scheme == "S14":
+        r = run_dist(topo, txns, params=s14_params(plane_sel="least_occupied"),
+                     seed=seed)
     else:
         r = run_rg(topo, txns, cfg=RGConfig(
             algo="islip", iters=2, plane_sel="least_occupied", seed=seed),
@@ -139,10 +142,10 @@ def plot_panels(traces: dict[str, dict], path: Path, *, bin_w: int,
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
          for tr in traces.values()),
         default=1)
-    fig, axes = plt.subplots(14, 1, figsize=(9.6, 34.4), sharex=True)
+    fig, axes = plt.subplots(15, 1, figsize=(9.6, 36.8), sharex=True)
     for ax, scheme in zip(axes, ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
                                  "S7", "S8", "S9", "S10", "S11", "S12",
-                                 "S13")):
+                                 "S13", "S14")):
         tr = traces[scheme]
         t_max = max((max(ts) for ts in tr["recv_by_core"].values()), default=1)
         mean = None
@@ -183,13 +186,14 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
               "S3": "#9333ea", "S4": "#ea580c", "S5": "#0d9488",
               "S6": "#c026d3", "S7": "#7c3aed", "S8": "#ca8a04",
               "S9": "#be123c", "S10": "#047857", "S11": "#9a3412",
-              "S12": "#4338ca", "S13": "#0369a1"}
+              "S12": "#4338ca", "S13": "#0369a1", "S14": "#db2777"}
     # S3 is drawn dashed on top of S0: after the 512-outstanding
     # alignment the two means coincide, and a second solid line would
     # hide S0 completely.
     styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5)),
               "S4": "-", "S5": "-", "S6": "-", "S7": "-", "S8": "-",
-              "S9": "-", "S10": "-", "S11": "-", "S12": "-", "S13": "-"}
+              "S9": "-", "S10": "-", "S11": "-", "S12": "-", "S13": "-",
+              "S14": "-"}
     fig, ax = plt.subplots(figsize=(9.2, 4.2))
     t_max_all = max(
         (max((max(ts) for ts in tr["recv_by_core"].values()), default=0)
@@ -197,7 +201,7 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
         default=1)
     cs = cores()
     for scheme in ("S1", "S2", "S0", "S3", "S4", "S5", "S6", "S7", "S8",
-                   "S9", "S10", "S11", "S12", "S13"):
+                   "S9", "S10", "S11", "S12", "S13", "S14"):
         tr = traces[scheme]
         acc = None
         xs = []
@@ -221,7 +225,7 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
     ax.set_xlabel("cycle")
     ax.set_ylabel("mean recv flit / cycle / core")
     ax.set_title(
-        f"S0–S13 on the same uniform batch  "
+        f"S0–S14 on the same uniform batch  "
         f"({flits_per_core} flits/core, bin={bin_w})")
     ax.set_xlim(0, t_max_all)
     ax.set_ylim(bottom=0)
@@ -252,7 +256,7 @@ def main() -> None:
     t0 = time.perf_counter()
     traces = {}
     for scheme in ("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8",
-                   "S9", "S10", "S11", "S12", "S13"):
+                   "S9", "S10", "S11", "S12", "S13", "S14"):
         traces[scheme] = _run(scheme, topo, txns, args.seed)
 
     panel = ROOT / "results" / "ring2_core_recv_bw_10k.png"

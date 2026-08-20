@@ -23,7 +23,7 @@ from rg_ring2_base import Ring2BaseParams, Ring2BaseSim, run_batch as run_base
 from rg_ring2_dist import (
     Ring2DistParams, Ring2DistSim, run_batch as run_dist, s5_params,
     s6_params, s7_params, s8_params, s9_params, s10_params, s11_params,
-    s12_params, s13_params,
+    s12_params, s13_params, s14_params,
 )
 from rg_ring2_pop import Ring2PopSim, run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, replay_ok, run_batch as run_rg
@@ -130,11 +130,12 @@ def test_three_schemes_same_flits() -> None:
     s11 = run_dist(topo, txns, params=s11_params())
     s12 = run_dist(topo, txns, params=s12_params())
     s13 = run_dist(topo, txns, params=s13_params())
+    s14 = run_dist(topo, txns, params=s14_params())
     exp = _expected_flits(txns)
     for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3),
                     ("S4", s4), ("S5", s5), ("S6", s6), ("S7", s7),
                     ("S8", s8), ("S9", s9), ("S10", s10), ("S11", s11),
-                    ("S12", s12), ("S13", s13)):
+                    ("S12", s12), ("S13", s13), ("S14", s14)):
         assert r["completed"], name
         assert r["n_delivered_flits"] == exp, (name, r["n_delivered_flits"])
         assert r["n_txn_done"] == len(txns), name
@@ -160,7 +161,8 @@ def test_makespan_ge_bound() -> None:
             ("S10", run_dist(topo, txns, params=s10_params())),
             ("S11", run_dist(topo, txns, params=s11_params())),
             ("S12", run_dist(topo, txns, params=s12_params())),
-            ("S13", run_dist(topo, txns, params=s13_params()))):
+            ("S13", run_dist(topo, txns, params=s13_params())),
+            ("S14", run_dist(topo, txns, params=s14_params()))):
         assert r["makespan"] >= b["bound"], (
             f"{name} makespan {r['makespan']} < bound {b['bound']}")
 
@@ -350,7 +352,7 @@ def test_pop_window_and_token() -> None:
 
 
 def test_core_outstanding_aligned() -> None:
-    """S0–S13 share a 512-per-core outstanding-read cap."""
+    """S0–S14 share a 512-per-core outstanding-read cap."""
     from rg_ring2_aimd import Ring2AimdSim
 
     cap = 512
@@ -390,6 +392,8 @@ def test_core_outstanding_aligned() -> None:
             ("S12", Ring2DistSim(topo, s12_params(
                 core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
             ("S13", Ring2DistSim(topo, s13_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S14", Ring2DistSim(topo, s14_params(
                 core_outstanding=bind, plane_sel="least_occupied"), seed=0))):
         sim.offer_batch(tx_bind)
         while sim.t < 200_000 and not sim.done():
@@ -574,6 +578,19 @@ def test_s10_resp_late_dir_beats_s9() -> None:
     assert s10u["n_deflections"] == 0, s10u["n_deflections"]
 
 
+def test_s14_sib_ha_beats_s13_allpairs() -> None:
+    """HA sibling plane yield beats S13 allpairs (64 vs 68); K=500 may lose."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s13a = run_dist(topo, ap, params=s13_params())
+    s14a = run_dist(topo, ap, params=s14_params())
+    assert s13a["completed"] and s14a["completed"]
+    assert s14a["n_delivered_flits"] == s13a["n_delivered_flits"]
+    assert s14a["makespan"] < s13a["makespan"], (
+        s14a["makespan"], s13a["makespan"])
+    assert s14a["n_deflections"] == 0, s14a["n_deflections"]
+
+
 def test_s13_hopkeep_beats_s12_uniform() -> None:
     """Shorter-path hop-grant beats S12 on K=500; allpairs may tie at 68."""
     topo = Ring2Topology()
@@ -669,6 +686,7 @@ def main() -> None:
     c.add("s11_hop_hold_beats_s10", test_s11_hop_hold_beats_s10)
     c.add("s12_hop_islip_beats_s11_uniform", test_s12_hop_islip_beats_s11_uniform)
     c.add("s13_hopkeep_beats_s12_uniform", test_s13_hopkeep_beats_s12_uniform)
+    c.add("s14_sib_ha_beats_s13_allpairs", test_s14_sib_ha_beats_s13_allpairs)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

@@ -86,6 +86,18 @@ late_plane         always pick plane at inject among those with hop
                    and dest free. "need" = only if assigned cannot.
                    "occ" / "dest" = both-ok tie-break. S8 default
                    is occ: 10k 11971 vs S7 12824, allpairs 72.
+late_plane_sib     after late_plane, if the other srcq at this node
+                   peeks to the same first hop, the short/oldest
+                   HOL keeps it; the loser takes the other plane
+                   when hop+dest are free. Peek-time so dest-then-
+                   hop sees two hops. Not hop_hold_late /
+                   hop_islip_busy / late_dir_dest / hop_joint.
+                   "" = off (S13). 1 = both node kinds:
+                   ap 71 K500 2348 10k 11135. Allpairs +3.
+                   ha = HA only (S14): ap 64 K500 2370
+                   10k 11043/11224/11201. core = cores only:
+                   ap 70 K500 2361 10k 11382. Do not ship
+                   1 / core.
                    age/age_hol: occ only if oldest at node; 10k 12135.
                    live/livedir/liveocc/occlive/injlive/hop0occ:
                    real occupancy tie-breaks; livedir 11986, others
@@ -111,10 +123,30 @@ late_dir_eager     flip even if the short hop is free, dest cooler.
 hop_hold           same-cycle first-hop mutex (oldest keeps the hop).
                    Not a future book / peek / hop0 credit.
                    S11 hop_hold_kind=resp: 10k 11451, allpairs 67.
+hop_hold_late      hop_hold still mutexes the assigned hop, but
+                   _may_inject may late_dir anyway. Mutex losers
+                   of a free hop can flip after the winner boards.
+                   Not hop_islip_busy=late (skip hop_hold if
+                   phys-busy), not hop_hold_retry, not
+                   late_dir_dest, not live-HOL skip.
+                   ap 68 K500 2336 10k 11323. K500 wins, 10k
+                   loses. Do not ship.
 hop_hold_keep      oldest (S11) | dest | dest_old — who wins a clash.
                    dest / dest_old lose K=500 (2503 / 2484).
 hop_hold_retry     losers rematch unused plane/dir this cycle.
                    dir 10k 11507; both 10k 11400 but allpairs 78.
+ej_hold_retry      after dest-then-hop, dest-held HOLs retry the
+                   other plane (same dir). late_plane cannot see
+                   same-cycle dest grants. hop_grant freezes the
+                   alt route so inject late_plane cannot undo it.
+                   Not hop_hold_retry (S11 hop losers), not
+                   hopkeep dest occupancy, not late_plane_sib,
+                   not plane_bounce (inject-time dest busy).
+                   "" = off (S14).
+                   plane: ap 69 K500 2458 10k 11133.
+                   plane_ha: ap 66 K500 2325 10k 11135.
+                   K500 wins on HA-only; allpairs +2/+5 and
+                   10k lose. Do not ship / retry.
 hop_joint          one oldest-first set over dest-leave AND first-hop
                    (not sequential ej_hold then hop_hold).
                    resp 10k 11502 allpairs 72; both 73/2407. Do not ship.
@@ -189,6 +221,46 @@ hop_islip_hopkeep  hop-grant among dest-granted: "" = oldest (S12),
                    short = fewer remaining hops (S13), long = more.
                    short: ap 68 K500 2362 10k 11288/11399/11270.
                    long: ap 72 K500 2456 10k 11503. Do not ship long.
+                   pathlive / pathpack = live occupancy of the
+                   remaining path after the first hop (sum of
+                   arr_set along later nodes). Dest-granted HOLs
+                   that share a hop have different dests.
+                   Not hop_islip_pack / hopkeep short / path_peek.
+                   pathlive: ap 68 K500 2370 10k 11307.
+                   pathpack: ap 75 K500 2425 10k 11539.
+                   Do not ship.
+                   destlive / destpack = live occupancy at the
+                   dest node (in-flight arrivals). Dest-granted
+                   HOLs that share a first hop have different
+                   dests. Not pathlive / hop_islip_pack /
+                   dest_peek deny / hopkeep short.
+                   destlive: ap 64 K500 2392 10k 11399.
+                   destpack: ap 67 K500 2431 10k 11490.
+                   Allpairs wins, 10k loses. Do not ship.
+                   short_destlive = S13 short first, dest_live
+                   only breaks hop-count ties. Not destlive
+                   replacing short.
+                   short_destlive: = S13 68/2362/11288. No-op —
+                   dest-granted HOLs that share a hop do not
+                   tie on remaining hops. Do not retry short_*
+                   tie-breaks.
+                   ejq / ejqpack = dest eject-queue occupancy
+                   len(ejectq[(dst,plane)]). Dest-granted HOLs
+                   that share a hop have different dests.
+                   Not dest_live / dest_peek / hopkeep short.
+                   ejq: ap 63 K500 2411 10k 11414.
+                   ejqpack: ap 68 K500 2382 10k 11427.
+                   Best allpairs this streak (destlive was 64);
+                   10k loses. Same dest-occupancy trap. Do not
+                   ship / retry.
+                   destbook / destbookpack = dest leave-book
+                   occupancy (sum of ej_book for (dst,plane)).
+                   Not dest_live / dest_ejq / path_live /
+                   hopkeep short.
+                   destbook: ap 70 K500 2355 10k 11232.
+                   destbookpack: ap 67 K500 2416 10k 11258.
+                   Allpairs +6/+3 vs S14 64; 10k loses.
+                   Same dest-occupancy trap. Do not ship / retry.
 hop_islip_destkeep dest-grant among the same dest slot: "" = oldest
                    (S13), short / long = remaining hops. Dest slot
                    already keys (dst, plane, eta), so remaining hops
@@ -250,6 +322,21 @@ hop_islip_match    "" = dest-then-hop (S13). max = dest-hop
                    max_resp: = max 66/2407/11390 (resp-only).
                    max_req: = S13 68/2362/11288. No-op.
                    Do not retry max / max_resp / max_req.
+                   weight = same graph, min-cost max-flow:
+                   max card then older HOL (cost = t_gen).
+                   Not hop_joint / max-card Kuhn / dest-then-hop.
+                   weight / weight_resp: ap 66 K500 2411
+                   10k 11396. Do not retry weight variants.
+                   gs = Gale-Shapley dest↔hop: dests prefer
+                   oldest HOL, hops prefer short remaining
+                   path. Dest-proposing; commit only stable
+                   pairs. Not dest-then-hop / mutual /
+                   max / weight / hop_joint.
+                   gs_hop = hop-proposing GS (same prefs).
+                   gs / gs_hop identical: ap 68 K500 2471
+                   10k 11235/11353/11333 (seed0/1 beat S13
+                   11288/11399; seed2 loses 11270). Do not
+                   ship mixed-seed 10k.
 """
 
 from __future__ import annotations
@@ -304,6 +391,7 @@ class Ring2DistParams(Ring2BaseParams):
     hop_bounce_age: str = ""    # "" | "hol" | "node"
     hop_book: int = 0           # book first N path hops (0 = off)
     late_plane: str = ""        # occ=S8; age/live*/hop0occ/resp_* optional
+    late_plane_sib: str = ""    # "" | 1 | ha | core — sibling plane yield
     hop_yield: bool = False     # yield if neighbor HOL is older (no book)
     hop_yield_free: bool = False  # hop_yield only if neighbor hop still free
     hop_cred: int = 0           # deny if live dir occupancy >= N (0 = off)
@@ -322,6 +410,8 @@ class Ring2DistParams(Ring2BaseParams):
     hop_hold_kind: str = "both" # "both" | "resp" | "req"
     hop_hold_keep: str = "oldest"  # oldest | dest | dest_old | node
     hop_hold_retry: str = ""    # "" | "plane" | "dir" | "both"
+    hop_hold_late: bool = False # hop_held HOL may still late_dir
+    ej_hold_retry: str = ""     # "" | plane | plane_ha — dest-held plane retry
     hop_joint: bool = False     # joint dest+hop oldest-first match
     hop_islip: int = 0          # 0 = off; I dest-then-hop grant/accept iters
     hop_islip_arb: str = "oldest"  # oldest | rr | dest_rr | hop_rr
@@ -331,13 +421,13 @@ class Ring2DistParams(Ring2BaseParams):
     hop_islip_pack: str = ""      # "" | spread | pack | spread_resp | pack_resp
     hop_islip_mutual: bool = False  # dest+hop grant independently; accept if both
     hop_islip_split: str = ""     # "" | resp | req — main wave kind
-    hop_islip_hopkeep: str = ""   # "" | short | long — hop-grant path length
+    hop_islip_hopkeep: str = ""   # "" | short | long | pathlive | destlive | ejq | destbook
     hop_islip_destkeep: str = ""  # "" | short | long | free — dest-grant rank
     hop_islip_leftkeep: str = ""  # "" | short | long — leftover hop path length
     hop_islip_busy: str = ""      # "" | late — skip hop_hold if hop physically busy
     hop_islip_leftdest: str = ""  # "" | spread | pack | *_resp | free
     hop_islip_leftcommit: str = ""  # "" | hop — leftover dest commit on hop accept
-    hop_islip_match: str = ""     # "" | max | max_resp — dest-hop max matching
+    hop_islip_match: str = ""     # "" | max | max_resp | max_req | weight | gs | gs_hop
     hop_sticky: bool = False    # last-cycle hop_hold loser preferred on that hop
     dest_sticky: bool = False   # last-cycle ej_hold loser preferred on that dest
     inj_order: str = ""         # "" | "oldest" | "young" | "node" | "oldest_resp"
@@ -646,11 +736,13 @@ class Ring2DistSim(Ring2BaseSim):
         skip = getattr(self.p, "inj_skip_hold", "") or ""
         q = self.srcq.get((node, plane))
         is_hol = bool(q) and f is q[0]
-        if getattr(self.p, "hop_hold", False) and (node, plane) in self.hop_hold:
-            if not (skip and not is_hol):
-                self.st["n_outst_wait"] += 1
-                self.st["n_deny_hop"] += 1
-                return False
+        hop_held = (getattr(self.p, "hop_hold", False)
+                    and (node, plane) in self.hop_hold
+                    and not (skip and not is_hol))
+        if hop_held and not getattr(self.p, "hop_hold_late", False):
+            self.st["n_outst_wait"] += 1
+            self.st["n_deny_hop"] += 1
+            return False
         if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
             # Hold is per source (node, plane) queue. After late-bind
             # the flit is on another plane's dest slot — do not apply.
@@ -755,6 +847,10 @@ class Ring2DistSim(Ring2BaseSim):
             if not self._can_board(f.plane, f.dir, f.idx):
                 if self._try_hop_bounce(node, f):
                     return True
+        if hop_held:
+            self.st["n_outst_wait"] += 1
+            self.st["n_deny_hop"] += 1
+            return False
         return True
 
     def _plane_inject_ok(self, node: int, f: Flit, pl: int) -> bool:
@@ -779,8 +875,54 @@ class Ring2DistSim(Ring2BaseSim):
         return (hop and dest and not booked and not yield_older
                 and not cred_full and not h0_full and not old_dest)
 
-    def _late_bind_plane(self, node: int, f: Flit) -> None:
+    def _late_bind_plane(self, node: int, f: Flit, sib: bool = True) -> None:
         """Choose plane at inject from hop+dest availability."""
+        self._late_bind_plane_pick(node, f)
+        mode = getattr(self.p, "late_plane_sib", "") or ""
+        if mode is True:
+            mode = "1"
+        if sib and mode:
+            if mode == "ha" and not is_ha(node):
+                pass
+            elif mode == "core" and not is_core(node):
+                pass
+            else:
+                self._yield_sibling_plane(node, f)
+
+    def _yield_sibling_plane(self, node: int, f: Flit) -> None:
+        """If the other srcq at this node late-binds to the same first
+        hop, keep the short/oldest HOL and move the loser to the
+        other plane when hop+dest are free."""
+        src_pl = None
+        for pl in (0, 1):
+            q = self.srcq.get((node, pl))
+            if q and q[0] is f:
+                src_pl = pl
+                break
+        if src_pl is None:
+            return
+        sq = self.srcq.get((node, 1 - src_pl))
+        if not sq:
+            return
+        g = sq[0]
+        if g.dir is None or f.dir is None:
+            return
+        old_g = (g.plane, g.dir, g.target)
+        self._late_bind_plane_pick(node, g)
+        clash = (g.plane, g.dir, g.idx) == (f.plane, f.dir, f.idx)
+        g.plane, g.dir, g.target = old_g
+        if not clash:
+            return
+        my_key = (0 if f.target is None else f.target, f.t_gen, src_pl)
+        sib_key = (0 if g.target is None else g.target, g.t_gen, 1 - src_pl)
+        if my_key <= sib_key:
+            return
+        alt = 1 - f.plane
+        if self._plane_inject_ok(node, f, alt):
+            f.plane = alt
+
+    def _late_bind_plane_pick(self, node: int, f: Flit) -> None:
+        """late_plane occ/need/... pick only. No sibling yield."""
         mode = getattr(self.p, "late_plane", "") or ""
         cur, alt = f.plane, 1 - f.plane
         ok_c = self._plane_inject_ok(node, f, cur)
@@ -1329,8 +1471,68 @@ class Ring2DistSim(Ring2BaseSim):
     def _islip_advance(self, ptr_map: dict, pkey, rec: dict) -> None:
         ptr_map[pkey] = (rec["node"], rec["src_pl"])
 
-    def _islip_dest_hop_max(self, recs: list, use_hop, age_key) -> None:
-        """Dest-hop bipartite max matching. Edge = oldest HOL for that pair."""
+    def _mcmf_bipartite(self, lefts: list, rights: list,
+                        edges: list[tuple]) -> dict:
+        """Max-flow min-cost assignment. edges: (left, right, cost).
+        Returns mate[right] = left."""
+        li = {u: i for i, u in enumerate(lefts)}
+        ri = {v: i for i, v in enumerate(rights)}
+        nl, nr = len(lefts), len(rights)
+        s, t = nl + nr, nl + nr + 1
+        n = t + 1
+        g: list[list[list]] = [[] for _ in range(n)]
+
+        def add(u: int, v: int, cap: int, cost: int) -> None:
+            g[u].append([v, cap, cost, len(g[v])])
+            g[v].append([u, 0, -cost, len(g[u]) - 1])
+
+        for i in range(nl):
+            add(s, i, 1, 0)
+        for j in range(nr):
+            add(nl + j, t, 1, 0)
+        for u, v, cost in edges:
+            add(li[u], nl + ri[v], 1, int(cost))
+        mate: dict = {}
+        inf = 10 ** 18
+        while True:
+            dist = [inf] * n
+            prev: list[tuple | None] = [None] * n
+            dist[s] = 0
+            q = [s]
+            inq = [False] * n
+            inq[s] = True
+            while q:
+                u = q.pop(0)
+                inq[u] = False
+                for ei, e in enumerate(g[u]):
+                    v, cap, cost, _rev = e
+                    if cap <= 0 or dist[u] + cost >= dist[v]:
+                        continue
+                    dist[v] = dist[u] + cost
+                    prev[v] = (u, ei)
+                    if not inq[v]:
+                        q.append(v)
+                        inq[v] = True
+            if dist[t] >= inf:
+                break
+            v = t
+            while v != s:
+                u, ei = prev[v]
+                e = g[u][ei]
+                e[1] -= 1
+                g[v][e[3]][1] += 1
+                v = u
+        for j, right in enumerate(rights):
+            for e in g[nl + j]:
+                if e[0] < nl and e[1] == 1:
+                    mate[right] = lefts[e[0]]
+                    break
+        return mate
+
+    def _islip_dest_hop_max(self, recs: list, use_hop, age_key,
+                            weighted: bool = False) -> None:
+        """Dest-hop bipartite matching. Edge = oldest HOL for that pair.
+        weighted: max card then older HOL (min-cost max-flow)."""
         pair_hol: dict[tuple, dict] = {}
         for r in recs:
             if r["dest_slot"] is None or r["dest_booked"]:
@@ -1351,19 +1553,130 @@ class Ring2DistSim(Ring2BaseSim):
             hops.sort(key=lambda h, d=dest: age_key(pair_hol[(d, h)]))
         dests = sorted(adj.keys(), key=lambda d: dest_age[d])
         mate: dict[tuple, tuple] = {}
+        if weighted and dests:
+            hops = sorted({h for hs in adj.values() for h in hs})
+            edges = [(d, h, pair_hol[(d, h)]["age"])
+                     for d, hs in adj.items() for h in hs]
+            mate = self._mcmf_bipartite(dests, hops, edges)
+        else:
+            def dfs(u: tuple, seen: set) -> bool:
+                for v in adj[u]:
+                    if v in seen:
+                        continue
+                    seen.add(v)
+                    if v not in mate or dfs(mate[v], seen):
+                        mate[v] = u
+                        return True
+                return False
 
-        def dfs(u: tuple, seen: set) -> bool:
-            for v in adj[u]:
-                if v in seen:
+            for dest in dests:
+                dfs(dest, set())
+        matched_dest = set(mate.values())
+        matched_hop = set(mate.keys())
+        matched_keys = {pair_hol[(mate[h], h)]["key"] for h in mate}
+        for r in sorted(
+                (x for x in recs
+                 if x["dest_slot"] is not None and not use_hop(x)
+                 and not x["dest_booked"]),
+                key=age_key):
+            if r["dest_slot"] in matched_dest:
+                continue
+            matched_dest.add(r["dest_slot"])
+            matched_keys.add(r["key"])
+        for r in sorted(
+                (x for x in recs
+                 if x["dest_slot"] is None and use_hop(x)
+                 and x.get("hop_free", True)),
+                key=age_key):
+            if r["hop"] in matched_hop:
+                continue
+            matched_hop.add(r["hop"])
+            matched_keys.add(r["key"])
+        for r in recs:
+            if r["key"] in matched_keys:
+                continue
+            dest_hit = (r["dest_slot"] is not None
+                        and (r["dest_booked"] or r["dest_slot"] in matched_dest))
+            hop_hit = use_hop(r) and (
+                r["hop"] in matched_hop or not r.get("hop_free", True))
+            if dest_hit:
+                self.ej_hold.add((r["node"], r["src_pl"]))
+                self.dest_hot[(r["dest_slot"][0], r["dest_slot"][1])] = self.t
+            if hop_hit:
+                self.hop_hold.add((r["node"], r["src_pl"]))
+
+    def _islip_dest_hop_gs(self, recs: list, use_hop, age_key,
+                           hop_propose: bool = False) -> None:
+        """Gale-Shapley dest↔hop. Dests prefer oldest HOL; hops
+        prefer fewer remaining hops. hop_propose=False is
+        dest-optimal; True is hop-optimal."""
+        pair_hol: dict[tuple, dict] = {}
+        for r in recs:
+            if r["dest_slot"] is None or r["dest_booked"]:
+                continue
+            if not use_hop(r) or not r.get("hop_free", True):
+                continue
+            pk = (r["dest_slot"], r["hop"])
+            if pk not in pair_hol or age_key(r) < age_key(pair_hol[pk]):
+                pair_hol[pk] = r
+        dests = sorted({d for d, _h in pair_hol})
+        hops = sorted({h for _d, h in pair_hol})
+
+        def dest_rank(d, h) -> tuple:
+            r = pair_hol[(d, h)]
+            return (r["age"], r["node"], r["src_pl"])
+
+        def hop_rank(d, h) -> tuple:
+            r = pair_hol[(d, h)]
+            return (r["hops"], r["age"], r["node"], r["src_pl"])
+
+        dest_pref = {
+            d: sorted((h for (dd, h) in pair_hol if dd == d),
+                      key=lambda h, d=d: dest_rank(d, h))
+            for d in dests}
+        hop_pref = {
+            h: sorted((d for (d, hh) in pair_hol if hh == h),
+                      key=lambda d, h=h: hop_rank(d, h))
+            for h in hops}
+        mate: dict[tuple, tuple] = {}
+        if hop_propose:
+            nxt = {h: 0 for h in hops}
+            engaged: dict = {}
+            free = list(hops)
+            while free:
+                h = free.pop()
+                prefs = hop_pref[h]
+                if nxt[h] >= len(prefs):
                     continue
-                seen.add(v)
-                if v not in mate or dfs(mate[v], seen):
-                    mate[v] = u
-                    return True
-            return False
-
-        for dest in dests:
-            dfs(dest, set())
+                d = prefs[nxt[h]]
+                nxt[h] += 1
+                if d not in engaged:
+                    engaged[d] = h
+                elif dest_rank(d, h) < dest_rank(d, engaged[d]):
+                    free.append(engaged[d])
+                    engaged[d] = h
+                else:
+                    free.append(h)
+            mate = {h: d for d, h in engaged.items()}
+        else:
+            nxt = {d: 0 for d in dests}
+            engaged = {}
+            free = list(dests)
+            while free:
+                d = free.pop()
+                prefs = dest_pref[d]
+                if nxt[d] >= len(prefs):
+                    continue
+                h = prefs[nxt[d]]
+                nxt[d] += 1
+                if h not in engaged:
+                    engaged[h] = d
+                elif hop_rank(d, h) < hop_rank(engaged[h], h):
+                    free.append(engaged[h])
+                    engaged[h] = d
+                else:
+                    free.append(d)
+            mate = engaged
         matched_dest = set(mate.values())
         matched_hop = set(mate.keys())
         matched_keys = {pair_hol[(mate[h], h)]["key"] for h in mate}
@@ -1408,6 +1721,9 @@ class Ring2DistSim(Ring2BaseSim):
         iters = max(1, int(getattr(self.p, "hop_islip", 0) or 0))
         hop_kind = getattr(self.p, "hop_hold_kind", "both") or "both"
         recs: list[dict] = []
+        dest_book_n: dict[tuple, int] = defaultdict(int)
+        for (dst, pl, _eta), n in self.ej_book.items():
+            dest_book_n[(dst, pl)] += n
         for key in list(self.active_src):
             node, plane = key
             q = self.srcq.get(key)
@@ -1433,14 +1749,26 @@ class Ring2DistSim(Ring2BaseSim):
             hop = ((f.plane, f.dir, f.idx)
                    if f.dir is not None else None)
             hop_live = 0
+            path_live = 0
+            dest_live = 0
             if hop is not None:
                 nxt = (hop[2] + hop[1]) % self.n
                 hop_live = len(self.arr_set[(hop[0], hop[1], nxt)])
+                dest_live = len(self.arr_set[(hop[0], hop[1], f.dst)])
+                hops_left = 0 if f.target is None else f.target
+                if hops_left >= 2:
+                    for k in range(2, hops_left + 1):
+                        node_k = (hop[2] + k * hop[1]) % self.n
+                        path_live += len(self.arr_set[(hop[0], hop[1], node_k)])
             recs.append({
                 "key": key, "age": f.t_gen, "node": node, "src_pl": plane,
                 "kind": f.kind, "dest_slot": dest_slot,
                 "dest_booked": dest_booked, "hop": hop,
                 "hop_live": hop_live,
+                "path_live": path_live,
+                "dest_live": dest_live,
+                "dest_ejq": len(self.ejectq[(f.dst, f.plane)]),
+                "dest_book": dest_book_n.get((f.dst, f.plane), 0),
                 "hop_free": hop is None or self._can_board(*hop),
                 "hops": 0 if f.target is None else f.target,
             })
@@ -1457,6 +1785,20 @@ class Ring2DistSim(Ring2BaseSim):
         if match == "max":
             self._islip_dest_hop_max(recs, use_hop, age_key)
             return
+        if match == "gs":
+            self._islip_dest_hop_gs(recs, use_hop, age_key)
+            return
+        if match == "gs_hop":
+            self._islip_dest_hop_gs(recs, use_hop, age_key, hop_propose=True)
+            return
+        if match == "weight":
+            self._islip_dest_hop_max(recs, use_hop, age_key, weighted=True)
+            return
+        if match == "weight_resp":
+            self._islip_dest_hop_max(
+                [r for r in recs if r["kind"] == "resp"],
+                use_hop, age_key, weighted=True)
+            recs = [r for r in recs if r["kind"] != "resp"]
         if match == "max_resp":
             self._islip_dest_hop_max(
                 [r for r in recs if r["kind"] == "resp"], use_hop, age_key)
@@ -1502,8 +1844,27 @@ class Ring2DistSim(Ring2BaseSim):
         def hop_pick_key(r: dict) -> tuple:
             if hopkeep == "short":
                 return (r["hops"], r["age"], r["node"], r["src_pl"])
+            if hopkeep == "short_destlive":
+                return (r["hops"], r.get("dest_live", 0),
+                        r["age"], r["node"], r["src_pl"])
             if hopkeep == "long":
                 return (-r["hops"], r["age"], r["node"], r["src_pl"])
+            if hopkeep == "pathlive":
+                return (r.get("path_live", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "pathpack":
+                return (-r.get("path_live", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "destlive":
+                return (r.get("dest_live", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "destpack":
+                return (-r.get("dest_live", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "ejq":
+                return (r.get("dest_ejq", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "ejqpack":
+                return (-r.get("dest_ejq", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "destbook":
+                return (r.get("dest_book", 0), r["age"], r["node"], r["src_pl"])
+            if hopkeep == "destbookpack":
+                return (-r.get("dest_book", 0), r["age"], r["node"], r["src_pl"])
             return hop_key(r)
 
         matched: set[tuple] = set()
@@ -1833,6 +2194,20 @@ class Ring2DistSim(Ring2BaseSim):
                             continue
                         hold_hop(r)
 
+        retry = getattr(self.p, "ej_hold_retry", "") or ""
+        if retry:
+            taken_dest = {r["dest_slot"] for r in recs
+                          if r["dest_slot"] is not None and (
+                              r["dest_booked"]
+                              or (r["node"], r["src_pl"]) not in self.ej_hold)}
+            taken_hop = set(phys_busy)
+            for r in recs:
+                if (r["hop"] is not None
+                        and (r["node"], r["src_pl"]) not in self.hop_hold
+                        and (r["node"], r["src_pl"]) not in self.ej_hold):
+                    taken_hop.add(r["hop"])
+            self._ej_hold_retry_plane(recs, taken_dest, taken_hop, age_key)
+
         nxt: set[tuple] = set()
         if getattr(self.p, "hop_sticky", False):
             for r in recs:
@@ -1848,6 +2223,61 @@ class Ring2DistSim(Ring2BaseSim):
                     dnext.add(((r["dest_slot"][0], r["dest_slot"][1]),
                                r["node"], r["src_pl"]))
         self.dest_sticky = dnext
+
+    def _ej_hold_retry_plane(
+            self, recs: list[dict], taken_dest: set[tuple],
+            taken_hop: set[tuple], age_key) -> None:
+        """Dest-held HOLs try the other plane after dest-then-hop.
+
+        late_plane ran before dest grants, so a same-cycle dest_slot
+        clash is invisible to occ pick. Default hop_islip (retry="")
+        must stay bit-identical to S14.
+        """
+        mode = getattr(self.p, "ej_hold_retry", "") or ""
+        cands: list[dict] = []
+        for r in recs:
+            if (r["node"], r["src_pl"]) not in self.ej_hold:
+                continue
+            if r["hop"] is None or r["dest_slot"] is None:
+                continue
+            if mode in ("plane_ha", "ha") and not is_ha(r["node"]):
+                continue
+            if mode in ("plane_core", "core") and not is_core(r["node"]):
+                continue
+            if mode in ("plane_resp", "resp") and r["kind"] != "resp":
+                continue
+            if mode in ("plane_req", "req") and r["kind"] != "req":
+                continue
+            q = self.srcq.get(r["key"])
+            if not q:
+                continue
+            f = q[0]
+            old = (f.plane, f.dir, f.target)
+            pl, d, _idx = r["hop"]
+            alt = 1 - pl
+            hops = r["hops"]
+            f.plane, f.dir, f.target = alt, d, hops
+            alt_slot = (f.dst, alt, self._ej_eta(f))
+            alt_hop = (alt, d, f.idx)
+            dest_ok = not self._ej_slots_busy(f)
+            hop_ok = self._can_board(*alt_hop)
+            f.plane, f.dir, f.target = old
+            if (dest_ok and hop_ok
+                    and alt_slot not in taken_dest
+                    and alt_hop not in taken_hop):
+                cands.append({
+                    **r, "alt_slot": alt_slot, "alt_hop": alt_hop,
+                    "alt_route": (alt, d, hops),
+                })
+        cands.sort(key=age_key)
+        for r in cands:
+            if r["alt_slot"] in taken_dest or r["alt_hop"] in taken_hop:
+                continue
+            taken_dest.add(r["alt_slot"])
+            taken_hop.add(r["alt_hop"])
+            self.ej_hold.discard((r["node"], r["src_pl"]))
+            self.hop_hold.discard((r["node"], r["src_pl"]))
+            self.hop_grant[(r["node"], r["src_pl"])] = r["alt_route"]
 
     def _inject_keys(self) -> list:
         keys = list(self.active_src)
@@ -2183,6 +2613,7 @@ class Ring2DistSim(Ring2BaseSim):
         out["hop_bounce_age"] = getattr(self.p, "hop_bounce_age", "")
         out["hop_book"] = getattr(self.p, "hop_book", 0)
         out["late_plane"] = getattr(self.p, "late_plane", "")
+        out["late_plane_sib"] = getattr(self.p, "late_plane_sib", "")
         out["hop_yield"] = getattr(self.p, "hop_yield", False)
         out["hop_cred"] = getattr(self.p, "hop_cred", 0)
         out["hop0_cred"] = getattr(self.p, "hop0_cred", 0)
@@ -2197,6 +2628,8 @@ class Ring2DistSim(Ring2BaseSim):
         out["hop_hold"] = getattr(self.p, "hop_hold", False)
         out["hop_hold_keep"] = getattr(self.p, "hop_hold_keep", "oldest")
         out["hop_hold_retry"] = getattr(self.p, "hop_hold_retry", "")
+        out["hop_hold_late"] = getattr(self.p, "hop_hold_late", False)
+        out["ej_hold_retry"] = getattr(self.p, "ej_hold_retry", "")
         out["hop_joint"] = getattr(self.p, "hop_joint", False)
         out["hop_islip"] = getattr(self.p, "hop_islip", 0)
         out["hop_islip_arb"] = getattr(self.p, "hop_islip_arb", "oldest")
@@ -2277,6 +2710,12 @@ def s13_params(**kw) -> Ring2DistParams:
     """S12 + hop-grant prefers shorter remaining path among dest-granted."""
     kw.setdefault("hop_islip_hopkeep", "short")
     return s12_params(**kw)
+
+
+def s14_params(**kw) -> Ring2DistParams:
+    """S13 + HA sibling plane yield on same-node first-hop clash."""
+    kw.setdefault("late_plane_sib", "ha")
+    return s13_params(**kw)
 
 
 def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,

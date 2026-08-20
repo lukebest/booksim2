@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fourteen-scheme makespan comparison on the 20-node dual-plane ring.
+"""Fifteen-scheme makespan comparison on the 20-node dual-plane ring.
 
 Schemes
 -------
-Common datapath (all fourteen): 2-cycle hops, 8-deep boarding queue per
+Common datapath (all fifteen): 2-cycle hops, 8-deep boarding queue per
 (node, plane), point-to-point credit FC + I-tag + E-tag, and a 512
 outstanding-read cap per AI core.
 S0  ring2_base   RR inject on that datapath, no source rate control
@@ -20,6 +20,7 @@ S10 ring2_ej     S9 + late_dir only for responses
 S11 ring2_ej     S10 + same-cycle first-hop mutex (resp, oldest)
 S12 ring2_ej     S11 + dest-then-hop request-grant (I=1, leftover dest)
 S13 ring2_ej     S12 + hop-grant prefers shorter remaining path
+S14 ring2_ej     S13 + HA sibling plane yield on same-node hop clash
 
 Workloads: allpairs (deterministic 10x10 x m) and uniform (K per core,
 uniform HA, multi-seed). Makespan is the cycle the last response flit is
@@ -46,7 +47,7 @@ from rg_ring2_base import Ring2BaseParams, run_batch as run_base
 from rg_ring2_dist import (
     Ring2DistParams, run_batch as run_dist, s5_params, s6_params,
     s7_params, s8_params, s9_params, s10_params, s11_params, s12_params,
-    s13_params,
+    s13_params, s14_params,
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
@@ -57,6 +58,8 @@ from rg_ring2_topo import (
 OUT = Path(__file__).resolve().parents[1] / "results" / "ring2_20node.json"
 
 PLANE_SELS = ("static_hash", "rr_per_pkt", "least_occupied", "req_resp_split")
+SCHEMES = ("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
+           "S10", "S11", "S12", "S13", "S14")
 
 
 def _bounds(topo: Ring2Topology, txns, plane_sel: str, m_resp: int) -> dict:
@@ -132,6 +135,11 @@ def run_one(scheme: str, topo: Ring2Topology, txns, *,
                         eject_depth=params.eject_depth,
                         core_outstanding=params.core_outstanding)
         r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S14":
+        dp = s14_params(plane_sel=params.plane_sel,
+                        eject_depth=params.eject_depth,
+                        core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
     else:
         raise ValueError(scheme)
     keep = ("completed", "makespan", "makespan_des", "n_txn_done",
@@ -145,10 +153,43 @@ def run_one(scheme: str, topo: Ring2Topology, txns, *,
     return {k: r.get(k) for k in keep}
 
 
-def sweep(*, quick: bool = False) -> dict[str, Any]:
+def _summary_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    keys = set()
+    summary: list[dict[str, Any]] = []
+    for r in rows:
+        if r.get("plane_sel") != "least_occupied":
+            continue
+        if r.get("eject_depth", 4) not in (4, None):
+            continue
+        keys.add((r["scheme"], r["pattern"], r.get("R"),
+                  r.get("m"), r.get("K")))
+    for key in sorted(keys, key=lambda x: (x[0], x[1], str(x[2]))):
+        scheme, pat, R, m, K = key
+        grp = [r for r in rows
+               if r["scheme"] == scheme and r["pattern"] == pat
+               and r.get("R") == R and r.get("m") == m and r.get("K") == K
+               and r.get("plane_sel") == "least_occupied"
+               and r.get("eject_depth", 4) in (4, None)
+               and r.get("makespan") is not None]
+        if not grp:
+            continue
+        mks = [r["makespan"] for r in grp]
+        summary.append({
+            "scheme": scheme, "pattern": pat, "R": R, "m": m, "K": K,
+            "n": len(mks),
+            "makespan_mean": round(sum(mks) / len(mks), 1),
+            "makespan_min": min(mks), "makespan_max": max(mks),
+            "all_completed": all(r.get("completed") for r in grp),
+            "bound": grp[0].get("bound"),
+        })
+    return summary
+
+
+def sweep(*, quick: bool = False, only: str = "") -> dict[str, Any]:
     topo = Ring2Topology()
     rows: list[dict[str, Any]] = []
     t0 = time.perf_counter()
+    schemes = (only,) if only else SCHEMES
 
     if quick:
         allpairs_m = (1,)
@@ -183,9 +224,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ed in ejects:
                     p = Ring2BaseParams(plane_sel=ps, eject_depth=ed)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
-                                   "S7", "S8", "S9", "S10", "S11", "S12",
-                                   "S13"):
+                    for scheme in schemes:
                         extra = {}
                         if scheme == "S1":
                             for ac in aimd_cfgs:
@@ -227,9 +266,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ps in plane_sels:
                     p = Ring2BaseParams(plane_sel=ps)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
-                                   "S7", "S8", "S9", "S10", "S11", "S12",
-                                   "S13"):
+                    for scheme in schemes:
                         if scheme == "S1":
                             ac = aimd_cfgs[0]
                             pp = Ring2BaseParams(plane_sel=ps, **ac)
@@ -257,36 +294,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                               f"{ps} mk={r.get('makespan')} "
                               f"ok={r.get('completed')}", flush=True)
 
-    # compact summary: mean makespan per (scheme, pattern, R) on the default
-    # plane_sel / eject_depth so the eleven schemes can be compared directly
-    summary: list[dict[str, Any]] = []
-    keys = set()
-    for r in rows:
-        if r.get("plane_sel") != "least_occupied":
-            continue
-        if r.get("eject_depth", 4) not in (4, None):
-            continue
-        keys.add((r["scheme"], r["pattern"], r.get("R"),
-                  r.get("m"), r.get("K")))
-    for key in sorted(keys, key=lambda x: (x[0], x[1], str(x[2]))):
-        scheme, pat, R, m, K = key
-        grp = [r for r in rows
-               if r["scheme"] == scheme and r["pattern"] == pat
-               and r.get("R") == R and r.get("m") == m and r.get("K") == K
-               and r.get("plane_sel") == "least_occupied"
-               and r.get("eject_depth", 4) in (4, None)
-               and r.get("makespan") is not None]
-        if not grp:
-            continue
-        mks = [r["makespan"] for r in grp]
-        oks = all(r.get("completed") for r in grp)
-        summary.append({
-            "scheme": scheme, "pattern": pat, "R": R, "m": m, "K": K,
-            "n": len(mks), "makespan_mean": round(sum(mks) / len(mks), 1),
-            "makespan_min": min(mks), "makespan_max": max(mks),
-            "all_completed": oks,
-            "bound": grp[0].get("bound"),
-        })
+    summary = _summary_from_rows(rows)
 
     return {
         "meta": {
@@ -304,9 +312,17 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--only", type=str, default="",
+                    help="run only this scheme and merge into --out")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()
-    res = sweep(quick=args.quick)
+    res = sweep(quick=args.quick, only=args.only)
+    if args.only and args.out.exists():
+        prior = json.loads(args.out.read_text())
+        keep = [r for r in (prior.get("rows") or [])
+                if r.get("scheme") != args.only]
+        res["rows"] = keep + res["rows"]
+        res["summary"] = _summary_from_rows(res["rows"])
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(res, indent=1, default=str))
     print(f"\nwrote {args.out}  rows={len(res['rows'])}  "

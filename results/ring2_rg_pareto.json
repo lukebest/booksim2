@@ -2710,7 +2710,7 @@
    "completed": true,
    "n_deflections": 0,
    "tag": "S11",
-   "on_front": true
+   "on_front": false
   },
   {
    "scheme": "S12",
@@ -2747,6 +2747,24 @@
    "area_bits": 80500,
    "n_deflections": 0,
    "on_front": false
+  },
+  {
+   "scheme": "S14",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 64,
+   "t_sched_cycles": 0,
+   "makespan": 64,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S14",
+   "on_front": true
   }
  ],
  "pareto": [
@@ -2762,8 +2780,8 @@
   },
   {
    "area_norm": 0.0458,
-   "makespan": 67,
-   "tag": "S11"
+   "makespan": 64,
+   "tag": "S14"
   }
  ],
  "n_front": 3,

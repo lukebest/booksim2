@@ -7,9 +7,10 @@ y   makespan = makespan_des + t_sched_cycles   (scheduler delay charged back)
 x   area_norm  = shared credit+I/E-tag datapath + arbiter + control-plane
                 (IQ-XY router = 1.0, amortized per node)
 
-S0–S13 are plotted as reference points so the front is cross-scheme.
+S0–S14 are plotted as reference points so the front is cross-scheme.
 S11 adds a same-cycle hop mutex; S12 adds dest-then-hop request-grant;
-S13 prefers the shorter remaining path on hop-grant.
+S13 prefers the shorter remaining path on hop-grant; S14 yields the
+sibling HA srcq off a late_plane first-hop clash.
 `--refine` densifies around the current knee and tries leftover algorithm
 variants; used by the self-paced search loop.
 
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -38,7 +40,7 @@ from rg_ring2_base import Ring2BaseParams, run_batch as run_base
 from rg_ring2_dist import (
     Ring2DistParams, run_batch as run_dist, s5_params, s6_params,
     s7_params, s8_params, s9_params, s10_params, s11_params, s12_params,
-    s13_params,
+    s13_params, s14_params,
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, run_batch as run_rg
@@ -91,7 +93,9 @@ def _s0_s1_refs(topo: Ring2Topology, txns, *, m_resp: int) -> list[dict]:
             ("S12", run_dist, "ring2_ej",
              s12_params(plane_sel="least_occupied")),
             ("S13", run_dist, "ring2_ej",
-             s13_params(plane_sel="least_occupied"))):
+             s13_params(plane_sel="least_occupied")),
+            ("S14", run_dist, "ring2_ej",
+             s14_params(plane_sel="least_occupied"))):
         r = runner(topo, txns, params=params, seed=0)
         d = distributed_cost(cfg, n_nodes=topo.n, n_planes=topo.n_planes,
                              eject_depth=p.eject_depth, resv_ej=p.resv_ej,
@@ -250,12 +254,14 @@ def sweep(*, quick: bool = False, refine: bool = False,
               f"S10 mk={by_sch.get('S10')} "
               f"S11 mk={by_sch.get('S11')} "
               f"S12 mk={by_sch.get('S12')} "
-              f"S13 mk={by_sch.get('S13')}", flush=True)
+              f"S13 mk={by_sch.get('S13')} "
+              f"S14 mk={by_sch.get('S14')}", flush=True)
     else:
         rows.extend([r for r in prior_rows
                      if r.get("scheme") in ("S0", "S1", "S3", "S4", "S5",
                                             "S6", "S7", "S8", "S9",
-                                            "S10", "S11", "S12", "S13")])
+                                            "S10", "S11", "S12", "S13",
+                                            "S14")])
 
     cfgs = _space(refine=refine, prior=prior_rows)
     if quick:
@@ -307,84 +313,163 @@ def sweep(*, quick: bool = False, refine: bool = False,
     }
 
 
+# Same-area S5–S14 sit on x=0.0458; S14 stays on the true x (Pareto vertex).
+_EJ_SPREAD = ("S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13", "S14")
+_STYLE = {
+    "S0":  ("#2563eb", "D", "S0 baseline"),
+    "S1":  ("#16a34a", "s", "S1 AIMD"),
+    "S3":  ("#9333ea", "^", "S3 push-on-pull"),
+    "S4":  ("#ea580c", "p", "S4 kind-aware leave"),
+    "S5":  ("#0d9488", "h", "S5 leave-slot lock"),
+    "S6":  ("#c026d3", "*", "S6 oldest dest clash"),
+    "S7":  ("#7c3aed", "P", "S7 hop bounce"),
+    "S8":  ("#ca8a04", "X", "S8 late plane"),
+    "S9":  ("#be123c", "v", "S9 late dir"),
+    "S10": ("#047857", "<", "S10 resp late dir"),
+    "S11": ("#9a3412", ">", "S11 hop hold"),
+    "S12": ("#4338ca", "d", "S12 hop islip"),
+    "S13": ("#0369a1", "H", "S13 hop short"),
+    "S14": ("#db2777", "8", "S14 HA sib plane"),
+}
+
+
+def _display_xy(scheme: str, x: float, y: float) -> tuple[float, float]:
+    """Visual offset only. Pareto line still uses true (area, makespan).
+
+    S5–S14 share area_norm=0.0458. Keep S14 on the true x (Pareto vertex)
+    and fan the rest to the right so they do not sit on the S1→S14 edge.
+    """
+    if scheme == "S14":
+        return x, y
+    if scheme in _EJ_SPREAD:
+        i = _EJ_SPREAD.index(scheme)
+        return x + (i + 1) * 0.00012, y
+    if scheme == "S0":
+        return x - 0.00014, y
+    return x, y
+
+
+def _s2_nearest_front(res: dict[str, Any]) -> dict[str, Any] | None:
+    """S2 row with the smallest full-span distance to the S0–S14 front."""
+    front = [(p["area_norm"], p["makespan"])
+             for p in (res.get("pareto") or []) if p.get("tag") in _STYLE]
+    s2 = [r for r in res.get("rows") or []
+          if r.get("scheme") == "S2" and r.get("completed")
+          and r.get("makespan") is not None]
+    if not front or not s2:
+        return None
+    pts = [r for r in res["rows"]
+           if r.get("completed") and r.get("makespan") is not None]
+    ax = max(r["area_norm"] for r in pts) - min(r["area_norm"] for r in pts)
+    ay = max(r["makespan"] for r in pts) - min(r["makespan"] for r in pts)
+    ax = ax or 1.0
+    ay = ay or 1.0
+    verts = [(a / ax, m / ay) for a, m in front]
+
+    def dist(r: dict[str, Any]) -> float:
+        px, py = r["area_norm"] / ax, r["makespan"] / ay
+        best = 1e18
+        for i, (vx, vy) in enumerate(verts):
+            best = min(best, math.hypot(px - vx, py - vy))
+            if i + 1 >= len(verts):
+                continue
+            x0, y0 = verts[i]
+            x1, y1 = verts[i + 1]
+            dx, dy = x1 - x0, y1 - y0
+            l2 = dx * dx + dy * dy
+            t = (0.0 if l2 == 0 else
+                 max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / l2)))
+            best = min(best, math.hypot(px - (x0 + t * dx),
+                                        py - (y0 + t * dy)))
+        return best
+
+    return min(s2, key=lambda r: (dist(r), r["area_norm"], r["makespan"],
+                                  r.get("tag", "")))
+
+
 def plot(res: dict[str, Any], path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(8.2, 5.4))
-    by = {"S0": ([], [], []), "S1": ([], [], []),
-          "S2": ([], [], []), "S3": ([], [], []),
-          "S4": ([], [], []), "S5": ([], [], []),
-          "S6": ([], [], []),
-          "S7": ([], [], []),
-          "S8": ([], [], []),
-          "S9": ([], [], []),
-          "S10": ([], [], []),
-          "S11": ([], [], []),
-          "S12": ([], [], []),
-          "S13": ([], [], [])}
+    s2n = _s2_nearest_front(res)
+    fig = plt.figure(figsize=(9.6, 5.6))
+    gs = fig.add_gridspec(1, 2, width_ratios=[3.7, 1.05], wspace=0.12)
+    ax = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1]) if s2n else None
+
+    refs: dict[str, tuple[float, float]] = {}
     for r in res["rows"]:
-        if r.get("makespan") is None:
+        if r.get("makespan") is None or not r.get("completed"):
             continue
-        x, y, t = r["area_norm"], r["makespan"], r.get("tag", "")
-        bucket = by.setdefault(r["scheme"], ([], [], []))
-        bucket[0].append(x)
-        bucket[1].append(y)
-        bucket[2].append(t)
-    ax.scatter(by["S2"][0], by["S2"][1], s=22, c="#64748b", alpha=0.7,
-               label="S2 request-grant", zorder=2)
-    if by["S0"][0]:
-        ax.scatter(by["S0"][0], by["S0"][1], s=80, c="#2563eb", marker="D",
-                   label="S0 baseline", zorder=4)
-    if by["S1"][0]:
-        ax.scatter(by["S1"][0], by["S1"][1], s=80, c="#16a34a", marker="s",
-                   label="S1 AIMD", zorder=4)
-    if by["S3"][0]:
-        ax.scatter(by["S3"][0], by["S3"][1], s=80, c="#9333ea", marker="^",
-                   label="S3 push-on-pull", zorder=4)
-    if by["S4"][0]:
-        ax.scatter(by["S4"][0], by["S4"][1], s=90, c="#ea580c", marker="p",
-                   label="S4 kind-aware leave", zorder=4)
-    if by["S5"][0]:
-        ax.scatter(by["S5"][0], by["S5"][1], s=90, c="#0d9488", marker="h",
-                   label="S5 leave-slot lock", zorder=4)
-    if by["S6"][0]:
-        ax.scatter(by["S6"][0], by["S6"][1], s=70, c="#c026d3", marker="*",
-                   label="S6 oldest dest clash", zorder=5)
-    if by["S7"][0]:
-        ax.scatter(by["S7"][0], by["S7"][1], s=80, c="#7c3aed", marker="P",
-                   label="S7 hop bounce", zorder=6)
-    if by["S8"][0]:
-        ax.scatter(by["S8"][0], by["S8"][1], s=80, c="#ca8a04", marker="X",
-                   label="S8 late plane", zorder=6)
-    if by["S9"][0]:
-        ax.scatter(by["S9"][0], by["S9"][1], s=80, c="#be123c", marker="v",
-                   label="S9 late dir", zorder=7)
-    if by["S10"][0]:
-        ax.scatter(by["S10"][0], by["S10"][1], s=90, c="#047857", marker="<",
-                   label="S10 resp late dir", zorder=8)
-    if by["S11"][0]:
-        ax.scatter(by["S11"][0], by["S11"][1], s=90, c="#9a3412", marker=">",
-                   label="S11 hop hold", zorder=9)
-    if by["S12"][0]:
-        ax.scatter(by["S12"][0], by["S12"][1], s=90, c="#4338ca", marker="d",
-                   label="S12 hop islip", zorder=10)
-    if by["S13"][0]:
-        ax.scatter(by["S13"][0], by["S13"][1], s=90, c="#0369a1", marker="H",
-                   label="S13 hop short", zorder=11)
-    front = res.get("pareto") or []
+        sch = r.get("scheme", "")
+        if sch == "S2" or sch not in _STYLE:
+            continue
+        refs[sch] = (r["area_norm"], r["makespan"])
+
+    z = 4
+    for sch, (color, marker, label) in _STYLE.items():
+        if sch not in refs:
+            continue
+        x, y = refs[sch]
+        xd, yd = _display_xy(sch, x, y)
+        ax.scatter([xd], [yd], s=92, c=color, marker=marker, label=label,
+                   zorder=z, edgecolors="white", linewidths=0.4)
+        z += 1
+
+    front = [p for p in (res.get("pareto") or [])
+             if p.get("tag") in _STYLE]
     if front:
         xs = [p["area_norm"] for p in front]
         ys = [p["makespan"] for p in front]
-        ax.plot(xs, ys, "-o", c="#dc2626", ms=5, lw=1.4, label="Pareto",
-                zorder=5)
-        for p in front:
-            ax.annotate(p["tag"], (p["area_norm"], p["makespan"]),
-                        textcoords="offset points", xytext=(4, 4),
-                        fontsize=7, color="#111827")
+        ax.plot(xs, ys, "-", c="#dc2626", lw=1.5, label="Pareto", zorder=3)
+        ax.scatter(xs, ys, s=28, c="#dc2626", zorder=12)
+
+    label_off = {
+        "S0": (-18, 8), "S1": (6, 8), "S3": (6, 8), "S4": (-22, -12),
+        "S5": (6, 5), "S6": (6, -11), "S7": (6, 4), "S8": (6, -10),
+        "S9": (6, 6), "S10": (6, 6), "S11": (-22, -11), "S12": (6, 6),
+        "S13": (6, -11), "S14": (-22, -11),
+    }
+    for sch, (x, y) in refs.items():
+        xd, yd = _display_xy(sch, x, y)
+        dx, dy = label_off.get(sch, (5, 4))
+        ax.annotate(sch, (xd, yd), textcoords="offset points",
+                    xytext=(dx, dy), fontsize=8, color="#111827",
+                    zorder=13)
+
+    xs_all = [_display_xy(s, x, y)[0] for s, (x, y) in refs.items()]
+    ys_all = [y for _, y in refs.values()]
+    pad_x = 0.00035
+    ax.set_xlim(min(xs_all) - pad_x, max(xs_all) + 0.00085)
+    ax.set_ylim(min(ys_all) - 8, max(ys_all) + 12)
     ax.set_xlabel("area_norm  (IQ-XY router = 1.0, per node)")
     ax.set_ylabel("makespan  (DES + t_sched_cycles)")
-    ax.set_title("2-full-ring 20-node  request-grant area / makespan")
     ax.grid(True, ls=":", alpha=0.5)
-    ax.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
+    ax.legend(frameon=False, fontsize=7.5, loc="lower left")
+    ax.spines["right"].set_visible(False)
+
+    if ax2 is not None and s2n is not None:
+        x, y = s2n["area_norm"], s2n["makespan"]
+        short = str(s2n.get("tag", "S2")).split("/")[0]
+        ax2.scatter([x], [y], s=110, c="#64748b", marker="o",
+                    zorder=4, edgecolors="white", linewidths=0.4)
+        ax2.annotate(f"S2 {short}\nmk={y}", (x, y),
+                     textcoords="offset points", xytext=(-52, 10),
+                     fontsize=8, color="#111827")
+        ax2.set_xlim(x - 0.008, x + 0.008)
+        ax2.set_ylim(y - 18, y + 18)
+        ax2.set_xlabel("area_norm")
+        ax2.grid(True, ls=":", alpha=0.5)
+        ax2.spines["left"].set_visible(False)
+        ax2.tick_params(left=False, labelleft=True)
+        d = 0.018
+        kw = dict(color="#111827", clip_on=False, lw=0.9)
+        ax.plot((1 - d, 1 + d), (-d, +d), transform=ax.transAxes, **kw)
+        ax.plot((1 - d, 1 + d), (1 - d, 1 + d), transform=ax.transAxes, **kw)
+        ax2.plot((-d, +d), (-d, +d), transform=ax2.transAxes, **kw)
+        ax2.plot((-d, +d), (1 - d, 1 + d), transform=ax2.transAxes, **kw)
+
+    fig.suptitle("2-full-ring 20-node  S0–S14 knee  (nearest S2 kept)",
+                 fontsize=12, y=0.99)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.90, bottom=0.12,
+                        wspace=0.14)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -394,8 +479,17 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--refine", action="store_true")
+    ap.add_argument("--plot-only", action="store_true",
+                    help="redraw PNG from existing JSON, do not resweep")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()
+    if args.plot_only:
+        res = json.loads(args.out.read_text())
+        plot(res, args.out.with_suffix(".png"))
+        print(f"rewrote {args.out.with_suffix('.png')}  "
+              f"rows={len(res.get('rows') or [])}  "
+              f"front={res.get('n_front')}")
+        return
     res = sweep(quick=args.quick, refine=args.refine, prior_path=args.out)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(res, indent=1, default=str))

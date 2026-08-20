@@ -209,6 +209,14 @@ S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更�
 
 实测：10k seed0 **11288**（1.26× bound），seed1/2 **11399 / 11270**（三 seed 全赢）。allpairs **68**。K=500 **2362**。K=20 均值 135.6，K=100 均值 518.9（不及 S12）。偏转 0。面积仍是 `ring2_ej`。allpairs Pareto 仍是 S4 / S1 / **S11**（同面积 68 被 67 支配）。
 
+## 4.16 S14 HA sibling plane（`rg_ring2_dist.py` `s14_params`）
+
+第一跳冲突来自同节点跨 plane：`late_plane` 可以把两个 srcq 绑到同一 `(plane, dir, src)`。S14 在 peek 时若 HA 两条 srcq 撞车，短/老的留下，输家在 hop+dest 都空时换到另一 plane。dest-then-hop 于是看见两条 hop。不是 hop_hold_late，不是 hop_islip_busy，不是 late_dir_dest。只做 HA：core 侧 twin yield 把 allpairs 打到 70。两端都做（`late_plane_sib=1`）allpairs 71、10k 11135，不作为默认。
+
+**预期（可证伪）：** 10k seed0 严格低于 S13 的 11288，三 seed 全赢，allpairs 不大幅回归（最好压过 S11 的 67）。
+
+实测：10k seed0 **11043**（1.24× bound），seed1/2 **11224 / 11201**（三 seed 全赢）。allpairs **64**（压住 S11 的 67）。K=500 **2370**（不及 S13 的 2362）。偏转 0。面积仍是 `ring2_ej`。allpairs Pareto 前沿改成 S4 / S1 / **S14**。
+
 ## 5. 面积
 
 五方案先付同一笔数据面：`credit_counters`（80 有向 hop）+ `boarding_queues`（每 (node, plane) 8 flit）+ 每 plane 共享 eject + E-tag 预留 + 重组缓冲 + I/E-tag 状态 + 每核 512 outstanding 记分板。没有 transfer FIFO，没有 Swap bypass。
@@ -223,7 +231,7 @@ S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更�
 
 `distributed_cost("ring2_dist")`：与 `ring2_base` 同位。kind-aware leave 是 mux 优先级，不占 bit。
 
-`distributed_cost("ring2_ej")`：共同数据面 + 每 (node, plane) 64 拍 leave 时隙窗口。S5–S13 同位。
+`distributed_cost("ring2_ej")`：共同数据面 + 每 (node, plane) 64 拍 leave 时隙窗口。S5–S14 同位。
 
 ## 6. 产物
 
@@ -234,24 +242,24 @@ S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更�
 | `utils/rg_ring2_aimd.py` | S1 AIMD |
 | `utils/rg_ring2_rg.py` | S2 调度 + 回放 |
 | `utils/rg_ring2_pop.py` | S3 NGSF 式 push-on-pull |
-| `utils/rg_ring2_dist.py` | S4–S13 分布式 leave、late dir、hop hold / islip |
-| `utils/dse_ring2_20node.py` | 十四方案 makespan |
+| `utils/rg_ring2_dist.py` | S4–S14 分布式 leave、late dir、hop hold / islip |
+| `utils/dse_ring2_20node.py` | 十五方案 makespan |
 | `utils/dse_ring2_rg_pareto.py` | 面积-性能 Pareto（`--refine` 给 loop 用） |
 | `utils/verify_ring2_20.py` | 可执行断言 |
-| `results/ring2_20node.json` | 十四方案扫 |
+| `results/ring2_20node.json` | 十五方案扫 |
 | `results/ring2_rg_pareto.json` / `.png` | Pareto |
 | `results/verify_ring2_20.json` | 门禁 |
 | `results/report_ring2_20node.html` | 报告 |
 | `results/ring2_core_recv_bw_allpairs.png` | 每核接收带宽（allpairs） |
 | `results/ring2_core_recv_bw_uniform.png` | 每核接收带宽（uniform K=20） |
-| `utils/dse_ring2_core10k.py` | 同 pattern、每核 10000 响应 flit 的 S0–S13 对比 |
+| `utils/dse_ring2_core10k.py` | 同 pattern、每核 10000 响应 flit 的 S0–S14 对比 |
 | `results/ring2_core10k.json` | 10k 每核接收曲线（分箱）+ 上环 / 队列统计 |
-| `results/ring2_core_recv_bw_10k.png` | 十四方案每核接收带宽（aligned x） |
-| `results/ring2_core_recv_bw_10k_overlay.png` | 十四方案均值叠图 + 解析下界理想接收 |
+| `results/ring2_core_recv_bw_10k.png` | 十五方案每核接收带宽（aligned x） |
+| `results/ring2_core_recv_bw_10k_overlay.png` | 十五方案均值叠图 + 解析下界理想接收 |
 
 ## 7. 实测（allpairs m=1 R=4 / uniform 多 seed，plane_sel=least_occupied）
 
-闭集中突发、验证 28/28 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
+闭集中突发、验证 29/29 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
 
 | 方案 | allpairs m=1 R=4 | uniform K=20 R=4 | uniform K=100 R=4 |
 |---|---|---|---|
@@ -269,11 +277,12 @@ S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更�
 | S11 hop hold | **67** | **140** | **514** |
 | S12 hop islip | 68 | **134** | **501** |
 | S13 hop short | 68 | 135.6 | 518.9 |
+| S14 HA sib plane | **64** | **129.7** | **504** |
 | 解析下界 | 41 | 95 | 376 |
 
-**Pareto 图上 S2 有 109 个点，S0–S13 各 1 个。** 同面积 0.0458 上 S11（mk 67）支配 S13（68）、S12（68）、S10（69）、S8（72）、S9（73）、S7（83）和 S5/S6（100）。 不是画重了：参考方案各自只有一种硬件结构，而 request-grant 的仲裁器是可设计对象，每组旋钮取值对应一块不同的、都可实现的电路，面积和调度延迟都不同，必须单独评估。旋钮空间 = 算法 9 种（`islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs`）× 迭代轮数（islip/pim 取 1,2,4，其余仅 1）→ 13 种组合，× 冲突域 2（`arc` / `whole_ring`）× 占用表示 2（`interval` / `free_at`）× 仲裁器 2 = 104，再加一片补充切片（VOQ 粒度、token 仲裁器、带 RTT 流水线）去重后 109。y 轴已把 `t_sched_cycles` 计回。
+**Pareto 图上 S2 有 109 个点，S0–S14 各 1 个。** 同面积 0.0458 上 S14（mk 64）支配 S11（67）、S13（68）、S12（68）、S10（69）、S8（72）、S9（73）、S7（83）和 S5/S6（100）。 不是画重了：参考方案各自只有一种硬件结构，而 request-grant 的仲裁器是可设计对象，每组旋钮取值对应一块不同的、都可实现的电路，面积和调度延迟都不同，必须单独评估。旋钮空间 = 算法 9 种（`islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs`）× 迭代轮数（islip/pim 取 1,2,4，其余仅 1）→ 13 种组合，× 冲突域 2（`arc` / `whole_ring`）× 占用表示 2（`interval` / `free_at`）× 仲裁器 2 = 104，再加一片补充切片（VOQ 粒度、token 仲裁器、带 RTT 流水线）去重后 109。y 轴已把 `t_sched_cycles` 计回。
 
-hop 时延 2 拍、上环队列 8 深、端口口径与每核 512 outstanding 对齐之后，**S2 在纯数据面上仍最快**（allpairs DES 88，10k 10044）。把 `t_sched_cycles` 计回后，S11（area 0.0458 / mk 67）**支配**原先前沿上的 S10（0.0458 / 69）和 S2 `rr_oldest`（0.1997 / 106）。**Pareto 前沿现在是三点：S4（0.0444 / 122）、S1（0.0449 / 115）、S11（0.0458 / 67）。** S12 / S13 同面积 0.0458 / 68，被 S11 支配。S0 被 S4 支配，S3 被支配。S2 要赢回前沿，必须把调度延迟压下去，或在更大流量上比面积。
+hop 时延 2 拍、上环队列 8 深、端口口径与每核 512 outstanding 对齐之后，**S2 在纯数据面上仍最快**（allpairs DES 88，10k 10044）。把 `t_sched_cycles` 计回后，S14（area 0.0458 / mk 64）**支配**原先前沿上的 S11（0.0458 / 67）和 S2 `rr_oldest`（0.1997 / 106）。**Pareto 前沿现在是三点：S4（0.0444 / 122）、S1（0.0449 / 115）、S14（0.0458 / 64）。** S11 / S12 / S13 同面积，被 S14 支配。S0 被 S4 支配，S3 被支配。S2 要赢回前沿，必须把调度延迟压下去，或在更大流量上比面积。
 
 S1 默认用温和 AIMD（α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）。allpairs 均值 122、最好 115，压过 S0 的 129；K=20 也赢（173 vs 188）。流量再大开始落后：K=100 是 701 vs 669，10k 是 18170 vs 14886（1.22×）。教科书组合（0.05 / 0.5 / 32 / 0.05）会把 10k 打到 3×，那是地板太低，不是 AIMD 本身不能用。
 
@@ -299,6 +308,8 @@ S12 dest-then-hop request-grant：allpairs 68；K=20 **134**；K=100 **501**；1
 
 S13 hop grant 优先短路径：allpairs 68；K=20 135.6；K=100 518.9；K=500 **2362**；10k **11288**。同面积被 S11 支配。
 
+S14 HA sibling plane yield：allpairs **64**；K=20 **129.7**；K=100 **504**；K=500 2370；10k **11043 / 11224 / 11201**。Pareto 前沿改成 S4 / S1 / **S14**。
+
 ## 8. 跑法
 
 ```bash
@@ -311,7 +322,7 @@ python3 utils/gen_ring2_report.py
 
 ## 9. 同 pattern、10000 响应 flit / core
 
-Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`。每个 core 收 **10000** 个响应 flit（10 core × 2500 txn × 4 flit）。十四方案吃同一批事务，同一条数据面（hop 2 拍、上环队列 8 深、下环 4+1、每核 outstanding 512）。S1 用温和 AIMD：α=0.15、β=0.85、epoch=64、rate_min=0.30。
+Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`。每个 core 收 **10000** 个响应 flit（10 core × 2500 txn × 4 flit）。十五方案吃同一批事务，同一条数据面（hop 2 拍、上环队列 8 深、下环 4+1、每核 outstanding 512）。S1 用温和 AIMD：α=0.15、β=0.85、epoch=64、rate_min=0.30。
 
 | 方案 | makespan | 上环成功 | 上环失败 | 偏转 | 上环队列峰值 | 下环队列峰值 | 响应时延 p50 / p99 | outstanding 峰值 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -328,7 +339,8 @@ Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`�
 | S10 resp late dir | 11781 | 100000 | 61870 | **0** | 8 | 1 | 1568 / 4248 | **512** |
 | S11 hop hold | 11451 | 100000 | **52288** | **0** | 8 | 1 | 2235 / **2512** | **512** |
 | S12 hop islip | 11402 | 100000 | 732 | **0** | 8 | 1 | 2190 / 2572 | **512** |
-| S13 hop short | **11288** | 100000 | 835 | **0** | 8 | 1 | **2181** / **2512** | **512** |
+| S13 hop short | 11288 | 100000 | 835 | **0** | 8 | 1 | 2181 / 2512 | **512** |
+| S14 HA sib plane | **11043** | 100000 | 852 | **0** | 8 | 1 | **2159** / **2505** | **512** |
 
 按目的 core 的响应上环（方向由 HA→core 最短路决定，九方案 CW/CCW 逐核相同；失败只计 slot 忙或 I-tag，**不含** AIMD 令牌拒绝、也不含 outstanding / leave-slot 等待）：
 
@@ -370,10 +382,12 @@ S12 dest-then-hop request-grant：makespan **11402**（1.28× bound），seed �
 
 S13 hop grant 优先短路径：makespan **11288**（1.26× bound），seed 11399 / 11270 全赢。上环失败 732→835。p50 2181，p99 2512。仍落后 S2 的 10044。
 
+S14 HA sibling plane yield：makespan **11043**（1.24× bound），seed 11224 / 11201 全赢。上环失败 835→852。p50 2159，p99 2505。仍落后 S2 的 10044。
+
 S0 / S1 / S4 的上环队列都是 8 深且都跑满（峰值 8，S0 有 511885 次 admission stall，S4 有 516880），说明反压真的在起作用。**下环队列峰值只有 1**：4 深的 eject FIFO 在这个负载下根本用不上，S0 的 11348 次偏转来自「每 (node, plane) 每拍只有 1 个 leave 端口，两个方向同拍到达必有一个被挤掉」，不是队列满。E-tag 也因此几乎不触发。真正的限制是 leave 端口数，不是队列深度。
 
 S2 的上环队列占用没法直接比：调度器给出的是刚性 t0，源端提前知道自己什么时候上环，所以只需在 t0 前把 flit 挪进队列，fabric 里的队列需求约为 1。但「已生成、尚未上环」的量峰值达 **267**（`max_src_wait`，512 分代之后从原先整批 25000 的 1249 降下来），这些 flit 停在 PE 侧 backlog 里——S2 把排队从 fabric 推到了源端。
 
 S1 用温和 AIMD 之后，10k makespan 从教科书参数的 45748 收到 **18170**（S0 的 1.22×）。上环失败 118628，仍低于 S0 的 189434；响应 p50 / p99 为 23 / 205（S0 是 2758 / 3817）；outstanding 峰值 54。仍然是在拿一点吞吐换时延，但不再把速率打到地板。
 
-接收带宽图：`results/ring2_core_recv_bw_10k.png`（十四面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝。
+接收带宽图：`results/ring2_core_recv_bw_10k.png`（十五面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝；S14 玫红。
