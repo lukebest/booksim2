@@ -3,7 +3,10 @@
 
 Axes
 ----
-y   makespan = makespan_des + t_sched_cycles   (scheduler delay charged back)
+y   makespan = end-to-end batch completion on the same 10k-flits/core
+              closed uniform batch as §4 (K=2500 × R=4, seed=0): the
+              cycle the last response flit drains. t_sched_cycles is
+              recorded for S2 but not added to y.
 x   area_norm  = shared credit+I/E-tag datapath + arbiter + control-plane
                 (IQ-XY router = 1.0, amortized per node)
 
@@ -44,13 +47,20 @@ from rg_ring2_dist import (
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, run_batch as run_rg
-from rg_ring2_topo import Ring2Topology, build_allpairs, build_uniform
+from rg_ring2_topo import Ring2Topology, build_uniform
 from rg_sched_cost import (
     area_from_bits, distributed_cost, pareto_front, sched_cost,
 )
 
-OUT = Path(__file__).resolve().parents[1] / "results" / "ring2_rg_pareto.json"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "results" / "ring2_rg_pareto.json"
 PNG = OUT.with_suffix(".png")
+CORE10K = ROOT / "results" / "ring2_core10k.json"
+
+# Same closed batch as utils/dse_ring2_core10k.py (§4).
+K_PER_CORE = 2_500
+R_FLITS = 4
+PARETO_SEED = 0
 
 CTRL_NOC = {
     "central": 0.08,
@@ -68,8 +78,16 @@ def _tag(r: dict[str, Any]) -> str:
 
 
 def _s0_s1_refs(topo: Ring2Topology, txns, *, m_resp: int) -> list[dict]:
+    """S0–S14 refs on the 10k batch; prefer §4 JSON so Pareto matches §4."""
     out = []
     p = Ring2BaseParams(plane_sel="least_occupied")
+    cached = {}
+    if CORE10K.exists():
+        big = json.loads(CORE10K.read_text())
+        meta = big.get("meta") or {}
+        if (meta.get("K") == K_PER_CORE and meta.get("R") == R_FLITS
+                and meta.get("seed", PARETO_SEED) == PARETO_SEED):
+            cached = big.get("schemes") or {}
     for scheme, runner, cfg, params in (
             ("S0", run_base, "ring2_base", p),
             ("S1", run_aimd, "ring2_aimd", p),
@@ -96,7 +114,15 @@ def _s0_s1_refs(topo: Ring2Topology, txns, *, m_resp: int) -> list[dict]:
              s13_params(plane_sel="least_occupied")),
             ("S14", run_dist, "ring2_ej",
              s14_params(plane_sel="least_occupied"))):
-        r = runner(topo, txns, params=params, seed=0)
+        if scheme in cached and cached[scheme].get("makespan") is not None:
+            mk = cached[scheme]["makespan"]
+            completed = bool(cached[scheme].get("completed"))
+            n_defl = cached[scheme].get("n_deflections", 0)
+        else:
+            r = runner(topo, txns, params=params, seed=PARETO_SEED)
+            mk = r["makespan"]
+            completed = r["completed"]
+            n_defl = r.get("n_deflections", 0)
         d = distributed_cost(cfg, n_nodes=topo.n, n_planes=topo.n_planes,
                              eject_depth=p.eject_depth, resv_ej=p.resv_ej,
                              reasm_depth=m_resp)
@@ -105,20 +131,20 @@ def _s0_s1_refs(topo: Ring2Topology, txns, *, m_resp: int) -> list[dict]:
             "scheme": scheme, "algo": cfg, "iters": 0,
             "spatial_reuse": "-", "conflict_domain": "-",
             "arbiter": "-", "voq_granularity": "-",
-            "makespan_des": r["makespan"],
+            "makespan_des": mk,
             "t_sched_cycles": 0,
-            "makespan": r["makespan"],
+            "makespan": mk,
             "area_norm": area,
             "area_bits": d["bits"],
-            "completed": r["completed"],
-            "n_deflections": r.get("n_deflections", 0),
+            "completed": completed,
+            "n_deflections": n_defl,
             "tag": scheme,
         })
     return out
 
 
 def _s2_row(topo: Ring2Topology, txns, cfg: RGConfig) -> dict[str, Any]:
-    r = run_rg(topo, txns, cfg=cfg)
+    r = run_rg(topo, txns, cfg=cfg, skip_replay=len(txns) >= 20_000)
     n_flows = 2 * len(txns)
     n_rounds = r.get("n_rounds_est", max(1, n_flows // max(1, topo.n_cores)))
     cost = sched_cost(
@@ -131,7 +157,8 @@ def _s2_row(topo: Ring2Topology, txns, cfg: RGConfig) -> dict[str, Any]:
     # S2 keeps the shared credit + I/E-tag datapath; arbiter is extra
     area = (area_from_bits(d["bits"], topo) + cost["area_norm"]
             + CTRL_NOC.get(cfg.arbiter, 0.08))
-    mk = r["makespan_des"] + cost["t_sched_cycles"]
+    # Pareto y is end-to-end fabric makespan only; keep t_sched for audit.
+    mk = r["makespan_des"]
     row = {
         "scheme": "S2", "algo": cfg.algo, "iters": cfg.iters,
         "spatial_reuse": cfg.spatial_reuse,
@@ -230,9 +257,8 @@ def _space(*, refine: bool, prior: list[dict] | None) -> list[RGConfig]:
 def sweep(*, quick: bool = False, refine: bool = False,
           prior_path: Path | None = None) -> dict[str, Any]:
     topo = Ring2Topology()
-    # Same closed batch for every point, including --refine: mixing m
-    # would put S0 (m=1) and a refined S2 (m=2) on one Pareto.
-    txns = build_allpairs(m=1, m_resp=4)
+    # Same closed 10k-flits/core batch as §4 for every point, including --refine.
+    txns = build_uniform(k=K_PER_CORE, m_resp=R_FLITS, seed=PARETO_SEED)
     prior_rows: list[dict] = []
     if refine and prior_path and prior_path.exists():
         prior_rows = json.loads(prior_path.read_text()).get("rows", [])
@@ -240,9 +266,9 @@ def sweep(*, quick: bool = False, refine: bool = False,
     t0 = time.perf_counter()
     rows: list[dict[str, Any]] = []
     if not refine:
-        rows.extend(_s0_s1_refs(topo, txns, m_resp=4))
+        rows.extend(_s0_s1_refs(topo, txns, m_resp=R_FLITS))
         by_sch = {r["scheme"]: r["makespan"] for r in rows}
-        print(f"  refs S0 mk={by_sch.get('S0')} "
+        print(f"  refs (10k e2e) S0 mk={by_sch.get('S0')} "
               f"S1 mk={by_sch.get('S1')} "
               f"S3 mk={by_sch.get('S3')} "
               f"S4 mk={by_sch.get('S4')} "
@@ -301,8 +327,12 @@ def sweep(*, quick: bool = False, refine: bool = False,
 
     return {
         "meta": {
-            "n": topo.n, "n_txns": len(txns), "quick": quick,
-            "refine": refine,
+            "n": topo.n, "n_txns": len(txns),
+            "pattern": "uniform", "K": K_PER_CORE, "R": R_FLITS,
+            "seed": PARETO_SEED,
+            "flits_per_core": K_PER_CORE * R_FLITS,
+            "y_metric": "e2e_makespan_10k",
+            "quick": quick, "refine": refine,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
         "rows": rows,
@@ -437,12 +467,14 @@ def plot(res: dict[str, Any], path: Path) -> None:
     xs_all = [_display_xy(s, x, y)[0] for s, (x, y) in refs.items()]
     ys_all = [y for _, y in refs.values()]
     pad_x = 0.00035
+    y_lo, y_hi = min(ys_all), max(ys_all)
+    y_pad = max(40.0, 0.03 * (y_hi - y_lo or 1.0))
     ax.set_xlim(min(xs_all) - pad_x, max(xs_all) + 0.00085)
-    ax.set_ylim(min(ys_all) - 8, max(ys_all) + 12)
+    ax.set_ylim(y_lo - y_pad, y_hi + y_pad)
     ax.set_xlabel("area_norm  (IQ-XY router = 1.0, per node)")
-    ax.set_ylabel("makespan  (last resp drain + t_sched; not mean E2E lat)")
+    ax.set_ylabel("end-to-end makespan  (10k flits/core, last resp drain)")
     ax.grid(True, ls=":", alpha=0.5)
-    ax.legend(frameon=False, fontsize=7.5, loc="lower left")
+    ax.legend(frameon=False, fontsize=7.5, loc="upper right")
     ax.spines["right"].set_visible(False)
 
     if ax2 is not None and s2n is not None:
@@ -454,7 +486,7 @@ def plot(res: dict[str, Any], path: Path) -> None:
                      textcoords="offset points", xytext=(-52, 10),
                      fontsize=8, color="#111827")
         ax2.set_xlim(x - 0.008, x + 0.008)
-        ax2.set_ylim(y - 18, y + 18)
+        ax2.set_ylim(y - max(80.0, 0.02 * y), y + max(80.0, 0.02 * y))
         ax2.set_xlabel("area_norm")
         ax2.grid(True, ls=":", alpha=0.5)
         ax2.spines["left"].set_visible(False)
@@ -466,8 +498,10 @@ def plot(res: dict[str, Any], path: Path) -> None:
         ax2.plot((-d, +d), (-d, +d), transform=ax2.transAxes, **kw)
         ax2.plot((-d, +d), (1 - d, 1 + d), transform=ax2.transAxes, **kw)
 
-    fig.suptitle("2-full-ring 20-node  S0–S14 knee  (nearest S2 kept)",
-                 fontsize=12, y=0.99)
+    flits = (res.get("meta") or {}).get("flits_per_core", K_PER_CORE * R_FLITS)
+    fig.suptitle(
+        f"2-full-ring 20-node  S0–S14 knee  ({flits} flits/core e2e; nearest S2)",
+        fontsize=12, y=0.99)
     fig.subplots_adjust(left=0.08, right=0.98, top=0.90, bottom=0.12,
                         wspace=0.14)
     path.parent.mkdir(parents=True, exist_ok=True)

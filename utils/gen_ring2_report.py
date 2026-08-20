@@ -596,18 +596,22 @@ Quick={ (cmp_.get("meta") or {}).get("quick") }。</p>
 {board_html}
 
 <h2>5. request-grant 的面积 / makespan Pareto</h2>
-<p class="note">纵轴<b>不是</b>平均端到端时延，也不是 p50 / p99。
-它是闭集突发的 <b>makespan</b>：最后一个响应 flit 在发起 core 被 drain 的那一拍
-（S2 再把组合逻辑深度换算的 <code>t_sched_cycles</code> 加回去）。
-x = area_norm（IQ-XY router = 1.0，按节点摊）。S0–S14 作为参考点画在同一张
-图上。面积对十五方案都计入<em>共同</em>的 credit + 8 深上环队列 + I-tag / E-tag
-数据面（含每核 {CORE_OUTSTANDING} 条 outstanding 记分板）；S2 再加仲裁器，S3 加 HA pending/RR，
+<p class="note">纵轴是与 §4 <b>同一批 10k</b> 的端到端 makespan：uniform
+K={ (pareto.get("meta") or {}).get("K", 2500) } × R={ (pareto.get("meta") or {}).get("R", 4) }
+、seed={ (pareto.get("meta") or {}).get("seed", 0) }，每核
+{ (pareto.get("meta") or {}).get("flits_per_core", 10000) } 个响应 flit
+全部收完的那一拍（最后一个响应在发起 core 被 drain）。不是 allpairs，也不是
+p50 / p99。S2 的 <code>t_sched_cycles</code> 只记在 JSON 里，
+<strong>不加进</strong>纵轴。x = area_norm（IQ-XY router = 1.0，按节点摊）。
+S0–S14 作为参考点画在同一张图上。面积对十五方案都计入<em>共同</em>的 credit +
+8 深上环队列 + I-tag / E-tag 数据面（含每核 {CORE_OUTSTANDING} 条 outstanding
+记分板）；S2 再加仲裁器，S3 加 HA pending/RR，
 S4 与 S0 同位，S5–S14 加 dest leave 时隙窗口——都<b>没有</b>删掉站点存储。
 等效 bit 模型，标定到 mesh <code>greedy_ff = 0.05</code>，不是 mm²。</p>
 <p><img src="{png}" alt="Pareto 前沿"></p>
 <p class="note">图只画 S0–S14 左下角膝点；S5–S14 同面积，S14 留在真实 x（前沿顶点），其余点沿 x 稍稍错开以便辨认。
 S2 族只保留距离前沿最近的一个（全图归一化欧氏距离），其余云点不画。
-x 轴在膝点与该 S2 之间断开。当前 allpairs 前沿是 S0 / S14（S1、S4 被 S0 支配）。</p>
+x 轴在膝点与该 S2 之间断开。</p>
 {_table(["配置 tag", "area_norm", "makespan"], front_rows)}
 <p class="note">{pareto.get("n_front", 0)} 个非支配点，
 共评估 {len(pareto.get("rows") or [])} 个（其中 S2 {n_s2} 个），
@@ -616,8 +620,8 @@ x 轴在膝点与该 S2 之间断开。当前 allpairs 前沿是 S0 / S14（S1�
 <h3>5.1 为什么图上 S2 有这么多点</h3>
 <p>因为 <b>S2 不是一个方案，而是一族方案</b>。S0–S14 各自只有一种硬件结构，
 所以各出一个点；而 request-grant 的「仲裁器」是一个可设计的对象，每一组旋钮
-取值对应一块<em>不同的、都可实现的</em>电路，面积和调度延迟都不同，因此每一组
-都必须单独评估、单独画点。旋钮空间：</p>
+取值对应一块<em>不同的、都可实现的</em>电路，面积不同，因此每一组都必须单独
+评估、单独画点。旋钮空间：</p>
 {_table(["旋钮", "取值", "个数"], [
     ["匹配算法", "islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, "
      "wavefront, batched_bcfs", 9],
@@ -632,13 +636,9 @@ x 轴在膝点与该 S2 之间断开。当前 allpairs 前沿是 S0 / S14（S1�
 共 {n_s2} 个 S2 点。</p>
 <p>关键在于<b>这些点绝大多数没有意义、也不该有意义</b>——它们的作用是把前沿
 「撑」出来。只有 {pareto.get("n_front", 0)} 个点是非支配的。散点越密，说明
-「S2 能不能赢」这个问题被问得越充分：一个只画了自己最好配置的 S2 是无法反驳的，
-而画满 {n_s2} 个配置之后，S2 仍被同面积的 S14 压住，这个结论就有分量了。
-S5–S13 同面积，被 S14 支配。</p>
-<p class="note">注意 y 轴已经把 <code>t_sched_cycles</code> 计回去了。这是为什么
-很多 S2 点被推到图的上方：<code>batched_bcfs</code> 在纯数据面上极快
-（DES 只要几十拍），但它的组合逻辑深度换算出上千拍的调度延迟，于是自己把自己
-罚出了前沿。一个只因为造不出来才快的算法，会在这张图上付出代价。</p>
+「S2 能不能赢」这个问题被问得越充分。纵轴只看端到端数据面 makespan 时，
+S2 的最好 DES 往往快于 S0，但仍可能被同面积、更小的 S14 压住；
+<code>t_sched_cycles</code> 另表记录，不在本图里罚分。</p>
 
 <h2>6. 怎么读这组对比</h2>
 <ul>
@@ -659,8 +659,9 @@ outstanding 峰值 56，碰不到 {CORE_OUTSTANDING} 的记分板。</li>
 <li><b>S2</b> 保留同样的 credit + 上环队列 + I-tag / E-tag 数据面，在上环<em>之前
 </em>加一次 request-grant 匹配，使 flit 只在 hop 已被预约时注入。它要付一个
 仲裁器加一小笔控制面开销。端口按 (node, plane) 计价之后（与 S0 的 DES 一致），
-S2 在数据面上仍最快（allpairs DES 91，10k 10512 = 1.18× bound），但把
-<code>t_sched_cycles</code> 计回后被同面积的 S14 压出前沿。S5–S13 同面积，不进前沿。</li>
+S2 在数据面上仍最快（allpairs DES 91，10k 10512 = 1.18× bound）。
+Pareto 纵轴与 §4 同一批 10k 端到端 makespan（不加 <code>t_sched_cycles</code>）时，
+S2 仍因面积更大而通常进不了膝点；S5–S13 同面积，不进前沿。</li>
 <li><b>S3</b> 用读 memory 的请求当 POP 调度信息：五方案对齐为每核最多
 {CORE_OUTSTANDING} 条 outstanding 读，HA 对已到达的多条请求做 RR，再放出该请求的响应。环上 hop
 仍是反应式的，所以它<b>不</b>消除 slot 忙导致的上环失败。没有单独的
@@ -698,7 +699,7 @@ grant 等到 hop accept 才提交，hop 失败则 dest 让给下一名。allpair
 <li><b>S14</b> 在 HA 两个 srcq 被 late_plane 绑到同一第一跳时，短/老的留下，
 另一条换到 hop+dest 都空的另一 plane。面积仍是 <code>ring2_ej</code>。
 allpairs <b>70</b>（1.49× bound）；10k <b>11106</b>（1.24× bound，p50=408 / p99=919），
-是分布式方案里最快的。allpairs Pareto 前沿是 S0（0.0443 / 111）/ <b>S14</b>（0.0458 / 70）。</li>
+是分布式方案里最快的。10k Pareto 前沿见表（纵轴与 §4 同一批）。</li>
 <li>4 深的下环队列在这些负载下几乎没有作用：峰值占用只有 1。偏转来自
 每 (node, plane) <b>唯一</b>的那个 leave 端口，两个方向都要抢它。真正的限制是
 端口数量，不是队列深度。</li>
