@@ -24,6 +24,7 @@ from rg_ring2_dist import (
 )
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
+from dse_ring2_core10k import plot_directed_link_bw
 from rg_ring2_topo import (
     Ring2Topology, build_allpairs, build_uniform, cores, paths_for_txns,
 )
@@ -178,6 +179,7 @@ def _collect_traces(topo: Ring2Topology, txns, *, seed: int = 0
             "makespan": r.get("makespan"),
             "completed": r.get("completed"),
             "recv_by_core": recv,
+            "hop_starts": list(r.get("hop_starts") or []),
         }
     return out
 
@@ -372,6 +374,11 @@ S13 hop grant 优先剩余 hop 更短的。
 S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
 <p><img src="ring2_core_recv_bw_10k_overlay.png" alt="十五方案均值接收带宽叠图"></p>
 <p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
+<p class="note">下面两张是<b>全网 80 条有向段</b>每拍启动的 hop 数（σ=1，
+虚线 = 80 flit/cycle）。偏转也计入——偏转会再占 hop。不是每核接收带宽。
+uniform 与 allpairs 各一张，S0–S14 叠在同一时间轴上。</p>
+<p><img src="ring2_link_bw_10k.png" alt="uniform 10k 全网有向段总带宽"></p>
+<p><img src="ring2_link_bw_allpairs.png" alt="allpairs 全网有向段总带宽"></p>
 {_table(["", "S0 RR", "S1 AIMD", "S2 request-grant",
          "S3 push-on-pull", "S4 kind-aware leave",
          "S5 leave-slot lock", "S6 oldest dest",
@@ -390,6 +397,22 @@ S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
     lats = ", ".join(str(x) for x in topo.link_lats)
     bnd_rows, bnd = _bound_rows(topo, big, cmp_)
     n_dir = len(topo.directed_links)
+    ap_tr = _collect_traces(topo, build_allpairs(m=1, m_resp=4))
+    plot_directed_link_bw(
+        ap_tr, ROOT / "results" / "ring2_link_bw_allpairs.png",
+        bin_w=2,
+        title="Network directed-hop bandwidth  ·  allpairs m=1 R=4  (bin=2)",
+        cap=n_dir)
+    if any((v.get("hop_bw") or v.get("hop_starts"))
+           for v in (big.get("schemes") or {}).values()):
+        meta10 = big.get("meta") or {}
+        plot_directed_link_bw(
+            big["schemes"], ROOT / "results" / "ring2_link_bw_10k.png",
+            bin_w=int(meta10.get("bin_w") or 64),
+            title=("Network directed-hop bandwidth  ·  uniform "
+                   f"K={meta10.get('K', 2500)} R={meta10.get('R', 4)}  "
+                   f"(bin={meta10.get('bin_w', 64)})"),
+            cap=n_dir)
     n_s2 = len([r for r in (pareto.get("rows") or [])
                 if r.get("scheme") == "S2"])
 

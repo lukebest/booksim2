@@ -693,6 +693,13 @@ def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
         for k in range(g.m):
             recv[g.dst].append(g.t0 + g.fp.wire + k * g.fp.sigma + RAMP)
     out["recv_by_core"] = {c: sorted(ts) for c, ts in recv.items()}
+    hops: list[int] = []
+    for g in grants:
+        for k in range(g.m):
+            off = k * g.fp.sigma
+            for _, pref in g.fp.links:
+                hops.append(g.t0 + pref + off)
+    out["hop_starts"] = hops
     out["max_src_wait"] = _max_src_wait(grants)
     board: dict[int, dict[str, int]] = {}
     for g in grants:

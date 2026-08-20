@@ -257,6 +257,8 @@ S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更�
 | `results/ring2_core10k.json` | 10k 每核接收曲线（分箱）+ 上环 / 队列统计 |
 | `results/ring2_core_recv_bw_10k.png` | 十五方案每核接收带宽（aligned x） |
 | `results/ring2_core_recv_bw_10k_overlay.png` | 十五方案均值叠图 + 解析下界理想接收 |
+| `results/ring2_link_bw_10k.png` | 全网 80 条有向段 hop 启动率（uniform 10k） |
+| `results/ring2_link_bw_allpairs.png` | 全网 80 条有向段 hop 启动率（allpairs m=1 R=4） |
 
 ## 7. 实测（allpairs m=1 R=4 / uniform 多 seed，plane_sel=least_occupied）
 
@@ -392,3 +394,5 @@ S2 的上环队列占用没法直接比：调度器给出的是刚性 t0，源�
 S1 用温和 AIMD 之后，10k makespan 是 **18616**（S0 的 1.24×）。上环失败 110774，仍低于 S0 的 192305；响应 p50 / p99 为 22 / 187（S0 是 2755 / 3686）；outstanding 峰值 56。仍然是在拿一点吞吐换时延，但不再把速率打到地板。
 
 接收带宽图：`results/ring2_core_recv_bw_10k.png`（十五面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝；S14 玫红。
+
+全网有向段总带宽：`results/ring2_link_bw_10k.png`（uniform 10k）和 `results/ring2_link_bw_allpairs.png`（allpairs m=1 R=4）。纵轴是 80 条有向 hop 每拍启动的 flit 数（σ=1，虚线 = 80）；偏转计入。

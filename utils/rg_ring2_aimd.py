@@ -126,6 +126,7 @@ def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
     out = sim.summary()
     out["stall_detected"] = not out["completed"]
     out["recv_by_core"] = sim.recv_by_core()
+    out["hop_starts"] = sim.hop_starts
     return out
 
 

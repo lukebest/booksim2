@@ -157,6 +157,8 @@ class Ring2BaseSim:
         self._n_txn_target = 0
         self._resp_stash: dict[tuple, Flit] = {}
         self.core_outst: dict[int, int] = defaultdict(int)  # per-core in-flight reads
+        # Cycle of every successful directed-hop launch (σ=1 → 1 flit / hop).
+        self.hop_starts: list[int] = []
 
     # -- routing / plane ----------------------------------------------------
 
@@ -264,6 +266,7 @@ class Ring2BaseSim:
             self.arr_set[(f.plane, f.dir, f.idx)].add(self.t + 1)
             return False
         self.seg_free[seg] = self.t + self.sigma
+        self.hop_starts.append(self.t)
         nxt = (f.idx + f.dir) % self.n
         lat = self.topo.hop_lat_from(f.idx, f.dir)
         f.idx = nxt
@@ -609,6 +612,7 @@ def run_batch(topo: Ring2Topology, txns: Sequence[Txn], *,
     out = sim.summary()
     out["stall_detected"] = not out["completed"]
     out["recv_by_core"] = sim.recv_by_core()
+    out["hop_starts"] = sim.hop_starts
     return out
 
 

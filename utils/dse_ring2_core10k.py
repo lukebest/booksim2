@@ -130,6 +130,7 @@ def _run(scheme: str, topo, txns, seed: int) -> dict:
         "n_outst_wait": r.get("n_outst_wait", 0),
         "recv_by_core": recv,
         "board_by_core": board,
+        "hop_starts": list(r.get("hop_starts") or []),
         "wall_secs": round(time.perf_counter() - t0, 1),
     }
 
@@ -236,6 +237,53 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
     plt.close(fig)
 
 
+def plot_directed_link_bw(traces: dict[str, dict], path: Path, *,
+                          bin_w: int, title: str, cap: int = 80) -> None:
+    """Sum of directed-hop launches / cycle (σ=1 → cap = 80)."""
+    colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626",
+              "S3": "#9333ea", "S4": "#ea580c", "S5": "#0d9488",
+              "S6": "#c026d3", "S7": "#7c3aed", "S8": "#ca8a04",
+              "S9": "#be123c", "S10": "#047857", "S11": "#9a3412",
+              "S12": "#4338ca", "S13": "#0369a1", "S14": "#db2777"}
+    styles = {"S0": "-", "S1": "-", "S2": "-", "S3": (0, (5, 2.5)),
+              "S4": "-", "S5": "-", "S6": "-", "S7": "-", "S8": "-",
+              "S9": "-", "S10": "-", "S11": "-", "S12": "-", "S13": "-",
+              "S14": "-"}
+    t_max_all = max((tr.get("makespan") or 1) for tr in traces.values())
+    fig, ax = plt.subplots(figsize=(9.2, 4.4))
+    for scheme in ("S1", "S2", "S0", "S3", "S4", "S5", "S6", "S7", "S8",
+                   "S9", "S10", "S11", "S12", "S13", "S14"):
+        tr = traces.get(scheme)
+        if not tr:
+            continue
+        hops = tr.get("hop_starts")
+        hb = tr.get("hop_bw") or {}
+        if hops:
+            n_hops = len(hops)
+            xs, rate = _bin_rate(hops, t_max_all, bin_w)
+        elif hb.get("t") and hb.get("rate"):
+            xs, rate = hb["t"], hb["rate"]
+            n_hops = hb.get("n_hops", "?")
+        else:
+            continue
+        ax.plot(xs, rate, color=colors[scheme], lw=1.7,
+                linestyle=styles[scheme],
+                label=f"{scheme}  mk={tr.get('makespan')}  hops={n_hops}")
+    ax.axhline(cap, color="#111827", lw=1.3, ls=":",
+               label=f"directed-hop cap  {cap} flit/cyc")
+    ax.set_xlabel("cycle")
+    ax.set_ylabel("directed-hop starts / cycle")
+    ax.set_title(title)
+    ax.set_xlim(0, t_max_all)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, ls=":", alpha=0.45)
+    ax.legend(frameon=False, fontsize=8, ncol=2)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=K_PER_CORE)
@@ -261,10 +309,16 @@ def main() -> None:
 
     panel = ROOT / "results" / "ring2_core_recv_bw_10k.png"
     overlay = ROOT / "results" / "ring2_core_recv_bw_10k_overlay.png"
+    link_bw = ROOT / "results" / "ring2_link_bw_10k.png"
     plot_panels(traces, panel, bin_w=bin_w, k=k, r_flits=R,
                 flits_per_core=flits)
     plot_overlay(traces, overlay, bin_w=bin_w, flits_per_core=flits,
                  bound=bounds["bound"])
+    plot_directed_link_bw(
+        traces, link_bw, bin_w=bin_w,
+        title=f"Network directed-hop bandwidth  ·  uniform K={k} R={R}  "
+              f"({flits} flits/core, bin={bin_w})",
+        cap=len(topo.directed_links))
 
     slim = {
         "meta": {
@@ -301,6 +355,7 @@ def main() -> None:
             xs, ys = _bin_rate(ts, t_max, bin_w)
             rates[str(c)] = {"t": xs, "rate": [round(y, 4) for y in ys],
                              "n_recv": len(ts)}
+        hop_xs, hop_ys = _bin_rate(tr.get("hop_starts") or [], t_max, bin_w)
         slim["schemes"][name] = {
             "makespan": tr["makespan"],
             "completed": tr["completed"],
@@ -320,6 +375,10 @@ def main() -> None:
             "n_outst_wait": tr["n_outst_wait"],
             "board_by_core": {str(c): v for c, v in tr["board_by_core"].items()},
             "recv_binned": rates,
+            "hop_bw": {
+                "t": hop_xs, "rate": [round(y, 3) for y in hop_ys],
+                "n_hops": len(tr.get("hop_starts") or []),
+            },
         }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(slim, indent=1))
