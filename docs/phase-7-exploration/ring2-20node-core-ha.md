@@ -1,11 +1,11 @@
-# 2-full-ring 20 节点：五方案 makespan + request-grant Pareto
+# 2-full-ring 20 节点：九方案 makespan + request-grant Pareto
 
 **几何：** 20 节点；偶数 index = AI core，奇数 = memory Home Agent；节点 19 与 0 相邻。
 **Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。相邻节点 **hop 时延 2 拍**。
 **流量：** 读往返。core→HA 请求 1 flit，HA→core 响应 R flit。**makespan = 最后一个响应 flit 被 core PE drain 的拍。**
 **Workload：** `allpairs`（10×10 每对 m 个事务，确定性）+ `uniform`（每 core 发 K 个事务，目的地在 10 个 HA 中均匀随机，多 seed）。
-**共同数据面（五方案相同）：** 点对点 credit-based flow control + **8 深上环队列** + I-tag + E-tag。
-**五方案只改注入/调度策略：** S0 在有 credit 时 RR 上环；S1 再加失败计数 piggyback + AIMD 源端速率；S2 同一数据面上做 request-grant（iSLIP 族）；S3 读请求作 POP 调度信息，HA 调度后给响应；S4 同 S0 数据面 + kind-aware leave（core 优先下响应，HA 优先下请求）。
+**共同数据面（九方案相同）：** 点对点 credit-based flow control + **8 深上环队列** + I-tag + E-tag。
+**九方案只改注入/调度策略：** S0 在有 credit 时 RR 上环；S1 再加失败计数 piggyback + AIMD 源端速率；S2 同一数据面上做 request-grant（iSLIP 族）；S3 读请求作 POP 调度信息，HA 调度后给响应；S4 同 S0 数据面 + kind-aware leave；S5 预约 dest leave 时隙（同拍留节点号更小的源）；S6 同 S5 预约表，同拍 dest 冲突留最老的 flit；S7 同 S6，本 plane 第一跳被占时改绑到另一 plane；S8 注入时现场选 hop+dest 都空的 plane。
 **验证：** `results/verify_ring2_20.json`，检查项可执行、失败即点名具体量。
 
 ## 0. 和仓库里已有 ring 研究的关系
@@ -50,10 +50,10 @@
 
 `bound = max(LB_link, LB_port, LB_cut, LB_txn)`。实测对照：
 
-| 档位 | LB_link | LB_port | LB_cut | LB_txn | bound | S0 | S1 | S2 | S3 | S4 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| allpairs m=1 R=4（100 事务） | 35 | 20 | 32 | **41** | 41 | 129 (3.15×) | 122 (2.97×) | 88 (2.15×) | 129 (3.15×) | 122 (2.98×) |
-| uniform K=2500 R=4（25000 事务） | **8939** | 5168 | 7788 | 41 | 8939 | 14886 (1.66×) | 18170 (2.03×) | **10044 (1.12×)** | 14886 (1.66×) | 15075 (1.69×) |
+| 档位 | LB_link | LB_port | LB_cut | LB_txn | bound | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| allpairs m=1 R=4（100 事务） | 35 | 20 | 32 | **41** | 41 | 129 (3.15×) | 122 (2.97×) | 88 (2.15×) | 129 (3.15×) | 122 (2.98×) | 100 (2.44×) | 100 (2.44×) | 83 (2.02×) | **72 (1.76×)** |
+| uniform K=2500 R=4（25000 事务） | **8939** | 5168 | 7788 | 41 | 8939 | 14886 (1.66×) | 18170 (2.03×) | **10044 (1.12×)** | 14886 (1.66×) | 15075 (1.69×) | 13522 (1.51×) | 13200 (1.48×) | 12824 (1.43×) | **11971 (1.34×)** |
 
 两档的主导项不同：allpairs 事务太少、资源计数没饱和，瓶颈是单事务往返时延；10k 那档段带宽主导，S2 做到 1.12× 物理极限。每核对齐 512 条 outstanding 之后，S3 与 S0 在这两档重合（S3 的 HA RR 不再是瓶颈）。S4 在 allpairs 上与温和 AIMD 均值同速、支配 S0；10k 上略慢于 S0——kind-aware leave 解的是 leave 口上的种类冲突，不是段带宽。
 
@@ -61,7 +61,7 @@
 
 ## 2. 共同数据面，然后才是 S0 / S1 / S2 / S3 / S4
 
-五方案跑在**同一条**数据面上，不是五种 fabric。
+九方案跑在**同一条**数据面上，不是九种 fabric。
 
 | 层 | S0 RR | S1 AIMD | S2 request-grant | S3 push-on-pull | S4 kind-aware leave |
 |---|---|---|---|---|---|
@@ -135,6 +135,80 @@ rate ∈ [rate_min, rate_max]
 
 **预期（可证伪）：** 在 `LB_txn` 主导的小 all-to-all 上，种类优先级能缩短依赖链等待，makespan 低于 S0 且面积相同。在 `LB_link` 主导的 10k 上它解不了段带宽，还可能比 S0 略慢。
 
+## 4.7 S5 leave-slot lock（`rg_ring2_dist.py` `ej_lock`）
+
+每 (node, plane) 每拍只有 1 个 leave 口。两个方向的 flit 同拍到达，必有一个偏转再绕一圈。S5 在注入时用 `ETA = t + hops·λ` 预约 dest 的 leave 时隙；该槽已被占则本拍不上环（FIFO，不跳 dest）。同拍多个候选按节点号留 1 个。
+
+这是分布式的：每个源只看 dest 的预约表，没有中心匹配。代价是一张约 64 拍窗口的 bitmap（`leave_slot_resv`）。偏转降到 0；上环仍可能因 hop 忙失败。
+
+**预期（可证伪）：** 消灭偏转会砍掉 S0 多出来的 ~40% flit-hop，10k 和 allpairs 都比 S0 快，但仍落后预约整条弧的 S2。
+
+## 4.8 S6 oldest dest clash（`rg_ring2_dist.py` `s6_params`）
+
+S5 同拍多个源抢同一个 `(dst, plane, ETA)` 时按节点号留 1 个。节点号小的 core/HA 系统性地赢，10k 的尾核被拖长（p99 3816）。S6 改成留 `t_gen` 最早的 flit，预约表和面积与 S5 相同。
+
+hop 前瞻（`hop_peek`）、1 拍/2 拍延迟预约、in-ring 改期（`ej_rebook`）、neighbor/ctrl1 弧锁在 10k 上都复现 S5 的 13522，没有单独出方案。HOL / dest-VOQ / inject-token 仍禁止做默认。
+
+**预期（可证伪）：** allpairs 不回归（仍 100）；10k 严格低于 S5 的 13522，p99 缩短。
+
+## 4.9 S7 hop bounce（`rg_ring2_dist.py` `s7_params`）
+
+plane 在 offer 时就用 `least_occupied` 绑死。到注入拍，本 plane 第一跳常常已经被过路 flit 占住，另一 plane 的同向 hop 却是空的。S7 在 S6 预约表上加 `hop_bounce`：第一跳忙则看另一 plane——dest leave 也空才改绑。这和 `plane_bounce`（只在 dest 冲突时换）不是一回事；后者对 S6 是空操作。
+
+代价仍是 `ring2_ej`：两个 plane 的第一跳占用本来就在本节点上，不新增预约 bit。`hb+pb` 组合 10k 不稳定（seed 1 比单 hop_bounce 差），默认只开 hop_bounce。
+
+**预期（可证伪）：** 10k 严格低于 S6 的 13200，allpairs 不大幅回归。
+
+## 4.10 S8 late plane（`rg_ring2_dist.py` `s8_params`）
+
+S7 只在本 plane 第一跳忙时换。dest 已被占时 `_may_inject` 更早返回，换 plane 的机会用不上。S8 在 dest/hop 检查之前现场看两个 plane：hop 和 dest leave 都空的才能上；两个都能上就走当前占用更低的（`late_plane=occ`）。`need`（只在本 plane 不能上时才换）10k 是 12092，略慢于 occ 的 11971，所以默认 occ。
+
+不新增预约 bit，面积仍是 `ring2_ej`。
+
+**预期（可证伪）：** 10k 严格低于 S7 的 12824，allpairs 不大幅回归。
+
+## 4.11 S9 late dir（`rg_ring2_dist.py` `s9_params`）
+
+S8 的 10k stall 拆开之后，dest leave 拒绝只有 4675，同拍 dest hold 46959，512 outstanding 卡 85228，**第一跳 hop 拒绝 98376**（HA 响应 67945 / core 请求 30431）。环上 in-ring 从不 stall。`dest_old`（同 dest 已有更老 in-flight）allpairs 89、K=500 3372+；`nbr_adv`（邻居本拍注入广告）K=500 赢到 2511，10k 炸到 13300。都不作为默认。
+
+S9 打的是「两个 plane 的本方向第一跳都忙」：若另一环方向绕路不超过 +2 hop，且 hop+dest leave 空，就改 `dir`/`target`。`late_dir=tie`（只允许等长）是空操作。不新增预约 bit，面积仍是 `ring2_ej`。
+
+**预期（可证伪）：** 10k 严格低于 S8 的 11971，allpairs 不大幅回归。
+
+实测：10k seed0 **11809**（1.32× bound，S8 11971），seed1/2 11864/11889。allpairs 73。dest-core board_fail 67945→62971。偏转 0。allpairs Pareto 仍是 S4 / S1 / S8（同面积 S9 被 72 支配）。
+
+## 4.12 S10 resp-only late dir（`rg_ring2_dist.py` `s10_params`）
+
+S9 对请求和响应都改向。10k 的第一跳拒绝主要是 HA 响应（67945 vs core 请求 30431）。S10 只对 `resp` 做 `late_dir=slack`，请求仍走最短路。`slack=1` 是空操作；`slack=4` 与 S9 相同；`slack=8` 10k 12085；`late_dir_hold`（最短路下一拍就空则等）K=500 输。面积仍是 `ring2_ej`。
+
+**预期（可证伪）：** 10k 严格低于 S9 的 11809，allpairs 不大幅回归。
+
+实测：10k seed0 **11781**，seed1/2 11729/11821。allpairs **69**（压住 S8 的 72）。dest-core board_fail 62971→61870。偏转 0。allpairs Pareto 变为 S4 / S1 / **S10**。
+
+## 4.13 S11 hop hold（`rg_ring2_dist.py` `s11_params`）
+
+S10 的剩余缺口仍是第一跳：`active_src` 的哈希序决定同拍谁先占用 hop。S11 在 `_pre_inject` 里按（plane, dir, idx）分组 HOL，只留最老的响应，其余本拍等待。不预约未来 hop（不是 hop_book / hop_peek / hop0_cred）。`hop_hold` 对请求也开 10k 11507；只对响应开更好（11451，allpairs 67）。dest-aware late_dir（cooler / pick / eager）allpairs 或 K=500 都输，不作为默认。
+
+**预期（可证伪）：** 10k 严格低于 S10 的 11781，allpairs 不大幅回归。
+
+实测：10k seed0 **11451**（1.28× bound），seed1/2 11509/11493。allpairs **67**。dest-core board_fail 61870→52288。p99 4248→2512，p50 1568→2235。偏转 0。allpairs Pareto 变为 S4 / S1 / **S11**。
+
+## 4.14 S12 hop islip（`rg_ring2_dist.py` `s12_params`）
+
+S11 顺序做 dest hold 再 hop hold：dest 留给最老的 HOL，即使它随后抢不到 hop。S12 改成一波本地 request-grant：dest 先 grant，再在 dest-granted 里做 hop grant，两者都拿到才提交；hop 失败则该 dest 本拍让给下一名（不是 hop_joint 的一遍独立集，也不是 hop_hold_retry）。`hop_islip=2` 10k 11481，不作为默认。
+
+**预期（可证伪）：** 10k seed0 严格低于 S11 的 11451，allpairs 不大幅回归。
+
+实测：10k seed0 **11402**（1.28× bound），seed1/2 11458/11397。allpairs **68**（+1）。K=20 均值 134，K=100 均值 501。偏转 0。面积仍是 `ring2_ej`。allpairs Pareto 仍是 S4 / S1 / **S11**（同面积 S12 被 67 支配）。
+
+## 4.15 S13 hop short（`rg_ring2_dist.py` `s13_params`）
+
+S12 hop grant 在 dest-granted 里按年龄挑。S13 改成优先剩余 hop 更短的（年龄作次键）。不是 dest-aware hop_hold，不是 late_dir dest。kind-split（resp 先、req leftover）对 S12 是空操作（core / HA 不共享 dest 或第一跳）；req-first 10k 11439，不作为默认。
+
+**预期（可证伪）：** 10k seed0 严格低于 S12 的 11402，allpairs 不大幅回归，且不能只赢一个 seed。
+
+实测：10k seed0 **11288**（1.26× bound），seed1/2 **11399 / 11270**（三 seed 全赢）。allpairs **68**。K=500 **2362**。K=20 均值 135.6，K=100 均值 518.9（不及 S12）。偏转 0。面积仍是 `ring2_ej`。allpairs Pareto 仍是 S4 / S1 / **S11**（同面积 68 被 67 支配）。
+
 ## 5. 面积
 
 五方案先付同一笔数据面：`credit_counters`（80 有向 hop）+ `boarding_queues`（每 (node, plane) 8 flit）+ 每 plane 共享 eject + E-tag 预留 + 重组缓冲 + I/E-tag 状态 + 每核 512 outstanding 记分板。没有 transfer FIFO，没有 Swap bypass。
@@ -149,6 +223,8 @@ rate ∈ [rate_min, rate_max]
 
 `distributed_cost("ring2_dist")`：与 `ring2_base` 同位。kind-aware leave 是 mux 优先级，不占 bit。
 
+`distributed_cost("ring2_ej")`：共同数据面 + 每 (node, plane) 64 拍 leave 时隙窗口。S5–S13 同位。
+
 ## 6. 产物
 
 | 文件 | 内容 |
@@ -158,24 +234,24 @@ rate ∈ [rate_min, rate_max]
 | `utils/rg_ring2_aimd.py` | S1 AIMD |
 | `utils/rg_ring2_rg.py` | S2 调度 + 回放 |
 | `utils/rg_ring2_pop.py` | S3 NGSF 式 push-on-pull |
-| `utils/rg_ring2_dist.py` | S4 分布式 leave / 本地策略 |
-| `utils/dse_ring2_20node.py` | 五方案 makespan |
+| `utils/rg_ring2_dist.py` | S4–S13 分布式 leave、late dir、hop hold / islip |
+| `utils/dse_ring2_20node.py` | 十四方案 makespan |
 | `utils/dse_ring2_rg_pareto.py` | 面积-性能 Pareto（`--refine` 给 loop 用） |
 | `utils/verify_ring2_20.py` | 可执行断言 |
-| `results/ring2_20node.json` | 五方案扫 |
+| `results/ring2_20node.json` | 十四方案扫 |
 | `results/ring2_rg_pareto.json` / `.png` | Pareto |
 | `results/verify_ring2_20.json` | 门禁 |
 | `results/report_ring2_20node.html` | 报告 |
 | `results/ring2_core_recv_bw_allpairs.png` | 每核接收带宽（allpairs） |
 | `results/ring2_core_recv_bw_uniform.png` | 每核接收带宽（uniform K=20） |
-| `utils/dse_ring2_core10k.py` | 同 pattern、每核 10000 响应 flit 的 S0–S4 对比 |
+| `utils/dse_ring2_core10k.py` | 同 pattern、每核 10000 响应 flit 的 S0–S13 对比 |
 | `results/ring2_core10k.json` | 10k 每核接收曲线（分箱）+ 上环 / 队列统计 |
-| `results/ring2_core_recv_bw_10k.png` | 五方案每核接收带宽（aligned x） |
-| `results/ring2_core_recv_bw_10k_overlay.png` | 五方案均值叠图 + 解析下界理想接收 |
+| `results/ring2_core_recv_bw_10k.png` | 十四方案每核接收带宽（aligned x） |
+| `results/ring2_core_recv_bw_10k_overlay.png` | 十四方案均值叠图 + 解析下界理想接收 |
 
 ## 7. 实测（allpairs m=1 R=4 / uniform 多 seed，plane_sel=least_occupied）
 
-闭集中突发、验证 19/19 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
+闭集中突发、验证 28/28 通过。数据面 makespan（S2 不含 `t_sched_cycles`）：
 
 | 方案 | allpairs m=1 R=4 | uniform K=20 R=4 | uniform K=100 R=4 |
 |---|---|---|---|
@@ -183,18 +259,45 @@ rate ∈ [rate_min, rate_max]
 | S1 | 122（AIMD 配置均值；最好 115） | 173 | 701 |
 | S2 iSLIP I=2 | **88** | **145** | **526** |
 | S3 push-on-pull | 129 | 188 | 669 |
-| S4 kind-aware leave | **122** | 184 | 669 |
+| S4 kind-aware leave | 122 | 184 | 669 |
+| S5 leave-slot lock | 100 | 160 | 595 |
+| S6 oldest dest clash | 100 | 151 | 585 |
+| S7 hop bounce | 83 | 159 | 573 |
+| S8 late plane | 72 | 145 | 542 |
+| S9 late dir | 73 | 145 | **519** |
+| S10 resp late dir | 69 | 141 | 534 |
+| S11 hop hold | **67** | **140** | **514** |
+| S12 hop islip | 68 | **134** | **501** |
+| S13 hop short | 68 | 135.6 | 518.9 |
 | 解析下界 | 41 | 95 | 376 |
 
-**Pareto 图上 S2 有 109 个点，S0 / S1 / S3 / S4 各 1 个。** 不是画重了：S0、S1、S3、S4 各自只有一种硬件结构，而 request-grant 的仲裁器是可设计对象，每组旋钮取值对应一块不同的、都可实现的电路，面积和调度延迟都不同，必须单独评估。旋钮空间 = 算法 9 种（`islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs`）× 迭代轮数（islip/pim 取 1,2,4，其余仅 1）→ 13 种组合，× 冲突域 2（`arc` / `whole_ring`）× 占用表示 2（`interval` / `free_at`）× 仲裁器 2 = 104，再加一片补充切片（VOQ 粒度、token 仲裁器、带 RTT 流水线）去重后 109。这些点绝大多数被支配，作用是把前沿撑出来——一个只画自己最好配置的 S2 无法反驳，画满 109 个之后仍只有一个配置留在前沿，结论才有分量。y 轴已把 `t_sched_cycles` 计回，所以 `batched_bcfs` 这类纯数据面极快（DES 几十拍）但组合深度换算出上千拍调度延迟的算法，会自己把自己罚出前沿。
+**Pareto 图上 S2 有 109 个点，S0–S13 各 1 个。** 同面积 0.0458 上 S11（mk 67）支配 S13（68）、S12（68）、S10（69）、S8（72）、S9（73）、S7（83）和 S5/S6（100）。 不是画重了：参考方案各自只有一种硬件结构，而 request-grant 的仲裁器是可设计对象，每组旋钮取值对应一块不同的、都可实现的电路，面积和调度延迟都不同，必须单独评估。旋钮空间 = 算法 9 种（`islip, pim, rr_oldest, lqf, ocf, bvn, greedy_ff, wavefront, batched_bcfs`）× 迭代轮数（islip/pim 取 1,2,4，其余仅 1）→ 13 种组合，× 冲突域 2（`arc` / `whole_ring`）× 占用表示 2（`interval` / `free_at`）× 仲裁器 2 = 104，再加一片补充切片（VOQ 粒度、token 仲裁器、带 RTT 流水线）去重后 109。y 轴已把 `t_sched_cycles` 计回。
 
-hop 时延 2 拍、上环队列 8 深、端口口径与每核 512 outstanding 对齐之后，**S2 在数据面上稳定赢 S0**：allpairs 88 vs 129，uniform K=100 是 526 vs 669。把 `t_sched_cycles` 计回之后仍有配置留在前沿——`rr_oldest/I1/arc/int/central/per_plane` 在 area 0.1997 拿到 makespan 106。S4 与 S0 同面积 0.0444、allpairs 122 vs 129，因此**支配 S0**。**Pareto 前沿现在是三点：S4、S1、S2 的 rr_oldest。** S3（area 0.0451 / mk 129）与 S0 同速、略贵，仍被支配。换 S2 的 makespan 要付约 4.5× 面积，值不值取决于系统层。
+hop 时延 2 拍、上环队列 8 深、端口口径与每核 512 outstanding 对齐之后，**S2 在纯数据面上仍最快**（allpairs DES 88，10k 10044）。把 `t_sched_cycles` 计回后，S11（area 0.0458 / mk 67）**支配**原先前沿上的 S10（0.0458 / 69）和 S2 `rr_oldest`（0.1997 / 106）。**Pareto 前沿现在是三点：S4（0.0444 / 122）、S1（0.0449 / 115）、S11（0.0458 / 67）。** S12 / S13 同面积 0.0458 / 68，被 S11 支配。S0 被 S4 支配，S3 被支配。S2 要赢回前沿，必须把调度延迟压下去，或在更大流量上比面积。
 
 S1 默认用温和 AIMD（α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）。allpairs 均值 122、最好 115，压过 S0 的 129；K=20 也赢（173 vs 188）。流量再大开始落后：K=100 是 701 vs 669，10k 是 18170 vs 14886（1.22×）。教科书组合（0.05 / 0.5 / 32 / 0.05）会把 10k 打到 3×，那是地板太低，不是 AIMD 本身不能用。
 
 S3 用读请求当调度信息：五方案对齐为每核最多 512 条 outstanding 读，HA 对已到请求 RR 后给整段响应。allpairs / K≤100 都远小于 512，S3 与 S0 重合。窗口否认时摘掉 I-tag 之前，uniform 曲线中间会大段掉到 0——过期 I-tag 把 HA 响应关在门口。
 
 S4 用 leave 口的种类优先级：allpairs 122（2.98× bound），K=20 略赢 S0（184 vs 188），K=100 持平，10k 反而慢到 15075。它解的是「谁先占用共享 leave 口」，不是段带宽，也不是 S2 那种 hop 预约。
+
+S5 预约 dest leave 时隙：allpairs 100（2.44× bound），K=20 / K=100 / 10k 都赢 S0（160 / 595 / 13522），偏转为 0。仍落后 S2 的数据面（88 / 145 / 10044），但面积只比 S0 多一张 64 拍窗口。
+
+S6 把同拍 dest 冲突从节点号改成 oldest：allpairs 仍 100；K=20 160→151；K=100 595→585；10k 13522→13200（1.48× bound），p99 3816→3050。面积与 S5 相同。
+
+S7 在第一跳忙时改绑 plane：allpairs 100→83（2.02× bound）；K=20 略回退到 159；K=100 585→573；10k 13200→12824（1.43× bound）。
+
+S8 注入时现场选 hop+dest 都空的 plane：allpairs 83→**72**（1.76× bound，分布式首次快过 S2 DES 的 88）；K=20 **145**（与 S2 持平）；K=100 573→542；10k 12824→**11971**（1.34× bound）。面积与 S5–S7 相同。
+
+S9 第一跳仍忙则改走另一环方向（≤+2 hop）：allpairs 73；K=100 **519**；10k **11809**（1.32× bound）。同面积被 S8 的 72 支配。
+
+S10 只对响应做这次改向：allpairs **69**（1.68× bound，压住 S8）；K=20 **141**；K=100 534（不及 S9）；10k **11781**。
+
+S11 同拍第一跳只留最老响应：allpairs **67**；K=20 **140**；K=100 **514**；10k **11451**。Pareto 前沿改成 S4 / S1 / **S11**。
+
+S12 dest-then-hop request-grant：allpairs 68；K=20 **134**；K=100 **501**；10k **11402**。同面积被 S11 支配。
+
+S13 hop grant 优先短路径：allpairs 68；K=20 135.6；K=100 518.9；K=500 **2362**；10k **11288**。同面积被 S11 支配。
 
 ## 8. 跑法
 
@@ -208,7 +311,7 @@ python3 utils/gen_ring2_report.py
 
 ## 9. 同 pattern、10000 响应 flit / core
 
-Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`。每个 core 收 **10000** 个响应 flit（10 core × 2500 txn × 4 flit）。五方案吃同一批事务，同一条数据面（hop 2 拍、上环队列 8 深、下环 4+1、每核 outstanding 512）。S1 用温和 AIMD：α=0.15、β=0.85、epoch=64、rate_min=0.30。
+Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`。每个 core 收 **10000** 个响应 flit（10 core × 2500 txn × 4 flit）。十四方案吃同一批事务，同一条数据面（hop 2 拍、上环队列 8 深、下环 4+1、每核 outstanding 512）。S1 用温和 AIMD：α=0.15、β=0.85、epoch=64、rate_min=0.30。
 
 | 方案 | makespan | 上环成功 | 上环失败 | 偏转 | 上环队列峰值 | 下环队列峰值 | 响应时延 p50 / p99 | outstanding 峰值 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -217,22 +320,31 @@ Workload 固定：`uniform` K=2500、R=4、seed=0，`plane_sel=least_occupied`�
 | S2 iSLIP I=2 | **10044** | 100000 | 0 | 0 | 见下 | 0 | — | 509 |
 | S3 push-on-pull | 14886 | 100000 | 189434 | 11348 | 8 | 1 | 2758 / 3817 | **512** |
 | S4 kind-aware leave | 15075 | 100000 | 190870 | 11359 | 8 | 1 | 2790 / 4003 | **512** |
+| S5 leave-slot lock | 13522 | 100000 | 92143 | **0** | 8 | 1 | 2388 / 3816 | **512** |
+| S6 oldest dest clash | 13200 | 100000 | 93928 | **0** | 8 | 1 | 2515 / 3050 | **512** |
+| S7 hop bounce | 12824 | 100000 | 71409 | **0** | 8 | 1 | 1967 / 3917 | **512** |
+| S8 late plane | 11971 | 100000 | 67945 | **0** | 8 | 1 | 1559 / 4279 | **512** |
+| S9 late dir | 11809 | 100000 | 62971 | **0** | 8 | 1 | 1638 / 4218 | **512** |
+| S10 resp late dir | 11781 | 100000 | 61870 | **0** | 8 | 1 | 1568 / 4248 | **512** |
+| S11 hop hold | 11451 | 100000 | **52288** | **0** | 8 | 1 | 2235 / **2512** | **512** |
+| S12 hop islip | 11402 | 100000 | 732 | **0** | 8 | 1 | 2190 / 2572 | **512** |
+| S13 hop short | **11288** | 100000 | 835 | **0** | 8 | 1 | **2181** / **2512** | **512** |
 
-按目的 core 的响应上环（方向由 HA→core 最短路决定，五方案 CW/CCW 逐核相同；失败只计 slot 忙或 I-tag，**不含** AIMD 令牌拒绝、也不含 outstanding 等待）：
+按目的 core 的响应上环（方向由 HA→core 最短路决定，九方案 CW/CCW 逐核相同；失败只计 slot 忙或 I-tag，**不含** AIMD 令牌拒绝、也不含 outstanding / leave-slot 等待）：
 
-| core | 上环 (CW / CCW) | S0 失败 | S1 失败 | S2 失败 | S3 失败 | S4 失败 |
-|---|---|---:|---:|---:|---:|---:|
-| 0 | 10000 (5008 / 4992) | 18575 | 11449 | 0 | 18575 | 18187 |
-| 2 | 10000 (4888 / 5112) | 19286 | 11983 | 0 | 19286 | 20225 |
-| 4 | 10000 (4920 / 5080) | 19114 | 12256 | 0 | 19114 | 18599 |
-| 6 | 10000 (4924 / 5076) | 18488 | 12813 | 0 | 18488 | 18793 |
-| 8 | 10000 (5124 / 4876) | 19894 | 12467 | 0 | 19894 | 19305 |
-| 10 | 10000 (4828 / 5172) | 18589 | 12235 | 0 | 18589 | 19344 |
-| 12 | 10000 (5056 / 4944) | 18678 | 11755 | 0 | 18678 | 18780 |
-| 14 | 10000 (4912 / 5088) | 19640 | 10561 | 0 | 19640 | 19550 |
-| 16 | 10000 (5032 / 4968) | 19087 | 11669 | 0 | 19087 | 19284 |
-| 18 | 10000 (5044 / 4956) | 18083 | 11440 | 0 | 18083 | 18803 |
-| **合计** | **100000 (49736 / 50264)** | **189434** | **118628** | **0** | **189434** | **190870** |
+| core | 上环 (CW / CCW) | S0 失败 | S1 失败 | S2 失败 | S3 失败 | S4 失败 | S5 失败 | S6 失败 | S7 失败 | S8 失败 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 10000 (5008 / 4992) | 18575 | 11449 | 0 | 18575 | 18187 | 9320 | 9658 | 7952 | 6552 |
+| 2 | 10000 (4888 / 5112) | 19286 | 11983 | 0 | 19286 | 20225 | 9425 | 9413 | 7438 | 7157 |
+| 4 | 10000 (4920 / 5080) | 19114 | 12256 | 0 | 19114 | 18599 | 8836 | 9340 | 7029 | 6748 |
+| 6 | 10000 (4924 / 5076) | 18488 | 12813 | 0 | 18488 | 18793 | 9428 | 9712 | 6842 | 6594 |
+| 8 | 10000 (5124 / 4876) | 19894 | 12467 | 0 | 19894 | 19305 | 8806 | 9395 | 7124 | 7207 |
+| 10 | 10000 (4828 / 5172) | 18589 | 12235 | 0 | 18589 | 19344 | 8877 | 9224 | 7143 | 6795 |
+| 12 | 10000 (5056 / 4944) | 18678 | 11755 | 0 | 18678 | 18780 | 9563 | 9383 | 7378 | 6681 |
+| 14 | 10000 (4912 / 5088) | 19640 | 10561 | 0 | 19640 | 19550 | 8968 | 9127 | 6544 | 6988 |
+| 16 | 10000 (5032 / 4968) | 19087 | 11669 | 0 | 19087 | 19284 | 9514 | 9513 | 7107 | 6501 |
+| 18 | 10000 (5044 / 4956) | 18083 | 11440 | 0 | 18083 | 18803 | 9406 | 9163 | 6852 | 6722 |
+| **合计** | **100000 (49736 / 50264)** | **189434** | **118628** | **0** | **189434** | **190870** | **92143** | **93928** | **71409** | **67945** |
 
 **S2 最快（10044 vs S0 14886，快 32%）。** 失败为 0 不是因为没有 I-tag / E-tag，而是 grant 只在 hop 已空时发出，反应式标签在本闭集中突发里用不上。分代预约把每核 in-flight 压在 512 附近（峰值 509，同拍完成/起飞交错）。
 
@@ -240,10 +352,28 @@ S3 的 100000 个响应都是 HA 按已到读请求调度后放出的（`n_pull_
 
 S4 的 10k 均值曲线贴着 S0，但 makespan 更长（15075 vs 14886，1.01×），上环失败略多（190870 vs 189434）。leave 种类优先级在段带宽饱和时帮不上忙，还会打乱 RR 对两个方向的公平。
 
+S5 把偏转打到 0，响应上环失败从 189434 收到 92143，makespan 14886→13522（1.51× bound）。p50 2758→2388。没有消灭 hop 忙，所以仍落后 S2 的 10044。
+
+S6 同预约表、同拍 dest 冲突留最老 flit：makespan 13200（1.48× bound），p99 3816→3050。上环失败略升到 93928——赢的是尾核公平，不是 hop 空闲。
+
+S7 第一跳忙就换 plane：makespan 12824（1.43× bound），响应上环失败 93928→71409，p50 2515→1967。p99 3050→3917。
+
+S8 注入时现场选 plane：makespan **11971**（1.34× bound），上环失败 71409→67945，p50 1967→1559。p99 3917→4279。
+
+S9 第一跳仍忙则改向：makespan **11809**（1.32× bound），上环失败 67945→62971。
+
+S10 只对响应改向：makespan **11781**（1.32× bound），上环失败 62971→61870，p50 1568。
+
+S11 同拍第一跳只留最老响应：makespan 11451（1.28× bound），p99 4248→2512。仍落后 S2 的 10044。
+
+S12 dest-then-hop request-grant：makespan **11402**（1.28× bound），seed 全赢。上环失败从 52288 收到 732，多半是 hold 后不再尝试上环的重分类，不是 hop 争用消失。p50 2235→2190，p99 2512→2572。仍落后 S2 的 10044。
+
+S13 hop grant 优先短路径：makespan **11288**（1.26× bound），seed 11399 / 11270 全赢。上环失败 732→835。p50 2181，p99 2512。仍落后 S2 的 10044。
+
 S0 / S1 / S4 的上环队列都是 8 深且都跑满（峰值 8，S0 有 511885 次 admission stall，S4 有 516880），说明反压真的在起作用。**下环队列峰值只有 1**：4 深的 eject FIFO 在这个负载下根本用不上，S0 的 11348 次偏转来自「每 (node, plane) 每拍只有 1 个 leave 端口，两个方向同拍到达必有一个被挤掉」，不是队列满。E-tag 也因此几乎不触发。真正的限制是 leave 端口数，不是队列深度。
 
 S2 的上环队列占用没法直接比：调度器给出的是刚性 t0，源端提前知道自己什么时候上环，所以只需在 t0 前把 flit 挪进队列，fabric 里的队列需求约为 1。但「已生成、尚未上环」的量峰值达 **267**（`max_src_wait`，512 分代之后从原先整批 25000 的 1249 降下来），这些 flit 停在 PE 侧 backlog 里——S2 把排队从 fabric 推到了源端。
 
 S1 用温和 AIMD 之后，10k makespan 从教科书参数的 45748 收到 **18170**（S0 的 1.22×）。上环失败 118628，仍低于 S0 的 189434；响应 p50 / p99 为 23 / 205（S0 是 2758 / 3817）；outstanding 峰值 54。仍然是在拿一点吞吐换时延，但不再把速率打到地板。
 
-接收带宽图：`results/ring2_core_recv_bw_10k.png`（五面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。 S3 虚线叠在 S0 上；S4 橙色。
+接收带宽图：`results/ring2_core_recv_bw_10k.png`（十四面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝。

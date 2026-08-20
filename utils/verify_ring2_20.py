@@ -20,7 +20,11 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, Ring2BaseSim, run_batch as run_base
-from rg_ring2_dist import Ring2DistParams, Ring2DistSim, run_batch as run_dist
+from rg_ring2_dist import (
+    Ring2DistParams, Ring2DistSim, run_batch as run_dist, s5_params,
+    s6_params, s7_params, s8_params, s9_params, s10_params, s11_params,
+    s12_params, s13_params,
+)
 from rg_ring2_pop import Ring2PopSim, run_batch as run_pop
 from rg_ring2_rg import RING2_ALGOS, RGConfig, replay_ok, run_batch as run_rg
 from rg_ring2_rg import requirements, schedule
@@ -117,9 +121,20 @@ def test_three_schemes_same_flits() -> None:
     s2 = run_rg(topo, txns, cfg=RGConfig(algo="islip", iters=2))
     s3 = run_pop(topo, txns)
     s4 = run_dist(topo, txns)
+    s5 = run_dist(topo, txns, params=s5_params())
+    s6 = run_dist(topo, txns, params=s6_params())
+    s7 = run_dist(topo, txns, params=s7_params())
+    s8 = run_dist(topo, txns, params=s8_params())
+    s9 = run_dist(topo, txns, params=s9_params())
+    s10 = run_dist(topo, txns, params=s10_params())
+    s11 = run_dist(topo, txns, params=s11_params())
+    s12 = run_dist(topo, txns, params=s12_params())
+    s13 = run_dist(topo, txns, params=s13_params())
     exp = _expected_flits(txns)
     for name, r in (("S0", s0), ("S1", s1), ("S2", s2), ("S3", s3),
-                    ("S4", s4)):
+                    ("S4", s4), ("S5", s5), ("S6", s6), ("S7", s7),
+                    ("S8", s8), ("S9", s9), ("S10", s10), ("S11", s11),
+                    ("S12", s12), ("S13", s13)):
         assert r["completed"], name
         assert r["n_delivered_flits"] == exp, (name, r["n_delivered_flits"])
         assert r["n_txn_done"] == len(txns), name
@@ -136,7 +151,16 @@ def test_makespan_ge_bound() -> None:
             ("S1", run_aimd(topo, txns)),
             ("S2", run_rg(topo, txns, cfg=RGConfig(algo="greedy_ff"))),
             ("S3", run_pop(topo, txns)),
-            ("S4", run_dist(topo, txns))):
+            ("S4", run_dist(topo, txns)),
+            ("S5", run_dist(topo, txns, params=s5_params())),
+            ("S6", run_dist(topo, txns, params=s6_params())),
+            ("S7", run_dist(topo, txns, params=s7_params())),
+            ("S8", run_dist(topo, txns, params=s8_params())),
+            ("S9", run_dist(topo, txns, params=s9_params())),
+            ("S10", run_dist(topo, txns, params=s10_params())),
+            ("S11", run_dist(topo, txns, params=s11_params())),
+            ("S12", run_dist(topo, txns, params=s12_params())),
+            ("S13", run_dist(topo, txns, params=s13_params()))):
         assert r["makespan"] >= b["bound"], (
             f"{name} makespan {r['makespan']} < bound {b['bound']}")
 
@@ -254,12 +278,15 @@ def test_cost_ring2_does_not_break_mesh() -> None:
     dr = distributed_cost("ring2_rg", n_nodes=20)
     dp = distributed_cost("ring2_pop", n_nodes=20)
     dd = distributed_cost("ring2_dist", n_nodes=20)
+    de = distributed_cost("ring2_ej", n_nodes=20)
     assert da["bits"] > db["bits"]
     assert dp["bits"] > db["bits"]
     # S0 and S2 share the credit + I/E-tag datapath; S2 does not drop it
     assert dr["bits"] == db["bits"], (dr["bits"], db["bits"])
     # S4 kind-aware leave is mux preference only — same bits as S0
     assert dd["bits"] == db["bits"], (dd["bits"], db["bits"])
+    assert de["bits"] > db["bits"], (de["bits"], db["bits"])
+    assert "leave_slot_resv" in de["breakdown"]
     assert "credit_counters" in db["breakdown"]
     assert "itag_etag_state" in db["breakdown"]
     assert "core_outstanding" in db["breakdown"]
@@ -323,7 +350,7 @@ def test_pop_window_and_token() -> None:
 
 
 def test_core_outstanding_aligned() -> None:
-    """S0/S1/S2/S3/S4 share a 512-per-core outstanding-read cap."""
+    """S0–S13 share a 512-per-core outstanding-read cap."""
     from rg_ring2_aimd import Ring2AimdSim
 
     cap = 512
@@ -345,7 +372,25 @@ def test_core_outstanding_aligned() -> None:
                 pop_window=0), seed=0)),
             ("S4", Ring2DistSim(topo, Ring2DistParams(
                 core_outstanding=bind, plane_sel="least_occupied",
-                leave_useful=True), seed=0))):
+                leave_useful=True), seed=0)),
+            ("S5", Ring2DistSim(topo, s5_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S6", Ring2DistSim(topo, s6_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S7", Ring2DistSim(topo, s7_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S8", Ring2DistSim(topo, s8_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S9", Ring2DistSim(topo, s9_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S10", Ring2DistSim(topo, s10_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S11", Ring2DistSim(topo, s11_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S12", Ring2DistSim(topo, s12_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0)),
+            ("S13", Ring2DistSim(topo, s13_params(
+                core_outstanding=bind, plane_sel="least_occupied"), seed=0))):
         sim.offer_batch(tx_bind)
         while sim.t < 200_000 and not sim.done():
             sim.step()
@@ -417,6 +462,174 @@ def test_s4_leave_beats_s0_allpairs() -> None:
         s4["makespan"], s0["makespan"])
 
 
+def test_s5_ej_beats_s0() -> None:
+    """Leave-slot lock should cut allpairs makespan and kill deflections."""
+    topo = Ring2Topology()
+    txns = build_allpairs(m=1, m_resp=4)
+    s0 = run_base(topo, txns)
+    s5 = run_dist(topo, txns, params=s5_params())
+    assert s0["completed"] and s5["completed"]
+    assert s5["n_delivered_flits"] == s0["n_delivered_flits"]
+    assert s5["makespan"] < s0["makespan"], (s5["makespan"], s0["makespan"])
+    assert s5["n_deflections"] == 0, s5["n_deflections"]
+
+
+def test_s6_oldest_beats_s5_uniform() -> None:
+    """Oldest dest-clash should not regress allpairs and should win K=100."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s5a = run_dist(topo, ap, params=s5_params())
+    s6a = run_dist(topo, ap, params=s6_params())
+    assert s5a["completed"] and s6a["completed"]
+    assert s6a["n_delivered_flits"] == s5a["n_delivered_flits"]
+    assert s6a["makespan"] <= s5a["makespan"], (
+        s6a["makespan"], s5a["makespan"])
+    assert s6a["n_deflections"] == 0, s6a["n_deflections"]
+    tx = build_uniform(k=100, m_resp=4, seed=0)
+    s5u = run_dist(topo, tx, params=s5_params())
+    s6u = run_dist(topo, tx, params=s6_params())
+    assert s5u["completed"] and s6u["completed"]
+    assert s6u["makespan"] < s5u["makespan"], (
+        s6u["makespan"], s5u["makespan"])
+    assert s6u["n_deflections"] == 0, s6u["n_deflections"]
+
+
+def test_s7_hop_bounce_beats_s6() -> None:
+    """Late plane bind on a busy first hop should beat S6 on allpairs."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s6a = run_dist(topo, ap, params=s6_params())
+    s7a = run_dist(topo, ap, params=s7_params())
+    assert s6a["completed"] and s7a["completed"]
+    assert s7a["n_delivered_flits"] == s6a["n_delivered_flits"]
+    assert s7a["makespan"] < s6a["makespan"], (
+        s7a["makespan"], s6a["makespan"])
+    assert s7a["n_deflections"] == 0, s7a["n_deflections"]
+    tx = build_uniform(k=100, m_resp=4, seed=0)
+    s6u = run_dist(topo, tx, params=s6_params())
+    s7u = run_dist(topo, tx, params=s7_params())
+    assert s6u["completed"] and s7u["completed"]
+    assert s7u["makespan"] <= s6u["makespan"], (
+        s7u["makespan"], s6u["makespan"])
+    assert s7u["n_deflections"] == 0, s7u["n_deflections"]
+
+
+def test_s8_late_plane_beats_s7() -> None:
+    """Always late-bind plane should beat S7 hop-only bounce on allpairs."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s7a = run_dist(topo, ap, params=s7_params())
+    s8a = run_dist(topo, ap, params=s8_params())
+    assert s7a["completed"] and s8a["completed"]
+    assert s8a["n_delivered_flits"] == s7a["n_delivered_flits"]
+    assert s8a["makespan"] < s7a["makespan"], (
+        s8a["makespan"], s7a["makespan"])
+    assert s8a["n_deflections"] == 0, s8a["n_deflections"]
+    tx = build_uniform(k=100, m_resp=4, seed=0)
+    s7u = run_dist(topo, tx, params=s7_params())
+    s8u = run_dist(topo, tx, params=s8_params())
+    assert s7u["completed"] and s8u["completed"]
+    assert s8u["makespan"] <= s7u["makespan"], (
+        s8u["makespan"], s7u["makespan"])
+    assert s8u["n_deflections"] == 0, s8u["n_deflections"]
+
+
+def test_s9_late_dir_beats_s8() -> None:
+    """Other-dir slack should beat S8 on uniform without a large allpairs gap."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s8a = run_dist(topo, ap, params=s8_params())
+    s9a = run_dist(topo, ap, params=s9_params())
+    assert s8a["completed"] and s9a["completed"]
+    assert s9a["n_delivered_flits"] == s8a["n_delivered_flits"]
+    assert s9a["makespan"] <= s8a["makespan"] + 2, (
+        s9a["makespan"], s8a["makespan"])
+    assert s9a["n_deflections"] == 0, s9a["n_deflections"]
+    tx = build_uniform(k=100, m_resp=4, seed=0)
+    s8u = run_dist(topo, tx, params=s8_params())
+    s9u = run_dist(topo, tx, params=s9_params())
+    assert s8u["completed"] and s9u["completed"]
+    assert s9u["makespan"] < s8u["makespan"], (
+        s9u["makespan"], s8u["makespan"])
+    assert s9u["n_deflections"] == 0, s9u["n_deflections"]
+
+
+def test_s10_resp_late_dir_beats_s9() -> None:
+    """Resp-only late_dir should beat S9 on allpairs and K=500."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s9a = run_dist(topo, ap, params=s9_params())
+    s10a = run_dist(topo, ap, params=s10_params())
+    assert s9a["completed"] and s10a["completed"]
+    assert s10a["n_delivered_flits"] == s9a["n_delivered_flits"]
+    assert s10a["makespan"] < s9a["makespan"], (
+        s10a["makespan"], s9a["makespan"])
+    assert s10a["n_deflections"] == 0, s10a["n_deflections"]
+    tx = build_uniform(k=500, m_resp=4, seed=0)
+    s9u = run_dist(topo, tx, params=s9_params())
+    s10u = run_dist(topo, tx, params=s10_params())
+    assert s9u["completed"] and s10u["completed"]
+    assert s10u["makespan"] < s9u["makespan"], (
+        s10u["makespan"], s9u["makespan"])
+    assert s10u["n_deflections"] == 0, s10u["n_deflections"]
+
+
+def test_s13_hopkeep_beats_s12_uniform() -> None:
+    """Shorter-path hop-grant beats S12 on K=500; allpairs may tie at 68."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s12a = run_dist(topo, ap, params=s12_params())
+    s13a = run_dist(topo, ap, params=s13_params())
+    assert s12a["completed"] and s13a["completed"]
+    assert s13a["n_delivered_flits"] == s12a["n_delivered_flits"]
+    assert s13a["n_deflections"] == 0, s13a["n_deflections"]
+    tx = build_uniform(k=500, m_resp=4, seed=0)
+    s12u = run_dist(topo, tx, params=s12_params())
+    s13u = run_dist(topo, tx, params=s13_params())
+    assert s12u["completed"] and s13u["completed"]
+    assert s13u["makespan"] < s12u["makespan"], (
+        s13u["makespan"], s12u["makespan"])
+    assert s13u["n_deflections"] == 0, s13u["n_deflections"]
+
+
+def test_s12_hop_islip_beats_s11_uniform() -> None:
+    """Dest-then-hop I=1 beats S11 on K=20; allpairs may be +1; K=500 ties."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s11a = run_dist(topo, ap, params=s11_params())
+    s12a = run_dist(topo, ap, params=s12_params())
+    assert s11a["completed"] and s12a["completed"]
+    assert s12a["n_delivered_flits"] == s11a["n_delivered_flits"]
+    assert s12a["n_deflections"] == 0, s12a["n_deflections"]
+    tx = build_uniform(k=20, m_resp=4, seed=0)
+    s11u = run_dist(topo, tx, params=s11_params())
+    s12u = run_dist(topo, tx, params=s12_params())
+    assert s11u["completed"] and s12u["completed"]
+    assert s12u["makespan"] < s11u["makespan"], (
+        s12u["makespan"], s11u["makespan"])
+    assert s12u["n_deflections"] == 0, s12u["n_deflections"]
+
+
+def test_s11_hop_hold_beats_s10() -> None:
+    """Same-cycle resp hop mutex should beat S10 on allpairs and K=500."""
+    topo = Ring2Topology()
+    ap = build_allpairs(m=1, m_resp=4)
+    s10a = run_dist(topo, ap, params=s10_params())
+    s11a = run_dist(topo, ap, params=s11_params())
+    assert s10a["completed"] and s11a["completed"]
+    assert s11a["n_delivered_flits"] == s10a["n_delivered_flits"]
+    assert s11a["makespan"] < s10a["makespan"], (
+        s11a["makespan"], s10a["makespan"])
+    assert s11a["n_deflections"] == 0, s11a["n_deflections"]
+    tx = build_uniform(k=500, m_resp=4, seed=0)
+    s10u = run_dist(topo, tx, params=s10_params())
+    s11u = run_dist(topo, tx, params=s11_params())
+    assert s10u["completed"] and s11u["completed"]
+    assert s11u["makespan"] < s10u["makespan"], (
+        s11u["makespan"], s10u["makespan"])
+    assert s11u["n_deflections"] == 0, s11u["n_deflections"]
+
+
 def test_plane_sel_all_work() -> None:
     topo = Ring2Topology()
     txns = build_allpairs(m=1, m_resp=2)
@@ -432,7 +645,7 @@ def main() -> None:
     c.add("workload_counts", test_workload_counts)
     c.add("s0_completes_and_conserves", test_s0_completes_and_conserves)
     c.add("s1_completes_and_conserves", test_s1_completes_and_conserves)
-    c.add("five_schemes_same_flits", test_three_schemes_same_flits)
+    c.add("six_schemes_same_flits", test_three_schemes_same_flits)
     c.add("makespan_ge_bound", test_makespan_ge_bound)
     c.add("inring_never_blocked", test_inring_never_blocked_under_load)
     c.add("itag_starve_finite", test_itag_bounds_starve)
@@ -447,6 +660,15 @@ def main() -> None:
     c.add("core_outstanding_aligned", test_core_outstanding_aligned)
     c.add("plane_sel_all_work", test_plane_sel_all_work)
     c.add("s4_leave_beats_s0_allpairs", test_s4_leave_beats_s0_allpairs)
+    c.add("s5_ej_beats_s0_allpairs", test_s5_ej_beats_s0)
+    c.add("s6_oldest_beats_s5_uniform", test_s6_oldest_beats_s5_uniform)
+    c.add("s7_hop_bounce_beats_s6", test_s7_hop_bounce_beats_s6)
+    c.add("s8_late_plane_beats_s7", test_s8_late_plane_beats_s7)
+    c.add("s9_late_dir_beats_s8", test_s9_late_dir_beats_s8)
+    c.add("s10_resp_late_dir_beats_s9", test_s10_resp_late_dir_beats_s9)
+    c.add("s11_hop_hold_beats_s10", test_s11_hop_hold_beats_s10)
+    c.add("s12_hop_islip_beats_s11_uniform", test_s12_hop_islip_beats_s11_uniform)
+    c.add("s13_hopkeep_beats_s12_uniform", test_s13_hopkeep_beats_s12_uniform)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

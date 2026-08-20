@@ -4,7 +4,7 @@
   "n_txns": 100,
   "quick": false,
   "refine": false,
-  "generated_at": "2026-08-19T09:56:58Z"
+  "generated_at": "2026-08-19T17:05:09Z"
  },
  "rows": [
   {
@@ -78,6 +78,42 @@
    "n_deflections": 59,
    "tag": "S4",
    "on_front": true
+  },
+  {
+   "scheme": "S5",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 100,
+   "t_sched_cycles": 0,
+   "makespan": 100,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S5",
+   "on_front": false
+  },
+  {
+   "scheme": "S6",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 100,
+   "t_sched_cycles": 0,
+   "makespan": 100,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S6",
+   "on_front": false
   },
   {
    "scheme": "S2",
@@ -1204,7 +1240,7 @@
    "replay_ok": true,
    "n_conflicts": 0,
    "tag": "rr_oldest/I1/arc/int/cen/per",
-   "on_front": true
+   "on_front": false
   },
   {
    "scheme": "S2",
@@ -2585,6 +2621,132 @@
    "n_conflicts": 0,
    "tag": "greedy_ff/I2/arc/int/dis/per",
    "on_front": false
+  },
+  {
+   "scheme": "S7",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 83,
+   "t_sched_cycles": 0,
+   "makespan": 83,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S7",
+   "on_front": false
+  },
+  {
+   "scheme": "S8",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 72,
+   "t_sched_cycles": 0,
+   "makespan": 72,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S8",
+   "on_front": false
+  },
+  {
+   "scheme": "S9",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 73,
+   "t_sched_cycles": 0,
+   "makespan": 73,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S9",
+   "on_front": false
+  },
+  {
+   "scheme": "S10",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 69,
+   "t_sched_cycles": 0,
+   "makespan": 69,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S10",
+   "on_front": false
+  },
+  {
+   "scheme": "S11",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 67,
+   "t_sched_cycles": 0,
+   "makespan": 67,
+   "area_norm": 0.0458,
+   "area_bits": 80500,
+   "completed": true,
+   "n_deflections": 0,
+   "tag": "S11",
+   "on_front": true
+  },
+  {
+   "scheme": "S12",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 68,
+   "t_sched_cycles": 0,
+   "makespan": 68,
+   "completed": true,
+   "area_norm": 0.0458,
+   "tag": "S12",
+   "area_bits": 80500,
+   "n_deflections": 0,
+   "on_front": false
+  },
+  {
+   "scheme": "S13",
+   "algo": "ring2_ej",
+   "iters": 0,
+   "spatial_reuse": "-",
+   "conflict_domain": "-",
+   "arbiter": "-",
+   "voq_granularity": "-",
+   "makespan_des": 68,
+   "t_sched_cycles": 0,
+   "makespan": 68,
+   "completed": true,
+   "area_norm": 0.0458,
+   "tag": "S13",
+   "area_bits": 80500,
+   "n_deflections": 0,
+   "on_front": false
   }
  ],
  "pareto": [
@@ -2599,11 +2761,11 @@
    "tag": "S1"
   },
   {
-   "area_norm": 0.1997,
-   "makespan": 106,
-   "tag": "rr_oldest/I1/arc/int/cen/per"
+   "area_norm": 0.0458,
+   "makespan": 67,
+   "tag": "S11"
   }
  ],
  "n_front": 3,
- "wall_secs": 2.5
+ "wall_secs": 2.2
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Five-scheme makespan comparison on the 20-node dual-plane ring.
+"""Fourteen-scheme makespan comparison on the 20-node dual-plane ring.
 
 Schemes
 -------
-Common datapath (all five): 2-cycle hops, 8-deep boarding queue per
+Common datapath (all fourteen): 2-cycle hops, 8-deep boarding queue per
 (node, plane), point-to-point credit FC + I-tag + E-tag, and a 512
 outstanding-read cap per AI core.
 S0  ring2_base   RR inject on that datapath, no source rate control
@@ -11,6 +11,15 @@ S1  ring2_aimd   S0 + piggybacked failure counts + AIMD token bucket
 S2  ring2_rg     same datapath + request-grant (default islip, interval, arc)
 S3  ring2_pop    same datapath + read-request-as-POP (HA schedules resps)
 S4  ring2_dist   same datapath + kind-aware leave (resp at core, req at HA)
+S5  ring2_ej     dest leave-slot reservation, node-id dest clash
+S6  ring2_ej     S5 + oldest-first among same-cycle dest candidates
+S7  ring2_ej     S6 + hop_bounce (late-bind plane if first hop is busy)
+S8  ring2_ej     S7 + always late-bind plane (hop+dest, occupancy tie)
+S9  ring2_ej     S8 + late_dir slack (other ring dir if hop busy, ≤+2)
+S10 ring2_ej     S9 + late_dir only for responses
+S11 ring2_ej     S10 + same-cycle first-hop mutex (resp, oldest)
+S12 ring2_ej     S11 + dest-then-hop request-grant (I=1, leftover dest)
+S13 ring2_ej     S12 + hop-grant prefers shorter remaining path
 
 Workloads: allpairs (deterministic 10x10 x m) and uniform (K per core,
 uniform HA, multi-seed). Makespan is the cycle the last response flit is
@@ -34,7 +43,11 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_aimd import run_batch as run_aimd
 from rg_ring2_base import Ring2BaseParams, run_batch as run_base
-from rg_ring2_dist import Ring2DistParams, run_batch as run_dist
+from rg_ring2_dist import (
+    Ring2DistParams, run_batch as run_dist, s5_params, s6_params,
+    s7_params, s8_params, s9_params, s10_params, s11_params, s12_params,
+    s13_params,
+)
 from rg_ring2_pop import run_batch as run_pop
 from rg_ring2_rg import RGConfig, run_batch as run_rg
 from rg_ring2_topo import (
@@ -73,6 +86,51 @@ def run_one(scheme: str, topo: Ring2Topology, txns, *,
                              eject_depth=params.eject_depth,
                              core_outstanding=params.core_outstanding,
                              leave_useful=True)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S5":
+        dp = s5_params(plane_sel=params.plane_sel,
+                       eject_depth=params.eject_depth,
+                       core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S6":
+        dp = s6_params(plane_sel=params.plane_sel,
+                       eject_depth=params.eject_depth,
+                       core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S7":
+        dp = s7_params(plane_sel=params.plane_sel,
+                       eject_depth=params.eject_depth,
+                       core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S8":
+        dp = s8_params(plane_sel=params.plane_sel,
+                       eject_depth=params.eject_depth,
+                       core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S9":
+        dp = s9_params(plane_sel=params.plane_sel,
+                       eject_depth=params.eject_depth,
+                       core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S10":
+        dp = s10_params(plane_sel=params.plane_sel,
+                        eject_depth=params.eject_depth,
+                        core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S11":
+        dp = s11_params(plane_sel=params.plane_sel,
+                        eject_depth=params.eject_depth,
+                        core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S12":
+        dp = s12_params(plane_sel=params.plane_sel,
+                        eject_depth=params.eject_depth,
+                        core_outstanding=params.core_outstanding)
+        r = run_dist(topo, txns, params=dp, seed=seed)
+    elif scheme == "S13":
+        dp = s13_params(plane_sel=params.plane_sel,
+                        eject_depth=params.eject_depth,
+                        core_outstanding=params.core_outstanding)
         r = run_dist(topo, txns, params=dp, seed=seed)
     else:
         raise ValueError(scheme)
@@ -125,7 +183,9 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ed in ejects:
                     p = Ring2BaseParams(plane_sel=ps, eject_depth=ed)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3", "S4"):
+                    for scheme in ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
+                                   "S7", "S8", "S9", "S10", "S11", "S12",
+                                   "S13"):
                         extra = {}
                         if scheme == "S1":
                             for ac in aimd_cfgs:
@@ -167,7 +227,9 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                 for ps in plane_sels:
                     p = Ring2BaseParams(plane_sel=ps)
                     b = _bounds(topo, txns, ps, R)
-                    for scheme in ("S0", "S1", "S2", "S3", "S4"):
+                    for scheme in ("S0", "S1", "S2", "S3", "S4", "S5", "S6",
+                                   "S7", "S8", "S9", "S10", "S11", "S12",
+                                   "S13"):
                         if scheme == "S1":
                             ac = aimd_cfgs[0]
                             pp = Ring2BaseParams(plane_sel=ps, **ac)
@@ -196,7 +258,7 @@ def sweep(*, quick: bool = False) -> dict[str, Any]:
                               f"ok={r.get('completed')}", flush=True)
 
     # compact summary: mean makespan per (scheme, pattern, R) on the default
-    # plane_sel / eject_depth so the five schemes can be compared directly
+    # plane_sel / eject_depth so the eleven schemes can be compared directly
     summary: list[dict[str, Any]] = []
     keys = set()
     for r in rows:

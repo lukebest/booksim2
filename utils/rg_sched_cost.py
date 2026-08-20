@@ -452,12 +452,12 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
         # study prices only the arbiter (station storage counted as 0).
         pass
     elif config in ("ring2_base", "ring2_aimd", "ring2_rg", "ring2_pop",
-                    "ring2_dist"):
-        # Common datapath for all five 20-node schemes: point-to-point
+                    "ring2_dist", "ring2_ej"):
+        # Common datapath for the 20-node schemes: point-to-point
         # credit on each directed hop (80 segments), I-tag / E-tag, the
         # `inj_depth`-deep boarding queue, shared per-plane eject queue +
         # reserved E-tag slots, reassembly, and the aligned per-core
-        # outstanding-read scoreboard (512). S0–S4 differ in
+        # outstanding-read scoreboard (512). S0–S10 differ in
         # injection / matching / leave policy, not in this layer.
         n_cores = n_nodes // 2
         n_has = n_nodes - n_cores
@@ -473,6 +473,10 @@ def distributed_cost(config: str, *, n_nodes: int = 48, buf_depth: int = 20,
             b["aimd_rate_tokens"] = n_nodes * 2 * W_T
             b["aimd_fail_counters"] = n_nodes * W_T
             b["piggyback_fields"] = n_nodes * 2 * W_D
+        elif config == "ring2_ej":
+            # Horizon bitmap: one leave slot per (node, plane) for the
+            # next ~64 cycles (max hops × hop_lat with slack).
+            b["leave_slot_resv"] = n_nodes * n_planes * 64
         elif config == "ring2_pop":
             # HA request RR. The read request itself is the grant; no
             # dedicated pull-token plane. Receive-window bits live in the

@@ -1,6 +1,6 @@
 {
-  "n_total": 19,
-  "n_ok": 19,
+  "n_total": 28,
+  "n_ok": 28,
   "all_ok": true,
   "rows": [
     {
@@ -20,7 +20,7 @@
       "ok": true
     },
     {
-      "name": "five_schemes_same_flits",
+      "name": "six_schemes_same_flits",
       "ok": true
     },
     {
@@ -78,7 +78,43 @@
     {
       "name": "s4_leave_beats_s0_allpairs",
       "ok": true
+    },
+    {
+      "name": "s5_ej_beats_s0_allpairs",
+      "ok": true
+    },
+    {
+      "name": "s6_oldest_beats_s5_uniform",
+      "ok": true
+    },
+    {
+      "name": "s7_hop_bounce_beats_s6",
+      "ok": true
+    },
+    {
+      "name": "s8_late_plane_beats_s7",
+      "ok": true
+    },
+    {
+      "name": "s9_late_dir_beats_s8",
+      "ok": true
+    },
+    {
+      "name": "s10_resp_late_dir_beats_s9",
+      "ok": true
+    },
+    {
+      "name": "s11_hop_hold_beats_s10",
+      "ok": true
+    },
+    {
+      "name": "s12_hop_islip_beats_s11_uniform",
+      "ok": true
+    },
+    {
+      "name": "s13_hopkeep_beats_s12_uniform",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-19T09:56:51Z"
+  "generated_at": "2026-08-19T22:45:49Z"
 }

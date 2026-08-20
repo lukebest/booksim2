@@ -256,6 +256,7 @@ class Ring2BaseSim:
         seg = self._seg(f.plane, f.dir, f.idx)
         if inring and self.seg_free[seg] > self.t:
             self.st["n_inring_blocked"] += 1
+            self._on_inring_block(f)
             self.arrivals[self.t + 1].append(f)
             self.arr_set[(f.plane, f.dir, f.idx)].add(self.t + 1)
             return False
@@ -326,6 +327,18 @@ class Ring2BaseSim:
         cap = self.p.core_outstanding
         return cap > 0 and self.core_outst[core] >= cap
 
+    def _pre_inject(self) -> None:
+        """Optional same-cycle coordination before the inject loop."""
+        return
+
+    def _inject_keys(self) -> list:
+        """Source queues to visit this cycle. Default: set order."""
+        return list(self.active_src)
+
+    def _select_inject_flit(self, node: int, plane: PlaneId, q) -> Flit | None:
+        """Which boarding-queue flit tries the inject port. Default: FIFO head."""
+        return q[0] if q else None
+
     def _may_inject(self, node: int, plane: PlaneId, f: Flit | None = None
                     ) -> bool:
         if f is None or f.kind != "req" or not is_core(f.src):
@@ -364,6 +377,9 @@ class Ring2BaseSim:
                 self.board_ok_ccw[dst] += 1
             else:
                 self.board_fail_ccw[dst] += 1
+
+    def _on_inring_block(self, f: Flit) -> None:
+        return
 
     def _on_board_fail(self, node: int, f: Flit) -> None:
         f.fail_board += 1
@@ -410,7 +426,8 @@ class Ring2BaseSim:
         self._release_ready_resps()
 
         # local injection: one flit per (node, plane) if the slot is free
-        for key in list(self.active_src):
+        self._pre_inject()
+        for key in self._inject_keys():
             node, plane = key
             self._admit(key)
             if self.pending[key]:
@@ -420,7 +437,9 @@ class Ring2BaseSim:
                 self.inj_starve[key] = 0
                 self.active_src.discard(key)
                 continue
-            f = q[0]
+            f = self._select_inject_flit(node, plane, q)
+            if f is None:
+                continue
             if not self._may_inject(node, plane, f):
                 # Policy denial (AIMD token, S3 receive window) is not hop
                 # starvation. A leftover I-tag would lock out HA responses
@@ -442,7 +461,10 @@ class Ring2BaseSim:
                         self.i_tag[rk].add(node)
                         self.st["n_itag_raised"] += 1
                 continue
-            q.popleft()
+            if f is q[0]:
+                q.popleft()
+            else:
+                q.remove(f)
             self._admit(key)
             if self._src_idle(key):
                 self.active_src.discard(key)
