@@ -376,9 +376,9 @@ S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
 <p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
 <p class="note">下面两张是<b>全网 80 条有向段</b>每拍启动的 hop 数（σ=1，
 虚线 = 80 flit/cycle）。偏转也计入——偏转会再占 hop。不是每核接收带宽。
-uniform 与 allpairs 各一张，S0–S14 叠在同一时间轴上。</p>
+uniform 与 allpairs m=100 各一张，S0–S14 叠在同一时间轴上。</p>
 <p><img src="ring2_link_bw_10k.png" alt="uniform 10k 全网有向段总带宽"></p>
-<p><img src="ring2_link_bw_allpairs.png" alt="allpairs 全网有向段总带宽"></p>
+<p><img src="ring2_link_bw_allpairs.png" alt="allpairs m=100 全网有向段总带宽"></p>
 {_table(["", "S0 RR", "S1 AIMD", "S2 request-grant",
          "S3 push-on-pull", "S4 kind-aware leave",
          "S5 leave-slot lock", "S6 oldest dest",
@@ -397,11 +397,11 @@ uniform 与 allpairs 各一张，S0–S14 叠在同一时间轴上。</p>
     lats = ", ".join(str(x) for x in topo.link_lats)
     bnd_rows, bnd = _bound_rows(topo, big, cmp_)
     n_dir = len(topo.directed_links)
-    ap_tr = _collect_traces(topo, build_allpairs(m=1, m_resp=4))
+    ap_tr = _collect_traces(topo, build_allpairs(m=100, m_resp=4))
     plot_directed_link_bw(
         ap_tr, ROOT / "results" / "ring2_link_bw_allpairs.png",
-        bin_w=2,
-        title="Network directed-hop bandwidth  ·  allpairs m=1 R=4  (bin=2)",
+        bin_w=16,
+        title="Network directed-hop bandwidth  ·  allpairs m=100 R=4  (bin=16)",
         cap=n_dir)
     if any((v.get("hop_bw") or v.get("hop_starts"))
            for v in (big.get("schemes") or {}).values()):
