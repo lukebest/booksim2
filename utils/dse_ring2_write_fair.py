@@ -45,8 +45,9 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_base import Ring2BaseParams, Ring2BaseSim
 from rg_ring2_topo import (
-    CHI_VCS_WRITE, Ring2Topology, Txn, build_hot_write, build_uniform_write,
-    cores, hop_count, shortest_dir, write_bounds, write_paths_for_txns,
+    CHI_VCS_WRITE, N_NODES, Ring2Topology, Txn, build_hot_write,
+    build_uniform_write, cores, has, hop_count, shortest_dir, write_bounds,
+    write_paths_for_txns,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,8 +212,11 @@ def pass_through_load(topo: Ring2Topology, txns: Sequence[Txn]
     by_vc["all"] = {n: round(sum(by_vc[v][n] for v in ("req", "rsp", "dat")),
                              2)
                     for n in range(topo.n)}
+    # Injectors come from the workload: an odd node that is not memory can be
+    # a core, so index parity is not the right thing to iterate over.
+    srcs = sorted({t.core for t in txns}) or cores(topo.n)
     eff: dict[int, float] = {}
-    for c in cores(topo.n):
+    for c in srcs:
         tot = own[(c, 1)] + own[(c, -1)]
         if tot <= 0:
             eff[c] = 0.0
@@ -227,15 +231,15 @@ def pass_through_load(topo: Ring2Topology, txns: Sequence[Txn]
         "dat_cw": {n: round(per_vc["dat"][(n, 1)], 2) for n in range(topo.n)},
         "dat_ccw": {n: round(per_vc["dat"][(n, -1)], 2)
                     for n in range(topo.n)},
-        "own_cw": {c: own[(c, 1)] for c in cores(topo.n)},
-        "own_ccw": {c: own[(c, -1)] for c in cores(topo.n)},
+        "own_cw": {c: own[(c, 1)] for c in srcs},
+        "own_ccw": {c: own[(c, -1)] for c in srcs},
     }
 
 
 def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
-    """Mean latency of a core's two outgoing links."""
+    """Mean latency of each node's two outgoing links."""
     return {c: (topo.hop_lat_from(c, 1) + topo.hop_lat_from(c, -1)) / 2
-            for c in cores(topo.n)}
+            for c in range(topo.n)}
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +351,10 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
                s0: dict[str, Any]) -> dict[str, Any]:
     pt = pass_through_load(topo, txns)
     lat = hop_latency_by_core(topo)
-    cs = cores(topo.n)
     bw = {int(c): v for c, v in s0["fairness"]["bw_by_core"].items()}
+    # Which nodes inject is a property of the workload, not of index parity:
+    # once some odd node stops being memory it can be a core instead.
+    cs = sorted(bw) or cores(topo.n)
     fails = s0.get("board_fail_by_src", {})
 
     def cause(c: int, key: str) -> int:
@@ -372,6 +378,19 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
             "succ_rate": round(ok / tries, 4) if tries else 0.0,
         })
     bws = [r["bw"] for r in rows]
+    # How many memory nodes sit right next to each core. A write to a
+    # neighbour occupies one segment and then leaves the ring; everything
+    # else has to ride deeper, blocking more nodes and being blocked more.
+    # Mean distance to memory cannot see this -- remove an antipodal pair of
+    # memory nodes and every core's mean distance is still identical.
+    mem = sorted({t.ha for t in txns})
+    adj = [sum(1 for h in mem
+               if min((h - c) % topo.n, (c - h) % topo.n) == 1) for c in cs]
+    mean_hop = [sum(min((h - c) % topo.n, (c - h) % topo.n)
+                    for h in mem) / max(1, len(mem)) for c in cs]
+    for r, a, mh in zip(rows, adj, mean_hop):
+        r["adj_mem"] = a
+        r["mean_hop_to_mem"] = round(mh, 2)
     hops = []
     for key, v in (s0.get("inj_by_hop") or {}).items():
         tot = v["ok"] + v["fail"]
@@ -395,6 +414,10 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
         "corr_bw_pt_all": round(pearson(bws, [r["pt_all"] for r in rows]), 4),
         "corr_bw_lat": round(pearson(bws, [r["lat_out"] for r in rows]), 4),
         "corr_bw_succ": round(pearson(bws, [r["succ_rate"] for r in rows]), 4),
+        "corr_bw_adjmem": round(pearson(bws, [float(a) for a in adj]), 4),
+        "rank_bw_adjmem": round(spearman(bws, [float(a) for a in adj]), 4),
+        "corr_bw_meanhop": round(pearson(bws, mean_hop), 4),
+        "mem": mem,
         "hops": sorted(hops, key=lambda h: h["lat"]),
         "corr_succ_lat": round(pearson([h["succ"] for h in hops],
                                        [float(h["lat"]) for h in hops]), 4),
@@ -405,11 +428,25 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
 # main
 # ---------------------------------------------------------------------------
 
+# Node 9 and node 19 are not memory. Two readings of that, both measured,
+# because they give materially different answers: either those two nodes are
+# simply not write destinations (the ring still has 10 cores), or they are
+# compute like every other non-memory node (12 cores).
+MEM_GAP = (9, 19)
+MEM_8 = tuple(h for h in has(N_NODES) if h not in MEM_GAP)
+
+
 def build_pattern(name: str, *, k: int, W: int, seed: int) -> list[Txn]:
     if name == "uniform":
         return build_uniform_write(k=k, m_wdata=W, seed=seed)
     if name == "cluster":
         return build_hot_write(k=k, m_wdata=W, hot_has=HOT_HAS)
+    if name == "gap":
+        return build_uniform_write(k=k, m_wdata=W, seed=seed, mem=MEM_8)
+    if name == "gap12":
+        return build_uniform_write(
+            k=k, m_wdata=W, seed=seed, mem=MEM_8,
+            core_set=sorted(cores(N_NODES) + list(MEM_GAP)))
     raise ValueError(f"unknown pattern {name}")
 
 
@@ -453,6 +490,8 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         "pattern": pattern, "K": k, "W": W,
         "flits_per_core": flits_per_core, "n_txn": len(txns),
         "hot_has": list(HOT_HAS) if pattern == "cluster" else None,
+        "mem": sorted({t.ha for t in txns}),
+        "core_set": sorted({t.core for t in txns}),
         "bounds": bounds, "schemes": runs, "sweep": sweep,
     }
     if "S0" in runs:
