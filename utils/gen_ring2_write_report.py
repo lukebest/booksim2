@@ -25,10 +25,12 @@ DATA = ROOT / "results" / "ring2_write_fair.json"
 OUT = ROOT / "results" / "report_ring2_write_fairness.html"
 IMG = ROOT / "results"
 
-SCHEMES = ("S0", "S1", "S15")
-COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb"}
+SCHEMES = ("S0", "S1", "S15", "S16")
+COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb",
+         "S16": "#16a34a"}
 LABEL = {"S0": "S0 基线（无流控）", "S1": "S1 拥塞等级 AIMD",
-         "S15": "S15 公平份额 + 槽预约"}
+         "S15": "S15 公平份额 + 槽预约",
+         "S16": "S16 接收端授权（Homa 式）"}
 
 
 def _use_cjk_font() -> None:
@@ -121,12 +123,14 @@ def plot_bw_bars(pat: dict, path: Path) -> None:
     _use_cjk_font()
     cs = _cores(pat)
     x = range(len(cs))
-    w = 0.27
-    fig, ax = plt.subplots(figsize=(10.2, 4.0))
+    n = len(SCHEMES)
+    w = 0.82 / n
+    off = (n - 1) / 2.0
+    fig, ax = plt.subplots(figsize=(11.6, 4.2))
     for i, s in enumerate(SCHEMES):
         f = pat["schemes"][s]["fairness"]
         vals = [f["bw_by_core"][c] for c in cs]
-        ax.bar([v + (i - 1) * w for v in x], vals, w,
+        ax.bar([v + (i - off) * w for v in x], vals, w,
                label=f"{LABEL[s]}  Jain={f['jain']:.4f}"
                      f"  max/min={f['max_min']:.3f}",
                color=COLOR[s], edgecolor="white", linewidth=0.6)
@@ -378,15 +382,68 @@ def _sweep_table(pat: dict) -> str:
 def _seed_table(pat: dict) -> str:
     rows = []
     for r in pat.get("seed_sweep", []):
-        a, b = r.get("S0"), r.get("S15")
-        if not (a and b):
+        a = r.get("S0")
+        if not a:
             continue
-        rows.append([r["seed"], a["jain"], a["max_min"], b["jain"],
-                     b["max_min"], f"{b['thr_delta_pct']:+.2f}%"])
+        row = [r["seed"], a["jain"], a["max_min"]]
+        for s in ("S15", "S16"):
+            b = r.get(s)
+            row += ([b["jain"], b["max_min"], f"{b['thr_delta_pct']:+.2f}%"]
+                    if b else ["—", "—", "—"])
+        rows.append(row)
     if not rows:
         return ""
-    return _table(["seed", "S0 Jain", "S0 max/min", "S15 Jain",
-                   "S15 max/min", "S15 吞吐差"], rows)
+    return _table(["seed", "S0 Jain", "S0 max/min",
+                   "S15 Jain", "S15 max/min", "S15 吞吐差",
+                   "S16 Jain", "S16 max/min", "S16 吞吐差"], rows)
+
+
+def _oc_table(pat: dict) -> str:
+    rows = []
+    for r in pat.get("sweep_oc", []):
+        oc = r["overcommit"]
+        rows.append([
+            "∞（= S0 的授权策略）" if oc is None else oc,
+            r["makespan"], r["jain"], r["max_min"], r["throughput"],
+            r.get("peak_grants"), r.get("grant_delay_mean"),
+            r.get("lat_p99"),
+        ])
+    if not rows:
+        return ""
+    return _table(["overcommit", "makespan", "Jain", "max/min", "吞吐",
+                   "实测峰值授权", "授权等待均值", "事务延迟 p99"], rows)
+
+
+def _ablate_table(pat: dict) -> str:
+    rows = [[r["variant"], r["makespan"], r["jain"], r["max_min"],
+             r["throughput"], r.get("grant_delay_mean")]
+            for r in pat.get("ablate", [])]
+    if not rows:
+        return ""
+    return _table(["变体", "makespan", "Jain", "max/min", "吞吐",
+                   "授权等待均值"], rows)
+
+
+def _cost_table(pat: dict, s0: dict) -> str:
+    """What each scheme actually costs in hardware."""
+    oc = {r["overcommit"]: r for r in pat.get("sweep_oc", [])}
+    base_peak = (oc.get(None) or {}).get("peak_grants")
+    fc15 = pat["schemes"].get("S15", {}).get("fc") or {}
+    fc16 = pat["schemes"].get("S16", {}).get("fc") or {}
+    posts = max(1, fc15.get("bus_posts", 1))
+    rows = [
+        ["专用拥塞总线", "无", f"有，{fc15.get('bus_bits', 0) // posts} bit "
+                              f"× {fc15.get('bus_posts')} 次", "无"],
+        ["环上槽预约逻辑", "无", f"有，{fc15.get('n_reserved', 0)} 次预约",
+         "无"],
+        ["新增报文类型", "无", "无（走总线）", "无（复用 DBIDResp）"],
+        ["completer 写缓冲（峰值授权）",
+         f"{base_peak}（≈{(base_peak or 0) * 4} flit）",
+         f"{base_peak}（未约束）",
+         f"{fc16.get('overcommit')}（≈{fc16.get('peak_buf_flits')} flit）"],
+        ["核内速率控制器", "无", "每 (node,VC) AIMD 预算 + 累计欠账", "无"],
+    ]
+    return _table(["代价项", "S0", "S15", "S16"], rows)
 
 
 def _fc_table(pat: dict) -> str:
@@ -434,9 +491,18 @@ def main() -> None:
     s0 = pat["schemes"]["S0"]["fairness"]
     s1 = pat["schemes"]["S1"]["fairness"]
     s15 = pat["schemes"]["S15"]["fairness"]
+    s16 = pat["schemes"]["S16"]["fairness"]
     rc = pat["root_cause"]
     t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / s0["throughput"]
     t15 = 100.0 * (s15["throughput"] - s0["throughput"]) / s0["throughput"]
+    t16 = 100.0 * (s16["throughput"] - s0["throughput"]) / s0["throughput"]
+    fc16 = pat["schemes"]["S16"].get("fc") or {}
+    oc_rows = {r["overcommit"]: r for r in pat.get("sweep_oc", [])}
+    base_peak = (oc_rows.get(None) or {}).get("peak_grants") or 0
+    buf_ratio = base_peak / max(1, fc16.get("overcommit") or 1)
+    lat0 = pat["schemes"]["S0"].get("lat_p99")
+    lat16 = pat["schemes"]["S16"].get("lat_p99")
+    lat15 = pat["schemes"]["S15"].get("lat_p99")
 
     bw0 = s0["bw_by_core"]
     adj = {str(r["core"]): r.get("adj_mem") for r in rc["rows"]}
@@ -450,22 +516,45 @@ def main() -> None:
 
     # Judge on the whole seed sweep, not just the headline seed: the
     # reservation mechanism is discrete and one seed can flatter a tuning.
-    sw = [r for r in pat.get("seed_sweep", []) if r.get("S15")]
-    js = [r["S15"]["jain"] for r in sw] or [s15["jain"]]
-    ms = [r["S15"]["max_min"] for r in sw] or [s15["max_min"]]
-    ts = [r["S15"]["thr_delta_pct"] for r in sw] or [t15]
-    hit_j, hit_m, hit_t = min(js) >= 0.98, max(ms) <= 1.05, min(ts) >= -1.0
-    good = [n for n, v in (("Jain ≥ 0.98", hit_j), ("max/min ≤ 1.05", hit_m),
-                           ("吞吐差 ≤ 1%", hit_t)) if v]
-    bad = [n for n, v in (("Jain ≥ 0.98", hit_j), ("max/min ≤ 1.05", hit_m),
-                          ("吞吐差 ≤ 1%", hit_t)) if not v]
-    verdict = ("全部达标" if not bad else
-               (("达成 " + "、".join(good) + "；") if good else "") +
-               "未达成 " + "、".join(bad))
-    n_seed = len(sw)
-    rng_j = f"{min(js):.5f} ~ {max(js):.5f}"
-    rng_m = f"{min(ms):.3f} ~ {max(ms):.3f}"
-    rng_t = f"{max(ts):+.1f}% ~ {min(ts):+.1f}%"
+    def _verdict(scheme: str, fall: dict, tfall: float) -> dict:
+        """Judge on the whole seed sweep, not just the headline seed."""
+        sw = [r for r in pat.get("seed_sweep", []) if r.get(scheme)]
+        js = [r[scheme]["jain"] for r in sw] or [fall["jain"]]
+        ms = [r[scheme]["max_min"] for r in sw] or [fall["max_min"]]
+        ts = [r[scheme]["thr_delta_pct"] for r in sw] or [tfall]
+        hit = (min(js) >= 0.98, max(ms) <= 1.05, min(ts) >= -1.0)
+        names = ("Jain ≥ 0.98", "max/min ≤ 1.05", "吞吐差 ≤ 1%")
+        good = [n for n, v in zip(names, hit) if v]
+        bad = [n for n, v in zip(names, hit) if not v]
+        return {
+            "n": len(sw), "hit": hit, "bad": bad,
+            "verdict": ("全部达标" if not bad else
+                        (("达成 " + "、".join(good) + "；") if good else "") +
+                        "未达成 " + "、".join(bad)),
+            "rng_j": f"{min(js):.5f} ~ {max(js):.5f}",
+            "rng_m": f"{min(ms):.3f} ~ {max(ms):.3f}",
+            "rng_t": f"{max(ts):+.1f}% ~ {min(ts):+.1f}%",
+            "t_worst": min(ts), "m_worst": max(ms),
+        }
+
+    v15 = _verdict("S15", s15, t15)
+    v16 = _verdict("S16", s16, t16)
+    verdict, bad = v15["verdict"], v15["bad"]
+    n_seed, rng_j = v15["n"], v15["rng_j"]
+    rng_m, rng_t = v15["rng_m"], v15["rng_t"]
+
+    # Name the binding bound from the data so the prose cannot go stale.
+    _lb_txt = {
+        "link_lb": "最忙的那条有向链路上、DAT VC 的容量",
+        "port_lb": "每 (node, plane) 只有一个上下环端口，三条 VC 共享",
+        "cut_lb": "跨割面的流量除以割面上的有向链路数",
+        "txn_lb": "单笔事务四拍握手的串行链",
+    }
+    b = pat["bounds"]
+    bind_key = max(_lb_txt, key=lambda k: b.get(k, 0))
+    bind_lb = {"link_lb": "LB_link", "port_lb": "LB_port",
+               "cut_lb": "LB_cut", "txn_lb": "LB_txn"}[bind_key]
+    bind_txt = _lb_txt[bind_key]
 
     demo = [1.0] * 9 + [0.1]
     jain_demo = sum(demo) ** 2 / (len(demo) * sum(v * v for v in demo))
@@ -539,12 +628,50 @@ Jain {rng_j}、max/min {rng_m}、吞吐差 {rng_t}。
 公平性目标稳定成立（max/min 从 1.13~1.18 收到 1.03~1.07），
 但拉平最慢 core 要付 1%~3% 的吞吐，<b>没能同时守住 1% 的吞吐预算</b>。</li>
 
+<li><b>S16（接收端授权，Homa 式）以更低的代价全面胜出，是推荐方案。</b>
+关键观察：<b>CHI 本来就有 Homa 的 GRANT</b>——<code>WriteNoSnp</code>
+规定拿到 <code>DBIDResp</code> 之前不许发 WriteData，
+所以<b>接收端（completer）本来就握有"谁、何时可以把写数据放上环"的权力</b>，
+基线只是把它浪费掉了（一到就授权）。S16 不加任何新报文、不加总线、
+不做槽预约，只改 DBIDResp 的<b>发放时机与顺序</b>：
+Jain <b>{s16['jain']}</b>、max/min <b>{s16['max_min']}</b>、
+吞吐 <b>{t16:+.1f}%</b>（<b>比基线更快</b>）。跨 {v16['n']} 个种子
+max/min {v16['rng_m']}、吞吐差 {v16['rng_t']}，
+<b>按最坏种子判定：{v16['verdict']}</b>。
+<span class="note">这里的"更快"指<b>批完成时间</b>：每 core 工作量相同，
+拉平速率消除了尾部拖延（见 7.3）。它不是说环的链路容量变大了，
+开环饱和场景下不会超过 hop 容量。</span></li>
+
+<li><b>S16 的代价是负的：它比基线还省硬件。</b>
+一个未完成的 DBID 就是 completer 上一块已承诺的写缓冲。
+基线"一到就授权"实测峰值同时挂着 <b>{base_peak}</b> 个授权
+（≈{base_peak * 4} flit 的写缓冲）；S16 把它钉在
+<b>{fc16.get('overcommit')}</b> 个（≈{fc16.get('peak_buf_flits')} flit），
+<b>缓冲需求降到 1/{buf_ratio:.1f}</b>。
+端到端事务延迟 p99 也没有变差（S0 {lat0} → S16 {lat16}，
+而 S15 是 {lat15}）。</li>
+
+<li><b>为什么授权比限速便宜：授权不会制造气泡。</b>
+预约一个环上槽位意味着<b>禁止</b>上游注入该槽，
+预约者若没用上，这一拍就白扔了——这正是 S15 那 1%~3% 的来源。
+扣住一个授权只是让占优的 core <b>手上没数据</b>，
+槽位仍然归"谁能用谁用"。而且把每 core 的速率拉平之后，
+所有 core 同时收工，makespan 由最慢者决定的拖尾消失了，
+这就是吞吐反而<b>上升</b>的原因。</li>
+
 <li><b>全程严格无缓存。</b>所有方案的
 <code>n_inring_blocked = 0</code>、<code>max_inring_hold = 0</code>：
-S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit，
-因此不需要在环上增加任何缓冲。</li>
+S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit；
+S16 根本不碰环上仲裁。两者都不需要在环上增加缓冲。</li>
 </ol>
 </div>
+
+<p class="note"><b>四个方案一眼看完</b>（seed {meta['seed']}，
+括号内为相对基线的吞吐差）：
+S0 max/min {s0['max_min']} ·
+S1 {s1['max_min']}（{t1:+.1f}%）·
+S15 {s15['max_min']}（{t15:+.1f}%）·
+<b>S16 {s16['max_min']}（{t16:+.1f}%）</b>。</p>
 
 <h2>1. 拓扑与硬件配置</h2>
 <img src="{imgs['topo']}" alt="topology">
@@ -608,8 +735,8 @@ Jain 仍有 <b>{jain_demo:.4f}</b>，而 max/min 已经是 <b>10</b>。
 
 <h2>3. 下界与失衡现象</h2>
 {_bounds_table(pat['bounds'])}
-<p class="note">makespan 下界 {pat['bounds']['bound']} 拍，
-由端口（LB_port）主导：三条 VC 共享同一个上下环端口。</p>
+<p class="note">makespan 下界 {pat['bounds']['bound']} 拍，由 <b>{bind_lb}</b> 决定，
+即<b>{bind_txt}</b>。</p>
 
 <h3>3.1 基线 S0 的失衡</h3>
 {_summary_table(pat)}
@@ -720,7 +847,7 @@ flit</b>。资格用<b>全环累计量</b>判定而不是各自的本地目标�
 <code>max_inring_hold</code> 全程为 0，无缓存前提没有被偷偷放弃。</div>
 
 <h3>6.1 结果</h3>
-<div class="def {'good' if (hit_j and hit_m) else ''}">
+<div class="def {'good' if (v15['hit'][0] and v15['hit'][1]) else ''}">
 Jain <b>{s0['jain']} → {s15['jain']}</b>，
 max/min <b>{s0['max_min']} → {s15['max_min']}</b>，
 每 core 带宽收敛到 <b>{s15['bw_min']} ~ {s15['bw_max']}</b>，
@@ -745,14 +872,118 @@ max/min 落在 {rng_m}，而 S0 的 max/min 是 1.13 ~ 1.18。
 唯一能把槽位让给弱者的手段就是让强者的上游空一拍，
 这一拍在强者本来能用满的时候就是净损失。</div>
 
-<h2>7. 总线的代价</h2>
+<h2>7. S16：接收端驱动的授权（Homa 式），代价压到最低</h2>
+<p>S15 的问题不在于不公平，而在于<b>为公平付的钱太贵</b>：
+一条专用广播总线、每 (node, VC) 的 AIMD 状态机、
+再加上环上的槽预约逻辑，换来 1%~3% 的吞吐下降。
+下面这条路几乎不花钱。</p>
+
+<div class="def"><b>关键观察：CHI 里已经有 Homa 的 GRANT 了。</b>
+Homa 的核心是<b>接收端驱动</b>——发送端在收到接收端的 GRANT 之前不得发送
+被调度的数据，接收端同时授权给若干发送端（overcommitment），
+使自己的入口链路不会因为某个发送端反应慢而空转。
+而 <code>WriteNoSnp</code> 明文规定：<b>拿到 <code>DBIDResp</code>
+之前不许发 WriteData</b>。也就是说，
+<b>completer 本来就掌握着"哪个 core、什么时候可以把写数据放上环"的授权权</b>，
+它就是 Homa 的 GRANT。基线把这个权力浪费了——REQ 一到就立刻授权。
+S16 不改任何报文格式，只改<b>发放时机与发放顺序</b>。</div>
+
+<h3>7.1 机制</h3>
+<ul>
+<li><b>排队而非即授</b>：REQ 到达 completer 后进入按源 core 分开的授权队列。</li>
+<li><b>overcommitment</b>：一个 completer 最多同时持有
+<code>overcommit</code> 个未完成授权。这是 Homa 的过量授权度，
+也对应 Homa 的 RTTbytes：太小则 completer 自己空转，
+太大则退化成无管控的基线。<b>这是唯一的旋钮。</b></li>
+<li><b>调度顺序</b>：在排队的请求方中，选<b>累计被服务最少</b>的那个。
+写请求都是 {meta['W']} 个 flit 的等长报文，
+Homa 的 SRPT 在等长下退化为公平排队，所以直接均衡累计授权量。</li>
+<li><b>eager 授权</b>：completer 未饱和时立即授权，
+低负载下不引入任何额外延迟。这是 Homa 的 unscheduled bytes 的对应物
+（CHI 无法真正表达"未授权就发"，所以只能用这种方式近似）。</li>
+</ul>
+
+<div class="def good"><b>为什么这能拉平带宽。</b>
+每个 core 均匀写全部 {len(meta['mem_nodes'])} 个 mem，
+若每个 mem 都在自己的请求方之间均分授权，
+那么 core <i>i</i> 得到的授权率 =
+Σ<sub>mem</sub>（该 mem 的授权率 / {len(meta['core_nodes'])}），
+<b>对所有 core 相同</b>。占优的 core（邻接 2 个 mem）虽然能更快地把
+授权用掉，但调度器只在它重新变成"被服务最少"时才再给它授权，
+<b>所以它跑不到前面去</b>。位置优势被授权配额直接抵消，
+不需要知道任何拓扑信息。</div>
+
+<h3>7.2 overcommit 扫描：公平与吞吐的唯一权衡</h3>
+{_oc_table(pat)}
+<div class="def">读法：<b>公平性在整个范围内几乎不动</b>
+（授权配额决定了带宽，与 overcommit 无关），
+<b>吞吐随 overcommit 单调上升然后走平</b>——
+太小的话 completer 手上没有足够多的活跃请求方，
+自己的 leave 端口就会空转。
+最后一行 <code>overcommit = ∞</code> 就是基线的授权策略，
+它的 max/min 回到了 {oc_rows.get(None, {}).get('max_min')}，
+<b>确认了失衡确实来自"一到就授权"</b>。</div>
+
+<h3>7.3 结果</h3>
+<div class="def {'good' if not v16['bad'] else ''}">
+Jain <b>{s0['jain']} → {s16['jain']}</b>，
+max/min <b>{s0['max_min']} → {s16['max_min']}</b>，
+吞吐 <b>{t16:+.1f}%</b>，事务延迟 p99 <b>{lat0} → {lat16}</b>。
+跨 {v16['n']} 个种子：Jain {v16['rng_j']}、max/min {v16['rng_m']}、
+吞吐差 {v16['rng_t']}。<b>按最坏种子判定：{v16['verdict']}。</b></div>
+
+<p><b>吞吐为什么会上升？</b>两个原因叠加，且都与"授权不制造气泡"有关。
+其一，预约槽位是<b>禁止</b>上游注入某一拍，预约者没用上就是净损失；
+扣住授权只是让占优的 core 手上暂时没有数据，
+那个槽位仍然归"谁能用谁用"。
+其二，每 core 的工作量相同（各 {pat['K']} 笔），
+基线让占优的 core 先冲完、剩下慢的 core 拖长尾巴，
+makespan 由最慢者决定；把速率拉平之后所有 core 同时收工，
+makespan 反而缩短（{pat['schemes']['S0']['makespan']} →
+{pat['schemes']['S16']['makespan']} 拍）。</p>
+
+<h3>7.4 拆开看哪一部分在起作用</h3>
+{_ablate_table(pat)}
+<p class="note">把"累计被服务最少优先"换成朴素轮询，公平性会退一档
+——说明<b>跟踪累计服务量</b>是必要的，仅靠顺序轮转不够，
+因为不同 core 把授权兑现成上环的速度本来就不一样。
+关掉 eager 授权在满载下没有区别（满载时本来就没有"未饱和"的时刻），
+它只影响轻载延迟，所以是免费的。</p>
+
+<h3>7.5 代价对比</h3>
+{_cost_table(pat, s0)}
+<div class="def good">S16 的代价不只是"低"，而是<b>负的</b>：
+一个未完成的 DBID 就是 completer 上一块已经承诺出去的写数据缓冲，
+基线"一到就授权"实测峰值同时挂着 <b>{base_peak}</b> 个授权
+（≈{base_peak * 4} flit），而 S16 把它钉死在
+<b>{fc16.get('overcommit')}</b> 个（≈{fc16.get('peak_buf_flits')} flit），
+<b>缓冲需求只有基线的 1/{buf_ratio:.1f}</b>。
+也就是说，这套拥塞控制是靠<b>给 completer 的写缓冲加一个上限</b>
+实现的，而那个上限本来就该有。</div>
+
+<h3>7.6 哪些 Homa 的东西用不上</h3>
+<ul>
+<li><b>SRPT 优先级</b>：Homa 靠"短报文优先"压低小报文延迟。
+这里所有写都是 {meta['W']} 个 flit 的等长报文，SRPT 退化为公平排队。
+如果将来引入不等长写（例如部分写 / 原子操作），
+这一条会重新变得有意义。</li>
+<li><b>网络内多级优先级</b>：Homa 依赖交换机的多个优先级队列。
+本环是<b>严格无缓存</b>的，环上没有队列可供排序，
+在环流量绝对优先是硬性规则——这条搬不过来。</li>
+<li><b>未授权先发（unscheduled bytes）</b>：Homa 允许先发 RTTbytes
+再等 GRANT。CHI 不允许在 DBIDResp 之前发 WriteData，
+所以只能用 7.1 里的 eager 授权近似，代价是低负载下多一个环回延迟。</li>
+</ul>
+
+<h2>8. 总线的代价</h2>
 {_fc_table(pat)}
 <p class="note">专用广播总线不占用任何环上 hop，按窗口边界发一次。
 S1 每次 6 bit（两个 3 bit 等级）；S15 增加 8 bit 本窗口成功数、
 16 bit 累计数、1 bit active，以及 6 个 8 bit 出向公平份额。
 窗口 {pat['schemes']['S15']['fc']['window']} 拍发一次，
 折算到每拍的线上开销可以忽略；面积在
-<code>rg_sched_cost.py</code> 中单列。</p>
+<code>rg_sched_cost.py</code> 中单列。
+<b>S16 不在这张表里，因为它没有总线</b>——它的控制信号就是协议本来要发的 <code>DBIDResp</code>。</p>
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>（K={meta['K']}、

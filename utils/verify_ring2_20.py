@@ -826,6 +826,71 @@ def test_s15_fixes_study_workload() -> None:
         (s0["throughput"], s15["throughput"])
 
 
+def _run_s16(*, k: int = 600, cfg: dict | None = None):
+    from dse_ring2_write_fair import CORE_NODES, FABRIC, MEM_NODES
+    from rg_ring2_grant import Ring2GrantParams, Ring2GrantSim
+    topo = _write_topo()
+    txns = build_uniform_write(k=k, m_wdata=4, seed=0, mem=MEM_NODES,
+                               core_set=CORE_NODES)
+    sim = Ring2GrantSim(topo, Ring2GrantParams(**FABRIC, **(cfg or {})),
+                        seed=0)
+    sim.offer_batch(txns)
+    while sim.t < 400_000 and not sim.done():
+        sim.step()
+    return topo, txns, sim
+
+
+def test_s16_unbounded_equals_baseline() -> None:
+    """Granting on arrival is the baseline policy, bit for bit.
+
+    This is what proves the completer hook did not perturb the datapath:
+    with an unbounded grant budget S16 must reproduce S0 exactly.
+    """
+    _, _, a = _run_write(k=300, pattern="study")
+    _, _, b = _run_s16(k=300, cfg={"overcommit": 10 ** 9})
+    sa, sb = a.summary(), b.summary()
+    for key in ("makespan", "n_delivered_flits", "n_board_fail",
+                "n_deflections", "n_txn_done"):
+        assert sa[key] == sb[key], f"{key}: S0 {sa[key]} vs S16-inf {sb[key]}"
+    assert sa["wr_inject_by_core"].keys() == sb["wr_inject_by_core"].keys()
+    for c, ts in sa["wr_inject_by_core"].items():
+        assert ts == sb["wr_inject_by_core"][c], f"core {c} diverged"
+
+
+def test_s16_respects_grant_budget() -> None:
+    """No completer may ever exceed its overcommit, and none may deadlock."""
+    for oc in (1, 4, 32):
+        _, txns, sim = _run_s16(k=200, cfg={"overcommit": oc})
+        s = sim.summary()
+        assert s["completed"], f"oc={oc} did not drain: {s['n_txn_done']}"
+        assert sim.peak_outstanding <= oc, \
+            f"oc={oc} peaked at {sim.peak_outstanding} grants"
+        assert all(v == 0 for v in sim.outstanding.values()), \
+            "grants left outstanding at drain"
+        assert sum(sim.n_queued.values()) == 0, "REQs left ungranted"
+        n, W = len(txns), txns[0].m_wdata
+        assert s["n_delivered_dbid"] == n, s["n_delivered_dbid"]
+        assert s["n_delivered_wdata"] == n * W, s["n_delivered_wdata"]
+
+
+def test_s16_is_bufferless_and_fair() -> None:
+    """The payoff: fairer than S0 and no slower, without touching the ring."""
+    _, _, a = _run_write(k=600, pattern="study")
+    _, _, b = _run_s16(k=600)
+    fa = fairness_stats(a.summary()["wr_inject_by_core"],
+                        a.summary()["makespan"], 600 * 4)
+    fb = fairness_stats(b.summary()["wr_inject_by_core"],
+                        b.summary()["makespan"], 600 * 4)
+    sb = b.summary()
+    assert sb["n_inring_blocked"] == 0 and sb["max_inring_hold"] == 0, \
+        "S16 must not buffer or stall in-ring flits"
+    assert fb["jain"] >= 0.98, fb["jain"]
+    assert fb["max_min"] < fa["max_min"], (fa["max_min"], fb["max_min"])
+    assert fb["bw_min"] > fa["bw_min"], (fa["bw_min"], fb["bw_min"])
+    assert fb["throughput"] >= fa["throughput"] * 0.99, \
+        (fa["throughput"], fb["throughput"])
+
+
 def main() -> None:
     c = Checks()
     c.add("topo_roles_and_wrap", test_topo)
@@ -867,6 +932,9 @@ def main() -> None:
     c.add("study_topology_roles", test_study_topology_roles)
     c.add("study_baseline_unfair", test_study_baseline_is_position_unfair)
     c.add("s15_fixes_study_workload", test_s15_fixes_study_workload)
+    c.add("s16_unbounded_equals_s0", test_s16_unbounded_equals_baseline)
+    c.add("s16_respects_grant_budget", test_s16_respects_grant_budget)
+    c.add("s16_bufferless_and_fair", test_s16_is_bufferless_and_fair)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

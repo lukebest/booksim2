@@ -654,14 +654,27 @@ class Ring2BaseSim:
         """Flit has entered the eject queue; occupancy already charged."""
         return
 
+    def _on_req_at_completer(self, txn: Txn) -> None:
+        """Completer decides when to grant the write buffer.
+
+        CHI already puts this decision at the receiver: WriteData may not be
+        sent until the completer returns DBIDResp. The baseline grants on
+        arrival; a receiver-driven scheme overrides this to pace the grant.
+        """
+        self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
+                         self.t + self.p.t_ha_service)
+
+    def _on_write_data_complete(self, txn: Txn) -> None:
+        """Last WriteData of `txn` has landed; its grant is now retired."""
+        return
+
     def _on_pe_drain_write(self, txn: Txn, f: Flit) -> None:
         """Advance the WriteNoSnp handshake one phase."""
         key = f"n_delivered_{f.kind}"
         self.st[key] = self.st.get(key, 0) + 1
         self._ensure_stash()
         if f.kind == "req":
-            self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                             self.t + self.p.t_ha_service)
+            self._on_req_at_completer(txn)
         elif f.kind == "dbid":
             self._emit_write(txn, "wdata", txn.core, txn.ha, txn.m_wdata,
                              self.t)
@@ -672,6 +685,7 @@ class Ring2BaseSim:
             if left == 0:
                 self._emit_write(txn, "comp", txn.ha, txn.core, 1,
                                  self.t + self.p.t_ha_service)
+                self._on_write_data_complete(txn)
         else:                                   # Comp: the txn retires
             self.st["n_txn_done"] += 1
             self.txn_done.append((f.txn_id, self.t))

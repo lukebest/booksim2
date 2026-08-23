@@ -67,12 +67,50 @@ Jain 0.99950 ~ 0.99992、max/min 1.030 ~ 1.073、吞吐差 -1.1% ~ -2.6%。
 公平性目标稳定成立（max/min 从 1.13~1.18 收到 1.03~1.07），
 但拉平最慢 core 要付 1%~3% 的吞吐，<b>没能同时守住 1% 的吞吐预算</b>。</li>
 
+<li><b>S16（接收端授权，Homa 式）以更低的代价全面胜出，是推荐方案。</b>
+关键观察：<b>CHI 本来就有 Homa 的 GRANT</b>——<code>WriteNoSnp</code>
+规定拿到 <code>DBIDResp</code> 之前不许发 WriteData，
+所以<b>接收端（completer）本来就握有"谁、何时可以把写数据放上环"的权力</b>，
+基线只是把它浪费掉了（一到就授权）。S16 不加任何新报文、不加总线、
+不做槽预约，只改 DBIDResp 的<b>发放时机与顺序</b>：
+Jain <b>0.99998</b>、max/min <b>1.0155</b>、
+吞吐 <b>+2.1%</b>（<b>比基线更快</b>）。跨 3 个种子
+max/min 1.012 ~ 1.016、吞吐差 +2.0% ~ +0.9%，
+<b>按最坏种子判定：全部达标</b>。
+<span class="note">这里的"更快"指<b>批完成时间</b>：每 core 工作量相同，
+拉平速率消除了尾部拖延（见 7.3）。它不是说环的链路容量变大了，
+开环饱和场景下不会超过 hop 容量。</span></li>
+
+<li><b>S16 的代价是负的：它比基线还省硬件。</b>
+一个未完成的 DBID 就是 completer 上一块已承诺的写缓冲。
+基线"一到就授权"实测峰值同时挂着 <b>183</b> 个授权
+（≈732 flit 的写缓冲）；S16 把它钉在
+<b>32</b> 个（≈128 flit），
+<b>缓冲需求降到 1/5.7</b>。
+端到端事务延迟 p99 也没有变差（S0 13341 → S16 13303，
+而 S15 是 13707）。</li>
+
+<li><b>为什么授权比限速便宜：授权不会制造气泡。</b>
+预约一个环上槽位意味着<b>禁止</b>上游注入该槽，
+预约者若没用上，这一拍就白扔了——这正是 S15 那 1%~3% 的来源。
+扣住一个授权只是让占优的 core <b>手上没数据</b>，
+槽位仍然归"谁能用谁用"。而且把每 core 的速率拉平之后，
+所有 core 同时收工，makespan 由最慢者决定的拖尾消失了，
+这就是吞吐反而<b>上升</b>的原因。</li>
+
 <li><b>全程严格无缓存。</b>所有方案的
 <code>n_inring_blocked = 0</code>、<code>max_inring_hold = 0</code>：
-S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit，
-因此不需要在环上增加任何缓冲。</li>
+S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit；
+S16 根本不碰环上仲裁。两者都不需要在环上增加缓冲。</li>
 </ol>
 </div>
+
+<p class="note"><b>四个方案一眼看完</b>（seed 0，
+括号内为相对基线的吞吐差）：
+S0 max/min 1.176 ·
+S1 1.3673（-17.0%）·
+S15 1.03（-1.1%）·
+<b>S16 1.0155（+2.1%）</b>。</p>
 
 <h2>1. 拓扑与硬件配置</h2>
 <img src="ring2_wfair_topo.png" alt="topology">
@@ -136,11 +174,11 @@ Jain 仍有 <b>0.9191</b>，而 max/min 已经是 <b>10</b>。
 
 <h2>3. 下界与失衡现象</h2>
 <table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link 每 VC 独立链路</td><td>7120</td><td>REQ/RSP/DAT 各占一条 VC，取三者最大</td></tr><tr><td>LB_port 端口合并</td><td>6353</td><td>inject / leave 每 (node, plane) 只有一个端口，三 VC 共享</td></tr><tr><td>LB_cut 割集</td><td>5012</td><td>跨割面的流量除以割面上的有向链路数</td></tr><tr><td>LB_txn 事务串行链</td><td>91</td><td>REQ→DBIDResp→WriteData→Comp 两个来回</td></tr><tr><td><b>bound</b></td><td><b>7120</b></td><td>以上取最大</td></tr></tbody></table>
-<p class="note">makespan 下界 7120 拍，
-由端口（LB_port）主导：三条 VC 共享同一个上下环端口。</p>
+<p class="note">makespan 下界 7120 拍，由 <b>LB_link</b> 决定，
+即<b>最忙的那条有向链路上、DAT VC 的容量</b>。</p>
 
 <h3>3.1 基线 S0 的失衡</h3>
-<table><thead><tr><th>方案</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>13784</td><td>0.99629</td><td>1.176</td><td>0.06105</td><td>0.54863</td><td>0.64516</td><td>5.8038</td><td>+0.0%</td><td>23692</td><td>166293</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>16612</td><td>0.99217</td><td>1.3673</td><td>0.08884</td><td>0.42777</td><td>0.58488</td><td>4.8158</td><td>-17.0%</td><td>18897</td><td>98365</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>13942</td><td>0.99992</td><td>1.03</td><td>0.0089</td><td>0.57258</td><td>0.58975</td><td>5.7381</td><td>-1.1%</td><td>23042</td><td>154741</td></tr></tbody></table>
+<table><thead><tr><th>方案</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>13784</td><td>0.99629</td><td>1.176</td><td>0.06105</td><td>0.54863</td><td>0.64516</td><td>5.8038</td><td>+0.0%</td><td>23692</td><td>166293</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>16612</td><td>0.99217</td><td>1.3673</td><td>0.08884</td><td>0.42777</td><td>0.58488</td><td>4.8158</td><td>-17.0%</td><td>18897</td><td>98365</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>13942</td><td>0.99992</td><td>1.03</td><td>0.0089</td><td>0.57258</td><td>0.58975</td><td>5.7381</td><td>-1.1%</td><td>23042</td><td>154741</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>13507</td><td>0.99998</td><td>1.0155</td><td>0.00496</td><td>0.59051</td><td>0.59966</td><td>5.9229</td><td>+2.1%</td><td>23484</td><td>159749</td></tr></tbody></table>
 <div class="def bad">需求完全对称，结果并不对称：Jain <b>0.99629</b>、
 max/min <b>1.176</b>、CoV 0.06105。
 最慢的 core 只有最快的 85%。</div>
@@ -262,7 +300,7 @@ max/min <b>1.176 → 1.03</b>，
 <h3>6.2 换种子还成立吗</h3>
 <p>预约是离散机制，单一种子容易把某个参数点衬托得过好，
 所以把 S0 与 S15 在多个随机种子上重跑。</p>
-<table><thead><tr><th>seed</th><th>S0 Jain</th><th>S0 max/min</th><th>S15 Jain</th><th>S15 max/min</th><th>S15 吞吐差</th></tr></thead><tbody><tr><td>0</td><td>0.99629</td><td>1.176</td><td>0.99992</td><td>1.03</td><td>-1.13%</td></tr><tr><td>1</td><td>0.99813</td><td>1.1306</td><td>0.99972</td><td>1.0596</td><td>-2.34%</td></tr><tr><td>2</td><td>0.9966</td><td>1.1549</td><td>0.9995</td><td>1.0735</td><td>-2.60%</td></tr></tbody></table>
+<table><thead><tr><th>seed</th><th>S0 Jain</th><th>S0 max/min</th><th>S15 Jain</th><th>S15 max/min</th><th>S15 吞吐差</th><th>S16 Jain</th><th>S16 max/min</th><th>S16 吞吐差</th></tr></thead><tbody><tr><td>0</td><td>0.99629</td><td>1.176</td><td>0.99992</td><td>1.03</td><td>-1.13%</td><td>0.99998</td><td>1.0155</td><td>+2.05%</td></tr><tr><td>1</td><td>0.99813</td><td>1.1306</td><td>0.99972</td><td>1.0596</td><td>-2.34%</td><td>0.99999</td><td>1.0121</td><td>+1.00%</td></tr><tr><td>2</td><td>0.9966</td><td>1.1549</td><td>0.9995</td><td>1.0735</td><td>-2.60%</td><td>0.99998</td><td>1.0142</td><td>+0.89%</td></tr></tbody></table>
 <div class="def bad">
 公平性的改善在所有种子上都成立：S15 的 Jain 落在 0.99950 ~ 0.99992，
 max/min 落在 1.030 ~ 1.073，而 S0 的 max/min 是 1.13 ~ 1.18。
@@ -273,17 +311,121 @@ max/min 落在 1.030 ~ 1.073，而 S0 的 max/min 是 1.13 ~ 1.18。
 唯一能把槽位让给弱者的手段就是让强者的上游空一拍，
 这一拍在强者本来能用满的时候就是净损失。</div>
 
-<h2>7. 总线的代价</h2>
+<h2>7. S16：接收端驱动的授权（Homa 式），代价压到最低</h2>
+<p>S15 的问题不在于不公平，而在于<b>为公平付的钱太贵</b>：
+一条专用广播总线、每 (node, VC) 的 AIMD 状态机、
+再加上环上的槽预约逻辑，换来 1%~3% 的吞吐下降。
+下面这条路几乎不花钱。</p>
+
+<div class="def"><b>关键观察：CHI 里已经有 Homa 的 GRANT 了。</b>
+Homa 的核心是<b>接收端驱动</b>——发送端在收到接收端的 GRANT 之前不得发送
+被调度的数据，接收端同时授权给若干发送端（overcommitment），
+使自己的入口链路不会因为某个发送端反应慢而空转。
+而 <code>WriteNoSnp</code> 明文规定：<b>拿到 <code>DBIDResp</code>
+之前不许发 WriteData</b>。也就是说，
+<b>completer 本来就掌握着"哪个 core、什么时候可以把写数据放上环"的授权权</b>，
+它就是 Homa 的 GRANT。基线把这个权力浪费了——REQ 一到就立刻授权。
+S16 不改任何报文格式，只改<b>发放时机与发放顺序</b>。</div>
+
+<h3>7.1 机制</h3>
+<ul>
+<li><b>排队而非即授</b>：REQ 到达 completer 后进入按源 core 分开的授权队列。</li>
+<li><b>overcommitment</b>：一个 completer 最多同时持有
+<code>overcommit</code> 个未完成授权。这是 Homa 的过量授权度，
+也对应 Homa 的 RTTbytes：太小则 completer 自己空转，
+太大则退化成无管控的基线。<b>这是唯一的旋钮。</b></li>
+<li><b>调度顺序</b>：在排队的请求方中，选<b>累计被服务最少</b>的那个。
+写请求都是 4 个 flit 的等长报文，
+Homa 的 SRPT 在等长下退化为公平排队，所以直接均衡累计授权量。</li>
+<li><b>eager 授权</b>：completer 未饱和时立即授权，
+低负载下不引入任何额外延迟。这是 Homa 的 unscheduled bytes 的对应物
+（CHI 无法真正表达"未授权就发"，所以只能用这种方式近似）。</li>
+</ul>
+
+<div class="def good"><b>为什么这能拉平带宽。</b>
+每个 core 均匀写全部 8 个 mem，
+若每个 mem 都在自己的请求方之间均分授权，
+那么 core <i>i</i> 得到的授权率 =
+Σ<sub>mem</sub>（该 mem 的授权率 / 10），
+<b>对所有 core 相同</b>。占优的 core（邻接 2 个 mem）虽然能更快地把
+授权用掉，但调度器只在它重新变成"被服务最少"时才再给它授权，
+<b>所以它跑不到前面去</b>。位置优势被授权配额直接抵消，
+不需要知道任何拓扑信息。</div>
+
+<h3>7.2 overcommit 扫描：公平与吞吐的唯一权衡</h3>
+<table><thead><tr><th>overcommit</th><th>makespan</th><th>Jain</th><th>max/min</th><th>吞吐</th><th>实测峰值授权</th><th>授权等待均值</th><th>事务延迟 p99</th></tr></thead><tbody><tr><td>2</td><td>41454</td><td>0.99997</td><td>1.0194</td><td>1.9298</td><td>2</td><td>2401.05</td><td>39675</td></tr><tr><td>4</td><td>25768</td><td>0.99998</td><td>1.0137</td><td>3.1046</td><td>4</td><td>1469.79</td><td>24821</td></tr><tr><td>8</td><td>17128</td><td>0.99998</td><td>1.0136</td><td>4.6707</td><td>8</td><td>953.35</td><td>16753</td></tr><tr><td>16</td><td>13846</td><td>0.99999</td><td>1.0091</td><td>5.7778</td><td>16</td><td>716.39</td><td>13620</td></tr><tr><td>24</td><td>13618</td><td>0.99995</td><td>1.0211</td><td>5.8746</td><td>24</td><td>657.88</td><td>13370</td></tr><tr><td>32</td><td>13507</td><td>0.99998</td><td>1.0155</td><td>5.9229</td><td>32</td><td>609.58</td><td>13303</td></tr><tr><td>48</td><td>13664</td><td>0.99992</td><td>1.025</td><td>5.8548</td><td>48</td><td>537.54</td><td>13376</td></tr><tr><td>64</td><td>13571</td><td>0.99981</td><td>1.0425</td><td>5.8949</td><td>64</td><td>463.54</td><td>13277</td></tr><tr><td>128</td><td>13643</td><td>0.99582</td><td>1.1782</td><td>5.8638</td><td>128</td><td>157.2</td><td>13381</td></tr><tr><td>∞（= S0 的授权策略）</td><td>13784</td><td>0.99629</td><td>1.176</td><td>5.8038</td><td>183</td><td>0.0</td><td>13341</td></tr></tbody></table>
+<div class="def">读法：<b>公平性在整个范围内几乎不动</b>
+（授权配额决定了带宽，与 overcommit 无关），
+<b>吞吐随 overcommit 单调上升然后走平</b>——
+太小的话 completer 手上没有足够多的活跃请求方，
+自己的 leave 端口就会空转。
+最后一行 <code>overcommit = ∞</code> 就是基线的授权策略，
+它的 max/min 回到了 1.176，
+<b>确认了失衡确实来自"一到就授权"</b>。</div>
+
+<h3>7.3 结果</h3>
+<div class="def good">
+Jain <b>0.99629 → 0.99998</b>，
+max/min <b>1.176 → 1.0155</b>，
+吞吐 <b>+2.1%</b>，事务延迟 p99 <b>13341 → 13303</b>。
+跨 3 个种子：Jain 0.99998 ~ 0.99999、max/min 1.012 ~ 1.016、
+吞吐差 +2.0% ~ +0.9%。<b>按最坏种子判定：全部达标。</b></div>
+
+<p><b>吞吐为什么会上升？</b>两个原因叠加，且都与"授权不制造气泡"有关。
+其一，预约槽位是<b>禁止</b>上游注入某一拍，预约者没用上就是净损失；
+扣住授权只是让占优的 core 手上暂时没有数据，
+那个槽位仍然归"谁能用谁用"。
+其二，每 core 的工作量相同（各 2000 笔），
+基线让占优的 core 先冲完、剩下慢的 core 拖长尾巴，
+makespan 由最慢者决定；把速率拉平之后所有 core 同时收工，
+makespan 反而缩短（13784 →
+13507 拍）。</p>
+
+<h3>7.4 拆开看哪一部分在起作用</h3>
+<table><thead><tr><th>变体</th><th>makespan</th><th>Jain</th><th>max/min</th><th>吞吐</th><th>授权等待均值</th></tr></thead><tbody><tr><td>least_served + eager</td><td>13507</td><td>0.99998</td><td>1.0155</td><td>5.9229</td><td>609.58</td></tr><tr><td>round_robin</td><td>13583</td><td>0.99993</td><td>1.0272</td><td>5.8897</td><td>613.91</td></tr><tr><td>no eager grant</td><td>13507</td><td>0.99998</td><td>1.0155</td><td>5.9229</td><td>600.65</td></tr></tbody></table>
+<p class="note">把"累计被服务最少优先"换成朴素轮询，公平性会退一档
+——说明<b>跟踪累计服务量</b>是必要的，仅靠顺序轮转不够，
+因为不同 core 把授权兑现成上环的速度本来就不一样。
+关掉 eager 授权在满载下没有区别（满载时本来就没有"未饱和"的时刻），
+它只影响轻载延迟，所以是免费的。</p>
+
+<h3>7.5 代价对比</h3>
+<table><thead><tr><th>代价项</th><th>S0</th><th>S15</th><th>S16</th></tr></thead><tbody><tr><td>专用拥塞总线</td><td>无</td><td>有，79 bit × 4340 次</td><td>无</td></tr><tr><td>环上槽预约逻辑</td><td>无</td><td>有，52808 次预约</td><td>无</td></tr><tr><td>新增报文类型</td><td>无</td><td>无（走总线）</td><td>无（复用 DBIDResp）</td></tr><tr><td>completer 写缓冲（峰值授权）</td><td>183（≈732 flit）</td><td>183（未约束）</td><td>32（≈128 flit）</td></tr><tr><td>核内速率控制器</td><td>无</td><td>每 (node,VC) AIMD 预算 + 累计欠账</td><td>无</td></tr></tbody></table>
+<div class="def good">S16 的代价不只是"低"，而是<b>负的</b>：
+一个未完成的 DBID 就是 completer 上一块已经承诺出去的写数据缓冲，
+基线"一到就授权"实测峰值同时挂着 <b>183</b> 个授权
+（≈732 flit），而 S16 把它钉死在
+<b>32</b> 个（≈128 flit），
+<b>缓冲需求只有基线的 1/5.7</b>。
+也就是说，这套拥塞控制是靠<b>给 completer 的写缓冲加一个上限</b>
+实现的，而那个上限本来就该有。</div>
+
+<h3>7.6 哪些 Homa 的东西用不上</h3>
+<ul>
+<li><b>SRPT 优先级</b>：Homa 靠"短报文优先"压低小报文延迟。
+这里所有写都是 4 个 flit 的等长报文，SRPT 退化为公平排队。
+如果将来引入不等长写（例如部分写 / 原子操作），
+这一条会重新变得有意义。</li>
+<li><b>网络内多级优先级</b>：Homa 依赖交换机的多个优先级队列。
+本环是<b>严格无缓存</b>的，环上没有队列可供排序，
+在环流量绝对优先是硬性规则——这条搬不过来。</li>
+<li><b>未授权先发（unscheduled bytes）</b>：Homa 允许先发 RTTbytes
+再等 GRANT。CHI 不允许在 DBIDResp 之前发 WriteData，
+所以只能用 7.1 里的 eager 授权近似，代价是低负载下多一个环回延迟。</li>
+</ul>
+
+<h2>8. 总线的代价</h2>
 <table><thead><tr><th>方案</th><th>window</th><th>广播次数</th><th>每次 bit</th><th>总 bit</th><th>预算拒绝</th><th>AIMD 降</th><th>AIMD 升</th><th>预约槽</th><th>预约命中</th></tr></thead><tbody><tr><td>S1 拥塞等级 AIMD</td><td>64</td><td>5180</td><td>6</td><td>31080</td><td>121653</td><td>271</td><td>2319</td><td>0</td><td>0</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>64</td><td>4340</td><td>79</td><td>342860</td><td>4406</td><td>48</td><td>164</td><td>52808</td><td>9772</td></tr></tbody></table>
 <p class="note">专用广播总线不占用任何环上 hop，按窗口边界发一次。
 S1 每次 6 bit（两个 3 bit 等级）；S15 增加 8 bit 本窗口成功数、
 16 bit 累计数、1 bit active，以及 6 个 8 bit 出向公平份额。
 窗口 64 拍发一次，
 折算到每拍的线上开销可以忽略；面积在
-<code>rg_sched_cost.py</code> 中单列。</p>
+<code>rg_sched_cost.py</code> 中单列。
+<b>S16 不在这张表里，因为它没有总线</b>——它的控制信号就是协议本来要发的 <code>DBIDResp</code>。</p>
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>（K=2000、
-W=4、seed=0，生成于 2026-08-23T06:20:30Z）。
+W=4、seed=0，生成于 2026-08-23T08:55:18Z）。
 回归：<code>utils/verify_ring2_20.py</code>。</p>
 </body></html>

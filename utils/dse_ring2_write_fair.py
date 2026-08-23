@@ -265,6 +265,10 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
     cfg = cfg or {}
     if scheme == "S0":
         return Ring2BaseSim(topo, base_params(), seed=seed)
+    if scheme == "S16":
+        from rg_ring2_grant import Ring2GrantParams, Ring2GrantSim
+        return Ring2GrantSim(topo, Ring2GrantParams(**FABRIC, **cfg),
+                             seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
     p = Ring2FcParams(**FABRIC,
                       mode="s1" if scheme == "S1" else "s15", **cfg)
@@ -505,6 +509,63 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         r = run_scheme(scheme, topo, txns, seed=seed)
         runs[scheme] = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
 
+    sweep_oc: list[dict[str, Any]] = []
+    if sweep_s1 and "S16" in schemes:
+        print("  sweeping S16 overcommit ...", flush=True)
+        for oc in (2, 4, 8, 16, 24, 32, 48, 64, 128):
+            r = run_scheme("S16", topo, txns, seed=seed,
+                           cfg={"overcommit": oc}, quiet=True)
+            d = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
+            f = d["fairness"]
+            sweep_oc.append({
+                "overcommit": oc, "makespan": d["makespan"],
+                "jain": f["jain"], "max_min": f["max_min"],
+                "cov": f["cov"], "throughput": f["throughput"],
+                "peak_grants": (d.get("fc") or {}).get("peak_grants"),
+                "grant_delay_mean": (d.get("fc") or {}).get(
+                    "grant_delay_mean"),
+                "lat_p99": d.get("lat_p99"),
+            })
+            print(f"    sweep S16 oc={oc} mk={d['makespan']} "
+                  f"jain={f['jain']} max/min={f['max_min']} "
+                  f"thr={f['throughput']}", flush=True)
+        # Grant-on-arrival is exactly the baseline policy, so it also
+        # measures the completer buffering the baseline silently needs.
+        r = run_scheme("S16", topo, txns, seed=seed,
+                       cfg={"overcommit": 10 ** 9}, quiet=True)
+        d = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
+        sweep_oc.append({
+            "overcommit": None, "makespan": d["makespan"],
+            "jain": d["fairness"]["jain"],
+            "max_min": d["fairness"]["max_min"],
+            "cov": d["fairness"]["cov"],
+            "throughput": d["fairness"]["throughput"],
+            "peak_grants": (d.get("fc") or {}).get("peak_grants"),
+            "grant_delay_mean": (d.get("fc") or {}).get("grant_delay_mean"),
+            "lat_p99": d.get("lat_p99"),
+        })
+        print(f"    sweep S16 oc=inf (=S0 policy) "
+              f"peak_grants={(d.get('fc') or {}).get('peak_grants')}",
+              flush=True)
+
+    ablate: list[dict[str, Any]] = []
+    if sweep_s1 and "S16" in schemes:
+        for tag, cfg in (("least_served + eager", {}),
+                         ("round_robin", {"policy": "round_robin"}),
+                         ("no eager grant", {"eager": False})):
+            r = run_scheme("S16", topo, txns, seed=seed, cfg=cfg, quiet=True)
+            d = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
+            f = d["fairness"]
+            ablate.append({
+                "variant": tag, "makespan": d["makespan"],
+                "jain": f["jain"], "max_min": f["max_min"],
+                "throughput": f["throughput"],
+                "grant_delay_mean": (d.get("fc") or {}).get(
+                    "grant_delay_mean"),
+            })
+            print(f"    ablate S16 {tag}: jain={f['jain']} "
+                  f"max/min={f['max_min']} thr={f['throughput']}", flush=True)
+
     sweep: list[dict[str, Any]] = []
     if sweep_s1:
         for window in (64, 128):
@@ -529,7 +590,7 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
     if seeds:
         print("  seed robustness ...", flush=True)
         seeds_out = seed_sweep(pattern, topo, k=k, W=W, seeds=seeds,
-                               schemes=[s for s in ("S0", "S15")
+                               schemes=[s for s in ("S0", "S15", "S16")
                                         if s in schemes])
 
     out: dict[str, Any] = {
@@ -538,6 +599,7 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         "mem": sorted({t.ha for t in txns}),
         "core_set": sorted({t.core for t in txns}),
         "bounds": bounds, "schemes": runs, "sweep": sweep,
+        "sweep_oc": sweep_oc, "ablate": ablate,
         "seed_sweep": seeds_out,
     }
     if "S0" in runs:
@@ -569,7 +631,7 @@ def main() -> None:
     ap.add_argument("--W", type=int, default=W_FLITS)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--quick", action="store_true", help="K=200 smoke run")
-    ap.add_argument("--schemes", default="S0,S1,S15")
+    ap.add_argument("--schemes", default="S0,S1,S15,S16")
     ap.add_argument("--patterns", default="uniform")
     ap.add_argument("--seeds", default="",
                     help="extra seeds for the S0/S15 robustness sweep")
