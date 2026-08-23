@@ -239,7 +239,7 @@ def plot_overlay(traces: dict[str, dict], path: Path, *, bin_w: int,
 
 def plot_directed_link_bw(traces: dict[str, dict], path: Path, *,
                           bin_w: int, title: str, cap: int = 80) -> None:
-    """Sum of directed-hop launches / cycle (σ=1 → cap = 80)."""
+    """Sum of directed-hop launches / cycle (REQ+DAT VCs, cap = 160)."""
     colors = {"S0": "#2563eb", "S1": "#16a34a", "S2": "#dc2626",
               "S3": "#9333ea", "S4": "#ea580c", "S5": "#0d9488",
               "S6": "#c026d3", "S7": "#7c3aed", "S8": "#ca8a04",
@@ -270,7 +270,7 @@ def plot_directed_link_bw(traces: dict[str, dict], path: Path, *,
                 linestyle=styles[scheme],
                 label=f"{scheme}  mk={tr.get('makespan')}  hops={n_hops}")
     ax.axhline(cap, color="#111827", lw=1.3, ls=":",
-               label=f"directed-hop cap  {cap} flit/cyc")
+               label=f"REQ+DAT hop cap  {cap} flit/cyc")
     ax.set_xlabel("cycle")
     ax.set_ylabel("directed-hop starts / cycle")
     ax.set_title(title)
@@ -318,7 +318,7 @@ def main() -> None:
         traces, link_bw, bin_w=bin_w,
         title=f"Network directed-hop bandwidth  ·  uniform K={k} R={R}  "
               f"({flits} flits/core, bin={bin_w})",
-        cap=len(topo.directed_links))
+        cap=topo.hop_bw_cap)
 
     slim = {
         "meta": {
@@ -335,6 +335,8 @@ def main() -> None:
             "link_lb": bounds["link_lb"],
             "port_lb": bounds["port_lb"],
             "cut_lb": bounds["cut_lb"],
+            "n_vc": topo.n_vc,
+            "hop_bw_cap": topo.hop_bw_cap,
             "single_txn_lb": bounds["single_txn_lb"],
             "ideal_recv_rate": round(flits / bounds["bound"], 4),
             "aimd": {

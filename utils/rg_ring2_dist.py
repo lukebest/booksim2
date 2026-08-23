@@ -641,7 +641,7 @@ class Ring2DistSim(Ring2BaseSim):
                 return False
         if self._itag_blocks(f, node):
             return False
-        return self._can_board(f.plane, f.dir, f.idx)
+        return self._can_board(f.plane, f.dir, f.idx, f.vc)
 
     def _bump_dir_starve(self, node: int, plane: int, f: Flit) -> None:
         key = (node, plane, f.dir)
@@ -650,7 +650,7 @@ class Ring2DistSim(Ring2BaseSim):
             self.st["max_inj_starve"], self.dir_starve[key])
         if (self.dir_starve[key] >= self.p.t_inj
                 and self._should_raise_itag(node, f)):
-            rk = (f.plane, f.dir)
+            rk = (f.plane, f.dir, f.vc)
             if node not in self.i_tag[rk]:
                 self.i_tag[rk].add(node)
                 self.st["n_itag_raised"] += 1
@@ -786,20 +786,20 @@ class Ring2DistSim(Ring2BaseSim):
                     old = f.plane
                     f.plane = alt
                     if not self._ej_slots_busy(f) and self._can_board(
-                            f.plane, f.dir, f.idx):
+                            f.plane, f.dir, f.idx, f.vc):
                         return True
                     f.plane = old
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "hop_peek", False):
             nxt = (f.idx + f.dir) % self.n
-            if (self.t + self.topo.hop_lat_from(f.idx, f.dir)) in self.arr_set[(f.plane, f.dir, nxt)]:
+            if (self.t + self.topo.hop_lat_from(f.idx, f.dir)) in self.arr_set[(f.plane, f.dir, nxt, f.vc)]:
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "dest_peek", False):
             eta = self._ej_eta(f)
             for d in (1, -1):
-                if eta in self.arr_set[(f.plane, d, f.dst)]:
+                if eta in self.arr_set[(f.plane, d, f.dst, f.vc)]:
                     self.st["n_outst_wait"] += 1
                     return False
         if getattr(self.p, "nbr2", False) and self._nbr2_busy(f):
@@ -821,7 +821,7 @@ class Ring2DistSim(Ring2BaseSim):
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "hop_tab", False) and f.dir is not None:
-            key = (f.plane, f.dir, f.idx)
+            key = (f.plane, f.dir, f.idx, f.vc)
             if self.t in self.hop_at[key] or self.t in self.hop_next[key]:
                 self.st["n_outst_wait"] += 1
                 return False
@@ -837,12 +837,12 @@ class Ring2DistSim(Ring2BaseSim):
                 return False
         cred = getattr(self.p, "hop_cred", 0)
         if cred > 0 and f.dir is not None:
-            if self._live_dir(f.plane, f.dir) >= cred:
+            if self._live_dir(f.plane, f.dir, f.vc) >= cred:
                 self.st["n_outst_wait"] += 1
                 return False
         h0 = getattr(self.p, "hop0_cred", 0)
         if h0 > 0 and f.dir is not None:
-            if self.hop0.get((f.plane, f.dir, f.idx), 0) >= h0:
+            if self.hop0.get((f.plane, f.dir, f.idx, f.vc), 0) >= h0:
                 self.st["n_outst_wait"] += 1
                 return False
         if getattr(self.p, "nbr_adv", False) and f.dir is not None:
@@ -859,7 +859,7 @@ class Ring2DistSim(Ring2BaseSim):
         if getattr(self.p, "late_dir", "") and f.dir is not None:
             kind = getattr(self.p, "late_dir_kind", "both") or "both"
             if kind == "both" or f.kind == kind:
-                busy = not self._can_board(f.plane, f.dir, f.idx)
+                busy = not self._can_board(f.plane, f.dir, f.idx, f.vc)
                 if busy:
                     if self._try_late_dir(node, f):
                         return True
@@ -867,7 +867,7 @@ class Ring2DistSim(Ring2BaseSim):
                     self._try_late_dir(node, f)
         if getattr(self.p, "hop_bounce", False) and not getattr(
                 self.p, "late_plane", "") and f.dir is not None:
-            if not self._can_board(f.plane, f.dir, f.idx):
+            if not self._can_board(f.plane, f.dir, f.idx, f.vc):
                 if self._try_hop_bounce(node, f):
                     return True
         if hop_held:
@@ -879,7 +879,7 @@ class Ring2DistSim(Ring2BaseSim):
     def _plane_inject_ok(self, node: int, f: Flit, pl: int) -> bool:
         old = f.plane
         f.plane = pl
-        hop = self._can_board(pl, f.dir, f.idx)
+        hop = self._can_board(pl, f.dir, f.idx, f.vc)
         dest = True
         if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
             dest = not self._ej_slots_busy(f)
@@ -889,9 +889,9 @@ class Ring2DistSim(Ring2BaseSim):
                         or getattr(self.p, "hop_yield_free", False))
                        and self._hop_yield_older(node, f))
         cred = getattr(self.p, "hop_cred", 0)
-        cred_full = cred > 0 and self._live_dir(pl, f.dir) >= cred
+        cred_full = cred > 0 and self._live_dir(pl, f.dir, f.vc) >= cred
         h0 = getattr(self.p, "hop0_cred", 0)
-        h0_full = h0 > 0 and self.hop0.get((pl, f.dir, f.idx), 0) >= h0
+        h0_full = h0 > 0 and self.hop0.get((pl, f.dir, f.idx, f.vc), 0) >= h0
         old_dest = (getattr(self.p, "dest_old", "") == "bind"
                     and self._dest_old_applies(f) and self._dest_older_inf(f))
         f.plane = old
@@ -987,11 +987,11 @@ class Ring2DistSim(Ring2BaseSim):
                 f.plane = alt
             return
         if mode == "live":
-            if self._live_plane(alt) < self._live_plane(cur):
+            if self._live_plane(alt, f.vc) < self._live_plane(cur, f.vc):
                 f.plane = alt
             return
         if mode == "livedir":
-            if self._live_dir(alt, f.dir) < self._live_dir(cur, f.dir):
+            if self._live_dir(alt, f.dir, f.vc) < self._live_dir(cur, f.dir, f.vc):
                 f.plane = alt
             return
         if mode == "path":
@@ -1000,13 +1000,13 @@ class Ring2DistSim(Ring2BaseSim):
             return
         if mode == "liveocc":
             # live first, assignment occ as tie-break
-            la, lc = self._live_plane(alt), self._live_plane(cur)
+            la, lc = self._live_plane(alt, f.vc), self._live_plane(cur, f.vc)
             if la < lc or (la == lc and self.occ.get(alt, 0) < self.occ.get(cur, 0)):
                 f.plane = alt
             return
         if mode == "occlive":
             # switch only if assignment occ and live dir agree
-            da, dc = self._live_dir(alt, f.dir), self._live_dir(cur, f.dir)
+            da, dc = self._live_dir(alt, f.dir, f.vc), self._live_dir(cur, f.dir, f.vc)
             oa, oc = self.occ.get(alt, 0), self.occ.get(cur, 0)
             if oa < oc and da <= dc:
                 f.plane = alt
@@ -1016,14 +1016,14 @@ class Ring2DistSim(Ring2BaseSim):
                 f.plane = alt
             return
         if mode == "hop0occ":
-            ha = self.hop0.get((alt, f.dir, f.idx), 0)
-            hc = self.hop0.get((cur, f.dir, f.idx), 0)
+            ha = self.hop0.get((alt, f.dir, f.idx, f.vc), 0)
+            hc = self.hop0.get((cur, f.dir, f.idx, f.vc), 0)
             if ha < hc or (ha == hc and self.occ.get(alt, 0) < self.occ.get(cur, 0)):
                 f.plane = alt
             return
         if mode == "resp_live":
             if f.kind == "resp":
-                if self._live_dir(alt, f.dir) < self._live_dir(cur, f.dir):
+                if self._live_dir(alt, f.dir, f.vc) < self._live_dir(cur, f.dir, f.vc):
                     f.plane = alt
             elif self.occ.get(alt, 0) < self.occ.get(cur, 0):
                 f.plane = alt
@@ -1032,14 +1032,16 @@ class Ring2DistSim(Ring2BaseSim):
             if f.kind == "resp":
                 if self.occ.get(alt, 0) < self.occ.get(cur, 0):
                     f.plane = alt
-            elif self._live_dir(alt, f.dir) < self._live_dir(cur, f.dir):
+            elif self._live_dir(alt, f.dir, f.vc) < self._live_dir(cur, f.dir, f.vc):
                 f.plane = alt
 
-    def _live_plane(self, pl: int) -> int:
-        return (self._live_dir(pl, 1) + self._live_dir(pl, -1))
+    def _live_plane(self, pl: int, vc: str | None = None) -> int:
+        return (self._live_dir(pl, 1, vc) + self._live_dir(pl, -1, vc))
 
-    def _live_dir(self, pl: int, d: int) -> int:
-        return sum(len(self.arr_set[(pl, d, i)]) for i in range(self.n))
+    def _live_dir(self, pl: int, d: int, vc: str | None = None) -> int:
+        if vc is None:
+            return sum(self._live_dir(pl, d, v) for v in ("req", "dat"))
+        return sum(len(self.arr_set[(pl, d, i, vc)]) for i in range(self.n))
 
     def _path_live(self, f: Flit, pl: int) -> int:
         """In-flight arrivals on this flit's next hops (no ghost book)."""
@@ -1047,8 +1049,9 @@ class Ring2DistSim(Ring2BaseSim):
         take = min(4, max(0, f.target))
         node = f.idx
         tau = self.t
+        vc = f.vc
         for k in range(take):
-            if tau in self.arr_set[(pl, f.dir, node)]:
+            if tau in self.arr_set[(pl, f.dir, node, vc)]:
                 n += 1
             if k + 1 < take:
                 tau += self.topo.hop_lat_from(node, f.dir)
@@ -1056,12 +1059,12 @@ class Ring2DistSim(Ring2BaseSim):
         return n
 
     def _can_board_at(self, plane: int, direction: int, idx: int,
-                      t: int) -> bool:
+                      t: int, vc: str = "req") -> bool:
         """_can_board as of cycle t (t >= self.t), in-flight only."""
-        seg = self._seg(plane, direction, idx)
+        seg = self._seg(plane, direction, idx, vc)
         if self.seg_free[seg] > t:
             return False
-        key = (plane, direction, idx)
+        key = (plane, direction, idx, vc)
         for dt in range(self.sigma):
             if (t + dt) in self.arr_set[key]:
                 return False
@@ -1084,7 +1087,7 @@ class Ring2DistSim(Ring2BaseSim):
         if mode == "tie" and alt not in opts:
             return False
         if getattr(self.p, "late_dir_hold", False):
-            if self._can_board_at(f.plane, f.dir, f.idx, self.t + 1):
+            if self._can_board_at(f.plane, f.dir, f.idx, self.t + 1, f.vc):
                 return False
         old_d, old_t, old_pl = f.dir, f.target, f.plane
         new_t = hop_count(f.idx, f.dst, alt, self.n)
@@ -1103,7 +1106,7 @@ class Ring2DistSim(Ring2BaseSim):
             if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
                 dest_ok = ((node, pl) not in self.ej_hold
                            and not self._ej_slots_busy(f))
-            if not (dest_ok and self._can_board(pl, alt, f.idx)):
+            if not (dest_ok and self._can_board(pl, alt, f.idx, f.vc)):
                 continue
             load = self._dest_leave_load(f) if dest_mode else 0
             if dest_mode == "cooler" and load >= short_load:
@@ -1138,7 +1141,7 @@ class Ring2DistSim(Ring2BaseSim):
             return False
         if getattr(self.p, "hop_yield_free", False):
             arrive = self.t + self.topo.hop_lat_from(f.idx, f.dir)
-            key = (f.plane, f.dir, nxt)
+            key = (f.plane, f.dir, nxt, f.vc)
             if arrive in self.arr_set[key]:
                 return False
         return True
@@ -1186,7 +1189,7 @@ class Ring2DistSim(Ring2BaseSim):
                        and not self._ej_slots_busy(f))
         nbook = getattr(self.p, "hop_book", 0)
         booked = nbook > 0 and self._hop_booked(f, nbook)
-        if dest_ok and not booked and self._can_board(alt, f.dir, f.idx):
+        if dest_ok and not booked and self._can_board(alt, f.dir, f.idx, f.vc):
             return True
         f.plane = old
         return False
@@ -1202,7 +1205,7 @@ class Ring2DistSim(Ring2BaseSim):
         node = f.idx
         tau = self.t
         for k in range(end):
-            if k >= start_k and tau in self.arr_set[(f.plane, f.dir, node)]:
+            if k >= start_k and tau in self.arr_set[(f.plane, f.dir, node, f.vc)]:
                 return True
             if k + 1 < end:
                 tau += self.topo.hop_lat_from(node, f.dir)
@@ -1272,12 +1275,12 @@ class Ring2DistSim(Ring2BaseSim):
         in the same cycle this inject would arrive there."""
         nxt = (f.idx + f.dir) % self.n
         arrive = self.t + self.topo.hop_lat_from(f.idx, f.dir)
-        node_key = (f.plane, f.dir, nxt)
+        node_key = (f.plane, f.dir, nxt, f.vc)
         if arrive in self.arr_set[node_key]:
             return True
         # 2-hop: a flit arriving at nxt+dir at arrive, having come from nxt
         nxt2 = (nxt + f.dir) % self.n
-        if arrive in self.arr_set[(f.plane, f.dir, nxt2)]:
+        if arrive in self.arr_set[(f.plane, f.dir, nxt2, f.vc)]:
             return True
         return False
 
@@ -1288,7 +1291,7 @@ class Ring2DistSim(Ring2BaseSim):
         lk = getattr(self.p, "late_dir_kind", "both") or "both"
         if (getattr(self.p, "late_dir", "")
                 and (lk == "both" or f.kind == lk)
-                and not self._can_board(f.plane, f.dir, f.idx)):
+                and not self._can_board(f.plane, f.dir, f.idx, f.vc)):
             self._try_late_dir(node, f)
 
     def _hop_hold_key(self, rec: dict) -> tuple:
@@ -1326,12 +1329,12 @@ class Ring2DistSim(Ring2BaseSim):
                     continue
                 tgt = hop_count(f.idx, f.dst, d, self.n) if d != old[1] else old[2]
                 f.plane, f.dir, f.target = pl, d, tgt
-                hop = (pl, d, f.idx)
+                hop = (pl, d, f.idx, f.vc)
                 dest_ok = True
                 if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
                     dest_ok = ((node, pl) not in self.ej_hold
                                and not self._ej_slots_busy(f))
-                if dest_ok and hop not in claimed and self._can_board(pl, d, f.idx):
+                if dest_ok and hop not in claimed and self._can_board(pl, d, f.idx, f.vc):
                     return hop
         f.plane, f.dir, f.target = old
         return None
@@ -1370,7 +1373,7 @@ class Ring2DistSim(Ring2BaseSim):
                 lk = getattr(self.p, "late_dir_kind", "both") or "both"
                 if (getattr(self.p, "late_dir", "")
                         and (lk == "both" or f.kind == lk)
-                        and not self._can_board(f.plane, f.dir, f.idx)):
+                        and not self._can_board(f.plane, f.dir, f.idx, f.vc)):
                     self._try_late_dir(node, f)
                 groups[(f.plane, f.dir, f.idx)].append((f.t_gen, node, plane))
             f.plane, f.dir, f.target = old
@@ -1440,7 +1443,7 @@ class Ring2DistSim(Ring2BaseSim):
             if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
                 dest_slot = (f.dst, f.plane, self._ej_eta(f))
                 dest_booked = self.ej_book.get(dest_slot, 0) > 0
-            hop = ((f.plane, f.dir, f.idx)
+            hop = ((f.plane, f.dir, f.idx, f.vc)
                    if f.dir is not None else None)
             recs.append({
                 "age": f.t_gen, "node": node, "src_pl": plane,
@@ -1778,20 +1781,20 @@ class Ring2DistSim(Ring2BaseSim):
             if getattr(self.p, "ej_lock", False) and self._ej_applies(f):
                 dest_slot = (f.dst, f.plane, self._ej_eta(f))
                 dest_booked = self.ej_book.get(dest_slot, 0) > 0
-            hop = ((f.plane, f.dir, f.idx)
+            hop = ((f.plane, f.dir, f.idx, f.vc)
                    if f.dir is not None else None)
             hop_live = 0
             path_live = 0
             dest_live = 0
             if hop is not None:
                 nxt = (hop[2] + hop[1]) % self.n
-                hop_live = len(self.arr_set[(hop[0], hop[1], nxt)])
-                dest_live = len(self.arr_set[(hop[0], hop[1], f.dst)])
+                hop_live = len(self.arr_set[(hop[0], hop[1], nxt, hop[3])])
+                dest_live = len(self.arr_set[(hop[0], hop[1], f.dst, hop[3])])
                 hops_left = 0 if f.target is None else f.target
                 if hops_left >= 2:
                     for k in range(2, hops_left + 1):
                         node_k = (hop[2] + k * hop[1]) % self.n
-                        path_live += len(self.arr_set[(hop[0], hop[1], node_k)])
+                        path_live += len(self.arr_set[(hop[0], hop[1], node_k, hop[3])])
             recs.append({
                 "key": key, "age": f.t_gen, "node": node, "src_pl": plane,
                 "kind": f.kind, "dest_slot": dest_slot,
@@ -2296,12 +2299,12 @@ class Ring2DistSim(Ring2BaseSim):
                 continue
             f = q[0]
             old = (f.plane, f.dir, f.target)
-            pl, d, _idx = r["hop"]
+            pl, d, _idx = r["hop"][:3]
             alt = 1 - pl
             hops = r["hops"]
             f.plane, f.dir, f.target = alt, d, hops
             alt_slot = (f.dst, alt, self._ej_eta(f))
-            alt_hop = (alt, d, f.idx)
+            alt_hop = (alt, d, f.idx, f.vc)
             dest_ok = not self._ej_slots_busy(f)
             hop_ok = self._can_board(*alt_hop)
             f.plane, f.dir, f.target = old
@@ -2400,7 +2403,7 @@ class Ring2DistSim(Ring2BaseSim):
                 g = q[0]
                 if g.dir is None:
                     continue
-                if self._can_board(g.plane, g.dir, g.idx):
+                if self._can_board(g.plane, g.dir, g.idx, g.vc):
                     self.nbr_age[(node, g.plane, g.dir)] = g.t_gen
         if getattr(self.p, "hop_hold", False):
             self._build_hop_hold()
@@ -2475,9 +2478,9 @@ class Ring2DistSim(Ring2BaseSim):
         node, plane, d = f.idx, f.plane, f.dir
         ok = super()._launch(f, inring=inring)
         if ok and getattr(self.p, "hop_tab", False):
-            self.hop_at[(plane, d, node)].add(self.t)
+            self.hop_at[(plane, d, node, f.vc)].add(self.t)
             if f.target > 0:
-                self.hop_next[(plane, d, f.idx)].add(
+                self.hop_next[(plane, d, f.idx, f.vc)].add(
                     self.t + self.topo.hop_lat_from(node, d))
             if self.t % 64 == 0:
                 cut = self.t
@@ -2521,7 +2524,7 @@ class Ring2DistSim(Ring2BaseSim):
     def _on_inject(self, f: Flit) -> None:
         super()._on_inject(f)
         if f.dir is not None:
-            key = (f.plane, f.dir, f.idx)
+            key = (f.plane, f.dir, f.idx, f.vc)
             self.hop0[key] += 1
             self.hop0_of[f.pid] = key
         if getattr(self.p, "late_plane", "") == "injlive":
@@ -2602,7 +2605,7 @@ class Ring2DistSim(Ring2BaseSim):
 
     def _on_board_fail(self, node: int, f: Flit) -> None:
         super()._on_board_fail(node, f)
-        hop = f.dir is not None and not self._can_board(f.plane, f.dir, f.idx)
+        hop = f.dir is not None and not self._can_board(f.plane, f.dir, f.idx, f.vc)
         if hop:
             self.st["n_deny_hop"] += 1
             self.st["n_deny_hop_resp" if f.kind == "resp" else "n_deny_hop_req"] += 1

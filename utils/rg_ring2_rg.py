@@ -39,7 +39,7 @@ from typing import Any, Sequence
 
 from rg_ring2_topo import (
     Kind, PlaneSel, RAMP, Ring2Footprint, Ring2Path, Ring2Topology, Txn,
-    board_key, leave_key,
+    board_key, leave_key, vc_of,
 )
 from rg_ring2_base import CORE_OUTSTANDING
 
@@ -157,11 +157,13 @@ def requirements(topo: Ring2Topology, fp: Ring2Footprint
         return cached
     out: list[tuple[Any, int, int, int]] = []
     if topo.spatial_reuse == "arc":
+        vc = vc_of(fp.kind)
         for e, pref in fp.links:
-            out.append((("L", e), pref, fp.dur, 1))
+            out.append((("L", e, vc), pref, fp.dur, 1))
     else:
+        vc = vc_of(fp.kind)
         for k, off, d in fp.rings:
-            out.append((("R", k), off, d, 1))
+            out.append((("R", k, vc), off, d, 1))
     for k, off in fp.boards:
         out.append((k, off, fp.dur, topo.board_ports))
     for k, off in fp.leaves:
@@ -281,6 +283,8 @@ def _same_round_conflict(a: _Flow, b: _Flow, topo: Ring2Topology) -> bool:
     """Would a and b conflict if both started at the same t0?"""
     if a.src == b.src or a.dst == b.dst:
         return True
+    if vc_of(a.kind) != vc_of(b.kind):
+        return False
     if a.path.plane == b.path.plane and a.path.dir == b.path.dir:
         if topo.spatial_reuse == "whole_ring":
             return True

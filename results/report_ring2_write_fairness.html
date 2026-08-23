@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>无缓存环上的 per-core 写带宽公平性</title>
+<style>
+body { font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
+       "Noto Sans CJK SC", sans-serif;
+       margin: 2rem auto; max-width: 980px; color: #111; line-height: 1.65; }
+h1,h2,h3 { font-weight: 650; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th,td { border: 1px solid #e5e7eb; padding: 0.35rem 0.5rem; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { background: #f8fafc; }
+code { background: #f1f5f9; padding: 0.1rem 0.3rem; }
+img { max-width: 100%; border: 1px solid #e5e7eb; }
+.note { color: #475569; font-size: 0.9rem; }
+.def { background: #f8fafc; border-left: 3px solid #94a3b8;
+        padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
+.bad { border-left-color: #dc2626; background: #fef2f2; }
+.good { border-left-color: #16a34a; background: #f0fdf4; }
+</style></head><body>
+
+<h1>无缓存环上的 per-core 写带宽公平性</h1>
+<p class="note">20 节点双 plane 双向环，偶数 index 是 AI core（CHI RN），奇数是
+memory Home Agent。本报告只讨论<b>写</b>：完整的 <code>WriteNoSnp</code> 四拍握手
+<code>REQ → DBIDResp → WriteData×4 → Comp</code>，因此实例化
+<b>REQ / RSP / DAT 三条 CHI VC</b>，每条有向 hop 容量
+<code>240</code> flit/cycle。每 core 发 2000 笔写、
+8000 个 WriteData flit。
+<b>per-core 写带宽 = 该 core 在争用窗口内成功上环的 WriteData flit / cycle。</b>
+既有的读研究与 <code>report_ring2_20node.html</code> 未被改动。</p>
+
+<h2>1. 前提：环是无缓存的，在环流量绝对优先</h2>
+<p><code>_launch</code> 从不阻塞已在环上的 flit，只占用槽位；本地注入由
+<code>_can_board</code> 拒绝——要么该有向 hop 的这条 VC 被占，要么
+<code>arr_set</code> 显示 σ 拍内有在环 flit 即将到达。</p>
+
+<div class="def">在环流量<b>先于</b>本地注入预定槽位。一个节点想上环，必须等到
+一个没有任何过路 flit 经过的空拍。全部实验里
+<code>n_inring_blocked = 0</code>，无缓存语义自始至终成立。</div>
+
+<p>关键推论：<b>源端限速无法凭空造出槽位</b>。让上游少发，让出来的空拍会被下一个
+过路 flit 顺手拿走，而不是留给被饿死的节点。这一点决定了后面 S1 为什么会失败。</p>
+
+<h2>2. 下界</h2>
+<h3>uniform（每 core 均匀写到随机 HA）</h3>
+<table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link 每 VC 独立链路</td><td>6264</td><td>REQ/RSP/DAT 各自占一条 VC，取三者最大</td></tr><tr><td>LB_port 端口合并</td><td>5133</td><td>inject / leave 每 (node, plane) 仍只有一个端口，三 VC 共享</td></tr><tr><td>LB_cut 割集</td><td>4986</td><td>跨割面的流量除以割面上的有向链路数</td></tr><tr><td>LB_txn 事务串行链</td><td>91</td><td>REQ→DBIDResp→WriteData→Comp 两个来回</td></tr><tr><td><b>bound</b></td><td><b>6264</b></td><td>以上取最大</td></tr></tbody></table>
+<h3>cluster（所有 core 都写 HA9, HA11）</h3>
+<table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link 每 VC 独立链路</td><td>18000</td><td>REQ/RSP/DAT 各自占一条 VC，取三者最大</td></tr><tr><td>LB_port 端口合并</td><td>25000</td><td>inject / leave 每 (node, plane) 仍只有一个端口，三 VC 共享</td></tr><tr><td>LB_cut 割集</td><td>5000</td><td>跨割面的流量除以割面上的有向链路数</td></tr><tr><td>LB_txn 事务串行链</td><td>87</td><td>REQ→DBIDResp→WriteData→Comp 两个来回</td></tr><tr><td><b>bound</b></td><td><b>25000</b></td><td>以上取最大</td></tr></tbody></table>
+<p class="note">cluster 的瓶颈从链路移到了<b>端口</b>：
+LB_port=25000 远大于 LB_link=18000，
+因为两个热点 HA 的 leave 端口要吞下全环的写数据。</p>
+
+<h2>3. 现象：均匀流量并不失衡，聚集流量才失衡</h2>
+<p>先说一个和预期相反、但数据很明确的结果。</p>
+
+<h3>3.1 uniform：基线本来就是公平的</h3>
+<table><thead><tr><th>方案</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>12617</td><td>0.99983</td><td>1.0524</td><td>0.01309</td><td>0.62404</td><td>0.65671</td><td>6.3407</td><td>+0.0%</td><td>19748</td><td>153691</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>15277</td><td>0.99789</td><td>1.1504</td><td>0.046</td><td>0.51031</td><td>0.58707</td><td>5.2366</td><td>-17.4%</td><td>15445</td><td>91696</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>12975</td><td>0.99992</td><td>1.0263</td><td>0.00874</td><td>0.61998</td><td>0.63628</td><td>6.1657</td><td>-2.8%</td><td>18782</td><td>138399</td></tr></tbody></table>
+<div class="def good">均匀写流量下 S0 的 Jain = <b>0.99983</b>，
+max/min = <b>1.0524</b>。<b>没有需要修的不公平。</b>
+每个 core 的目的地分布相同，所有出向 hop 的负载在统计上等价，
+位置差异被平均掉了。此时上流控只会掉吞吐（见表中 S1 与 S15 两列）。</div>
+<img src="ring2_wfair_uniform_bars.png" alt="uniform per-core BW">
+
+<h3>3.2 cluster：所有 core 写同两个 HA，失衡立刻出现</h3>
+<table><thead><tr><th>方案</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>31958</td><td>0.56117</td><td>15.5945</td><td>0.88431</td><td>0.04377</td><td>0.68259</td><td>2.5033</td><td>+0.0%</td><td>76938</td><td>342228</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>36567</td><td>0.5647</td><td>13.267</td><td>0.87798</td><td>0.05181</td><td>0.6874</td><td>2.1878</td><td>-12.6%</td><td>65231</td><td>140892</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>32299</td><td>0.98065</td><td>1.6093</td><td>0.14047</td><td>0.18947</td><td>0.30491</td><td>2.4769</td><td>-1.1%</td><td>80863</td><td>284086</td></tr></tbody></table>
+<div class="def bad">同样是 10 个 core、同样的需求量，只是把目的地收敛到
+HA9, HA11，S0 的 Jain 就掉到 <b>0.56117</b>，最快最慢比
+<b>15.5945×</b>：C0 拿到 0.68259
+flit/cycle，C8 只有 0.04377。</div>
+<img src="ring2_wfair_cluster_bars.png" alt="cluster per-core BW">
+<img src="ring2_wfair_cluster_panels.png" alt="cluster per-core BW over time">
+<p class="note">时间轴上看得更清楚：基线里少数几个 core 一开始就抢到高注入率并
+一直保持，被压住的 core 全程贴着地板走。</p>
+<img src="ring2_wfair_cluster_overlay.png" alt="cluster slowest vs fastest">
+
+<h2>4. 根因：谁挨着热点，谁就挤不上环</h2>
+<table><thead><tr><th>core</th><th>S0 写带宽</th><th>出向过路流量</th><th>出向平均 λ</th><th>上环成功率</th><th>hop_busy 失败</th><th>I-tag 失败</th><th>outstanding 失败</th></tr></thead><tbody><tr><td>C0</td><td>0.68259</td><td>0.0</td><td>2.5</td><td>0.3906</td><td>6923</td><td>5559</td><td>0</td></tr><tr><td>C2</td><td>0.4599</td><td>2500.0</td><td>2.0</td><td>0.2954</td><td>13697</td><td>5387</td><td>0</td></tr><tr><td>C4</td><td>0.11357</td><td>7500.0</td><td>2.0</td><td>0.1974</td><td>26258</td><td>6267</td><td>0</td></tr><tr><td>C6</td><td>0.07491</td><td>12500.0</td><td>2.0</td><td>0.1566</td><td>39148</td><td>3947</td><td>0</td></tr><tr><td>C8</td><td>0.04377</td><td>17500.0</td><td>1.5</td><td>0.1308</td><td>52572</td><td>584</td><td>0</td></tr><tr><td>C10</td><td>0.45811</td><td>14000.0</td><td>2.5</td><td>0.2597</td><td>16364</td><td>6437</td><td>0</td></tr><tr><td>C12</td><td>0.05205</td><td>17500.0</td><td>2.0</td><td>0.132</td><td>51966</td><td>632</td><td>0</td></tr><tr><td>C14</td><td>0.07782</td><td>12500.0</td><td>2.0</td><td>0.1575</td><td>38455</td><td>4336</td><td>0</td></tr><tr><td>C16</td><td>0.10563</td><td>7500.0</td><td>2.0</td><td>0.1964</td><td>25902</td><td>6826</td><td>0</td></tr><tr><td>C18</td><td>0.45205</td><td>2500.0</td><td>2.5</td><td>0.2925</td><td>13484</td><td>5868</td><td>0</td></tr></tbody></table>
+<p>把每个 core 的实测带宽和它<b>出向 hop 上的过路流量</b>（别处上环、从这里路过的
+flit，按最短路解析算出）放在一起，相关系数
+<b>r = -0.728</b>，Spearman 秩相关
+<b>-0.7976</b>；和上环成功率的相关是
+<b>r = 0.9735</b>。</p>
+<img src="ring2_wfair_cluster_scatter.png" alt="bw vs pass-through">
+
+<div class="def bad">根因一句话：<b>紧挨热点 HA 的那个 core，必须把数据注入到全网最重的
+那条链路上——热点前的最后一跳。</b>去 HA9, HA11 的所有写数据都要经过它的出向 hop，
+而在环流量绝对优先，于是它自己反而最挤不上去。位置越靠近热点，
+过路负载越重，本地带宽越低。</div>
+
+<h3>4.1 I-tag 能限制饥饿时长，但造不出槽位</h3>
+<p><code>_itag_blocks</code> 只压制<b>与它竞争的其他注入者</b>，对在环 flit 无效。
+表中被饿死的 core，失败原因绝大多数是 <code>hop_busy</code>（在环占用），
+I-tag 类失败占比很小——I-tag 把等待时间限住了，却无法把带宽拉平。</p>
+
+<h3>4.2 偏转流量会自我放大</h3>
+<p>热点 HA 的 leave 端口一拍只能吞一个 flit；同拍到达的其它 flit 被<b>偏转</b>，
+再绕一整圈回来。基线 cluster 下偏转 76938 次，
+这些流量重新占用热点前最后一跳，进一步压死本来就挤不上去的邻居 core。</p>
+
+<h2>5. S1：按规格实现的拥塞等级 AIMD</h2>
+<p>四段可独立消融，全部按规格实现在 <code>utils/rg_ring2_fc.py</code>：</p>
+<ul>
+<li><b>拥塞检测</b>：每节点每窗口分别统计上环失败（up）与 eject 偏转（down）的
+<code>total_fail</code> 与 <code>net_fail</code>（只计纯粹由在环占用造成的失败），
+等级 <code>= min(7, count // 8)</code>。</li>
+<li><b>拥塞传递</b>：<code>CongestionBus</code> 专用广播总线，不占环上 hop，
+延迟 1 拍。</li>
+<li><b>拥塞反馈</b>：每节点维护自己的<b>通路节点</b>表，对该集合取 <b>max</b>。</li>
+<li><b>流量控制</b>：最终等级 <code>= level_of(own_total_fail −
+max_received_net_fail)</code>；罚则 <code>budget ← max(min, ⌊budget·α⌋)</code>，
+α = 0.75 / 0.5 / 0.25；奖励 <code>budget ← min(window, budget + β)</code>，
+β = 16 / 8 / 2。</li>
+</ul>
+<table><thead><tr><th>window</th><th>α/β 档位</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>吞吐</th></tr></thead><tbody><tr><td>64</td><td>spec</td><td>36567</td><td>0.5647</td><td>13.267</td><td>0.87798</td><td>2.1878</td></tr><tr><td>64</td><td>harsh</td><td>40376</td><td>0.55967</td><td>11.5274</td><td>0.88699</td><td>1.9814</td></tr><tr><td>64</td><td>gentle</td><td>35657</td><td>0.54648</td><td>19.0024</td><td>0.91099</td><td>2.2436</td></tr><tr><td>128</td><td>spec</td><td>40836</td><td>0.63565</td><td>8.8692</td><td>0.7571</td><td>1.9591</td></tr><tr><td>128</td><td>harsh</td><td>48108</td><td>0.74516</td><td>5.4533</td><td>0.58481</td><td>1.6629</td></tr><tr><td>128</td><td>gentle</td><td>37671</td><td>0.63006</td><td>9.3677</td><td>0.76626</td><td>2.1236</td></tr></tbody></table>
+<p class="note">cluster 上的 window × α/β 档位扫描。</p>
+
+<h2>6. S1 的结果与失败分析</h2>
+<div class="def bad">S1 在 cluster 上把 Jain 从 0.56117 抬到
+0.5647，max/min 仍有 <b>13.267×</b>，同时吞吐
+<b>-12.6%</b>——<b>既没拉平，又欠吞吐</b>。三条预测全部被数据证实。</div>
+<img src="ring2_wfair_cluster_s1trace.png" alt="S1 control trace">
+
+<h3>6.1 max 聚合保住了比例</h3>
+<p>共享同一条通路的 core 收到同一个等级，于是<b>乘以同一个 α</b>。等比缩小不改变
+贫富<b>比值</b>：预算曲线整体下移，Jain 几乎不动。</p>
+
+<h3>6.2 差值规则把信号搞反了</h3>
+<p>被饿死的 core <code>own_total_fail</code> 很高；而上游的赢家正在<b>赢</b>，
+它的 <code>net_fail</code> 很低，所以受害者收到的
+<code>max_received_net_fail</code> 很小、差值很大 →
+<b>受害者惩罚自己</b>；赢家差值 ≈ 0，继续 <code>+β</code>。
+这是一个放大不公平的正反馈，图中最慢 core 的最终等级持续高于最快 core。</p>
+
+<h3>6.3 源端速率造不出槽位</h3>
+<p>这是最根本的一条。在环优先是绝对的，被限速的 core 让出的空拍立刻被过路 flit
+吃掉，被饿死的 core 一无所获。所以 S1 只是把总量压下去：吞吐
+-12.6%，而最慢 core 的带宽几乎不动。</p>
+
+<h2>7. 改进方案 S15：最大最小公平份额 + 槽预约</h2>
+<p>保留专用总线和窗口结构，换掉<b>聚合什么</b>，并加一个仲裁钩子。</p>
+<ul>
+<li><b>检测</b>：额外记录成功上环数、累计成功数与 active 标志。</li>
+<li><b>传递</b>：同一条总线上多播 <code>(等级, 本窗口成功数, 累计成功数,
+active, 各出向公平份额)</code>。</li>
+<li><b>反馈</b>：用<b>最大最小公平份额</b>替代 max-of-levels。每个共享资源
+（有向 hop、以及目的 HA 的 leave 端口）按观测到的吞吐峰值作为容量，
+除以其上的活跃竞争者，广播一个份额；节点取自己路径上所有资源份额的最小值作为目标。
+容量取实测峰值而非理论值，回路因此自校准，不会把吞吐一路压下去。</li>
+<li><b>控制</b>：AIMD 跟踪这个目标，并按<b>累计欠账</b>而不是瞬时速率修正，
+避免开局阶段的抢占决定全局。</li>
+<li><b>槽预约（真正的修复）</b>：这是速率控制做不到的部分。落后于全环平均
+累计进度超过 <code>reserve_gap</code> 的节点，通过总线预约未来若干拍的
+<code>(plane, dir, VC)</code> 槽；<b>上游节点不得注入会在预约窗口内到达该槽的
+flit</b>。资格用全环累计量判定而不是各自的本地目标——按本地判定时几乎每个节点都
+认为自己落后，预约互相抵消，全环白白付出上万次让路。</li>
+</ul>
+
+<div class="def">预约只压制<b>注入</b>，从不停住已经在环上的 flit，
+所以不需要任何缓冲：<code>n_inring_blocked</code> 与
+<code>max_inring_hold</code> 全程为 0，无缓存前提没有被偷偷放弃。</div>
+
+<h3>7.1 结果</h3>
+<table><thead><tr><th>方案</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>31958</td><td>0.56117</td><td>15.5945</td><td>0.88431</td><td>0.04377</td><td>0.68259</td><td>2.5033</td><td>+0.0%</td><td>76938</td><td>342228</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>36567</td><td>0.5647</td><td>13.267</td><td>0.87798</td><td>0.05181</td><td>0.6874</td><td>2.1878</td><td>-12.6%</td><td>65231</td><td>140892</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>32299</td><td>0.98065</td><td>1.6093</td><td>0.14047</td><td>0.18947</td><td>0.30491</td><td>2.4769</td><td>-1.1%</td><td>80863</td><td>284086</td></tr></tbody></table>
+<div class="def ">S15 在 cluster 上：
+Jain <b>0.56117 → 0.98065</b>，
+max/min <b>15.5945 → 1.6093</b>，
+吞吐 <b>-1.05%</b>（预算 −1%）。最慢 core 的带宽从
+0.04377 抬到 0.18947，<b>4.3 倍</b>。
+对照验收线（Jain ≥ 0.98、max/min ≤ 1.05、吞吐差 ≤ 1%）：<b>达成 Jain ≥ 0.98；未达成 max/min ≤ 1.05、吞吐差 ≤ 1%</b>。</div>
+
+<p>诚实地说明没有完全达标的部分与原因：max/min 仍是
+1.6093×。剩下的差距来自热点相邻 core 的<b>瞬时</b>仲裁劣势。
+把它的平均速率配到公平份额还不够——它只能在“恰好没有过路 flit”的那些拍上环，
+而这样的空拍本身就稀缺。实测中该 core 全程只有约 12% 的
+(拍, plane) 机会是可上环的，且它已经用掉了其中的绝大多数。</p>
+
+<div class="def bad">要把 max/min 压到 1.05，只靠“不让上游注入”不够，还必须让
+<b>已经在环上</b>的 flit 给预约槽让路。我们实现并实测了这条路径：Jain 可达
+0.982、吞吐仅 −0.8%，但代价是单条 segment 上同时被暂存的 flit 峰值达 355 个——
+那已经不是无缓存环了。因此该配置<b>没有</b>被采纳为默认值，
+默认保持 <code>hold_depth = 0</code> 的严格无缓存语义。
+这是本研究给出的真实结论：<b>在严格无缓存、在环绝对优先的前提下，
+完全的 per-core 写带宽均等无法在不引入环上缓冲的情况下达成。</b></div>
+
+<h3>7.2 时间轴与链路占用</h3>
+<img src="ring2_wfair_cluster_panels.png" alt="per-core over time">
+<img src="ring2_wfair_cluster_hopbw.png" alt="hop bandwidth vs cap">
+
+<h2>8. 总线的代价</h2>
+<table><thead><tr><th>方案</th><th>window</th><th>广播次数</th><th>广播总 bit</th><th>预算拒绝</th><th>AIMD 降</th><th>AIMD 升</th><th>预约槽</th><th>预约命中</th><th>上游让路</th></tr></thead><tbody><tr><td>S1 拥塞等级 AIMD</td><td>64</td><td>11420</td><td>68520</td><td>377006</td><td>896</td><td>4814</td><td>0</td><td>0</td><td>0</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>64</td><td>10080</td><td>796320</td><td>53949</td><td>907</td><td>1084</td><td>193648</td><td>41715</td><td>192787</td></tr></tbody></table>
+<p class="note">专用广播总线不占用任何环上 hop，按窗口边界发一次。S1 每次
+6 bit（两个 3 bit 等级）；S15 增加 8 bit 本窗口成功数、16 bit 累计数、
+1 bit active，以及 6 个 8 bit 出向公平份额，共
+79
+bit/次。窗口 64 拍发一次，
+折算到每拍的线上开销可以忽略；面积在 <code>rg_sched_cost.py</code> 中单列。</p>
+
+<h2>9. 结论</h2>
+<ol>
+<li>无缓存环上的 per-core 写带宽不公平<b>不是</b>拓扑固有的：均匀流量下
+Jain = 0.99983，本来就是公平的。它需要一个空间上收敛的目的地分布才会出现。</li>
+<li>一旦出现（cluster：Jain 0.56117、max/min 15.5945×），
+根因是<b>热点前最后一跳</b>：紧邻热点的 core 必须注入到全网最重的链路，
+在环优先让它最挤不上去。相关系数 r = -0.728。</li>
+<li>S1 按规格实现后<b>既没拉平也欠吞吐</b>（Jain 0.5647、
+吞吐 -12.6%）：max 聚合保比例、差值规则罚受害者、
+源端速率造不出槽位。</li>
+<li>S15 用最大最小公平份额 + 上游注入预约，把 Jain 抬到 0.98065、
+max/min 降到 1.6093×，吞吐 -1.1%，且严格保持无缓存。
+完全均等（max/min ≤ 1.05）需要在环 flit 让路，即引入环上缓冲，
+本研究认为该代价不值得，并把权衡量化列出。</li>
+</ol>
+</body></html>

@@ -374,8 +374,8 @@ S13 hop grant 优先剩余 hop 更短的。
 S14 HA 同节点两条 srcq 争同一第一跳时，输家换 plane。</p>
 <p><img src="ring2_core_recv_bw_10k_overlay.png" alt="十五方案均值接收带宽叠图"></p>
 <p><img src="ring2_core_recv_bw_10k.png" alt="每核接收带宽 10k"></p>
-<p class="note">下面两张是<b>全网 80 条有向段</b>每拍启动的 hop 数（σ=1，
-虚线 = 80 flit/cycle）。偏转也计入——偏转会再占 hop。不是每核接收带宽。
+<p class="note">下面两张是<b>全网有向 hop</b>每拍启动的 flit 数（REQ+DAT 独立 VC，
+σ=1，虚线 = 160）。偏转也计入——偏转会再占 hop。不是每核接收带宽。
 uniform 与 allpairs m=100 各一张，S0–S14 叠在同一时间轴上。</p>
 <p><img src="ring2_link_bw_10k.png" alt="uniform 10k 全网有向段总带宽"></p>
 <p><img src="ring2_link_bw_allpairs.png" alt="allpairs m=100 全网有向段总带宽"></p>
@@ -397,12 +397,13 @@ uniform 与 allpairs m=100 各一张，S0–S14 叠在同一时间轴上。</p>
     lats = ", ".join(str(x) for x in topo.link_lats)
     bnd_rows, bnd = _bound_rows(topo, big, cmp_)
     n_dir = len(topo.directed_links)
+    hop_cap = topo.hop_bw_cap
     ap_tr = _collect_traces(topo, build_allpairs(m=100, m_resp=4))
     plot_directed_link_bw(
         ap_tr, ROOT / "results" / "ring2_link_bw_allpairs.png",
         bin_w=16,
         title="Network directed-hop bandwidth  ·  allpairs m=100 R=4  (bin=16)",
-        cap=n_dir)
+        cap=hop_cap)
     if any((v.get("hop_bw") or v.get("hop_starts"))
            for v in (big.get("schemes") or {}).values()):
         meta10 = big.get("meta") or {}
@@ -412,7 +413,7 @@ uniform 与 allpairs m=100 各一张，S0–S14 叠在同一时间轴上。</p>
             title=("Network directed-hop bandwidth  ·  uniform "
                    f"K={meta10.get('K', 2500)} R={meta10.get('R', 4)}  "
                    f"(bin={meta10.get('bin_w', 64)})"),
-            cap=n_dir)
+            cap=hop_cap)
     n_s2 = len([r for r in (pareto.get("rows") or [])
                 if r.get("scheme") == "S2"])
 
@@ -446,10 +447,15 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }}
 </style></head><body>
 <h1>双全环 20 节点：十五方案 makespan + request-grant Pareto</h1>
-<p class="note">偶数 index 是 AI core，奇数是 memory Home Agent。两个独立的双向
-ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端口的 buffer。
-流量是读往返（请求 1 flit，响应 R flit）。<b>makespan = 最后一个响应 flit 在发起
-core 处被 drain 的那一拍。</b></p>
+<p class="note">偶数 index 是 AI core（CHI RN），奇数是 memory Home Agent（completer）。
+两个独立的双向 ring plane；每节点每 plane 一个端口，plane 内两个方向共用该端口的
+buffer。协议是 <b>AMBA CHI</b>，操作全部按 <b>non-cacheable、non-snoopable 读</b>
+（<code>ReadNoSnp</code>）处理：没有 SNP，没有 cache line 状态。
+一条事务 = REQ 1 flit + DAT 上 R flit（CompData）。环上实例化
+<b>REQ 与 DAT 两条独立 CHI VC</b>（本闭集无 snoop、Comp 并进 DAT，故不建 SNP/RSP）。
+每条有向 hop 上 REQ 与 DAT 可同拍各发 1 个 flit（σ=1），全网 hop 容量
+<code>{hop_cap}</code> flit/cycle；inject / leave 端口仍是每 (node, plane) 各 1 个。
+<b>makespan = 最后一个 DAT flit 在发起 core 处被 drain 的那一拍。</b></p>
 
 <h2>拓扑</h2>
 <p>20 个节点围成一个双向全环；两个 ring plane 共用同一套几何。边上的数字是
@@ -472,24 +478,27 @@ core 处被 drain 的那一拍。</b></p>
 <code>N</code> = {topo.n} 节点 · <code>P</code> = {topo.n_planes} 个 plane ·
 <code>σ</code> = {topo.sigma} 拍/flit（同一有向段上连续两个 flit 的最小间隔）·
 <code>λ(u,v)</code> = 相邻无向边 hop 时延（1–4 拍，见图）·
-有向段总数 <code>2PN</code> = {n_dir}<br>
-事务集合 <code>T</code>；每个 <code>t ∈ T</code> 是 core→HA 的
-<code>m_req</code> flit 请求，加 HA→core 的 <code>m_resp</code> flit 响应。<br>
+有向段总数 <code>2PN</code> = {n_dir} · CHI VC <code>{topo.n_vc}</code>
+（REQ+DAT，hop 容量 {hop_cap}）<br>
+事务集合 <code>T</code>；每个 <code>t ∈ T</code> 是一条 CHI
+<code>ReadNoSnp</code>：core（RN）→HA 的 <code>m_req</code> flit REQ，
+加 HA→core 的 <code>m_resp</code> flit DAT。无 SNP。<br>
 <code>π_req(t)</code> / <code>π_resp(t)</code> 是取最短方向的路径，
 <code>hops(π)</code> 是跳数。
 </div>
 
 <h3>0.2 LB_link：段带宽下界</h3>
-<p>对每条<em>不区分 plane</em> 的有向邻接 <code>(u,v)</code>，统计必须穿过它的
-flit 总数</p>
-<div class="def"><code>L(u,v) = Σ_t m_req·[⟨u,v⟩ ∈ π_req(t)]
-+ m_resp·[⟨u,v⟩ ∈ π_resp(t)]</code></div>
-<p>plane 分配是<em>策略</em>而非物理约束——同一条有向 hop 两个 plane 都能承载，
-所以该有向邻接的合并容量是每 <code>σ</code> 拍 <code>P</code> 个 flit：</p>
-<div class="def"><code>makespan ≥ LB_link = σ · ⌈ max<sub>(u,v)</sub> L(u,v) / P ⌉</code></div>
-<p class="note">这里必须除以 <code>P</code>。如果改用某个具体
-<code>plane_sel</code> 策略下的单 plane 峰值负载，会在仿真器运行时平衡得更好时
-反过来<em>高于</em>实测 makespan，那就不是下界了。</p>
+<p>CHI REQ 与 DAT 是独立 VC，互不占用对方的 hop 时隙。对每条<em>不区分
+plane</em> 的有向邻接 <code>(u,v)</code> 分别统计</p>
+<div class="def"><code>L<sub>REQ</sub>(u,v) = Σ_t m_req·[⟨u,v⟩ ∈ π_req(t)]
+<br>L<sub>DAT</sub>(u,v) = Σ_t m_resp·[⟨u,v⟩ ∈ π_resp(t)]</code></div>
+<p>plane 分配是<em>策略</em>而非物理约束，每条 VC 的合并容量是每
+<code>σ</code> 拍 <code>P</code> 个 flit：</p>
+<div class="def"><code>makespan ≥ LB_link = σ · max(
+⌈ max L<sub>REQ</sub> / P ⌉,
+⌈ max L<sub>DAT</sub> / P ⌉ )</code></div>
+<p class="note">这里必须除以 <code>P</code>。DAT 是 R=4 时的主导 VC，所以
+下界几乎就是数据波的段带宽，不再把请求 flit 加进同一条 hop 的容量里。</p>
 
 <h3>0.3 LB_port：端口下界</h3>
 <p>对每个节点 <code>n</code>，令 <code>B(n)</code> 为必须在 <code>n</code>
@@ -502,8 +511,10 @@ max(B(n), E(n)) / P ⌉</code></div>
 <p>环的二等分需要切开<em>两个</em>缺口。取割集</p>
 <div class="def"><code>X = {{⟨N/2−1, N/2⟩, ⟨N/2, N/2−1⟩, ⟨N−1, 0⟩, ⟨0, N−1⟩}}
 × P 个 plane</code>，共 <code>|X|</code> = {4 * topo.n_planes} 条有向段</div>
-<p>令 <code>C</code> 为所有路径穿过 <code>X</code> 的 flit-段数总和，则</p>
-<div class="def"><code>makespan ≥ LB_cut = σ · ⌈ C / |X| ⌉</code></div>
+<p>令 <code>C_REQ</code> / <code>C_DAT</code> 为两条 VC 各自穿过 <code>X</code>
+的 flit-段数，则</p>
+<div class="def"><code>makespan ≥ LB_cut = σ · max(
+⌈ C_REQ / |X| ⌉, ⌈ C_DAT / |X| ⌉ )</code></div>
 <p class="note">这里数的是<em>实际</em>穿越次数。core/HA 交错布局下大量路径只有
 1 跳，套用「一半流量必然过割」的经验假设会高估到超过实测值。</p>
 
@@ -540,16 +551,16 @@ allpairs 那档 <code>bound</code> 只有 47 的直接原因：100 个事务的�
 
 <h2>1. 共同数据面（十五方案完全相同）</h2>
 <p class="note">S0–S8 <em>不是</em>九种不同的 fabric。它们共用同一条
-点对点 credit 数据面、同样 8 深的上环队列、同样的 I-tag / E-tag 保证。整个
+点对点 credit 数据面（REQ 与 DAT 独立 VC）、同样 8 深的上环队列、同样的 I-tag / E-tag 保证。整个
 扫参只改变「一个源被允许如何花掉 credit / 谁先占用 leave 口」。</p>
 {_table(["层", "S0 RR", "S1 AIMD", "S2 request-grant", "S3 push-on-pull",
          "S4 kind-aware leave", "S5 leave-slot", "S6 oldest dest",
          "S7 hop bounce"], [
     ["相邻节点 hop 时延", "按边 1–4 拍", "同左", "同左", "同左", "同左",
      "同左", "同左", "同左"],
-    ["上环队列（每 node, plane）", "8 flit", "8 flit", "8 flit", "8 flit",
+    ["上环队列（每 node, plane, VC）", "8 flit", "8 flit", "8 flit", "8 flit",
      "8 flit", "8 flit", "8 flit", "8 flit"],
-    ["下环队列（每 node, plane）", "4 + 1 E-tag", "4 + 1 E-tag",
+    ["下环队列（每 node, plane, VC）", "4 + 1 E-tag", "4 + 1 E-tag",
      "4 + 1 E-tag", "4 + 1 E-tag", "4 + 1 E-tag", "4 + 1 E-tag",
      "4 + 1 E-tag", "4 + 1 E-tag"],
     ["inject / eject 端口", "每 (node, plane) 1 个", "每 (node, plane) 1 个",
@@ -576,8 +587,9 @@ allpairs 那档 <code>bound</code> 只有 47 的直接原因：100 个事务的�
 ])}
 <ul>
 <li><b>Credit：</b>每条有向 hop 是一对 credit。上游发 flit 前先扣 credit，
-下游槽位空出后归还。没有 credit 绝不发送。共 {n_dir} 条有向段
-（{topo.n_planes} 个 plane × 2 个方向 × {topo.n} 节点）。</li>
+下游槽位空出后归还。没有 credit 绝不发送。共 {n_dir} 条有向段 ×
+{topo.n_vc} 条 CHI VC（REQ+DAT），hop 容量 {hop_cap} flit/cycle
+（{topo.n_planes} 个 plane × 2 个方向 × {topo.n} 节点 × {topo.n_vc} VC）。</li>
 <li><b>上环队列：</b>每 (node, plane) 8 个 flit，plane 内双向共用。PE 把 flit
 交给 fabric 外的 backlog，只有队列有空位才 admit，所以注入点是<em>真反压</em>，
 不是把整批流量一次吞下。</li>
@@ -667,22 +679,24 @@ S2 的最好 DES 往往快于 S0，但仍可能被同面积、更小的 S14 压�
 <ul>
 <li>把十五方案读成<b>同一块 fabric 上的十五种策略</b>。credit + I-tag + E-tag
 永远都在。环上按 credit 前进（本闭集里 in-ring 从不 stall）；I-tag 给上环饥饿定上界；
-E-tag 给下环活锁定上界。hop 时延按边 1–4 拍，飞越时间是路径各边之和。</li>
+E-tag 给下环活锁定上界。hop 时延按边 1–4 拍，飞越时间是路径各边之和。
+事务层是 CHI <code>ReadNoSnp</code>（NC、无 snoop），所以没有 snoop 风暴可减；
+环上 REQ 与 DAT 是独立 VC（SNP/RSP 未实例化）。</li>
 <li><b>S0</b> 是反应式基线：hop 空就用 RR 花掉 credit，除 I-tag 之外没有任何
 源端速率控制。它是<em>工作守恒</em>的，代价是每次成功上环约伴随 2 次重试——
 重试不烧 slot，所以这笔代价落在时延上，不落在 makespan 上。
-allpairs 111（2.36× bound）；10k 14894（1.67× bound）。每核 outstanding 上限
-{CORE_OUTSTANDING} 在 10k 上打满（峰值 100），p50 从放开窗口时的 ~2700 收到 509。</li>
-<li><b>S1</b> 把上环 / 下环失败计数回传给源端，对令牌桶速率做 AIMD。默认温和配置
-（α=0.15 / β=0.85 / epoch=64 / rate_min=0.30）在 uniform K=20 上仍赢 S0
-（184.7 vs 195.3）；allpairs 反而落到 123.7，10k 是 S0 的约 1.25×（18616）。
+allpairs 115（2.45× bound）；10k 13632（1.78× bound）。每核 outstanding 上限
+{CORE_OUTSTANDING} 在 10k 上打满（峰值 100），p50 497 / p99 1035。</li>
+<li><b>S1</b> 把上环 / 下环失败计数回传给源端，对令牌桶速率做 AIMD。拆 VC 之后
+REQ 与 DAT 不再互堵，默认温和配置下 10k 几乎回到 S0（13687 vs 13632，
+allpairs 114 vs 115），outstanding 同样打满 100，p50 488。
 教科书组合会一路乘到 0.05 地板，那是旋钮过狠，不是 AIMD 不能用。</li>
-<li>S1 仍是<b>在拿一点吞吐换时延</b>：10k 响应 p50 是 22 拍（S0 是 509），
-outstanding 峰值 56，碰不到 {CORE_OUTSTANDING} 的记分板。</li>
+<li>S1 不再明显「用吞吐换时延」：10k 响应 p50 与 S0 同量级（488 vs 497）。</li>
 <li><b>S2</b> 保留同样的 credit + 上环队列 + I-tag / E-tag 数据面，在上环<em>之前
 </em>加一次 request-grant 匹配，使 flit 只在 hop 已被预约时注入。它要付一个
 仲裁器加一小笔控制面开销。端口按 (node, plane) 计价之后（与 S0 的 DES 一致），
-S2 在数据面上仍最快（allpairs DES 91，10k 10512 = 1.18× bound）。
+REQ/DAT  hop 占用按 VC 切开。S2 在数据面上仍最快（allpairs DES 91，
+10k 9351 = 1.22× bound）。
 Pareto 纵轴与 §4 同一批 10k 端到端 makespan（不加 <code>t_sched_cycles</code>）时，
 S2 仍因面积更大而通常进不了膝点；S5–S13 同面积，不进前沿。</li>
 <li><b>S3</b> 用读 memory 的请求当 POP 调度信息：五方案对齐为每核最多
@@ -690,38 +704,37 @@ S2 仍因面积更大而通常进不了膝点；S5–S13 同面积，不进前�
 仍是反应式的，所以它<b>不</b>消除 slot 忙导致的上环失败。没有单独的
 pull-token RTT——请求在数据面上走到 HA，本身就是 grant。allpairs / 10k 与 S0 重合。</li>
 <li><b>S4</b> 是分布式、零额外 bit 的 leave 优先级：core 上先让响应下环（解锁
-outstanding），HA 上先让请求下环（尽快放出响应）。按边时延下 allpairs 114，
-被 S0 的 111 支配；10k 15029，也略慢于 S0。</li>
+outstanding），HA 上先让请求下环（尽快放出响应）。拆 VC 后 allpairs 93，
+快于 S0 的 115；10k 13777，仍略慢于 S0。</li>
 <li><b>S5</b> 预约 dest 的 leave 时隙：注入前算 ETA，若该 (dst, plane, cycle)
-已被占用则本拍不上环。同拍多个候选留节点号更小的源。消灭双方向同拍到达造成的偏转（10k 偏转 11035→0），
-makespan 14894→13001（1.45× bound，S2 仍是 1.18×）。allpairs 111→86。
+已被占用则本拍不上环。同拍多个候选留节点号更小的源。消灭双方向同拍到达造成的偏转（10k 偏转 12256→0），
+makespan 13632→12151（1.58× bound，S2 仍是 1.22×）。allpairs 115→89。
 面积只多一张 64 拍窗口的 leave 记分板。</li>
-<li><b>S6</b> 与 S5 同一张预约表，同拍 dest 冲突改留最老的 flit。allpairs 仍是 86
-（Pareto 上与 S5 重合）；10k 13001→13033，略慢于 S5，p99 1020→1077。
+<li><b>S6</b> 与 S5 同一张预约表，同拍 dest 冲突改留最老的 flit。allpairs 仍是 89
+（Pareto 上与 S5 重合）；10k 12151→11962。
 面积与 S5 相同。</li>
 <li><b>S7</b> 在 S6 上加 hop_bounce：本 plane 第一跳被占时，若另一 plane 的
-第一跳和 dest leave 都空，就改绑过去。allpairs 86→81；10k 13033→12798
-（1.43× bound）。面积与 S5 / S6 相同。p99 从 1077 升到 1713——换 plane 换来吞吐，
-尾核公平回退一点。</li>
+第一跳和 dest leave 都空，就改绑过去。allpairs 89→79；10k 11962→11951。
+面积与 S5 / S6 相同。</li>
 <li><b>S8</b> 在注入时现场选 hop 和 dest leave 都空的 plane；两个都能上就走
-占用更低的。allpairs 81→78；10k 12798→11968（1.34× bound）。面积仍是
+占用更低的。allpairs 79→68；10k 11951→10824（1.41× bound）。面积仍是
 <code>ring2_ej</code>。</li>
 <li><b>S9</b> 在 S8 上：本方向第一跳仍忙时，若另一方向绕路不超过 +2 hop
-且 dest leave 空，就改走那边。allpairs 78→76；10k 11968→11698（1.31× bound）。
+且 dest leave 空，就改走那边。allpairs 68→74（略回退）；10k 10824→10663（1.39× bound）。
 面积仍是 <code>ring2_ej</code>。</li>
-<li><b>S10</b> 只让响应走 late_dir，请求保持最短路。allpairs 76→80；
-10k 11698→11757，两项都略输给 S9。</li>
+<li><b>S10</b> 只让响应走 late_dir，请求保持最短路。allpairs 74→73；
+10k 10663→10728，两项都略输给 S9。</li>
 <li><b>S11</b> 同拍多个响应争同一第一跳时只留最老的（不预约未来 hop）。
-allpairs 80→74；10k 11757→11351（1.27× bound）；p99 1430→807。
+allpairs 73→69；10k 10728→10322（1.34× bound）；p99 1368→896。
 面积仍是 <code>ring2_ej</code>。</li>
 <li><b>S12</b> 在 dest leave 与第一跳上做一波本地 request-grant：dest
-grant 等到 hop accept 才提交，hop 失败则 dest 让给下一名。allpairs 74→71；
-10k 11351→11381，略慢于 S11。面积仍是 <code>ring2_ej</code>。</li>
-<li><b>S13</b> 在 dest-granted 的 hop grant 里优先剩余 hop 更短的。allpairs 仍 71；
-10k 11381→11201（1.25× bound）。面积仍是 <code>ring2_ej</code>。</li>
+grant 等到 hop accept 才提交，hop 失败则 dest 让给下一名。allpairs 仍 69；
+10k 10322→10211。面积仍是 <code>ring2_ej</code>。</li>
+<li><b>S13</b> 在 dest-granted 的 hop grant 里优先剩余 hop 更短的。allpairs 仍 69；
+10k 10211→10220。面积仍是 <code>ring2_ej</code>。</li>
 <li><b>S14</b> 在 HA 两个 srcq 被 late_plane 绑到同一第一跳时，短/老的留下，
 另一条换到 hop+dest 都空的另一 plane。面积仍是 <code>ring2_ej</code>。
-allpairs <b>70</b>（1.49× bound）；10k <b>11106</b>（1.24× bound，p50=408 / p99=919），
+allpairs <b>64</b>（1.36× bound）；10k <b>10031</b>（1.31× bound，p50=364 / p99=825），
 是分布式方案里最快的。10k Pareto 前沿见表（纵轴与 §4 同一批）。</li>
 <li>4 深的下环队列在这些负载下几乎没有作用：峰值占用只有 1。偏转来自
 每 (node, plane) <b>唯一</b>的那个 leave 端口，两个方向都要抢它。真正的限制是

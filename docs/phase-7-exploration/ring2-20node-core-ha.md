@@ -1,8 +1,9 @@
 # 2-full-ring 20 节点：九方案 makespan + request-grant Pareto
 
 **几何：** 20 节点；偶数 index = AI core，奇数 = memory Home Agent；节点 19 与 0 相邻。
-**Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。相邻 hop 时延按边：`2,2,2,3,1,3,1,1,2,4,1,1,3,1,3,2,2,2,3,3`（最后一项是 HA19 ↔ C0）。
-**流量：** 读往返。core→HA 请求 1 flit，HA→core 响应 R flit。**makespan = 最后一个响应 flit 被 core PE drain 的拍。**
+**Fabric：** 两个独立的并行 ring plane，每个 plane 自身双向。每节点每 plane 一个 inject/eject 端口，**plane 内双向共用同一 buffer**。有向段 `20 × 2 × 2 = 80`。CHI **REQ 与 DAT 独立 VC**（SNP/RSP 本闭集不实例化），hop 容量 `80 × 2 = 160` flit/cycle。相邻 hop 时延按边：`2,2,2,3,1,3,1,1,2,4,1,1,3,1,3,2,2,2,3,3`（最后一项是 HA19 ↔ C0）。
+**协议：** AMBA CHI。操作全部按 **non-cacheable、non-snoopable 读**（`ReadNoSnp`）处理：core 是 RN，HA 是 completer。没有 SNP，没有 cache line 状态，没有 snoop fanout。
+**流量：** 一条事务 = REQ 上 1 flit 请求 + DAT 上 R flit 数据（CompData 形态）。REQ 与 DAT 不共享 hop 占用。**makespan = 最后一个 DAT flit 被 core PE drain 的拍。**
 **Workload：** `allpairs`（10×10 每对 m 个事务，确定性）+ `uniform`（每 core 发 K 个事务，目的地在 10 个 HA 中均匀随机，多 seed）。
 **共同数据面（九方案相同）：** 点对点 credit-based flow control + **8 深上环队列** + I-tag + E-tag。
 **九方案只改注入/调度策略：** S0 在有 credit 时 RR 上环；S1 再加失败计数 piggyback + AIMD 源端速率；S2 同一数据面上做 request-grant（iSLIP 族）；S3 读请求作 POP 调度信息，HA 调度后给响应；S4 同 S0 数据面 + kind-aware leave；S5 预约 dest leave 时隙（同拍留节点号更小的源）；S6 同 S5 预约表，同拍 dest 冲突留最老的 flit；S7 同 S6，本 plane 第一跳被占时改绑到另一 plane；S8 注入时现场选 hop+dest 都空的 plane。
@@ -20,7 +21,9 @@
 
 ## 1. 拓扑与路由
 
-节点 `i` 的角色：`is_core(i) ⇔ i % 2 == 0`。最短方向，平局走 CW（+1）。Plane 选择是注入/调度策略，不是拓扑事实：
+节点 `i` 的角色：`is_core(i) ⇔ i % 2 == 0`。最短方向，平局走 CW（+1）。Plane 选择是注入/调度策略，不是拓扑事实。事务层固定为 CHI `ReadNoSnp`（NC、无 snoop），因此环上不会出现 SNP 广播或目录查找；请求→数据依赖仍然在：HA 必须先收下 REQ 才发出 DAT。本仿真实例化 **REQ 与 DAT 两条独立 VC**（每 hop 每 VC σ=1）；SNP/RSP 因 NC CompData 省略。仍没有 RetryAck / P-credit / DBID / WriteNoSnp。inject/leave 端口仍是每 (node, plane) 各 1。
+
+Plane 选择：
 
 | `plane_sel` | 行为 |
 |---|---|
@@ -31,19 +34,19 @@
 
 ## 1.5 makespan 的理论下界（形式化）
 
-记号：`N=20` 节点，`P=2` plane，`σ=1` 拍/flit（同一有向段上连续两 flit 的最小间隔），`λ(u,v)` = 相邻无向边 hop 时延（1–4 拍，见几何），有向段 `2PN=80`。事务集合 `T`，每个 `t` 是 core→HA 的 `m_req` flit 请求 + HA→core 的 `m_resp` flit 响应，路径 `π(t)` 取最短方向。
+记号：`N=20` 节点，`P=2` plane，`σ=1` 拍/flit（同一 VC 上连续两 flit 的最小间隔），`λ(u,v)` = 相邻无向边 hop 时延（1–4 拍，见几何），有向段 `2PN=80`，CHI VC = REQ+DAT（hop 容量 160）。事务集合 `T`，每个 `t` 是一条 CHI `ReadNoSnp`：core（RN）→HA 的 `m_req` flit REQ + HA→core 的 `m_resp` flit DAT，无 SNP；路径 `π(t)` 取最短方向。
 
 四条下界都是「某资源必须搬的总量 ÷ 该资源容量」的计数论证，对**任何**调度策略成立，包括离线最优：
 
 **LB_link（段带宽）** 对每条不区分 plane 的有向邻接 `(u,v)`，令
-`L(u,v) = Σ_t m_req·[⟨u,v⟩∈π_req(t)] + m_resp·[⟨u,v⟩∈π_resp(t)]`，则
-`makespan ≥ σ·⌈ max_(u,v) L(u,v) / P ⌉`。
-必须除以 `P`：plane 分配是策略不是物理约束，同一有向 hop 两个 plane 都能承载。用某个具体 `plane_sel` 的单 plane 峰值会在仿真器平衡得更好时反过来超过实测值，那就不是下界。
+`L_REQ(u,v) = Σ_t m_req·[⟨u,v⟩∈π_req(t)]`，`L_DAT` 同理用 `m_resp`，则
+`makespan ≥ σ·max( ⌈max L_REQ / P⌉, ⌈max L_DAT / P⌉ )`。
+REQ 与 DAT 不共享 hop。必须除以 `P`：plane 分配是策略不是物理约束。
 
 **LB_port（端口）** 令 `B(n)` / `E(n)` 为节点 `n` 上必须上环 / 下环的 flit 总数（跨 plane 合并、请求+响应合并），每节点每 plane 各 1 个 inject / eject 口，则
 `makespan ≥ σ·⌈ max_n max(B(n), E(n)) / P ⌉`。
 
-**LB_cut（二等分割）** 环的二等分要切**两个**缺口。取 `X = {⟨N/2−1,N/2⟩, ⟨N/2,N/2−1⟩, ⟨N−1,0⟩, ⟨0,N−1⟩} × P`，共 8 条有向段；`C` 为路径穿过 `X` 的 flit-段数，则 `makespan ≥ σ·⌈C/|X|⌉`。数实际穿越次数——core/HA 交错布局下大量路径只有 1 跳，套用「一半流量过割」会高估到超过实测。
+**LB_cut（二等分割）** 环的二等分要切**两个**缺口。取 `X = {⟨N/2−1,N/2⟩, ⟨N/2,N/2−1⟩, ⟨N−1,0⟩, ⟨0,N−1⟩} × P`，共 8 条有向段；REQ 与 DAT 分别计数穿越，`makespan ≥ σ·max(⌈C_REQ/|X|⌉, ⌈C_DAT/|X|⌉)`。
 
 **LB_txn（单事务串行）** 事务内部严格串行，取最深的那个：
 `makespan ≥ max_t [ delay(π_req(t)) + m_req·σ + t_ha + delay(π_resp(t)) + m_resp·σ ]`，
@@ -53,10 +56,10 @@
 
 | 档位 | LB_link | LB_port | LB_cut | LB_txn | bound | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| allpairs m=1 R=4（100 事务） | 35 | 20 | 32 | **47** | 47 | 111 (2.36×) | 123.7 (2.63×) | 91 (1.94×) | 111 (2.36×) | 114 (2.43×) | 86 (1.83×) | 86 (1.83×) | 81 (1.72×) | **78 (1.66×)** |
-| uniform K=2500 R=4（25000 事务） | **8939** | 5168 | 7788 | 47 | 8939 | 15039 (1.68×) | 18616 (2.08×) | **10403 (1.16×)** | 15039 (1.68×) | 15207 (1.70×) | 13296 (1.49×) | 13207 (1.48×) | 12880 (1.44×) | **12071 (1.35×)** |
+| allpairs m=1 R=4（100 事务） | 30 | 20 | 25 | **47** | 47 | 115 (2.45×) | 114 (2.43×) | 91 (1.94×) | 115 (2.45×) | 93 (1.98×) | 89 (1.89×) | 89 (1.89×) | 79 (1.68×) | **68 (1.45×)** |
+| uniform K=2500 R=4（25000 事务） | **7680** | 5168 | 6230 | 47 | 7680 | 13632 (1.78×) | 13687 (1.78×) | **9351 (1.22×)** | 13632 (1.78×) | 13777 (1.79×) | 12151 (1.58×) | 11962 (1.56×) | 11951 (1.56×) | **10824 (1.41×)** |
 
-两档的主导项不同：allpairs 事务太少、资源计数没饱和，瓶颈是单事务往返时延；10k 那档段带宽主导，S2 做到 1.16× 物理极限。每核对齐 512 条 outstanding 之后，S3 与 S0 在这两档重合（S3 的 HA RR 不再是瓶颈）。按边时延下 S4 不再支配 S0（allpairs 114 vs 111；10k 15207 vs 15039）——kind-aware leave 解的是 leave 口上的种类冲突，不是段带宽。S14 在 allpairs 上做到 70（1.49× bound），10k 11147（1.25× bound），是分布式最快。
+两档的主导项不同：allpairs 事务太少、资源计数没饱和，瓶颈仍是单事务往返时延（`LB_txn=47`）；10k 那档 DAT 段带宽主导（`LB_link=7680`，不再把 REQ 加进同一 hop）。CHI 拆 VC 之后同一有向 hop 上 REQ 与 DAT 可同拍各走 1 个，10k 下界从 8939 降到 7680。S2 做到 9351（1.22× bound），S14 10031（1.31× bound），S0 13632（1.78×）。S3 与 S0 仍重合。S4 在 allpairs 上变得明显快于 S0（93 vs 115），因为 leave 口仍共享、但 hop 上 REQ/DAT 不再互堵。
 
 **为什么不紧。** 每条都是一次松弛：(1) 除 `LB_txn` 外丢掉了请求→响应依赖，把两波当独立车队——这是 allpairs 那档 bound 只有 47 的直接原因；(2) 不含偏转，假设每 flit 只走最短路，S0 实测 flit-hop 比最短路多约 40%；(3) plane 分配当自由变量；(4) 不含上环队列深度、leave 端口冲突、I/E-tag 抑制；(5) 四项各自取 max，没有联立，真正的 LP 松弛会更高。
 
@@ -67,8 +70,8 @@
 | 层 | S0 RR | S1 AIMD | S2 request-grant | S3 push-on-pull | S4 kind-aware leave |
 |---|---|---|---|---|---|
 | 相邻节点 hop 时延 | 按边 1–4 拍 | 同左 | 同左 | 同左 | 同左 |
-| 上环队列（每 node, plane） | 8 flit | 8 flit | 8 flit | 8 flit | 8 flit |
-| 下环队列（每 node, plane） | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag |
+| 上环队列（每 node, plane, VC） | 8 flit | 8 flit | 8 flit | 8 flit | 8 flit |
+| 下环队列（每 node, plane, VC） | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag | 4 + 1 E-tag |
 | inject / eject 端口 | 每 (node, plane) 1 个 | 同左 | 同左 | 同左 | 同左 |
 | 点对点 credit FC | 有 | 有 | 有 | 有 | 有 |
 | I-tag（上环饥饿有界） | 有 | 有 | 有 | 有 | 有 |
@@ -393,6 +396,6 @@ S2 的上环队列占用没法直接比：调度器给出的是刚性 t0，源�
 
 S1 用温和 AIMD 之后，10k makespan 是 **18616**（S0 的 1.24×）。上环失败 110774，仍低于 S0 的 192305；响应 p50 / p99 为 22 / 187（S0 是 2755 / 3686）；outstanding 峰值 56。仍然是在拿一点吞吐换时延，但不再把速率打到地板。
 
-接收带宽图：`results/ring2_core_recv_bw_10k.png`（十五面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=8939` 拍、1.12 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝；S14 玫红。
+接收带宽图：`results/ring2_core_recv_bw_10k.png`（十五面板、共用 x）和 `results/ring2_core_recv_bw_10k_overlay.png`（均值叠图；黑点线是解析下界对应的匀速接收，`bound=7680` 拍、1.30 flit/cycle/core）。S3 虚线叠在 S0 上；S4 橙色；S5 青绿；S6 品红；S7 紫色；S8 金色；S9 绯红；S10 翠绿；S11 锈色；S12 靛蓝；S13 青蓝；S14 玫红。
 
-全网有向段总带宽：`results/ring2_link_bw_10k.png`（uniform 10k）和 `results/ring2_link_bw_allpairs.png`（allpairs m=100 R=4）。纵轴是 80 条有向 hop 每拍启动的 flit 数（σ=1，虚线 = 80）；偏转计入。
+全网有向段总带宽：`results/ring2_link_bw_10k.png`（uniform 10k）和 `results/ring2_link_bw_allpairs.png`（allpairs m=100 R=4）。纵轴是 REQ+DAT 独立 VC 每拍启动的 flit 数（σ=1，虚线 = 160）；偏转计入。

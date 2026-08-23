@@ -1,6 +1,6 @@
 {
-  "n_total": 29,
-  "n_ok": 29,
+  "n_total": 36,
+  "n_ok": 36,
   "all_ok": true,
   "rows": [
     {
@@ -118,7 +118,35 @@
     {
       "name": "s14_sib_ha_beats_s13_allpairs",
       "ok": true
+    },
+    {
+      "name": "write_vc_mapping",
+      "ok": true
+    },
+    {
+      "name": "write_four_phase_conservation",
+      "ok": true
+    },
+    {
+      "name": "write_phase_ordering",
+      "ok": true
+    },
+    {
+      "name": "write_inring_never_blocked",
+      "ok": true
+    },
+    {
+      "name": "write_makespan_ge_bound",
+      "ok": true
+    },
+    {
+      "name": "write_fairness_metrics_sane",
+      "ok": true
+    },
+    {
+      "name": "s15_beats_s0_fairness",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-20T07:49:17Z"
+  "generated_at": "2026-08-22T14:35:05Z"
 }

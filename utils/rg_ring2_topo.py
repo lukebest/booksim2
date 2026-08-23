@@ -15,6 +15,14 @@ Hop delay is per undirected edge (same both directions). Default
 the last entry is mem HA 19 ↔ core 0. Routing is still hop-count
 shortest path (CW on a hop-count tie).
 
+Protocol is AMBA CHI, restricted to non-cacheable non-snoopable reads
+(`ReadNoSnp`): cores are RNs, HAs are completers. No SNP channel, no
+cache-line state. One txn is 1 REQ flit plus R DAT flits (CompData).
+The ring instantiates two independent CHI VCs (REQ and DAT); SNP/RSP
+are omitted in this NC CompData closed set. Each VC has its own hop
+occupancy (σ=1), so REQ and DAT may traverse the same directed hop
+in the same cycle. Inject/leave ports stay one per (node, plane).
+
 A transfer is a single arc: pick a plane, pick the shortest direction (CW on a
 tie), ride until the destination, leave. There is no turn and therefore no
 transfer FIFO and no R4.
@@ -57,7 +65,25 @@ Pair = tuple[int, int]
 PlaneSel = Literal["static_hash", "rr_per_pkt", "least_occupied",
                    "req_resp_split"]
 SpatialReuse = Literal["arc", "whole_ring"]
-Kind = Literal["req", "resp"]
+Kind = Literal["req", "resp", "dbid", "wdata", "comp"]
+ChiVc = Literal["req", "rsp", "dat"]
+# ReadNoSnp closed set: REQ carries requests, DAT carries CompData.
+# SNP/RSP are not instantiated (no snoop; Comp is folded into CompData).
+CHI_VCS: tuple[ChiVc, ...] = ("req", "dat")
+# WriteNoSnp closed set needs a real RSP channel for DBIDResp and Comp.
+CHI_VCS_WRITE: tuple[ChiVc, ...] = ("req", "rsp", "dat")
+
+_VC_OF: dict[str, ChiVc] = {
+    "req": "req",       # ReadNoSnp / WriteNoSnp request
+    "resp": "dat",      # CompData (read)
+    "dbid": "rsp",      # DBIDResp (write)
+    "comp": "rsp",      # Comp (write)
+    "wdata": "dat",     # WriteData (write)
+}
+
+
+def vc_of(kind: Kind) -> ChiVc:
+    return _VC_OF.get(kind, "dat")
 
 
 def is_core(n: int) -> bool:
@@ -176,7 +202,8 @@ class Ring2Topology:
                  hop_lat: int = HOP_LAT, sigma: int = SIGMA,
                  board_ports: int = 1, leave_ports: int = 1,
                  spatial_reuse: SpatialReuse = "arc",
-                 link_lats: Sequence[int] | None = None):
+                 link_lats: Sequence[int] | None = None,
+                 vcs: Sequence[str] | None = None):
         if n < 4 or n % 2:
             raise ValueError("n must be even and >= 4")
         if n_planes < 1:
@@ -204,9 +231,16 @@ class Ring2Topology:
         # rings: one per (plane, dir) so sched_cost can count grant pointers
         self.rings: list[tuple[PlaneId, Dir]] = [
             (p, d) for p in range(n_planes) for d in (1, -1)]
+        self.vcs: tuple[str, ...] = tuple(vcs) if vcs else CHI_VCS
+        self.n_vc = len(self.vcs)
         self.directed_links: list[Edge] = self._directed_links()
         self.undirected_links = sorted(
             {(p, min(u, v), max(u, v)) for p, u, v in self.directed_links})
+
+    @property
+    def hop_bw_cap(self) -> int:
+        """Directed hops × independent CHI VCs (REQ+DAT, +RSP for writes)."""
+        return len(self.directed_links) * self.n_vc
 
     def _directed_links(self) -> list[Edge]:
         out: list[Edge] = []
@@ -416,9 +450,14 @@ class Ring2Topology:
                 out[(key[0], key[1])] += val   # (kind, node)
             return out
 
-        link_lb = math.ceil(
-            _max_load(_collapse_links(_merge(req_load, resp_load)))
-            / max(1, self.n_planes)) * sig
+        # CHI VCs are independent: REQ and DAT do not share hop occupancy.
+        # Port bounds still merge kinds — inject/leave stay 1 per (node, plane).
+        link_lb = max(
+            math.ceil(_max_load(_collapse_links(req_load))
+                      / max(1, self.n_planes)),
+            math.ceil(_max_load(_collapse_links(resp_load))
+                      / max(1, self.n_planes)),
+        ) * sig
         port_lb = math.ceil(
             _max_load(_collapse_ports(_merge(rb, sb, rl, sl)))
             / max(1, self.n_planes)) * sig
@@ -442,12 +481,14 @@ class Ring2Topology:
             cut.add((p, mid, mid - 1))
             cut.add((p, self.n - 1, wrap))
             cut.add((p, wrap, self.n - 1))
-        cut_load = 0
-        for pth, mm in ((req_paths, m_req), (resp_paths, m_resp)):
-            for path in pth:
-                cut_load += mm * sum(1 for e in path.links() if e in cut)
+        def _cut_load(paths, mm) -> int:
+            return sum(mm * sum(1 for e in path.links() if e in cut)
+                       for path in paths)
         cut_cap = len(cut)
-        cut_lb = math.ceil(cut_load / max(1, cut_cap)) * sig
+        cut_lb = max(
+            math.ceil(_cut_load(req_paths, m_req) / max(1, cut_cap)),
+            math.ceil(_cut_load(resp_paths, m_resp) / max(1, cut_cap)),
+        ) * sig
         bound = max(link_lb, port_lb, single, cut_lb, min_hop + m_req * sig
                     + t_ha + min_hop + m_resp * sig)
         return {
@@ -459,6 +500,8 @@ class Ring2Topology:
             "n_req_paths": len(req_paths), "n_resp_paths": len(resp_paths),
             "n_directed": len(self.directed_links),
             "n_undirected": len(self.undirected_links),
+            "n_vc": self.n_vc,
+            "hop_bw_cap": self.hop_bw_cap,
         }
 
 
@@ -468,12 +511,21 @@ class Ring2Topology:
 
 @dataclass(frozen=True)
 class Txn:
-    """One read transaction: 1 request flit, R response flits."""
+    """One CHI transaction, non-cacheable and non-snoopable.
+
+    `op == "read"`  — ReadNoSnp: 1 REQ core→HA, then `m_resp` DAT (CompData)
+                      HA→core. Two VCs, one round trip.
+    `op == "write"` — WriteNoSnp: 1 REQ core→HA, 1 DBIDResp HA→core,
+                      `m_wdata` WriteData core→HA, 1 Comp HA→core. Three VCs,
+                      two serial round trips.
+    """
     txn_id: int
     core: int
     ha: int
     m_req: int = 1
     m_resp: int = 4
+    op: Literal["read", "write"] = "read"
+    m_wdata: int = 0
 
 
 def build_allpairs(*, m: int = 1, m_resp: int = 4, n: int = N_NODES
@@ -506,6 +558,54 @@ def build_uniform(*, k: int = 100, m_resp: int = 4, n: int = N_NODES,
     return out
 
 
+def build_uniform_write(*, k: int = 100, m_wdata: int = 4, n: int = N_NODES,
+                        seed: int = 0, mem: Sequence[int] | None = None,
+                        core_set: Sequence[int] | None = None) -> list[Txn]:
+    """Each core issues `k` WriteNoSnp txns to a uniform-random memory node.
+
+    `mem` overrides which nodes are memory. It matters more than it looks:
+    with all ten odd nodes as memory the destination set is rotationally
+    symmetric, so every core sees a statistically identical view of the ring
+    and uniform traffic is fair by construction. Drop any memory node and
+    that symmetry is gone — cores near the gap route differently from cores
+    far from it, and the position dependence shows up without any hotspot.
+    """
+    import random
+    cs = list(core_set) if core_set is not None else cores(n)
+    hs = list(mem) if mem is not None else has(n)
+    rng = random.Random(seed)
+    out: list[Txn] = []
+    tid = 0
+    for c in cs:
+        for _ in range(k):
+            h = hs[rng.randrange(len(hs))]
+            out.append(Txn(tid, c, h, 1, 0, "write", m_wdata))
+            tid += 1
+    return out
+
+
+def build_hot_write(*, k: int = 100, m_wdata: int = 4,
+                    hot_has: Sequence[int] = (9, 11), n: int = N_NODES
+                    ) -> list[Txn]:
+    """Every core writes into a clustered memory region (`hot_has`).
+
+    Two adjacent memory HAs stand in for one memory stack shared by all AI
+    cores. Shortest-path routing then funnels five cores' traffic through the
+    single directed hop that enters the cluster from each side, which is what
+    makes a core's achieved bandwidth depend on where it sits: the core next
+    to the cluster injects into a hop that is already full of everyone else's
+    flits, while the core farthest away injects into a private one.
+    """
+    out: list[Txn] = []
+    tid = 0
+    for c in cores(n):
+        for i in range(k):
+            out.append(Txn(tid, c, hot_has[i % len(hot_has)], 1, 0,
+                           "write", m_wdata))
+            tid += 1
+    return out
+
+
 def paths_for_txns(topo: Ring2Topology, txns: Sequence[Txn], *,
                    strategy: PlaneSel = "static_hash"
                    ) -> tuple[list[Ring2Path], list[Ring2Path]]:
@@ -520,6 +620,101 @@ def paths_for_txns(topo: Ring2Topology, txns: Sequence[Txn], *,
                                      txn_id=t.txn_id, strategy=strategy,
                                      rr_state=rr, occupancy=occ))
     return reqs, resps
+
+
+def write_paths_for_txns(topo: Ring2Topology, txns: Sequence[Txn], *,
+                         strategy: PlaneSel = "static_hash"
+                         ) -> dict[str, list[Ring2Path]]:
+    """Per-CHI-VC path lists for a WriteNoSnp batch.
+
+    REQ and DAT run core→HA, RSP runs HA→core. Each txn contributes exactly
+    one path to each VC; the flit multiplicity per VC is supplied separately
+    to `write_bounds` (REQ 1, RSP 2 = DBIDResp + Comp, DAT `m_wdata`).
+    """
+    rr: dict[int, int] = {}
+    occ: dict[int, int] = {}
+    out: dict[str, list[Ring2Path]] = {"req": [], "rsp": [], "dat": []}
+    for t in txns:
+        out["req"].append(topo.fixed_path(
+            t.core, t.ha, kind="req", txn_id=t.txn_id, strategy=strategy,
+            rr_state=rr, occupancy=occ))
+        out["rsp"].append(topo.fixed_path(
+            t.ha, t.core, kind="dbid", txn_id=t.txn_id, strategy=strategy,
+            rr_state=rr, occupancy=occ))
+        out["dat"].append(topo.fixed_path(
+            t.core, t.ha, kind="wdata", txn_id=t.txn_id, strategy=strategy,
+            rr_state=rr, occupancy=occ))
+    return out
+
+
+def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
+                 m_req: int = 1, m_rsp: int = 2, m_wdata: int = 4,
+                 t_ha: int = 0) -> dict[str, Any]:
+    """Lower bounds on makespan for a closed WriteNoSnp batch.
+
+    Independent CHI VCs mean the hop-occupancy floor is the *max* over VCs,
+    not the sum. Inject / leave ports are still one per (node, plane), so the
+    port floor merges every VC. `LB_txn` is a two-round-trip serial chain:
+    REQ → DBIDResp → WriteData → Comp.
+    """
+    sig = topo.sigma
+    mult = {"req": m_req, "rsp": m_rsp, "dat": m_wdata}
+    n_planes = max(1, topo.n_planes)
+
+    def _max(d: dict) -> int:
+        return max(d.values()) if d else 0
+
+    def _collapse_links(d: dict) -> dict:
+        out: dict = defaultdict(int)
+        for (_plane, u, v), val in d.items():
+            out[(u, v)] += val
+        return out
+
+    link_by_vc: dict[str, int] = {}
+    port_merged: dict = defaultdict(int)
+    for vc, paths in vc_paths.items():
+        m = mult[vc]
+        link_by_vc[vc] = math.ceil(
+            _max(_collapse_links(topo.link_load(paths, m))) / n_planes) * sig
+        b, l = topo.port_load(paths, m)
+        for d in (b, l):
+            for key, val in d.items():
+                port_merged[(key[0], key[1])] += val   # (kind, node)
+    link_lb = max(link_by_vc.values()) if link_by_vc else 0
+    port_lb = math.ceil(_max(port_merged) / n_planes) * sig
+
+    mid, wrap = topo.n // 2, 0
+    cut: set[Edge] = set()
+    for p in range(topo.n_planes):
+        cut.add((p, mid - 1, mid))
+        cut.add((p, mid, mid - 1))
+        cut.add((p, topo.n - 1, wrap))
+        cut.add((p, wrap, topo.n - 1))
+    cut_by_vc = {
+        vc: math.ceil(sum(mult[vc] * sum(1 for e in path.links() if e in cut)
+                          for path in paths) / max(1, len(cut))) * sig
+        for vc, paths in vc_paths.items()
+    }
+    cut_lb = max(cut_by_vc.values()) if cut_by_vc else 0
+
+    def _leg(vc: str) -> int:
+        ps = vc_paths.get(vc) or []
+        return max((topo.path_lat(p.src, p.dst, p.dir) for p in ps), default=0)
+
+    # REQ → (HA service) → DBIDResp → WriteData ×W → (HA service) → Comp
+    txn_lb = (_leg("req") + m_req * sig + t_ha
+              + _leg("rsp") + sig
+              + _leg("dat") + m_wdata * sig + t_ha
+              + _leg("rsp") + sig)
+    bound = max(link_lb, port_lb, cut_lb, txn_lb)
+    return {
+        "link_by_vc": link_by_vc, "cut_by_vc": cut_by_vc,
+        "link_lb": link_lb, "port_lb": port_lb, "cut_lb": cut_lb,
+        "txn_lb": txn_lb, "bound": bound,
+        "n_txn": len(vc_paths.get("req") or []),
+        "n_vc": topo.n_vc, "hop_bw_cap": topo.hop_bw_cap,
+        "m_req": m_req, "m_rsp": m_rsp, "m_wdata": m_wdata,
+    }
 
 
 if __name__ == "__main__":
