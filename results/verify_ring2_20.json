@@ -1,6 +1,6 @@
 {
-  "n_total": 36,
-  "n_ok": 36,
+  "n_total": 39,
+  "n_ok": 39,
   "all_ok": true,
   "rows": [
     {
@@ -146,7 +146,19 @@
     {
       "name": "s15_beats_s0_fairness",
       "ok": true
+    },
+    {
+      "name": "study_topology_roles",
+      "ok": true
+    },
+    {
+      "name": "study_baseline_unfair",
+      "ok": true
+    },
+    {
+      "name": "s15_fixes_study_workload",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-23T02:09:57Z"
+  "generated_at": "2026-08-23T06:41:24Z"
 }

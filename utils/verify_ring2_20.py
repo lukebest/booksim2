@@ -672,16 +672,28 @@ def _write_topo() -> Ring2Topology:
 
 def _run_write(scheme: str = "S0", *, k: int = 40, W: int = 4,
                pattern: str = "uniform", cfg: dict | None = None):
+    """Run one write workload.
+
+    "study" is the configuration the write report analyses: 10 AI cores
+    writing uniformly to 8 memory nodes, with 9 and 19 non-terminal.
+    """
+    from dse_ring2_write_fair import CORE_NODES, FABRIC, MEM_NODES
     topo = _write_topo()
-    txns = (build_uniform_write(k=k, m_wdata=W, seed=0) if pattern == "uniform"
-            else build_hot_write(k=k, m_wdata=W, hot_has=(9, 11)))
+    if pattern == "study":
+        txns = build_uniform_write(k=k, m_wdata=W, seed=0, mem=MEM_NODES,
+                                   core_set=CORE_NODES)
+        fabric = dict(FABRIC)
+    else:
+        txns = (build_uniform_write(k=k, m_wdata=W, seed=0)
+                if pattern == "uniform"
+                else build_hot_write(k=k, m_wdata=W, hot_has=(9, 11)))
+        fabric = dict(plane_sel="least_occupied", per_vc_srcq=True)
     if scheme == "S0":
-        sim = Ring2BaseSim(topo, Ring2BaseParams(
-            plane_sel="least_occupied", per_vc_srcq=True), seed=0)
+        sim = Ring2BaseSim(topo, Ring2BaseParams(**fabric), seed=0)
     else:
         sim = Ring2FcSim(topo, Ring2FcParams(
-            plane_sel="least_occupied", per_vc_srcq=True,
-            mode="s15" if scheme == "S15" else "s1", **(cfg or {})), seed=0)
+            **fabric, mode="s15" if scheme == "S15" else "s1",
+            **(cfg or {})), seed=0)
     sim.offer_batch(txns)
     while sim.t < 400_000 and not sim.done():
         sim.step()
@@ -768,6 +780,52 @@ def test_s15_beats_s0_fairness() -> None:
         (s0["throughput"], s15["throughput"])
 
 
+def test_study_topology_roles() -> None:
+    """The reported workload: 10 cores, 8 mem, nodes 9 and 19 terminal-free."""
+    from dse_ring2_write_fair import CORE_NODES, MEM_NODES, NON_TERMINAL
+    assert len(CORE_NODES) == 10 and len(MEM_NODES) == 8, \
+        (CORE_NODES, MEM_NODES)
+    assert set(NON_TERMINAL) == {9, 19}, NON_TERMINAL
+    assert not (set(MEM_NODES) | set(CORE_NODES)) & set(NON_TERMINAL), \
+        "9 / 19 must be neither core nor mem"
+    _, txns, _ = _run_write(k=8, pattern="study")
+    assert {t.core for t in txns} == set(CORE_NODES)
+    assert {t.ha for t in txns} == set(MEM_NODES)
+
+
+def test_study_baseline_is_position_unfair() -> None:
+    """Symmetric demand, asymmetric outcome: the phenomenon under study."""
+    from dse_ring2_write_fair import MEM_NODES
+    topo, _, sim = _run_write(k=600, pattern="study")
+    f = fairness_stats(sim.summary()["wr_inject_by_core"],
+                       sim.summary()["makespan"], 600 * 4)
+    assert f["max_min"] > 1.05, f"baseline unexpectedly fair: {f['max_min']}"
+    bw = {int(c): v for c, v in f["bw_by_core"].items()}
+    mem = set(MEM_NODES)
+    adj = {c: sum((c + d) % topo.n in mem for d in (-1, 1)) for c in bw}
+    two = [bw[c] for c in bw if adj[c] == 2]
+    one = [bw[c] for c in bw if adj[c] == 1]
+    assert two and one, adj
+    assert min(two) > max(one), \
+        f"adjacency classes overlap: adj2 {min(two)} vs adj1 {max(one)}"
+
+
+def test_s15_fixes_study_workload() -> None:
+    """S15 must equalise the reported workload without collapsing throughput."""
+    out = {}
+    for scheme in ("S0", "S15"):
+        _, _, sim = _run_write(scheme, k=600, pattern="study")
+        s = sim.summary()
+        out[scheme] = fairness_stats(s["wr_inject_by_core"], s["makespan"],
+                                     600 * 4)
+    s0, s15 = out["S0"], out["S15"]
+    assert s15["jain"] >= 0.98, s15["jain"]
+    assert s15["max_min"] < s0["max_min"], (s0["max_min"], s15["max_min"])
+    assert s15["bw_min"] > s0["bw_min"], (s0["bw_min"], s15["bw_min"])
+    assert s15["throughput"] > s0["throughput"] * 0.9, \
+        (s0["throughput"], s15["throughput"])
+
+
 def main() -> None:
     c = Checks()
     c.add("topo_roles_and_wrap", test_topo)
@@ -806,6 +864,9 @@ def main() -> None:
     c.add("write_makespan_ge_bound", test_write_makespan_ge_bound)
     c.add("write_fairness_metrics_sane", test_write_fairness_metrics_sane)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
+    c.add("study_topology_roles", test_study_topology_roles)
+    c.add("study_baseline_unfair", test_study_baseline_is_position_unfair)
+    c.add("s15_fixes_study_workload", test_s15_fixes_study_workload)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

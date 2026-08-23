@@ -246,9 +246,18 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 # Run one scheme
 # ---------------------------------------------------------------------------
 
+CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
+
+# Every scheme rides the same fabric: shortest-path routing, both planes
+# available and picked by occupancy, one board and one leave port per
+# (node, plane), per-VC boarding queues.
+FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
+              core_outstanding=CORE_OUTSTANDING_WR)
+
+
 def base_params() -> Ring2BaseParams:
     """Shared datapath settings. Every write scheme rides the same fabric."""
-    return Ring2BaseParams(plane_sel="least_occupied", per_vc_srcq=True)
+    return Ring2BaseParams(**FABRIC)
 
 
 def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
@@ -257,7 +266,7 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
     if scheme == "S0":
         return Ring2BaseSim(topo, base_params(), seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
-    p = Ring2FcParams(plane_sel="least_occupied", per_vc_srcq=True,
+    p = Ring2FcParams(**FABRIC,
                       mode="s1" if scheme == "S1" else "s15", **cfg)
     return Ring2FcSim(topo, p, seed=seed)
 
@@ -432,27 +441,57 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
 # because they give materially different answers: either those two nodes are
 # simply not write destinations (the ring still has 10 cores), or they are
 # compute like every other non-memory node (12 cores).
-MEM_GAP = (9, 19)
-MEM_8 = tuple(h for h in has(N_NODES) if h not in MEM_GAP)
+# Nodes 9 and 19 are neither memory nor AI core. They still sit on the ring
+# and still forward, but they never source or sink a write, so the memory set
+# is the eight remaining odd nodes and the ring is no longer rotationally
+# symmetric about the memory placement.
+NON_TERMINAL = (9, 19)
+MEM_NODES = tuple(h for h in has(N_NODES) if h not in NON_TERMINAL)
+CORE_NODES = tuple(cores(N_NODES))
 
 
 def build_pattern(name: str, *, k: int, W: int, seed: int) -> list[Txn]:
+    """The one workload under study: 10 AI cores writing uniformly to 8 mem."""
     if name == "uniform":
-        return build_uniform_write(k=k, m_wdata=W, seed=seed)
-    if name == "cluster":
-        return build_hot_write(k=k, m_wdata=W, hot_has=HOT_HAS)
-    if name == "gap":
-        return build_uniform_write(k=k, m_wdata=W, seed=seed, mem=MEM_8)
-    if name == "gap12":
-        return build_uniform_write(
-            k=k, m_wdata=W, seed=seed, mem=MEM_8,
-            core_set=sorted(cores(N_NODES) + list(MEM_GAP)))
+        return build_uniform_write(k=k, m_wdata=W, seed=seed, mem=MEM_NODES,
+                                   core_set=CORE_NODES)
     raise ValueError(f"unknown pattern {name}")
+
+
+def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
+               seeds: Sequence[int], schemes: Sequence[str]
+               ) -> list[dict[str, Any]]:
+    """Re-run the headline schemes on other seeds.
+
+    The reservation mechanism is discrete, so a single seed can flatter a
+    tuning point. Report the spread instead.
+    """
+    rows: list[dict[str, Any]] = []
+    for sd in seeds:
+        txns = build_pattern(pattern, k=k, W=W, seed=sd)
+        row: dict[str, Any] = {"seed": sd}
+        thr0 = None
+        for scheme in schemes:
+            r = run_scheme(scheme, topo, txns, seed=sd, quiet=True)
+            f = fairness_stats(r["wr_inject_by_core"], r["makespan"], k * W)
+            thr0 = f["throughput"] if scheme == "S0" else thr0
+            row[scheme] = {
+                "jain": f["jain"], "max_min": f["max_min"],
+                "throughput": f["throughput"],
+                "thr_delta_pct": (
+                    round(100.0 * (f["throughput"] - thr0) / thr0, 2)
+                    if thr0 else 0.0),
+            }
+        rows.append(row)
+        print(f"    seed {sd}: " + "  ".join(
+            f"{s} jain={row[s]['jain']} mm={row[s]['max_min']} "
+            f"({row[s]['thr_delta_pct']:+.2f}%)" for s in schemes), flush=True)
+    return rows
 
 
 def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
                 seed: int, bin_w: int, schemes: Sequence[str],
-                sweep_s1: bool) -> dict[str, Any]:
+                sweep_s1: bool, seeds: Sequence[int] = ()) -> dict[str, Any]:
     txns = build_pattern(pattern, k=k, W=W, seed=seed)
     flits_per_core = k * W
     vp = write_paths_for_txns(topo, txns, strategy="least_occupied")
@@ -486,13 +525,20 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
                       f"mk={d['makespan']} jain={f['jain']} "
                       f"max/min={f['max_min']}", flush=True)
 
+    seeds_out: list[dict[str, Any]] = []
+    if seeds:
+        print("  seed robustness ...", flush=True)
+        seeds_out = seed_sweep(pattern, topo, k=k, W=W, seeds=seeds,
+                               schemes=[s for s in ("S0", "S15")
+                                        if s in schemes])
+
     out: dict[str, Any] = {
         "pattern": pattern, "K": k, "W": W,
         "flits_per_core": flits_per_core, "n_txn": len(txns),
-        "hot_has": list(HOT_HAS) if pattern == "cluster" else None,
         "mem": sorted({t.ha for t in txns}),
         "core_set": sorted({t.core for t in txns}),
         "bounds": bounds, "schemes": runs, "sweep": sweep,
+        "seed_sweep": seeds_out,
     }
     if "S0" in runs:
         out["root_cause"] = root_cause(topo, txns, runs["S0"])
@@ -524,7 +570,9 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--quick", action="store_true", help="K=200 smoke run")
     ap.add_argument("--schemes", default="S0,S1,S15")
-    ap.add_argument("--patterns", default="uniform,cluster")
+    ap.add_argument("--patterns", default="uniform")
+    ap.add_argument("--seeds", default="",
+                    help="extra seeds for the S0/S15 robustness sweep")
     ap.add_argument("--sweep", action="store_true",
                     help="also sweep the S1 window / alpha-beta bands")
     ap.add_argument("--out", default=str(OUT))
@@ -539,7 +587,8 @@ def main() -> None:
     t0 = time.perf_counter()
     out_pats = {
         p: run_pattern(p, topo, k=k, W=args.W, seed=args.seed, bin_w=bin_w,
-                       schemes=schemes, sweep_s1=args.sweep)
+                       schemes=schemes, sweep_s1=args.sweep,
+                       seeds=[int(x) for x in args.seeds.split(",") if x])
         for p in patterns
     }
     bp = base_params()
@@ -547,7 +596,13 @@ def main() -> None:
         "meta": {
             "K": k, "W": args.W, "seed": args.seed, "bin_w": bin_w,
             "patterns": patterns, "schemes": schemes,
-            "hot_has": list(HOT_HAS), "plane_sel": bp.plane_sel,
+            "plane_sel": bp.plane_sel, "routing": "shortest_path",
+            "mem_nodes": list(MEM_NODES), "core_nodes": list(CORE_NODES),
+            "non_terminal": list(NON_TERMINAL),
+            "n_planes": topo.n_planes, "sigma": topo.sigma,
+            "board_ports": topo.board_ports,
+            "leave_ports": topo.leave_ports,
+            "t_xfer": bp.t_xfer, "eject_bw": bp.eject_bw,
             "vcs": list(topo.vcs), "n_vc": topo.n_vc,
             "hop_bw_cap": topo.hop_bw_cap,
             "link_lats": list(topo.link_lats),

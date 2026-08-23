@@ -75,8 +75,8 @@ class Ring2FcParams(Ring2BaseParams):
     # -- S15 only -------------------------------------------------------
     reserve_gap: int = 16         # how far below the ring-wide mean a node
                                   # must fall before it may post a hole
-    reserve_max: int = 64         # most holes one node may hold in a window
-    fair_headroom: float = 1.15   # let the shared hop try to grow a little
+    reserve_max: int = 32         # most holes one node may hold in a window
+    fair_headroom: float = 1.25   # let the shared hop try to grow a little
     busy_frac: float = 0.4        # hop occupancy before it advertises a share
     eject_share: bool = True      # also treat the leave port as a bottleneck
     fair_tol: float = 0.20        # spread in cumulative progress that has to
