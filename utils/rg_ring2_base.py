@@ -39,6 +39,27 @@ transaction so the read path above is untouched:
 DBIDResp and Comp need a real response channel, so a write run instantiates
 three CHI VCs by passing `Ring2Topology(vcs=("req", "rsp", "dat"))`. The
 transaction retires when Comp is drained by the core PE.
+
+CHI RetryAck / PCrdGrant (`ha_track > 0`)
+-----------------------------------------
+A completer has a finite request tracker. CHI's answer to a full tracker is
+not to queue the request but to bounce it: `RetryAck` sends the requester
+away, and it may only re-send once a `PCrdGrant` hands it a protocol credit.
+Both are single RSP flits, so no new channel appears.
+
+Three things follow, and they are the reason flow control is needed even
+where fairness is already acceptable:
+
+  * the bounce burns ring bandwidth (one wasted REQ, one RetryAck, one
+    PCrdGrant, one re-sent REQ) without moving a single byte of write data;
+  * the requester's outstanding slot stays allocated for the whole round
+    trip while making zero progress, so the *effective* outstanding count is
+    below the nominal cap;
+  * the re-sent request is accepted after requests issued behind it, which
+    reorders the stream.
+
+`ha_track = 0` means an unlimited tracker, which is the ungoverned model:
+every request is accepted on arrival and none of the above can happen.
 """
 
 from __future__ import annotations
@@ -89,6 +110,20 @@ class Ring2BaseParams:
     pop: bool = False
     pop_window: int = 0              # extra S3 per-(core, plane) cap; 0 = off
     pop_scope: str = "req_as_grant"  # "req_as_grant" | "resp_only"
+    # -- CHI RetryAck / PCrdGrant ---------------------------------------
+    # Request tracker entries per completer. A REQ holds one from acceptance
+    # until Comp is emitted; arriving at a full tracker earns a RetryAck.
+    # 0 = unlimited, i.e. every request is accepted on arrival.
+    ha_track: int = 0
+    pcrd_lat: int = 0             # completer cycles before PCrdGrant is sent
+    retry_backoff: int = 0        # requester cycles before the REQ goes again
+    # Free the requester's outstanding slot in issue order, the way a core
+    # with an in-order completion queue must. A retried transaction then
+    # blocks the slots of every younger transaction that already finished.
+    inorder_retire: bool = False
+    # Sample the outstanding / parked / head-of-line occupancy every N
+    # cycles. 0 = off, which is what keeps a plain run untouched.
+    outst_sample: int = 0
 
 
 @dataclass
@@ -112,6 +147,7 @@ class Flit:
     fail_eject: int = 0
     vc: str = "req"
     held: bool = False
+    retry: bool = False           # re-sent after RetryAck + PCrdGrant
 
 
 class Ring2BaseSim:
@@ -135,6 +171,11 @@ class Ring2BaseSim:
         # boarding queue (`inj_depth` deep) and the PE-side backlog behind it
         self.srcq: dict[Any, deque[Flit]] = defaultdict(deque)   # (node, plane)
         self.pending: dict[Any, deque[Flit]] = defaultdict(deque)
+        # Re-sent REQs, driven straight from the outstanding tracker. They
+        # take the board port ahead of the boarding queue: a retry is not new
+        # work waiting its turn, and queueing it behind requests that the
+        # outstanding cap is refusing would block the very slot it frees.
+        self.retryq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)       # (p, dir, vc)
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
@@ -211,6 +252,39 @@ class Ring2BaseSim:
         self._fail_cause: str = "hop_busy"
         self._deny_cause: str = "outstanding"
 
+        # -- CHI retry / ordering state (inert while ha_track == 0) ---------
+        self.ha_used: dict[int, int] = defaultdict(int)   # tracker entries
+        self.pcrd_q: dict[int, deque[Txn]] = defaultdict(deque)
+        # Credits granted but not yet spent by a returning REQ. They are
+        # reserved tracker entries, so they count against the cap.
+        self.pcrd_out: dict[int, int] = defaultdict(int)
+        # Tracker occupancy at the moment a request was accepted. This is the
+        # only completer state a response can legitimately carry back, and it
+        # is what a DCQCN-style mark has to be computed from.
+        self.acc_used: dict[int, int] = {}
+        # Per-core issue order, and the orders the completer accepted in and
+        # the core retired in. Reordering is the disagreement between them.
+        self.core_seq: dict[int, int] = {}               # txn_id -> issue idx
+        self._issue_n: dict[int, int] = defaultdict(int)
+        self.accept_order: dict[int, list[int]] = defaultdict(list)
+        self.retire_order: dict[int, list[int]] = defaultdict(list)
+        # Transactions holding an outstanding slot while making no progress:
+        # rejected by the completer, not yet re-accepted.
+        self.parked: dict[int, set[int]] = defaultdict(set)
+        self.retire_head: dict[int, int] = defaultdict(int)
+        self.done_seq: dict[int, set[int]] = defaultdict(set)
+        self.n_retry_by_core: dict[int, int] = defaultdict(int)
+        self.req_inject_t: dict[int, int] = {}           # first REQ board
+        # Time integrals of outstanding / parked / retired-but-held, per core.
+        self._outst_area: dict[int, int] = defaultdict(int)
+        self._park_area: dict[int, int] = defaultdict(int)
+        self._hol_area: dict[int, int] = defaultdict(int)
+        self._n_samples = 0
+        self.st["n_retry"] = 0
+        self.st["n_pcrd"] = 0
+        self.st["max_ha_used"] = 0
+        self.st["max_hol_hold"] = 0
+
     # -- routing / plane ----------------------------------------------------
 
     def _pick_plane(self, src: int, dst: int, kind: Kind, txn_id: int
@@ -233,6 +307,10 @@ class Ring2BaseSim:
         if getattr(txn, "op", "read") == "write":
             self.wdata_left[txn.txn_id] = txn.m_wdata
             self.wr_t0[txn.txn_id] = self.t
+            # Program order at the requester: the order the PE hands its
+            # transactions over, which is what reordering is measured against.
+            self.core_seq[txn.txn_id] = self._issue_n[txn.core]
+            self._issue_n[txn.core] += 1
         else:
             self.resp_left[txn.txn_id] = txn.m_resp
         self._n_txn_target += 1
@@ -263,12 +341,13 @@ class Ring2BaseSim:
             self.st["n_offered_resp"] += 1
 
     def _emit_write(self, txn: Txn, kind: Kind, src: int, dst: int,
-                    count: int, t_ready: int) -> None:
+                    count: int, t_ready: int, *, retry: bool = False) -> None:
         """Hand the next WriteNoSnp phase to its source PE at `t_ready`."""
         plane = self._pick_plane(src, dst, kind, txn.txn_id)
         for k in range(count):
             f = Flit(pid=self._pid, txn_id=txn.txn_id, seq=k, nflit=count,
-                     src=src, dst=dst, kind=kind, t_gen=t_ready, plane=plane)
+                     src=src, dst=dst, kind=kind, t_gen=t_ready, plane=plane,
+                     retry=retry)
             self._pid += 1
             self._place(f)
             self._wr_stash[(t_ready, src, txn.txn_id, kind, k)] = f
@@ -301,11 +380,20 @@ class Ring2BaseSim:
     def _offer_flit(self, f: Flit) -> None:
         """A PE hands a flit over; it waits behind the boarding queue."""
         key = self._sk(f.src, f.plane, f.vc)
+        if f.retry:
+            self.retryq[key].append(f)
+            self.active_src.add((f.src, f.plane))
+            return
         self.pending[key].append(f)
         self.st["max_pending"] = max(self.st["max_pending"],
                                      len(self.pending[key]))
         self.active_src.add((f.src, f.plane))
         self._admit(key)
+
+    def _q(self, key: Any) -> deque[Flit]:
+        """The queue this board port draws from: re-sends first."""
+        rq = self.retryq.get(key)
+        return rq if rq else self.srcq[key]
 
     def _admit(self, key: Any) -> None:
         """Move flits into the `inj_depth`-deep boarding queue while it fits."""
@@ -316,7 +404,8 @@ class Ring2BaseSim:
             self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
 
     def _src_idle(self, key: Any) -> bool:
-        return not self.srcq[key] and not self.pending[key]
+        return (not self.srcq[key] and not self.pending[key]
+                and not self.retryq[key])
 
     def _src_idle_all(self, keys: Sequence[Any]) -> bool:
         return all(self._src_idle(k) for k in keys)
@@ -458,6 +547,24 @@ class Ring2BaseSim:
                     ) -> bool:
         if f is None or f.kind != "req" or not is_core(f.src):
             return True
+        # A retried REQ already owns its outstanding slot. Charging it again
+        # would also deadlock the core: once every slot is held by a parked
+        # transaction, the retry that would free one could never board.
+        if f.retry:
+            return True
+        if self.p.inorder_retire and self.p.core_outstanding > 0:
+            # In-order retirement makes the window a contiguous range of issue
+            # indices, which is what a reorder buffer is. Gating on a *count*
+            # instead deadlocks: the count fills up with younger transactions
+            # that have finished but may not retire, and the one transaction
+            # whose retirement would release them can then never issue.
+            seq = self.core_seq.get(f.txn_id)
+            if seq is not None and \
+                    seq >= self.retire_head[f.src] + self.p.core_outstanding:
+                self.st["n_outst_wait"] += 1
+                self._deny_cause = "outstanding"
+                return False
+            return True
         if self._outst_full(f.src):
             self.st["n_outst_wait"] += 1
             self._deny_cause = "outstanding"
@@ -475,7 +582,11 @@ class Ring2BaseSim:
             self.wr_inject_times[f.src].append(self.t)
         if f.kind != "req" or not is_core(f.src):
             return
-        if self.p.core_outstanding <= 0:
+        if f.txn_id not in self.req_inject_t:
+            # First attempt only: the round-trip a rate controller measures
+            # has to include the retries, not restart at each one.
+            self.req_inject_t[f.txn_id] = self.t
+        if self.p.core_outstanding <= 0 or f.retry:
             return
         self.core_outst[f.src] += 1
         self.st["max_core_outstanding"] = max(
@@ -562,7 +673,7 @@ class Ring2BaseSim:
                 stalled = stalled or bool(self.pending[qk])
             if stalled:
                 self.st["n_admit_stall"] += 1
-            if not any(self.srcq[qk] for qk in qkeys):
+            if not any(self._q(qk) for qk in qkeys):
                 self.inj_starve[key] = 0
                 self.active_src.discard(key)
                 continue
@@ -571,7 +682,7 @@ class Ring2BaseSim:
             # blocking it.
             qk, f, denied = None, None, None
             for cand in qkeys:
-                q = self.srcq[cand]
+                q = self._q(cand)
                 if not q:
                     continue
                 cf = self._select_inject_flit(node, plane, q)
@@ -614,7 +725,7 @@ class Ring2BaseSim:
                         self.i_tag[rk].add(node)
                         self.st["n_itag_raised"] += 1
                 continue
-            q = self.srcq[qk]
+            q = self._q(qk)
             if f is q[0]:
                 q.popleft()
             else:
@@ -648,7 +759,23 @@ class Ring2BaseSim:
         self._release_ready_resps()
         self._aimd_tick()
         self._ctrl_issue()
+        if self.p.outst_sample and (t % self.p.outst_sample) == 0:
+            self._sample_outstanding()
         self.t += 1
+
+    def _sample_outstanding(self) -> None:
+        """Split each core's outstanding slots into working and wasted.
+
+        A slot is wasted either because its transaction was bounced and is
+        waiting for a protocol credit, or because it has already completed
+        and is only waiting for an older transaction to retire. What is left
+        is the outstanding count the core is actually getting paid for.
+        """
+        self._n_samples += 1
+        for c, v in self.core_outst.items():
+            self._outst_area[c] += v
+            self._park_area[c] += len(self.parked[c])
+            self._hol_area[c] += len(self.done_seq[c])
 
     def _on_arrive_station(self, f: Flit) -> None:
         """Flit has entered the eject queue; occupancy already charged."""
@@ -664,6 +791,80 @@ class Ring2BaseSim:
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
                          self.t + self.p.t_ha_service)
 
+    # -- request tracker: accept, or send the requester away ----------------
+
+    def _req_arrives(self, txn: Txn, *, retried: bool = False) -> None:
+        """A REQ reached its completer. Accept it, or RetryAck it.
+
+        A re-sent request arrives holding a protocol credit, so it is
+        accepted unconditionally -- that is what the credit is. Without that
+        reservation a freshly issued request could take the entry the credit
+        was granted for and the retried one would bounce again forever.
+        """
+        cap = self.p.ha_track
+        if retried:
+            self.pcrd_out[txn.ha] = max(0, self.pcrd_out[txn.ha] - 1)
+        elif cap > 0 and self.ha_used[txn.ha] + self.pcrd_out[txn.ha] >= cap:
+            self._reject_req(txn)
+            return
+        self._accept_req(txn)
+
+    def _accept_req(self, txn: Txn) -> None:
+        used = self.ha_used[txn.ha] + 1
+        self.ha_used[txn.ha] = used
+        self.st["max_ha_used"] = max(self.st["max_ha_used"], used)
+        self.acc_used[txn.txn_id] = used
+        self.parked[txn.core].discard(txn.txn_id)
+        self.accept_order[txn.core].append(self.core_seq.get(txn.txn_id, 0))
+        self._on_req_at_completer(txn)
+
+    def _reject_req(self, txn: Txn) -> None:
+        """No protocol credit: bounce the request and remember who to grant.
+
+        From here the requester's outstanding slot is allocated and idle.
+        """
+        self.st["n_retry"] += 1
+        self.n_retry_by_core[txn.core] += 1
+        self.parked[txn.core].add(txn.txn_id)
+        self.pcrd_q[txn.ha].append(txn)
+        self._emit_write(txn, "retry", txn.ha, txn.core, 1,
+                         self.t + self.p.t_ha_service)
+        self._pump_pcrd(txn.ha)
+
+    def _release_track(self, ha: int) -> None:
+        """The completer is done with a transaction; pass the credit on.
+
+        The counter is kept even with an unlimited tracker, because its peak
+        is then exactly the tracker the ungoverned policy silently demands.
+        """
+        self.ha_used[ha] = max(0, self.ha_used[ha] - 1)
+        self._pump_pcrd(ha)
+
+    def _pump_pcrd(self, ha: int) -> None:
+        """Hand a protocol credit to every waiting requester that fits.
+
+        Granting only on a release event is not enough: a request bounced
+        after the last release would wait for a credit that is already free
+        and would never be woken.
+        """
+        cap = self.p.ha_track
+        q = self.pcrd_q[ha]
+        while q and (cap <= 0 or self.ha_used[ha] + self.pcrd_out[ha] < cap):
+            txn = q.popleft()
+            self.pcrd_out[ha] += 1
+            self.st["n_pcrd"] += 1
+            self._emit_write(txn, "pcrd", ha, txn.core, 1,
+                             self.t + self.p.pcrd_lat)
+
+    def _on_retry_at_core(self, txn: Txn) -> None:
+        """RetryAck drained at the requester. A hook for congestion control:
+        a bounced request is the completer telling the source it is full."""
+        return
+
+    def _on_dbid_at_core(self, txn: Txn) -> None:
+        """DBIDResp drained at the requester, i.e. the round trip closed."""
+        return
+
     def _on_write_data_complete(self, txn: Txn) -> None:
         """Last WriteData of `txn` has landed; its grant is now retired."""
         return
@@ -674,8 +875,14 @@ class Ring2BaseSim:
         self.st[key] = self.st.get(key, 0) + 1
         self._ensure_stash()
         if f.kind == "req":
-            self._on_req_at_completer(txn)
+            self._req_arrives(txn, retried=f.retry)
+        elif f.kind == "retry":
+            self._on_retry_at_core(txn)
+        elif f.kind == "pcrd":
+            self._emit_write(txn, "req", txn.core, txn.ha, txn.m_req,
+                             self.t + self.p.retry_backoff, retry=True)
         elif f.kind == "dbid":
+            self._on_dbid_at_core(txn)
             self._emit_write(txn, "wdata", txn.core, txn.ha, txn.m_wdata,
                              self.t)
         elif f.kind == "wdata":
@@ -686,14 +893,38 @@ class Ring2BaseSim:
                 self._emit_write(txn, "comp", txn.ha, txn.core, 1,
                                  self.t + self.p.t_ha_service)
                 self._on_write_data_complete(txn)
+                self._release_track(txn.ha)
         else:                                   # Comp: the txn retires
             self.st["n_txn_done"] += 1
             self.txn_done.append((f.txn_id, self.t))
             self.resp_lat.append(self.t - self.wr_t0[f.txn_id])
-            if self.p.core_outstanding > 0:
-                self.core_outst[txn.core] = max(
-                    0, self.core_outst[txn.core] - 1)
+            self._retire(txn)
             self._on_txn_done(txn, f)
+
+    def _retire(self, txn: Txn) -> None:
+        """Give the requester its outstanding slot back.
+
+        Out of order by default. Under `inorder_retire` a core frees slots
+        strictly in issue order, so a transaction that got bounced holds up
+        every younger one that has already finished -- which is how request
+        reordering turns directly into a smaller usable outstanding window.
+        """
+        core = txn.core
+        self.retire_order[core].append(self.core_seq.get(txn.txn_id, 0))
+        if self.p.core_outstanding <= 0:
+            return
+        if not self.p.inorder_retire:
+            self.core_outst[core] = max(0, self.core_outst[core] - 1)
+            return
+        done = self.done_seq[core]
+        done.add(self.core_seq.get(txn.txn_id, 0))
+        self.st["max_hol_hold"] = max(self.st["max_hol_hold"], len(done))
+        head = self.retire_head[core]
+        while head in done:
+            done.discard(head)
+            head += 1
+            self.core_outst[core] = max(0, self.core_outst[core] - 1)
+        self.retire_head[core] = head
 
     def _on_pe_drain(self, f: Flit) -> None:
         self.st["n_delivered_flits"] += 1
@@ -734,7 +965,8 @@ class Ring2BaseSim:
 
     def backlog(self) -> int:
         return (sum(len(q) for q in self.srcq.values())
-                + sum(len(q) for q in self.pending.values()))
+                + sum(len(q) for q in self.pending.values())
+                + sum(len(q) for q in self.retryq.values()))
 
     def done(self) -> bool:
         return self.st["n_txn_done"] >= self._n_txn_target and self._n_txn_target > 0
@@ -763,7 +995,79 @@ class Ring2BaseSim:
             out["wr_recv_by_ha"] = self.wr_recv_by_ha()
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
+            out["retry"] = self.retry_summary()
         return out
+
+    # -- retry / reordering / effective outstanding --------------------------
+
+    @staticmethod
+    def _order_stats(seqs: Sequence[int]) -> tuple[float, float, int]:
+        """How far an observed order departs from issue order.
+
+        `seqs` is the issue index of each transaction in the order some stage
+        saw it. Because a closed batch eventually sees every transaction, the
+        issue index is also the position that entry would have held in a
+        perfectly ordered run, so the displacement is |position - index|.
+        `late` counts entries overtaken by a younger transaction.
+        """
+        if len(seqs) < 2:
+            return 0.0, 0.0, 0
+        late, disp, worst = 0, 0, 0
+        top = -1
+        for i, s in enumerate(seqs):
+            if s < top:
+                late += 1
+            else:
+                top = s
+            d = abs(i - s)
+            disp += d
+            worst = max(worst, d)
+        n = len(seqs)
+        return late / n, disp / n, worst
+
+    def retry_summary(self) -> dict[str, Any]:
+        """Retry pressure, reordering, and the outstanding actually used."""
+        cores_seen = sorted(self.accept_order) or sorted(self.retire_order)
+        n_txn = max(1, len(self.core_seq))
+        acc = [self._order_stats(self.accept_order[c]) for c in cores_seen]
+        ret = [self._order_stats(self.retire_order[c]) for c in cores_seen]
+
+        def _mean(rows: list[tuple[float, float, int]], i: int) -> float:
+            return round(sum(r[i] for r in rows) / len(rows), 5) if rows else 0.0
+
+        ns = max(1, self._n_samples)
+        eff, nom, park, hol = {}, {}, {}, {}
+        for c in sorted(self._outst_area):
+            nom[str(c)] = round(self._outst_area[c] / ns, 2)
+            park[str(c)] = round(self._park_area[c] / ns, 2)
+            hol[str(c)] = round(self._hol_area[c] / ns, 2)
+            eff[str(c)] = round(
+                (self._outst_area[c] - self._park_area[c]
+                 - self._hol_area[c]) / ns, 2)
+        n_cores = max(1, len(eff))
+        return {
+            "ha_track": self.p.ha_track,
+            "inorder_retire": self.p.inorder_retire,
+            "core_outstanding": self.p.core_outstanding,
+            "n_retry": self.st["n_retry"],
+            "n_pcrd": self.st["n_pcrd"],
+            "retry_per_txn": round(self.st["n_retry"] / n_txn, 4),
+            "max_ha_used": self.st["max_ha_used"],
+            "max_hol_hold": self.st["max_hol_hold"],
+            "n_retry_by_core": {str(c): v
+                                for c, v in sorted(self.n_retry_by_core.items())},
+            "ooo_frac": _mean(acc, 0),
+            "ooo_mean_disp": _mean(acc, 1),
+            "ooo_max_disp": max((r[2] for r in acc), default=0),
+            "retire_ooo_frac": _mean(ret, 0),
+            "retire_mean_disp": _mean(ret, 1),
+            "outst_nominal": nom, "outst_parked": park, "outst_hol": hol,
+            "outst_eff_by_core": eff,
+            "outst_eff_mean": round(sum(eff.values()) / n_cores, 2),
+            "outst_used_mean": round(sum(nom.values()) / n_cores, 2),
+            "outst_park_mean": round(sum(park.values()) / n_cores, 2),
+            "outst_hol_mean": round(sum(hol.values()) / n_cores, 2),
+        }
 
     # -- write-path introspection -------------------------------------------
 

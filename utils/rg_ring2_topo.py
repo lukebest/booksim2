@@ -65,7 +65,7 @@ Pair = tuple[int, int]
 PlaneSel = Literal["static_hash", "rr_per_pkt", "least_occupied",
                    "req_resp_split"]
 SpatialReuse = Literal["arc", "whole_ring"]
-Kind = Literal["req", "resp", "dbid", "wdata", "comp"]
+Kind = Literal["req", "resp", "dbid", "wdata", "comp", "retry", "pcrd"]
 ChiVc = Literal["req", "rsp", "dat"]
 # ReadNoSnp closed set: REQ carries requests, DAT carries CompData.
 # SNP/RSP are not instantiated (no snoop; Comp is folded into CompData).

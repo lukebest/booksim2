@@ -1,6 +1,6 @@
 {
-  "n_total": 42,
-  "n_ok": 42,
+  "n_total": 50,
+  "n_ok": 50,
   "all_ok": true,
   "rows": [
     {
@@ -156,6 +156,10 @@
       "ok": true
     },
     {
+      "name": "baseline_tracker_masks_imbalance",
+      "ok": true
+    },
+    {
       "name": "s15_fixes_study_workload",
       "ok": true
     },
@@ -170,7 +174,35 @@
     {
       "name": "s16_bufferless_and_fair",
       "ok": true
+    },
+    {
+      "name": "retry_off_equals_baseline",
+      "ok": true
+    },
+    {
+      "name": "retry_conserves_no_deadlock",
+      "ok": true
+    },
+    {
+      "name": "retry_parks_outstanding",
+      "ok": true
+    },
+    {
+      "name": "inorder_retire_never_better",
+      "ok": true
+    },
+    {
+      "name": "s16_grants_below_tracker",
+      "ok": true
+    },
+    {
+      "name": "rate_pinned_equals_s0",
+      "ok": true
+    },
+    {
+      "name": "rate_control_cuts_retries",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-23T18:17:36Z"
+  "generated_at": "2026-08-24T11:20:01Z"
 }

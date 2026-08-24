@@ -294,7 +294,7 @@ class Ring2FcSim(Ring2BaseSim):
         Without this check a hole preempts a pass-through flit for a slot
         nobody takes, which is pure loss.
         """
-        q = self.srcq.get((node, plane, vc))
+        q = self._q((node, plane, vc))
         return bool(q) and q[0].dir == d
 
     def _hits_hole(self, node: int, f: Flit) -> bool:
