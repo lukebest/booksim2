@@ -29,6 +29,11 @@ Second, and this is why it is cheaper than reserving slots, grant pacing
 into that slot, so if the reserving node then fails to use it the slot is
 lost. Withholding a grant only means an advantaged core has less data ready;
 whichever core can use the slot still takes it.
+
+The policy is expressed purely in terms of the completer hooks, so the same
+code governs the single ring and the 3D-stacked fabric. That is the point of
+placing control at the completer: it is a protocol decision, not a topology
+one.
 """
 
 from __future__ import annotations
@@ -42,8 +47,8 @@ from rg_ring2_topo import Ring2Topology, Txn
 
 
 @dataclass
-class Ring2GrantParams(Ring2BaseParams):
-    """Baseline fabric plus the receiver's scheduling knobs."""
+class GrantKnobs:
+    """The receiver's scheduling knobs, shared by every fabric."""
 
     # Grants a completer may have outstanding at once. This is the only
     # fairness/throughput knob: 1 serialises the completer and idles the
@@ -54,21 +59,22 @@ class Ring2GrantParams(Ring2BaseParams):
     # versus from tracking cumulative service.
     policy: str = "least_served"      # "least_served" | "round_robin"
     # Let a completer grant on arrival while it is under-subscribed, so a
-    # lightly loaded ring pays no added latency. This is the counterpart of
+    # lightly loaded fabric pays no added latency. This is the counterpart of
     # Homa's unscheduled bytes, which CHI cannot express directly.
     eager: bool = True
     trace: bool = True
 
 
-class Ring2GrantSim(Ring2BaseSim):
-    """Baseline datapath; the completer paces DBIDResp."""
+@dataclass
+class Ring2GrantParams(Ring2BaseParams, GrantKnobs):
+    """Baseline ring fabric plus the receiver's scheduling knobs."""
 
-    def __init__(self, topo: Ring2Topology,
-                 params: Ring2GrantParams | None = None, *,
-                 seed: int = 0) -> None:
-        super().__init__(topo, params or Ring2GrantParams(), seed=seed)
-        p: Ring2GrantParams = self.p           # type: ignore[assignment]
-        self.gp = p
+
+class GrantMixin:
+    """Receiver-driven admission, in terms of the completer hooks only."""
+
+    def _grant_init(self) -> None:
+        self.gp = self.p                       # type: ignore[attr-defined]
         # completer -> requester -> queued REQs, oldest first
         self.gq: dict[int, dict[int, deque[Txn]]] = defaultdict(
             lambda: defaultdict(deque))
@@ -79,12 +85,17 @@ class Ring2GrantSim(Ring2BaseSim):
             lambda: defaultdict(int))
         self.rr: dict[int, int] = defaultdict(int)
         self.peak_outstanding = 0
-        self.st["n_grant_eager"] = 0
-        self.st["n_grant_paced"] = 0
-        self.st["n_grant_queued"] = 0
+        st = self.st                           # type: ignore[attr-defined]
+        st["n_grant_eager"] = 0
+        st["n_grant_paced"] = 0
+        st["n_grant_queued"] = 0
         self.grant_delay: list[int] = []
         self._qt: dict[int, int] = {}
-        self.trace: list[dict[str, Any]] = []
+
+    # -- the DBIDResp emit differs only in name between the two fabrics ----
+
+    def _emit_dbid(self, txn: Txn) -> None:
+        raise NotImplementedError
 
     # -- receiver-driven admission -----------------------------------------
 
@@ -113,8 +124,7 @@ class Ring2GrantSim(Ring2BaseSim):
         self.peak_outstanding = max(self.peak_outstanding,
                                     self.outstanding[txn.ha])
         self.served[txn.ha][txn.core] += txn.m_wdata
-        self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+        self._emit_dbid(txn)
 
     def _pump(self, mem: int) -> None:
         """Issue grants until the completer is fully committed."""
@@ -174,3 +184,18 @@ class Ring2GrantSim(Ring2BaseSim):
             "peak_grants": self.peak_outstanding,
             "peak_buf_flits": self.peak_outstanding * 4,
         }
+
+
+class Ring2GrantSim(GrantMixin, Ring2BaseSim):
+    """Baseline ring datapath; the completer paces DBIDResp."""
+
+    def __init__(self, topo: Ring2Topology,
+                 params: Ring2GrantParams | None = None, *,
+                 seed: int = 0) -> None:
+        super().__init__(topo, params or Ring2GrantParams(), seed=seed)
+        self._grant_init()
+        self.trace: list[dict[str, Any]] = []
+
+    def _emit_dbid(self, txn: Txn) -> None:
+        self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
+                         self.t + self.p.t_ha_service)

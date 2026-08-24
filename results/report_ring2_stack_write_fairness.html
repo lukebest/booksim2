@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>3D 堆叠 NoC 上的 per-core 写带宽公平性</title>
+<style>
+body { font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
+       "Noto Sans CJK SC", sans-serif;
+       margin: 2rem auto; max-width: 1060px; color: #111; line-height: 1.65;
+       padding: 0 1rem; }
+h1,h2,h3 { font-weight: 650; }
+h2 { margin-top: 2.2rem; border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 0.25rem; }
+h3 { margin-top: 1.4rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem;
+         margin: 0.6rem 0; }
+th,td { border: 1px solid #e5e7eb; padding: 0.34rem 0.5rem;
+         text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+td:last-child, th:last-child { text-align: left; }
+th { background: #f8fafc; }
+code { background: #f1f5f9; padding: 0.1rem 0.3rem; }
+img { max-width: 100%; border: 1px solid #e5e7eb; margin: 0.5rem 0; }
+.note { color: #475569; font-size: 0.9rem; }
+.def { background: #f8fafc; border-left: 3px solid #94a3b8;
+        padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
+.bad { border-left-color: #dc2626; background: #fef2f2; }
+.good { border-left-color: #16a34a; background: #f0fdf4; }
+.key { background: #eff6ff; border: 1px solid #bfdbfe;
+        border-left: 4px solid #2563eb; padding: 0.8rem 1.1rem;
+        margin: 1rem 0; border-radius: 4px; }
+.key ol { margin: 0.4rem 0 0 1.1rem; }
+.key li { margin: 0.55rem 0; }
+</style></head><body>
+
+<h1>3D 堆叠 NoC 上的 per-core 写带宽公平性</h1>
+<p class="note">拓扑：<b>6 个 top die</b>（每个 20 节点、双平面、
+双向 full ring：10 个 AI core + 8 个 D2D bridge + 2 个非终端节点）
++ <b>48 条 D2D 链路</b>
++ <b>1 个 bottom die</b>（96 个 HA，12 行 × 8 列；
+6 条横向 + 8 条纵向<b>单向</b> half ring）。
+workload：<b>60 个 AI core 均匀写 96 个 HA</b>，
+每 core 50 笔 <code>WriteNoSnp</code>、每笔 4 个 WriteData
+flit，共 3,000 笔事务；每 core outstanding 上限
+<b>128</b>。</p>
+
+<h2>结论</h2>
+<div class="key">
+<ol>
+
+<li><b>最重要的一条：在这个拓扑上，路由策略的影响远大于任何流控方案。</b>
+按题目字面实现的 S0（每笔走<b>最短路径</b>、双平面负载均衡），
+在规定的 outstanding=128 下<b>直接拥塞崩溃</b>：
+3,000 笔事务只完成 160 笔
+（5%），且已有 core 的带宽掉到
+0（max/min = ∞）。
+换成<b>维序路由</b>（在目的列自己的 bridge 上跨 die，之后只走该列纵环，
+一个横向跳都不走）——同一份硬件、同一个 workload、同样 outstanding：
+<b>全部完成</b>，吞吐 2.185 txn/cycle，
+达到理论下界的 <b>95%</b>。
+即使给最短路径挑它自己最好的并发度（outstanding=16，
+0.785 txn/cycle），维序路由在自己的最优点
+（2.229 txn/cycle）仍然快 <b>2.8 倍</b>。
+而且 S1、S16、S17 加在最短路径版本上<b>全都救不回来</b>（§5.1），
+因为流控只能决定“注入多少”，改变不了“流量往哪里挤”。</li>
+
+<li><b>最短路径为什么反而更慢：它拿稀缺资源去换充裕资源。</b>
+bottom die 跳延迟 1 cycle，top die 环内
+1~4 cycle，
+所以“按时延最短”会诱导流量<b>尽早跨到 bottom die</b>、再用横环横向挪位，
+甚至<b>把纵环当作横环之间的过路通道</b>。
+但容量模型显示纵环才是全局瓶颈：每笔事务的写数据要在纵环上走
+35.64 个 flit·跳，
+而 top 环容量（480 条链路）相对需求过剩十倍以上。
+结果最忙的一条纵向链路承担了平均值的
+<b>4.04 倍</b>（3,000 flit，
+全压在第 0 列），维序路由把它压到 <b>1.59 倍</b>。
+注意维序路由的平均跳数其实<b>更长</b>
+（14.93 vs 13.59 跳），
+却把下界抬高了 2.30 倍
+——<b>决定性能的是负载均衡，不是路径长度</b>。</li>
+
+<li><b>修正计划中的一个预期：转向 FIFO 深度不是悬崖，4 flit 就够。</b>
+计划把“横↔纵转向 FIFO 深 4 flit”列为需要验证的风险项。
+实测在维序路由下，深度 4 与深度 128 的吞吐只差
+3.1%
+（2.149 → 2.216 txn/cycle），
+全部事务都能完成。<b>此前观察到的“深度 4 活锁”其实是最短路径路由的热点，
+不是缓冲不足</b>：最短路径下把 FIFO 加深到 128 依然崩溃
+（只完成 634
+笔）。也就是说这里<b>不需要</b>为 bottom die 付大缓冲的代价。</li>
+
+<li><b>公平性最便宜的解法根本不是流控，而是把 outstanding 从 128 调到 32。</b>
+这是本文最实用的发现。跨 3 个随机种子，维序路由下：
+outstanding=128 得到平均效率 93.5%、
+Jain 0.93762、最差 max/min 3.1746；
+outstanding=32 得到平均效率 <b>96.7%</b>、
+Jain <b>0.94847</b>、最差 max/min <b>2.2727</b>。
+也就是说<b>吞吐和公平性同时变好</b>，而代价是<b>零</b>——
+outstanding 上限本来就是一个已有的寄存器。
+反过来说，题目规定的 128 把织物推过了最优点：
+多出来的在途报文并不产生吞吐，只是变成互相阻塞的偏转流量。
+并发度不是“越大越好、到某点崩溃”，而是<b>存在一个真正的最优点</b>
+（16 以下欠载、32 附近最优、128 已经过载）。</li>
+
+<li><b>把路由和并发度都调对之后，位置相关的失衡仍然存在。</b>
+维序路由、outstanding=128：
+Jain = <b>0.93635</b>，max/min = <b>3.5088</b>，
+每核带宽 0.19064 ~ 0.6689 flit/cycle。
+需求是完全对称的（每 core 发一样多、目的地分布一样），
+差异<b>纯粹来自位置</b>。</li>
+
+<li><b>根因不是“top die 编号”——计划里的假设被数据否定。</b>
+计划预期带宽按 top die 编号（即纵环插入位置 1,2,8,9,15,16）<b>单调</b>排序。
+实测 Spearman(die 编号, 带宽) = <b>-0.0581</b>，
+几乎为零。真实结构是<b>成对锯齿</b>：
+每个行间隙放<b>两个相邻</b>的挂接点，第二个永远在第一个的正下游。
+在“在环优先”绝对优先的规则下，第二个挂接点注入时，
+它要挤进的那条出边上已经载着第一个挂接点<b>全部</b>的写数据。
+解析值把机理钉死了——成对的注入边负载相差恰好 <b>48 个单位</b>
+（168↔216、144↔192、120↔168），
+而 48 = 12 HA × 4 flit = <b>一个 die 的完整写数据输出</b>。
+偶数 die 平均 <b>0.55307</b>、奇数 die 平均
+<b>0.35942</b>，相差 <b>1.54 倍</b>；
+Spearman(成对次序, 带宽) = <b>-0.8241</b>，
+Spearman(注入边 DAT 负载, 带宽) = <b>-0.7665</b>。
+而 core 在 top 环上的位置几乎没有影响（0.0887）——
+top 环容量过剩，片内位置不构成瓶颈。</li>
+
+<li><b>S1（拥塞等级 + AIMD）方向正确、收益真实但有限，且代价不低。</b>
+Jain 0.93635 → <b>0.94549</b>，
+max/min 3.5088 → <b>2.5641</b>，
+吞吐还略有改善（makespan 1373 → 1359）。
+跨种子也稳定（最差 Jain 0.94549、
+最差 max/min 2.7027），是三个流控方案里<b>最可靠</b>的。
+但它需要一条<b>专用广播总线</b>（实测 5,544 次广播、
+33,264 bit）和每源平均 140.6
+项的受控节点表。而且一旦 outstanding 已经调到 32，
+S1 的增量就只剩 Jain 0.94847 → 0.95465
+（最差 max/min 都是 2.2727）——<b>几乎被“调寄存器”取代了</b>。</li>
+
+<li><b>S16（接收端授权，Homa 式）在这个拓扑上<u>无效</u>，这是一个有价值的负面结论。</b>
+CHI 的 <code>DBIDResp</code> 确实是天然的 GRANT，完成端（HA）也确实坐在
+瓶颈纵环上，看起来是理想的控制点。但实测在 overcommit=32
+下 <b>2,997 笔授权是立即发出的，只有 3 笔真正被节流</b>——
+预算<b>从来没有绑定</b>，所以结果与基线基本相同
+（Jain 0.93839 vs 0.93635）。
+把 overcommit 压小到会绑定的程度，公平性反而<b>急剧恶化</b>
+（overcommit=4：Jain 0.53884、
+max/min 50.0）。
+原因是控制点<b>不在瓶颈上</b>：失衡发生在<b>注入侧</b>
+（挂接点抢纵环槽位），而 S16 管的是<b>接收侧</b>灌入量。
+扣住占优 die 的授权只是让它手上没数据，
+在环优先会立刻把空出的槽位交给下一个过路 flit，starved 的挂接点<b>拿不到</b>。
+<b>接收端驱动的拥塞控制能管“谁往瓶颈里灌多少”，
+管不了“瓶颈处的仲裁不公”</b>——单环研究里两者恰好重合，这里分离了。</li>
+
+<li><b>S17（挂接点转向仲裁）是本文提出的方案，但实测<u>不成立</u>——如实报告为负面结果。</b>
+它的思路是最对症的：既然根因是挂接点的转向 FIFO 被过路流量无限期压住，
+就给这个 FIFO 一个<b>有界耐心</b>阈值，
+连续被抢走槽位超过阈值后让一个过路 flit 在闩存里等一拍。
+单个种子上看确实有效（Jain 0.93635 → 0.94495）。
+但把阈值 1/2/8 各跑 3 个种子后，这个收益<b>消失了</b>：
+唯一不比基线差的阈值是 8，平均 Jain
+0.93643 → 0.94093
+（差别在噪声量级），而<b>最差 max/min 反而从
+3.3898 恶化到 3.5088</b>；
+阈值 1 明显更差（Jain 0.91866、
+max/min 4.7619）。
+在 outstanding=32 上重复，结论相同。
+<b>先前的单种子结论是噪声</b>。机理上的解释是：让位把槽位交给了转向 FIFO 的
+<b>队首</b>，而队首未必属于那个被饿死的 core——
+局部仲裁公平并不等于端到端公平。</li>
+
+<li><b>三个流控方案里只有 S1 站得住，而它又被一个免费的旋钮基本取代。</b>
+把四条结论并排看：<b>路由</b>决定织物能不能用（崩溃 vs 完成，各自最优并发度下也差 2.8 倍）；
+<b>outstanding</b> 免费地同时改善吞吐与公平；
+<b>S1</b> 有可靠但不大的增量，代价是一条专用广播总线；
+<b>S16 与 S17 都无效</b>。
+最好的组合是 S1 + outstanding=32（平均 Jain
+0.95465、最差 max/min 2.2727、
+平均效率 95.6%），
+但它相对“只调 outstanding”（0.94847 /
+2.2727）的增量很小。
+<b>工程结论：先调路由和 outstanding，再考虑是否值得为 S1 付一条总线。</b></li>
+
+<li><b>所有运行时方案都没有达到验收线，真正的解法在布局层面。</b>
+验收线是 Jain ≥ 0.98、max/min ≤ 1.05；
+维序路由下最好的运行时组合只到 Jain ≈ 0.95465、
+max/min ≈ 2.2727。唯一达标的点是把 outstanding 压到
+4（Jain 0.99489、
+max/min 1.3158），
+但效率掉到 74%——那是用吞吐换公平，不是解决问题。
+根本原因是<b>成对相邻的挂接点布局把不对称写进了拓扑</b>：
+无论怎么仲裁，第二个挂接点永远在第一个的下游。
+彻底的修法是<b>改布局</b>——把同一行间隙的两个挂接点<b>分散</b>到
+纵环上相距较远的位置，或让同一间隙的两条横环<b>反向</b>行进，
+使“第二个永远在下游”这个前提不再成立。
+这样位置失衡会从结构上消失，不需要任何运行时机制。</li>
+
+</ol>
+</div>
+
+<div class="def good"><b>一句话建议</b>：
+<b>维序路由（必须，决定崩溃与否）+ outstanding≈32（免费，
+吞吐与公平同时更优）+ 转向 FIFO 4~8 flit（够用，不必加深）</b>。
+这三项都不需要新增流控硬件。若仍需更公平，只有 S1 值得考虑
+（代价是一条专用广播总线，增量有限）；<b>S16 与 S17 实测无效</b>。
+若能改版图，优先<b>分散成对挂接点</b>，这比任何运行时机制都彻底。</div>
+
+<h2>1. 拓扑与硬件配置</h2>
+<p>bottom die 的结构是理解全部结论的前提。每一列是一条<b>单向</b>纵向
+half ring，18 个节点按行进顺序排列：12 个 HA 与 6 个挂接点交错，
+6 个挂接点<b>成对</b>出现在 3 个行间隙里（vpos 1&amp;2、8&amp;9、15&amp;16）。
+两个关键结构事实：</p>
+<ul>
+<li><b>横环 <i>t</i> 在每一列都切在同一个纵向位置</b>，
+所以 top die <i>t</i> 在全部 8 列都从同一个 vpos 注入——
+它的位置优劣对所有目的地是<b>同相</b>的，不会在目的地上被平均掉。</li>
+<li><b>挂接点成对相邻</b>，于是每对里的第二个永远在第一个的正下游。
+这正是 §6 的根因。</li>
+</ul>
+<img src="stack_topology.png" alt="bottom die 布局">
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>top die 数量</td><td>6</td><td>每个是 20 节点、双平面、双向 full ring</td></tr><tr><td>AI core</td><td>60</td><td>每 top die 10 个，环序号 0,2,…,18</td></tr><tr><td>D2D bridge</td><td>48</td><td>每 top die 8 个，环序号 [1, 3, 5, 7, 11, 13, 15, 17]，依次对应 bottom die 第 0–7 列</td></tr><tr><td>非终端节点</td><td>12</td><td>每 top die 的 9、19：只转发，不发起也不接收</td></tr><tr><td>HA（内存）</td><td>96</td><td>bottom die，12 行 × 8 列，全部在纵向 half ring 上</td></tr><tr><td>挂接点</td><td>48</td><td>6 条横向 half ring × 8 列；既在横环上也在该列纵环上，兼作转向点与 D2D 落地点</td></tr><tr><td>节点总数</td><td>264</td><td>6×20 + 96 + 48；8 列 × 18 = 144 = 96 + 48，自洽</td></tr><tr><td>有向链路</td><td>768</td><td>top 480 / D2D 96 / 横 48 / 纵 144</td></tr><tr><td>CHI VC</td><td>REQ / RSP / DAT</td><td>三条独立 VC；每条有向链路每 VC 每拍 1 flit（σ=1）</td></tr><tr><td>每 core outstanding</td><td>128</td><td>REQ 已注入、Comp 未回收的事务数上限（题目规定 128；见 §4.2，这个取值并非最优）</td></tr><tr><td>写事务</td><td>REQ×1 → DBIDResp×1 → WriteData×4 → Comp×1</td><td>CHI WriteNoSnp 四拍握手</td></tr><tr><td>每 core 事务数</td><td>50</td><td>均匀散布到全部 96 个 HA，共 3,000 笔</td></tr><tr><td>转向 FIFO 深度</td><td>64</td><td>横↔纵换环时经过；见 §4.1——维序路由下 4 flit 即够，此处取大值只为留出余量</td></tr><tr><td>D2D FIFO 深度</td><td>128</td><td>跨 die 时经过</td></tr><tr><td>上下环端口</td><td>1 / 站点 / 平面</td><td>注入队列 8 深，落地队列 4 深，PE 每拍取 1 flit</td></tr></tbody></table>
+
+<h3>1.1 链路延迟</h3>
+<table><thead><tr><th>top die 环内链路</th><th>延迟 (cycle)</th><th>两端角色</th></tr></thead><tbody><tr><td>0 ↔ 1</td><td>2</td><td>core→bridge</td></tr><tr><td>1 ↔ 2</td><td>2</td><td>bridge→core</td></tr><tr><td>2 ↔ 3</td><td>2</td><td>core→bridge</td></tr><tr><td>3 ↔ 4</td><td>3</td><td>bridge→core</td></tr><tr><td>4 ↔ 5</td><td>1</td><td>core→bridge</td></tr><tr><td>5 ↔ 6</td><td>3</td><td>bridge→core</td></tr><tr><td>6 ↔ 7</td><td>1</td><td>core→bridge</td></tr><tr><td>7 ↔ 8</td><td>1</td><td>bridge→core</td></tr><tr><td>8 ↔ 9</td><td>2</td><td>含非终端 9/19</td></tr><tr><td>9 ↔ 10</td><td>4</td><td>含非终端 9/19</td></tr><tr><td>10 ↔ 11</td><td>1</td><td>core→bridge</td></tr><tr><td>11 ↔ 12</td><td>1</td><td>bridge→core</td></tr><tr><td>12 ↔ 13</td><td>3</td><td>core→bridge</td></tr><tr><td>13 ↔ 14</td><td>1</td><td>bridge→core</td></tr><tr><td>14 ↔ 15</td><td>3</td><td>core→bridge</td></tr><tr><td>15 ↔ 16</td><td>2</td><td>bridge→core</td></tr><tr><td>16 ↔ 17</td><td>2</td><td>core→bridge</td></tr><tr><td>17 ↔ 18</td><td>2</td><td>bridge→core</td></tr><tr><td>18 ↔ 19</td><td>3</td><td>含非终端 9/19</td></tr><tr><td>19 ↔ 0</td><td>3</td><td>含非终端 9/19</td></tr></tbody></table><table><thead><tr><th>其他链路</th><th>延迟 (cycle)</th><th>说明</th></tr></thead><tbody><tr><td>bottom die 横向 half ring</td><td>1</td><td>单向，8 个挂接点成一个闭环</td></tr><tr><td>bottom die 纵向 half ring</td><td>1</td><td>单向，18 个节点成一个闭环（12 HA + 6 挂接点）</td></tr><tr><td>D2D 跨 die</td><td>4</td><td>SerDes + 跨时钟域，双向各一条</td></tr></tbody></table>
+
+<h3>1.2 路由与平面</h3>
+<p>两个平面只存在于 top die；D2D 与 bottom die 的链路为两个平面共享。
+平面选择按“最少占用”做负载均衡。三种路由策略在同一份拓扑上的对比：</p>
+<table><thead><tr><th>路由策略</th><th>下界 (cycle)</th><th>上限 txn/cycle</th><th>平均跳数</th><th>纵环 DAT 跳/笔</th><th>横环 DAT 跳/笔</th><th>top 环 DAT 跳/笔</th><th>纵环单链路 DAT 最大/平均</th><th>集中度</th></tr></thead><tbody><tr><td>最短路径（按时延）</td><td>3000</td><td>1.000</td><td>13.59</td><td>35.64</td><td>9.95</td><td>4.79</td><td>3000 / 742.5</td><td><b>4.04×</b></td></tr><tr><td>最短路径（按跳数）</td><td>2452</td><td>1.224</td><td>13.26</td><td>35.64</td><td>7.02</td><td>6.38</td><td>2452 / 742.5</td><td><b>3.30×</b></td></tr><tr><td>维序路由（先竖后横不换列）</td><td>1307</td><td>2.295</td><td>14.93</td><td>35.64</td><td>0</td><td>20.09</td><td>1184 / 742.5</td><td><b>1.59×</b></td></tr></tbody></table>
+<div class="def bad"><b>怎么读这张表。</b>
+维序路由的<b>平均跳数更长</b>，纵环 DAT 跳数<b>完全一样</b>
+（35.64 跳/笔），
+横环跳数降到 <b>0</b>，top 环跳数从
+4.79 涨到
+20.09。
+它没有缩短路径，只是把工作量从<b>稀缺</b>的 bottom die 挪到<b>充裕</b>的
+top die，并把纵环负载摊平（集中度
+4.04× → 1.59×），
+换来下界抬高 2.30 倍。
+还要注意：每个 top die 对 8 列各有一个 bridge，
+所以 core↔HA 流量<b>根本不需要横环</b>——
+横环在这个 workload 下是纯粹多余的通路，而“按时延最短”偏偏要去用它。</div>
+<p>最忙的几条链路，直接印证上面的集中度：</p>
+<table><thead><tr><th>路由</th><th>所属织物</th><th>VC</th><th>链路</th><th>该链路 flit 数</th></tr></thead><tbody><tr><td>最短路径（按时延）</td><td>v</td><td>DAT</td><td>A(h0,c0)@v1 → A(h1,c0)@v2</td><td>3,000</td></tr><tr><td>最短路径（按时延）</td><td>v</td><td>DAT</td><td>A(h2,c0)@v8 → A(h3,c0)@v9</td><td>2,592</td></tr><tr><td>最短路径（按时延）</td><td>v</td><td>DAT</td><td>A(h5,c0)@v16 → HA(r12,c0)@v17</td><td>2,396</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>v</td><td>DAT</td><td>A(h1,c0)@v2 → HA(r2,c0)@v3</td><td>1,184</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>v</td><td>DAT</td><td>A(h1,c7)@v2 → HA(r2,c7)@v3</td><td>1,152</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>v</td><td>DAT</td><td>A(h1,c6)@v2 → HA(r2,c6)@v3</td><td>1,152</td></tr></tbody></table>
+<p class="note">最短路径下三条最忙链路<b>全在第 0 列</b>，
+最忙那条正好等于全部 3,000 笔事务的 DAT；
+维序路由下最忙的链路分散在各列，且恰好是
+<b>每对里第二个挂接点的注入边</b>（A(h1)@v2 → HA(r2)），这就是 §6 的根因。</p>
+
+<h2>2. 公平性指标：Jain 指数怎么算、怎么读</h2>
+<div class="def">
+<p>对 <i>n</i> 个 core 的带宽 <i>x</i><sub>1</sub>…<i>x<sub>n</sub></i>：</p>
+<p style="text-align:center; font-size:1.05rem">
+J(x) = ( Σ<i>x<sub>i</sub></i> )<sup>2</sup> /
+( <i>n</i> · Σ<i>x<sub>i</sub></i><sup>2</sup> )</p>
+<p>它就是<b>算术平均的平方除以平方平均</b>，等价于
+1 / (1 + CV<sup>2</sup>)，其中 CV 是变异系数。因此：</p>
+<ul>
+<li><b>取值范围 [1/<i>n</i>, 1]</b>。全部相等时 J = 1；
+只有一个 core 拿到全部带宽时 J = 1/<i>n</i>
+（本文 <i>n</i> = 60，下限 0.0167）。</li>
+<li><b>与量纲无关</b>：所有带宽同乘一个常数，J 不变。
+所以它衡量的是“分布形状”，不是绝对性能——
+一个吞吐极低但人人平等的方案 J 也等于 1。
+这正是第 4 条结论里 outstanding=4 的陷阱，
+也是本文每张表都把 <b>Jain 与对下界效率并列</b>的原因。</li>
+<li><b>可解释为“有效份额人数”</b>：J ≈ <i>k/n</i> 意味着
+效果相当于带宽被 <i>k</i> 个 core 平分、其余基本饿死。</li>
+<li><b>对少数离群点不敏感</b>，这是它的弱点：
+59 个 core 相等、1 个只有 1/10，
+J 仍然高达 0.9865。所以必须同时看
+<b>max/min</b>（最快 ÷ 最慢，直接暴露最差个体）和
+<b>CoV</b>（相对离散度）。本文三个指标一起给。</li>
+</ul>
+</div>
+<p class="note"><b>带宽的测量窗口。</b>闭合批次里每个 core 最终都会发出同样多的
+WriteData flit，跑完再数必然相等、毫无信息。因此统计窗口取
+<code>t_fair</code> = <b>第一个 core 把自己的活干完的时刻</b>；
+在此之前全部 60 个 core 都在争抢同一批资源，
+这段区间内的每核 flit 数才是真实份额。</p>
+
+<h2>3. 下界</h2>
+<p>维序路由下，3,000 笔事务的 makespan 下界：</p>
+<table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link</td><td>1184</td><td>最忙的那条有向链路、单条 VC 的容量（DAT 1184 / RSP 606 / REQ 296，取最大）</td></tr><tr><td>LB_port</td><td>250</td><td>每站点一个上下环端口，三条 VC 相加共享</td></tr><tr><td>LB_fabric</td><td>1307</td><td>某层织物的总 flit·跳 ÷ 该层链路数（top 220，d2d 219，v 1307）</td></tr><tr><td>LB_txn</td><td>175</td><td>单笔事务四拍握手的串行链</td></tr><tr><td><b>下界</b></td><td><b>1307</b></td><td>以上四者取最大</td></tr></tbody></table>
+<p>本例的约束来自 <b>LB_fabric</b>，即<b>纵向 half ring 这一层织物</b>的总容量
+——144 条纵向有向链路要承载全部写数据。
+三条 CHI VC 相互独立，所以链路下界取各 VC 的<b>最大值</b>而不是求和；
+上下环端口每站点只有一个、被三条 VC 共享，所以端口下界要把各 VC 相加。</p>
+
+<h2>4. 现象一：织物可用性（路由、缓冲、并发度）</h2>
+<p>讨论公平性之前必须先确认织物<b>能不能跑</b>。这里有三个旋钮，
+但只有两个真正重要。</p>
+
+<h3>4.1 转向 FIFO 深度：不是悬崖</h3>
+<table><thead><tr><th>路由</th><th>转向 FIFO 深度</th><th>D2D FIFO 深度</th><th>状态</th><th>完成事务</th><th>makespan</th><th>吞吐 txn/cycle</th><th>偏转次数</th><th>实测峰值占用</th></tr></thead><tbody><tr><td>最短路径（按时延）</td><td>4</td><td>8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>70</td><td>20289</td><td>0.004</td><td>303,652</td><td>4</td></tr><tr><td>最短路径（按时延）</td><td>16</td><td>32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>67</td><td>20285</td><td>0.003</td><td>349,894</td><td>16</td></tr><tr><td>最短路径（按时延）</td><td>64</td><td>128</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>160</td><td>20336</td><td>0.008</td><td>417,527</td><td>64</td></tr><tr><td>最短路径（按时延）</td><td>128</td><td>256</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>634</td><td>20793</td><td>0.030</td><td>297,286</td><td>128</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>4</td><td>8</td><td><b style="color:#16a34a">完成</b></td><td>3,000</td><td>1396</td><td>2.149</td><td>3,559</td><td>4</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>16</td><td>32</td><td><b style="color:#16a34a">完成</b></td><td>3,000</td><td>1379</td><td>2.175</td><td>2,587</td><td>16</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>64</td><td>128</td><td><b style="color:#16a34a">完成</b></td><td>3,000</td><td>1373</td><td>2.185</td><td>2,664</td><td>64</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>128</td><td>256</td><td><b style="color:#16a34a">完成</b></td><td>3,000</td><td>1354</td><td>2.216</td><td>2,643</td><td>128</td></tr></tbody></table>
+<div class="def good"><b>与计划预期相反。</b>
+维序路由下深度 4 与 128 只差
+3.1% 吞吐，
+全部事务都完成，实测峰值占用也就是深度本身。
+而最短路径下<b>加深到 128 仍然崩溃</b>。
+所以“深度 4 会活锁”的现象<b>归因于路由热点，不是缓冲不足</b>：
+一旦某条纵向链路被要求承载 4.04 倍平均负载，
+任何有限缓冲都只是延后崩溃。
+好消息是：修好路由之后，bottom die <b>不需要</b>付大缓冲的代价。</div>
+
+<h3>4.2 并发度：存在最优点，不只是悬崖</h3>
+<table><thead><tr><th>路由</th><th>每 core outstanding</th><th>状态</th><th>makespan</th><th>对下界效率</th><th>吞吐 txn/cycle</th><th>Jain</th><th>max/min</th><th>偏转次数</th></tr></thead><tbody><tr><td>最短路径（按时延）</td><td>4</td><td><b style="color:#16a34a">完成</b></td><td>4042</td><td>74%</td><td>0.742</td><td>0.8281</td><td>6.25</td><td>7,750</td></tr><tr><td>最短路径（按时延）</td><td>8</td><td><b style="color:#16a34a">完成</b></td><td>3884</td><td>77%</td><td>0.772</td><td>0.7889</td><td>6.25</td><td>16,355</td></tr><tr><td>最短路径（按时延）</td><td>16</td><td><b style="color:#16a34a">完成</b></td><td>3823</td><td>78%</td><td>0.785</td><td>0.9306</td><td>3.85</td><td>21,212</td></tr><tr><td>最短路径（按时延）</td><td>24</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>20658</td><td>15%</td><td>0.025</td><td>0.9015</td><td>5.20</td><td>341,646</td></tr><tr><td>最短路径（按时延）</td><td>32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>20586</td><td>15%</td><td>0.018</td><td>0.8711</td><td>5.00</td><td>476,168</td></tr><tr><td>最短路径（按时延）</td><td>64</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>20336</td><td>15%</td><td>0.008</td><td>0.6816</td><td>∞</td><td>417,527</td></tr><tr><td>最短路径（按时延）</td><td>128</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>20336</td><td>15%</td><td>0.008</td><td>0.6816</td><td>∞</td><td>417,527</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>4</td><td><b style="color:#16a34a">完成</b></td><td>1766</td><td>74%</td><td>1.699</td><td>0.9949</td><td>1.32</td><td>719</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>8</td><td><b style="color:#16a34a">完成</b></td><td>1559</td><td>84%</td><td>1.924</td><td>0.9016</td><td>4.55</td><td>1,170</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>16</td><td><b style="color:#16a34a">完成</b></td><td>1446</td><td>90%</td><td>2.075</td><td>0.8162</td><td>3.33</td><td>1,943</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>24</td><td><b style="color:#16a34a">完成</b></td><td>1355</td><td>96%</td><td>2.214</td><td>0.8951</td><td>2.63</td><td>1,980</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>32</td><td><b style="color:#16a34a">完成</b></td><td>1346</td><td>97%</td><td>2.229</td><td>0.9547</td><td>2.08</td><td>2,030</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>64</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>95%</td><td>2.185</td><td>0.9364</td><td>3.51</td><td>2,664</td></tr><tr><td>维序路由（先竖后横不换列）</td><td>128</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>95%</td><td>2.185</td><td>0.9364</td><td>3.51</td><td>2,664</td></tr></tbody></table>
+<p>单种子容易被噪声误导，所以对关键取值做了 3 个种子的重复
+（维序路由；★ 为推荐取值）：</p>
+<table><thead><tr><th>配置</th><th>最差 Jain</th><th>平均 Jain</th><th>最差 max/min</th><th>最差效率</th><th>平均效率</th></tr></thead><tbody><tr><td>S0 基线，oc=16</td><td>0.8112</td><td>0.8136</td><td>3.846</td><td>91.3%</td><td>92.1%</td></tr><tr><td>S0 基线，oc=24</td><td>0.8887</td><td>0.8921</td><td>2.778</td><td>94.3%</td><td>95.1%</td></tr><tr><td>S0 基线，oc=32 ★</td><td>0.9422</td><td>0.9485</td><td>2.273</td><td>95.6%</td><td>96.7%</td></tr><tr><td>S0 基线，oc=48</td><td>0.9499</td><td>0.9525</td><td>3.175</td><td>94.0%</td><td>95.7%</td></tr><tr><td>S0 基线，oc=128</td><td>0.9329</td><td>0.9376</td><td>3.175</td><td>90.6%</td><td>93.5%</td></tr><tr><td>S1 AIMD，oc=16</td><td>0.8138</td><td>0.8172</td><td>3.571</td><td>88.3%</td><td>89.8%</td></tr><tr><td>S1 AIMD，oc=24</td><td>0.8961</td><td>0.9038</td><td>2.778</td><td>94.0%</td><td>94.9%</td></tr><tr><td>S1 AIMD，oc=32 ★</td><td>0.9493</td><td>0.9546</td><td>2.273</td><td>94.9%</td><td>95.6%</td></tr><tr><td>S1 AIMD，oc=48</td><td>0.9388</td><td>0.9468</td><td>2.667</td><td>88.6%</td><td>93.7%</td></tr><tr><td>S1 AIMD，oc=128</td><td>0.9374</td><td>0.9443</td><td>2.532</td><td>90.7%</td><td>94.5%</td></tr></tbody></table>
+<div class="def good"><b>这是本文最实用的一张表。</b>
+S0 从 outstanding=128 调到 32，平均效率
+93.5% → <b>96.7%</b>、
+Jain 0.93762 → <b>0.94847</b>、
+最差 max/min 3.1746 → <b>2.2727</b>，
+<b>三项全部改善，硬件代价为零</b>。
+机理是“在路上的包会互相阻碍”的定量版本：
+并发度越高，注入失败与落环偏转越多，
+而单向 18 节点纵环上偏转一次要烧掉 18 个槽位。
+超过最优点之后，新增的在途报文不产生吞吐，只产生互相阻塞。
+注意 oc=16 反而更差（Jain 0.81358）：
+并发太低时少数 core 会把窗口跑完、样本变短，Jain 也不好。
+所以是<b>最优点</b>，不是单调关系。</div>
+<div class="def bad">最短路径下则是纯悬崖：outstanding ≤16 可用、
+≥24 崩溃，且崩溃后效率锁在 15% 左右。
+这个悬崖还与<b>负载持续时间</b>有关：批次较小时（每 core ≲20 笔）
+即使 outstanding=128 也能跑完，
+只有在<b>持续饱和</b>下正反馈才会失控——本文的
+50 笔/core 正是题目要求的“把访存带宽用满”的工况。</div>
+
+<h2>5. 现象二：位置相关的每核写带宽失衡</h2>
+<img src="stack_bw_by_die.png" alt="按 die 分组的带宽">
+<p class="note">纵轴是<b>份额</b>（每核带宽 ÷ 该方案自身均值），
+不是绝对带宽：不同方案的公平窗口 <code>t_fair</code> 长度不同，
+绝对值不可横向比较，而份额正是 Jain 所度量的东西。
+右图可以直接看出 S1（橙）把饿死的 die 1 从 0.63 抬到 0.81、
+同时压低领先者，这就是它 Jain 更高的来源；
+S16（蓝）与 S0（红）几乎重合，说明它没有生效。</p>
+
+<h3>5.1 最短路径（题目字面实现）：四个方案全部崩溃</h3>
+<table><thead><tr><th>方案</th><th>状态</th><th>完成事务</th><th>makespan</th><th>对下界效率</th><th>Jain</th><th>max/min</th><th>CoV</th><th>每核带宽区间</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>160/3,000</td><td>20336</td><td>15%</td><td><b>0.6816</b></td><td>∞</td><td>0.683</td><td>0.0000 ~ 0.5161</td><td>417,527</td></tr><tr><td>S1 拥塞等级 AIMD</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>147/3,000</td><td>20494</td><td>15%</td><td><b>0.6565</b></td><td>∞</td><td>0.723</td><td>0.0000 ~ 0.4800</td><td>390,973</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>160/3,000</td><td>20336</td><td>15%</td><td><b>0.6816</b></td><td>∞</td><td>0.683</td><td>0.0000 ~ 0.5161</td><td>417,527</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>197/3,000</td><td>21009</td><td>14%</td><td><b>0.6629</b></td><td>∞</td><td>0.713</td><td>0.0000 ~ 0.5250</td><td>517,068</td></tr></tbody></table>
+<div class="def bad"><b>流控救不了路由。</b>
+热点是<b>某一条具体链路</b>被路由反复选中，
+而流控只能决定“注入多少”、不能决定“走哪里”。
+少注入只是让崩溃来得慢一点，不改变第 0 列纵环
+4.04 倍的负载集中。
+这一行数据的意义在于：<b>先修路由，再谈公平</b>。</div>
+
+<h3>5.2 维序路由：织物健康，失衡显现</h3>
+<table><thead><tr><th>方案</th><th>状态</th><th>完成事务</th><th>makespan</th><th>对下界效率</th><th>Jain</th><th>max/min</th><th>CoV</th><th>每核带宽区间</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>1373</td><td>95%</td><td><b>0.9364</b></td><td>3.51</td><td>0.261</td><td>0.1906 ~ 0.6689</td><td>2,664</td></tr><tr><td>S1 拥塞等级 AIMD</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>1359</td><td>96%</td><td><b>0.9455</b></td><td>2.56</td><td>0.240</td><td>0.2021 ~ 0.5181</td><td>2,244</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>1373</td><td>95%</td><td><b>0.9384</b></td><td>2.99</td><td>0.256</td><td>0.2204 ~ 0.6579</td><td>2,685</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>1421</td><td>92%</td><td><b>0.9449</b></td><td>3.12</td><td>0.241</td><td>0.1975 ~ 0.6173</td><td>2,568</td></tr></tbody></table>
+<img src="stack_bw_sorted.png" alt="每核带宽分布">
+<p>曲线越平越公平。四条曲线的左半段几乎全部由
+“每对里第二个挂接点”所属的 die（1、3、5）的 core 构成，
+这直接引出下一节的根因。</p>
+
+<h2>6. 根因</h2>
+
+<h3>6.1 计划中的假设被否定</h3>
+<p>原假设：横环 <i>t</i> 在所有列切在同一纵向位置，
+所以 top die <i>t</i> 的偏置是同相的，
+带宽应当按 die 编号（vpos 1,2,8,9,15,16）<b>单调</b>排序。
+<b>同相这一点是对的，单调这一点是错的</b>：</p>
+<table><thead><tr><th>候选解释变量</th><th>Spearman(变量, 每核带宽)</th><th>读法</th></tr></thead><tbody><tr><td>行间隙内是第几个挂接点</td><td><b>-0.824</b></td><td><b>主因</b>：第二个永远在第一个的正下游</td></tr><tr><td>挂接点出边的 DAT 负载</td><td><b>-0.766</b></td><td><b>主因的物理量</b>：注入时必须挤进这条边</td></tr><tr><td>行间隙编号（0/1/2）</td><td>0.192</td><td>次要：越靠下游越好，上游 HA 已经吸收了一部分流量</td></tr><tr><td>core 在 top 环上的序号</td><td>0.089</td><td>几乎无关——top 环容量过剩，片内位置不构成瓶颈</td></tr><tr><td>top die 编号</td><td>-0.058</td><td><b>≈0，计划中的假设被否定</b></td></tr><tr><td>纵环插入位置 vpos</td><td>-0.058</td><td>≈0，与 die 编号同序，单调性被成对结构打断</td></tr></tbody></table>
+
+<h3>6.2 真实机理：成对相邻的挂接点</h3>
+<p>每个行间隙放两个<b>相邻</b>的挂接点。
+第二个永远在第一个的正下游，于是它注入时要挤进的那条纵向出边上，
+已经载着第一个挂接点<b>全部</b>的写数据流量。</p>
+<img src="stack_v_profile.png" alt="纵环解析负载">
+<table><thead><tr><th>top die</th><th>挂接点 vpos</th><th>注入边 DAT 负载（解析）</th><th>行间隙内次序</th><th>平均带宽</th><th>最小</th><th>最大</th></tr></thead><tbody><tr><td>die 0</td><td>1</td><td>168</td><td>第一个</td><td>0.5371</td><td>0.4515</td><td>0.6154</td></tr><tr><td>die 1</td><td>2</td><td>216</td><td><b>第二个（下游）</b></td><td>0.2896</td><td>0.1906</td><td>0.3679</td></tr><tr><td>die 2</td><td>8</td><td>144</td><td>第一个</td><td>0.5716</td><td>0.4080</td><td>0.6522</td></tr><tr><td>die 3</td><td>9</td><td>192</td><td><b>第二个（下游）</b></td><td>0.3950</td><td>0.3345</td><td>0.4749</td></tr><tr><td>die 4</td><td>15</td><td>120</td><td>第一个</td><td>0.5505</td><td>0.4314</td><td>0.6689</td></tr><tr><td>die 5</td><td>16</td><td>168</td><td><b>第二个（下游）</b></td><td>0.3936</td><td>0.2910</td><td>0.4682</td></tr></tbody></table>
+<div class="def">解析值把机理钉死了：成对的两个挂接点，注入边 DAT 负载相差恰好
+<b>48 个单位</b>（168↔216、144↔192、120↔168），
+而 48 = 12 HA × 4 flit =
+<b>一个 die 的完整写数据输出</b>。
+次要效应是行间隙的位置：越靠下游（die 4/5）越轻，
+因为上游的 HA 已经把一部分流量吸收走了
+（Spearman(行间隙编号, 带宽) = 0.1916）。
+两个效应叠加，就是 0.55307 vs 0.35942
+（1.54 倍）的成对锯齿结构。
+另一个佐证：die 0 与 die 5 的注入边负载相同（都是 168），
+但 die 0 平均 0.53712、
+die 5 只有 0.39365——
+差别就在于 die 5 是“第二个”。这也解释了为什么
+Spearman(成对次序) = -0.8241 比
+Spearman(注入边负载) = -0.7665 更强。</div>
+<img src="stack_scatter.png" alt="带宽 vs 注入边负载">
+
+<h2>7. 三个流控方案</h2>
+
+<h3>7.1 S1：按规格实现的拥塞等级 AIMD</h3>
+<p>四个部分按规格实现：<b>检测</b>（每站点每窗口统计上环失败与落环偏转，
+等级 = min(7, 次数/8)）、<b>传播</b>（专用 3bit 广播总线，不占 NoC）、
+<b>反馈</b>（每个源维护受控节点表，取其中最大等级）、
+<b>控制</b>（终值 = level_of(自身失败 − 8×收到的最大净等级)，
+对整数注入预算做 AIMD）。
+唯一改动是受控节点表的构造：单环上是 <code>(idx+dir) % n</code> 走 hops 步，
+这里改为沿路由的边表收集途经站点——机械替换，不是策略变化。</p>
+<p>结果：Jain 0.93635 → <b>0.94549</b>，
+max/min 3.5088 → <b>2.5641</b>，
+makespan 1373 → 1359（略快）。
+跨种子稳定，是三个方案里最可靠的。
+局限在于 max 聚合让同一条纵环上的所有 core 收到相同的拥塞等级，
+而真正要区别对待的是“同一行间隙里的第一个 vs 第二个”——
+所以它只能压掉一部分差距，不能对症。</p>
+
+<h3>7.2 S16：接收端驱动的授权（Homa 式）</h3>
+<p><code>WriteNoSnp</code> 规定拿到 <code>DBIDResp</code> 之前不许发 WriteData，
+所以完成端本来就握有“谁、何时可以把写数据放上织物”的权力，
+基线只是一到就授权、把它浪费了。S16 不加报文、不加总线，
+只改授权的<b>时机与顺序</b>（每完成端最多挂起 overcommit 个授权，
+按已服务量最少优先）。在本拓扑上完成端（HA）还正好坐在瓶颈纵环上，
+看起来是理想的控制点。</p>
+<table><thead><tr><th>overcommit</th><th>状态</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>峰值挂起授权</th><th>峰值写缓冲 (flit)</th><th>平均授权等待</th></tr></thead><tbody><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>1527</td><td>0.5388</td><td>50.00</td><td>0.925</td><td>4</td><td>16</td><td>502.3</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>1334</td><td>0.7175</td><td>25.00</td><td>0.627</td><td>8</td><td>32</td><td>341.8</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>1356</td><td>0.8916</td><td>3.33</td><td>0.349</td><td>16</td><td>64</td><td>159.7</td></tr><tr><td>32</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>0.9384</td><td>2.99</td><td>0.256</td><td>32</td><td>128</td><td>30.3</td></tr><tr><td>64</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>0.9364</td><td>3.51</td><td>0.261</td><td>34</td><td>136</td><td>0.0</td></tr><tr><td>128</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>0.9364</td><td>3.51</td><td>0.261</td><td>34</td><td>136</td><td>0.0</td></tr></tbody></table>
+<div class="def bad"><b>但它在这里无效，而且原因很具体。</b>
+overcommit=32 时
+<b>2,997 笔授权立即发出、只有 3 笔被节流</b>——
+自然并发度（峰值挂起授权 32）本来就低于预算，
+<b>预算从未绑定</b>，所以结果与基线几乎逐位相同。
+把 overcommit 压到会绑定的程度，公平性<b>急剧恶化</b>
+（overcommit=4：Jain 0.53884、
+max/min 50.0）：
+全局并发度被压低后，公平窗口 <code>t_fair</code> 变短、每核样本变少，
+而位置劣势依旧。<br>
+根本原因是<b>控制点不在瓶颈上</b>：
+失衡发生在<b>注入侧</b>（挂接点抢纵环槽位），
+S16 管的是<b>接收侧</b>的灌入量。
+扣住占优 die 的授权只是让它手上没数据，
+在环优先会立刻把空出的槽位交给下一个过路 flit，
+starved 的挂接点<b>拿不到</b>这个槽位。<br>
+这与单环研究的结论并不矛盾：单环上瓶颈就是完成端所在的那条环段，
+控制灌入量等价于控制仲裁；这里两者<b>分离</b>了。</div>
+
+<h3>7.3 S17：挂接点转向仲裁（本文提出）</h3>
+<p>既然根因是挂接点的转向 FIFO 被过路流量无限期压住，
+最小的修法就是就地限制这个“无限期”：给转向 FIFO 一个<b>有界耐心</b>阈值，
+连续被过路流量抢走槽位超过阈值后，
+让一个过路 flit 在闩存里等一拍，把槽位交给转向 FIFO。</p>
+<table><thead><tr><th>耐心阈值 (cycle)</th><th>状态</th><th>makespan</th><th>Jain</th><th>max/min</th><th>CoV</th><th>让位次数</th><th>让位成功</th><th>闩存深度 (flit)</th></tr></thead><tbody><tr><td>0（等同基线）</td><td><b style="color:#16a34a">完成</b></td><td>1373</td><td>0.9364</td><td>3.51</td><td>0.261</td><td>0</td><td>0</td><td>0</td></tr><tr><td>1</td><td><b style="color:#16a34a">完成</b></td><td>1356</td><td>0.9426</td><td>2.67</td><td>0.247</td><td>13,368</td><td>3,254</td><td>1</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>1349</td><td>0.9395</td><td>2.99</td><td>0.254</td><td>10,739</td><td>1,990</td><td>1</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>1410</td><td>0.9340</td><td>4.17</td><td>0.266</td><td>8,655</td><td>955</td><td>1</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>1421</td><td>0.9449</td><td>3.12</td><td>0.241</td><td>7,339</td><td>398</td><td>1</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>1354</td><td>0.9251</td><td>3.57</td><td>0.284</td><td>6,191</td><td>176</td><td>1</td></tr><tr><td>32</td><td><b style="color:#16a34a">完成</b></td><td>1338</td><td>0.9341</td><td>3.17</td><td>0.266</td><td>5,326</td><td>103</td><td>1</td></tr></tbody></table>
+<img src="stack_sweeps.png" alt="三组扫描">
+<p>硬件代价确实是三个方案里最小的：每挂接点每出环 1 个计数器
+（共 361 个）+ 每出边
+1 flit 闩存，没有广播总线、没有新报文。
+它确实<b>局部破坏了链路无缓存性</b>，但破坏<b>有界且可计量</b>：
+实测闩存深度 1 flit。
+上表（单种子）看起来阈值 1 效果最好。
+<b>但这个结论经不起换种子。</b></p>
+<table><thead><tr><th>配置</th><th>平均 Jain</th><th>最差 Jain</th><th>最差 max/min</th><th>平均 CoV</th><th>平均 makespan</th><th>ΔJain / Δmax-min</th><th>判定</th></tr></thead><tbody><tr><td>oc=128，S0</td><td>0.93643</td><td>0.93005</td><td>3.390</td><td>0.2604</td><td>1392</td><td>—</td><td>—（基准）</td></tr><tr><td>oc=128，S17 pat=1</td><td>0.91866</td><td>0.90842</td><td>4.762</td><td>0.2973</td><td>1375</td><td>-0.01777 / +1.372</td><td><b style='color:#dc2626'>更差</b></td></tr><tr><td>oc=128，S17 pat=2</td><td>0.92721</td><td>0.91946</td><td>4.444</td><td>0.2799</td><td>1398</td><td>-0.00922 / +1.055</td><td><b style='color:#dc2626'>更差</b></td></tr><tr><td>oc=128，S17 pat=8</td><td>0.94093</td><td>0.93640</td><td>3.509</td><td>0.2505</td><td>1394</td><td>+0.00450 / +0.119</td><td>持平（噪声内）</td></tr><tr><td>oc=32，S0</td><td>0.94803</td><td>0.94258</td><td>2.174</td><td>0.2336</td><td>1382</td><td>—</td><td>—（基准）</td></tr><tr><td>oc=32，S17 pat=1</td><td>0.94341</td><td>0.93689</td><td>2.632</td><td>0.2443</td><td>1359</td><td>-0.00462 / +0.458</td><td><b style='color:#dc2626'>更差</b></td></tr><tr><td>oc=32，S17 pat=2</td><td>0.94395</td><td>0.94207</td><td>2.500</td><td>0.2436</td><td>1362</td><td>-0.00408 / +0.326</td><td><b style='color:#dc2626'>更差</b></td></tr><tr><td>oc=32，S17 pat=8</td><td>0.94906</td><td>0.93955</td><td>2.381</td><td>0.2312</td><td>1367</td><td>+0.00103 / +0.207</td><td>持平（噪声内）</td></tr></tbody></table>
+<div class="def bad"><b>S17 不成立，如实报告。</b>
+3 个种子的平均值显示：唯一不比基线差的阈值是 8，
+而它带来的 Jain 变化（0.93643 →
+0.94093）在噪声量级，
+<b>最差 max/min 反而变差</b>
+（3.3898 → 3.5088）；
+阈值 1、2 则明显更差。把 outstanding 换成 32 重做一遍，结论相同。
+所以<b>前面单种子上看到的改善是噪声</b>。<br>
+为什么对症的方案也会失效？让位把槽位交给了转向 FIFO 的<b>队首</b>，
+而队首未必属于那个被饿死的 core——
+转向 FIFO 里混装了来自同一个 die 全部 10 个 core 的 flit。
+<b>局部仲裁公平不等于端到端公平</b>：
+要真正定向补偿，仲裁就得按源 core 区分，
+那就退化成在每个挂接点维护 60 路状态，代价不再“最小”。</div>
+
+<h3>7.4 跨随机种子的稳定性</h3>
+<p>维序路由、outstanding=128，
+3 个种子（目的地序列不同）：</p>
+<table><thead><tr><th>方案</th><th>完成/总次数</th><th>最差 Jain</th><th>平均 Jain</th><th>最差 max/min</th><th>最差效率</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>3/3</td><td>0.9357</td><td>0.9369</td><td>4.082</td><td>89.0%</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>3/3</td><td>0.9455</td><td>0.9518</td><td>2.703</td><td>89.9%</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>3/3</td><td>0.9357</td><td>0.9376</td><td>4.082</td><td>89.0%</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td>3/3</td><td>0.9297</td><td>0.9415</td><td>3.448</td><td>90.6%</td></tr></tbody></table>
+<div class="def bad"><b>按最差种子判定，只有 S1 站得住。</b>
+S1 最差 Jain 0.94549、最差 max/min
+2.7027，明显优于基线
+（0.93567 / 4.0816）。
+S16 与基线在 3 个种子中有 2 个<b>数值完全相同</b>，再次印证它没有生效。
+S17 最差 Jain 0.92969，低于基线的 0.93567。
+<b>三个流控方案里只有 S1 的收益是可靠的</b>，
+而它需要一条专用广播总线，且一旦 outstanding 调到 32，
+增量就只剩 0.94847 → 0.95465。</div>
+
+<h3>7.5 改进方案：推荐的组合</h3>
+<p>把上面全部结果综合成一个可落地的配置。
+注意其中<b>前三项都不是流控机制</b>——它们是路由策略与两个已有参数的取值，
+却贡献了绝大部分收益。</p>
+<table><thead><tr><th>优先级</th><th>措施</th><th>类型</th><th>实测效果（维序路由，3 种子）</th><th>硬件代价</th></tr></thead><tbody><tr><td><b>1（必须）</b></td><td>维序路由：在目的列自己的 bridge 上跨 die，之后只走该列纵环，不走横环</td><td>路由策略</td><td>从拥塞崩溃（完成 5%）变为全部完成、效率 95%；各自最优并发度下吞吐 0.785 → 2.229 txn/cycle（<b>2.8 倍</b>）</td><td>无（只改路由表/路由函数）</td></tr><tr><td><b>2（免费）</b></td><td>每 core outstanding 由 128 降到 32</td><td>已有寄存器取值</td><td>平均效率 93.5% → <b>96.7%</b>，Jain 0.93762 → <b>0.94847</b>，最差 max/min 3.1746 → <b>2.2727</b></td><td><b>零</b></td></tr><tr><td>3（省成本）</td><td>转向 FIFO 保持 4~8 flit，不必加深</td><td>缓冲配置</td><td>深度 4 与 64 的吞吐仅差 3.1%</td><td>比原先设想的 64 flit <b>省 16 倍</b></td></tr><tr><td>4（可选）</td><td>S1 拥塞等级 AIMD</td><td>流控机制</td><td>在 oc=32 基础上 Jain 0.94847 → 0.95465，最差 max/min 同为 2.2727</td><td><b>专用 3bit 广播总线</b> + 每源受控节点表</td></tr><tr><td><b>5（最彻底）</b></td><td>改版图：分散成对挂接点，或让同间隙两条横环反向</td><td>拓扑布局</td><td>从结构上消除“第二个永远在下游”这一前提，预期可直接达标</td><td>版图改动，运行时零开销</td></tr></tbody></table>
+<div class="def good">若只能做一件事，做第 1 项；
+若能做两件，做第 1、2 项——<b>这两项加起来不需要任何新增硬件</b>，
+就把织物从崩溃状态带到效率 96.7%、
+Jain 0.94847。S1 是唯一值得考虑的流控增量，
+但要先确认那条广播总线的代价换得来那点增量。</div>
+
+<h2>8. 代价对比</h2>
+<table><thead><tr><th>代价项</th><th>S0</th><th>outstanding=32</th><th>S1</th><th>S16</th><th>S17</th></tr></thead><tbody><tr><td>专用广播总线</td><td>无</td><td>无</td><td><b>有</b>（5,544 次广播，33,264 bit）</td><td>无</td><td>无</td></tr><tr><td>新增报文类型</td><td>无</td><td>无</td><td>无（走专用总线）</td><td>无（复用 DBIDResp 的时机）</td><td>无</td></tr><tr><td>每站点状态</td><td>无</td><td>无（只改一个已有寄存器的取值）</td><td>3bit×2 等级 + 受控节点表（平均 140.6 项）+ 预算寄存器</td><td>每 HA：授权计数 + 每请求方已服务计数</td><td>每挂接点每出环 1 个计数器（共 361 个）</td></tr><tr><td>额外缓冲</td><td>无</td><td>无</td><td>无</td><td>完成端写缓冲，峰值 128 flit</td><td>每出边 1 flit 闩存</td></tr><tr><td>是否破坏链路无缓存性</td><td>否</td><td>否</td><td>否</td><td>否</td><td>是，但有界（实测 1 flit）</td></tr><tr><td>本拓扑实测收益（3 种子）</td><td>—</td><td><b>吞吐与公平同时改善</b></td><td>公平小幅但可靠改善，吞吐持平</td><td><b>无效</b>（预算几乎从不绑定）</td><td><b>无效</b>（噪声内，max/min 更差）</td></tr></tbody></table>
+<div class="def good"><b>推荐组合</b>：
+<b>维序路由（必须）+ outstanding≈32（免费）+ 转向 FIFO 4~8 flit（够用）</b>。
+第一项决定织物能不能用（崩溃 vs 完成），
+第二项同时改善吞吐与公平且不花一个门，
+第三项说明不必为 bottom die 付大缓冲。
+这三项<b>全都不需要新增流控硬件</b>。
+在此之上若仍需更高公平性，只有 S1 值得考虑，
+且要先接受一条专用广播总线的代价换取有限的增量；
+<b>S16 与 S17 在本拓扑实测无效</b>。</div>
+<div class="def"><b>更彻底的方案在布局层面。</b>
+成对相邻的挂接点把不对称直接写进了拓扑：
+无论怎么仲裁，第二个挂接点始终在第一个的下游。
+若把同一行间隙的两个挂接点<b>分散</b>到纵环上相距较远的位置，
+或让同一间隙的两条横环<b>反向</b>行进，
+“第二个永远在下游”这个前提就不成立了，
+位置失衡会从结构上消失，而不需要任何运行时机制。</div>
+
+<h2>9. 复现</h2>
+<pre style="background:#f8fafc;border:1px solid #e5e7eb;padding:0.7rem;
+font-size:0.85rem;overflow-x:auto">PYTHONPATH=utils python3 utils/dse_stack_write_fair.py
+PYTHONPATH=utils python3 utils/gen_stack_write_report.py
+PYTHONPATH=utils python3 utils/verify_stack.py
+PYTHONPATH=utils python3 utils/verify_ring2_20.py</pre>
+<p class="note">数据：<code>results/dse_stack_write_fair.json</code>
+（仿真耗时 1182.7 s，K=50/core，
+种子 0, 1, 2）与
+<code>results/dse_stack_oc_seeds.json</code>。
+四拍守恒、无 flit 丢失、makespan ≥ 下界、FIFO 占用有界、
+维序路由不使用横环、S16 无预算时与 S0 逐位相同
+等校验见 <code>utils/verify_stack.py</code>。</p>
+
+</body></html>

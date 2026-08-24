@@ -1,0 +1,122 @@
+[
+ {
+  "name": "topo_node_accounting",
+  "ok": true,
+  "note": "264 nodes = 6x20 + 96 HA + 48 attach; 8x18=144"
+ },
+ {
+  "name": "topo_v_ring_layout",
+  "ok": true,
+  "note": "attach vpos = [1,2,8,9,15,16] in every column"
+ },
+ {
+  "name": "topo_h_ring_and_bridge_map",
+  "ok": true,
+  "note": "each top die has exactly one bridge per bottom-die column"
+ },
+ {
+  "name": "topo_plane_isolation",
+  "ok": true,
+  "note": "no route uses the other plane's top-die links"
+ },
+ {
+  "name": "topo_routes_cross_d2d_once",
+  "ok": true,
+  "note": "every core->HA route crosses the die boundary exactly once"
+ },
+ {
+  "name": "topo_dor_uses_no_horizontal_hop",
+  "ok": true,
+  "note": "DOR needs no horizontal ring at all for core<->HA traffic"
+ },
+ {
+  "name": "topo_laps_close",
+  "ok": true,
+  "note": "every deflection lap returns to its start"
+ },
+ {
+  "name": "topo_dor_beats_shortest_path_bound",
+  "ok": true,
+  "note": "bound 620->260 while mean hops 13.56->14.94 (longer)"
+ },
+ {
+  "name": "write_four_phase_conservation",
+  "ok": true,
+  "note": "720 txns -> 5040 flits, exact"
+ },
+ {
+  "name": "no_flit_lost_at_turn_or_d2d",
+  "ok": true,
+  "note": "10,080 turns, nothing stranded"
+ },
+ {
+  "name": "makespan_ge_bound",
+  "ok": true,
+  "note": "makespan 421 >= bound 324"
+ },
+ {
+  "name": "links_stay_bufferless",
+  "ok": true,
+  "note": "S0 never latches an in-ring flit"
+ },
+ {
+  "name": "fifo_occupancy_bounded",
+  "ok": true,
+  "note": "turn peak 16/16, d2d peak 11/32 over 144+96 FIFOs"
+ },
+ {
+  "name": "fabric_util_matches_capacity_model",
+  "ok": true,
+  "note": "per-fabric link counts and utilisation self-consistent"
+ },
+ {
+  "name": "shallow_turn_fifo_is_adequate_under_dor",
+  "ok": true,
+  "note": "thr 2.076 (depth 4) vs 2.133 (depth 64), only 2.8% apart"
+ },
+ {
+  "name": "s16_unbounded_equals_s0",
+  "ok": true,
+  "note": "exact equality with the baseline on 6 counters"
+ },
+ {
+  "name": "s16_respects_grant_budget",
+  "ok": true,
+  "note": "peak outstanding grants 6 <= 6"
+ },
+ {
+  "name": "s1_bus_never_uses_the_noc",
+  "ok": true,
+  "note": "1,320 posts, 7,920 bits, mean 78.1 controlled nodes per source"
+ },
+ {
+  "name": "s17_latch_is_bounded_and_off_by_default",
+  "ok": true,
+  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 2,088 yields"
+ },
+ {
+  "name": "s17_does_not_deliver_a_reliable_gain",
+  "ok": true,
+  "note": "mean Jain baseline 0.93216; no aggressive patience setting beats it, matching the reported negative result"
+ },
+ {
+  "name": "lower_outstanding_wins_on_both_axes",
+  "ok": true,
+  "note": "oc 128->32: mean Jain 0.93216 -> 0.97200 and mean makespan 1131 -> 1107 (both better, zero hardware)"
+ },
+ {
+  "name": "baseline_is_position_unfair",
+  "ok": true,
+  "note": "max/min 4.4444; first-of-pair 0.5418 vs second-of-pair 0.3640 (1.49x)"
+ },
+ {
+  "name": "flow_control_cannot_fix_a_routing_hotspot",
+  "ok": true,
+  "note": "S0 and S1 both collapse under latency-shortest; DOR is stable"
+ },
+ {
+  "name": "collapse_needs_sustained_load",
+  "ok": true,
+  "note": "lat route: k=20 completes in 1670, k=40 collapses (286 txns done)"
+ }
+]
