@@ -26,8 +26,7 @@ OUT = ROOT / "results" / "report_ring2_write_fairness.html"
 IMG = ROOT / "results"
 
 SCHEMES = ("S0", "S1", "S15", "S16")
-# Section 3.1: the baseline is the unbounded-tracker S0 (the ring is the
-# only constraint, so position imbalance is visible). S15 is left out;
+# Section 3.1: the reported baseline (tracker = 32). S15 is left out;
 # S17 / S18 take its place as the rate-based answers to retry waste.
 SEC31 = ("S0", "S1", "S16", "S17", "S18")
 COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb",
@@ -133,12 +132,13 @@ def plot_topology(meta: dict, path: Path) -> None:
 
 
 def plot_bw_bars(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
-                s0_unbounded: bool = False) -> None:
+                s0_unbounded: bool = False, extra_ref: bool = True,
+                title: str | None = None) -> None:
     """Per-core write bandwidth, one group of bars per scheme.
 
-    `s0_unbounded` makes the S0 bar the unlimited-tracker run (section 3.1).
-    Otherwise a hatched copy of that run is drawn next to the finite-tracker
-    schemes so the masking is visible (section 6).
+    `s0_unbounded` makes the S0 bar the unlimited-tracker run.
+    `extra_ref` (default on) draws a hatched copy of that run next to the
+    finite-tracker schemes so the masking is visible (section 6).
     """
     _use_cjk_font()
     cs = _cores(pat)
@@ -151,7 +151,7 @@ def plot_bw_bars(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
             lab = "S0 基线（tracker = ∞）"
         series.append((s, rec["fairness"], COLOR[s], None, lab))
     ref = pat.get("s0_unbounded")
-    if ref and not s0_unbounded:
+    if extra_ref and ref and not s0_unbounded:
         series.insert(0, ("REF", ref["fairness"], "#64748b", "//",
                           "S0，tracker = ∞（参照：环受限）"))
     n = len(series)
@@ -176,7 +176,7 @@ def plot_bw_bars(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
     ax.set_xticklabels([f"C{c}" for c in cs])
     ax.set_xlabel("AI core")
     ax.set_ylabel("写带宽（WriteData flit/cycle）")
-    ax.set_title("每 core 写带宽（争用窗口内），虚线 = 该方案均值，"
+    ax.set_title(title or "每 core 写带宽（争用窗口内），虚线 = 该方案均值，"
                  "纵轴已截断以显示差异")
     # The truncated axis leaves no room inside the panel, so the legend goes
     # underneath rather than on top of the bars.
@@ -571,27 +571,33 @@ def _bounds_table(b: dict) -> str:
     return _table(["下界", "cycle", "含义"], rows)
 
 
-def _summary_table(pat: dict) -> str:
-    """Section 3.1: S0 is the unlimited-tracker baseline; no S15; S17/S18 in."""
+def _summary_table(pat: dict, *, pattern: str = "") -> str:
+    """Section 3.1: S0 is the reported baseline (tracker = 32)."""
     rows = []
-    thr0 = _sch(pat, "S0", s0_unbounded=True)["fairness"]["throughput"]
+    thr0 = pat["schemes"]["S0"]["fairness"]["throughput"]
     for s in SEC31:
-        sch = _sch(pat, s, s0_unbounded=True)
+        if s not in pat["schemes"]:
+            continue
+        sch = pat["schemes"][s]
         f = sch["fairness"]
         d = 100.0 * (f["throughput"] - thr0) / thr0
         q = sch.get("retry") or {}
         lab = LABEL[s]
         if s == "S0":
-            lab = "S0 基线（tracker = ∞）"
-        rows.append([
-            lab, sch["makespan"], f["max_min"],
-            f["bw_min"], f["bw_max"], f["throughput"],
-            f"{d:+.1f}%", q.get("retry_per_txn", "—"),
-            sch["n_deflections"], sch["n_board_fail"],
-        ])
-    return _table(["方案", "makespan", "max/min",
-                   "最低 BW", "最高 BW", "吞吐 flit/cycle", "吞吐差",
-                   "重试/事务", "偏转", "上环失败"], rows)
+            lab = "S0 基线（tracker = 32）"
+        row = [lab, sch["makespan"], f["max_min"],
+               f["bw_min"], f["bw_max"], f["throughput"],
+               f"{d:+.1f}%", q.get("retry_per_txn", "—"),
+               sch["n_deflections"], sch["n_board_fail"]]
+        if pattern:
+            row.insert(0, pattern)
+        rows.append(row)
+    heads = ["方案", "makespan", "max/min",
+             "最低 BW", "最高 BW", "吞吐 flit/cycle", "吞吐差",
+             "重试/事务", "偏转", "上环失败"]
+    if pattern:
+        heads.insert(0, "流量")
+    return _table(heads, rows)
 
 
 def _track_table(pat: dict) -> str:
@@ -1313,12 +1319,32 @@ def main() -> None:
         p = IMG / f"ring2_wfair_{tag}.png"
         fn(pat, p)
         imgs[tag] = p.name
-    # Section 3.1 uses its own set: unbounded S0, no S15, plus S17 / S18.
+    # Section 3.1: reported baseline (tracker = 32), no S15, plus S17 / S18.
+    # No hatched unbounded-S0 overlay — that comparison lives in the table.
     for tag, fn in (("bars31", plot_bw_bars), ("panels31", plot_bw_panels),
                     ("overlay31", plot_bw_overlay)):
         p = IMG / f"ring2_wfair_{tag}.png"
-        fn(pat, p, schemes=SEC31, s0_unbounded=True)
+        kw = dict(schemes=SEC31, s0_unbounded=False)
+        if fn is plot_bw_bars:
+            kw.update(extra_ref=False,
+                      title="均匀写 · 每 core 写带宽（tracker = 32），"
+                            "虚线 = 该方案均值，纵轴已截断")
+        fn(pat, p, **kw)
         imgs[tag] = p.name
+    hot = d["patterns"].get("hot")
+    if hot and all(s in hot.get("schemes", {}) for s in SEC31):
+        p = IMG / "ring2_wfair_bars31_hot.png"
+        plot_bw_bars(hot, p, schemes=SEC31, s0_unbounded=False,
+                     extra_ref=False,
+                     title="不均匀写（全部写入 M11/M13）· 每 core 写带宽"
+                           "（tracker = 32），虚线 = 该方案均值，纵轴已截断")
+        imgs["bars31_hot"] = p.name
+        p = IMG / "ring2_wfair_panels31_hot.png"
+        plot_bw_panels(hot, p, schemes=SEC31, s0_unbounded=False)
+        imgs["panels31_hot"] = p.name
+        p = IMG / "ring2_wfair_overlay31_hot.png"
+        plot_bw_overlay(hot, p, schemes=SEC31, s0_unbounded=False)
+        imgs["overlay31_hot"] = p.name
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name
@@ -1356,7 +1382,29 @@ def main() -> None:
     sref = ref.get("fairness") or s0
     rcref = pat.get("root_cause_unbounded") or rc
     q0 = pat["schemes"]["S0"].get("retry") or {}
+    q17 = (pat["schemes"].get("S17") or {}).get("retry") or {}
+    q18 = (pat["schemes"].get("S18") or {}).get("retry") or {}
     qref = ref.get("retry") or {}
+    hot = d["patterns"].get("hot")
+    hot_ok = bool(hot and all(s in (hot.get("schemes") or {}) for s in SEC31))
+    h0 = (hot["schemes"]["S0"]["fairness"] if hot_ok else {})
+    hq0 = (hot["schemes"]["S0"].get("retry") or {}) if hot_ok else {}
+    hot_has = (hot.get("mem") if hot else None) or meta.get("hot_has") \
+        or [11, 13]
+    hot_tbl = _summary_table(hot) if hot_ok else ""
+    hot_imgs = ""
+    if hot_ok:
+        hot_imgs = f"""
+<img src="{imgs.get('bars31_hot', '')}" alt="hot per-core BW">
+<p class="note">不均匀写把全部流量灌进 M{'/M'.join(str(x) for x in hot_has)}。
+S0 的 max/min 从均匀写的 {s0['max_min']} 回到 <b>{h0.get('max_min')}</b>——
+destination 几何重新拉开了各核，retry 背压盖不住。
+S1 两个指标同时更差；S16 在这个场景上吞吐和公平性都不如 S0；
+S17 / S18 与 S0 几乎贴在一起，重试也压不下去
+（{hq0.get('retry_per_txn')} 次/事务）。</p>
+<img src="{imgs.get('panels31_hot', '')}" alt="hot per-core BW over time">
+<img src="{imgs.get('overlay31_hot', '')}" alt="hot slowest vs fastest">
+"""
     t_ref = 100.0 * (s0["throughput"] - sref["throughput"]) \
         / max(1e-9, sref["throughput"])
 
@@ -1627,45 +1675,40 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 即<b>{bind_txt}</b>。</p>
 
 <h3>3.1 基线 S0 下各核是否不均</h3>
-<p>本节的 S0 <b>用无限 tracker</b>：环是唯一约束，位置相关的不均才能看见。
-对照方案是 S1、S16，以及两个 rate-based 方案 S17 / S18
-（它们仍在 tracker = {meta.get('ha_track')} 下运行——那是它们要对付的压力）。</p>
+<p>五个方案都在 <b>tracker = {meta.get('ha_track')}</b>、
+outstanding = {meta.get('core_outstanding')} 下测量。
+S0 是无流控基线；对照是 S1、S16，以及 S17 / S18。</p>
+<p><b>均匀写</b>（每个 core 均匀写全部 {len(meta.get('mem_nodes', []))} 个 mem）：</p>
 {_summary_table(pat)}
-{_track_table(pat)}
-<div class="def bad"><b>环受限时，失衡是真实且显著的。</b>
-S0（tracker = ∞）需求完全对称而结果并不对称：
-max/min = <b>{sref['max_min']}</b>，
-最慢的 core 只有最快的 {1 / sref['max_min'] * 100:.0f}%，
-最慢 {sref['bw_min']} vs 最快 {sref['bw_max']} flit/cycle。
-这就是第 4 节要归因的现象。</div>
-<div class="def"><b>把 tracker 收到 {meta.get('ha_track')} 之后，
-这个失衡被大幅压平：同一份 S0 的 max/min 变成 {s0['max_min']}</b>，
-已经落在 1.05 的验收线附近。<b>但这不是被修好了，是瓶颈换了地方。</b>
+<div class="def">均匀写下 S0 的 max/min 只有 <b>{s0['max_min']}</b>，
+最慢 {s0['bw_min']} vs 最快 {s0['bw_max']} flit/cycle，
+几乎落在 1.05 的验收线内。
+这不是各核本来就齐，而是 completer 的 tracker 成了公共瓶颈：
 每笔事务平均被 RetryAck <b>{q0.get('retry_per_txn')}</b> 次，
-瓶颈从“环上的槽位”移到了“completer 的 tracker 表项”，
-而后者对所有 core 一视同仁——谁的位置好也不能多要一个表项。
-代价是吞吐从 {sref['throughput']} 掉到 <b>{s0['throughput']}</b>
-（<b>{t_ref:+.1f}%</b>）。</div>
-<div class="key"><b>所以本研究有两个不同的问题，不要混为一谈：</b>
-<ol>
-<li><b>位置相关的不均</b>（第 4~7 节）：环受限时出现，
-S16 是针对它的解法。在有限 tracker 下它被 retry 背压掩盖，
-但只要 tracker 放宽、或 outstanding 调小到不触发重试，它就会回来。</li>
-<li><b>重试造成的浪费</b>（第 9~10 节）：有限 tracker 下才出现，
-吃掉了 {abs(t_ref):.0f}% 的吞吐，与公平性无关。
-S17 / S18 要对付的是这一条。</li>
-</ol></div>
-<img src="{imgs['bars31']}" alt="per-core BW">
-<p class="note">红色是无限 tracker 的 S0，高低差一眼可见。
-其余四个都在 tracker = {meta.get('ha_track')} 下：S16 最齐（max/min
+位置优势换不到一个表项。
+同一份 S0 把 tracker 放开之后 max/min 回到 {sref['max_min']}、
+吞吐从 {s0['throughput']} 升到 {sref['throughput']}
+（见下表）。</div>
+{_track_table(pat)}
+<img src="{imgs['bars31']}" alt="per-core BW uniform">
+<p class="note">S16 最齐（max/min
 {pat['schemes']['S16']['fairness']['max_min']}）但更矮；
-S17 / S18 把重试压下去了，却没有把各核拉平
-（S17 的 max/min 反而是五个里最高的）。
-注意纵轴已截断，否则差异在 0 起点上完全看不出来。</p>
+S17 / S18 把重试压到 {q17.get('retry_per_txn')} / {q18.get('retry_per_txn')}，
+S17 的 max/min 反而是五个里最高的。注意纵轴已截断。</p>
 <img src="{imgs['panels31']}" alt="per-core BW over time">
-<p class="note">S0（∞）面板上各 core 从一开始就按位置分开；
-S16 贴成一条，S17 / S18 仍有分叉，但整体低于 S0。</p>
 <img src="{imgs['overlay31']}" alt="slowest vs fastest">
+
+<p><b>不均匀写</b>（全部写入相邻的 M{'/M'.join(str(x) for x in hot_has)}，
+角色不变、只改目的地几何）：</p>
+{hot_tbl}
+<div class="def bad">流量一不均匀，S0 的 max/min 就从 {s0['max_min']}
+回到 <b>{h0.get('max_min', '—')}</b>，吞吐从 {s0['throughput']}
+掉到 <b>{h0.get('throughput', '—')}</b> flit/cycle
+（重试 {hq0.get('retry_per_txn', '—')} 次/事务）。
+<b>destination 几何重新拉开了各核，有限 tracker 盖不住。</b>
+离热点近的 core 注入的 hop 已经被所有人的过路流量占满，
+离热点远的 core 反而有一段相对空的入口。</div>
+{hot_imgs}
 
 <h2>4. 根因</h2>
 <p class="note">本节的归因全部在<b>无限 tracker</b>（环受限）的参照上做，
