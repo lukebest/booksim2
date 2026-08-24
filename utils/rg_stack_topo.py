@@ -30,21 +30,48 @@ ring length.
 
 An attach point is a node on **both** its horizontal ring and its column's
 vertical ring. It is simultaneously the D2D landing point and the turn node.
-Top die `t` maps to horizontal ring `t`; that die's bridge nodes map to
-columns 0..7 in ascending ring index.
 
-The consequence that drives the whole study: horizontal ring `t` crosses every
-column at the *same* gap and group, so top die `t` injects at the same vertical
-position on all 8 columns. A die's positional advantage is therefore coherent
-across destinations and cannot average out -- unlike the single-ring study,
-where every core had an identical mean hop distance to memory.
+Attach grouping
+---------------
+The 48 attach points are grouped **8 per top die as 2 attach rows x 4
+columns**. A row gap holds 2 attach rows (its two horizontal rings) x 8
+columns = 16 attach points = 2 groups, split left/right:
+
+    gap 0 (h rings 0,1)  ->  die 0 cols 0-3,  die 1 cols 4-7
+    gap 1 (h rings 2,3)  ->  die 2 cols 0-3,  die 3 cols 4-7
+    gap 2 (h rings 4,5)  ->  die 4 cols 0-3,  die 5 cols 4-7
+
+A horizontal ring still spans all 8 columns, so the two dies sharing a gap
+also share its two horizontal rings, and either die can borrow one to reach a
+column outside its own group.
+
+The consequence that drives the whole study: a die's group covers only **4 of
+the 8 columns**, so half of every core's writes must ride a horizontal ring to
+reach the target column. The horizontal rings are therefore load bearing, and
+with only 48 directed horizontal links against 144 vertical ones they are a
+candidate bottleneck in their own right.
+
+HA-to-bridge binding
+--------------------
+Each HA is bound to one D2D bridge, so the destination alone fixes the
+crossing point. A die has 8 bridges and must reach all 96 HAs, so each bridge
+owns exactly one column's 12 HAs. Four of a die's bridges land in the column
+they serve (no horizontal hop); the other four land in the group's columns and
+must cross to the far half. The two dies in a gap use *different* horizontal
+rings for their far traffic, which keeps the two rings of a gap balanced.
 
 Routing
 -------
-Global shortest path by latency over the combined graph (top rings + D2D +
-horizontal + vertical half rings), so the router decides for itself whether a
-horizontal hop is worth taking. Plane choice applies to the top die only; the
-bottom die has one plane per half ring.
+Destination driven, matching the hardware: the target HA fixes the bridge,
+hence the source and destination on *both* dies, and the path is then the
+shortest one within each die -- direction and plane on the top-die ring, and
+the shortest horizontal/vertical combination on the bottom die. Implemented as
+a single shortest-path search in which every D2D edge except the bound one is
+removed, which composes the two per-die shortest paths automatically.
+
+`lat` and `hops` remain available as reference points, but they ignore the
+binding and so are **not implementable** on this hardware; they exist only to
+quantify what the binding costs.
 
 A route is a list of directed edge ids, not a (direction, hop-count) pair:
 a transfer changes ring, changes die, and changes axis, so there is no single
@@ -89,6 +116,11 @@ H_PER_GAP = 2
 N_HRING = len(H_GAP_AFTER_ROW) * H_PER_GAP  # 6
 N_ATTACH = N_HRING * N_COLS                 # 48
 V_LEN = N_ROWS + N_HRING                    # 18 nodes per vertical half ring
+
+# An attach group is 2 attach rows x GROUP_COLS columns = 8 points per top die.
+GROUP_COLS = 4
+assert H_PER_GAP * GROUP_COLS == len(TOP_BRIDGES) == 8
+assert N_COLS == 2 * GROUP_COLS
 
 SIGMA = 1
 ANY_PLANE = -1         # bottom-die and D2D links are shared by both planes
@@ -151,7 +183,7 @@ class StackTopology:
                  bot_hop_lat: int = BOT_HOP_LAT, d2d_lat: int = D2D_LAT,
                  turn_lat: int = TURN_LAT, sigma: int = SIGMA,
                  board_ports: int = 1, leave_ports: int = 1,
-                 route_mode: str = "lat",
+                 route_mode: str = "bound", h_assign: str = "split",
                  vcs: Sequence[str] = CHI_VCS_WRITE) -> None:
         if len(top_link_lats) != TOP_N:
             raise ValueError(f"top_link_lats must have {TOP_N} entries")
@@ -163,6 +195,7 @@ class StackTopology:
         self.d2d_lat = d2d_lat
         self.turn_lat = turn_lat
         self.route_mode = route_mode
+        self.h_assign = h_assign
         self.sigma = sigma
         self.board_ports = board_ports
         self.leave_ports = leave_ports
@@ -174,6 +207,7 @@ class StackTopology:
         self._attach: dict[tuple[int, int], int] = {}   # (hring, col) -> nid
         self._ha: dict[tuple[int, int], int] = {}       # (row, col) -> nid
         self._build_nodes()
+        self._build_binding()
 
         # directed edges, indexed by id
         self.edges: list[tuple[int, int]] = []          # (u, v)
@@ -234,9 +268,78 @@ class StackTopology:
     def ha(self, row: int, col: int) -> int:
         return self._ha[(row, col)]
 
-    def bridge_col(self, idx: int) -> int:
-        """Which bottom-die column a top-die bridge index serves."""
-        return TOP_BRIDGES.index(idx)
+    # -- attach grouping and HA-to-bridge binding --------------------------
+
+    def die_gap(self, die: int) -> int:
+        """Which row gap a die's attach group sits in."""
+        return die // H_PER_GAP
+
+    def die_half(self, die: int) -> int:
+        """0 for the left column half (0-3), 1 for the right half (4-7)."""
+        return die % H_PER_GAP
+
+    def die_cols(self, die: int) -> tuple[int, ...]:
+        """The GROUP_COLS columns this die's attach points physically sit in."""
+        base = self.die_half(die) * GROUP_COLS
+        return tuple(range(base, base + GROUP_COLS))
+
+    def die_hrings(self, die: int) -> tuple[int, int]:
+        """(near ring, far ring) for this die, out of its gap's two rings.
+
+        Two defensible choices, and they trade the two bottlenecks against
+        each other:
+
+        ``split``  the dies sharing a gap use opposite rings for far traffic,
+                   so each ring carries one die's column crossings. Halves the
+                   horizontal load, but both dies then land on the *same*
+                   attach point of a given column, so they contend there.
+        ``stack``  both dies use the low ring for near and the high one for
+                   far. The two dies now reach a column at different attach
+                   points, but all horizontal traffic piles onto one ring.
+        """
+        g, half = self.die_gap(die), self.die_half(die)
+        lo = g * H_PER_GAP
+        if self.h_assign == "stack":
+            return (lo, lo + 1)
+        far = lo + half
+        return (lo + (1 - half), far)
+
+    def bridge_target_col(self, die: int, idx: int) -> int:
+        """The column whose 12 HAs are bound to this bridge.
+
+        The 8 bridges of a die own the 8 columns one apiece: the first
+        GROUP_COLS serve the die's own columns, the rest serve the far half.
+        """
+        j = TOP_BRIDGES.index(idx)
+        cols = self.die_cols(die)
+        if j < GROUP_COLS:
+            return cols[j]
+        return (cols[j - GROUP_COLS] + GROUP_COLS) % N_COLS
+
+    def bridge_landing(self, die: int, idx: int) -> int:
+        """The attach point this bridge's D2D link lands on."""
+        j = TOP_BRIDGES.index(idx)
+        near, far = self.die_hrings(die)
+        cols = self.die_cols(die)
+        if j < GROUP_COLS:
+            return self.attach(near, cols[j])
+        return self.attach(far, cols[j - GROUP_COLS])
+
+    def ha_bridge(self, die: int, col: int) -> int:
+        """The bridge index on `die` bound to every HA in `col`."""
+        return self._bind[(die, col)]
+
+    def _build_binding(self) -> None:
+        self._bind: dict[tuple[int, int], int] = {}
+        for d in range(self.n_die):
+            for idx in TOP_BRIDGES:
+                col = self.bridge_target_col(d, idx)
+                if (d, col) in self._bind:
+                    raise ValueError(f"die {d} column {col} bound twice")
+                self._bind[(d, col)] = idx
+            missing = [c for c in range(N_COLS) if (d, c) not in self._bind]
+            if missing:
+                raise ValueError(f"die {d} reaches no bridge for {missing}")
 
     def _link(self, u: int, v: int, lat: int, plane: int,
               ring: tuple[RingKind, int, int]) -> None:
@@ -262,11 +365,10 @@ class StackTopology:
         # D2D: bridge <-> attach, both ways. The crossing is one physical
         # link shared by both top-die planes, so it is plane-agnostic.
         for d in range(self.n_die):
-            for idx in TOP_BRIDGES:
-                col = self.bridge_col(idx)
-                u, v = self.top(d, idx), self.attach(d, col)
-                self._link(u, v, self.d2d_lat, ANY_PLANE, ("d2d", d, col))
-                self._link(v, u, self.d2d_lat, ANY_PLANE, ("d2d", d, col))
+            for j, idx in enumerate(TOP_BRIDGES):
+                u, v = self.top(d, idx), self.bridge_landing(d, idx)
+                self._link(u, v, self.d2d_lat, ANY_PLANE, ("d2d", d, j))
+                self._link(v, u, self.d2d_lat, ANY_PLANE, ("d2d", d, j))
         # horizontal half rings: unidirectional, wraps
         for h in range(N_HRING):
             for c in range(N_COLS):
@@ -372,12 +474,15 @@ class StackTopology:
 
         `mode` selects the routing policy:
 
-        ``lat``   least total latency, the literal reading of "shortest path".
-        ``hops``  least hop count.
-        ``dor``   dimension-ordered: cross the die boundary at the bridge that
-                  serves the destination *column*, then ride that column's
-                  vertical ring. Uses no horizontal hops at all, because each
-                  top die already has one bridge per column.
+        ``bound`` the hardware's own rule and the default. The destination HA
+                  fixes the bound bridge, so the crossing point is not a
+                  routing choice; the path is then shortest within each die.
+        ``lat``   least total latency ignoring the binding.
+        ``hops``  least hop count ignoring the binding.
+
+        `lat` and `hops` are **not implementable** here -- they let a write
+        cross at whichever bridge happens to be convenient, which the
+        HA-to-bridge binding forbids. They are kept to quantify that cost.
 
         `plane` selects which top-die plane the route may use; bottom-die and
         D2D edges are shared by both planes. Ties break deterministically.
@@ -390,10 +495,38 @@ class StackTopology:
         if src == dst:
             self._route_cache[key] = ()
             return ()
-        if mode == "dor":
-            out = self._route_dor(src, dst, plane)
-            self._route_cache[key] = out
-            return out
+        only = self._bound_d2d(src, dst) if mode == "bound" else None
+        out = self._dijkstra(src, dst, plane, mode, only)
+        self._route_cache[key] = out
+        return out
+
+    def _bound_d2d(self, src: int, dst: int) -> int | None:
+        """The one D2D crossing this source/destination pair is allowed.
+
+        Returns None for traffic that stays on one die, which then routes
+        freely within it.
+        """
+        a, b = self.nodes[src], self.nodes[dst]
+        if a.role == "core" and b.role in ("ha", "attach"):
+            die, col = a.die, b.col
+        elif a.role in ("ha", "attach") and b.role == "core":
+            die, col = b.die, a.col
+        else:
+            return None
+        idx = self.ha_bridge(die, col)
+        return self.eid(self.top(die, idx), self.bridge_landing(die, idx),
+                        ANY_PLANE) if a.role == "core" else \
+            self.eid(self.bridge_landing(die, idx), self.top(die, idx),
+                     ANY_PLANE)
+
+    def _dijkstra(self, src: int, dst: int, plane: int, mode: str,
+                  only_d2d: int | None) -> tuple[int, ...]:
+        """Shortest path, optionally pinned to a single D2D crossing.
+
+        Pinning the crossing is what makes this the composition of the two
+        per-die shortest paths: the die boundary is no longer a choice, so the
+        search optimises each side independently.
+        """
         weight = (lambda e: 1) if mode == "hops" else \
             (lambda e: self.edge_lat[e])
         dist: dict[int, tuple[int, int]] = {src: (0, 0)}
@@ -411,6 +544,9 @@ class StackTopology:
                 ep = self.edge_plane[eid]
                 if ep != ANY_PLANE and ep != plane:
                     continue          # a top-die plane is private to itself
+                if only_d2d is not None and self.is_d2d(eid) \
+                        and eid != only_d2d:
+                    continue          # the binding allows exactly one crossing
                 v = self.edges[eid][1]
                 if v in seen:
                     continue
@@ -428,9 +564,7 @@ class StackTopology:
             eid = prev[cur]
             path.append(eid)
             cur = self.edges[eid][0]
-        out = tuple(reversed(path))
-        self._route_cache[key] = out
-        return out
+        return tuple(reversed(path))
 
     def _ring_path(self, rk: Any, u: int, v: int, direction: int) -> list[int]:
         out: list[int] = []
@@ -440,25 +574,6 @@ class StackTopology:
             out.append(eid)
             cur = self.edges[eid][1]
         return out
-
-    def _route_dor(self, src: int, dst: int, plane: int) -> tuple[int, ...]:
-        """Cross at the destination column's own bridge; never turn sideways."""
-        a, b = self.nodes[src], self.nodes[dst]
-        if a.role == "core" and b.role == "ha":
-            die, col = a.die, b.col
-            bridge = self.top(die, TOP_BRIDGES[col])
-            land = self.attach(die, col)
-            top = self._top_path(die, plane, src, bridge)
-            return tuple(top + [self.eid(bridge, land, ANY_PLANE)]
-                         + self._ring_path(("v", col, 0), land, dst, 1))
-        if a.role == "ha" and b.role == "core":
-            die, col = b.die, a.col
-            bridge = self.top(die, TOP_BRIDGES[col])
-            land = self.attach(die, col)
-            return tuple(self._ring_path(("v", col, 0), src, land, 1)
-                         + [self.eid(land, bridge, ANY_PLANE)]
-                         + self._top_path(die, plane, bridge, dst))
-        return self.route(src, dst, plane, mode="lat")
 
     def _top_path(self, die: int, plane: int, u: int, v: int) -> list[int]:
         """Shorter-latency direction around the top-die ring."""

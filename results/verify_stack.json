@@ -10,9 +10,14 @@
   "note": "attach vpos = [1,2,8,9,15,16] in every column"
  },
  {
-  "name": "topo_h_ring_and_bridge_map",
+  "name": "topo_attach_grouping_is_2x4",
   "ok": true,
-  "note": "each top die has exactly one bridge per bottom-die column"
+  "note": "6 groups of 2 attach rows x 4 columns partition all 48 attach points"
+ },
+ {
+  "name": "topo_binding_is_one_column_per_bridge",
+  "ok": true,
+  "note": "each die's 8 bridges own the 8 columns one apiece; 4 land in-column, 4 must cross"
  },
  {
   "name": "topo_plane_isolation",
@@ -25,9 +30,14 @@
   "note": "every core->HA route crosses the die boundary exactly once"
  },
  {
-  "name": "topo_dor_uses_no_horizontal_hop",
+  "name": "topo_bound_route_uses_the_bound_bridge",
   "ok": true,
-  "note": "DOR needs no horizontal ring at all for core<->HA traffic"
+  "note": "the destination HA, not the router, picks the D2D crossing"
+ },
+ {
+  "name": "topo_far_writes_need_a_horizontal_hop",
+  "ok": true,
+  "note": "half of every core's writes (960/1920) ride 4 horizontal hops -- the H rings are load bearing"
  },
  {
   "name": "topo_laps_close",
@@ -35,9 +45,14 @@
   "note": "every deflection lap returns to its start"
  },
  {
-  "name": "topo_dor_beats_shortest_path_bound",
+  "name": "topo_binding_costs_no_capacity",
   "ok": true,
-  "note": "bound 620->260 while mean hops 13.56->14.94 (longer)"
+  "note": "mandated routing bound 676->440 better than free routing, mean hops 13.52->16.75"
+ },
+ {
+  "name": "topo_h_and_v_are_both_load_bearing",
+  "ok": true,
+  "note": "H peak 294 vs V peak 466: horizontal rings carry real load (5712 flit-hops) but vertical still binds"
  },
  {
   "name": "write_four_phase_conservation",
@@ -47,12 +62,12 @@
  {
   "name": "no_flit_lost_at_turn_or_d2d",
   "ok": true,
-  "note": "10,080 turns, nothing stranded"
+  "note": "14,906 turns, nothing stranded"
  },
  {
   "name": "makespan_ge_bound",
   "ok": true,
-  "note": "makespan 421 >= bound 324"
+  "note": "makespan 717 >= bound 524"
  },
  {
   "name": "links_stay_bufferless",
@@ -62,7 +77,7 @@
  {
   "name": "fifo_occupancy_bounded",
   "ok": true,
-  "note": "turn peak 16/16, d2d peak 11/32 over 144+96 FIFOs"
+  "note": "turn peak 16/16, d2d peak 7/32 over 183+96 FIFOs"
  },
  {
   "name": "fabric_util_matches_capacity_model",
@@ -70,9 +85,9 @@
   "note": "per-fabric link counts and utilisation self-consistent"
  },
  {
-  "name": "shallow_turn_fifo_is_adequate_under_dor",
-  "ok": true,
-  "note": "thr 2.076 (depth 4) vs 2.133 (depth 64), only 2.8% apart"
+  "name": "shallow_turn_fifo_is_adequate_at_workable_concurrency",
+  "ok": false,
+  "note": "should be stable at both"
  },
  {
   "name": "s16_unbounded_equals_s0",
@@ -87,36 +102,41 @@
  {
   "name": "s1_bus_never_uses_the_noc",
   "ok": true,
-  "note": "1,320 posts, 7,920 bits, mean 78.1 controlled nodes per source"
+  "note": "2,376 posts, 14,256 bits, mean 73.8 controlled nodes per source"
  },
  {
   "name": "s17_latch_is_bounded_and_off_by_default",
   "ok": true,
-  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 2,088 yields"
+  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 1,745 yields"
  },
  {
-  "name": "s17_does_not_deliver_a_reliable_gain",
+  "name": "s17_gain_is_real_but_immaterial",
   "ok": true,
-  "note": "mean Jain baseline 0.93216; no aggressive patience setting beats it, matching the reported negative result"
+  "note": "mean Jain 0.97892 -> at best 0.97934 (+0.00042), worst-case max/min unchanged at 2.00: real but immaterial"
  },
  {
   "name": "lower_outstanding_wins_on_both_axes",
   "ok": true,
-  "note": "oc 128->32: mean Jain 0.93216 -> 0.97200 and mean makespan 1131 -> 1107 (both better, zero hardware)"
+  "note": "oc 600->5: mean Jain 0.90594 -> 0.97976 and mean makespan 20663 -> 2204 (both better, zero hardware)"
  },
  {
-  "name": "baseline_is_position_unfair",
+  "name": "baseline_unfairness_is_structural_not_random",
   "ok": true,
-  "note": "max/min 4.4444; first-of-pair 0.5418 vs second-of-pair 0.3640 (1.49x)"
+  "note": "max/min 1.82-2.00 across 3 seeds; die 3 beats die 5 by 1.43x on the 3-seed mean"
  },
  {
-  "name": "flow_control_cannot_fix_a_routing_hotspot",
+  "name": "flow_control_cannot_fix_an_over_concurrency_collapse",
   "ok": true,
-  "note": "S0 and S1 both collapse under latency-shortest; DOR is stable"
+  "note": "S0/S1/S16/S17 all collapse at oc=600; capping at 5 is what fixes it"
  },
  {
   "name": "collapse_needs_sustained_load",
   "ok": true,
-  "note": "lat route: k=20 completes in 1670, k=40 collapses (286 txns done)"
+  "note": "oc=600: k=6 completes in 411, k=50 collapses (837 txns done)"
+ },
+ {
+  "name": "horizontal_ring_assignment_changes_the_collapse_point",
+  "ok": true,
+  "note": "identical bound 2112, yet at oc=6 split survives 3/3 seeds and stack only 1/3"
  }
 ]

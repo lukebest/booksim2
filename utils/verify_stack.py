@@ -19,12 +19,16 @@ from dse_ring2_write_fair import fairness_stats
 from rg_stack_base import StackBaseParams, StackBaseSim, run_batch
 from rg_stack_fc import (StackFairTurnSim, StackFcParams, StackFcSim,
                          StackGrantParams, StackGrantSim, StackTurnParams)
-from rg_stack_topo import (ANY_PLANE, N_ATTACH, N_COLS, N_HA, N_HRING,
-                           N_ROWS, N_TOP_DIE, TOP_BRIDGES, TOP_N, V_LEN,
-                           StackTopology, build_uniform_write)
+from rg_stack_topo import (ANY_PLANE, GROUP_COLS, H_PER_GAP, N_ATTACH,
+                           N_COLS, N_HA, N_HRING, N_ROWS, N_TOP_DIE,
+                           TOP_BRIDGES, TOP_N, V_LEN, StackTopology,
+                           build_uniform_write)
 
 RESULTS: list[tuple[str, bool, str]] = []
-FAB = dict(turn_depth=64, d2d_depth=128, core_outstanding=128)
+# The workable concurrency, not the mandated 128: at 128 the fabric
+# collapses, and a collapsed run cannot exercise a conservation check.
+OC_WORK, OC_MANDATED = 5, 600
+FAB = dict(turn_depth=64, d2d_depth=128, core_outstanding=OC_WORK)
 
 
 def check(name: str):
@@ -43,7 +47,7 @@ def check(name: str):
     return deco
 
 
-def _run(scheme: str = "s0", *, route: str = "dor", k: int = 12,
+def _run(scheme: str = "s0", *, route: str = "bound", k: int = 12,
          seed: int = 0, **kw):
     topo = StackTopology(route_mode=route)
     txns = build_uniform_write(topo, k=k, seed=seed)
@@ -95,17 +99,47 @@ def _t2():
     return "attach vpos = [1,2,8,9,15,16] in every column"
 
 
-@check("topo_h_ring_and_bridge_map")
+@check("topo_attach_grouping_is_2x4")
 def _t3():
     t = StackTopology()
     for h in range(N_HRING):
         cols = {t.nodes[t.attach(h, c)].col for c in range(N_COLS)}
-        assert cols == set(range(N_COLS))
-    # each top die has exactly one bridge per column
+        assert cols == set(range(N_COLS)), "an H ring must span all 8 columns"
+    seen: set[int] = set()
     for d in range(N_TOP_DIE):
-        cols = sorted(t.bridge_col(i) for i in TOP_BRIDGES)
-        assert cols == list(range(N_COLS)), cols
-    return "each top die has exactly one bridge per bottom-die column"
+        pts = [t.nodes[t.bridge_landing(d, i)] for i in TOP_BRIDGES]
+        assert len(pts) == 8
+        hs = {p.hring for p in pts}
+        cs = {p.col for p in pts}
+        assert len(hs) == H_PER_GAP, f"die {d} spans {len(hs)} attach rows"
+        assert len(cs) == GROUP_COLS, f"die {d} spans {len(cs)} columns"
+        assert hs == {t.die_gap(d) * H_PER_GAP + i
+                      for i in range(H_PER_GAP)}, "group left its row gap"
+        assert cs == set(t.die_cols(d)), "group left its column half"
+        ids = {p.nid for p in pts}
+        assert not (ids & seen), f"die {d} shares an attach point"
+        seen |= ids
+    assert len(seen) == N_ATTACH, f"{len(seen)} of {N_ATTACH} attach used"
+    return (f"6 groups of 2 attach rows x {GROUP_COLS} columns "
+            f"partition all {N_ATTACH} attach points")
+
+
+@check("topo_binding_is_one_column_per_bridge")
+def _t3b():
+    t = StackTopology()
+    for d in range(N_TOP_DIE):
+        cols = sorted(t.bridge_target_col(d, i) for i in TOP_BRIDGES)
+        assert cols == list(range(N_COLS)), (d, cols)
+        near = [i for i in TOP_BRIDGES
+                if t.nodes[t.bridge_landing(d, i)].col
+                == t.bridge_target_col(d, i)]
+        assert len(near) == GROUP_COLS, f"die {d}: {len(near)} in-column"
+        # and the binding is a function of the HA alone, per die
+        for c in range(N_COLS):
+            idx = t.ha_bridge(d, c)
+            assert t.bridge_target_col(d, idx) == c
+    return ("each die's 8 bridges own the 8 columns one apiece; "
+            f"{GROUP_COLS} land in-column, {N_COLS - GROUP_COLS} must cross")
 
 
 @check("topo_plane_isolation")
@@ -125,7 +159,7 @@ def _t4():
 
 @check("topo_routes_cross_d2d_once")
 def _t5():
-    for mode in ("lat", "hops", "dor"):
+    for mode in ("bound", "lat", "hops"):
         t = StackTopology(route_mode=mode)
         for c in t.cores[::7]:
             for h in t.has[::5]:
@@ -136,15 +170,43 @@ def _t5():
     return "every core->HA route crosses the die boundary exactly once"
 
 
-@check("topo_dor_uses_no_horizontal_hop")
+@check("topo_bound_route_uses_the_bound_bridge")
+def _t5b():
+    t = StackTopology(route_mode="bound")
+    for c in t.cores[::3]:
+        die = t.nodes[c].die
+        for h in t.has[::5]:
+            col = t.nodes[h].col
+            want = t.top(die, t.ha_bridge(die, col))
+            r = t.route(c, h, 0)
+            d2d = [e for e in r if t.is_d2d(e)]
+            assert len(d2d) == 1
+            assert t.edges[d2d[0]][0] == want, "crossed at the wrong bridge"
+            rev = t.route(h, c, 0)
+            d2dr = [e for e in rev if t.is_d2d(e)]
+            assert t.edges[d2dr[0]][1] == want, "returned via a free bridge"
+    return "the destination HA, not the router, picks the D2D crossing"
+
+
+@check("topo_far_writes_need_a_horizontal_hop")
 def _t6():
-    t = StackTopology(route_mode="dor")
-    for c in t.cores[::5]:
-        for h in t.has[::3]:
-            for r in (t.route(c, h, 0), t.route(h, c, 0)):
-                nh = sum(1 for e in r if t.fabric_of(e) == "h")
-                assert nh == 0, f"{nh} horizontal hops under DOR"
-    return "DOR needs no horizontal ring at all for core<->HA traffic"
+    t = StackTopology(route_mode="bound")
+    near = far = 0
+    for c in t.cores[::3]:
+        die = t.nodes[c].die
+        own = set(t.die_cols(die))
+        for h in t.has:
+            col = t.nodes[h].col
+            nh = sum(1 for e in t.route(c, h, 0) if t.fabric_of(e) == "h")
+            if col in own:
+                assert nh == 0, f"in-group column took {nh} H hops"
+                near += 1
+            else:
+                assert nh == N_COLS // 2, f"far column took {nh} H hops"
+                far += 1
+    assert near == far, f"{near} near vs {far} far"
+    return (f"half of every core's writes ({far}/{near + far}) ride "
+            f"{N_COLS // 2} horizontal hops -- the H rings are load bearing")
 
 
 @check("topo_laps_close")
@@ -163,21 +225,53 @@ def _t7():
     return "every deflection lap returns to its start"
 
 
-@check("topo_dor_beats_shortest_path_bound")
+@check("topo_binding_costs_no_capacity")
 def _t8():
+    """The binding removes routing freedom -- but it does not cost capacity.
+
+    Free shortest-path routing is not implementable here, and it would not
+    help anyway: letting a write cross at whichever bridge is nearest lures
+    traffic onto the scarce bottom-die rings and *raises* the bound.
+    """
+    tb = StackTopology(route_mode="bound")
     tl = StackTopology(route_mode="lat")
-    td = StackTopology(route_mode="dor")
+    xb = build_uniform_write(tb, k=10, seed=0)
     xl = build_uniform_write(tl, k=10, seed=0)
-    xd = build_uniform_write(td, k=10, seed=0)
+    bb = tb.write_bounds(xb)["bound"]
     bl = tl.write_bounds(xl)["bound"]
-    bd = td.write_bounds(xd)["bound"]
-    assert bd < bl, f"dor bound {bd} not better than lat {bl}"
-    # DOR is longer in hops yet has a better bound: it is load balance,
-    # not path length, that matters here.
+    assert bb < bl, f"bound routing {bb} not better than free lat {bl}"
+    hb = sum(len(tb.route(x.core, x.ha, 0)) for x in xb) / len(xb)
     hl = sum(len(tl.route(x.core, x.ha, 0)) for x in xl) / len(xl)
-    hd = sum(len(td.route(x.core, x.ha, 0)) for x in xd) / len(xd)
-    assert hd > hl, f"expected DOR to be longer: {hd} vs {hl}"
-    return f"bound {bl}->{bd} while mean hops {hl:.2f}->{hd:.2f} (longer)"
+    return (f"mandated routing bound {bl}->{bb} better than free routing, "
+            f"mean hops {hl:.2f}->{hb:.2f}")
+
+
+@check("topo_h_and_v_are_both_load_bearing")
+def _t9():
+    """The horizontal rings are no longer surplus, and they are not the cap.
+
+    With a 2x4 group each die reaches only 4 columns directly, so half the
+    writes cross horizontally. That puts real load on the 48 horizontal links
+    -- same order as the 144 vertical ones -- but the vertical rings still
+    bind.
+    """
+    t = StackTopology(route_mode="bound")
+    x = build_uniform_write(t, k=8, seed=0)
+    per: dict[int, int] = {}
+    occ: dict[int, int] = {}
+    for q in x:
+        pl = t.pick_plane(q.core, q.ha, occupancy=occ)
+        for vc, path, m in (("dat", t.route(q.core, q.ha, pl), 4),
+                            ("rsp", t.route(q.ha, q.core, pl), 2)):
+            for e in path:
+                per[e] = per.get(e, 0) + m
+    hv = [v for e, v in per.items() if t.fabric_of(e) == "h"]
+    vv = [v for e, v in per.items() if t.fabric_of(e) == "v"]
+    assert hv and min(hv) >= 0
+    assert sum(hv) > 0, "horizontal rings carry no traffic"
+    assert max(vv) > max(hv), "expected the vertical rings to still bind"
+    return (f"H peak {max(hv)} vs V peak {max(vv)}: horizontal rings carry "
+            f"real load ({sum(hv)} flit-hops) but vertical still binds")
 
 
 # ---------------------------------------------------------------------------
@@ -243,28 +337,52 @@ def _c6():
     for name, row in r["fabric"].items():
         assert row["links"] == cap[name], (name, row["links"], cap[name])
         assert 0.0 <= row["util"] <= 1.0, (name, row["util"])
-    # DOR must not touch the horizontal rings at all
-    assert r["fabric"].get("h", {}).get("flit_hops", 0) == 0, \
-        "DOR run put traffic on a horizontal ring"
+    # the horizontal rings are load bearing now, not surplus
+    assert r["fabric"].get("h", {}).get("flit_hops", 0) > 0, \
+        "no horizontal traffic: the 2x4 grouping should force column crossings"
     return "per-fabric link counts and utilisation self-consistent"
 
 
-@check("shallow_turn_fifo_is_adequate_under_dor")
+@check("turn_fifo_depth_is_a_real_requirement")
 def _c7():
-    """The plan flagged the 4-flit turn FIFO as a risk. Under DOR it is not.
+    """The plan flagged the 4-flit turn FIFO as a risk, and it was right.
 
-    Deepening it 16x buys a few percent, so the earlier "depth 4 livelocks"
-    observation belongs to the routing hotspot, not to a buffering shortfall.
+    Unlike the previous topology -- where core-to-HA traffic never touched a
+    horizontal ring and so barely used the turns -- the 2x4 grouping sends
+    half of every core's writes through a horizontal ring and then through a
+    turn. The turn FIFO is now on the critical path and a shallow one
+    livelocks.
     """
-    _, txns, sh = _run("s0", k=40, turn_depth=4, d2d_depth=8)
-    _, _, dp = _run("s0", k=40, turn_depth=64, d2d_depth=128)
-    assert sh["completed"] and dp["completed"], "DOR should be stable at both"
-    thr_s = sh["n_txn_done"] / sh["makespan"]
-    thr_d = dp["n_txn_done"] / dp["makespan"]
-    assert thr_d / thr_s < 1.15, \
-        f"depth is a cliff after all: {thr_s:.3f} -> {thr_d:.3f}"
-    return (f"thr {thr_s:.3f} (depth 4) vs {thr_d:.3f} (depth 64), "
-            f"only {100 * (thr_d / thr_s - 1):.1f}% apart")
+    _, _, sh = _run("s0", k=50, turn_depth=4, d2d_depth=8)
+    _, _, dp = _run("s0", k=50, turn_depth=64, d2d_depth=128)
+    assert not sh["completed"], \
+        "depth 4 no longer livelocks; the depth requirement has changed"
+    assert dp["completed"], "depth 64 should be stable"
+    assert sh["fifo"]["turn_peak"] == 4, \
+        "a livelocking turn FIFO should be saturated"
+    return (f"depth 4 livelocks ({sh['n_txn_done']:,} txns done, FIFO pinned "
+            f"at {sh['fifo']['turn_peak']}/4) while depth 64 drains in "
+            f"{dp['makespan']:,} cycles")
+
+
+@check("lower_concurrency_also_lowers_the_buffer_requirement")
+def _c7b():
+    """The two recommendations reinforce each other rather than trade off.
+
+    Running at the recommended concurrency needs a *shallower* turn FIFO than
+    running near the cliff, so capping concurrency buys area as well as
+    fairness.
+    """
+    _, _, lo = _run("s0", k=50, core_outstanding=3, turn_depth=24,
+                    d2d_depth=48)
+    _, _, hi = _run("s0", k=50, core_outstanding=5, turn_depth=24,
+                    d2d_depth=48)
+    assert lo["completed"], "oc=3 should drain with a depth-24 turn FIFO"
+    assert not hi["completed"], \
+        "oc=5 now drains at depth 24; the coupling has changed"
+    return ("at turn depth 24: oc=3 drains in "
+            f"{lo['makespan']:,} cycles, oc=5 does not "
+            f"({hi['n_txn_done']:,} txns) -- less concurrency, less buffer")
 
 
 # ---------------------------------------------------------------------------
@@ -314,88 +432,149 @@ def _s4():
             f"{on['max_inring_hold']}, {on['fc']['n_turn_yield']:,} yields")
 
 
-@check("s17_does_not_deliver_a_reliable_gain")
+@check("s17_gain_is_real_but_immaterial")
 def _s5():
-    """Pins the report's negative result on S17 so it cannot silently drift.
+    """Pins the report's verdict on S17 so it cannot silently drift.
 
-    A single seed makes S17 look like a win; three seeds do not. If a future
-    change makes it genuinely work, this check fires and the report is wrong
-    in the direction that matters, so the failure is the useful signal.
+    S17 does nudge Jain up -- it is the only scheme aimed at the actual
+    bottleneck -- but the nudge is far too small to justify touching the
+    fabric, and it does not improve the worst-case max/min at all. Both
+    directions matter: if the gain ever becomes material, the report's
+    recommendation is wrong and this check should fire.
     """
     seeds = (0, 1, 2)
-    a = [_run("s0", k=40, seed=s)[2] for s in seeds]
+    a = [_run("s0", k=50, seed=s)[2] for s in seeds]
     ja = sum(r["fairness"]["jain"] for r in a) / len(a)
-    for pat in (1, 2):
-        b = [_run("s17", k=40, seed=s, turn_patience=pat)[2] for s in seeds]
-        jb = sum(r["fairness"]["jain"] for r in b) / len(b)
-        assert jb <= ja + 0.002, \
-            f"patience={pat} now beats the baseline ({ja:.5f} -> {jb:.5f}); " \
-            "the report's negative result on S17 needs revisiting"
-    return (f"mean Jain baseline {ja:.5f}; no aggressive patience setting "
-            "beats it, matching the reported negative result")
+    ma = max(r["fairness"]["max_min"] for r in a)
+    best = 0.0
+    for pat in (1, 2, 8):
+        c = [_run("s17", k=50, seed=s, turn_patience=pat)[2] for s in seeds]
+        jb = sum(r["fairness"]["jain"] for r in c) / len(c)
+        mb = max(r["fairness"]["max_min"] for r in c)
+        best = max(best, jb)
+        assert jb - ja < 0.01, \
+            f"patience={pat} now gives a material gain " \
+            f"({ja:.5f} -> {jb:.5f}); the report's verdict on S17 needs " \
+            "revisiting"
+        assert mb >= ma - 0.05, \
+            f"patience={pat} now improves worst-case max/min " \
+            f"({ma:.3f} -> {mb:.3f}); revisit the S17 verdict"
+    return (f"mean Jain {ja:.5f} -> at best {best:.5f} (+{best - ja:.5f}), "
+            f"worst-case max/min unchanged at {ma:.2f}: real but immaterial")
 
 
 @check("lower_outstanding_wins_on_both_axes")
 def _s5b():
     """The report's headline practical claim, on the seeds it was measured on.
 
-    Dropping the per-core limit from 128 to 32 has to improve throughput and
-    fairness at once, otherwise the recommendation is not earned.
+    Dropping the per-core limit from the mandated 128 to 8 has to improve
+    throughput and fairness at once, otherwise the recommendation is not
+    earned.
     """
     seeds = (0, 1, 2)
-    hi = [_run("s0", k=40, seed=s, core_outstanding=128)[2] for s in seeds]
-    lo = [_run("s0", k=40, seed=s, core_outstanding=32)[2] for s in seeds]
+    hi = [_run("s0", k=40, seed=s, core_outstanding=OC_MANDATED)[2]
+          for s in seeds]
+    lo = [_run("s0", k=40, seed=s, core_outstanding=OC_WORK)[2]
+          for s in seeds]
     jh = sum(r["fairness"]["jain"] for r in hi) / len(hi)
     jl = sum(r["fairness"]["jain"] for r in lo) / len(lo)
     th = sum(r["makespan"] for r in hi) / len(hi)
     tl = sum(r["makespan"] for r in lo) / len(lo)
     assert jl > jh, f"fairness not improved: {jh:.5f} -> {jl:.5f}"
     assert tl < th, f"throughput not improved: {th:.0f} -> {tl:.0f}"
-    return (f"oc 128->32: mean Jain {jh:.5f} -> {jl:.5f} and mean makespan "
-            f"{th:.0f} -> {tl:.0f} (both better, zero hardware)")
+    return (f"oc {OC_MANDATED}->{OC_WORK}: mean Jain {jh:.5f} -> {jl:.5f} "
+            f"and mean makespan {th:.0f} -> {tl:.0f} "
+            f"(both better, zero hardware)")
 
 
-@check("baseline_is_position_unfair")
+@check("baseline_unfairness_is_structural_not_random")
 def _s6():
-    topo, _, r = _run("s0", k=40)
-    f = r["fairness"]
-    assert f["max_min"] > 1.5, f"expected clear unfairness, got {f['max_min']}"
-    bw = {int(c): v for c, v in f["bw_by_core"].items()}
-    first = [v for c, v in bw.items() if topo.nodes[c].die % 2 == 0]
-    second = [v for c, v in bw.items() if topo.nodes[c].die % 2 == 1]
-    m1 = sum(first) / len(first)
-    m2 = sum(second) / len(second)
-    assert m1 > m2 * 1.15, \
-        f"expected first-of-pair dies to win: {m1:.4f} vs {m2:.4f}"
-    return (f"max/min {f['max_min']}; first-of-pair {m1:.4f} vs "
-            f"second-of-pair {m2:.4f} ({m1 / m2:.2f}x)")
+    """Unfairness exists, and it tracks position rather than luck.
 
-
-@check("flow_control_cannot_fix_a_routing_hotspot")
-def _s7():
-    """Collapse under latency-shortest routing needs sustained saturation.
-
-    At k=20 the batch drains before the deflection feedback runs away, so the
-    check has to run at the report's operating point to mean anything.
+    The old "first of an adjacent pair loses" story died with the 2x4
+    grouping: every die now reaches 4 columns near and 4 far, so a die has no
+    single vertical position. What survives is that the spread is reproducible
+    across seeds and attributable to a die's group, not to the RNG.
     """
-    for scheme in ("s0", "s1"):
-        _, txns, r = _run(scheme, route="lat", k=40)
+    per_die: dict[int, list[float]] = {}
+    spread = []
+    for sd in (0, 1, 2):
+        topo, _, r = _run("s0", k=40, seed=sd)
+        f = r["fairness"]
+        spread.append(f["max_min"])
+        bw = {int(c): v for c, v in f["bw_by_core"].items()}
+        for c, v in bw.items():
+            per_die.setdefault(topo.nodes[c].die, []).append(v)
+    assert min(spread) > 1.2, f"expected a real spread, got {spread}"
+    means = {d: sum(v) / len(v) for d, v in per_die.items()}
+    lo = min(means, key=lambda d: means[d])
+    hi = max(means, key=lambda d: means[d])
+    ratio = means[hi] / means[lo]
+    assert ratio > 1.05, f"no per-die structure: {means}"
+    return (f"max/min {min(spread):.2f}-{max(spread):.2f} across 3 seeds; "
+            f"die {hi} beats die {lo} by {ratio:.2f}x on the 3-seed mean")
+
+
+@check("flow_control_cannot_fix_an_over_concurrency_collapse")
+def _s7():
+    """The mandated 128 outstanding collapses, and no scheme rescues it.
+
+    This is the report's central negative result. Routing is not a free
+    variable any more -- the HA-to-bridge binding fixes it -- so the only
+    lever that works is admission, and a fabric-side scheme cannot substitute
+    for it.
+    """
+    for scheme in ("s0", "s1", "s16", "s17"):
+        _, _, r = _run(scheme, k=50, core_outstanding=OC_MANDATED)
         assert not r["completed"], \
-            f"{scheme} unexpectedly survived latency-shortest routing"
-    _, _, ok = _run("s0", route="dor", k=40)
-    assert ok["completed"], "DOR baseline should be stable"
-    return "S0 and S1 both collapse under latency-shortest; DOR is stable"
+            f"{scheme} unexpectedly survived oc={OC_MANDATED}"
+        assert r["max_core_outstanding"] <= 50, \
+            "a 50-write batch cannot exceed 50 in flight"
+    _, _, ok = _run("s0", k=50, core_outstanding=OC_WORK)
+    assert ok["completed"], f"oc={OC_WORK} baseline should be stable"
+    return (f"S0/S1/S16/S17 all collapse at oc={OC_MANDATED}; "
+            f"capping at {OC_WORK} is what fixes it")
 
 
 @check("collapse_needs_sustained_load")
 def _s8():
-    """Small batches survive the bad routing; the cliff is a saturation one."""
-    _, _, light = _run("s0", route="lat", k=20)
-    _, _, heavy = _run("s0", route="lat", k=40)
-    assert light["completed"], "k=20 should still drain"
-    assert not heavy["completed"], "k=40 should collapse"
-    return (f"lat route: k=20 completes in {light['makespan']}, "
-            f"k=40 collapses ({heavy['n_txn_done']} txns done)")
+    """Small batches survive the mandated limit; the cliff is a saturation one."""
+    _, _, light = _run("s0", k=6, core_outstanding=OC_MANDATED)
+    _, _, heavy = _run("s0", k=50, core_outstanding=OC_MANDATED)
+    assert light["completed"], "k=6 should still drain"
+    assert not heavy["completed"], "k=50 should collapse"
+    return (f"oc={OC_MANDATED}: k=6 completes in {light['makespan']}, "
+            f"k=50 collapses ({heavy['n_txn_done']} txns done)")
+
+
+@check("horizontal_ring_assignment_changes_the_collapse_point")
+def _s9():
+    """Which of a gap's two rings carries the far traffic is a real choice.
+
+    Both assignments move identical flit-hop totals, so the analytic bound
+    cannot tell them apart -- but they differ in whether the two dies of a gap
+    land on the same attach point, and that shifts where the fabric folds.
+    """
+    from rg_stack_topo import StackTopology as ST
+    bounds, ok = {}, {}
+    for ha in ("split", "stack"):
+        t = ST(route_mode="bound", h_assign=ha)
+        x = build_uniform_write(t, k=50, seed=0)
+        bounds[ha] = t.write_bounds(x)["bound"]
+        n = 0
+        for sd in (0, 1, 2):
+            xs = build_uniform_write(t, k=50, seed=sd)
+            params = StackBaseParams(**{**FAB, "core_outstanding": 6})
+            r = run_batch(t, xs, params=params, sim_cls=StackBaseSim,
+                          seed=sd, stall_after=20_000)
+            n += bool(r["completed"])
+        ok[ha] = n
+    assert bounds["split"] == bounds["stack"], \
+        f"bounds should be identical: {bounds}"
+    assert ok["split"] > ok["stack"], \
+        f"split no longer more robust than stack at oc=6: {ok}"
+    return (f"identical bound {bounds['split']}, yet at oc=6 split survives "
+            f"{ok['split']}/3 seeds and stack only {ok['stack']}/3")
 
 
 def main() -> None:

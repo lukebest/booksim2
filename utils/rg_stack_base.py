@@ -125,12 +125,19 @@ class StackBaseSim:
         self.i_tag: dict[Any, set[int]] = defaultdict(set)   # (ring, vc)
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.resv_used: dict[Any, int] = defaultdict(int)
-        self.active_src: set[Any] = set()
-        self.active_ej: set[Any] = set()
+        # Insertion-ordered "sets": a plain set iterates in hash order, which
+        # varies with PYTHONHASHSEED between processes and silently becomes an
+        # arbitration tie-break -- near the concurrency cliff that flipped
+        # whole runs between draining and livelocking. A dict keeps insertion
+        # order, so service is first-come-first-served: reproducible, and
+        # without the static index bias that sorting would introduce into a
+        # fairness study.
+        self.active_src: dict[Any, None] = {}
+        self.active_ej: dict[Any, None] = {}
 
         # transfer FIFOs: (node, next_ring) -> flits waiting to board it
         self.xq: dict[Any, deque[Flit]] = defaultdict(deque)
-        self.active_xq: set[Any] = set()
+        self.active_xq: dict[Any, None] = {}
         self.xq_peak: dict[Any, int] = defaultdict(int)
         self._land_now: dict[int, int] = defaultdict(int)
 
@@ -275,7 +282,7 @@ class StackBaseSim:
         self.pending[key].append(f)
         self.st["max_pending"] = max(self.st["max_pending"],
                                      len(self.pending[key]))
-        self.active_src.add((f.src, self._pk(f.src, f.plane)))
+        self.active_src[(f.src, self._pk(f.src, f.plane))] = None
         self._admit(key)
 
     def _admit(self, key: Any) -> None:
@@ -363,7 +370,7 @@ class StackBaseSim:
         else:
             return False
         q.append(f)
-        self.active_ej.add(key)
+        self.active_ej[key] = None
         self.st["max_ejectq"] = max(self.st["max_ejectq"], len(q))
         self._on_arrive_station(f)
         return True
@@ -390,7 +397,7 @@ class StackBaseSim:
         q.append(f)
         f.n_turn += 1
         self.st["n_turns"] += 1
-        self.active_xq.add(key)
+        self.active_xq[key] = None
         depth = len(q)
         self.xq_peak[key] = max(self.xq_peak[key], depth)
         slot = "max_d2d_q" if nxt[0] == "d2d" else "max_turn_q"
@@ -543,7 +550,7 @@ class StackBaseSim:
                     self.resv_used[key] -= 1
                 self._on_pe_drain(f)
             if not q:
-                self.active_ej.discard(key)
+                self.active_ej.pop(key, None)
 
         self._release_ready()
         self._aimd_tick()
@@ -566,13 +573,13 @@ class StackBaseSim:
         for key in list(self.active_xq):
             q = self.xq[key]
             if not q:
-                self.active_xq.discard(key)
+                self.active_xq.pop(key, None)
                 continue
             f = q[0]
             if self._launch(f, inring=False):
                 q.popleft()
                 if not q:
-                    self.active_xq.discard(key)
+                    self.active_xq.pop(key, None)
             else:
                 self.st["n_turn_board_fail"] += 1
 
@@ -588,7 +595,7 @@ class StackBaseSim:
                 self.st["n_admit_stall"] += 1
             if not any(self.srcq[qk] for qk in qkeys):
                 self.inj_starve[key] = 0
-                self.active_src.discard(key)
+                self.active_src.pop(key, None)
                 continue
             qk, f, denied = None, None, None
             for cand in qkeys:
@@ -635,7 +642,7 @@ class StackBaseSim:
             self._admit(qk)
             self.vc_rr[key] += 1
             if all(self._src_idle(k) for k in qkeys):
-                self.active_src.discard(key)
+                self.active_src.pop(key, None)
             self.i_tag[(self.topo.edge_ring[self._next_edge(f)],
                         f.vc)].discard(node)
             self.inj_starve[key] = 0
