@@ -873,6 +873,221 @@ def test_s16_respects_grant_budget() -> None:
         assert s["n_delivered_wdata"] == n * W, s["n_delivered_wdata"]
 
 
+# ---------------------------------------------------------------------------
+# CHI RetryAck / PCrdGrant, reordering, and the rate-based schemes
+# ---------------------------------------------------------------------------
+
+def _run_retry(scheme: str = "S0", *, k: int = 200, cfg: dict | None = None):
+    """One write run on the study workload with the retry knobs available."""
+    from dse_ring2_write_fair import CORE_NODES, MEM_NODES, make_sim
+    topo = _write_topo()
+    txns = build_uniform_write(k=k, m_wdata=4, seed=0, mem=MEM_NODES,
+                               core_set=CORE_NODES)
+    sim = make_sim(scheme, topo, seed=0, cfg=cfg or {})
+    sim.offer_batch(txns)
+    while sim.t < 600_000 and not sim.done():
+        sim.step()
+    return topo, txns, sim
+
+
+def test_retry_off_reproduces_baseline() -> None:
+    """An unlimited tracker must leave the datapath bit for bit unchanged.
+
+    Everything the retry study adds hangs off `ha_track`; if the default also
+    perturbed a run, none of sections 1-8 would still be about the same ring.
+    """
+    _, _, a = _run_write(k=300, pattern="study")
+    _, _, b = _run_retry("S0", k=300, cfg={"ha_track": 0, "outst_sample": 16})
+    sa, sb = a.summary(), b.summary()
+    for key in ("makespan", "n_delivered_flits", "n_board_fail",
+                "n_deflections", "n_txn_done"):
+        assert sa[key] == sb[key], f"{key}: {sa[key]} vs {sb[key]}"
+    for c, ts in sa["wr_inject_by_core"].items():
+        assert ts == sb["wr_inject_by_core"][c], f"core {c} diverged"
+    assert sb["n_retry"] == 0 and sb["n_pcrd"] == 0, sb["n_retry"]
+    # The counter still reports the tracker the ungoverned policy demands.
+    assert sb["max_ha_used"] > 32, sb["max_ha_used"]
+
+
+def test_retry_conserves_and_never_deadlocks() -> None:
+    """A tight tracker must still drain, with every credit accounted for."""
+    for track in (4, 8, 32):
+        _, txns, sim = _run_retry(
+            "S0", k=200, cfg={"ha_track": track, "outst_sample": 16})
+        s = sim.summary()
+        assert s["completed"], f"track={track} stalled at {s['n_txn_done']}"
+        assert s["n_retry"] > 0, f"track={track} never filled the tracker"
+        # Every bounce hands out exactly one credit, and every credit is spent.
+        assert s["n_offered_retry"] == s["n_delivered_retry"] == s["n_retry"]
+        assert s["n_offered_pcrd"] == s["n_delivered_pcrd"] == s["n_pcrd"]
+        assert all(v == 0 for v in sim.pcrd_out.values()), dict(sim.pcrd_out)
+        assert not any(sim.pcrd_q.values()), "requesters left without a credit"
+        assert s["max_ha_used"] <= track, (track, s["max_ha_used"])
+        # A bounced REQ rides the ring twice, so REQ traffic grows by exactly
+        # the number of bounces and nothing is silently dropped.
+        n, W = len(txns), txns[0].m_wdata
+        assert s["n_delivered_req"] == n + s["n_retry"], s["n_delivered_req"]
+        assert s["n_delivered_dbid"] == n, s["n_delivered_dbid"]
+        assert s["n_delivered_wdata"] == n * W, s["n_delivered_wdata"]
+        assert s["n_inring_blocked"] == 0 and s["max_inring_hold"] == 0
+
+
+def test_retry_parks_outstanding_and_reorders() -> None:
+    """The point of the whole section: the nominal cap stops buying anything.
+
+    Past the knee, raising the cap raises only the number of allocated slots.
+    The effective count -- slots whose transaction is moving -- stays flat,
+    the retry rate climbs, and the accept order drifts further from issue
+    order.
+    """
+    rows = []
+    for oc in (16, 64, 256):
+        _, _, sim = _run_retry("S0", k=300, cfg={
+            "core_outstanding": oc, "ha_track": 32, "outst_sample": 16})
+        s = sim.summary()
+        assert s["completed"], oc
+        rows.append((oc, s["retry"]))
+    for oc, q in rows:
+        assert q["outst_eff_mean"] <= q["outst_used_mean"] + 1e-6, (oc, q)
+    lo, mid, hi = (r[1] for r in rows)
+    # A cap below the tracker's reach never bounces anything, and every slot
+    # it allocates is a working slot.
+    assert lo["retry_per_txn"] == 0.0, lo
+    assert abs(lo["outst_eff_mean"] - lo["outst_used_mean"]) < 0.01, lo
+    # Past the knee the allocated slots keep growing and the working ones
+    # stop: the extra cap buys parked slots and nothing else.
+    assert hi["outst_used_mean"] > 1.4 * mid["outst_used_mean"], rows
+    assert hi["outst_eff_mean"] < 1.1 * mid["outst_eff_mean"], rows
+    assert hi["outst_park_mean"] > 0.5 * hi["outst_used_mean"], rows
+    assert hi["retry_per_txn"] > lo["retry_per_txn"], rows
+    assert hi["ooo_frac"] > lo["ooo_frac"], rows
+    assert hi["ooo_max_disp"] > lo["ooo_max_disp"], rows
+    # A tracker this small cannot possibly hold the whole nominal window.
+    assert hi["outst_eff_mean"] < 0.5 * hi["core_outstanding"], rows
+
+
+def test_inorder_retire_is_never_better() -> None:
+    """In-order completion turns reordering into head-of-line blocking.
+
+    It must also still finish. Gating issue on a *count* of outstanding
+    transactions deadlocks under in-order retirement -- the count fills with
+    younger transactions that finished but may not retire, and the one whose
+    retirement would free them can never issue -- so the window has to be a
+    contiguous range of issue indices instead.
+    """
+    for track in (0, 32):
+        out = {}
+        for inorder in (False, True):
+            _, _, sim = _run_retry("S0", k=200, cfg={
+                "ha_track": track, "inorder_retire": inorder,
+                "outst_sample": 16})
+            s = sim.summary()
+            assert s["completed"], (track, inorder)
+            out[inorder] = s
+        assert out[True]["n_txn_done"] == out[False]["n_txn_done"], track
+        if track == 0:
+            # With nothing to retry the two runs move the same flits, so any
+            # difference is purely the retirement rule.
+            assert out[True]["n_delivered_flits"] == \
+                out[False]["n_delivered_flits"], track
+        # Slots of finished transactions are held back behind older ones, so
+        # fewer of the allocated slots are doing anything.
+        a, b = out[False]["retry"], out[True]["retry"]
+        assert b["max_hol_hold"] > 0, track
+        assert a["max_hol_hold"] == 0, track
+        assert b["outst_used_mean"] > a["outst_used_mean"], (track, a, b)
+        assert b["outst_eff_mean"] <= a["outst_eff_mean"] + 1.0, (track, a, b)
+    # Long enough for the boarding order to drift far from issue order, which
+    # is the condition the count-based gate deadlocked on.
+    _, _, deep = _run_retry("S0", k=600, cfg={
+        "ha_track": 32, "inorder_retire": True, "outst_sample": 16})
+    sd = deep.summary()
+    assert sd["completed"], f"stalled at {sd['n_txn_done']}/{sd['n_txn_target']}"
+    # The waste is set by the tracker; the retirement rule only moves it
+    # between the parked bucket and the head-of-line bucket.
+    q = sd["retry"]
+    assert q["outst_hol_mean"] > 1.0 and q["outst_park_mean"] > 1.0, q
+
+
+def test_s16_needs_to_grant_below_the_tracker() -> None:
+    """A finite tracker already does the job S16's overcommit was doing.
+
+    The completer cannot hold more accepted requests than it has tracker
+    entries, so an overcommit at or above the tracker never withholds a grant
+    and S16 becomes S0 exactly. Below it, S16 does bite -- but it bites by
+    holding tracker entries open while a request waits for its grant, so the
+    cheap resource comes under *more* pressure, not less. That is the price of
+    S16 that the earlier unlimited-tracker model could not see.
+    """
+    track = 32
+    _, _, base = _run_retry("S0", k=200, cfg={"ha_track": track,
+                                              "outst_sample": 16})
+    sb = base.summary()
+    _, _, same = _run_retry("S16", k=200, cfg={
+        "ha_track": track, "overcommit": track, "outst_sample": 16})
+    ss = same.summary()
+    for key in ("makespan", "n_delivered_flits", "n_retry", "n_board_fail"):
+        assert ss[key] == sb[key], f"{key}: {ss[key]} vs {sb[key]}"
+    _, _, low = _run_retry("S16", k=200, cfg={
+        "ha_track": track, "overcommit": track // 2, "outst_sample": 16})
+    sl = low.summary()
+    assert sl["completed"]
+    assert sl["n_retry"] > sb["n_retry"], (sl["n_retry"], sb["n_retry"])
+
+
+def test_rate_pinned_reproduces_baseline() -> None:
+    """S17 / S18 must be exactly S0 when the controller cannot throttle.
+
+    `pace_max` is two REQ per cycle, one per plane, which is a core's
+    physical ceiling; pinning the rate there proves the pacing hook is the
+    only thing either scheme changes.
+    """
+    pin = {"pace_min": 2.0, "pace_init": 2.0, "outst_sample": 16}
+    for track in (0, 32):
+        _, _, base = _run_retry("S0", k=200, cfg={
+            "ha_track": track, "outst_sample": 16})
+        sb = base.summary()
+        for scheme in ("S17", "S18"):
+            _, _, sim = _run_retry(scheme, k=200,
+                                   cfg={"ha_track": track, **pin})
+            s = sim.summary()
+            for key in ("makespan", "n_delivered_flits", "n_board_fail",
+                        "n_deflections", "n_retry"):
+                assert s[key] == sb[key], \
+                    f"{scheme} track={track} {key}: {s[key]} vs {sb[key]}"
+            assert s["wr_inject_by_core"] == sb["wr_inject_by_core"], scheme
+
+
+def test_rate_control_cuts_retries() -> None:
+    """Pacing the source is what keeps the completer's tracker from spilling.
+
+    Both controllers see the congestion through signals the protocol already
+    sends -- TIMELY the DBIDResp round trip, DCQCN a mark computed on the
+    tracker and carried on that same DBIDResp -- so both must end up sending
+    slower than the ungoverned baseline and bouncing less.
+    """
+    cfg = {"core_outstanding": 128, "ha_track": 32, "outst_sample": 16}
+    _, _, base = _run_retry("S0", k=300, cfg=cfg)
+    sb = base.summary()
+    assert sb["completed"] and sb["retry"]["retry_per_txn"] > 0.2, sb["retry"]
+    for scheme in ("S17", "S18"):
+        _, _, sim = _run_retry(scheme, k=300, cfg=cfg)
+        s = sim.summary()
+        fc = sim.fc_summary()
+        assert s["completed"], scheme
+        assert s["n_txn_done"] == sb["n_txn_done"], scheme
+        # Fewer bounces means strictly less ring traffic for the same writes.
+        assert s["n_delivered_flits"] < sb["n_delivered_flits"], scheme
+        assert fc["n_rate_deny"] > 0, f"{scheme} never throttled anyone"
+        assert fc["rate_mean_all"] < 2.0, (scheme, fc["rate_mean_all"])
+        assert s["retry"]["retry_per_txn"] < sb["retry"]["retry_per_txn"], \
+            (scheme, s["retry"]["retry_per_txn"],
+             sb["retry"]["retry_per_txn"])
+    # DCQCN's mark has to come from somewhere: the tracker plus every bounce.
+    _, _, dc = _run_retry("S18", k=300, cfg=cfg)
+    assert dc.fc_summary()["n_mark"] >= dc.summary()["n_retry"] > 0
+
+
 def test_s16_is_bufferless_and_fair() -> None:
     """The payoff: fairer than S0 and no slower, without touching the ring."""
     _, _, a = _run_write(k=600, pattern="study")
@@ -935,6 +1150,14 @@ def main() -> None:
     c.add("s16_unbounded_equals_s0", test_s16_unbounded_equals_baseline)
     c.add("s16_respects_grant_budget", test_s16_respects_grant_budget)
     c.add("s16_bufferless_and_fair", test_s16_is_bufferless_and_fair)
+    c.add("retry_off_equals_baseline", test_retry_off_reproduces_baseline)
+    c.add("retry_conserves_no_deadlock",
+          test_retry_conserves_and_never_deadlocks)
+    c.add("retry_parks_outstanding", test_retry_parks_outstanding_and_reorders)
+    c.add("inorder_retire_never_better", test_inorder_retire_is_never_better)
+    c.add("s16_grants_below_tracker", test_s16_needs_to_grant_below_the_tracker)
+    c.add("rate_pinned_equals_s0", test_rate_pinned_reproduces_baseline)
+    c.add("rate_control_cuts_retries", test_rate_control_cuts_retries)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

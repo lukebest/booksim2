@@ -23,6 +23,17 @@ S0   baseline: RR inject + I-tag / E-tag, no flow control.
 S1   the 4-part congestion-control spec (detect / propagate / feed back /
      AIMD on an integer per-window injection budget).
 S15  max-min fair share over the same bus plus bounded slot reservation.
+S16  receiver-driven grant pacing (Homa-style) over the stock DBIDResp.
+S17  TIMELY: RTT-gradient rate control, paced on REQ.
+S18  DCQCN: RED marks off the completer's request tracker, paced on REQ.
+
+`--retry` turns on the second study. It gives every completer a finite CHI
+request tracker, so an over-subscribed completer must send RetryAck instead
+of accepting, and sweeps the per-core outstanding cap on two workloads. That
+is what shows the cap has an interior optimum -- too small does not cover the
+round trip, too large drowns the tracker in retries which park outstanding
+slots and reorder the stream -- and that the optimum moves with the workload,
+so no static value is right.
 
 Writes results/ring2_write_fair.json; plotting lives in
 gen_ring2_write_report.py so the plots can be redrawn without re-simulating.
@@ -56,7 +67,30 @@ K_PER_CORE = 2_000
 W_FLITS = 4
 BIN_W = 128
 T_MAX = 4_000_000
-HOT_HAS = (9, 11)
+# Two adjacent memory nodes standing in for one clustered memory region. Both
+# are memory in this study (9 and 19 are not), so the roles are unchanged and
+# only the destination geometry differs from `uniform`.
+HOT_HAS = (11, 13)
+
+# -- the retry / outstanding study ------------------------------------------
+# Request tracker entries per completer. 32 is what S16 pins its write-data
+# buffer to, so holding the tracker there asks every scheme to live inside the
+# same completer budget.
+RETRY_TRACK = 32
+# S16 has to grant from *below* the tracker to do anything at all: at
+# overcommit >= ha_track its pump never withholds a grant and it degenerates
+# to S0 exactly (pinned by verify_ring2_20.py).
+RETRY_S16_OVERCOMMIT = 16
+OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
+TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
+RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
+RETRY_K = 800                # shorter batch: the grid is 56 runs wide
+OUTST_SAMPLE = 16            # cycles between outstanding-occupancy samples
+# Injection rates to pin, in REQ/cycle/core. Pinning the rate removes the
+# controller entirely, so the best of these is the ceiling any rate-based
+# scheme could reach if it guessed perfectly and never oscillated. The gap
+# between it and S17 / S18 is what being reactive costs.
+RATE_POINTS = (0.06, 0.10, 0.125, 0.15, 0.20, 0.30, 0.50, 1.0, 2.0)
 
 # Flits per VC per transaction: REQ 1, RSP 2 (DBIDResp + Comp), DAT W.
 M_REQ, M_RSP = 1, 2
@@ -262,16 +296,21 @@ def base_params() -> Ring2BaseParams:
 
 def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
              cfg: dict[str, Any] | None = None) -> Ring2BaseSim:
-    cfg = cfg or {}
+    # `cfg` overrides the shared fabric, so a sweep can move a datapath knob
+    # (the outstanding cap, the completer tracker) as well as a scheme knob.
+    kw = {**FABRIC, **(cfg or {})}
     if scheme == "S0":
-        return Ring2BaseSim(topo, base_params(), seed=seed)
+        return Ring2BaseSim(topo, Ring2BaseParams(**kw), seed=seed)
     if scheme == "S16":
         from rg_ring2_grant import Ring2GrantParams, Ring2GrantSim
-        return Ring2GrantSim(topo, Ring2GrantParams(**FABRIC, **cfg),
-                             seed=seed)
+        return Ring2GrantSim(topo, Ring2GrantParams(**kw), seed=seed)
+    if scheme in ("S17", "S18"):
+        from rg_ring2_rate import (Ring2DcqcnSim, Ring2RateParams,
+                                   Ring2TimelySim)
+        cls = Ring2TimelySim if scheme == "S17" else Ring2DcqcnSim
+        return cls(topo, Ring2RateParams(**kw), seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
-    p = Ring2FcParams(**FABRIC,
-                      mode="s1" if scheme == "S1" else "s15", **cfg)
+    p = Ring2FcParams(mode="s1" if scheme == "S1" else "s15", **kw)
     return Ring2FcSim(topo, p, seed=seed)
 
 
@@ -344,6 +383,8 @@ def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
     }
     if "fc" in r:
         out["fc"] = r["fc"]
+    if "retry" in r:
+        out["retry"] = r["retry"]
     return out
 
 
@@ -455,11 +496,168 @@ CORE_NODES = tuple(cores(N_NODES))
 
 
 def build_pattern(name: str, *, k: int, W: int, seed: int) -> list[Txn]:
-    """The one workload under study: 10 AI cores writing uniformly to 8 mem."""
+    """The workloads under study.
+
+    `uniform` is the headline one: 10 AI cores writing uniformly to 8 mem.
+    `hot` keeps the same roles but funnels every write into one two-node
+    memory cluster, which loads the completers far harder for the same
+    injection rate. It exists to show that the best outstanding cap is a
+    property of the workload, not of the fabric.
+    """
     if name == "uniform":
         return build_uniform_write(k=k, m_wdata=W, seed=seed, mem=MEM_NODES,
                                    core_set=CORE_NODES)
+    if name == "hot":
+        return build_hot_write(k=k, m_wdata=W, hot_has=HOT_HAS, n=N_NODES)
     raise ValueError(f"unknown pattern {name}")
+
+
+# ---------------------------------------------------------------------------
+# Retry / reordering / effective outstanding
+# ---------------------------------------------------------------------------
+
+def _rate_knobs() -> dict[str, Any]:
+    """The tunings S17 / S18 actually ran with, so the report cannot drift."""
+    from rg_ring2_rate import Ring2RateParams
+    p = Ring2RateParams()
+    return {k: getattr(p, k) for k in
+            ("pace_max", "pace_min", "pace_burst", "t_low_mult",
+             "t_high_mult", "timely_beta", "delta", "hai_n", "k_min", "k_max",
+             "p_max", "g", "alpha_timer", "rate_timer", "fast_recovery")}
+
+
+def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
+                seed: int, k: int, W: int, cfg: dict[str, Any],
+                keep_trace: bool = False) -> dict[str, Any]:
+    """One grid point: what the cap bought, and what the retries cost."""
+    if scheme == "S16":
+        cfg = {"overcommit": RETRY_S16_OVERCOMMIT, **cfg}
+    r = run_scheme(scheme, topo, txns, seed=seed, cfg=cfg, quiet=True)
+    f = fairness_stats(r.get("wr_inject_by_core") or {}, r["makespan"] or 1,
+                       k * W)
+    q = r.get("retry") or {}
+    fc = r.get("fc") or {}
+    row = {"trace": fc.get("trace")} if keep_trace else {}
+    return {
+        **row,
+        "scheme": scheme,
+        "core_outstanding": cfg.get("core_outstanding"),
+        "ha_track": cfg.get("ha_track", 0),
+        "inorder_retire": bool(cfg.get("inorder_retire")),
+        "makespan": r.get("makespan"), "completed": r.get("completed"),
+        "throughput": f.get("throughput", 0.0), "jain": f.get("jain", 0.0),
+        "max_min": f.get("max_min", 0.0), "bw_min": f.get("bw_min", 0.0),
+        "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
+        "n_retry": q.get("n_retry", 0),
+        "retry_per_txn": q.get("retry_per_txn", 0.0),
+        "max_ha_used": q.get("max_ha_used", 0),
+        "ooo_frac": q.get("ooo_frac", 0.0),
+        "ooo_mean_disp": q.get("ooo_mean_disp", 0.0),
+        "ooo_max_disp": q.get("ooo_max_disp", 0),
+        "retire_ooo": q.get("retire_ooo_frac", 0.0),
+        "outst_eff": q.get("outst_eff_mean", 0.0),
+        "outst_used": q.get("outst_used_mean", 0.0),
+        "outst_park": q.get("outst_park_mean", 0.0),
+        "outst_hol": q.get("outst_hol_mean", 0.0),
+        "max_hol_hold": q.get("max_hol_hold", 0),
+        "rate_mean": fc.get("rate_mean_all"),
+        "n_mark": fc.get("n_mark"),
+        "n_board_fail": r.get("n_board_fail", 0),
+        "wall_secs": r.get("wall_secs"),
+    }
+
+
+def _say(tag: str, row: dict[str, Any]) -> None:
+    print(f"    {tag} mk={row['makespan']} thr={row['throughput']:.3f} "
+          f"retry/txn={row['retry_per_txn']:.3f} "
+          f"eff={row['outst_eff']:.1f}/{row['outst_used']:.1f} "
+          f"ooo={row['ooo_frac']:.3f} max/min={row['max_min']}", flush=True)
+
+
+def retry_study(topo: Ring2Topology, *, k: int, W: int, seed: int,
+                patterns: Sequence[str] = ("uniform", "hot")
+                ) -> dict[str, Any]:
+    """Give the completers a finite tracker and sweep the outstanding cap.
+
+    Three views. `sweep_outst` is the headline: the cap has an interior
+    optimum, and where it sits depends on the workload. `sweep_track` shows
+    the same tension from the completer's side. `ablate_order` separates the
+    two ways reordering wastes an outstanding slot -- the slot parked waiting
+    for a protocol credit, and the slot of a finished transaction held back
+    behind an older one.
+    """
+    out: dict[str, Any] = {
+        "meta": {"K": k, "W": W, "seed": seed, "ha_track": RETRY_TRACK,
+                 "s16_overcommit": RETRY_S16_OVERCOMMIT,
+                 "outst_points": list(OUTST_POINTS),
+                 "track_points": list(TRACK_POINTS),
+                 "schemes": list(RETRY_SCHEMES),
+                 "patterns": list(patterns),
+                 "outst_sample": OUTST_SAMPLE,
+                 "headline_outst": CORE_OUTSTANDING_WR,
+                 "hot_has": list(HOT_HAS),
+                 "knobs": _rate_knobs()},
+        "sweep_outst": [], "sweep_track": [], "ablate_order": [],
+        "sweep_rate": [], "rate_trace": {},
+    }
+    for pattern in patterns:
+        txns = build_pattern(pattern, k=k, W=W, seed=seed)
+        print(f"\n  [retry:{pattern}] outstanding sweep, "
+              f"ha_track={RETRY_TRACK}", flush=True)
+        for scheme in RETRY_SCHEMES:
+            for oc in OUTST_POINTS:
+                # Keep the controller's own trace at the headline cap only:
+                # it is what the rate plot draws, and one run of it is enough.
+                keep = (scheme in ("S17", "S18") and pattern == patterns[0]
+                        and oc == CORE_OUTSTANDING_WR)
+                row = retry_point(
+                    scheme, topo, txns, seed=seed, k=k, W=W, keep_trace=keep,
+                    cfg={"core_outstanding": oc, "ha_track": RETRY_TRACK,
+                         "outst_sample": OUTST_SAMPLE})
+                row["pattern"] = pattern
+                if keep:
+                    out["rate_trace"][scheme] = row.pop("trace", None)
+                out["sweep_outst"].append(row)
+                _say(f"{pattern} {scheme} outst={oc}", row)
+
+    txns = build_pattern(patterns[0], k=k, W=W, seed=seed)
+    print(f"\n  [retry:{patterns[0]}] tracker sweep, outstanding="
+          f"{CORE_OUTSTANDING_WR}", flush=True)
+    for track in TRACK_POINTS:
+        row = retry_point(
+            "S0", topo, txns, seed=seed, k=k, W=W,
+            cfg={"core_outstanding": CORE_OUTSTANDING_WR, "ha_track": track,
+                 "outst_sample": OUTST_SAMPLE})
+        row["pattern"] = patterns[0]
+        out["sweep_track"].append(row)
+        _say(f"S0 ha_track={track or 'inf'}", row)
+
+    print(f"\n  [retry:{patterns[0]}] static injection rate, "
+          f"outstanding={CORE_OUTSTANDING_WR}", flush=True)
+    for rate in RATE_POINTS:
+        row = retry_point(
+            "S17", topo, txns, seed=seed, k=k, W=W,
+            cfg={"core_outstanding": CORE_OUTSTANDING_WR,
+                 "ha_track": RETRY_TRACK, "outst_sample": OUTST_SAMPLE,
+                 "pace_min": rate, "pace_init": rate, "pace_max": rate})
+        row["pattern"] = patterns[0]
+        row["scheme"] = "static"
+        row["pace"] = rate
+        out["sweep_rate"].append(row)
+        _say(f"pinned rate={rate}", row)
+
+    print("\n  [retry] in-order retirement ablation", flush=True)
+    for track in (0, RETRY_TRACK):
+        for inorder in (False, True):
+            row = retry_point(
+                "S0", topo, txns, seed=seed, k=k, W=W,
+                cfg={"core_outstanding": CORE_OUTSTANDING_WR,
+                     "ha_track": track, "inorder_retire": inorder,
+                     "outst_sample": OUTST_SAMPLE})
+            row["pattern"] = patterns[0]
+            out["ablate_order"].append(row)
+            _say(f"S0 ha_track={track or 'inf'} inorder={int(inorder)}", row)
+    return out
 
 
 def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
@@ -637,6 +835,10 @@ def main() -> None:
                     help="extra seeds for the S0/S15 robustness sweep")
     ap.add_argument("--sweep", action="store_true",
                     help="also sweep the S1 window / alpha-beta bands")
+    ap.add_argument("--retry", action="store_true",
+                    help="finite completer tracker: sweep the outstanding cap")
+    ap.add_argument("--retry-k", type=int, default=RETRY_K,
+                    help="batch size for the retry sweeps")
     ap.add_argument("--out", default=str(OUT))
     args = ap.parse_args()
 
@@ -653,6 +855,10 @@ def main() -> None:
                        seeds=[int(x) for x in args.seeds.split(",") if x])
         for p in patterns
     }
+    retry_out = None
+    if args.retry:
+        rk = 100 if args.quick else args.retry_k
+        retry_out = retry_study(topo, k=rk, W=args.W, seed=args.seed)
     bp = base_params()
     payload = {
         "meta": {
@@ -677,8 +883,19 @@ def main() -> None:
         "patterns": out_pats,
         "wall_secs": round(time.perf_counter() - t0, 1),
     }
+    if retry_out is not None:
+        payload["retry_study"] = retry_out
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Keep an existing retry study when this run did not redo it, so the two
+    # halves of the report can be regenerated independently.
+    if retry_out is None and out.exists():
+        try:
+            old = json.loads(out.read_text()).get("retry_study")
+        except (ValueError, OSError):
+            old = None
+        if old is not None:
+            payload["retry_study"] = old
     out.write_text(json.dumps(payload, indent=1))
     print(f"\nwrote {out}  {payload['wall_secs']}s")
     for pat in out_pats.values():

@@ -65,7 +65,7 @@ Pair = tuple[int, int]
 PlaneSel = Literal["static_hash", "rr_per_pkt", "least_occupied",
                    "req_resp_split"]
 SpatialReuse = Literal["arc", "whole_ring"]
-Kind = Literal["req", "resp", "dbid", "wdata", "comp"]
+Kind = Literal["req", "resp", "dbid", "wdata", "comp", "retry", "pcrd"]
 ChiVc = Literal["req", "rsp", "dat"]
 # ReadNoSnp closed set: REQ carries requests, DAT carries CompData.
 # SNP/RSP are not instantiated (no snoop; Comp is folded into CompData).
@@ -79,6 +79,8 @@ _VC_OF: dict[str, ChiVc] = {
     "dbid": "rsp",      # DBIDResp (write)
     "comp": "rsp",      # Comp (write)
     "wdata": "dat",     # WriteData (write)
+    "retry": "rsp",     # RetryAck: completer out of protocol credit
+    "pcrd": "rsp",      # PCrdGrant: the credit that lets the REQ come back
 }
 
 
