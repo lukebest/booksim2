@@ -1,6 +1,6 @@
 {
-  "n_total": 49,
-  "n_ok": 49,
+  "n_total": 50,
+  "n_ok": 50,
   "all_ok": true,
   "rows": [
     {
@@ -156,6 +156,10 @@
       "ok": true
     },
     {
+      "name": "baseline_tracker_masks_imbalance",
+      "ok": true
+    },
+    {
       "name": "s15_fixes_study_workload",
       "ok": true
     },
@@ -200,5 +204,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-24T10:10:07Z"
+  "generated_at": "2026-08-24T11:20:01Z"
 }

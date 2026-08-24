@@ -27,13 +27,17 @@ S16  receiver-driven grant pacing (Homa-style) over the stock DBIDResp.
 S17  TIMELY: RTT-gradient rate control, paced on REQ.
 S18  DCQCN: RED marks off the completer's request tracker, paced on REQ.
 
-`--retry` turns on the second study. It gives every completer a finite CHI
-request tracker, so an over-subscribed completer must send RetryAck instead
-of accepting, and sweeps the per-core outstanding cap on two workloads. That
-is what shows the cap has an interior optimum -- too small does not cover the
-round trip, too large drowns the tracker in retries which park outstanding
-slots and reorder the stream -- and that the optimum moves with the workload,
-so no static value is right.
+Every completer has a finite CHI request tracker (`ha_track`), so one that is
+over-subscribed must answer RetryAck instead of accepting. That is part of the
+baseline, not of one scheme: at the tracker and outstanding cap used here
+almost every transaction is bounced once, which is the pressure all four
+schemes are measured under.
+
+`--retry` turns on the second study, which sweeps the per-core outstanding cap
+on two workloads. That is what shows the cap has an interior optimum -- too
+small does not cover the round trip, too large drowns the tracker in retries
+which park outstanding slots and reorder the stream -- and that the optimum
+moves with the workload, so no static value is right.
 
 Writes results/ring2_write_fair.json; plotting lives in
 gen_ring2_write_report.py so the plots can be redrawn without re-simulating.
@@ -73,14 +77,15 @@ T_MAX = 4_000_000
 HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
-# Request tracker entries per completer. 32 is what S16 pins its write-data
-# buffer to, so holding the tracker there asks every scheme to live inside the
-# same completer budget.
+# Request tracker entries per completer, and the baseline for every scheme:
+# a completer that runs out of entries must RetryAck. 32 is what S16 pins its
+# write-data buffer to, so holding the tracker there asks every scheme to live
+# inside the same completer budget.
 RETRY_TRACK = 32
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
 # to S0 exactly (pinned by verify_ring2_20.py).
-RETRY_S16_OVERCOMMIT = 16
+S16_OVERCOMMIT = 16
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
@@ -284,9 +289,13 @@ CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
 # Every scheme rides the same fabric: shortest-path routing, both planes
 # available and picked by occupancy, one board and one leave port per
-# (node, plane), per-VC boarding queues.
+# (node, plane), per-VC boarding queues, and a finite request tracker at every
+# completer. The tracker is part of the baseline, not of one scheme: a real
+# completer has to RetryAck when it runs out of entries, and with the cap at
+# CORE_OUTSTANDING_WR every scheme below is measured with that pressure on.
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
-              core_outstanding=CORE_OUTSTANDING_WR)
+              core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
+              outst_sample=OUTST_SAMPLE)
 
 
 def base_params() -> Ring2BaseParams:
@@ -303,6 +312,10 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
         return Ring2BaseSim(topo, Ring2BaseParams(**kw), seed=seed)
     if scheme == "S16":
         from rg_ring2_grant import Ring2GrantParams, Ring2GrantSim
+        # Withholding a grant is the whole mechanism, and it can only withhold
+        # from below the tracker -- at or above it every arriving REQ that was
+        # accepted is grantable and S16 is S0 under another name.
+        kw = {"overcommit": S16_OVERCOMMIT, **kw}
         return Ring2GrantSim(topo, Ring2GrantParams(**kw), seed=seed)
     if scheme in ("S17", "S18"):
         from rg_ring2_rate import (Ring2DcqcnSim, Ring2RateParams,
@@ -530,8 +543,6 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
                 seed: int, k: int, W: int, cfg: dict[str, Any],
                 keep_trace: bool = False) -> dict[str, Any]:
     """One grid point: what the cap bought, and what the retries cost."""
-    if scheme == "S16":
-        cfg = {"overcommit": RETRY_S16_OVERCOMMIT, **cfg}
     r = run_scheme(scheme, topo, txns, seed=seed, cfg=cfg, quiet=True)
     f = fairness_stats(r.get("wr_inject_by_core") or {}, r["makespan"] or 1,
                        k * W)
@@ -588,7 +599,7 @@ def retry_study(topo: Ring2Topology, *, k: int, W: int, seed: int,
     """
     out: dict[str, Any] = {
         "meta": {"K": k, "W": W, "seed": seed, "ha_track": RETRY_TRACK,
-                 "s16_overcommit": RETRY_S16_OVERCOMMIT,
+                 "s16_overcommit": S16_OVERCOMMIT,
                  "outst_points": list(OUTST_POINTS),
                  "track_points": list(TRACK_POINTS),
                  "schemes": list(RETRY_SCHEMES),
@@ -707,6 +718,14 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         r = run_scheme(scheme, topo, txns, seed=seed)
         runs[scheme] = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
 
+    # The same baseline with an unlimited tracker. It is the only way to say
+    # how much of the imbalance the ring causes and how much the retry
+    # backpressure hides: with a finite tracker the completer, not the core's
+    # position, is what limits a core, so the cores look far more alike.
+    print("  running S0 with an unlimited tracker (reference) ...", flush=True)
+    r = run_scheme("S0", topo, txns, seed=seed, cfg={"ha_track": 0})
+    ref = digest(r, flits_per_core=flits_per_core, bin_w=bin_w)
+
     sweep_oc: list[dict[str, Any]] = []
     if sweep_s1 and "S16" in schemes:
         print("  sweeping S16 overcommit ...", flush=True)
@@ -799,9 +818,13 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         "bounds": bounds, "schemes": runs, "sweep": sweep,
         "sweep_oc": sweep_oc, "ablate": ablate,
         "seed_sweep": seeds_out,
+        "s0_unbounded": ref,
     }
     if "S0" in runs:
         out["root_cause"] = root_cause(topo, txns, runs["S0"])
+        # The position effect is only fully visible when the ring is the sole
+        # constraint, so attribute it on the unbounded reference too.
+        out["root_cause_unbounded"] = root_cause(topo, txns, ref)
     return out
 
 
@@ -877,6 +900,7 @@ def main() -> None:
             "inj_depth": bp.inj_depth, "eject_depth": bp.eject_depth,
             "t_inj": bp.t_inj, "per_vc_srcq": bp.per_vc_srcq,
             "core_outstanding": bp.core_outstanding,
+            "ha_track": bp.ha_track, "s16_overcommit": S16_OVERCOMMIT,
             "m_req": M_REQ, "m_rsp": M_RSP,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
