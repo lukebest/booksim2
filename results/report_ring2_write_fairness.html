@@ -265,18 +265,19 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 即<b>最忙的那条有向链路上、DAT VC 的容量</b>。</p>
 
 <h3>3.1 基线 S0 下各核是否不均</h3>
-<table><thead><tr><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>15411</td><td>1.0436</td><td>0.51059</td><td>0.53284</td><td>5.1911</td><td>+0.0%</td><td>0.9721</td><td>37441</td><td>209453</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>18084</td><td>1.2103</td><td>0.41675</td><td>0.50438</td><td>4.4238</td><td>-14.8%</td><td>0.7715</td><td>27987</td><td>123574</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>15751</td><td>1.0511</td><td>0.49674</td><td>0.52213</td><td>5.079</td><td>-2.2%</td><td>0.984</td><td>36847</td><td>198463</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>15757</td><td>1.007</td><td>0.51067</td><td>0.51427</td><td>5.0771</td><td>-2.2%</td><td>0.9853</td><td>35976</td><td>190306</td></tr></tbody></table>
-<p>答案取决于<b>此刻谁是瓶颈</b>，所以要把两个 S0 并排看：
-同一条环、同一份 workload，只改 completer 的请求 tracker。</p>
+<p>本节的 S0 <b>用无限 tracker</b>：环是唯一约束，位置相关的不均才能看见。
+对照方案是 S1、S16，以及两个 rate-based 方案 S17 / S18
+（它们仍在 tracker = 32 下运行——那是它们要对付的压力）。</p>
+<table><thead><tr><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = ∞）</td><td>13784</td><td>1.176</td><td>0.54863</td><td>0.64516</td><td>5.8038</td><td>+0.0%</td><td>0.0</td><td>23692</td><td>166293</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>18084</td><td>1.2103</td><td>0.41675</td><td>0.50438</td><td>4.4238</td><td>-23.8%</td><td>0.7715</td><td>27987</td><td>123574</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>15757</td><td>1.007</td><td>0.51067</td><td>0.51427</td><td>5.0771</td><td>-12.5%</td><td>0.9853</td><td>35976</td><td>190306</td></tr><tr><td>S17 TIMELY（RTT 梯度）</td><td>15757</td><td>1.2413</td><td>0.50109</td><td>0.62199</td><td>5.0771</td><td>-12.5%</td><td>0.2885</td><td>25444</td><td>145824</td></tr><tr><td>S18 DCQCN（tracker ECN）</td><td>15198</td><td>1.1025</td><td>0.50413</td><td>0.55583</td><td>5.2639</td><td>-9.3%</td><td>0.3669</td><td>27477</td><td>156319</td></tr></tbody></table>
 <table><thead><tr><th>每 completer 的请求 tracker</th><th>makespan</th><th>吞吐</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>重试/事务</th><th>峰值占用表项</th><th>有效 outstanding</th><th>延迟 p99</th></tr></thead><tbody><tr><td>∞（环受限）</td><td>13784</td><td>5.8038</td><td>1.176</td><td>0.54863</td><td>0.64516</td><td>0.0</td><td>183</td><td>114.2</td><td>13341</td></tr><tr><td>32（本报告基线）</td><td>15411</td><td>5.1911</td><td>1.0436</td><td>0.51059</td><td>0.53284</td><td>0.9721</td><td>32</td><td>23.6</td><td>15160</td></tr></tbody></table>
 <div class="def bad"><b>环受限时，失衡是真实且显著的。</b>
-把 tracker 放开（无限接收资源，环是唯一约束），
-需求完全对称而结果并不对称：max/min = <b>1.176</b>，
+S0（tracker = ∞）需求完全对称而结果并不对称：
+max/min = <b>1.176</b>，
 最慢的 core 只有最快的 85%，
 最慢 0.54863 vs 最快 0.64516 flit/cycle。
 这就是第 4 节要归因的现象。</div>
-<div class="def"><b>而在本报告的基线（tracker = 32）上，
-这个失衡被大幅压平了：max/min 只有 1.0436</b>，
+<div class="def"><b>把 tracker 收到 32 之后，
+这个失衡被大幅压平：同一份 S0 的 max/min 变成 1.0436</b>，
 已经落在 1.05 的验收线附近。<b>但这不是被修好了，是瓶颈换了地方。</b>
 每笔事务平均被 RetryAck <b>0.9721</b> 次，
 瓶颈从“环上的槽位”移到了“completer 的 tracker 表项”，
@@ -286,21 +287,23 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 <div class="key"><b>所以本研究有两个不同的问题，不要混为一谈：</b>
 <ol>
 <li><b>位置相关的不均</b>（第 4~7 节）：环受限时出现，
-S15 / S16 是针对它的解法。在有限 tracker 下它被 retry 背压掩盖，
+S16 是针对它的解法。在有限 tracker 下它被 retry 背压掩盖，
 但只要 tracker 放宽、或 outstanding 调小到不触发重试，它就会回来。</li>
 <li><b>重试造成的浪费</b>（第 9~10 节）：有限 tracker 下才出现，
-吃掉了 11% 的吞吐，与公平性无关，
-要靠动态流控压住 outstanding 才能解决。</li>
+吃掉了 11% 的吞吐，与公平性无关。
+S17 / S18 要对付的是这一条。</li>
 </ol></div>
-<img src="ring2_wfair_bars.png" alt="per-core BW">
-<p class="note">带斜纹的是放开 tracker 的参照，它的高低差一眼可见；
-基线（tracker = 32）与两个公平性方案在这张图上
-几乎是一堵平墙——<b>这堵平墙就是上面说的"被压平"</b>。
-注意纵轴已截断，否则 4% 的差异在 0 起点上完全看不出来。</p>
-<img src="ring2_wfair_panels.png" alt="per-core BW over time">
-<p class="note">时间轴上，各 core 的注入率在有限 tracker 下彼此贴得很近，
-且全程都低于放开 tracker 时的水平——所有人一起被 retry 背压按住。</p>
-<img src="ring2_wfair_overlay.png" alt="slowest vs fastest">
+<img src="ring2_wfair_bars31.png" alt="per-core BW">
+<p class="note">红色是无限 tracker 的 S0，高低差一眼可见。
+其余四个都在 tracker = 32 下：S16 最齐（max/min
+1.007）但更矮；
+S17 / S18 把重试压下去了，却没有把各核拉平
+（S17 的 max/min 反而是五个里最高的）。
+注意纵轴已截断，否则差异在 0 起点上完全看不出来。</p>
+<img src="ring2_wfair_panels31.png" alt="per-core BW over time">
+<p class="note">S0（∞）面板上各 core 从一开始就按位置分开；
+S16 贴成一条，S17 / S18 仍有分叉，但整体低于 S0。</p>
+<img src="ring2_wfair_overlay31.png" alt="slowest vs fastest">
 
 <h2>4. 根因</h2>
 <p class="note">本节的归因全部在<b>无限 tracker</b>（环受限）的参照上做，

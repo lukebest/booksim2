@@ -26,8 +26,12 @@ OUT = ROOT / "results" / "report_ring2_write_fairness.html"
 IMG = ROOT / "results"
 
 SCHEMES = ("S0", "S1", "S15", "S16")
+# Section 3.1: the baseline is the unbounded-tracker S0 (the ring is the
+# only constraint, so position imbalance is visible). S15 is left out;
+# S17 / S18 take its place as the rate-based answers to retry waste.
+SEC31 = ("S0", "S1", "S16", "S17", "S18")
 COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb",
-         "S16": "#16a34a"}
+         "S16": "#16a34a", "S17": "#0ea5e9", "S18": "#a855f7"}
 LABEL = {"S0": "S0 基线（无流控）", "S1": "S1 拥塞等级 AIMD",
          "S15": "S15 公平份额 + 槽预约",
          "S16": "S16 接收端授权（Homa 式）",
@@ -57,6 +61,14 @@ def _table(headers: list[str], rows: list[list]) -> str:
 def _cores(pat: dict) -> list[str]:
     return sorted(pat["schemes"][SCHEMES[0]]["fairness"]["bw_by_core"],
                   key=int)
+
+
+def _sch(pat: dict, s: str, *, s0_unbounded: bool = False) -> dict:
+    """The run record for scheme `s`. Section 3.1 reads S0 from the
+    unlimited-tracker reference so the baseline row is the ring-limited one."""
+    if s == "S0" and s0_unbounded:
+        return pat.get("s0_unbounded") or pat["schemes"]["S0"]
+    return pat["schemes"][s]
 
 
 def _role(i: int, meta: dict) -> str:
@@ -120,22 +132,26 @@ def plot_topology(meta: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_bw_bars(pat: dict, path: Path) -> None:
+def plot_bw_bars(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
+                s0_unbounded: bool = False) -> None:
     """Per-core write bandwidth, one group of bars per scheme.
 
-    The unbounded-tracker baseline is drawn alongside, hatched, because with a
-    finite tracker every scheme lands inside a couple of percent of every
-    other one and the panel would otherwise look like a flat wall. That
-    flatness is itself the finding, but it is only legible next to the run
-    where the ring really is the constraint.
+    `s0_unbounded` makes the S0 bar the unlimited-tracker run (section 3.1).
+    Otherwise a hatched copy of that run is drawn next to the finite-tracker
+    schemes so the masking is visible (section 6).
     """
     _use_cjk_font()
     cs = _cores(pat)
     x = range(len(cs))
+    series = []
+    for s in schemes:
+        rec = _sch(pat, s, s0_unbounded=s0_unbounded)
+        lab = LABEL[s]
+        if s == "S0" and s0_unbounded:
+            lab = "S0 基线（tracker = ∞）"
+        series.append((s, rec["fairness"], COLOR[s], None, lab))
     ref = pat.get("s0_unbounded")
-    series = [(s, pat["schemes"][s]["fairness"], COLOR[s], None, LABEL[s])
-              for s in SCHEMES]
-    if ref:
+    if ref and not s0_unbounded:
         series.insert(0, ("REF", ref["fairness"], "#64748b", "//",
                           "S0，tracker = ∞（参照：环受限）"))
     n = len(series)
@@ -172,21 +188,23 @@ def plot_bw_bars(pat: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_bw_panels(pat: dict, path: Path) -> None:
+def plot_bw_panels(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
+                  s0_unbounded: bool = False) -> None:
     """Per-core write-inject rate over time, one panel per scheme."""
     _use_cjk_font()
     cs = _cores(pat)
-    fig, axes = plt.subplots(1, len(SCHEMES), figsize=(13.6, 3.6),
+    fig, axes = plt.subplots(1, len(schemes), figsize=(13.6, 3.6),
                              sharey=True)
     cmap = plt.get_cmap("viridis")
-    for ax, s in zip(axes, SCHEMES):
-        sch = pat["schemes"][s]
+    for ax, s in zip(axes, schemes):
+        sch = _sch(pat, s, s0_unbounded=s0_unbounded)
         for j, c in enumerate(cs):
             b = sch["wr_binned"][c]
             ax.plot(b["t"], b["rate"], lw=1.0,
                     color=cmap(j / max(1, len(cs) - 1)), alpha=0.9)
         f = sch["fairness"]
-        ax.set_title(f"{s}  mk={sch['makespan']}  "
+        tag = f"{s} ∞" if s == "S0" and s0_unbounded else s
+        ax.set_title(f"{tag}  mk={sch['makespan']}  "
                      f"max/min={f['max_min']:.3f}", fontsize=10)
         ax.set_xlabel("cycle")
         ax.grid(alpha=0.3)
@@ -197,16 +215,18 @@ def plot_bw_panels(pat: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_bw_overlay(pat: dict, path: Path) -> None:
+def plot_bw_overlay(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES,
+                   s0_unbounded: bool = False) -> None:
     """Slowest and fastest core of the baseline, tracked across schemes."""
     _use_cjk_font()
-    f0 = pat["schemes"]["S0"]["fairness"]["bw_by_core"]
+    f0 = _sch(pat, "S0", s0_unbounded=s0_unbounded)["fairness"]["bw_by_core"]
     lo = min(f0, key=lambda c: f0[c])
     hi = max(f0, key=lambda c: f0[c])
     fig, ax = plt.subplots(figsize=(10.2, 3.8))
-    for s in SCHEMES:
+    for s in schemes:
+        rec = _sch(pat, s, s0_unbounded=s0_unbounded)
         for c, ls in ((lo, "-"), (hi, "--")):
-            b = pat["schemes"][s]["wr_binned"][c]
+            b = rec["wr_binned"][c]
             tag = f"最慢 C{c}" if ls == "-" else f"最快 C{c}"
             ax.plot(b["t"], b["rate"], ls, lw=1.4, color=COLOR[s],
                     alpha=0.9, label=f"{s} {tag}")
@@ -552,15 +572,19 @@ def _bounds_table(b: dict) -> str:
 
 
 def _summary_table(pat: dict) -> str:
+    """Section 3.1: S0 is the unlimited-tracker baseline; no S15; S17/S18 in."""
     rows = []
-    thr0 = pat["schemes"]["S0"]["fairness"]["throughput"]
-    for s in SCHEMES:
-        sch = pat["schemes"][s]
+    thr0 = _sch(pat, "S0", s0_unbounded=True)["fairness"]["throughput"]
+    for s in SEC31:
+        sch = _sch(pat, s, s0_unbounded=True)
         f = sch["fairness"]
         d = 100.0 * (f["throughput"] - thr0) / thr0
         q = sch.get("retry") or {}
+        lab = LABEL[s]
+        if s == "S0":
+            lab = "S0 基线（tracker = ∞）"
         rows.append([
-            LABEL[s], sch["makespan"], f["max_min"],
+            lab, sch["makespan"], f["max_min"],
             f["bw_min"], f["bw_max"], f["throughput"],
             f"{d:+.1f}%", q.get("retry_per_txn", "—"),
             sch["n_deflections"], sch["n_board_fail"],
@@ -1289,6 +1313,12 @@ def main() -> None:
         p = IMG / f"ring2_wfair_{tag}.png"
         fn(pat, p)
         imgs[tag] = p.name
+    # Section 3.1 uses its own set: unbounded S0, no S15, plus S17 / S18.
+    for tag, fn in (("bars31", plot_bw_bars), ("panels31", plot_bw_panels),
+                    ("overlay31", plot_bw_overlay)):
+        p = IMG / f"ring2_wfair_{tag}.png"
+        fn(pat, p, schemes=SEC31, s0_unbounded=True)
+        imgs[tag] = p.name
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name
@@ -1597,18 +1627,19 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 即<b>{bind_txt}</b>。</p>
 
 <h3>3.1 基线 S0 下各核是否不均</h3>
+<p>本节的 S0 <b>用无限 tracker</b>：环是唯一约束，位置相关的不均才能看见。
+对照方案是 S1、S16，以及两个 rate-based 方案 S17 / S18
+（它们仍在 tracker = {meta.get('ha_track')} 下运行——那是它们要对付的压力）。</p>
 {_summary_table(pat)}
-<p>答案取决于<b>此刻谁是瓶颈</b>，所以要把两个 S0 并排看：
-同一条环、同一份 workload，只改 completer 的请求 tracker。</p>
 {_track_table(pat)}
 <div class="def bad"><b>环受限时，失衡是真实且显著的。</b>
-把 tracker 放开（无限接收资源，环是唯一约束），
-需求完全对称而结果并不对称：max/min = <b>{sref['max_min']}</b>，
+S0（tracker = ∞）需求完全对称而结果并不对称：
+max/min = <b>{sref['max_min']}</b>，
 最慢的 core 只有最快的 {1 / sref['max_min'] * 100:.0f}%，
 最慢 {sref['bw_min']} vs 最快 {sref['bw_max']} flit/cycle。
 这就是第 4 节要归因的现象。</div>
-<div class="def"><b>而在本报告的基线（tracker = {meta.get('ha_track')}）上，
-这个失衡被大幅压平了：max/min 只有 {s0['max_min']}</b>，
+<div class="def"><b>把 tracker 收到 {meta.get('ha_track')} 之后，
+这个失衡被大幅压平：同一份 S0 的 max/min 变成 {s0['max_min']}</b>，
 已经落在 1.05 的验收线附近。<b>但这不是被修好了，是瓶颈换了地方。</b>
 每笔事务平均被 RetryAck <b>{q0.get('retry_per_txn')}</b> 次，
 瓶颈从“环上的槽位”移到了“completer 的 tracker 表项”，
@@ -1618,21 +1649,23 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 <div class="key"><b>所以本研究有两个不同的问题，不要混为一谈：</b>
 <ol>
 <li><b>位置相关的不均</b>（第 4~7 节）：环受限时出现，
-S15 / S16 是针对它的解法。在有限 tracker 下它被 retry 背压掩盖，
+S16 是针对它的解法。在有限 tracker 下它被 retry 背压掩盖，
 但只要 tracker 放宽、或 outstanding 调小到不触发重试，它就会回来。</li>
 <li><b>重试造成的浪费</b>（第 9~10 节）：有限 tracker 下才出现，
-吃掉了 {abs(t_ref):.0f}% 的吞吐，与公平性无关，
-要靠动态流控压住 outstanding 才能解决。</li>
+吃掉了 {abs(t_ref):.0f}% 的吞吐，与公平性无关。
+S17 / S18 要对付的是这一条。</li>
 </ol></div>
-<img src="{imgs['bars']}" alt="per-core BW">
-<p class="note">带斜纹的是放开 tracker 的参照，它的高低差一眼可见；
-基线（tracker = {meta.get('ha_track')}）与两个公平性方案在这张图上
-几乎是一堵平墙——<b>这堵平墙就是上面说的"被压平"</b>。
-注意纵轴已截断，否则 4% 的差异在 0 起点上完全看不出来。</p>
-<img src="{imgs['panels']}" alt="per-core BW over time">
-<p class="note">时间轴上，各 core 的注入率在有限 tracker 下彼此贴得很近，
-且全程都低于放开 tracker 时的水平——所有人一起被 retry 背压按住。</p>
-<img src="{imgs['overlay']}" alt="slowest vs fastest">
+<img src="{imgs['bars31']}" alt="per-core BW">
+<p class="note">红色是无限 tracker 的 S0，高低差一眼可见。
+其余四个都在 tracker = {meta.get('ha_track')} 下：S16 最齐（max/min
+{pat['schemes']['S16']['fairness']['max_min']}）但更矮；
+S17 / S18 把重试压下去了，却没有把各核拉平
+（S17 的 max/min 反而是五个里最高的）。
+注意纵轴已截断，否则差异在 0 起点上完全看不出来。</p>
+<img src="{imgs['panels31']}" alt="per-core BW over time">
+<p class="note">S0（∞）面板上各 core 从一开始就按位置分开；
+S16 贴成一条，S17 / S18 仍有分叉，但整体低于 S0。</p>
+<img src="{imgs['overlay31']}" alt="slowest vs fastest">
 
 <h2>4. 根因</h2>
 <p class="note">本节的归因全部在<b>无限 tracker</b>（环受限）的参照上做，
