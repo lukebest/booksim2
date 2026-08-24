@@ -49,11 +49,15 @@ flit，共 3,000 笔事务；每 core outstanding 上限
 <ol>
 
 <li><b>最重要的一条：outstanding = 600 会让这个织物直接拥塞崩溃，
-而且没有任何流控方案能救回来。</b>
+而且只调节“怎么发”的流控一个也救不回来。</b>
 在规定的 outstanding=600 下，3,000 笔事务只完成
 <b>824 笔（27%）</b>，
 批次根本排不空；把 S1、S16、S17 分别加上去，
-<b>四个方案全部崩溃</b>（§7）。
+<b>这四个方案全部崩溃</b>（§7）——
+它们都只调节“怎么发”，没有一个限制“同时能有多少笔在飞”，
+而后者才是崩溃的原因。
+本文新增的 S18 正是补上这一点，它在同样的 outstanding=600 下
+<b>能把批次排空</b>（见第 4 条）。
 实测的边界很窄：跨 3 个种子，
 到 <b>outstanding = 5</b>
 为止每个种子都能排空，
@@ -70,8 +74,75 @@ flit，共 3,000 笔事务；每 core outstanding 上限
 偏转次数从 1,215 涨到
 92,079。</li>
 
-<li><b>本次最实用的建议只有一句：把 outstanding 从 600 改成
-2，代价为零。</b>
+<li><b>换成以 top die 为单位统计，失衡比按 core 看严重一个量级。</b>
+一个 top die 的 10 个 core 共用一个环、一个挂接组、一套 8 个 bridge，
+是真正不可再内部调度的单位。
+在 outstanding=600 下，按 core 的 Jain 是
+0.9094（看起来只是“略有不均”），
+但按 die 的完成量最快与最慢相差
+<b>88 倍</b>：
+die 0、die 2、die 4 几乎完全被饿死，die 1、die 3、die 5 拿走几乎全部吞吐。
+按 core 看不出来，是因为崩溃时同一个 die 内部的核<b>同样惨</b>
+（最差 die 内部 Jain 仍有 0.8606），
+失衡整体落在 die <b>之间</b>。
+被饿死的正好是三个左半区 die——
+它们的远端流量在纵环上并入的位置处于<b>下游</b>，
+而这个劣势对该 die 的全部 8 列同向，
+所以整组 10 个 core 一起受损，不会在目的地之间被平均掉。
+好消息是把并发度调对之后它<b>完全消失</b>：
+die 间完成量的 max/min 从 88 倍降到
+1.00（六个 die 完成量<b>完全相同</b>），
+竞争窗口内的带宽 max/min 也从 1.66 降到
+1.34。
+<b>所以 die 粒度的巨大失衡是拥塞崩溃的产物，不是拓扑的固有上限；
+织物本身对六个 die 是对称的，只有过载时它才把对称性交给
+“谁在纵环上游”这条规则。</b></li>
+
+<li><b>“配 600”和“真的能用 600”是两件事：完成方会把请求退回来。</b>
+HA 的请求跟踪表满了不能排队，CHI 要求它回 <code>RetryAck</code>
+把请求退回发起方，再用 <code>PCrdGrant</code> 放行重发。
+这条回路要真实带宽（2 个 RSP + 一次 REQ 重新过网）、
+把请求打乱顺序，而且<b>被挂起的事务仍然占着 outstanding 额度却毫无进展</b>。
+实测跟踪表深 2 时，
+<b>有效并发只剩名义值的 26.4%</b>
+（1109.7 → 293.4 笔），
+平均挂起 1143.9 cycle。
+反直觉的是这<b>反而救了织物</b>：深度 4 时批次
+完整排空（Jain 0.9876），
+而跟踪表不限时只完成
+824/3,000。
+原因是 RetryAck 本质上是一种<b>非自愿的准入控制</b>，
+把吃不下的请求挡在织物外面。
+所以正确的结论不是“retry 有害”，而是
+<b>这个织物必须有准入控制；用一个明确的窗口去做，
+可以省下那段挂起延迟</b>（§5.5）。</li>
+
+<li><b>一个静态 outstanding 伺候不了两个场景，所以动态流控是必要的而不是锦上添花。</b>
+outstanding 有两个方向相反的失效模式：太大则忙时崩溃，
+太小则闲时<b>盖不住往返时延</b>。
+实测这两个区间<b>没有交集</b>：
+60 个 core 全在写时最好的静态值是 <b>oc=5</b>
+（再往上崩溃），只有 10 个 core 在写时是 <b>oc=32</b>。
+把所有场景一起看最差的那个，
+最好的静态配置也只能拿到
+50.7%。
+本文因此给出 <b>S18</b>：发起方用<b>自己测到的往返时延</b>
+（Comp 减去 REQ 发出时刻，本来就知道）当拥塞信号，
+低于 <code>rtt_min×(1+slack)</code> 就涨窗口、越线就按比例回退、
+收到 RetryAck 直接折半。
+同一套参数不重配，窗口自己从
+8.6（满载）走到
+16.8（轻载），
+跨场景下限提高到
+<b>65.5%</b>。
+代价是每 core 三个寄存器，<b>没有</b>广播总线、
+<b>没有</b>新报文类型、<b>不改</b>完成方（§7.5）。
+要如实说明：在<b>已知不变</b>的负载上，调对的静态值仍然更好
+（S18 只到最好静态值的 85.7%），
+S18 换来的是不掉悬崖、也不在轻载白扔带宽。</li>
+
+<li><b>如果负载形态是已知且固定的，最实用的一步就一句话：把 outstanding 从
+600 改成 2，代价为零。</b>
 outstanding 上限本来就是一个已有的配置寄存器，改它不花任何硬件。
 跨 3 个种子实测，outstanding=2 时：
 3/3 个种子全部排空，
@@ -93,7 +164,9 @@ txn/cycle），2 只拿到它的
 换来 1.049 txn/cycle
 （峰值的 96.5%，
 比 2 高 19.1%）。
-两者都比规定的 600 好几个数量级。</li>
+两者都比规定的 600 好几个数量级。
+<b>但这条建议的前提是负载形态不变</b>——上一条已经说明它不总成立，
+所以它和 S18 是<b>互补的两个答案</b>，不是二选一的竞争关系。</li>
 
 <li><b>路由在这个拓扑上不是可调项——目的地决定了一切。</b>
 每个 HA 与一个 D2D bridge 绑定：先确定去哪个 HA，就确定了走哪个 bridge，
@@ -125,17 +198,17 @@ txn/cycle），2 只拿到它的
 
 <li><b>残余失衡是结构性的，但它不是某个位置坐标的简单函数。</b>
 即使把并发度调到推荐值，位置性失衡依然存在：
-outstanding=4 下 Jain = <b>0.99046</b>，
-max/min = <b>1.61</b>，
-每核带宽 0.06681 ~ 0.10776 flit/cycle，
+outstanding=5 下 Jain = <b>0.98276</b>，
+max/min = <b>1.79</b>，
+每核带宽 0.06817 ~ 0.12173 flit/cycle，
 而需求是完全对称的。
 把带宽与各结构变量做秩相关，最强的是
 “该 core 要并入的最忙那条纵环边的负载”
-（Spearman <b>-0.5099</b>，方向正确但只是中等强度），
-top die 编号只有 -0.26，
-top 环上的位置只有 0.0579。
-按 die 聚合后最好与最差相差 1.28 倍
-（die 2 vs die 5），
+（Spearman <b>-0.703</b>，方向正确但只是中等强度），
+top die 编号只有 -0.3135，
+top 环上的位置只有 0.0322。
+按 die 聚合后最好与最差相差 1.34 倍
+（die 3 vs die 5），
 但<b>存在反例</b>：die 5 的纵环负载并非最高。
 结论是：<b>失衡可复现、可归因于“在环优先”下的并入竞争，
 但无法约化成一个静态位置变量</b>——
@@ -147,7 +220,7 @@ top 环上的位置只有 0.0579。
 所以任何静态分析都区分不出来。
 实测两者<b>可靠上沿相同</b>（都到 outstanding=5），
 差别在越过上沿之后的<b>劣化方式</b>和<b>同并发度下的公平性</b>：
-outstanding 6 时 split 还能排空 2/3 个种子、stack 只有 1/3，outstanding 8 时 split 还能排空 1/3 个种子、stack 只有 0/3；
+outstanding 6 时 split 还能排空 2/3 个种子、stack 只有 1/3，outstanding 7 时 split 还能排空 2/3 个种子、stack 只有 0/3，outstanding 8 时 split 还能排空 1/3 个种子、stack 只有 0/3；
 而在推荐点 outstanding=2 上，
 split 的 Jain 是 0.99866、stack 是 0.99846。
 原因是前者让两个 die 在同一列上<b>落在不同的挂接点</b>，
@@ -157,28 +230,36 @@ split 的 Jain 是 0.99866、stack 是 0.99846。
 <li><b>与上一版拓扑相反：转向 FIFO 深度这次是硬需求，而且它和并发度绑在一起。</b>
 计划把“横↔纵转向 FIFO 深 4 flit”列为风险项，这次它是对的：
 深度 4 直接活锁
-（只完成 166 笔，FIFO 全程被占满）。
+（只完成 168 笔，FIFO 全程被占满）。
 原因是 2×4 分组让<b>一半</b>的写必须先走横环、再经转向进入纵环，
 转向从上一版的“几乎不用”变成了关键路径。
 好消息是这两个建议<b>互相加强而不是互相拉扯</b>：
 跨 3 个种子实测，
 在推荐并发度 2 下只需要
 <b>8 flit</b> 深，
-而所需深度随并发度陡升（outstanding 2 需要 8 flit；outstanding 3 需要 24 flit；outstanding 4 需要 32 flit；outstanding 5 需要 &gt;48 flit）。
+而所需深度随并发度陡升（outstanding 2 需要 8 flit；outstanding 3 需要 24 flit；outstanding 5 需要 64 flit）。
 <b>把并发度压下来同时省了面积。</b></li>
 
-<li><b>三个流控方案的结论：S1 能跑但很贵，S16 打不到痛点，
+<li><b>三个原有流控方案的结论：S1 能跑但很贵，S16 打不到痛点，
 S17 收益不稳定。</b>
-在 outstanding=4 上跨 3 个种子：
-S1 Jain 均值 0.98313、
-S16 0.98313、
-S17 0.98198，
-基线 S0 0.98313。
+在 outstanding=5 上跨 3 个种子：
+S1 Jain 均值 0.97796、
+S16 0.97796、
+S17 0.98176，
+基线 S0 0.97796。
 S16 的控制点在 HA 侧的授权发放，而瓶颈在纵环的<b>并入仲裁</b>上，
 控制点和瓶颈不在一处，所以它的预算在正常负载下几乎不生效（§7.2）；
 S17 直接针对挂接点的转向仲裁，机理是对的，
-但跨种子看收益不稳定（§7.3）。
-<b>没有一个方案比“把 outstanding 调对”更有效，而后者代价为零。</b></li>
+按 core 看跨种子收益不稳定（§7.3），
+但换到 <b>top die 粒度</b>它的作用就清楚了：
+在 outstanding=5 上它把 die 间 Jain 从
+0.9903 提到
+0.9936、
+max/min 从 1.34 降到
+1.28。
+<b>结论是：这三个方案都不如“把并发度控住”，
+而控住并发度的两个办法（静态调对、或 S18 自己找）才是主线；
+S17 只在按 die 验收时值得叠加上去（§7.6）。</b></li>
 
 </ol>
 </div>
@@ -212,6 +293,17 @@ bridge</b>。一个 die 有 8 个 bridge、要覆盖 96 个 HA，
 由于挂接组只落在 4 列上，其中 4 个 bridge 是“本列直落”，
 另外 4 个必须先在横环上换列：</p>
 <img src="stack_binding.png" alt="HA 到 bridge 的绑定">
+<p><b>用哪个 bridge 不需要查表，是一条布线规则：</b>
+一个 die 的 8 个 bridge 落在自己那 4 列上、每列两次
+（近端横环一次、远端横环一次）。
+去本半区的列走近端横环那一个，去另一半区的列走远端横环那一个，
+而<b>组内的位置都等于目标列 mod 4</b>。
+以 die 0（拥有第 0~3 列）为例，它去右半区第 4~7 列时，
+分别取组内第 0 / 1 / 2 / 3 个 bridge：</p>
+<table><thead><tr><th>目标 HA 所在列</th><th>位置</th><th>用的 D2D bridge 节点号</th><th>该 bridge 在 8 个中的序号</th><th>组内位置</th><th>目标列 mod 4</th><th>落到哪条横环</th><th>符合 mod-4 规则</th></tr></thead><tbody><tr><td>0</td><td>本 die 的 4 列</td><td>1</td><td>0</td><td>0</td><td>0</td><td>近端横环 H1</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>1</td><td>本 die 的 4 列</td><td>3</td><td>1</td><td>1</td><td>1</td><td>近端横环 H1</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>2</td><td>本 die 的 4 列</td><td>5</td><td>2</td><td>2</td><td>2</td><td>近端横环 H1</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>3</td><td>本 die 的 4 列</td><td>7</td><td>3</td><td>3</td><td>3</td><td>近端横环 H1</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>4</td><td>另一半的 4 列</td><td>11</td><td>4</td><td>0</td><td>0</td><td>远端横环 H0</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>5</td><td>另一半的 4 列</td><td>13</td><td>5</td><td>1</td><td>1</td><td>远端横环 H0</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>6</td><td>另一半的 4 列</td><td>15</td><td>6</td><td>2</td><td>2</td><td>远端横环 H0</td><td><b style="color:#16a34a">完成</b></td></tr><tr><td>7</td><td>另一半的 4 列</td><td>17</td><td>7</td><td>3</td><td>3</td><td>远端横环 H0</td><td><b style="color:#16a34a">完成</b></td></tr></tbody></table>
+<p class="note">全部 48 个
+(die, 列) 组合都满足这条 mod-4 规则
+（<b style="color:#16a34a">完成</b>），6 个 die 无一例外。</p>
 <div class="def"><b>这对路由意味着什么。</b>
 目的 HA 定了 → bridge 定了 → top die 上的目的（bridge 节点）和
 bottom die 上的源（该 bridge 的落点）都定了。
@@ -294,7 +386,7 @@ core 还远没用到自己的额度，织物就已经塌了。
 所以设计上真正能动的只剩一个数：每 core 的 outstanding 上限。
 先看单种子的全景扫描：</p>
 <img src="stack_oc.png" alt="并发度扫描">
-<table><thead><tr><th>outstanding</th><th>批次是否排空</th><th>makespan</th><th>txn/cycle</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>偏转次数</th></tr></thead><tbody><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>3,396</td><td>0.883</td><td>62.2%</td><td><b>0.99862</b></td><td>1.16</td><td>1,215</td></tr><tr><td>3</td><td><b style="color:#16a34a">完成</b></td><td>2,804</td><td>1.070</td><td>75.3%</td><td><b>0.99521</b></td><td>1.32</td><td>1,528</td></tr><tr><td>4 ← 推荐</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td>1.047</td><td>73.7%</td><td><b>0.99046</b></td><td>1.61</td><td>2,537</td></tr><tr><td>5</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td>1.111</td><td>78.2%</td><td><b>0.98276</b></td><td>1.79</td><td>4,030</td></tr><tr><td>6</td><td><b style="color:#16a34a">完成</b></td><td>2,727</td><td>1.100</td><td>77.5%</td><td><b>0.98441</b></td><td>1.89</td><td>5,064</td></tr><tr><td>8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>8,219</td><td>0.301</td><td>25.7%</td><td><b>0.98833</b></td><td>1.63</td><td>46,139</td></tr><tr><td>16</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>7,179</td><td>0.115</td><td>29.4%</td><td><b>0.97233</b></td><td>2.57</td><td>92,079</td></tr><tr><td>32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,984</td><td>0.123</td><td>30.2%</td><td><b>0.97249</b></td><td>2.70</td><td>67,460</td></tr><tr><td>128</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,866</td><td>0.120</td><td>30.8%</td><td><b>0.90943</b></td><td>4.71</td><td>75,916</td></tr><tr><td>600 ← 题目规定</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,866</td><td>0.120</td><td>30.8%</td><td><b>0.90943</b></td><td>4.71</td><td>75,916</td></tr></tbody></table>
+<table><thead><tr><th>outstanding</th><th>批次是否排空</th><th>makespan</th><th>txn/cycle</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>偏转次数</th></tr></thead><tbody><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>3,396</td><td>0.883</td><td>62.2%</td><td><b>0.99862</b></td><td>1.16</td><td>1,215</td></tr><tr><td>3</td><td><b style="color:#16a34a">完成</b></td><td>2,804</td><td>1.070</td><td>75.3%</td><td><b>0.99521</b></td><td>1.32</td><td>1,528</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td>1.047</td><td>73.7%</td><td><b>0.99046</b></td><td>1.61</td><td>2,537</td></tr><tr><td>5 ← 推荐</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td>1.111</td><td>78.2%</td><td><b>0.98276</b></td><td>1.79</td><td>4,030</td></tr><tr><td>6</td><td><b style="color:#16a34a">完成</b></td><td>2,727</td><td>1.100</td><td>77.5%</td><td><b>0.98441</b></td><td>1.89</td><td>5,064</td></tr><tr><td>8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>8,219</td><td>0.301</td><td>25.7%</td><td><b>0.98833</b></td><td>1.63</td><td>46,139</td></tr><tr><td>16</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>7,179</td><td>0.115</td><td>29.4%</td><td><b>0.97233</b></td><td>2.57</td><td>92,079</td></tr><tr><td>32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,984</td><td>0.123</td><td>30.2%</td><td><b>0.97249</b></td><td>2.70</td><td>67,460</td></tr><tr><td>128</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,866</td><td>0.120</td><td>30.8%</td><td><b>0.90943</b></td><td>4.71</td><td>75,916</td></tr><tr><td>600 ← 题目规定</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,866</td><td>0.120</td><td>30.8%</td><td><b>0.90943</b></td><td>4.71</td><td>75,916</td></tr></tbody></table>
 <div class="def bad"><b>注意崩溃档的 Jain 不可信。</b>
 崩溃的运行里 makespan 是停滞检测器截断的时刻，
 此时 Jain 反映的是“卡住的织物里谁还在动”。
@@ -305,7 +397,7 @@ core 还远没用到自己的额度，织物就已经塌了。
 
 <h3>5.1 跨种子定位悬崖与推荐值</h3>
 <img src="stack_stability.png" alt="跨种子并发度扫描">
-<table><thead><tr><th>outstanding</th><th>排空的种子数</th><th>txn/cycle</th><th>达下界比例</th><th>Jain 均值</th><th>Jain 最差</th><th>max/min 最差</th><th>是否满足公平线</th></tr></thead><tbody><tr><td>2 ← 推荐</td><td>3 / 3</td><td>0.881</td><td>62.2%</td><td><b>0.99866</b></td><td>0.99862</td><td>1.19</td><td><b style="color:#16a34a">达标</b></td></tr><tr><td>3</td><td>3 / 3</td><td>1.049</td><td>74.1%</td><td><b>0.99373</b></td><td>0.99179</td><td>1.52</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>4</td><td>3 / 3</td><td>1.047</td><td>74.0%</td><td><b>0.98313</b></td><td>0.97686</td><td>2.08</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>5</td><td>3 / 3</td><td>1.087</td><td>76.8%</td><td><b>0.97796</b></td><td>0.97159</td><td>2.08</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>6</td><td>2 / 3</td><td>1.094</td><td>78.4%</td><td><b>0.97659</b></td><td>0.96997</td><td>2.65</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>8</td><td>1 / 3</td><td>1.153</td><td>79.0%</td><td><b>0.97942</b></td><td>0.96909</td><td>2.36</td><td><span style="color:#b45309">未达标</span></td></tr></tbody></table>
+<table><thead><tr><th>outstanding</th><th>排空的种子数</th><th>txn/cycle</th><th>达下界比例</th><th>Jain 均值</th><th>Jain 最差</th><th>max/min 最差</th><th>是否满足公平线</th></tr></thead><tbody><tr><td>2 ← 推荐</td><td>3 / 3</td><td>0.881</td><td>62.2%</td><td><b>0.99866</b></td><td>0.99862</td><td>1.19</td><td><b style="color:#16a34a">达标</b></td></tr><tr><td>3</td><td>3 / 3</td><td>1.049</td><td>74.1%</td><td><b>0.99373</b></td><td>0.99179</td><td>1.52</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>4</td><td>3 / 3</td><td>1.047</td><td>74.0%</td><td><b>0.98313</b></td><td>0.97686</td><td>2.08</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>5</td><td>3 / 3</td><td>1.087</td><td>76.8%</td><td><b>0.97796</b></td><td>0.97159</td><td>2.08</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>6</td><td>2 / 3</td><td>1.094</td><td>78.4%</td><td><b>0.97659</b></td><td>0.96997</td><td>2.65</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>7</td><td>2 / 3</td><td>1.101</td><td>79.0%</td><td><b>0.97466</b></td><td>0.96845</td><td>2.51</td><td><span style="color:#b45309">未达标</span></td></tr><tr><td>8</td><td>1 / 3</td><td>1.153</td><td>79.0%</td><td><b>0.97942</b></td><td>0.96909</td><td>2.36</td><td><span style="color:#b45309">未达标</span></td></tr></tbody></table>
 <div class="def good"><b>这是本文最实用的一张表。</b>
 可靠区的上沿是 5（全排空），
 6（3 个种子里有的排空、有的不排空） 起变成时好时坏，
@@ -328,8 +420,8 @@ Jain 0.99866、max/min 1.19、
 无论选哪个，代价都只是一个已有寄存器的取值。</div>
 
 <h3>5.2 各方案在推荐并发度附近的跨种子表现</h3>
-<table><thead><tr><th>方案</th><th>排空的种子数</th><th>Jain 均值</th><th>Jain 最差</th><th>max/min 最差</th><th>达下界比例最差</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>3 / 3</td><td><b>0.98313</b></td><td>0.97686</td><td>2.08</td><td>72.2%</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>3 / 3</td><td><b>0.98313</b></td><td>0.97686</td><td>2.08</td><td>72.2%</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>3 / 3</td><td><b>0.98313</b></td><td>0.97686</td><td>2.08</td><td>72.2%</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td>3 / 3</td><td><b>0.98198</b></td><td>0.97614</td><td>2.00</td><td>72.9%</td></tr></tbody></table>
-<p class="note">上表在 outstanding=4 上跑。
+<table><thead><tr><th>方案</th><th>排空的种子数</th><th>Jain 均值</th><th>Jain 最差</th><th>max/min 最差</th><th>达下界比例最差</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>3 / 3</td><td><b>0.97796</b></td><td>0.97159</td><td>2.08</td><td>74.1%</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>3 / 3</td><td><b>0.97796</b></td><td>0.97159</td><td>2.08</td><td>74.1%</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>3 / 3</td><td><b>0.97796</b></td><td>0.97159</td><td>2.08</td><td>74.1%</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td>3 / 3</td><td><b>0.98176</b></td><td>0.97702</td><td>2.27</td><td>74.8%</td></tr></tbody></table>
+<p class="note">上表在 outstanding=5 上跑。
 S0、S1、S16 三行<b>完全一样</b>——这不是笔误：
 并发度已经压到织物的舒适区之后，
 S1 的 AIMD 和 S16 的授权预算都<b>从不触发</b>，
@@ -337,22 +429,22 @@ S1 的 AIMD 和 S16 的授权预算都<b>从不触发</b>，
 
 <h3>5.3 一个免费的拓扑选择：横环分工</h3>
 <img src="stack_hassign.png" alt="横环分配对比">
-<table><thead><tr><th>横环分配</th><th>outstanding</th><th>下界</th><th>批次是否排空</th><th>txn/cycle</th><th>Jain</th><th>max/min</th><th>各 die 进入列 0 的位置</th></tr></thead><tbody><tr><td>split</td><td>2</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>0.883</td><td><b>0.99862</b></td><td>1.16</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>4</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>1.047</td><td><b>0.99046</b></td><td>1.61</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>32</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.123</td><td><b>0.97249</b></td><td>2.70</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>600</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.120</td><td><b>0.90943</b></td><td>4.71</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>stack</td><td>2</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>0.857</td><td><b>0.99865</b></td><td>1.22</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>4</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>1.027</td><td><b>0.98197</b></td><td>1.72</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>32</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.188</td><td><b>0.95973</b></td><td>4.12</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>600</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.146</td><td><b>0.92638</b></td><td>3.88</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr></tbody></table>
+<table><thead><tr><th>横环分配</th><th>outstanding</th><th>下界</th><th>批次是否排空</th><th>txn/cycle</th><th>Jain</th><th>max/min</th><th>各 die 进入列 0 的位置</th></tr></thead><tbody><tr><td>split</td><td>2</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>0.883</td><td><b>0.99862</b></td><td>1.16</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>5</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>1.111</td><td><b>0.98276</b></td><td>1.79</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>32</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.123</td><td><b>0.97249</b></td><td>2.70</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>split</td><td>600</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.120</td><td><b>0.90943</b></td><td>4.71</td><td>d0→v2,d1→v2,d2→v9,d3→v9,d4→v16,d5→v16</td></tr><tr><td>stack</td><td>2</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>0.857</td><td><b>0.99865</b></td><td>1.22</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>5</td><td>2,112</td><td><b style="color:#16a34a">完成</b></td><td>1.068</td><td><b>0.97926</b></td><td>2.00</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>32</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.188</td><td><b>0.95973</b></td><td>4.12</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr><tr><td>stack</td><td>600</td><td>2,112</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.146</td><td><b>0.92638</b></td><td>3.88</td><td>d0→v1,d1→v2,d2→v8,d3→v9,d4→v15,d5→v16</td></tr></tbody></table>
 <div class="def good">两种分配的<b>解析下界完全相同</b>，
 静态分析无法区分；实测可靠上沿也相同，
 但 split（两个 die 各用一条横环走远端流量）
 让它们在同一列上落在<b>不同</b>挂接点，
-越过上沿之后劣化得更慢（outstanding 6 时 split 还能排空 2/3 个种子、stack 只有 1/3，outstanding 8 时 split 还能排空 1/3 个种子、stack 只有 0/3）。
+越过上沿之后劣化得更慢（outstanding 6 时 split 还能排空 2/3 个种子、stack 只有 1/3，outstanding 7 时 split 还能排空 2/3 个种子、stack 只有 0/3，outstanding 8 时 split 还能排空 1/3 个种子、stack 只有 0/3）。
 这提示一类只有仿真才能发现的设计点：
 <b>总量相同、分布不同</b>。</div>
 
 <h3>5.4 转向 FIFO 深度：这次是硬需求</h3>
 <p>转向 FIFO 是这个织物<b>唯一允许缓冲</b>的地方，深度直接是面积代价。
-单种子扫描（在 outstanding=4 下）：</p>
-<table><thead><tr><th>转向 / D2D FIFO 深度</th><th>批次是否排空</th><th>makespan</th><th>txn/cycle</th><th>Jain</th><th>转向 FIFO 峰值占用</th><th>偏转次数</th></tr></thead><tbody><tr><td>4 / 8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,391</td><td>0.026</td><td><b>0.62877</b></td><td>4</td><td>62,335</td></tr><tr><td>16 / 32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,701</td><td>0.033</td><td><b>0.75977</b></td><td>16</td><td>59,360</td></tr><tr><td>64 / 128</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td>1.047</td><td><b>0.99046</b></td><td>64</td><td>2,537</td></tr><tr><td>128 / 256</td><td><b style="color:#16a34a">完成</b></td><td>2,840</td><td>1.056</td><td><b>0.99164</b></td><td>95</td><td>1,638</td></tr></tbody></table>
+单种子扫描（在 outstanding=5 下）：</p>
+<table><thead><tr><th>转向 / D2D FIFO 深度</th><th>批次是否排空</th><th>makespan</th><th>txn/cycle</th><th>Jain</th><th>转向 FIFO 峰值占用</th><th>偏转次数</th></tr></thead><tbody><tr><td>4 / 8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,602</td><td>0.025</td><td><b>0.62404</b></td><td>4</td><td>60,510</td></tr><tr><td>16 / 32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>6,754</td><td>0.038</td><td><b>0.84761</b></td><td>16</td><td>67,533</td></tr><tr><td>64 / 128</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td>1.111</td><td><b>0.98276</b></td><td>64</td><td>4,030</td></tr><tr><td>128 / 256</td><td><b style="color:#16a34a">完成</b></td><td>2,815</td><td>1.066</td><td><b>0.98413</b></td><td>128</td><td>1,731</td></tr></tbody></table>
 <p>再跨 3 个种子把深度和并发度一起扫，
 得到真正可用的深度需求：</p>
-<table><thead><tr><th>outstanding</th><th>转向 / D2D 深度</th><th>排空的种子数</th><th>txn/cycle</th><th>Jain 均值</th><th>转向 FIFO 峰值占用</th></tr></thead><tbody><tr><td>2</td><td>8 / 16 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>0.872</td><td><b>0.99863</b></td><td>8</td></tr><tr><td>2</td><td>16 / 32</td><td>3 / 3</td><td>0.881</td><td><b>0.99872</b></td><td>16</td></tr><tr><td>2</td><td>24 / 48</td><td>3 / 3</td><td>0.876</td><td><b>0.9987</b></td><td>24</td></tr><tr><td>2</td><td>32 / 64</td><td>3 / 3</td><td>0.881</td><td><b>0.99867</b></td><td>32</td></tr><tr><td>2</td><td>48 / 96</td><td>3 / 3</td><td>0.881</td><td><b>0.99866</b></td><td>34</td></tr><tr><td>3</td><td>8 / 16</td><td>0 / 3</td><td>—</td><td><b>0.82396</b></td><td>8</td></tr><tr><td>3</td><td>16 / 32</td><td>2 / 3</td><td>1.029</td><td><b>0.99414</b></td><td>16</td></tr><tr><td>3</td><td>24 / 48 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>1.043</td><td><b>0.99453</b></td><td>24</td></tr><tr><td>3</td><td>32 / 64</td><td>3 / 3</td><td>1.051</td><td><b>0.99379</b></td><td>32</td></tr><tr><td>3</td><td>48 / 96</td><td>3 / 3</td><td>1.067</td><td><b>0.99372</b></td><td>48</td></tr><tr><td>4</td><td>8 / 16</td><td>0 / 3</td><td>—</td><td><b>0.7632</b></td><td>8</td></tr><tr><td>4</td><td>16 / 32</td><td>0 / 3</td><td>—</td><td><b>0.90254</b></td><td>16</td></tr><tr><td>4</td><td>24 / 48</td><td>1 / 3</td><td>1.081</td><td><b>0.98226</b></td><td>24</td></tr><tr><td>4</td><td>32 / 64 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>1.079</td><td><b>0.98425</b></td><td>32</td></tr><tr><td>4</td><td>48 / 96</td><td>3 / 3</td><td>1.045</td><td><b>0.98112</b></td><td>48</td></tr><tr><td>5</td><td>8 / 16</td><td>0 / 3</td><td>—</td><td><b>0.7735</b></td><td>8</td></tr><tr><td>5</td><td>16 / 32</td><td>0 / 3</td><td>—</td><td><b>0.83438</b></td><td>16</td></tr><tr><td>5</td><td>24 / 48</td><td>0 / 3</td><td>—</td><td><b>0.91665</b></td><td>24</td></tr><tr><td>5</td><td>32 / 64</td><td>0 / 3</td><td>—</td><td><b>0.9761</b></td><td>32</td></tr><tr><td>5</td><td>48 / 96</td><td>2 / 3</td><td>1.094</td><td><b>0.97786</b></td><td>48</td></tr></tbody></table>
+<table><thead><tr><th>outstanding</th><th>转向 / D2D 深度</th><th>排空的种子数</th><th>txn/cycle</th><th>Jain 均值</th><th>转向 FIFO 峰值占用</th></tr></thead><tbody><tr><td>2</td><td>8 / 16 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>0.872</td><td><b>0.99863</b></td><td>8</td></tr><tr><td>2</td><td>16 / 32</td><td>3 / 3</td><td>0.881</td><td><b>0.99872</b></td><td>16</td></tr><tr><td>2</td><td>24 / 48</td><td>3 / 3</td><td>0.876</td><td><b>0.9987</b></td><td>24</td></tr><tr><td>2</td><td>32 / 64</td><td>3 / 3</td><td>0.881</td><td><b>0.99867</b></td><td>32</td></tr><tr><td>2</td><td>48 / 96</td><td>3 / 3</td><td>0.881</td><td><b>0.99866</b></td><td>34</td></tr><tr><td>2</td><td>64 / 128</td><td>3 / 3</td><td>0.881</td><td><b>0.99866</b></td><td>34</td></tr><tr><td>3</td><td>8 / 16</td><td>0 / 3</td><td>—</td><td><b>0.82396</b></td><td>8</td></tr><tr><td>3</td><td>16 / 32</td><td>2 / 3</td><td>1.029</td><td><b>0.99414</b></td><td>16</td></tr><tr><td>3</td><td>24 / 48 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>1.043</td><td><b>0.99453</b></td><td>24</td></tr><tr><td>3</td><td>32 / 64</td><td>3 / 3</td><td>1.051</td><td><b>0.99379</b></td><td>32</td></tr><tr><td>3</td><td>48 / 96</td><td>3 / 3</td><td>1.067</td><td><b>0.99372</b></td><td>48</td></tr><tr><td>3</td><td>64 / 128</td><td>3 / 3</td><td>1.049</td><td><b>0.99373</b></td><td>64</td></tr><tr><td>5</td><td>8 / 16</td><td>0 / 3</td><td>—</td><td><b>0.7735</b></td><td>8</td></tr><tr><td>5</td><td>16 / 32</td><td>0 / 3</td><td>—</td><td><b>0.83438</b></td><td>16</td></tr><tr><td>5</td><td>24 / 48</td><td>0 / 3</td><td>—</td><td><b>0.91665</b></td><td>24</td></tr><tr><td>5</td><td>32 / 64</td><td>0 / 3</td><td>—</td><td><b>0.9761</b></td><td>32</td></tr><tr><td>5</td><td>48 / 96</td><td>2 / 3</td><td>1.094</td><td><b>0.97786</b></td><td>48</td></tr><tr><td>5</td><td>64 / 128 ← 该并发度的最小可用深度</td><td>3 / 3</td><td>1.087</td><td><b>0.97796</b></td><td>64</td></tr></tbody></table>
 <div class="def bad"><b>和上一版拓扑的结论相反，这里必须给够深度。</b>
 深度 4 会<b>活锁</b>，
 而且注意上表里“FIFO 峰值占用”一列在崩溃档位<b>恰好等于深度</b>——
@@ -360,16 +452,63 @@ FIFO 全程满载，是真正的瓶颈，不是余量。
 根源是 2×4 分组：一半的写要经“横环 → 转向 → 纵环”，
 转向点从上一版的近乎空闲变成了关键路径。</div>
 <div class="def good"><b>但它和并发度是同向的，不是权衡。</b>
-所需深度随并发度上升：outstanding 2 需要 8 flit；outstanding 3 需要 24 flit；outstanding 4 需要 32 flit；outstanding 5 需要 &gt;48 flit。
+所需深度随并发度上升：outstanding 2 需要 8 flit；outstanding 3 需要 24 flit；outstanding 5 需要 64 flit。
 也就是说把 outstanding 压到 2 不仅换来公平性，
 还把这 48 个挂接点上的缓冲需求降到
 <b>8 flit</b>——
-而在 outstanding=5 上连 48 flit 都不够。
+而在 outstanding=5 上连 64 flit 都不够。
 <b>两个建议是同一个方向。</b></div>
+
+<h3>5.5 名义 outstanding 不等于有效 outstanding</h3>
+<p>前面把 outstanding 当成一个纯粹的注入闸门，但完成方也有自己的额度。
+CHI 里 HA 的请求跟踪表满了之后<b>不能把请求排队</b>：
+它必须回一个 <code>RetryAck</code> 把请求<b>退回</b>发起方，
+之后再用 <code>PCrdGrant</code> 发一个协议信用，
+发起方收到信用才能<b>重发</b>这笔请求。
+这条回路有三个后果，本节把它们分开测量：</p>
+<ul>
+<li><b>它要真实带宽</b>：一次退回 = 1 个 RSP（RetryAck）+ 1 个 RSP
+（PCrdGrant）+ 一次 REQ <b>重新过网</b>。</li>
+<li><b>它把请求打乱</b>：被退回的那笔要排到后发的请求之后，
+所以到达顺序不再是发出顺序。</li>
+<li><b>它吃掉 outstanding 额度而不产生进展</b>：被挂起等信用的事务
+仍然占着发起方的额度，却没有任何一个 flit 在路上。
+所以<b>名义并发（额度占用）大于有效并发（真正在推进的）</b>，
+而决定一个 core 能不能盖住往返时延的是后者。</li>
+</ul>
+<img src="stack_retry.png" alt="名义并发与有效并发">
+<table><thead><tr><th>HA 跟踪表深度</th><th>排空</th><th>完成事务</th><th>吞吐<br>txn/cycle</th><th>RetryAck 次数</th><th>每笔<br>retry</th><th>名义并发</th><th>有效并发</th><th>有效/名义</th><th>挂起<br>均值</th><th>挂起<br>p99</th><th>Jain<br>（按 core）</th><th>Jain<br>（按 die）</th></tr></thead><tbody><tr><td>64</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>824/3,000</td><td>0.040</td><td>0</td><td>0.000</td><td>2190.6</td><td>2190.6</td><td>100.0%</td><td>0</td><td>0</td><td>0.9094</td><td>0.9762</td></tr><tr><td>32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>824/3,000</td><td>0.040</td><td>0</td><td>0.000</td><td>2190.6</td><td>2190.6</td><td>100.0%</td><td>0</td><td>0</td><td>0.9094</td><td>0.9762</td></tr><tr><td>16</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>789/3,000</td><td>0.038</td><td>166</td><td>0.210</td><td>2224.1</td><td>2172.0</td><td>97.7%</td><td>129.3</td><td>304</td><td>0.9040</td><td>0.9747</td></tr><tr><td>8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>892/3,000</td><td>0.043</td><td>1,323</td><td>1.483</td><td>2122.6</td><td>1465.6</td><td>69.0%</td><td>251.3</td><td>549</td><td>0.8843</td><td>0.9495</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>0.866</td><td>2,616</td><td>0.872</td><td>1142.9</td><td>461.0</td><td>40.3%</td><td>902.7</td><td>2657</td><td>0.9876</td><td>0.9915</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>3,000/3,000</td><td>0.762</td><td>2,808</td><td>0.936</td><td>1109.7</td><td>293.4</td><td>26.4%</td><td>1143.9</td><td>2950</td><td>0.9885</td><td>0.9926</td></tr><tr><td>不限</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>824/3,000</td><td>0.040</td><td>0</td><td>0.000</td><td>2190.6</td><td>2190.6</td><td>100.0%</td><td>0</td><td>0</td><td>0.9094</td><td>0.9762</td></tr></tbody></table>
+<div class="def"><b>怎么读。</b>
+名义 outstanding 全程固定为 600，只改 HA 跟踪表深度。
+跟踪表越浅，退回越多：到深度 2 时
+<b>有效并发只剩名义值的 26.4%</b>
+（1109.7 → 293.4 笔），
+每笔事务平均被退回 0.94 次，
+挂起等信用的时间均值 1143.9 cycle、
+p99 2950 cycle。
+这就是“outstanding 配了 600，实际能用的远不到 600”的量化形式。</div>
+<div class="def good"><b>但这里有一个反直觉的结果，而且它是本节的重点。</b>
+把跟踪表做<b>浅</b>反而救了这个织物：
+深度 4 时批次<b>完整排空</b>
+（3,000/3,000），
+吞吐 0.866 txn/cycle、
+Jain 0.9876，
+而跟踪表<b>不限</b>时只完成
+824/3,000、Jain 0.9094。
+原因很直接：RetryAck 是一种<b>非自愿的准入控制</b>——
+完成方把自己吃不下的请求挡在了织物<b>外面</b>，
+挂在发起方那里是不占链路的。
+所以“有效并发被压低”在这里不是缺陷，而正是它有效的原因。
+<b>代价是延迟</b>：请求平均要在发起方等 902.7 cycle
+才拿到信用，这段时间对上层就是纯粹的等待。
+用一个明确的窗口去做同一件事（§5.1 的 outstanding=2）
+既能排空、又不用付这段挂起时间，
+所以正确的读法是：<b>这个织物需要准入控制，
+问题只是由谁、在哪一层、用什么代价来做。</b></div>
 
 <h2>6　根因分析</h2>
 <img src="stack_root_cause.png" alt="根因">
-<table><thead><tr><th>结构变量</th><th>Spearman(变量, 每核带宽)</th><th>说明</th></tr></thead><tbody><tr><td>seat_pearson</td><td>-0.519</td><td>平均纵环边负载的线性相关程度</td></tr><tr><td>seat_max</td><td><b>-0.510</b></td><td><b>最强的单一预测变量</b>：该 core 要并入的<b>最忙</b>那条纵向边上已有多少上游流量</td></tr><tr><td>seat</td><td>-0.487</td><td>平均（而非最忙）纵环边负载</td></tr><tr><td>die</td><td>-0.260</td><td>计划里的假设。数值很小，说明<b>不是</b>按 die 编号排序</td></tr><tr><td>far_vpos</td><td>-0.260</td><td>换列后进入的挂接点位置</td></tr><tr><td>gap</td><td>-0.212</td><td>0/1/2，即纵环上的三段</td></tr><tr><td>half</td><td>-0.194</td><td>左半区(0) 还是右半区(1)</td></tr><tr><td>h_hops</td><td>-0.151</td><td>每个 core 都是一半近一半远，本来就<b>没有区分度</b></td></tr><tr><td>near_vpos</td><td>-0.146</td><td>本列直落的挂接点位置</td></tr><tr><td>top_idx</td><td>0.058</td><td>core 在 top 环上的序号；top 环容量过剩，影响最小</td></tr></tbody></table>
+<table><thead><tr><th>结构变量</th><th>Spearman(变量, 每核带宽)</th><th>说明</th></tr></thead><tbody><tr><td>seat_max</td><td><b>-0.703</b></td><td><b>最强的单一预测变量</b>：该 core 要并入的<b>最忙</b>那条纵向边上已有多少上游流量</td></tr><tr><td>seat_pearson</td><td>-0.612</td><td>平均纵环边负载的线性相关程度</td></tr><tr><td>seat</td><td>-0.597</td><td>平均（而非最忙）纵环边负载</td></tr><tr><td>near_vpos</td><td>-0.386</td><td>本列直落的挂接点位置</td></tr><tr><td>gap</td><td>-0.366</td><td>0/1/2，即纵环上的三段</td></tr><tr><td>die</td><td>-0.314</td><td>计划里的假设。数值很小，说明<b>不是</b>按 die 编号排序</td></tr><tr><td>far_vpos</td><td>-0.314</td><td>换列后进入的挂接点位置</td></tr><tr><td>h_hops</td><td>-0.217</td><td>每个 core 都是一半近一半远，本来就<b>没有区分度</b></td></tr><tr><td>half</td><td>0.123</td><td>左半区(0) 还是右半区(1)</td></tr><tr><td>top_idx</td><td>0.032</td><td>core 在 top 环上的序号；top 环容量过剩，影响最小</td></tr></tbody></table>
 <div class="def"><b>为什么“top die 编号”这次没有解释力。</b>
 上一版拓扑里每个 die 在所有列上都从同一个纵向位置注入，
 位置优势在所有目的地上是<b>一致的</b>，因此能按 die 排序。
@@ -378,10 +517,10 @@ FIFO 全程满载，是真正的瓶颈，不是余量。
 对另外 4 列要换列后从远端横环进入，
 <b>一个 die 不再只有一个纵向位置</b>，
 优势在目的地之间被平均掉了——
-这就是 Spearman(die 编号, 带宽) 只有 -0.26 的原因。</div>
+这就是 Spearman(die 编号, 带宽) 只有 -0.3135 的原因。</div>
 <div class="def bad"><b>需要如实说明的一点：没有任何单一静态变量能解释这个失衡。</b>
 最强的预测变量是“要并入的最忙那条纵环边的负载”，
-Spearman = <b>-0.5099</b>——方向正确
+Spearman = <b>-0.703</b>——方向正确
 （要挤的边越忙、拿到的带宽越少），但<b>只是中等强度</b>。
 下面按 die 聚合的表里就能看到反例：
 die 5 的纵环边负载并不是最高的，带宽却最低。
@@ -393,24 +532,67 @@ die 5 的纵环边负载并不是最高的，带宽却最低。
 这也解释了为什么 §7 里所有<b>静态</b>的流控方案都收效有限。</div>
 
 <h3>6.1 按 die 聚合</h3>
-<table><thead><tr><th>top die</th><th>行间隙</th><th>挂接列</th><th>近/远横环</th><th>近/远注入 vpos</th><th>平均纵环边负载</th><th>core 数</th><th>带宽均值</th><th>最小</th><th>最大</th></tr></thead><tbody><tr><td>top die 0</td><td>0</td><td>左 0–3</td><td>H1 / H0</td><td>v2 / v1</td><td>1664.8</td><td>10</td><td><b>0.08691</b></td><td>0.0819</td><td>0.09483</td></tr><tr><td>top die 1</td><td>0</td><td>右 4–7</td><td>H0 / H1</td><td>v1 / v2</td><td>1435.2</td><td>10</td><td><b>0.08944</b></td><td>0.0819</td><td>0.09914</td></tr><tr><td>top die 2</td><td>1</td><td>左 0–3</td><td>H3 / H2</td><td>v9 / v8</td><td>1590.4</td><td>10</td><td><b>0.09655</b></td><td>0.07974</td><td>0.10776</td></tr><tr><td>top die 3</td><td>1</td><td>右 4–7</td><td>H2 / H3</td><td>v8 / v9</td><td>1410.5</td><td>10</td><td><b>0.09483</b></td><td>0.08836</td><td>0.1056</td></tr><tr><td>top die 4</td><td>2</td><td>左 0–3</td><td>H5 / H4</td><td>v16 / v15</td><td>1609.3</td><td>10</td><td><b>0.08912</b></td><td>0.0819</td><td>0.09914</td></tr><tr><td>top die 5</td><td>2</td><td>右 4–7</td><td>H4 / H5</td><td>v15 / v16</td><td>1632.3</td><td>10</td><td><b>0.0757</b></td><td>0.06681</td><td>0.08836</td></tr></tbody></table>
-<p class="note">最好的 die 2（0.09655）与最差的
-die 5（0.0757）相差 1.28 倍。
+<table><thead><tr><th>top die</th><th>行间隙</th><th>挂接列</th><th>近/远横环</th><th>近/远注入 vpos</th><th>平均纵环边负载</th><th>core 数</th><th>带宽均值</th><th>最小</th><th>最大</th></tr></thead><tbody><tr><td>top die 0</td><td>0</td><td>左 0–3</td><td>H1 / H0</td><td>v2 / v1</td><td>1664.8</td><td>10</td><td><b>0.09136</b></td><td>0.08521</td><td>0.09738</td></tr><tr><td>top die 1</td><td>0</td><td>右 4–7</td><td>H0 / H1</td><td>v1 / v2</td><td>1435.2</td><td>10</td><td><b>0.09617</b></td><td>0.08764</td><td>0.10956</td></tr><tr><td>top die 2</td><td>1</td><td>左 0–3</td><td>H3 / H2</td><td>v9 / v8</td><td>1590.4</td><td>10</td><td><b>0.09957</b></td><td>0.08034</td><td>0.12173</td></tr><tr><td>top die 3</td><td>1</td><td>右 4–7</td><td>H2 / H3</td><td>v8 / v9</td><td>1410.5</td><td>10</td><td><b>0.10657</b></td><td>0.09982</td><td>0.11929</td></tr><tr><td>top die 4</td><td>2</td><td>左 0–3</td><td>H5 / H4</td><td>v16 / v15</td><td>1609.3</td><td>10</td><td><b>0.08424</b></td><td>0.06817</td><td>0.09982</td></tr><tr><td>top die 5</td><td>2</td><td>右 4–7</td><td>H4 / H5</td><td>v15 / v16</td><td>1632.3</td><td>10</td><td><b>0.07931</b></td><td>0.0706</td><td>0.09738</td></tr></tbody></table>
+<p class="note">最好的 die 3（0.10657）与最差的
+die 5（0.07931）相差 1.34 倍。
 注意“平均纵环边负载”这一列并不与带宽单调对应，
 正是上面那段说的反例。</p>
 
+<h3>6.2 以 top die 为单位统计：失衡比按 core 看要严重得多</h3>
+<p>按 core 统计回答的是“有没有哪一个核被饿死”。
+但一个 core 不是可调度的单位，<b>一个 top die 才是</b>：
+它的 10 个 AI core 共用同一个 die 的环、同一个 8 个挂接点的组、
+同一套 8 个 D2D bridge。如果一个 die 的带宽不够，
+在这个 die 内部再怎么调度也补不回来。
+所以下表把每个 top die 的 10 个 core 合成一组：</p>
+<img src="stack_group.png" alt="按 top die 分组的写带宽">
+<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计</th><th>die 间<br>max/min<br>（按完成量）</th><th>die 间 Jain<br>（竞争窗口）</th><th>die 间<br>max/min</th><th>die 间 CoV</th><th>最差 die</th><th>Jain<br>（按 core）</th><th>最差 die 内部<br>的 Jain</th></tr></thead><tbody><tr><td>600</td><td>S0</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.001 / 0.048 / 0.010 / 0.047 / 0.001 / 0.051</td><td>0.158</td><td>88.33</td><td>0.9762</td><td>1.66</td><td>0.156</td><td>die 4</td><td>0.9094</td><td>0.8606</td></tr><tr><td>600</td><td>S1</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.002 / 0.048 / 0.004 / 0.047 / 0.001 / 0.051</td><td>0.152</td><td>66.25</td><td>0.9934</td><td>1.31</td><td>0.082</td><td>die 4</td><td>0.9334</td><td>0.8944</td></tr><tr><td>600</td><td>S16</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.001 / 0.048 / 0.010 / 0.047 / 0.001 / 0.051</td><td>0.158</td><td>88.33</td><td>0.9762</td><td>1.66</td><td>0.156</td><td>die 4</td><td>0.9094</td><td>0.8606</td></tr><tr><td>600</td><td>S17</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.001 / 0.046 / 0.011 / 0.044 / 0.011 / 0.048</td><td>0.161</td><td>66.25</td><td>0.9788</td><td>1.66</td><td>0.147</td><td>die 4</td><td>0.9185</td><td>0.8791</td></tr><tr><td>5</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>0.741 / 0.741 / 0.741 / 0.741 / 0.741 / 0.741</td><td>4.444</td><td>1.00</td><td>0.9903</td><td>1.34</td><td>0.099</td><td>die 5</td><td>0.9828</td><td>0.9863</td></tr><tr><td>5</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>0.741 / 0.741 / 0.741 / 0.741 / 0.741 / 0.741</td><td>4.444</td><td>1.00</td><td>0.9903</td><td>1.34</td><td>0.099</td><td>die 5</td><td>0.9828</td><td>0.9863</td></tr><tr><td>5</td><td>S16</td><td><b style="color:#16a34a">完成</b></td><td>0.741 / 0.741 / 0.741 / 0.741 / 0.741 / 0.741</td><td>4.444</td><td>1.00</td><td>0.9903</td><td>1.34</td><td>0.099</td><td>die 5</td><td>0.9828</td><td>0.9863</td></tr><tr><td>5</td><td>S17</td><td><b style="color:#16a34a">完成</b></td><td>0.726 / 0.726 / 0.726 / 0.726 / 0.726 / 0.726</td><td>4.359</td><td>1.00</td><td>0.9936</td><td>1.28</td><td>0.080</td><td>die 5</td><td>0.9882</td><td>0.9921</td></tr><tr><td>自适应</td><td>S18</td><td><b style="color:#16a34a">完成</b></td><td>0.635 / 0.635 / 0.635 / 0.635 / 0.635 / 0.635</td><td>3.810</td><td>1.00</td><td>0.9690</td><td>1.86</td><td>0.179</td><td>die 5</td><td>0.8558</td><td>0.8533</td></tr><tr><td>自适应</td><td>S19</td><td><b style="color:#16a34a">完成</b></td><td>0.608 / 0.608 / 0.608 / 0.608 / 0.608 / 0.608</td><td>3.645</td><td>1.00</td><td>0.9814</td><td>1.48</td><td>0.138</td><td>die 5</td><td>0.8223</td><td>0.7985</td></tr></tbody></table>
+<div class="def bad"><b>这是本次新增分析里最重要的一条。</b>
+在规定的 outstanding=600 下，按 core 看 Jain 是
+0.9094，听起来只是“略有不均”；
+但按 top die 看完成量，最快与最慢的 die 相差
+<b>88 倍</b>——
+die 0、die 2、die 4 几乎完全拿不到带宽，
+die 1、die 3、die 5 拿走了几乎全部吞吐。
+按 core 的 Jain 之所以看不出来，是因为崩溃时
+<b>每个 die 内部的核彼此都同样惨</b>
+（最差 die 内部的 Jain 仍有 0.8606），
+失衡整体落在 die 之间，而 Jain 对“少数组全灭”本来就不敏感。
+<b>换句话说，之前按 core 得到的“失衡温和”的印象，
+在真正该关心的粒度上是不成立的。</b></div>
+<div class="def"><b>被饿死的三个 die 完全对应列的左半区。</b>
+这不是巧合，而是 §6 那条机理在 die 粒度上的直接体现：
+一个 die 的远端流量要从<b>远端横环</b>并入纵环，
+而同一个行间隙里两个 die 的挂接点在纵环上一个在<b>上游</b>、
+一个在<b>下游</b>；“在环优先”意味着下游那个只能用上游剩下的槽。
+这个劣势对该 die 的<b>全部 8 列都是同向的</b>，
+所以它不会在目的地之间被平均掉，
+而是<b>整组 10 个 core 一起</b>受影响——
+这正是它在 die 粒度上放大、在 core 粒度上被稀释的原因。</div>
+<div class="def good"><b>好消息：把并发度调对之后，die 之间的失衡基本消失。</b>
+在 outstanding=5 上，die 间 max/min 从
+1.66 降到 1.34、
+die 间 Jain 0.9762 → 0.9903，
+每个 die 完成的事务数<b>完全相同</b>。
+也就是说 die 粒度上的巨大失衡<b>是拥塞崩溃的产物，不是拓扑的固有上限</b>：
+织物本身对六个 die 是对称的，只有在过载时它才把对称性交给了
+“谁在纵环上游”这条规则。
+残余的 die 间差异只体现在<b>谁先跑完</b>
+（各 die 完成时刻 2460 / 2518 / 2222 / 2140 / 2511 / 2640 cycle），
+不再体现在带宽上。</div>
+
 <h2>7　流控方案</h2>
-<table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>CoV</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,866</td><td>73.7%</td><td><b>0.99046</b></td><td>1.61</td><td>0.0981</td><td>2,537</td></tr><tr><td>S1 拥塞等级 AIMD</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,866</td><td>73.7%</td><td><b>0.99046</b></td><td>1.61</td><td>0.0981</td><td>2,537</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,866</td><td>73.7%</td><td><b>0.99046</b></td><td>1.61</td><td>0.0981</td><td>2,537</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,842</td><td>74.3%</td><td><b>0.99146</b></td><td>1.52</td><td>0.0928</td><td>2,463</td></tr></tbody></table>
+<table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>CoV</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,700</td><td>78.2%</td><td><b>0.98276</b></td><td>1.79</td><td>0.1325</td><td>4,030</td></tr><tr><td>S1 拥塞等级 AIMD</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,700</td><td>78.2%</td><td><b>0.98276</b></td><td>1.79</td><td>0.1325</td><td>4,030</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,700</td><td>78.2%</td><td><b>0.98276</b></td><td>1.79</td><td>0.1325</td><td>4,030</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,753</td><td>76.7%</td><td><b>0.98824</b></td><td>1.67</td><td>0.1091</td><td>4,065</td></tr></tbody></table>
 <img src="stack_schemes.png" alt="各方案每核带宽">
 
 <h3>7.1 S1：拥塞等级 + AIMD</h3>
 <p>每个节点统计本地拥塞等级，经<b>专用旁路总线</b>（不占 NoC）广播，
 源端按 AIMD 调整注入速率。
-实测它在 outstanding=4 下能跑，
-跨种子 Jain 均值 0.98313、最差 max/min
+实测它在 outstanding=5 下能跑，
+跨种子 Jain 均值 0.97796、最差 max/min
 2.08。
 代价是要一条覆盖全芯片、跨 die 的广播网
-（69,696 bit
+（66,528 bit
 广播总量），在 3D 堆叠里尤其贵。</p>
 
 <h3>7.2 S16：Homa 式接收端授权</h3>
@@ -418,7 +600,7 @@ die 5（0.0757）相差 1.28 倍。
 HA 按“最少服务优先”配额发放 DBIDResp，
 用 <code>overcommit</code> 控制同时在飞的授权数。
 好处是<b>不新增报文类型</b>，完全落在 CHI 语义内。</p>
-<table><thead><tr><th>overcommit</th><th>批次是否排空</th><th>makespan</th><th>Jain</th><th>max/min</th><th>授权峰值</th><th>HA 侧缓冲峰值(flit)</th><th>授权等待均值</th><th>网络时延 p99</th></tr></thead><tbody><tr><td>1</td><td><b style="color:#16a34a">完成</b></td><td>3,692</td><td><b>0.91359</b></td><td>4.55</td><td>1</td><td>4</td><td>132.9</td><td>1062</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>2,857</td><td><b>0.98523</b></td><td>1.92</td><td>2</td><td>8</td><td>74.3</td><td>559</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>2,820</td><td><b>0.99056</b></td><td>1.52</td><td>4</td><td>16</td><td>42.7</td><td>499</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td><b>0.99046</b></td><td>1.61</td><td>8</td><td>32</td><td>0.0</td><td>480</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td><b>0.99046</b></td><td>1.61</td><td>8</td><td>32</td><td>0.0</td><td>480</td></tr><tr><td>64</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td><b>0.99046</b></td><td>1.61</td><td>8</td><td>32</td><td>0.0</td><td>480</td></tr></tbody></table>
+<table><thead><tr><th>overcommit</th><th>批次是否排空</th><th>makespan</th><th>Jain</th><th>max/min</th><th>授权峰值</th><th>HA 侧缓冲峰值(flit)</th><th>授权等待均值</th><th>网络时延 p99</th></tr></thead><tbody><tr><td>1</td><td><b style="color:#16a34a">完成</b></td><td>3,558</td><td><b>0.85385</b></td><td>6.25</td><td>1</td><td>4</td><td>159.3</td><td>1379</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>2,954</td><td><b>0.97916</b></td><td>2.17</td><td>2</td><td>8</td><td>114.9</td><td>938</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>2,724</td><td><b>0.98612</b></td><td>1.72</td><td>4</td><td>16</td><td>74.3</td><td>725</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>2,775</td><td><b>0.98401</b></td><td>1.72</td><td>8</td><td>32</td><td>33.6</td><td>710</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td><b>0.98276</b></td><td>1.79</td><td>10</td><td>40</td><td>0.0</td><td>702</td></tr><tr><td>64</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td><b>0.98276</b></td><td>1.79</td><td>10</td><td>40</td><td>0.0</td><td>702</td></tr></tbody></table>
 <div class="def bad"><b>为什么在这个拓扑上不奏效。</b>
 S16 的控制点是 <b>HA 侧的授权发放</b>，
 而瓶颈是<b>纵环上的并入仲裁</b>——
@@ -436,39 +618,154 @@ outstanding 寄存器已经能做的事。</div>
 挂接点的转向 FIFO 连续被阻塞 <code>turn_patience</code> 拍之后，
 获得一次对在环流量的优先权，用一个 1 flit 的闩实现。
 这是唯一直接命中瓶颈机理的方案，也是最便宜的织物侧改动。</p>
-<table><thead><tr><th>turn_patience</th><th>批次是否排空</th><th>makespan</th><th>Jain</th><th>max/min</th><th>转向让行次数</th><th>被闩住的 flit·cycle</th><th>网络时延 p99</th></tr></thead><tbody><tr><td>0（等于基线）</td><td><b style="color:#16a34a">完成</b></td><td>2,866</td><td><b>0.99046</b></td><td>1.61</td><td>0</td><td>0</td><td>480</td></tr><tr><td>1</td><td><b style="color:#16a34a">完成</b></td><td>2,759</td><td><b>0.99031</b></td><td>1.56</td><td>8,336</td><td>1</td><td>472</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>2,854</td><td><b>0.99087</b></td><td>1.56</td><td>5,885</td><td>1</td><td>476</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>2,799</td><td><b>0.99033</b></td><td>1.52</td><td>2,806</td><td>1</td><td>474</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>2,842</td><td><b>0.99146</b></td><td>1.52</td><td>1,007</td><td>1</td><td>493</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>2,804</td><td><b>0.99065</b></td><td>1.56</td><td>263</td><td>1</td><td>489</td></tr></tbody></table>
+<table><thead><tr><th>turn_patience</th><th>批次是否排空</th><th>makespan</th><th>Jain</th><th>max/min</th><th>转向让行次数</th><th>被闩住的 flit·cycle</th><th>网络时延 p99</th></tr></thead><tbody><tr><td>0（等于基线）</td><td><b style="color:#16a34a">完成</b></td><td>2,700</td><td><b>0.98276</b></td><td>1.79</td><td>0</td><td>0</td><td>702</td></tr><tr><td>1</td><td><b style="color:#16a34a">完成</b></td><td>2,741</td><td><b>0.98753</b></td><td>1.72</td><td>13,764</td><td>1</td><td>738</td></tr><tr><td>2</td><td><b style="color:#16a34a">完成</b></td><td>2,715</td><td><b>0.98803</b></td><td>1.67</td><td>9,835</td><td>1</td><td>718</td></tr><tr><td>4</td><td><b style="color:#16a34a">完成</b></td><td>2,758</td><td><b>0.98458</b></td><td>1.85</td><td>6,088</td><td>1</td><td>661</td></tr><tr><td>8</td><td><b style="color:#16a34a">完成</b></td><td>2,753</td><td><b>0.98824</b></td><td>1.67</td><td>2,876</td><td>1</td><td>708</td></tr><tr><td>16</td><td><b style="color:#16a34a">完成</b></td><td>2,751</td><td><b>0.98671</b></td><td>1.82</td><td>892</td><td>1</td><td>690</td></tr></tbody></table>
 <div class="def"><b>实测结论要说清楚。</b>
 在单个种子上，patience=8 把 Jain 从
-0.99046 提到 0.99146，看起来是有效的；
+0.98276 提到 0.98824，看起来是有效的；
+（按 top die 的粒度上它的收益更清楚，见 §7.6）
 但跨 3 个种子它的均值是
-0.98198，相对基线 0.98313
+0.98176，相对基线 0.97796
 <b>并不构成稳定收益</b>。
 机理是对的，收益不稳定，因此本文<b>不</b>把它作为推荐方案；
 如果要继续做，方向是让让行的判据带上下游负载信息，
 而不只是本地饥饿计数。</div>
 
+<h3>7.4 为什么必须做动态流控：一个静态值伺候不了两个场景</h3>
+<p>到这里推荐值是一个<b>静态</b>数字（outstanding=2），
+它成立的前提是“负载形态不变”。这个前提要检验，因为 outstanding
+有<b>两个方向相反</b>的失效模式：
+配得太大，忙的时候拥塞崩溃；
+配得太小，闲的时候<b>盖不住往返时延</b>，core 只能空等 Comp。
+决定“静态值到底行不行”的，是这两个区间还有没有交集。
+下面把有流量的 core 数从 60 降到 10（只有一个 top die 在写），
+其余一切不变：</p>
+<img src="stack_scenario.png" alt="不同场景对 outstanding 的要求">
+<table><thead><tr><th>场景</th><th>有流量的<br>core 数</th><th>配置</th><th>排空</th><th>吞吐<br>txn/cycle</th><th>占该场景<br>最好静态值</th><th>实测收敛的<br>窗口范围</th><th>Jain<br>（按 core）</th><th>Jain<br>（按 die）</th></tr></thead><tbody><tr><td>all 6 dies</td><td>60</td><td>静态 oc=2</td><td><b style="color:#16a34a">完成</b></td><td>0.883</td><td>79.5%</td><td>—</td><td>0.9986</td><td>0.9997</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=3</td><td><b style="color:#16a34a">完成</b></td><td>1.070</td><td>96.3%</td><td>—</td><td>0.9952</td><td>0.9971</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=5</td><td><b style="color:#16a34a">完成</b></td><td>1.111</td><td>100.0%</td><td>—</td><td>0.9828</td><td>0.9903</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=8</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.111</td><td>10.0%</td><td>—</td><td>0.9883</td><td>0.9962</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=16</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.039</td><td>3.5%</td><td>—</td><td>0.9723</td><td>0.9908</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.041</td><td>3.7%</td><td>—</td><td>0.9725</td><td>0.9945</td></tr><tr><td>all 6 dies</td><td>60</td><td>静态 oc=600</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.040</td><td>3.6%</td><td>—</td><td>0.9094</td><td>0.9762</td></tr><tr><td>all 6 dies</td><td>60</td><td>S18 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.740</td><td>66.6%</td><td>2..21</td><td>0.8231</td><td>0.9728</td></tr><tr><td>all 6 dies</td><td>60</td><td>S18 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.952</td><td>85.7%</td><td>1..18</td><td>0.8558</td><td>0.9690</td></tr><tr><td>all 6 dies</td><td>60</td><td>S19 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.797</td><td>71.7%</td><td>1..18</td><td>0.8051</td><td>0.9857</td></tr><tr><td>all 6 dies</td><td>60</td><td>S19 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.911</td><td>82.0%</td><td>1..21</td><td>0.8223</td><td>0.9814</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=2</td><td><b style="color:#16a34a">完成</b></td><td>0.479</td><td>50.3%</td><td>—</td><td>0.9991</td><td>1.0000</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=3</td><td><b style="color:#16a34a">完成</b></td><td>0.674</td><td>70.8%</td><td>—</td><td>0.9988</td><td>0.9999</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=5</td><td><b style="color:#16a34a">完成</b></td><td>0.913</td><td>95.9%</td><td>—</td><td>0.9972</td><td>0.9987</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=8</td><td><b style="color:#16a34a">完成</b></td><td>0.952</td><td>100.0%</td><td>—</td><td>0.9814</td><td>0.9859</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=16</td><td><b style="color:#16a34a">完成</b></td><td>0.916</td><td>96.2%</td><td>—</td><td>0.9887</td><td>0.9914</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=32</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.049</td><td>5.1%</td><td>—</td><td>0.9881</td><td>0.9906</td></tr><tr><td>3 dies</td><td>30</td><td>静态 oc=600</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.046</td><td>4.8%</td><td>—</td><td>0.9698</td><td>0.9724</td></tr><tr><td>3 dies</td><td>30</td><td>S18 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.564</td><td>59.2%</td><td>2..18</td><td>0.9017</td><td>0.9922</td></tr><tr><td>3 dies</td><td>30</td><td>S18 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.677</td><td>71.1%</td><td>4..18</td><td>0.9327</td><td>0.9970</td></tr><tr><td>3 dies</td><td>30</td><td>S19 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.540</td><td>56.7%</td><td>2..17</td><td>0.9013</td><td>0.9900</td></tr><tr><td>3 dies</td><td>30</td><td>S19 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.688</td><td>72.3%</td><td>4..36</td><td>0.9266</td><td>0.9861</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=2</td><td><b style="color:#16a34a">完成</b></td><td>0.163</td><td>21.7%</td><td>—</td><td>0.9993</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=3</td><td><b style="color:#16a34a">完成</b></td><td>0.242</td><td>32.2%</td><td>—</td><td>0.9994</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=5</td><td><b style="color:#16a34a">完成</b></td><td>0.381</td><td>50.7%</td><td>—</td><td>0.9993</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=8</td><td><b style="color:#16a34a">完成</b></td><td>0.544</td><td>72.4%</td><td>—</td><td>0.9990</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=16</td><td><b style="color:#16a34a">完成</b></td><td>0.729</td><td>96.9%</td><td>—</td><td>0.9977</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=32</td><td><b style="color:#16a34a">完成</b></td><td>0.752</td><td>100.0%</td><td>—</td><td>0.9990</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>静态 oc=600</td><td><b style="color:#16a34a">完成</b></td><td>0.714</td><td>95.0%</td><td>—</td><td>0.9995</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>S18 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.232</td><td>30.8%</td><td>4..17</td><td>0.8898</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>S18 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.493</td><td>65.5%</td><td>10..32</td><td>0.9575</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>S19 slack=1.0</td><td><b style="color:#16a34a">完成</b></td><td>0.216</td><td>28.7%</td><td>3..18</td><td>0.8860</td><td>1.0000</td></tr><tr><td>1 die</td><td>10</td><td>S19 slack=2.0</td><td><b style="color:#16a34a">完成</b></td><td>0.452</td><td>60.1%</td><td>9..38</td><td>0.9644</td><td>1.0000</td></tr></tbody></table>
+<div class="def bad"><b>两个区间没有交集。</b>
+all 6 dies（60 个 core）最好的静态值是
+<b>oc=5</b>，再往上就崩溃；
+而 1 die（10 个 core）最好的静态值是
+<b>oc=32</b>——比前者高
+6 倍还多，
+因为此时织物空着，少量在途事务根本填不满往返时延。
+于是任何一个固定值都必然在某个场景上大幅让步：
+把全部场景放在一起看最差的那个，
+<b>最好的静态配置（oc=5）
+也只能拿到 50.7%</b>。
+这不是调参没调好，而是<b>被要求用一个数去满足两个互相排斥的约束</b>。
+这也正是“实际有效的 outstanding 需要动态控制”的直接证据。
+中间那档（30 个 core）最好的静态值是
+oc=8，
+正好落在两者之间——所以这不是两个特例，而是一条随负载移动的曲线。</div>
+<div class="def"><b>顺便纠正一个可能的误读：规定的 600 本身并不“错”。</b>
+在只有一个 top die 有流量时，
+outstanding=600 也能拿到该场景最好静态值的
+95.0%，
+批次照样排空——因为织物空着，多出来的额度根本用不上，
+也就不会互相阻塞。
+它<b>只在多个 die 同时满负荷写的时候才是灾难性的</b>
+（3.6%）。
+这恰恰说明问题的性质：<b>它不是一个取值选错了，
+而是“用一个固定取值”这件事本身在这里不成立。</b></div>
+
+<h3>7.5 S18：用往返时延自己找窗口（本文推荐的新方案）</h3>
+<p>既然要动态，就得先选一个反馈信号。RetryAck 看起来最现成，
+但 §5.5 已经说明它<b>来得太晚</b>：这个织物的瓶颈在环上的并入仲裁，
+HA 的跟踪表在被压垮之前<b>根本填不满</b>，
+所以只靠 RetryAck 的控制器会一路把窗口涨过悬崖。
+真正能反映织物拥塞的免费信号是<b>往返时延本身</b>：
+发起方本来就知道自己什么时候发出 REQ、什么时候收到 Comp。</p>
+<p>S18 的控制环完全落在发起方本地：</p>
+<ul>
+<li><b>测</b>：每笔写的往返时延；历史最小值 <code>rtt_min</code>
+就是这个 core 自己的“无拥塞基线”，
+它同时也<b>定义了窗口的下限</b>——要盖住往返，窗口不能比
+带宽时延积更小。</li>
+<li><b>判</b>：目标线 = <code>rtt_min × (1 + slack)</code>。
+低于它说明织物还有余量，高于它说明这个 core 正在为自己制造排队。</li>
+<li><b>调</b>：明显没拥塞时窗口<b>几何增长</b>（否则跨不过
+5→32 这个量级差就已经过了这一相），
+接近目标线时改为加性小步；越线则按超出比例回退；
+收到 RetryAck 直接<b>折半</b>。</li>
+</ul>
+<div class="def good"><b>实测：它自己走到了两个场景各自该在的位置。</b>
+同一套参数、<b>没有为任何场景重新配过</b>，
+S18（slack=2.0）的窗口在
+all 6 dies 收敛到 1~18
+（均值 8.6），
+在 1 die 收敛到 10~32
+（均值 16.8）——
+方向和量级都对上了实测的最好静态值（5 与 32）。
+跨场景的<b>下限</b>因此从最好静态值的
+50.7%
+提高到 <b>65.5%</b>。
+测到的 rtt_min 约 78 cycle，
+这也是“窗口不能太小”的定量依据。</div>
+<div class="def"><b>代价，以及要如实说明的两点。</b>
+每个 core 三个寄存器（窗口、rtt_min、累加器）
+外加每个在途表项一个时间戳——而重传超时本来就需要这个时间戳。
+<b>没有</b>广播总线（对比 S1 的
+66,528 bit 广播）、
+<b>没有</b>新报文类型、<b>不改</b>完成方。
+两点让步：
+其一，在<b>已知且不变</b>的负载上，调对的静态值仍然更好——
+all 6 dies 上 S18 只到最好静态值的
+85.7%，因为它要花时间收敛，
+而静态值一开始就在正确位置；
+其二，各 core 依自己的 rtt_min 独立决策，窗口会有差异
+（1~18），
+按 core 的 Jain 因此不如静态值
+（0.8558 vs 0.99866）。
+<b>所以 S18 的价值不是峰值，而是不会掉下悬崖、
+也不会在轻载时白扔一半带宽。</b></div>
+
+<h3>7.6 S19 = S18 + S17：两个问题分别用两个便宜的办法</h3>
+<p>S18 修的是“流量总量”，S17 修的是“谁先走”，两者互不干涉，
+可以直接叠加。这也刚好对上 §6.2：
+die 粒度的失衡来自挂接点的并入优先级，
+而这正是 S17 的作用点。</p>
+<div class="def good">在按 top die 的粒度上，叠加是有意义的：
+S19 把 die <b>之间</b>的 max/min 从 1.86 压到 1.48、die 间 Jain 从 0.9690 提到 0.9814，代价是完成时间长 4.5%（3,150 → 3,292 cycle）。
+<b>但要说清楚方向：这是把公平性从 die 内部挪到 die 之间，不是净增。</b>最差 die <b>内部</b>的 Jain 反而从 0.8533 掉到 0.7985——S17 让转向 FIFO 插队，受益的是被压住的那个挂接点整体，而同一个挂接点上先到的 core 因此更占优。所以只有当验收指标确实是按 die 时，这笔交换才划算。
+如果最终的验收指标是<b>按 top die</b> 的均衡（本次的要求就是如此），
+S19 是这份报告里代价最小、又同时覆盖两个失效模式的组合。</div>
+
 <h2>8　代价对比</h2>
-<table><thead><tr><th>方案</th><th>存储/逻辑代价</th><th>带宽代价</th><th>额外互连</th><th>运行时状态</th><th>评价</th></tr></thead><tbody><tr><td>S0 基线</td><td>0</td><td>0</td><td>无</td><td>无</td><td>已有 outstanding 计数器之外不加任何东西</td></tr><tr><td><b>把 outstanding 调到推荐值</b></td><td><b>0</b></td><td><b>0</b></td><td><b>无</b></td><td><b>无</b></td><td><b>改一个已经存在的配置寄存器，是本文唯一推荐的动作</b></td></tr><tr><td>S1 拥塞等级 AIMD</td><td>264 个节点各 1 个拥塞等级寄存器</td><td>69,696 bit 广播总量</td><td>专用旁路总线（不占 NoC）</td><td>每源平均 123.0 个受控节点</td><td>要一条覆盖全芯片的广播网，跨 die 还要过 D2D</td></tr><tr><td>S16 接收端授权</td><td>96 个 HA 各 1 套授权状态机 + 请求表</td><td>HA 侧缓冲峰值 32 flit</td><td>无额外网络</td><td>授权峰值 8</td><td>把 DBIDResp 当授权用，不新增报文类型</td></tr><tr><td>S17 挂接点转向仲裁</td><td>48 个挂接点各 1 个饥饿计数器 + 1 flit 闩</td><td>0</td><td>无</td><td>纯本地，无通信</td><td>最便宜的织物侧改动，但见下文的实测结论</td></tr></tbody></table>
-<div class="def good"><b>一句话建议。</b>
-在这个拓扑上，路由已经被 HA↔bridge 绑定钉死，不是可调项；
-转向 FIFO 深度不是瓶颈；三个流控方案都没有稳定收益。
-唯一既有效、又免费的动作是<b>把每 core 的 outstanding 从
-600 调到 2</b>：
+<table><thead><tr><th>方案</th><th>存储/逻辑代价</th><th>带宽代价</th><th>额外互连</th><th>运行时状态</th><th>评价</th></tr></thead><tbody><tr><td>S0 基线</td><td>0</td><td>0</td><td>无</td><td>无</td><td>已有 outstanding 计数器之外不加任何东西</td></tr><tr><td><b>把 outstanding 调到推荐值</b></td><td><b>0</b></td><td><b>0</b></td><td><b>无</b></td><td><b>无</b></td><td><b>改一个已有的配置寄存器；负载形态已知且不变时的首选</b></td></tr><tr><td>S1 拥塞等级 AIMD</td><td>264 个节点各 1 个拥塞等级寄存器</td><td>66,528 bit 广播总量</td><td>专用旁路总线（不占 NoC）</td><td>每源平均 123.0 个受控节点</td><td>要一条覆盖全芯片的广播网，跨 die 还要过 D2D</td></tr><tr><td>S16 接收端授权</td><td>96 个 HA 各 1 套授权状态机 + 请求表</td><td>HA 侧缓冲峰值 40 flit</td><td>无额外网络</td><td>授权峰值 10</td><td>把 DBIDResp 当授权用，不新增报文类型</td></tr><tr><td>S17 挂接点转向仲裁</td><td>48 个挂接点各 1 个饥饿计数器 + 1 flit 闩</td><td>0</td><td>无</td><td>纯本地，无通信</td><td>最便宜的织物侧改动，但见下文的实测结论</td></tr><tr><td>S18 时延驱动的自适应窗口（本文推荐）</td><td>60 个 core 各 3 个寄存器（窗口 / rtt_min / 累加器）+ 每个在途表项 1 个时间戳</td><td>0（复用已有的 Comp 时刻，不新增报文）</td><td>无</td><td>纯本地，只看自己的往返时延</td><td>唯一能同时应对满载崩溃与轻载欠载的方案；不改完成方</td></tr><tr><td>S19 = S18 + S17</td><td>上面两项之和</td><td>0</td><td>无</td><td>两处互不干涉</td><td>按 top die 粒度验收时代价最小的组合</td></tr></tbody></table>
+<div class="def good"><b>建议分两种情况，因为它们的最优解不同。</b>
+共同的前提：路由已被 HA↔bridge 绑定钉死，不是可调项；
+转向 FIFO 必须给够深度（§5.4）；
+S1 贵、S16 打不到痛点、S17 单独用收益不稳。
+<br><br>
+<b>其一，负载形态已知且基本不变</b>——直接把每 core 的 outstanding 从
+600 调到 2，代价为零：
 批次从“永远排不空”变成全部排空，
 吞吐 0.120 → 0.881 txn/cycle
 （<b>7 倍</b>），
-公平性 Jain 0.90943 → 0.99866、
-max/min 4.71 → 1.19。
-如果还有布线自由度，再顺手选 split 式的横环分工。</div>
+按 core 的 Jain 0.90943 → 0.99866、
+max/min 4.71 → 1.19，
+按 top die 的 max/min 1.66 →
+1.34。
+<br><br>
+<b>其二，负载形态会变（更接近真实场景）</b>——静态值不成立，
+因为满载的安全区间（≤5）与轻载的可用区间（≈32）
+<b>没有交集</b>（§7.4）。此时用 <b>S18</b>：
+每 core 三个寄存器，拿自己测到的往返时延当信号，
+不重配参数就能在两个场景各自收敛到正确的量级，
+跨场景下限从最好静态值的
+50.7%
+提高到 65.5%。
+如果验收指标是<b>按 top die</b> 的均衡，再叠加 S17 成为 S19（§7.6）。
+如果还有布线自由度，顺手选 split 式的横环分工。</div>
 
 <h2>9　复现</h2>
 <div class="def">
 <code>python3 utils/dse_stack_write_fair.py --k 50
---seeds 0 1 2 --oc-work 4</code><br>
+--seeds 0 1 2 --oc-work 5</code><br>
 <code>python3 utils/gen_stack_write_report.py</code><br>
 <code>python3 utils/verify_stack.py</code>（拓扑、守恒、方案不变量的回归检查）
 <br><br>
-仿真总耗时 1177 s。
+仿真总耗时 2316 s。
 所有崩溃判定都以“批次是否排空”为准，
 停滞检测阈值 6000 cycle。
 </div>

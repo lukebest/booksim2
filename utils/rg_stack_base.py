@@ -62,6 +62,10 @@ class StackBaseParams:
     t_ha_service: int = 0
     per_vc_srcq: bool = True        # WriteNoSnp needs REQ not to head-block DAT
     core_outstanding: int = CORE_OUTSTANDING_WR
+    # HA request-tracker entries. A completer that runs out of them cannot
+    # queue the request: CHI makes it reject with RetryAck and hand out a
+    # PCrdGrant later. 0 keeps the old unlimited-completer behaviour.
+    ha_pos_depth: int = 0
     turn_depth: int = 4             # ring -> ring transfer FIFO
     d2d_depth: int = 8              # die-crossing FIFO
     resv_ej: int = 1                # eject slots only an E-tagged flit may use
@@ -171,6 +175,27 @@ class StackBaseSim:
         self._n_txn_target = 0
         self._stash: dict[tuple, Flit] = {}
         self.core_outst: dict[int, int] = defaultdict(int)
+
+        # -- credit retry and its two consequences -------------------------
+        # `core_outst` counts every transaction the core cannot retire yet,
+        # including those parked waiting for a P-Credit. Those make no
+        # forward progress, so the *effective* concurrency is the difference.
+        self.ha_used: dict[int, int] = defaultdict(int)
+        self.pcrd_q: dict[int, deque[int]] = defaultdict(deque)
+        self.parked: set[int] = set()      # awaiting PCrdGrant
+        self._granted: set[int] = set()    # holds a P-Credit, will be accepted
+        self._counted: set[int] = set()    # already charged to core_outst
+        self.retry_by_core: dict[int, int] = defaultdict(int)
+        self._park_t0: dict[int, int] = {}
+        self.park_wait: list[int] = []
+        self._eff_sum = 0
+        self._nom_sum = 0
+        self._conc_samples = 0
+        # completion order per core, in units of the core's own issue rank,
+        # which is what makes reordering measurable
+        self._issue_rank: dict[int, int] = {}
+        self._issued: dict[int, int] = defaultdict(int)
+        self.compl_ranks: dict[int, list[int]] = defaultdict(list)
         self.hop_starts: list[int] = []
         self.fabric_hops: dict[str, int] = defaultdict(int)
         self.edge_load: dict[int, int] = defaultdict(int)
@@ -416,6 +441,8 @@ class StackBaseSim:
     def _may_inject(self, node: int, plane: int, f: Flit | None = None) -> bool:
         if f is None or f.kind != "req" or not self._is_core[f.src]:
             return True
+        if f.txn_id in self._counted:
+            return True          # re-send: already holds its slot
         if self._outst_full(f.src):
             self.st["n_outst_wait"] += 1
             self._deny_cause = "outstanding"
@@ -435,7 +462,16 @@ class StackBaseSim:
         # Batch latency is measured from the offer, which for a closed batch
         # is t=0 for every transaction and therefore mostly source backlog.
         # Network latency is measured from the cycle the REQ actually boards.
+        # A re-sent request is the same transaction, so it must not be charged
+        # to the outstanding budget twice, and its original injection time is
+        # the one that makes latency include the retry round trip.
+        if f.txn_id in self._counted:
+            self.st["n_req_resent"] = self.st.get("n_req_resent", 0) + 1
+            return
+        self._counted.add(f.txn_id)
         self.wr_tinj[f.txn_id] = self.t
+        self._issue_rank[f.txn_id] = self._issued[f.src]
+        self._issued[f.src] += 1
         if self.p.core_outstanding <= 0:
             return
         self.core_outst[f.src] += 1
@@ -475,6 +511,7 @@ class StackBaseSim:
 
     def step(self) -> None:
         self._ctrl_deliver()
+        self._sample_concurrency()
         t = self.t
         arrivals = self.arrivals.pop(t, [])
         self._land_now.clear()
@@ -653,6 +690,76 @@ class StackBaseSim:
 
     # -- CHI WriteNoSnp phases ---------------------------------------------
 
+    def _ha_take_credit(self, txn: Txn) -> bool:
+        """CHI credit check. False means the request was bounced with RetryAck.
+
+        A completer cannot silently queue a request it has no tracker entry
+        for. It answers RetryAck, remembers that it owes the requester a
+        P-Credit, and the requester parks the request until the PCrdGrant
+        arrives -- then re-sends it. That costs two RSP messages and a second
+        REQ traversal, and it reorders the request stream, because the bounced
+        request restarts behind requests that were issued after it.
+        """
+        d = self.p.ha_pos_depth
+        if d <= 0:
+            return True
+        if txn.txn_id in self._granted:
+            # arrived holding a P-Credit: acceptance is guaranteed and the
+            # entry was already reserved when the grant was sent
+            self._granted.discard(txn.txn_id)
+            return True
+        if self.ha_used[txn.ha] < d:
+            self.ha_used[txn.ha] += 1
+            return True
+        self.pcrd_q[txn.ha].append(txn.txn_id)
+        self.parked.add(txn.txn_id)
+        self._park_t0[txn.txn_id] = self.t
+        self.st["n_retry"] = self.st.get("n_retry", 0) + 1
+        self.retry_by_core[txn.core] += 1
+        self._on_retry(txn)
+        self._emit(txn, "retry", txn.ha, txn.core, 1,
+                   self.t + self.p.t_ha_service)
+        return False
+
+    def _ha_free_credit(self, txn: Txn) -> None:
+        """Release the tracker entry and hand it to the longest waiter."""
+        if self.p.ha_pos_depth <= 0:
+            return
+        self.ha_used[txn.ha] = max(0, self.ha_used[txn.ha] - 1)
+        q = self.pcrd_q[txn.ha]
+        if not q:
+            return
+        tid = q.popleft()
+        nxt = self.txn_by_id[tid]
+        self.ha_used[nxt.ha] += 1          # reserved for the grantee
+        self._granted.add(tid)
+        self.st["n_pcrd"] = self.st.get("n_pcrd", 0) + 1
+        self._emit(nxt, "pcrd", nxt.ha, nxt.core, 1,
+                   self.t + self.p.t_ha_service)
+
+    def _on_retry(self, txn: Txn) -> None:
+        """Hook at the completer: it just bounced this request."""
+        return
+
+    def _on_retry_at_requester(self, txn: Txn) -> None:
+        """Hook at the requester: its RetryAck arrived. Congestion signal."""
+        return
+
+    def _sample_concurrency(self) -> None:
+        """Nominal vs effective concurrency, once per cycle.
+
+        The outstanding register bounds the *nominal* count. What determines
+        whether a core can cover the round trip is the effective count: the
+        transactions actually moving, excluding those parked on a P-Credit.
+        """
+        nom = sum(self.core_outst.values())
+        parked = len(self.parked)
+        self._nom_sum += nom
+        self._eff_sum += nom - parked
+        self._conc_samples += 1
+        if parked > self.st.get("max_parked", 0):
+            self.st["max_parked"] = parked
+
     def _on_req_at_completer(self, txn: Txn) -> None:
         """Completer decides when to grant its write buffer.
 
@@ -660,6 +767,8 @@ class StackBaseSim:
         DBIDResp comes back. The baseline grants on arrival and throws the
         authority away; a receiver-driven scheme overrides this to pace it.
         """
+        if not self._ha_take_credit(txn):
+            return
         self._emit(txn, "dbid", txn.ha, txn.core, 1,
                    self.t + self.p.t_ha_service)
 
@@ -684,9 +793,21 @@ class StackBaseSim:
             if left == 0:
                 self._emit(txn, "comp", txn.ha, txn.core, 1,
                            self.t + self.p.t_ha_service)
+                self._ha_free_credit(txn)
                 self._on_write_data_complete(txn)
+        elif f.kind == "retry":
+            # The requester now learns it was bounced. This is the only
+            # congestion signal CHI already gives it, for free.
+            self._on_retry_at_requester(txn)
+        elif f.kind == "pcrd":
+            self.parked.discard(f.txn_id)
+            t0 = self._park_t0.pop(f.txn_id, None)
+            if t0 is not None:
+                self.park_wait.append(self.t - t0)
+            self._emit(txn, "req", txn.core, txn.ha, 1, self.t)
         else:                                    # Comp retires the txn
             self.st["n_txn_done"] += 1
+            self.compl_ranks[txn.core].append(self._issue_rank.get(f.txn_id, 0))
             self.txn_done.append((f.txn_id, self.t))
             self.resp_lat.append(self.t - self.wr_t0[f.txn_id])
             t_in = self.wr_tinj.get(f.txn_id)
@@ -696,6 +817,47 @@ class StackBaseSim:
                 self.core_outst[txn.core] = max(
                     0, self.core_outst[txn.core] - 1)
             self._on_txn_done(txn, f)
+
+    def _retry_stats(self) -> dict[str, Any]:
+        """Retry cost, the concurrency it wastes, and the reordering it causes.
+
+        Reordering is measured per core against that core's own issue order:
+        an inversion is a pair of its transactions that retired in the
+        opposite order to the one they were issued in. Normalising by the
+        number of pairs gives a 0..1 figure comparable across run lengths.
+        """
+        n = max(1, self._conc_samples)
+        inv = pairs = 0
+        worst = 0.0
+        for ranks in self.compl_ranks.values():
+            m = len(ranks)
+            if m < 2:
+                continue
+            bad = sum(1 for i in range(m) for j in range(i + 1, m)
+                      if ranks[j] < ranks[i])
+            tot = m * (m - 1) // 2
+            inv += bad
+            pairs += tot
+            worst = max(worst, bad / tot)
+        retries = self.st.get("n_retry", 0)
+        done = max(1, self.st["n_txn_done"])
+        pw = sorted(self.park_wait)
+        return {
+            "park_wait_mean": round(sum(pw) / len(pw), 1) if pw else 0,
+            "park_wait_p99": pw[min(len(pw) - 1, int(0.99 * len(pw)))]
+            if pw else 0,
+            "n_retry": retries,
+            "n_pcrd": self.st.get("n_pcrd", 0),
+            "n_req_resent": self.st.get("n_req_resent", 0),
+            "retry_per_txn": round(retries / done, 4),
+            "max_parked": self.st.get("max_parked", 0),
+            "nom_conc_mean": round(self._nom_sum / n, 2),
+            "eff_conc_mean": round(self._eff_sum / n, 2),
+            "eff_frac": round(self._eff_sum / max(1, self._nom_sum), 4),
+            "reorder": round(inv / max(1, pairs), 5),
+            "reorder_worst_core": round(worst, 5),
+            "retry_by_core": dict(sorted(self.retry_by_core.items())),
+        }
 
     # -- introspection ------------------------------------------------------
 
@@ -760,10 +922,17 @@ class StackBaseSim:
             out["net_p99"] = net[min(len(net) - 1, int(0.99 * len(net)))]
             out["net_mean"] = round(sum(net) / len(net), 1)
         out["core_outstanding"] = self.p.core_outstanding
+        out["ha_pos_depth"] = self.p.ha_pos_depth
+        out["retry"] = self._retry_stats()
         out["wr_inject_by_core"] = {c: list(v) for c, v
                                     in sorted(self.wr_inject_times.items())}
         out["wr_recv_by_ha"] = {h: len(v) for h, v
                                 in sorted(self.wr_recv_times.items())}
+        # Retired transactions per core. Unlike injection counts this is
+        # comparable between a run that drained and one that collapsed,
+        # because both are divided by the same makespan.
+        out["wr_done_by_core"] = {c: len(v) for c, v
+                                  in sorted(self.compl_ranks.items())}
         out["fifo"] = self.fifo_report()
         out["fabric"] = self.fabric_util(max(1, self.t))
         out["board_fail_by_src"] = {

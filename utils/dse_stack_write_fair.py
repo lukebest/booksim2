@@ -28,8 +28,10 @@ from typing import Any, Sequence
 
 from dse_ring2_write_fair import cov, fairness_stats, jain, pearson, spearman
 from rg_stack_base import StackBaseParams, StackBaseSim, run_batch
-from rg_stack_fc import (StackFairTurnSim, StackFcParams, StackFcSim,
-                         StackGrantParams, StackGrantSim, StackTurnParams)
+from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
+                         StackAdaptTurnSim, StackFairTurnSim,
+                         StackFcParams, StackFcSim, StackGrantParams,
+                         StackGrantSim, StackTurnParams)
 from rg_stack_topo import (GROUP_COLS, N_COLS, TOP_BRIDGES, V_LEN,
                            StackTopology, Txn, build_uniform_write)
 
@@ -62,7 +64,84 @@ def _sim(name: str, *, route: str, **kw) -> tuple[type, Any]:
         return StackGrantSim, StackGrantParams(**f)
     if name == "s17":
         return StackFairTurnSim, StackTurnParams(**f)
+    if name == "s18":
+        return StackAdaptSim, StackAdaptParams(**f)
+    if name == "s19":
+        return StackAdaptTurnSim, StackAdaptTurnParams(**f)
     raise ValueError(name)
+
+
+def group_stats(topo: StackTopology, inject_times: dict[int, list[int]],
+                done_by_core: dict[int, int] | None = None,
+                makespan: int = 0, m_wdata: int = M_WDATA) -> dict[str, Any]:
+    """Write bandwidth per top die, treating each die's 10 cores as one group.
+
+    A per-core number answers "is any single core starved". It is not the
+    number an integrator can act on, because a core is not a schedulable unit:
+    a top die is. Ten cores share one die's ring, one attach group and one set
+    of eight D2D bridges, so if a die is short of bandwidth the whole die is,
+    and no amount of scheduling inside it recovers the shortfall.
+
+    Both levels are reported because they can disagree, and the disagreement
+    is the interesting part: cores inside a die can be unfair to each other
+    while every die gets an equal share, or every core inside a die can be
+    treated identically while the dies themselves differ by a wide margin.
+    Only the second is a topology problem.
+    """
+    by_die: dict[int, list[int]] = defaultdict(list)
+    for c in inject_times:
+        by_die[topo.nodes[c].die].append(c)
+    dies = sorted(by_die)
+    if not dies:
+        return {}
+    finish = {c: (max(ts) if ts else 0) for c, ts in inject_times.items()}
+    # Same contention window as the per-core view: measure while every core
+    # still has work, so the shares are comparable.
+    t_fair = min(finish.values()) or 1
+    got = {d: sum(1 for c in by_die[d] for t in inject_times[c] if t <= t_fair)
+           for d in dies}
+    bw = {d: got[d] / t_fair for d in dies}
+    vals = [bw[d] for d in dies]
+    lo, hi = min(vals), max(vals)
+    mean = sum(vals) / len(vals)
+    var = sum((v - mean) ** 2 for v in vals) / len(vals)
+    # fairness among the cores *inside* each die, for the comparison above
+    inner = {}
+    for d in dies:
+        cv = [sum(1 for t in inject_times[c] if t <= t_fair)
+              for c in sorted(by_die[d])]
+        inner[str(d)] = round(jain(cv), 5)
+    # Retired write data per die over the whole run. This is the number to
+    # compare between schemes: a collapsed run gets a short contention
+    # window, which flatters its `bw_by_group`, but it cannot hide here.
+    gp: dict[int, float] = {}
+    gj = gmm = 0.0
+    if done_by_core and makespan > 0:
+        gp = {d: sum(done_by_core.get(c, 0) for c in by_die[d]) * m_wdata
+                 / makespan for d in dies}
+        gv = [gp[d] for d in dies]
+        gj = round(jain(gv), 5)
+        gmm = (round(max(gv) / min(gv), 4) if min(gv) > 0 else float("inf"))
+    return {
+        "n_groups": len(dies),
+        "cores_per_group": len(by_die[dies[0]]),
+        "goodput_by_group": {str(d): round(v, 5) for d, v in gp.items()},
+        "goodput_total": round(sum(gp.values()), 5),
+        "goodput_jain": gj,
+        "goodput_max_min": gmm,
+        "t_fair": t_fair,
+        "bw_by_group": {str(d): round(bw[d], 5) for d in dies},
+        "got_by_group": {str(d): got[d] for d in dies},
+        "finish_by_group": {str(d): max(finish[c] for c in by_die[d])
+                            for d in dies},
+        "jain": round(jain(vals), 5),
+        "max_min": round(hi / lo, 4) if lo > 0 else float("inf"),
+        "cov": round(var ** 0.5 / mean, 5) if mean else 0.0,
+        "best_group": max(dies, key=lambda d: bw[d]),
+        "worst_group": min(dies, key=lambda d: bw[d]),
+        "jain_within_group": inner,
+        "jain_within_worst": round(min(inner.values()), 5),
+    }
 
 
 def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
@@ -75,11 +154,14 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
     n_per_core = (len(txns) // max(1, len(topo.cores))) * M_WDATA
     r["fairness"] = fairness_stats(r["wr_inject_by_core"], r["makespan"],
                                    n_per_core)
+    r["group"] = group_stats(topo, r["wr_inject_by_core"],
+                             r.get("wr_done_by_core"), r["makespan"])
     r["scheme"] = name
     r["route"] = route
     r["wall_s"] = round(time.time() - t0, 1)
     r["max_core_outstanding"] = r.get("max_core_outstanding", 0)
     r.pop("wr_inject_by_core", None)
+    r.pop("wr_done_by_core", None)
     if not keep_trace and "fc" in r:
         r["fc"].pop("trace", None)
     return r
@@ -561,6 +643,236 @@ def saturation_scan(seed: int, ks: Sequence[int], oc: int) -> list[dict]:
     return out
 
 
+def retry_sweep(k: int, seed: int, depths: Sequence[int],
+                oc: int) -> list[dict[str, Any]]:
+    """What the completer's request tracker does to the effective concurrency.
+
+    A completer cannot queue a request it has no tracker entry for: CHI makes
+    it answer RetryAck and hand out a P-Credit later, and the requester holds
+    the request until then. So the outstanding register is an upper bound on
+    *nominal* concurrency, and the concurrency that actually covers the round
+    trip is smaller by however much is parked. This sweep varies the tracker
+    depth at a fixed nominal limit and reports both numbers, the parking time
+    that separates them, and what it costs in retry traffic.
+    """
+    out = []
+    topo = StackTopology(route_mode="bound")
+    txns = build_uniform_write(topo, k=k, seed=seed)
+    for d in depths:
+        r = run_scheme(topo, txns, "s0", route="bound", seed=seed,
+                       core_outstanding=oc, ha_pos_depth=d, stall_after=20_000)
+        q, f, g = r["retry"], r["fairness"], r["group"]
+        out.append({
+            "pos_depth": d, "outstanding": oc,
+            "completed": r["completed"], "makespan": r["makespan"],
+            "n_txn_done": r["n_txn_done"], "n_txn": len(txns),
+            "thr": round(r["n_txn_done"] / max(1, r["makespan"]), 4),
+            "n_retry": q["n_retry"], "n_req_resent": q["n_req_resent"],
+            "retry_per_txn": q["retry_per_txn"],
+            "nom_conc": q["nom_conc_mean"], "eff_conc": q["eff_conc_mean"],
+            "eff_frac": q["eff_frac"], "max_parked": q["max_parked"],
+            "park_mean": q["park_wait_mean"], "park_p99": q["park_wait_p99"],
+            "reorder": q["reorder"],
+            "jain": f.get("jain", 0.0), "max_min": f.get("max_min", 0.0),
+            "group_jain": g.get("jain", 0.0),
+            "group_max_min": g.get("max_min", 0.0),
+        })
+        print("      pos=%-4d %-8s done=%4d/%d retry=%-5d eff/nom=%.3f "
+              "park=%4.0f jain=%.4f" %
+              (d, "OK" if r["completed"] else "COLLAPSE", r["n_txn_done"],
+               len(txns), q["n_retry"], q["eff_frac"], q["park_wait_mean"],
+               f.get("jain", 0.0)), flush=True)
+    return out
+
+
+SCENARIOS: tuple[tuple[str, Any], ...] = (
+    ("all 6 dies", None),
+    ("3 dies", [0, 1, 2]),
+    ("1 die", [0]),
+)
+
+
+def scenario_scan(k: int, seed: int, ocs: Sequence[int],
+                  slacks: Sequence[float], pos_depth: int) -> dict[str, Any]:
+    """Is one configured outstanding limit ever right for every scenario?
+
+    The limit has two failure modes pulling in opposite directions. Set it
+    high and a busy fabric collapses; set it low and a quiet fabric cannot
+    keep enough writes in flight to cover the round trip, so the cores idle.
+    The question that decides whether dynamic control is worth its cost is
+    whether the safe range at full load still overlaps the useful range at
+    light load. This scan measures both ranges directly, then runs the
+    adaptive schemes over the same scenarios without retuning anything.
+    """
+    topo = StackTopology(route_mode="bound")
+    rows: list[dict[str, Any]] = []
+    best: dict[str, Any] = {}
+    for lbl, dies in SCENARIOS:
+        txns = build_uniform_write(topo, k=k, seed=seed, dies=dies)
+        for oc in ocs:
+            r = run_scheme(topo, txns, "s0", route="bound", seed=seed,
+                           core_outstanding=oc, ha_pos_depth=pos_depth,
+                           stall_after=20_000)
+            thr = round(r["n_txn_done"] / max(1, r["makespan"]), 4)
+            rows.append({
+                "scenario": lbl, "n_cores": len(txns) // k, "n_txn": len(txns),
+                "scheme": "s0", "outstanding": oc,
+                "completed": r["completed"], "thr": thr,
+                "makespan": r["makespan"],
+                "jain": r["fairness"].get("jain", 0.0),
+                "group_jain": r["group"].get("jain", 0.0),
+            })
+            if r["completed"] and thr > best.get(lbl, {}).get("thr", -1):
+                best[lbl] = {"outstanding": oc, "thr": thr}
+        print("      %-11s best static oc=%s at %.3f txn/cycle"
+              % (lbl, best.get(lbl, {}).get("outstanding"),
+                 best.get(lbl, {}).get("thr", 0)), flush=True)
+
+    for lbl, dies in SCENARIOS:
+        txns = build_uniform_write(topo, k=k, seed=seed, dies=dies)
+        bt = max(1e-9, best.get(lbl, {}).get("thr", 0.0))
+        for name in ("s18", "s19"):
+            for sl in slacks:
+                r = run_scheme(topo, txns, name, route="bound", seed=seed,
+                               core_outstanding=CORE_OUTSTANDING_WR,
+                               ha_pos_depth=pos_depth, rtt_slack=sl,
+                               keep_trace=True, stall_after=20_000)
+                thr = round(r["n_txn_done"] / max(1, r["makespan"]), 4)
+                fc = r.get("fc", {})
+                rows.append({
+                    "scenario": lbl, "n_cores": len(txns) // k,
+                    "n_txn": len(txns), "scheme": name, "outstanding": None,
+                    "rtt_slack": sl, "completed": r["completed"], "thr": thr,
+                    "makespan": r["makespan"],
+                    "rel_best": round(thr / bt, 4),
+                    "win_mean": fc.get("win_mean_final", 0.0),
+                    "win_lo": fc.get("win_min_final", 0.0),
+                    "win_hi": fc.get("win_max_final", 0.0),
+                    "rtt_min": fc.get("rtt_min_mean", 0.0),
+                    "n_win_cut": fc.get("n_win_cut", 0),
+                    "n_retry_cut": fc.get("n_retry_cut", 0),
+                    "jain": r["fairness"].get("jain", 0.0),
+                    "max_min": r["fairness"].get("max_min", 0.0),
+                    "group_jain": r["group"].get("jain", 0.0),
+                    "group_max_min": r["group"].get("max_min", 0.0),
+                })
+                print("      %-11s %s slack=%.1f thr=%.3f (%3.0f%% of best) "
+                      "win %.0f..%.0f" %
+                      (lbl, name, sl, thr, 100 * thr / bt,
+                       fc.get("win_min_final", 0), fc.get("win_max_final", 0)),
+                      flush=True)
+
+    # Worst relative throughput across scenarios: the number that decides
+    # whether a single configured value is defensible at all.
+    worst: dict[str, float] = {}
+    for oc in ocs:
+        vs = []
+        for lbl, _ in SCENARIOS:
+            bt = max(1e-9, best.get(lbl, {}).get("thr", 0.0))
+            hit = [r for r in rows if r["scenario"] == lbl
+                   and r["scheme"] == "s0" and r["outstanding"] == oc]
+            vs.append((hit[0]["thr"] / bt) if hit else 0.0)
+        worst[f"static_oc{oc}"] = round(min(vs), 4)
+    for name in ("s18", "s19"):
+        for sl in slacks:
+            vs = []
+            for lbl, _ in SCENARIOS:
+                hit = [r for r in rows if r["scenario"] == lbl
+                       and r["scheme"] == name and r.get("rtt_slack") == sl]
+                vs.append(hit[0]["rel_best"] if hit else 0.0)
+            worst[f"{name}_slack{sl}"] = round(min(vs), 4)
+    return {"rows": rows, "best_static": best, "worst_rel": worst,
+            "pos_depth": pos_depth, "k": k,
+            "scenarios": [s[0] for s in SCENARIOS]}
+
+
+def group_compare(topo: StackTopology, txns: Sequence[Txn], seed: int,
+                  ocs: Sequence[int], names: Sequence[str],
+                  pos_depth: int) -> list[dict[str, Any]]:
+    """Write bandwidth per top die, which is the unit an integrator owns.
+
+    Ten cores share one die's ring, one attach group and one set of bridges,
+    so a shortfall at that granularity cannot be scheduled away from inside
+    the die. This is also the granularity at which the fabric's asymmetry is
+    visible: the per-core spread mixes it with noise, while the per-die spread
+    is the same sign in every run.
+    """
+    out = []
+    seen: set[str] = set()
+    for oc in ocs:
+        for name in names:
+            kw: dict[str, Any] = {"core_outstanding": oc,
+                                  "ha_pos_depth": pos_depth}
+            if name in ("s18", "s19"):
+                # These set their own limit, so sweeping it would just repeat
+                # the same run under a different label.
+                if name in seen:
+                    continue
+                seen.add(name)
+                kw["core_outstanding"] = CORE_OUTSTANDING_WR
+                kw["rtt_slack"] = 2.0
+            r = run_scheme(topo, txns, name, route="bound", seed=seed,
+                           stall_after=20_000, **kw)
+            g, f = r["group"], r["fairness"]
+            out.append({
+                "outstanding": oc, "scheme": name,
+                "completed": r["completed"], "makespan": r["makespan"],
+                "n_txn_done": r["n_txn_done"],
+                "bw_by_group": g["bw_by_group"],
+                "goodput_by_group": g["goodput_by_group"],
+                "goodput_total": g["goodput_total"],
+                "goodput_jain": g["goodput_jain"],
+                "goodput_max_min": g["goodput_max_min"],
+                "finish_by_group": g["finish_by_group"],
+                "group_jain": g["jain"], "group_max_min": g["max_min"],
+                "group_cov": g["cov"],
+                "worst_group": g["worst_group"], "best_group": g["best_group"],
+                "jain_within_group": g["jain_within_group"],
+                "jain_within_worst": g["jain_within_worst"],
+                "core_jain": f.get("jain", 0.0),
+                "core_max_min": f.get("max_min", 0.0),
+            })
+            print("      oc=%-4d %-4s %-8s grp_jain=%.4f grp_mm=%5.2f "
+                  "gp_mm=%6.2f worst=die%s" %
+                  (oc, name, "OK" if r["completed"] else "COLLAPSE",
+                   g["jain"], g["max_min"], g["goodput_max_min"],
+                   g["worst_group"]), flush=True)
+    return out
+
+
+def binding_mod4(topo: StackTopology) -> dict[str, Any]:
+    """Check the bridge a die uses for a column is the one at (col mod 4).
+
+    A die's eight bridges land on its own four columns, twice: once on each
+    horizontal ring of its row gap. Reaching a column in the other half means
+    landing on the same position of the far ring and riding four columns
+    across. Either way the position within the group is the target column
+    modulo four, which is what makes the binding a wiring rule rather than a
+    table.
+    """
+    rows = []
+    ok = True
+    for die in range(topo.n_die):
+        cols = topo.die_cols(die)
+        near, far = topo.die_hrings(die)
+        for col in range(N_COLS):
+            idx = topo.ha_bridge(die, col)
+            j = TOP_BRIDGES.index(idx)
+            own = col in cols
+            good = (j % GROUP_COLS == col % GROUP_COLS
+                    and (j < GROUP_COLS) == own)
+            ok = ok and good
+            rows.append({
+                "die": die, "col": col, "bridge": idx, "pos": j,
+                "group_pos": j % GROUP_COLS, "col_mod4": col % GROUP_COLS,
+                "row": "near" if j < GROUP_COLS else "far",
+                "hring": near if own else far,
+                "in_own_half": own, "matches_mod4": good,
+            })
+    return {"holds": ok, "rows": rows, "group_cols": GROUP_COLS,
+            "n_checked": len(rows)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=50,
@@ -569,6 +881,8 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
     ap.add_argument("--oc-work", type=int, default=5,
                     help="workable per-core outstanding limit")
+    ap.add_argument("--pos-depth", type=int, default=32,
+                    help="HA request tracker entries; 0 = unlimited")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
 
@@ -579,7 +893,7 @@ def main() -> None:
             "k": args.k, "seed": args.seed, "seeds": args.seeds,
             "m_req": M_REQ, "m_rsp": M_RSP, "m_wdata": M_WDATA,
             "core_outstanding": CORE_OUTSTANDING_WR,
-            "oc_work": oc_work,
+            "oc_work": oc_work, "pos_depth": args.pos_depth,
             "fabric": dict(FABRIC),
             "route_label": ROUTE_LABEL,
         },
@@ -600,10 +914,11 @@ def main() -> None:
         "h_assign": topo0.h_assign,
     }
     blob["binding"] = binding_table(topo0)
+    blob["binding_mod4"] = binding_mod4(topo0)
     blob["v_profile"] = v_ring_profile(topo0, col=0)
     blob["v_profile_right"] = v_ring_profile(topo0, col=N_COLS - 1)
 
-    print("[1/9] routing comparison", flush=True)
+    print("[1/12] routing comparison", flush=True)
     blob["routing"] = routing_compare(args.k, args.seed)
     blob["hot_edges"] = {
         m: hot_edges(StackTopology(route_mode=m),
@@ -611,20 +926,20 @@ def main() -> None:
                                          k=args.k, seed=args.seed))
         for m in ("bound", "lat")}
 
-    print("[2/9] horizontal-ring assignment", flush=True)
+    print("[2/12] horizontal-ring assignment", flush=True)
     blob["hassign"] = hassign_compare(args.k, args.seed,
                                       (2, oc_work, 32, CORE_OUTSTANDING_WR))
 
-    print("[3/9] crossing-FIFO depth sweep", flush=True)
+    print("[3/12] crossing-FIFO depth sweep", flush=True)
     blob["fifo_sweep"] = fifo_sweep(args.k, args.seed, (4, 16, 64, 128),
                                     core_outstanding=oc_work)
 
-    print("[4/9] outstanding sweep", flush=True)
+    print("[4/12] outstanding sweep", flush=True)
     blob["oc_sweep"] = outstanding_sweep(
         args.k, args.seed,
         (2, 3, 4, 5, 6, 8, 16, 32, 128, CORE_OUTSTANDING_WR))
 
-    print("[5/9] schemes at the mandated and the workable concurrency",
+    print("[5/12] schemes at the mandated and the workable concurrency",
           flush=True)
     blob["schemes"] = {}
     topo = StackTopology(route_mode="bound")
@@ -635,7 +950,8 @@ def main() -> None:
                                "outstanding": oc}
         for name in ("s0", "s1", "s16", "s17"):
             r = run_scheme(topo, txns, name, route="bound", seed=args.seed,
-                           keep_trace=(name == "s1"), core_outstanding=oc)
+                           keep_trace=(name == "s1"), core_outstanding=oc,
+                           ha_pos_depth=args.pos_depth)
             r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
             per[name] = r
             f = r["fairness"]
@@ -646,13 +962,13 @@ def main() -> None:
                      "OK" if r["completed"] else "COLLAPSE"), flush=True)
         blob["schemes"][tag] = per
 
-    print("[6/9] root cause", flush=True)
+    print("[6/12] root cause", flush=True)
     seats = vseat_load(topo, txns)
     blob["root_cause"] = {
         tag: root_cause(topo, blob["schemes"][tag]["s0"], seats)
         for tag in ("mandated", "work")}
 
-    print("[7/9] scheme knob sweeps", flush=True)
+    print("[7/12] scheme knob sweeps", flush=True)
     blob["s16_sweep"] = oc_sweep_s16(topo, txns, "bound", args.seed,
                                      (1, 2, 4, 8, 16, 64),
                                      core_outstanding=oc_work)
@@ -660,14 +976,32 @@ def main() -> None:
                                        (0, 1, 2, 4, 8, 16),
                                        core_outstanding=oc_work)
 
-    print("[8/9] saturation: does the 600 limit ever bind?", flush=True)
+    print("[8/12] saturation: does the 600 limit ever bind?", flush=True)
     blob["saturation"] = saturation_scan(args.seed, (50, 100, 200),
                                         CORE_OUTSTANDING_WR)
 
-    print("[9/9] seed sweep", flush=True)
+    print("[9/12] seed sweep", flush=True)
     blob["seeds_bound"] = seed_sweep(args.k, args.seeds,
                                      ("s0", "s1", "s16", "s17"), "bound",
                                      core_outstanding=oc_work)
+
+    print("[10/12] completer retry: nominal vs effective outstanding",
+          flush=True)
+    blob["retry_sweep"] = retry_sweep(args.k, args.seed,
+                                      (0, 64, 32, 16, 8, 4, 2),
+                                      CORE_OUTSTANDING_WR)
+
+    print("[11/12] one limit for every scenario?", flush=True)
+    blob["scenario"] = scenario_scan(args.k, args.seed,
+                                     (2, 3, 5, 8, 16, 32,
+                                      CORE_OUTSTANDING_WR),
+                                     (1.0, 2.0), args.pos_depth)
+
+    print("[12/12] write bandwidth per top die", flush=True)
+    blob["group"] = group_compare(topo, txns, args.seed,
+                                  (CORE_OUTSTANDING_WR, oc_work),
+                                  ("s0", "s1", "s16", "s17", "s18", "s19"),
+                                  args.pos_depth)
 
     blob["meta"]["wall_s"] = round(time.time() - t_start, 1)
     out = Path(args.out)

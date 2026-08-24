@@ -17,8 +17,10 @@ if str(_UTILS) not in sys.path:
 
 from dse_ring2_write_fair import fairness_stats
 from rg_stack_base import StackBaseParams, StackBaseSim, run_batch
-from rg_stack_fc import (StackFairTurnSim, StackFcParams, StackFcSim,
-                         StackGrantParams, StackGrantSim, StackTurnParams)
+from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
+                         StackAdaptTurnSim, StackFairTurnSim, StackFcParams,
+                         StackFcSim, StackGrantParams, StackGrantSim,
+                         StackTurnParams)
 from rg_stack_topo import (ANY_PLANE, GROUP_COLS, H_PER_GAP, N_ATTACH,
                            N_COLS, N_HA, N_HRING, N_ROWS, N_TOP_DIE,
                            TOP_BRIDGES, TOP_N, V_LEN, StackTopology,
@@ -58,6 +60,8 @@ def _run(scheme: str = "s0", *, route: str = "bound", k: int = 12,
         "s1": (StackFcSim, StackFcParams),
         "s16": (StackGrantSim, StackGrantParams),
         "s17": (StackFairTurnSim, StackTurnParams),
+        "s18": (StackAdaptSim, StackAdaptParams),
+        "s19": (StackAdaptTurnSim, StackAdaptTurnParams),
     }[scheme]
     r = run_batch(topo, txns, params=params(**f), sim_cls=cls, seed=seed,
                   stall_after=20_000)
@@ -575,6 +579,197 @@ def _s9():
         f"split no longer more robust than stack at oc=6: {ok}"
     return (f"identical bound {bounds['split']}, yet at oc=6 split survives "
             f"{ok['split']}/3 seeds and stack only {ok['stack']}/3")
+
+
+@check("binding_follows_the_mod4_rule")
+def _b1():
+    """The bridge for a column is the one at (column mod 4) within its row.
+
+    This is the difference between a wiring rule and a lookup table. A die's
+    eight bridges cover its own four columns twice, once per horizontal ring
+    of its row gap; the near-ring one serves that column directly and the
+    far-ring one serves the column four across. Either way the position
+    inside the group of four is the target column modulo four.
+    """
+    t = StackTopology()
+    n = 0
+    for die in range(t.n_die):
+        cols = t.die_cols(die)
+        for col in range(N_COLS):
+            j = TOP_BRIDGES.index(t.ha_bridge(die, col))
+            assert j % GROUP_COLS == col % GROUP_COLS, (die, col, j)
+            assert (j < GROUP_COLS) == (col in cols), (die, col, j)
+            n += 1
+    assert n == t.n_die * N_COLS == 48, n
+    return f"all {n} (die, column) pairs use the bridge at (col mod 4)"
+
+
+@check("retry_costs_bandwidth_and_parks_outstanding")
+def _r1():
+    """A bounced request must cost real traffic and hold its slot idle.
+
+    If RetryAck were free the completer's limit would be a pure win. It is
+    not: the bounce and the credit are RSP messages, the request crosses the
+    network a second time, and while it waits it occupies the requester's
+    outstanding budget without a flit in flight. That gap between nominal and
+    effective concurrency is the thing worth measuring, so it must not be
+    silently zero.
+    """
+    _, _, deep = _run("s0", k=12, core_outstanding=OC_MANDATED,
+                      ha_pos_depth=0)
+    _, _, shal = _run("s0", k=12, core_outstanding=OC_MANDATED,
+                      ha_pos_depth=4)
+    assert deep["retry"]["n_retry"] == 0, deep["retry"]
+    assert deep["retry"]["eff_frac"] == 1.0, deep["retry"]
+    q = shal["retry"]
+    assert q["n_retry"] > 0, q
+    # every bounce is answered by a grant and a second REQ traversal
+    assert q["n_req_resent"] == q["n_pcrd"], q
+    assert q["n_pcrd"] <= q["n_retry"], q
+    assert q["eff_frac"] < 1.0, q
+    assert q["park_wait_mean"] > 0, q
+    return (f"pos=4: {q['n_retry']} bounces, {q['n_req_resent']} re-sends, "
+            f"effective concurrency {q['eff_frac']:.3f} of nominal, "
+            f"parked {q['park_wait_mean']:.0f} cycles on average")
+
+
+@check("shallow_completer_tracker_is_involuntary_admission_control")
+def _r2():
+    """A shallow tracker drains a batch that an unlimited one cannot.
+
+    Counter-intuitive but load-bearing for the report: the completer refusing
+    requests keeps them out of the fabric, which is the same service an
+    explicit window provides. If this ever stops holding, the report's
+    framing of RetryAck as involuntary admission control is wrong.
+    """
+    _, x, unl = _run("s0", k=50, core_outstanding=OC_MANDATED, ha_pos_depth=0)
+    _, _, shal = _run("s0", k=50, core_outstanding=OC_MANDATED, ha_pos_depth=4)
+    assert not unl["completed"], "unlimited completer should collapse here"
+    assert shal["completed"], "shallow tracker should drain the batch"
+    assert shal["fairness"]["jain"] > unl["fairness"]["jain"], \
+        (shal["fairness"]["jain"], unl["fairness"]["jain"])
+    return (f"unlimited: {unl['n_txn_done']}/{len(x)} done; pos=4: "
+            f"{shal['n_txn_done']}/{len(x)}, Jain "
+            f"{unl['fairness']['jain']:.4f} -> {shal['fairness']['jain']:.4f}")
+
+
+@check("no_single_static_outstanding_serves_both_loads")
+def _r3():
+    """The safe range at full load must not overlap the useful range light.
+
+    This is the premise the adaptive scheme rests on. Full load collapses
+    above a single-digit limit; a lightly loaded fabric needs far more than
+    that to cover the round trip. If the two ranges ever overlapped, a fixed
+    number would be defensible and S18 would not be worth its registers.
+    """
+    t = StackTopology(route_mode="bound")
+    full = build_uniform_write(t, k=50, seed=0)
+    light = build_uniform_write(t, k=50, seed=0, dies=[0])
+    assert len(light) * 6 == len(full), (len(light), len(full))
+
+    def thr(x, oc):
+        r = run_batch(t, x, params=StackBaseParams(
+            **{**FAB, "core_outstanding": oc, "ha_pos_depth": 32}),
+            sim_cls=StackBaseSim, seed=0, stall_after=20_000)
+        return r["n_txn_done"] / max(1, r["makespan"]), r["completed"]
+
+    f_lo, ok_lo = thr(full, 5)
+    f_hi, ok_hi = thr(full, 32)
+    l_lo, _ = thr(light, 5)
+    l_hi, _ = thr(light, 32)
+    assert ok_lo and not ok_hi, (ok_lo, ok_hi)
+    assert f_hi < 0.5 * f_lo, (f_lo, f_hi)      # high limit ruins full load
+    assert l_hi > 1.5 * l_lo, (l_lo, l_hi)      # low limit starves light load
+    return (f"full load: oc=5 {f_lo:.3f} drains, oc=32 {f_hi:.3f} collapses; "
+            f"light load: oc=5 only {l_lo:.3f} vs oc=32 {l_hi:.3f}")
+
+
+@check("s18_tracks_the_window_across_scenarios")
+def _r4():
+    """One parameter set, two loads, two different converged windows.
+
+    The claim is that the controller finds the concurrency instead of being
+    told it. The test of that is not the throughput it reaches but whether the
+    window it settles on moves with the load, in the right direction, without
+    anything being retuned.
+    """
+    t = StackTopology(route_mode="bound")
+    out = {}
+    for lbl, dies in (("full", None), ("light", [0])):
+        x = build_uniform_write(t, k=50, seed=0, dies=dies)
+        p = StackAdaptParams(**{**FAB, "core_outstanding": OC_MANDATED,
+                                "ha_pos_depth": 32, "rtt_slack": 2.0})
+        r = run_batch(t, x, params=p, sim_cls=StackAdaptSim, seed=0,
+                      stall_after=20_000)
+        out[lbl] = (r["fc"]["win_mean_final"], r["fc"]["win_max_final"],
+                    r["completed"],                     r["fc"]["rtt_min_mean"])
+    assert out["full"][2] and out["light"][2], out
+    assert out["light"][0] > 1.5 * out["full"][0], out
+    assert out["full"][3] > 0 and out["light"][3] > 0, out
+    return (f"window settles at {out['full'][0]:.1f} under full load and "
+            f"{out['light'][0]:.1f} under light load (peak "
+            f"{out['light'][1]:.0f}), rtt_min ~{out['full'][3]:.0f} cycles")
+
+
+@check("group_view_exposes_imbalance_the_core_view_hides")
+def _r5():
+    """Per-top-die grouping must be strictly more revealing than per-core.
+
+    Ten cores share a die's ring, attach group and bridges, so a die-level
+    shortfall cannot be scheduled away inside the die. Under collapse the
+    per-core Jain looks mild because every core of a starved die is equally
+    starved; the die-level ratio is what shows the real spread.
+    """
+    from dse_stack_write_fair import group_stats
+    t = StackTopology(route_mode="bound")
+    x = build_uniform_write(t, k=50, seed=0)
+    r = run_batch(t, x, params=StackBaseParams(
+        **{**FAB, "core_outstanding": OC_MANDATED, "ha_pos_depth": 32}),
+        sim_cls=StackBaseSim, seed=0, stall_after=20_000)
+    g = group_stats(t, r["wr_inject_by_core"], r["wr_done_by_core"],
+                    r["makespan"])
+    f = fairness_stats(r["wr_inject_by_core"], r["makespan"], 50 * 4)
+    assert not r["completed"], "this check needs the collapsed regime"
+    assert g["n_groups"] == 6 and g["cores_per_group"] == 10, g
+    # the die-level spread of retired work dwarfs the per-core Jain view
+    assert g["goodput_max_min"] > 10, g["goodput_max_min"]
+    assert f["jain"] > 0.85, f["jain"]
+    # and inside the worst die the cores are treated alike
+    assert g["jain_within_worst"] > 0.7, g["jain_within_worst"]
+    gp = g["goodput_by_group"]
+    lo = sorted(gp, key=lambda d: gp[d])[:3]
+    assert {int(d) % 2 for d in lo} == {0}, gp
+    return (f"per-core Jain {f['jain']:.4f} looks mild, yet die-level "
+            f"max/min is {g['goodput_max_min']:.0f}x and the three starved "
+            f"dies {sorted(int(d) for d in lo)} are all left-half")
+
+
+@check("admission_control_removes_the_group_imbalance")
+def _r6():
+    """Die-level unfairness is a collapse artefact, not a topology limit.
+
+    If it survived at a workable concurrency it would be a structural cap and
+    the fix would have to be in the fabric. It does not, so the fix is the
+    concurrency.
+    """
+    from dse_stack_write_fair import group_stats
+    t = StackTopology(route_mode="bound")
+    x = build_uniform_write(t, k=50, seed=0)
+    got = {}
+    for oc in (OC_MANDATED, OC_WORK):
+        r = run_batch(t, x, params=StackBaseParams(
+            **{**FAB, "core_outstanding": oc, "ha_pos_depth": 32}),
+            sim_cls=StackBaseSim, seed=0, stall_after=20_000)
+        got[oc] = group_stats(t, r["wr_inject_by_core"],
+                              r["wr_done_by_core"], r["makespan"])
+    bad, good = got[OC_MANDATED], got[OC_WORK]
+    assert bad["max_min"] > good["max_min"], (bad["max_min"],
+                                              good["max_min"])
+    assert good["max_min"] < 1.5, good["max_min"]
+    assert good["goodput_max_min"] == 1.0, good["goodput_max_min"]
+    return (f"die-level max/min {bad['max_min']:.2f} at oc={OC_MANDATED} "
+            f"falls to {good['max_min']:.2f} at oc={OC_WORK}, and every die "
+            f"retires the same amount")
 
 
 def main() -> None:

@@ -364,3 +364,199 @@ class StackFairTurnSim(StackBaseSim):
             "n_counters": len(self.turn_wait),
             "latch_flits": self.st["max_inring_hold"],
         }
+
+
+@dataclass
+class StackAdaptParams(StackBaseParams):
+    """S18: each core discovers its own outstanding limit at run time.
+
+    The setting a core wants is the bandwidth-delay product: enough writes in
+    flight to cover the round trip, and not one more. Too few and the core
+    idles waiting for Comp; too many and the surplus only lengthens queues,
+    which on this fabric means deflections, a fuller turn FIFO and -- once the
+    completers saturate -- RetryAcks that park requests without retiring them.
+    Neither end of that trade-off is knowable at design time, because the
+    round trip depends on what every other core is doing.
+
+    So the window is not configured, it is measured. The core already knows
+    when it issued each write and when Comp came back; the shortest round trip
+    it has ever seen is its uncongested baseline, and anything above that is
+    queueing it is itself paying for.
+    """
+
+    win_min: int = 1
+    win_max: int = 600
+    win_init: int = 4
+    # Queueing the core will tolerate before it backs off, as a fraction of
+    # its own best observed round trip. Larger keeps more in flight and finds
+    # more bandwidth; smaller holds latency down.
+    rtt_slack: float = 0.5
+    win_ai: float = 1.0        # additive step, once queueing is visible
+    win_mi: float = 2.0        # geometric step while clearly uncongested
+    # Fraction of the slack below which the fabric counts as uncongested and
+    # the window may grow geometrically.
+    slow_start_frac: float = 0.25
+    win_md: float = 0.5        # proportional back-off gain
+    md_max: float = 0.5        # cap on one back-off, so it cannot collapse
+    # A RetryAck is a hard signal from the completer rather than an inference,
+    # so it halves the window outright -- but only once per refractory period,
+    # or a burst of bounces would drive every core to the floor together.
+    retry_md: float = 0.5
+    refractory: int = 64
+    trace: bool = True
+
+
+class StackAdaptSim(StackBaseSim):
+    """S18: delay-driven adaptive outstanding, one window per core.
+
+    Control loop, entirely local to the requester:
+
+        measure     round trip from the cycle the REQ boards to the cycle Comp
+                    retires, per transaction. `rtt_min` is the running best.
+        decide      target = rtt_min * (1 + rtt_slack). Below target the
+                    fabric has room, above it the core is queueing.
+        act         below target, add `win_ai` per window of clean
+                    completions; above it, back off in proportion to the
+                    excess. A RetryAck halves the window immediately.
+
+    Cost: per core, a window register, an rtt_min register, an accumulator,
+    and the issue timestamp per outstanding entry that a retry timeout needs
+    anyway. No broadcast bus, no new packet type, no completer change, and
+    nothing to configure per scenario -- which is the point, since the right
+    concurrency differs between scenarios and even between phases of one.
+    """
+
+    def __init__(self, topo: StackTopology,
+                 params: StackAdaptParams | None = None, seed: int = 0):
+        self.pa = params or StackAdaptParams()
+        super().__init__(topo, self.pa, seed=seed)
+        self.win: dict[int, float] = defaultdict(
+            lambda: float(self.pa.win_init))
+        self.rtt_min: dict[int, int] = {}
+        self._acc: dict[int, float] = defaultdict(float)
+        self._last_cut: dict[int, int] = defaultdict(lambda: -10**9)
+        self.st["n_win_cut"] = 0
+        self.st["n_win_raise"] = 0
+        self.st["n_retry_cut"] = 0
+        self._win_sum = 0.0
+        self._win_n = 0
+        self._win_trace: list[tuple[int, float]] = []
+
+    def _clamp(self, core: int, w: float) -> None:
+        self.win[core] = min(float(self.pa.win_max),
+                             max(float(self.pa.win_min), w))
+
+    def _outst_full(self, core: int) -> bool:
+        return self.core_outst[core] >= max(1, int(self.win[core]))
+
+    def _on_retry_at_requester(self, txn: Txn) -> None:
+        c = txn.core
+        if self.t - self._last_cut[c] < self.pa.refractory:
+            return
+        self._last_cut[c] = self.t
+        self._clamp(c, self.win[c] * self.pa.retry_md)
+        self._acc[c] = 0.0
+        self.st["n_retry_cut"] += 1
+
+    def _on_txn_done(self, txn: Txn, last: Flit) -> None:
+        c = txn.core
+        t0 = self.wr_tinj.get(txn.txn_id)
+        if t0 is None:
+            return
+        rtt = self.t - t0
+        best = self.rtt_min.get(c)
+        if best is None or rtt < best:
+            self.rtt_min[c] = best = rtt
+        target = best * (1.0 + self.pa.rtt_slack)
+        if rtt <= target:
+            self._acc[c] += 1.0
+            if self._acc[c] >= max(1.0, self.win[c]):
+                self._acc[c] = 0.0
+                # Two regimes, for the same reason TCP has two. The right
+                # window differs between scenarios by more than an order of
+                # magnitude -- five when every die is writing, thirty-odd when
+                # one is -- and an additive ramp cannot cross that range
+                # before the phase it is measuring has ended. So while the
+                # round trip is still close to the uncongested baseline the
+                # window grows geometrically, and it only switches to the
+                # careful additive step once queueing starts to show.
+                if rtt <= best * (1.0 + self.pa.slow_start_frac
+                                  * self.pa.rtt_slack):
+                    self._clamp(c, self.win[c] * self.pa.win_mi)
+                else:
+                    self._clamp(c, self.win[c] + self.pa.win_ai)
+                self.st["n_win_raise"] += 1
+        else:
+            if self.t - self._last_cut[c] < self.pa.refractory:
+                return
+            self._last_cut[c] = self.t
+            excess = (rtt - target) / max(1, rtt)
+            factor = max(1.0 - self.pa.md_max,
+                         1.0 - self.pa.win_md * excess)
+            self._clamp(c, self.win[c] * factor)
+            self._acc[c] = 0.0
+            self.st["n_win_cut"] += 1
+
+    def _sample_concurrency(self) -> None:
+        super()._sample_concurrency()
+        if self.win:
+            m = sum(self.win.values()) / len(self.win)
+            self._win_sum += m
+            self._win_n += 1
+            if self.pa.trace and self.t % 100 == 0:
+                self._win_trace.append((self.t, round(m, 2)))
+
+    def fc_summary(self) -> dict[str, Any]:
+        wins = {c: round(v, 2) for c, v in sorted(self.win.items())}
+        vals = list(wins.values()) or [0.0]
+        rtts = list(self.rtt_min.values()) or [0]
+        return {
+            "mode": "s18",
+            "rtt_slack": self.pa.rtt_slack,
+            "win_init": self.pa.win_init,
+            "win_mean_final": round(sum(vals) / len(vals), 2),
+            "win_min_final": min(vals),
+            "win_max_final": max(vals),
+            "win_mean_overtime": round(self._win_sum / max(1, self._win_n), 2),
+            "rtt_min_mean": round(sum(rtts) / len(rtts), 1),
+            "rtt_min_lo": min(rtts),
+            "rtt_min_hi": max(rtts),
+            "n_win_cut": self.st["n_win_cut"],
+            "n_win_raise": self.st["n_win_raise"],
+            "n_retry_cut": self.st["n_retry_cut"],
+            "win_by_core": wins,
+            # window + rtt_min + accumulator per core; timestamps per
+            # outstanding entry are already needed for retry timeouts
+            "n_registers": 3 * len(wins),
+            "trace": self._win_trace,
+        }
+
+
+@dataclass
+class StackAdaptTurnParams(StackTurnParams, StackAdaptParams):
+    """S19 = S18 + S17. Two independent problems, two independent fixes."""
+
+
+class StackAdaptTurnSim(StackFairTurnSim, StackAdaptSim):
+    """S19: adaptive concurrency at the source, fair arbitration at the turn.
+
+    The two defects this fabric has are not the same defect, and neither fix
+    addresses the other. Too much concurrency causes collapse, and it is
+    fixed at the requester by sizing the window to the round trip. The
+    positional advantage of the upstream attach point causes per-core
+    unfairness, and it is fixed at the attach point by capping how long the
+    turn FIFO can be denied. Composing them costs the sum of two small costs
+    and there is no interaction to tune, because one acts on how much traffic
+    exists and the other on which flit goes first.
+    """
+
+    def __init__(self, topo: StackTopology,
+                 params: StackAdaptTurnParams | None = None, seed: int = 0):
+        super().__init__(topo, params or StackAdaptTurnParams(), seed=seed)
+
+    def fc_summary(self) -> dict[str, Any]:
+        out = StackAdaptSim.fc_summary(self)
+        out.update({k: v for k, v in StackFairTurnSim.fc_summary(self).items()
+                    if k != "mode"})
+        out["mode"] = "s19"
+        return out
