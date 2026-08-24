@@ -319,24 +319,35 @@ def plot_stability(b: dict, path: Path) -> None:
         axes[2].plot(xs, [r["jain_mean"] for r in sub], "-o", color=c,
                      ms=5, lw=1.5, label=name)
     axes[0].set_ylabel(f"排空的种子数（共 {nseed}）", fontsize=9)
-    axes[0].set_title("稳定性：悬崖在哪", fontsize=10.5)
+    axes[0].set_title("可靠性：能不能排空", fontsize=10.5)
     axes[0].set_ylim(-0.2, nseed + 0.3)
     axes[1].set_ylabel("txn/cycle（仅统计排空的运行）", fontsize=9)
     axes[1].set_title("吞吐", fontsize=10.5)
-    axes[2].set_ylabel("Jain 指数（3 种子均值）", fontsize=9)
+    axes[2].set_ylabel(f"Jain 指数（{nseed} 种子均值）", fontsize=9)
     axes[2].set_title("公平性", fontsize=10.5)
     axes[2].axhline(0.99, color="#2563eb", ls=":", lw=1.3)
     axes[2].text(max(r["outstanding"] for r in st), 0.9903,
                  "公平线 0.99", fontsize=7.8, ha="right", va="bottom",
                  color="#2563eb")
+    # everything to the right of this drains only on some seeds, so the
+    # throughput drawn there is survivor-biased and must not be read as a gain
+    edge = max((r["outstanding"] for r in st
+                if r["h_assign"] == "split"
+                and r["n_completed"] == r["n_runs"]), default=0)
+    hi = max(r["outstanding"] for r in st)
     rec = b["_rec"]["oc"]
     for ax in axes:
+        ax.axvspan(edge, hi, color="#fca5a5", alpha=0.20, zorder=0)
         ax.axvline(rec, color="#2563eb", ls="--", lw=1.2)
         ax.set_xlabel("每 core outstanding 上限", fontsize=9)
         ax.grid(alpha=0.25)
-        ax.legend(fontsize=8)
-    fig.suptitle("跨 %d 个随机种子扫并发度：蓝色虚线是本文推荐的 %d，"
-                 "它同时落在公平线之内和悬崖之内" % (nseed, rec),
+        ax.legend(fontsize=8, loc="best")
+    axes[1].text((edge + hi) / 2, min(r["thr_mean_ok"] for r in st
+                                      if r["n_completed"]),
+                 "红区：只有部分种子排空，\n这里的吞吐是“幸存者偏差”",
+                 fontsize=7.6, ha="center", va="bottom", color="#b91c1c")
+    fig.suptitle("跨 %d 个随机种子扫并发度：蓝色虚线是推荐的 %d；"
+                 "红色区域（>%d）已经无法保证排空" % (nseed, rec, edge),
                  fontsize=11.5)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
@@ -826,8 +837,10 @@ def main() -> None:
         if k not in b:
             raise SystemExit(f"missing {k} scan; run dse_stack_stability.py")
     need = b["depth"]["need"]
+    deepest = max(r["turn_depth"] for r in b["depth"]["rows"])
     need_txt = "；".join(
-        f"outstanding {k} 需要 {v} flit" if v else f"outstanding {k} 无解"
+        f"outstanding {k} 需要 {v} flit" if v
+        else f"outstanding {k} 需要 &gt;{deepest} flit"
         for k, v in sorted(need.items(), key=lambda kv: int(kv[0])))
 
     # The recommended limit is chosen from the cross-seed scan, not from the
@@ -842,9 +855,20 @@ def main() -> None:
     drain_ok = [r for r in split if r["n_completed"] == r["n_runs"]]
     rec = max(fair_ok, key=lambda r: r["outstanding"]) if fair_ok else \
         max(drain_ok, key=lambda r: r["outstanding"])
+    # The next step up usually misses the line only marginally while buying
+    # real throughput, so quote it rather than burying the trade-off.
+    alt = min((r for r in drain_ok if r["outstanding"] > rec["outstanding"]),
+              key=lambda r: r["outstanding"], default=None)
     fastest = max(drain_ok, key=lambda r: r["thr_mean_ok"])
-    cliff = min((r["outstanding"] for r in split if r["n_completed"] == 0),
-                default=None)
+    # With deterministic arbitration the boundary is a reliability edge rather
+    # than a hard wall: the first limit that fails on *some* seed, and then a
+    # region where draining is luck-dependent before it collapses outright.
+    flaky = min((r["outstanding"] for r in split
+                 if 0 < r["n_completed"] < r["n_runs"]), default=None)
+    dead = min((r["outstanding"] for r in split if r["n_completed"] == 0),
+               default=None)
+    edge_txt = (f"{flaky}（{len(st['seeds'])} 个种子里有的排空、有的不排空）"
+                if flaky else "扫描范围内未出现")
     b["_rec"] = {"oc": rec["outstanding"]}
 
     plot_topology(b, IMG / "stack_topology.png")
@@ -885,12 +909,25 @@ def main() -> None:
     f128 = next((r for r in b["fifo_sweep"] if r["turn_depth"] == 128), None)
 
     ha_rows = b["hassign"]
-    ha_split_ok = max((r["outstanding"] for r in ha_rows
-                       if r["h_assign"] == "split" and r["completed"]),
-                      default=0)
-    ha_stack_ok = max((r["outstanding"] for r in ha_rows
-                       if r["h_assign"] == "stack" and r["completed"]),
-                      default=0)
+
+    def _st(name):
+        return sorted((r for r in st["rows"] if r["h_assign"] == name),
+                      key=lambda r: r["outstanding"])
+
+    edge_split = max((r["outstanding"] for r in _st("split")
+                      if r["n_completed"] == r["n_runs"]), default=0)
+    # above the shared ceiling, compare how many seeds each still drains
+    degrade = [(r["outstanding"], r["n_completed"], o["n_completed"],
+                r["n_runs"])
+               for r, o in zip(_st("split"), _st("stack"))
+               if r["outstanding"] > edge_split]
+    degrade_txt = "，".join(
+        f"outstanding {oc} 时 split 还能排空 {a}/{n} 个种子、stack 只有 {c}/{n}"
+        for oc, a, c, n in degrade) or "扫描范围内没有可比的档位"
+    ha_j_split = next((r["jain_mean"] for r in _st("split")
+                       if r["outstanding"] == rec["outstanding"]), None)
+    ha_j_stack = next((r["jain_mean"] for r in _st("stack")
+                       if r["outstanding"] == rec["outstanding"]), None)
 
     # how far past the cliff the mandated setting sits
     over = oc_mand / max(1, worst_ok)
@@ -962,12 +999,14 @@ flit，共 {n_txn:,} 笔事务；每 core outstanding 上限
 <b>{m0['n_txn_done']:,} 笔（{100 * m0['n_txn_done'] / n_txn:.0f}%）</b>，
 批次根本排不空；把 S1、S16、S17 分别加上去，
 <b>四个方案全部崩溃</b>（§7）。
-实测的悬崖非常陡：跨 {len(st['seeds'])} 个种子，
+实测的边界很窄：跨 {len(st['seeds'])} 个种子，
 到 <b>outstanding = {max(r['outstanding'] for r in drain_ok)}</b>
 为止每个种子都能排空，
-而 <b>{cliff}</b> 就<b>一个种子都排不空</b>——
-中间没有缓慢劣化的过渡带。
-也就是说规定值比织物能承受的并发度高了约
+从 <b>{edge_txt}</b> 起就变成<b>时好时坏</b>，
+再往上（32、{oc_mand}）则每次都崩溃。
+可用区间的上沿就在个位数，
+而<b>能不能排空在边沿上取决于运气</b>，这本身就不能作为设计点。
+换算下来，规定值比织物能承受的并发度高了约
 <b>{oc_mand // max(1, max(r['outstanding'] for r in drain_ok))} 倍</b>——
 {t['n_cores']} 个 core × {oc_mand} =
 <b>{n_flight_mand:,}</b> 笔并发写，而整个 bottom die 的纵向织物
@@ -985,15 +1024,21 @@ outstanding 上限本来就是一个已有的配置寄存器，改它不花任�
 （达理论下界 <b>{_pct(rec['eff_mean_ok'])}</b>），
 Jain <b>{rec['jain_mean']}</b>，最差 max/min
 <b>{_f(rec['mm_worst'], 2)}</b>——
-<b>这是唯一同时满足公平线（Jain ≥ 0.99 且 max/min ≤ 1.5）的可用配置</b>。
-而且它几乎不牺牲吞吐：稳定区内的吞吐峰值在
+这是<b>唯一严格满足 §2 那条公平线（Jain ≥ 0.99 且 max/min ≤ 1.5）</b>
+的可用配置。
+代价要说清楚：稳定区内吞吐峰值在
 outstanding={fastest['outstanding']}（{fastest['thr_mean_ok']:.3f}
-txn/cycle），{rec['outstanding']} 已经拿到了它的
-<b>{_pct(rec['thr_mean_ok'] / fastest['thr_mean_ok'])}</b>，
-但峰值那一档的公平性是不达标的
+txn/cycle），{rec['outstanding']} 只拿到它的
+{_pct(rec['thr_mean_ok'] / fastest['thr_mean_ok'])}，
+而峰值那一档公平性不达标
 （Jain {fastest['jain_mean']}、max/min {_f(fastest['mm_worst'], 2)}）。
-换句话说，<b>把并发度从 {oc_mand} 压到 {rec['outstanding']}
-可以几乎免费地换到公平性</b>。</li>
+<b>如果愿意让一点公平性换吞吐，outstanding={alt['outstanding']}
+是更好的工程折中</b>：Jain {alt['jain_mean']} 仍在 0.99 以上，
+只是最差 max/min {_f(alt['mm_worst'], 2)} 略微越过 1.5 这条线，
+换来 {alt['thr_mean_ok']:.3f} txn/cycle
+（峰值的 {_pct(alt['thr_mean_ok'] / fastest['thr_mean_ok'])}，
+比 {rec['outstanding']} 高 {_pct(alt['thr_mean_ok'] / rec['thr_mean_ok'] - 1)}）。
+两者都比规定的 {oc_mand} 好几个数量级。</li>
 
 <li><b>路由在这个拓扑上不是可调项——目的地决定了一切。</b>
 每个 HA 与一个 D2D bridge 绑定：先确定去哪个 HA，就确定了走哪个 bridge，
@@ -1011,7 +1056,7 @@ txn/cycle），{rec['outstanding']} 已经拿到了它的
 
 <li><b>横环不再是闲置的余量，它承担了一半的流量。</b>
 挂接组是 2 横 × {t['group_cols']} 列，所以一个 top die 只直接覆盖
-<b>{t['group_cols']} 列中的 4 列</b>；
+<b>{t['n_cols']} 列中的 {t['group_cols']} 列</b>；
 去另外 4 列的写必须先在横环上走
 <b>{t['n_cols'] // 2} 跳</b>换列。
 每个 core 的目的地一半近一半远，
@@ -1041,16 +1086,18 @@ top 环上的位置只有 {rc['corr']['top_idx']}。
 但无法约化成一个静态位置变量</b>——
 这正是所有静态流控方案在这里收效有限的原因（§6、§7）。</li>
 
-<li><b>一个免费的拓扑选择：同一行间隙里两条横环怎么分工，会改变耐并发能力。</b>
+<li><b>一个免费的拓扑选择：同一行间隙里两条横环怎么分工，会改变越过上沿之后的劣化方式。</b>
 两种分配搬运的 flit·跳完全相同，<b>解析下界一模一样</b>
 （都是 {ha_rows[0]['bound']:,} cycle），
 所以任何静态分析都区分不出来。
-但实测差别明显：让两个 die 各用一条横环走远端流量（split）
-可以稳到 outstanding={ha_split_ok}，
-而两个 die 共用一条横环（stack）只能稳到 {ha_stack_ok}。
+实测两者<b>可靠上沿相同</b>（都到 outstanding={edge_split}），
+差别在越过上沿之后的<b>劣化方式</b>和<b>同并发度下的公平性</b>：
+{degrade_txt}；
+而在推荐点 outstanding={rec['outstanding']} 上，
+split 的 Jain 是 {ha_j_split}、stack 是 {ha_j_stack}。
 原因是前者让两个 die 在同一列上<b>落在不同的挂接点</b>，
 后者把它们挤到同一个挂接点上抢同一条出边。
-这条不花任何硬件，只是布线时的一个选择。</li>
+收益不大但不花任何硬件，只是布线时的一个选择。</li>
 
 <li><b>与上一版拓扑相反：转向 FIFO 深度这次是硬需求，而且它和并发度绑在一起。</b>
 计划把“横↔纵转向 FIFO 深 4 flit”列为风险项，这次它是对的：
@@ -1062,8 +1109,7 @@ top 环上的位置只有 {rc['corr']['top_idx']}。
 跨 {len(st['seeds'])} 个种子实测，
 在推荐并发度 {rec['outstanding']} 下只需要
 <b>{need.get(str(rec['outstanding']))} flit</b> 深，
-而并发度每往上一档，所需深度就翻一倍
-（{need_txt}）。
+而所需深度随并发度陡升（{need_txt}）。
 <b>把并发度压下来同时省了面积。</b></li>
 
 <li><b>三个流控方案的结论：S1 能跑但很贵，S16 打不到痛点，
@@ -1206,18 +1252,25 @@ core 还远没用到自己的额度，织物就已经塌了。
 <img src="stack_stability.png" alt="跨种子并发度扫描">
 {stability_table(b)}
 <div class="def good"><b>这是本文最实用的一张表。</b>
-悬崖极陡：{max(r['outstanding'] for r in drain_ok)} 全排空、
-{cliff} 全崩溃，中间没有过渡。
+可靠区的上沿是 {max(r['outstanding'] for r in drain_ok)}（全排空），
+{edge_txt} 起变成时好时坏，
+到 32 与 {oc_mand} 则每次都崩溃。
 但<b>“能排空”不等于“公平”</b>：
 到 {fastest['outstanding']} 时吞吐最高
 （{fastest['thr_mean_ok']:.3f} txn/cycle），
 Jain 却只有 {fastest['jain_mean']}、max/min {_f(fastest['mm_worst'], 2)}，
 达不到公平线。
-同时满足两者的最大并发度是 <b>{rec['outstanding']}</b>：
+严格满足两者的最大并发度是 <b>{rec['outstanding']}</b>：
 Jain {rec['jain_mean']}、max/min {_f(rec['mm_worst'], 2)}、
 吞吐 {rec['thr_mean_ok']:.3f} txn/cycle
 （峰值的 {_pct(rec['thr_mean_ok'] / fastest['thr_mean_ok'])}）。
-<b>这就是推荐值</b>，代价是一个已有寄存器的取值。</div>
+紧邻的 {alt['outstanding']} 只是 max/min
+（{_f(alt['mm_worst'], 2)}）刚刚越线，
+吞吐却高 {_pct(alt['thr_mean_ok'] / rec['thr_mean_ok'] - 1)}——
+<b>这条线画在 1.5 还是 1.6，决定推荐 {rec['outstanding']} 还是
+{alt['outstanding']}，所以两个数都列出来</b>，
+由能接受的最差核间差异来定。
+无论选哪个，代价都只是一个已有寄存器的取值。</div>
 
 <h3>5.2 各方案在推荐并发度附近的跨种子表现</h3>
 {seed_table(b, "seeds_bound")}
@@ -1231,9 +1284,10 @@ S1 的 AIMD 和 S16 的授权预算都<b>从不触发</b>，
 <img src="stack_hassign.png" alt="横环分配对比">
 {hassign_table(b)}
 <div class="def good">两种分配的<b>解析下界完全相同</b>，
-静态分析无法区分；但 split（两个 die 各用一条横环走远端流量）
+静态分析无法区分；实测可靠上沿也相同，
+但 split（两个 die 各用一条横环走远端流量）
 让它们在同一列上落在<b>不同</b>挂接点，
-耐并发能力比 stack 更好。
+越过上沿之后劣化得更慢（{degrade_txt}）。
 这提示一类只有仿真才能发现的设计点：
 <b>总量相同、分布不同</b>。</div>
 
@@ -1253,9 +1307,9 @@ FIFO 全程满载，是真正的瓶颈，不是余量。
 <div class="def good"><b>但它和并发度是同向的，不是权衡。</b>
 所需深度随并发度上升：{need_txt}。
 也就是说把 outstanding 压到 {rec['outstanding']} 不仅换来公平性，
-还把这 {t['n_attach']} 个挂接点上的缓冲需求
-从 {need.get(str(max(int(k) for k in need)))} flit 降到
-{need.get(str(rec['outstanding']))} flit。
+还把这 {t['n_attach']} 个挂接点上的缓冲需求降到
+<b>{need.get(str(rec['outstanding']))} flit</b>——
+而在 outstanding={max(int(k) for k in need)} 上连 {deepest} flit 都不够。
 <b>两个建议是同一个方向。</b></div>
 
 <h2>6　根因分析</h2>

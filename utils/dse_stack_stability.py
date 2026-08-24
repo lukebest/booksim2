@@ -126,19 +126,26 @@ def main() -> None:
     ap.add_argument("--depth-ocs", type=int, nargs="*", default=[3, 5])
     ap.add_argument("--depths", type=int, nargs="*",
                     default=[8, 16, 24, 32, 48, 64])
+    ap.add_argument("--skip-stability", action="store_true",
+                    help="reuse the existing cliff scan, redo only depths")
     ap.add_argument("--blob", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
 
-    print("concurrency cliff, per seed:")
-    rows = scan(args.k, args.seeds, args.ocs, "split")
-    rows += scan(args.k, args.seeds, args.ocs, "stack")
+    prev = json.loads(Path(args.blob).read_text()).get("stability", {})
+    if args.skip_stability and prev.get("rows"):
+        rows, safe = prev["rows"], prev["safe_oc"]
+        print("reusing the existing cliff scan:", safe)
+    else:
+        print("concurrency cliff, per seed:")
+        rows = scan(args.k, args.seeds, args.ocs, "split")
+        rows += scan(args.k, args.seeds, args.ocs, "stack")
 
-    safe = {}
-    for ha in ("split", "stack"):
-        ok = [r["outstanding"] for r in rows
-              if r["h_assign"] == ha and r["n_completed"] == r["n_runs"]]
-        safe[ha] = max(ok) if ok else 0
-    print(f"\nlargest limit that drains every seed: {safe}")
+        safe = {}
+        for ha in ("split", "stack"):
+            ok = [r["outstanding"] for r in rows
+                  if r["h_assign"] == ha and r["n_completed"] == r["n_runs"]]
+            safe[ha] = max(ok) if ok else 0
+        print(f"\nlargest limit that drains every seed: {safe}")
 
     print("\nturn-FIFO depth requirement vs concurrency:")
     depth = depth_scan(args.k, args.seeds, args.depth_ocs, args.depths)

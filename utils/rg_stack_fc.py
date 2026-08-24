@@ -334,7 +334,7 @@ class StackFairTurnSim(StackBaseSim):
         for key in list(self.active_xq):
             q = self.xq[key]
             if not q:
-                self.active_xq.discard(key)
+                self.active_xq.pop(key, None)
                 self.turn_wait.pop(key, None)
                 continue
             if self._launch(q[0], inring=False):
@@ -343,7 +343,7 @@ class StackFairTurnSim(StackBaseSim):
                 if key in self._yield_now:
                     self.st["n_turn_win"] += 1
                 if not q:
-                    self.active_xq.discard(key)
+                    self.active_xq.pop(key, None)
                     self.turn_wait.pop(key, None)
             else:
                 self.st["n_turn_board_fail"] += 1
