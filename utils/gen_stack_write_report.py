@@ -815,7 +815,7 @@ def setup_table(b: dict) -> str:
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
          f"burst {m.get('burst_len', 128)} B / stride {m.get('stride', 4096)} B / "
-         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 1)}",
+         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 10)}",
          "二维密铺：每行 stride/burst 笔，tile/stride 行。"
          f"128 B 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
     ]

@@ -126,6 +126,10 @@ class StackBaseSim:
 
         self.srcq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.pending: dict[Any, deque[Flit]] = defaultdict(deque)
+        # Flits that may try to inject now (P-Credit re-sends, WriteData,
+        # responses). Kept off `pending` so a full outstanding window does
+        # not scan thousands of waiting new REQs every cycle.
+        self.ready: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)   # (ring, vc)
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
@@ -309,9 +313,14 @@ class StackBaseSim:
 
     def _offer_flit(self, f: Flit) -> None:
         key = self._sk(f.src, f.plane, f.vc)
-        self.pending[key].append(f)
+        waiting = (f.kind == "req" and self._is_core[f.src]
+                   and f.txn_id not in self._counted)
+        if waiting:
+            self.pending[key].append(f)
+        else:
+            self.ready[key].append(f)
         self.st["max_pending"] = max(self.st["max_pending"],
-                                     len(self.pending[key]))
+                                     len(self.pending[key]) + len(self.ready[key]))
         self.active_src[(f.src, self._pk(f.src, f.plane))] = None
         self._admit(key)
 
@@ -330,7 +339,7 @@ class StackBaseSim:
                 and self._outst_full(f.src))
 
     def _admit(self, key: Any) -> None:
-        q, pend = self.srcq[key], self.pending[key]
+        q, pend, ready = self.srcq[key], self.pending[key], self.ready[key]
         # Evict new REQs that filled the window after they were admitted.
         if q and self._outst_blocked(q[0]):
             stuck = deque()
@@ -338,24 +347,18 @@ class StackBaseSim:
                 stuck.append(q.popleft())
             stuck.extend(pend)
             self.pending[key] = pend = stuck
-        # A P-Credit re-send already holds its outstanding slot. It must
-        # pass the rest of the closed batch (still waiting on a free
-        # slot) or the grant is delivered into a queue that never moves.
-        skipped = deque()
+        while ready and len(q) < self.p.inj_depth:
+            q.append(ready.popleft())
         while pend and len(q) < self.p.inj_depth:
-            f = pend.popleft()
-            if self._outst_blocked(f):
-                skipped.append(f)
-                continue
-            q.append(f)
-        if skipped:
-            skipped.extend(pend)
-            self.pending[key] = skipped
+            if self._outst_blocked(pend[0]):
+                break
+            q.append(pend.popleft())
         if q:
             self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
 
     def _src_idle(self, key: Any) -> bool:
-        return not self.srcq[key] and not self.pending[key]
+        return (not self.srcq[key] and not self.pending[key]
+                and not self.ready[key])
 
     def _clear_itag(self, node: int) -> None:
         """Drop leftover I-tags. A port with nothing injectable must not
@@ -701,7 +704,7 @@ class StackBaseSim:
             stalled = False
             for qk in qkeys:
                 self._admit(qk)
-                stalled = stalled or bool(self.pending[qk])
+                stalled = stalled or bool(self.pending[qk] or self.ready[qk])
             if stalled:
                 self.st["n_admit_stall"] += 1
             if not any(self.srcq[qk] for qk in qkeys):
@@ -710,7 +713,7 @@ class StackBaseSim:
                 # drop I-tag so a full window does not pin the ring.
                 self._clear_itag(node)
                 self.inj_starve[key] = 0
-                if not any(self.pending[qk] for qk in qkeys):
+                if not any(self.pending[qk] or self.ready[qk] for qk in qkeys):
                     self.active_src.pop(key, None)
                 continue
             qk, f, denied, idx = None, None, None, 0
@@ -950,7 +953,8 @@ class StackBaseSim:
 
     def backlog(self) -> int:
         return (sum(len(q) for q in self.srcq.values())
-                + sum(len(q) for q in self.pending.values()))
+                + sum(len(q) for q in self.pending.values())
+                + sum(len(q) for q in self.ready.values()))
 
     def done(self) -> bool:
         return (self._n_txn_target > 0

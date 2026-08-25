@@ -32,10 +32,10 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackAdaptTurnSim, StackFairTurnSim,
                          StackFcParams, StackFcSim, StackGrantParams,
                          StackGrantSim, StackTurnParams)
-from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, STRIDE,
-                           TILING_SIZE, TOP_BRIDGES, V_LEN, StackTopology,
-                           Txn, build_tiled_write, build_uniform_write,
-                           ha_histogram)
+from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
+                           TILING_SIZE, TOP_BRIDGES, TXN_PER_CORE, V_LEN,
+                           StackTopology, Txn, build_tiled_write,
+                           build_uniform_write, ha_histogram)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
 # Per-core write outstanding. Held from REQ inject to Comp retire.
@@ -939,7 +939,7 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     """
     oc = blob["meta"]["core_outstanding"]
     pos = args.pos_depth
-    n_tiles = getattr(args, "n_tiles", 1)
+    n_tiles = getattr(args, "n_tiles", N_TILES)
     txns = build_tiled_write(topo, n_tiles=n_tiles, seed=args.seed)
     hist = ha_histogram(topo, txns)
     bound = topo.write_bounds(txns, m_req=M_REQ, m_rsp=M_RSP, m_wdata=M_WDATA)
@@ -1014,8 +1014,9 @@ def main() -> None:
                     help="workable per-core outstanding limit")
     ap.add_argument("--pos-depth", type=int, default=HA_POS_DEPTH,
                     help="HA request tracker entries; 0 = unlimited")
-    ap.add_argument("--n-tiles", type=int, default=1,
-                    help="64 KB tiles per AI core")
+    ap.add_argument("--n-tiles", type=int, default=N_TILES,
+                    help=f"64 KB tiles per AI core (default {N_TILES} = "
+                         f"{TXN_PER_CORE} WriteNoSnp)")
     ap.add_argument("--focus", action="store_true",
                     help="S0/S1 time series at the configured outstanding")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
@@ -1036,6 +1037,7 @@ def main() -> None:
             "core_outstanding": CORE_OUTSTANDING_WR,
             "oc_work": oc_work, "pos_depth": args.pos_depth,
             "n_tiles": args.n_tiles,
+            "txn_per_core": args.n_tiles * (TILING_SIZE // BURST_LEN),
             "burst_len": BURST_LEN, "stride": STRIDE,
             "tiling_size": TILING_SIZE,
             "fabric": dict(FABRIC),

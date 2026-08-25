@@ -722,6 +722,9 @@ BURST_LEN = 128
 STRIDE = 4096
 TILING_SIZE = 64 * 1024
 FLIT_BYTES = 32          # 128 B burst -> 4 WriteData flits
+TXN_PER_TILE = TILING_SIZE // BURST_LEN   # 512 WriteNoSnp / 64 KB tile
+TXN_PER_CORE = 5120                       # 10 tiles
+N_TILES = TXN_PER_CORE // TXN_PER_TILE
 
 
 def ha_of_addr(topo: StackTopology, addr: int, *,
@@ -732,7 +735,7 @@ def ha_of_addr(topo: StackTopology, addr: int, *,
 
 
 def tiled_addrs(*, burst_len: int = BURST_LEN, stride: int = STRIDE,
-                tiling_size: int = TILING_SIZE, n_tiles: int = 1,
+                tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
                 base: int = 0) -> list[int]:
     """2-D dense tile: `tiling_size/stride` rows of `stride/burst_len` bursts."""
     if (stride % burst_len) or (tiling_size % stride):
@@ -748,7 +751,7 @@ def tiled_addrs(*, burst_len: int = BURST_LEN, stride: int = STRIDE,
 
 def build_tiled_write(topo: StackTopology, *,
                       burst_len: int = BURST_LEN, stride: int = STRIDE,
-                      tiling_size: int = TILING_SIZE, n_tiles: int = 1,
+                      tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
                       m_wdata: int | None = None, seed: int = 0,
                       dies: Sequence[int] | None = None) -> list[Txn]:
     """Each AI core writes `n_tiles` dense 64 KB tiles.
