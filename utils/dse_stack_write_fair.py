@@ -36,13 +36,21 @@ from rg_stack_topo import (GROUP_COLS, N_COLS, TOP_BRIDGES, V_LEN,
                            StackTopology, Txn, build_uniform_write)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
-CORE_OUTSTANDING_WR = 600
+# Filled in main() from the topology: one outstanding slot is held from REQ
+# inject to Comp retire, so the register is sized to the longest write RTT.
+CORE_OUTSTANDING_WR = 0
+# CHI request-tracker entries per HA. A completer that runs out answers
+# RetryAck rather than silently queueing. 16 is deep enough that the fabric
+# still drains at the RTT-sized window, and shallow enough that the retry
+# path is actually taken under the uniform write load.
+HA_POS_DEPTH = 16
+BW_WINDOW = 50
 
 # The crossing FIFOs are the one place strict bufferlessness does not hold,
-# so their depth is a hardware cost that has to be stated, not assumed. The
-# sweep below shows depth 4 -- the value the plan guessed -- livelocks.
+# so their depth is a hardware cost that has to be stated, not assumed.
 FABRIC = dict(turn_depth=64, d2d_depth=128,
               core_outstanding=CORE_OUTSTANDING_WR,
+              ha_pos_depth=HA_POS_DEPTH,
               inj_depth=8, eject_depth=4, eject_bw=1, per_vc_srcq=True)
 
 ROUTE_LABEL = {
@@ -144,6 +152,36 @@ def group_stats(topo: StackTopology, inject_times: dict[int, list[int]],
     }
 
 
+def group_bw_series(topo: StackTopology, inject_times: dict[int, list[int]],
+                    window: int = BW_WINDOW, makespan: int = 0
+                    ) -> dict[str, Any]:
+    """Write bandwidth vs time, one series per top-die group.
+
+    Each point is WriteData flits boarded by that die's 10 cores in a
+    `window`-cycle bin, divided by the window -- so the y-axis is flit/cycle
+    and the integral is the completed write traffic.
+    """
+    by_die: dict[int, list[int]] = defaultdict(list)
+    for c, ts in inject_times.items():
+        by_die[topo.nodes[int(c)].die].extend(ts)
+    last = makespan or 0
+    for ts in inject_times.values():
+        if ts:
+            last = max(last, max(ts))
+    nwin = max(1, (last + window) // window)
+    series: dict[str, list[float]] = {}
+    for d in sorted(by_die):
+        hist = [0] * nwin
+        for t in by_die[d]:
+            hist[min(max(0, t // window), nwin - 1)] += 1
+        series[str(d)] = [round(c / window, 5) for c in hist]
+    return {
+        "window": window, "n_windows": nwin, "makespan": last,
+        "t": [i * window for i in range(nwin)],
+        "bw_by_group": series,
+    }
+
+
 def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                route: str, seed: int = 0, keep_trace: bool = False,
                stall_after: int = 6_000, **kw) -> dict[str, Any]:
@@ -160,6 +198,8 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
     r["route"] = route
     r["wall_s"] = round(time.time() - t0, 1)
     r["max_core_outstanding"] = r.get("max_core_outstanding", 0)
+    r["bw_series"] = group_bw_series(topo, r["wr_inject_by_core"],
+                                     window=BW_WINDOW, makespan=r["makespan"])
     r.pop("wr_inject_by_core", None)
     r.pop("wr_done_by_core", None)
     if not keep_trace and "fc" in r:
@@ -873,18 +913,91 @@ def binding_mod4(topo: StackTopology) -> dict[str, Any]:
             "n_checked": len(rows)}
 
 
+def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
+    """The operating point the hardware now specifies.
+
+    Workload is 800 WriteNoSnp per AI core (closed batch). Outstanding is
+    the longest uncongested write RTT -- that is how many of those 800 may
+    be in flight, not how many exist. S0 has no source-side rate control:
+    a core issues whenever it has an outstanding slot and the ring has a
+    free hop. S1 adds AIMD on top of the same two conditions. Every HA
+    retries once its request tracker fills.
+    """
+    oc = blob["meta"]["core_outstanding"]
+    pos = args.pos_depth
+    txns = build_uniform_write(topo, k=args.k, seed=args.seed)
+    bound = topo.write_bounds(txns, m_req=M_REQ, m_rsp=M_RSP, m_wdata=M_WDATA)
+    per: dict[str, Any] = {"bounds": bound, "n_txn": len(txns),
+                           "outstanding": oc, "pos_depth": pos}
+    series: dict[str, Any] = {}
+    # A 20k-cycle stall window was sized for the k=50 smoke run. At 800
+    # writes/core the batch is long enough that a retry valley can sit
+    # idle for longer than that without being dead.
+    stall = max(80_000, 100 * args.k)
+    print(f"[focus] outstanding={oc} (max write RTT)  HA POS={pos}  "
+          f"k={args.k}  ntxn={len(txns)}  stall_after={stall}", flush=True)
+    names = ("s0", "s1")
+    for name in names:
+        r = run_scheme(topo, txns, name, route="bound", seed=args.seed,
+                       keep_trace=(name == "s1"), core_outstanding=oc,
+                       ha_pos_depth=pos, stall_after=stall)
+        r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
+        per[name] = r
+        series[name] = r.get("bw_series", {})
+        f, g, q = r["fairness"], r["group"], r.get("retry", {})
+        print("      %-4s %-8s t=%6d done=%d/%d jain=%.4f "
+              "grp_jain=%.4f gp_mm=%.2f retry=%d"
+              % (name, "OK" if r["completed"] else "COLLAPSE",
+                 r["makespan"], r["n_txn_done"], len(txns),
+                 f.get("jain", 0), g.get("jain", 0),
+                 g.get("goodput_max_min", 0), q.get("n_retry", 0)),
+              flush=True)
+    blob["schemes"] = {"mandated": per, "work": per}
+    blob["group_series"] = series
+    blob["group"] = [{
+        "outstanding": oc, "scheme": name,
+        "completed": per[name]["completed"],
+        "makespan": per[name]["makespan"],
+        "n_txn_done": per[name]["n_txn_done"],
+        **{k: per[name]["group"][k] for k in (
+            "bw_by_group", "goodput_by_group", "goodput_total",
+            "goodput_jain", "goodput_max_min", "finish_by_group",
+            "worst_group", "best_group", "jain_within_group",
+            "jain_within_worst") if k in per[name]["group"]},
+        "group_jain": per[name]["group"].get("jain", 0),
+        "group_max_min": per[name]["group"].get("max_min", 0),
+        "group_cov": per[name]["group"].get("cov", 0),
+        "core_jain": per[name]["fairness"].get("jain", 0),
+        "core_max_min": per[name]["fairness"].get("max_min", 0),
+    } for name in names]
+    seats = vseat_load(topo, txns)
+    blob["root_cause"] = {"mandated": root_cause(topo, per["s0"], seats),
+                          "work": root_cause(topo, per["s0"], seats)}
+    print("[focus] routing comparison", flush=True)
+    blob["routing"] = routing_compare(args.k, args.seed)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--k", type=int, default=50,
-                    help="write transactions per AI core")
+    ap.add_argument("--k", type=int, default=800,
+                    help="write requests per AI core (closed-batch workload)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
     ap.add_argument("--oc-work", type=int, default=5,
                     help="workable per-core outstanding limit")
-    ap.add_argument("--pos-depth", type=int, default=32,
+    ap.add_argument("--pos-depth", type=int, default=HA_POS_DEPTH,
                     help="HA request tracker entries; 0 = unlimited")
+    ap.add_argument("--focus", action="store_true",
+                    help="RTT-sized outstanding + HA retry + S0/S1 time series")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
+
+    topo0 = StackTopology()
+    rtt = topo0.max_write_rtt(m_wdata=M_WDATA)
+    global CORE_OUTSTANDING_WR
+    CORE_OUTSTANDING_WR = rtt["outstanding"]
+    FABRIC["core_outstanding"] = CORE_OUTSTANDING_WR
+    FABRIC["ha_pos_depth"] = args.pos_depth
 
     oc_work = args.oc_work
     t_start = time.time()
@@ -896,10 +1009,9 @@ def main() -> None:
             "oc_work": oc_work, "pos_depth": args.pos_depth,
             "fabric": dict(FABRIC),
             "route_label": ROUTE_LABEL,
+            "rtt": rtt,
         },
     }
-
-    topo0 = StackTopology()
     blob["topology"] = {
         "n_nodes": topo0.n, "n_die": topo0.n_die,
         "n_cores": len(topo0.cores), "n_has": len(topo0.has),
@@ -909,14 +1021,26 @@ def main() -> None:
         "directed_links": topo0.directed_links,
         "capacity": topo0.capacity(),
         "top_link_lats": list(topo0.top_link_lats),
+        "h_hop_lat": topo0.h_hop_lat, "v_hop_lat": topo0.v_hop_lat,
         "bot_hop_lat": topo0.bot_hop_lat, "d2d_lat": topo0.d2d_lat,
+        "turn_lat": topo0.turn_lat,
         "vcs": list(topo0.vcs),
         "h_assign": topo0.h_assign,
+        "rtt": rtt,
     }
     blob["binding"] = binding_table(topo0)
     blob["binding_mod4"] = binding_mod4(topo0)
     blob["v_profile"] = v_ring_profile(topo0, col=0)
     blob["v_profile_right"] = v_ring_profile(topo0, col=N_COLS - 1)
+
+    if args.focus:
+        _run_focus(blob, topo0, args)
+        blob["meta"]["wall_s"] = round(time.time() - t_start, 1)
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(blob, indent=1))
+        print(f"wrote {out}  ({blob['meta']['wall_s']}s)")
+        return
 
     print("[1/12] routing comparison", flush=True)
     blob["routing"] = routing_compare(args.k, args.seed)

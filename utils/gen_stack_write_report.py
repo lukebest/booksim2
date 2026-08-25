@@ -32,7 +32,7 @@ IMG = ROOT / "results"
 
 SCHEMES = ("s0", "s1", "s16", "s17")
 COLOR = {"s0": "#dc2626", "s1": "#f59e0b", "s16": "#2563eb", "s17": "#16a34a"}
-LABEL = {"s0": "S0 基线（无流控）", "s1": "S1 拥塞等级 AIMD",
+LABEL = {"s0": "S0 基线（无源端流控）", "s1": "S1 源端 AIMD 控速",
          "s16": "S16 接收端授权（Homa 式）",
          "s17": "S17 挂接点转向仲裁（本文提出）"}
 DIE_COLOR = ["#1d4ed8", "#dc2626", "#0891b2", "#ea580c", "#4338ca", "#b91c1c"]
@@ -613,8 +613,39 @@ def plot_group(b: dict, path: Path) -> None:
         ax.legend(fontsize=7, ncol=3, loc="upper center",
                   bbox_to_anchor=(0.5, -0.08), frameon=False)
         ax.grid(alpha=0.25, axis="y")
-    fig.suptitle("以 top die 为单位（每组 10 个 AI core）。die 0/2/4 的远端流量"
-                 "并入纵环时位于下游，崩溃时几乎完全被饿死", fontsize=11.5)
+    drained = all(r.get("completed") for r in g)
+    fig.suptitle("以 top die 为单位（每组 10 个 AI core）"
+                 + ("。批次排空后六个 die 完成量相同"
+                    if drained else
+                    "。die 0/2/4 的远端流量并入纵环时位于下游，崩溃时几乎被饿死"),
+                 fontsize=11.5)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def plot_group_series(b: dict, path: Path) -> None:
+    """Write bandwidth vs time, one curve per top-die group, S0 vs S1."""
+    gs = b.get("group_series") or {}
+    _cjk()
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 4.8), sharey=True)
+    colors = ["#2563eb", "#dc2626", "#0891b2", "#ea5800", "#7c3aed", "#16a34a"]
+    for ax, name, title in ((axes[0], "s0", "S0 基线（无源端流控）"),
+                            (axes[1], "s1", "S1 源端 AIMD 控速")):
+        ser = gs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw_by_group") or {}
+        w = ser.get("window", 50)
+        for i, d in enumerate(sorted(bw, key=int)):
+            ax.plot(t, bw[d], "-", color=colors[i % len(colors)], lw=1.5,
+                    label=f"die {d}（10 个 AI core）")
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel("时间 (cycle)", fontsize=9)
+        ax.set_ylabel(f"组写带宽 (WriteData flit / cycle，窗={w})", fontsize=9)
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=7.5, ncol=2, loc="upper right")
+    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计的写带宽随时间变化",
+                 fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
     plt.close(fig)
@@ -745,13 +776,17 @@ def setup_table(b: dict) -> str:
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
         ["每 core outstanding", f"<b>{m['core_outstanding']}</b>",
-         "本次按要求设定；下文会说明它在这个织物上意味着什么"],
+         "按最长无拥塞写 RTT 设定：从 REQ 上环到 Comp 回来，"
+         "一个额度要盖住这段往返"],
+        ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
+         "超出后对后续 REQ 回 RetryAck，再发 PCrdGrant 后重传"],
         ["转向 / D2D FIFO 深度",
          f"{m['fabric']['turn_depth']} / {m['fabric']['d2d_depth']}",
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
-         f"每 core {m['k']} 笔，均匀写全部 {t['n_has']} 个 HA",
-         "需求完全对称，任何不均衡都是织物造成的"],
+         f"每 core <b>{m['k']}</b> 个写请求，均匀写全部 {t['n_has']} 个 HA",
+         "这是请求总数，不是在途上限；共 "
+         f"{m['k'] * t['n_cores']:,} 笔。需求对称，不均衡来自织物"],
     ]
     return _t(["项目", "取值", "说明"], rows)
 
@@ -764,10 +799,13 @@ def link_table(b: dict) -> str:
         ["top die 环内链路", " / ".join(str(v) for v in uniq) + " cycle",
          f"共 {len(lats)} 段，按位置不同；两个平面各一份"],
         ["D2D 跨 die", f"{t['d2d_lat']} cycle",
-         "SerDes + 跨时钟域，是全网最贵的一跳"],
-        ["bottom die 环内跳", f"{t['bot_hop_lat']} cycle",
-         "规则阵列，短线"],
-        ["挂接点内转向", "1 cycle", "横环 → 纵环，经转向 FIFO"],
+         "SerDes + 跨时钟域"],
+        ["bottom die 横环节点间", f"<b>{t.get('h_hop_lat', t.get('bot_hop_lat', 4))}</b> cycle",
+         "挂接点 → 挂接点，单向 half ring"],
+        ["bottom die 纵环节点间", f"<b>{t.get('v_hop_lat', 6)}</b> cycle",
+         "HA ↔ 挂接点，单向 half ring"],
+        ["挂接点转向", f"<b>{t.get('turn_lat', 5)}</b> cycle",
+         "横环 ↔ 纵环，经转向 FIFO，不计入 D2D 落地"],
     ]
     return _t(["链路", "延迟", "说明"], rows)
 
@@ -1090,11 +1128,158 @@ def cost_table(b: dict) -> str:
 # report
 # ---------------------------------------------------------------------------
 
+def write_focus_report(b: dict) -> None:
+    """Report for the RTT-sized outstanding + HA retry operating point."""
+    t, m = b["topology"], b["meta"]
+    rtt = m.get("rtt") or t.get("rtt") or {}
+    mand = b["schemes"]["mandated"]
+    s0, s1 = mand["s0"], mand["s1"]
+    n_txn = mand["n_txn"]
+    bd = mand["bounds"]
+    oc = m["core_outstanding"]
+    pos = m.get("pos_depth", 16)
+    q0, q1 = s0.get("retry", {}), s1.get("retry", {})
+    g0, g1 = s0["group"], s1["group"]
+    f0, f1 = s0["fairness"], s1["fairness"]
+    peak0 = s0.get("max_core_outstanding", 0)
+    binds = peak0 >= oc
+    bind_txt = (
+        f"本批次每 core {m['k']} 笔，大于窗口 {oc}，实测峰值占用 {peak0}，"
+        f"<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。"
+        if binds else
+        f"本批次每 core {m['k']} 笔，实测峰值占用 {peak0}，"
+        f"<b>{oc} 这个上限本身没有打满</b>——它保证的是再长的往返也不会把 core 饿在等 Comp 上。"
+    )
+
+    plot_topology(b, IMG / "stack_topology.png")
+    plot_binding(b, IMG / "stack_binding.png")
+    plot_group_series(b, IMG / "stack_group_bw_series.png")
+    if b.get("group"):
+        plot_group(b, IMG / "stack_group.png")
+
+    html = f"""<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>3D 堆叠 NoC 上的 per-group 写带宽</title>
+<style>
+body {{ font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
+        sans-serif; max-width: 980px; margin: 1.5rem auto; padding: 0 1rem;
+        line-height: 1.55; color: #111; }}
+h1 {{ font-size: 1.45rem; }} h2 {{ font-size: 1.2rem; margin-top: 2rem; }}
+h3 {{ font-size: 1.05rem; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem;
+         margin: 0.6rem 0 1rem; }}
+th, td {{ border: 1px solid #d4d4d8; padding: 0.28rem 0.45rem;
+          text-align: left; vertical-align: top; }}
+th {{ background: #f4f4f5; }}
+.key {{ background: #f8fafc; border: 1px solid #e4e4e7; padding: 0.2rem 1.1rem; }}
+.def {{ background: #eff6ff; border-left: 4px solid #2563eb;
+        padding: 0.6rem 0.9rem; margin: 0.8rem 0; }}
+.good {{ background: #f0fdf4; border-left-color: #16a34a; }}
+img {{ max-width: 100%; height: auto; margin: 0.6rem 0 1rem; }}
+code {{ font-size: 0.86em; }}
+</style></head><body>
+<h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
+<p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
+挂接点转向 {t.get('turn_lat', 5)} cycle。
+每 core 请求数 = <b>{m['k']}</b>（closed batch，共 {n_txn:,} 笔），
+每 core outstanding = <b>{oc}</b>（最长写 RTT，在途上限），
+每个 HA 跟踪表 <b>{pos}</b> 项，超出回 RetryAck。</p>
+<div class="def"><b>k 和 outstanding 不是一回事。</b>
+k = {m['k']} 是每个 AI core 这一批要发的写请求总数。
+outstanding = {oc} 是同时能挂在网上的笔数：一笔从 REQ 上环占到 Comp 回来。
+S0 <b>没有源端流控</b>——只要该 core 还有 outstanding 空位、注入口当前 cycle
+ring 上有空 slot，就把下一条 REQ 发出；HA 跟踪表满回 RetryAck，那是完成方反压，不是源端控速。
+S1 在同样的 outstanding + slot 条件之上，再加 AIMD 源端注入预算。</div>
+
+<h2>结论</h2>
+<div class="key"><ol>
+<li><b>outstanding 按最长写 RTT 取值是 {oc}。</b>
+无拥塞的 WriteNoSnp 往返 = REQ 去程 + DBID 回程 + WriteData 去程
+（{m['m_wdata']} flit 流水，最后一拍比第一拍晚 {m['m_wdata'] - 1} cycle）+ Comp 回程。
+最坏一对 (core {rtt.get('core')}, HA {rtt.get('ha')}) 的去程
+{rtt.get('fwd')} cycle、回程 {rtt.get('rev')} cycle，合计
+<b>{rtt.get('rtt')} cycle</b>。额度从 REQ 上环一直占到 Comp 回来，
+所以寄存器就写成这个数。{bind_txt}</li>
+
+<li><b>HA 跟踪表满了就 retry。S0 不另加源端控速，S1 才控速。</b>
+每个 HA 同时只能收 {pos} 个请求；再来的 REQ 走
+RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
+S0 完成 <b>{s0['n_txn_done']:,}/{n_txn:,}</b>，makespan {s0['makespan']:,} cycle，
+RetryAck {q0.get('n_retry', 0):,} 次，有效并发是名义值的
+{_pct(q0.get('eff_frac', 1))}；
+S1 完成 {s1['n_txn_done']:,}/{n_txn:,}，{s1['makespan']:,} cycle，
+retry {q1.get('n_retry', 0):,}。
+{"两个方案都排空，没有活锁、没有停在停滞检测器上。"
+ if s0["completed"] and s1["completed"]
+ else "有方案没有排空，见下表。"}</li>
+
+<li><b>按 top die 一组（10 个 AI core）看写带宽随时间的变化。</b>
+S0 组间完成量 max/min = {_f(g0.get('goodput_max_min'), 2)}，
+组间 Jain {_f(g0.get('jain'))}；
+S1 为 {_f(g1.get('goodput_max_min'), 2)} / {_f(g1.get('jain'))}。
+下图是各 group 写带宽随时间的曲线。</li>
+</ol></div>
+
+<img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
+<div class="def">{scheme_table(b, "mandated")}
+<b>怎么读曲线。</b>
+纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
+（{b['group_series']['s0']['window']} cycle 滑窗）。
+六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
+就是这个 die 被饿死。
+S0 瞬时带宽只受 outstanding、ring slot 和 HA retry 成形；
+S1 再叠一层源端 AIMD。
+S0 每核 Jain {_f(f0.get('jain'))}、组间 CoV {_f(g0.get('cov'), 3)}；
+S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
+<img src="stack_group.png" alt="各 group 整次运行写吞吐">
+
+<h2>1　拓扑与硬件 setup</h2>
+<h3>1.1 总体结构</h3>
+{setup_table(b)}
+<h3>1.2 链路延迟</h3>
+{link_table(b)}
+<div class="def">横环一跳 {t.get('h_hop_lat', 4)} cycle，纵环一跳
+{t.get('v_hop_lat', 6)} cycle，挂接点 H↔V 转向另加
+{t.get('turn_lat', 5)} cycle。
+D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
+纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
+{rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
+<img src="stack_topology.png" alt="bottom die 与挂接点分组">
+<h3>1.3 HA 与 D2D bridge 绑定（mod-4）</h3>
+<img src="stack_binding.png" alt="HA 到 bridge 的绑定">
+{mod4_table(b)}
+
+<h2>2　按 top die 分组的写带宽</h2>
+<p>一个 top die 的 10 个 AI core 共用一条环、一组 8 个挂接点和 8 条 D2D，
+是不可再往下调度的单位。下表是整次运行的合计；上图是同一指标的时间展开。</p>
+{group_table(b)}
+
+<h2>3　理论下界</h2>
+{bounds_table(bd)}
+<p class="note">S0 效率 {s0.get('eff', 0):.2f}，S1 {s1.get('eff', 0):.2f}
+（下界 / makespan）。</p>
+
+<h2>4　复现</h2>
+<div class="def">
+<code>python3 utils/dse_stack_write_fair.py --focus --k {m['k']}</code><br>
+<code>python3 utils/gen_stack_write_report.py</code>
+<br><br>
+仿真 {m.get('wall_s', 0):.0f} s。outstanding = {oc}，HA POS = {pos}。
+</div>
+</body></html>
+"""
+    OUT.write_text(html)
+    print(f"wrote {OUT}")
+
+
 def main() -> None:
     if not DATA.exists():
         raise SystemExit(f"missing {DATA}; run dse_stack_write_fair.py first")
     b = json.loads(DATA.read_text())
     t, m = b["topology"], b["meta"]
+    if "group_series" in b and "stability" not in b:
+        write_focus_report(b)
+        return
     for k in ("stability", "depth"):
         if k not in b:
             raise SystemExit(f"missing {k} scan; run dse_stack_stability.py")

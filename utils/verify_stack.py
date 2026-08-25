@@ -21,16 +21,20 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackAdaptTurnSim, StackFairTurnSim, StackFcParams,
                          StackFcSim, StackGrantParams, StackGrantSim,
                          StackTurnParams)
-from rg_stack_topo import (ANY_PLANE, GROUP_COLS, H_PER_GAP, N_ATTACH,
-                           N_COLS, N_HA, N_HRING, N_ROWS, N_TOP_DIE,
-                           TOP_BRIDGES, TOP_N, V_LEN, StackTopology,
+from rg_stack_topo import (ANY_PLANE, GROUP_COLS, H_HOP_LAT, H_PER_GAP,
+                           N_ATTACH, N_COLS, N_HA, N_HRING, N_ROWS,
+                           N_TOP_DIE, TOP_BRIDGES, TOP_N, TURN_LAT,
+                           V_HOP_LAT, V_LEN, StackTopology,
                            build_uniform_write)
 
 RESULTS: list[tuple[str, bool, str]] = []
-# The workable concurrency, not the mandated 128: at 128 the fabric
-# collapses, and a collapsed run cannot exercise a conservation check.
-OC_WORK, OC_MANDATED = 5, 600
-FAB = dict(turn_depth=64, d2d_depth=128, core_outstanding=OC_WORK)
+# Outstanding is the longest uncongested write RTT. HA retry (16 POS
+# entries) is what keeps that window from flooding a completer.
+OC_WORK = 5
+OC_MANDATED = StackTopology().max_write_rtt(m_wdata=4)["outstanding"]
+HA_POS = 16
+FAB = dict(turn_depth=64, d2d_depth=128, core_outstanding=OC_WORK,
+           ha_pos_depth=HA_POS)
 
 
 def check(name: str):
@@ -88,6 +92,21 @@ def _t1():
     assert len(inert) == N_TOP_DIE * 2 == 12
     assert all(n.idx in (9, 19) for n in inert)
     return f"264 nodes = 6x20 + 96 HA + 48 attach; 8x{V_LEN}=144"
+
+
+@check("bottom_die_latencies_are_4_6_5")
+def _t_lat():
+    t = StackTopology()
+    assert t.h_hop_lat == H_HOP_LAT == 4, t.h_hop_lat
+    assert t.v_hop_lat == V_HOP_LAT == 6, t.v_hop_lat
+    assert t.turn_lat == TURN_LAT == 5, t.turn_lat
+    hs = {t.edge_lat[e] for e, rk in enumerate(t.edge_ring) if rk[0] == "h"}
+    vs = {t.edge_lat[e] for e, rk in enumerate(t.edge_ring) if rk[0] == "v"}
+    assert hs == {4} and vs == {6}, (hs, vs)
+    rtt = t.max_write_rtt(m_wdata=4)
+    assert rtt["outstanding"] == rtt["rtt"] == OC_MANDATED, rtt
+    return (f"h=4 v=6 turn=5; longest write RTT {rtt['rtt']} "
+            f"(fwd {rtt['fwd']}, rev {rtt['rev']})")
 
 
 @check("topo_v_ring_layout")
@@ -467,28 +486,16 @@ def _s5():
             f"worst-case max/min unchanged at {ma:.2f}: real but immaterial")
 
 
-@check("lower_outstanding_wins_on_both_axes")
+@check("rtt_window_drains_on_every_seed")
 def _s5b():
-    """The report's headline practical claim, on the seeds it was measured on.
-
-    Dropping the per-core limit from the mandated 128 to 8 has to improve
-    throughput and fairness at once, otherwise the recommendation is not
-    earned.
-    """
+    """The RTT-sized window plus HA retry must drain on every measured seed."""
     seeds = (0, 1, 2)
-    hi = [_run("s0", k=40, seed=s, core_outstanding=OC_MANDATED)[2]
-          for s in seeds]
-    lo = [_run("s0", k=40, seed=s, core_outstanding=OC_WORK)[2]
-          for s in seeds]
-    jh = sum(r["fairness"]["jain"] for r in hi) / len(hi)
-    jl = sum(r["fairness"]["jain"] for r in lo) / len(lo)
-    th = sum(r["makespan"] for r in hi) / len(hi)
-    tl = sum(r["makespan"] for r in lo) / len(lo)
-    assert jl > jh, f"fairness not improved: {jh:.5f} -> {jl:.5f}"
-    assert tl < th, f"throughput not improved: {th:.0f} -> {tl:.0f}"
-    return (f"oc {OC_MANDATED}->{OC_WORK}: mean Jain {jh:.5f} -> {jl:.5f} "
-            f"and mean makespan {th:.0f} -> {tl:.0f} "
-            f"(both better, zero hardware)")
+    rows = [_run("s0", k=40, seed=s, core_outstanding=OC_MANDATED,
+                 ha_pos_depth=HA_POS)[2] for s in seeds]
+    assert all(r["completed"] for r in rows), [r["n_txn_done"] for r in rows]
+    j = sum(r["fairness"]["jain"] for r in rows) / len(rows)
+    return (f"oc={OC_MANDATED} HA POS={HA_POS}: {len(rows)}/{len(rows)} "
+            f"seeds drained, mean Jain {j:.5f}")
 
 
 @check("baseline_unfairness_is_structural_not_random")
@@ -519,36 +526,35 @@ def _s6():
             f"die {hi} beats die {lo} by {ratio:.2f}x on the 3-seed mean")
 
 
-@check("flow_control_cannot_fix_an_over_concurrency_collapse")
+@check("rtt_window_and_ha_retry_do_not_collapse")
 def _s7():
-    """The mandated 128 outstanding collapses, and no scheme rescues it.
+    """The operating point is RTT-sized outstanding plus HA retry.
 
-    This is the report's central negative result. Routing is not a free
-    variable any more -- the HA-to-bridge binding fixes it -- so the only
-    lever that works is admission, and a fabric-side scheme cannot substitute
-    for it.
+    A slot is held from REQ inject to Comp, so the register equals the
+    longest write RTT. Completers that run out of tracker entries retry
+    rather than queue. Neither S0 nor S1 is allowed to livelock there.
     """
-    for scheme in ("s0", "s1", "s16", "s17"):
-        _, _, r = _run(scheme, k=50, core_outstanding=OC_MANDATED)
-        assert not r["completed"], \
-            f"{scheme} unexpectedly survived oc={OC_MANDATED}"
-        assert r["max_core_outstanding"] <= 50, \
-            "a 50-write batch cannot exceed 50 in flight"
-    _, _, ok = _run("s0", k=50, core_outstanding=OC_WORK)
-    assert ok["completed"], f"oc={OC_WORK} baseline should be stable"
-    return (f"S0/S1/S16/S17 all collapse at oc={OC_MANDATED}; "
-            f"capping at {OC_WORK} is what fixes it")
+    notes = []
+    for scheme in ("s0", "s1"):
+        _, x, r = _run(scheme, k=50, core_outstanding=OC_MANDATED,
+                       ha_pos_depth=HA_POS)
+        assert r["completed"], f"{scheme} collapsed at oc={OC_MANDATED}"
+        assert r["n_txn_done"] == len(x), (scheme, r["n_txn_done"], len(x))
+        notes.append(f"{scheme} {r['makespan']}c retry={r['retry']['n_retry']}")
+    return "; ".join(notes)
 
 
-@check("collapse_needs_sustained_load")
+@check("ha_retry_fires_when_the_tracker_fills")
 def _s8():
-    """Small batches survive the mandated limit; the cliff is a saturation one."""
-    _, _, light = _run("s0", k=6, core_outstanding=OC_MANDATED)
-    _, _, heavy = _run("s0", k=50, core_outstanding=OC_MANDATED)
-    assert light["completed"], "k=6 should still drain"
-    assert not heavy["completed"], "k=50 should collapse"
-    return (f"oc={OC_MANDATED}: k=6 completes in {light['makespan']}, "
-            f"k=50 collapses ({heavy['n_txn_done']} txns done)")
+    """A shallow completer tracker must bounce requests and still drain."""
+    _, _, deep = _run("s0", k=20, core_outstanding=OC_MANDATED, ha_pos_depth=0)
+    _, _, shal = _run("s0", k=20, core_outstanding=OC_MANDATED, ha_pos_depth=4)
+    assert deep["completed"] and shal["completed"]
+    assert shal["retry"]["n_retry"] > 0, shal["retry"]
+    assert shal["retry"]["n_req_resent"] == shal["retry"]["n_pcrd"]
+    assert shal["retry"]["eff_frac"] < 1.0
+    return (f"pos=4: {shal['retry']['n_retry']} bounces, "
+            f"eff/nom {shal['retry']['eff_frac']:.3f}, still drained")
 
 
 @check("horizontal_ring_assignment_changes_the_collapse_point")
@@ -575,10 +581,9 @@ def _s9():
         ok[ha] = n
     assert bounds["split"] == bounds["stack"], \
         f"bounds should be identical: {bounds}"
-    assert ok["split"] > ok["stack"], \
-        f"split no longer more robust than stack at oc=6: {ok}"
-    return (f"identical bound {bounds['split']}, yet at oc=6 split survives "
-            f"{ok['split']}/3 seeds and stack only {ok['stack']}/3")
+    assert ok["split"] == 3 and ok["stack"] == 3, \
+        f"both assignments should drain at oc=6: {ok}"
+    return (f"identical bound {bounds['split']}; both drain 3/3 seeds at oc=6")
 
 
 @check("binding_follows_the_mod4_rule")
@@ -633,55 +638,57 @@ def _r1():
             f"parked {q['park_wait_mean']:.0f} cycles on average")
 
 
-@check("shallow_completer_tracker_is_involuntary_admission_control")
-def _r2():
-    """A shallow tracker drains a batch that an unlimited one cannot.
+@check("batch_larger_than_outstanding_does_not_hol_block_retry")
+def _r1b():
+    """k > outstanding used to pin new REQs at the inject head.
 
-    Counter-intuitive but load-bearing for the report: the completer refusing
-    requests keeps them out of the fabric, which is the same service an
-    explicit window provides. If this ever stops holding, the report's
-    framing of RetryAck as involuntary admission control is wrong.
+    A P-Credit re-send already holds its slot and must be able to board
+    while the rest of the closed batch waits. If those waiters HOL-block
+    the re-send, grants are delivered into an empty ring and the run dies
+    with n_req_resent = 0.
+    """
+    _, x, r = _run("s0", k=20, core_outstanding=6, ha_pos_depth=4)
+    q = r["retry"]
+    assert r["completed"], (r["n_txn_done"], len(x), q)
+    assert r["n_txn_done"] == len(x)
+    assert q["n_retry"] > 0, q
+    assert q["n_req_resent"] == q["n_pcrd"] > 0, q
+    return (f"k=20 oc=6 drained {len(x)}; "
+            f"{q['n_req_resent']} re-sends after {q['n_retry']} retries")
+
+
+@check("shallow_tracker_retries_but_still_drains")
+def _r2():
+    """Retry is a real protocol cost, not a collapse substitute.
+
+    With the longer bottom-die hops the fabric drains even with an unlimited
+    completer. A shallow tracker must still bounce, park, and re-send -- and
+    the batch must still finish.
     """
     _, x, unl = _run("s0", k=50, core_outstanding=OC_MANDATED, ha_pos_depth=0)
     _, _, shal = _run("s0", k=50, core_outstanding=OC_MANDATED, ha_pos_depth=4)
-    assert not unl["completed"], "unlimited completer should collapse here"
-    assert shal["completed"], "shallow tracker should drain the batch"
-    assert shal["fairness"]["jain"] > unl["fairness"]["jain"], \
-        (shal["fairness"]["jain"], unl["fairness"]["jain"])
-    return (f"unlimited: {unl['n_txn_done']}/{len(x)} done; pos=4: "
-            f"{shal['n_txn_done']}/{len(x)}, Jain "
-            f"{unl['fairness']['jain']:.4f} -> {shal['fairness']['jain']:.4f}")
+    assert unl["completed"] and shal["completed"]
+    assert unl["n_txn_done"] == shal["n_txn_done"] == len(x)
+    assert shal["retry"]["n_retry"] > unl["retry"]["n_retry"]
+    return (f"both drain {len(x)}; pos=0 retry={unl['retry']['n_retry']}, "
+            f"pos=4 retry={shal['retry']['n_retry']}")
 
 
-@check("no_single_static_outstanding_serves_both_loads")
+@check("rtt_outstanding_covers_the_longest_round_trip")
 def _r3():
-    """The safe range at full load must not overlap the useful range light.
-
-    This is the premise the adaptive scheme rests on. Full load collapses
-    above a single-digit limit; a lightly loaded fabric needs far more than
-    that to cover the round trip. If the two ranges ever overlapped, a fixed
-    number would be defensible and S18 would not be worth its registers.
-    """
-    t = StackTopology(route_mode="bound")
-    full = build_uniform_write(t, k=50, seed=0)
-    light = build_uniform_write(t, k=50, seed=0, dies=[0])
-    assert len(light) * 6 == len(full), (len(light), len(full))
-
-    def thr(x, oc):
-        r = run_batch(t, x, params=StackBaseParams(
-            **{**FAB, "core_outstanding": oc, "ha_pos_depth": 32}),
-            sim_cls=StackBaseSim, seed=0, stall_after=20_000)
-        return r["n_txn_done"] / max(1, r["makespan"]), r["completed"]
-
-    f_lo, ok_lo = thr(full, 5)
-    f_hi, ok_hi = thr(full, 32)
-    l_lo, _ = thr(light, 5)
-    l_hi, _ = thr(light, 32)
-    assert ok_lo and not ok_hi, (ok_lo, ok_hi)
-    assert f_hi < 0.5 * f_lo, (f_lo, f_hi)      # high limit ruins full load
-    assert l_hi > 1.5 * l_lo, (l_lo, l_hi)      # low limit starves light load
-    return (f"full load: oc=5 {f_lo:.3f} drains, oc=32 {f_hi:.3f} collapses; "
-            f"light load: oc=5 only {l_lo:.3f} vs oc=32 {l_hi:.3f}")
+    """The configured window is exactly the longest uncongested write RTT."""
+    t = StackTopology()
+    info = t.max_write_rtt(m_wdata=4)
+    assert info["outstanding"] == OC_MANDATED == info["rtt"]
+    assert info["fwd"] + info["rev"] < info["rtt"]
+    # a one-die load still completes at that same window
+    x = build_uniform_write(t, k=20, seed=0, dies=[0])
+    r = run_batch(t, x, params=StackBaseParams(
+        **{**FAB, "core_outstanding": OC_MANDATED, "ha_pos_depth": HA_POS}),
+        sim_cls=StackBaseSim, seed=0, stall_after=20_000)
+    assert r["completed"], r["n_txn_done"]
+    return (f"window {info['rtt']} = 2*fwd({info['fwd']}) + 2*rev({info['rev']}) "
+            f"+ (W-1); one-die batch drained in {r['makespan']}")
 
 
 @check("s18_tracks_the_window_across_scenarios")
@@ -711,65 +718,43 @@ def _r4():
             f"{out['light'][1]:.0f}), rtt_min ~{out['full'][3]:.0f} cycles")
 
 
-@check("group_view_exposes_imbalance_the_core_view_hides")
+@check("group_goodput_is_equal_when_the_batch_drains")
 def _r5():
-    """Per-top-die grouping must be strictly more revealing than per-core.
-
-    Ten cores share a die's ring, attach group and bridges, so a die-level
-    shortfall cannot be scheduled away inside the die. Under collapse the
-    per-core Jain looks mild because every core of a starved die is equally
-    starved; the die-level ratio is what shows the real spread.
-    """
+    """Ten cores per top die; retired write traffic matches across dies."""
     from dse_stack_write_fair import group_stats
     t = StackTopology(route_mode="bound")
     x = build_uniform_write(t, k=50, seed=0)
     r = run_batch(t, x, params=StackBaseParams(
-        **{**FAB, "core_outstanding": OC_MANDATED, "ha_pos_depth": 32}),
+        **{**FAB, "core_outstanding": OC_MANDATED, "ha_pos_depth": HA_POS}),
         sim_cls=StackBaseSim, seed=0, stall_after=20_000)
     g = group_stats(t, r["wr_inject_by_core"], r["wr_done_by_core"],
                     r["makespan"])
-    f = fairness_stats(r["wr_inject_by_core"], r["makespan"], 50 * 4)
-    assert not r["completed"], "this check needs the collapsed regime"
+    assert r["completed"], r["n_txn_done"]
     assert g["n_groups"] == 6 and g["cores_per_group"] == 10, g
-    # the die-level spread of retired work dwarfs the per-core Jain view
-    assert g["goodput_max_min"] > 10, g["goodput_max_min"]
-    assert f["jain"] > 0.85, f["jain"]
-    # and inside the worst die the cores are treated alike
-    assert g["jain_within_worst"] > 0.7, g["jain_within_worst"]
-    gp = g["goodput_by_group"]
-    lo = sorted(gp, key=lambda d: gp[d])[:3]
-    assert {int(d) % 2 for d in lo} == {0}, gp
-    return (f"per-core Jain {f['jain']:.4f} looks mild, yet die-level "
-            f"max/min is {g['goodput_max_min']:.0f}x and the three starved "
-            f"dies {sorted(int(d) for d in lo)} are all left-half")
+    assert g["goodput_max_min"] == 1.0, g["goodput_by_group"]
+    return (f"6 groups x 10 cores, goodput max/min "
+            f"{g['goodput_max_min']:.2f}, group Jain {g['jain']:.4f}")
 
 
-@check("admission_control_removes_the_group_imbalance")
+@check("s0_and_s1_group_series_cover_the_run")
 def _r6():
-    """Die-level unfairness is a collapse artefact, not a topology limit.
-
-    If it survived at a workable concurrency it would be a structural cap and
-    the fix would have to be in the fabric. It does not, so the fix is the
-    concurrency.
-    """
-    from dse_stack_write_fair import group_stats
+    """The time-series bins reconstruct the WriteData count per die."""
+    from dse_stack_write_fair import group_bw_series
     t = StackTopology(route_mode="bound")
-    x = build_uniform_write(t, k=50, seed=0)
-    got = {}
-    for oc in (OC_MANDATED, OC_WORK):
-        r = run_batch(t, x, params=StackBaseParams(
-            **{**FAB, "core_outstanding": oc, "ha_pos_depth": 32}),
-            sim_cls=StackBaseSim, seed=0, stall_after=20_000)
-        got[oc] = group_stats(t, r["wr_inject_by_core"],
-                              r["wr_done_by_core"], r["makespan"])
-    bad, good = got[OC_MANDATED], got[OC_WORK]
-    assert bad["max_min"] > good["max_min"], (bad["max_min"],
-                                              good["max_min"])
-    assert good["max_min"] < 1.5, good["max_min"]
-    assert good["goodput_max_min"] == 1.0, good["goodput_max_min"]
-    return (f"die-level max/min {bad['max_min']:.2f} at oc={OC_MANDATED} "
-            f"falls to {good['max_min']:.2f} at oc={OC_WORK}, and every die "
-            f"retires the same amount")
+    x = build_uniform_write(t, k=20, seed=0)
+    r = run_batch(t, x, params=StackBaseParams(
+        **{**FAB, "core_outstanding": OC_MANDATED, "ha_pos_depth": HA_POS}),
+        sim_cls=StackBaseSim, seed=0, stall_after=20_000)
+    ser = group_bw_series(t, r["wr_inject_by_core"], window=50,
+                          makespan=r["makespan"])
+    assert r["completed"]
+    assert len(ser["bw_by_group"]) == 6
+    # 20 writes x 4 flits x 10 cores per die
+    for d, ys in ser["bw_by_group"].items():
+        got = sum(v * ser["window"] for v in ys)
+        assert abs(got - 20 * 4 * 10) < ser["window"] + 1, (d, got)
+    return (f"{ser['n_windows']} windows of {ser['window']}c, "
+            f"6 groups, integral matches 800 write flits/die")
 
 
 def main() -> None:

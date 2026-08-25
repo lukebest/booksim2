@@ -127,9 +127,11 @@ ANY_PLANE = -1         # bottom-die and D2D links are shared by both planes
 
 # -- default latencies -------------------------------------------------------
 
-BOT_HOP_LAT = 1        # bottom-die half-ring hop: short, regular array
+H_HOP_LAT = 4          # horizontal half-ring hop (attach -> attach)
+V_HOP_LAT = 6          # vertical half-ring hop (HA <-> attach)
 D2D_LAT = 4            # die-to-die crossing: SerDes + CDC
-TURN_LAT = 1           # horizontal -> vertical hand-off inside an attach point
+TURN_LAT = 5           # attach-point H <-> V turn
+BOT_HOP_LAT = H_HOP_LAT  # leftover alias; the two axes are no longer equal
 
 Role = Literal["core", "bridge", "inert", "attach", "ha"]
 RingKind = Literal["top", "d2d", "h", "v"]
@@ -180,7 +182,9 @@ class StackTopology:
 
     def __init__(self, *, n_die: int = N_TOP_DIE,
                  top_link_lats: Sequence[int] = RING2_LINK_LATS,
-                 bot_hop_lat: int = BOT_HOP_LAT, d2d_lat: int = D2D_LAT,
+                 bot_hop_lat: int | None = None,
+                 h_hop_lat: int = H_HOP_LAT, v_hop_lat: int = V_HOP_LAT,
+                 d2d_lat: int = D2D_LAT,
                  turn_lat: int = TURN_LAT, sigma: int = SIGMA,
                  board_ports: int = 1, leave_ports: int = 1,
                  route_mode: str = "bound", h_assign: str = "split",
@@ -191,7 +195,11 @@ class StackTopology:
             raise ValueError("vertical layout inconsistent")
         self.n_die = n_die
         self.top_link_lats = tuple(int(x) for x in top_link_lats)
-        self.bot_hop_lat = bot_hop_lat
+        if bot_hop_lat is not None:
+            h_hop_lat = v_hop_lat = bot_hop_lat
+        self.h_hop_lat = h_hop_lat
+        self.v_hop_lat = v_hop_lat
+        self.bot_hop_lat = v_hop_lat
         self.d2d_lat = d2d_lat
         self.turn_lat = turn_lat
         self.route_mode = route_mode
@@ -374,13 +382,13 @@ class StackTopology:
             for c in range(N_COLS):
                 u = self.attach(h, c)
                 v = self.attach(h, (c + 1) % N_COLS)
-                self._link(u, v, self.bot_hop_lat, ANY_PLANE, ("h", h, 0))
+                self._link(u, v, self.h_hop_lat, ANY_PLANE, ("h", h, 0))
         # vertical half rings: unidirectional, wraps
         for c in range(N_COLS):
             for pos in range(V_LEN):
                 u = self._v_node(c, pos)
                 v = self._v_node(c, (pos + 1) % V_LEN)
-                self._link(u, v, self.bot_hop_lat, ANY_PLANE, ("v", c, 0))
+                self._link(u, v, self.v_hop_lat, ANY_PLANE, ("v", c, 0))
 
     def _v_node(self, col: int, pos: int) -> int:
         what, key = V_LAYOUT[pos]
@@ -584,8 +592,56 @@ class StackTopology:
         kccw = (sum(self.edge_lat[e] for e in ccw), len(ccw))
         return cw if kcw <= kccw else ccw
 
+    def hv_turns(self, path: Sequence[int]) -> int:
+        """How many attach-point H <-> V turns a route pays.
+
+        Landing from D2D onto a ring is not a turn -- that latency is already
+        on the D2D edge. The 转向 is only the axis change at an attach point.
+        """
+        n = 0
+        for a, b in zip(path, path[1:]):
+            ka, kb = self.edge_ring[a][0], self.edge_ring[b][0]
+            if {ka, kb} == {"h", "v"}:
+                n += 1
+        return n
+
     def route_lat(self, src: int, dst: int, plane: int = 0) -> int:
-        return sum(self.edge_lat[e] for e in self.route(src, dst, plane))
+        path = self.route(src, dst, plane)
+        return (sum(self.edge_lat[e] for e in path)
+                + self.hv_turns(path) * self.turn_lat)
+
+    def write_rtt(self, core: int, ha: int, *, plane: int = 0,
+                  m_wdata: int = 4, t_ha: int = 0) -> int:
+        """Uncongested WriteNoSnp round trip, REQ inject to Comp retire.
+
+        Outstanding is held for this whole interval, so covering the longest
+        such RTT is what keeps a core from going idle waiting for Comp.
+        WriteData is pipelined: the last of `m_wdata` flits arrives
+        `m_wdata - 1` cycles after the first.
+        """
+        fwd = self.route_lat(core, ha, plane)
+        rev = self.route_lat(ha, core, plane)
+        return (fwd + t_ha + rev
+                + fwd + max(0, m_wdata - 1) + t_ha
+                + rev)
+
+    def max_write_rtt(self, *, m_wdata: int = 4, t_ha: int = 0
+                      ) -> dict[str, Any]:
+        """The longest uncongested write RTT over every (core, HA) pair."""
+        worst = 0
+        who: tuple[int, int] = (-1, -1)
+        for c in self.cores:
+            for h in self.has:
+                rtt = self.write_rtt(c, h, m_wdata=m_wdata, t_ha=t_ha)
+                if rtt > worst:
+                    worst, who = rtt, (c, h)
+        return {
+            "rtt": worst, "core": who[0], "ha": who[1],
+            "fwd": self.route_lat(who[0], who[1]) if who[0] >= 0 else 0,
+            "rev": self.route_lat(who[1], who[0]) if who[0] >= 0 else 0,
+            "m_wdata": m_wdata, "t_ha": t_ha,
+            "outstanding": worst,   # one slot held for the whole RTT
+        }
 
     def pick_plane(self, src: int, dst: int, *,
                    occupancy: dict[int, int] | None = None) -> int:
@@ -628,7 +684,8 @@ class StackTopology:
                 port[("board", self.edges[path[0]][0])] += m
                 port[("leave", self.edges[path[-1]][1])] += m
                 legs[vc] = max(legs[vc],
-                               sum(self.edge_lat[e] for e in path))
+                               sum(self.edge_lat[e] for e in path)
+                               + self.hv_turns(path) * self.turn_lat)
 
         link_by_vc = {vc: (max(d.values()) if d else 0) * sig
                       for vc, d in link.items()}
@@ -657,7 +714,7 @@ class StackTopology:
 # workload
 # ---------------------------------------------------------------------------
 
-def build_uniform_write(topo: StackTopology, *, k: int = 400,
+def build_uniform_write(topo: StackTopology, *, k: int = 800,
                         m_wdata: int = 4, seed: int = 0,
                         dies: Sequence[int] | None = None) -> list[Txn]:
     """Every AI core writes `k` times, uniformly over all 96 HAs.

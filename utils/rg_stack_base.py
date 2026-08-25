@@ -65,7 +65,7 @@ class StackBaseParams:
     # HA request-tracker entries. A completer that runs out of them cannot
     # queue the request: CHI makes it reject with RetryAck and hand out a
     # PCrdGrant later. 0 keeps the old unlimited-completer behaviour.
-    ha_pos_depth: int = 0
+    ha_pos_depth: int = 16
     turn_depth: int = 4             # ring -> ring transfer FIFO
     d2d_depth: int = 8              # die-crossing FIFO
     resv_ej: int = 1                # eject slots only an E-tagged flit may use
@@ -105,6 +105,7 @@ class Flit:
     fail_eject: int = 0
     held: bool = False
     n_turn: int = 0
+    turn_ready: int = 0             # cycle the turn FIFO may launch this flit
 
 
 class StackBaseSim:
@@ -310,15 +311,60 @@ class StackBaseSim:
         self.active_src[(f.src, self._pk(f.src, f.plane))] = None
         self._admit(key)
 
+    def _outst_blocked(self, f: Flit) -> bool:
+        """A new REQ that cannot take an outstanding slot yet.
+
+        These must not occupy the inject-queue head. The rest of the core's
+        closed batch sits behind the window; if they HOL-block a P-Credit
+        re-send, the completer's grant can never be used and the fabric
+        deadlocks with an empty ring and a full pending list. Re-sends
+        already hold their slot (`txn_id in _counted`) and must go first.
+        """
+        return (f.kind == "req"
+                and self._is_core[f.src]
+                and f.txn_id not in self._counted
+                and self._outst_full(f.src))
+
     def _admit(self, key: Any) -> None:
         q, pend = self.srcq[key], self.pending[key]
+        # Evict new REQs that filled the window after they were admitted.
+        if q and self._outst_blocked(q[0]):
+            stuck = deque()
+            while q and self._outst_blocked(q[0]):
+                stuck.append(q.popleft())
+            stuck.extend(pend)
+            self.pending[key] = pend = stuck
+        # A P-Credit re-send already holds its outstanding slot. It must
+        # pass the rest of the closed batch (still waiting on a free
+        # slot) or the grant is delivered into a queue that never moves.
+        skipped = deque()
         while pend and len(q) < self.p.inj_depth:
-            q.append(pend.popleft())
+            f = pend.popleft()
+            if self._outst_blocked(f):
+                skipped.append(f)
+                continue
+            q.append(f)
+        if skipped:
+            skipped.extend(pend)
+            self.pending[key] = skipped
         if q:
             self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
 
     def _src_idle(self, key: Any) -> bool:
         return not self.srcq[key] and not self.pending[key]
+
+    def _clear_itag(self, node: int) -> None:
+        """Drop leftover I-tags. A port with nothing injectable must not
+        keep the ring reserved; that blocks everyone else on an empty hop."""
+        for holders in self.i_tag.values():
+            holders.discard(node)
+
+    def _wake_core(self, core: int) -> None:
+        """Re-admit a core after an outstanding slot is freed."""
+        for plane in range(self.n_planes):
+            self.active_src[(core, plane)] = None
+            for qk in self._src_keys(core, plane):
+                self._admit(qk)
 
     # -- movement -----------------------------------------------------------
 
@@ -421,6 +467,14 @@ class StackBaseSim:
             self.st["n_turn_resv_used"] += 1
         q.append(f)
         f.n_turn += 1
+        # Attach-point H <-> V turn pays turn_lat before it may re-board.
+        # D2D landings do not: their latency is already on the D2D edge.
+        cur = f.ring[0] if f.ring is not None else None
+        nxtk = nxt[0]
+        if {cur, nxtk} == {"h", "v"}:
+            f.turn_ready = self.t + self.topo.turn_lat
+        else:
+            f.turn_ready = self.t
         self.st["n_turns"] += 1
         self.active_xq[key] = None
         depth = len(q)
@@ -613,6 +667,8 @@ class StackBaseSim:
                 self.active_xq.pop(key, None)
                 continue
             f = q[0]
+            if f.turn_ready > self.t:
+                continue
             if self._launch(f, inring=False):
                 q.popleft()
                 if not q:
@@ -631,21 +687,27 @@ class StackBaseSim:
             if stalled:
                 self.st["n_admit_stall"] += 1
             if not any(self.srcq[qk] for qk in qkeys):
+                # Pending new REQs may still be waiting on outstanding.
+                # Leave the port active so a later Comp can admit them;
+                # drop I-tag so a full window does not pin the ring.
+                self._clear_itag(node)
                 self.inj_starve[key] = 0
-                self.active_src.pop(key, None)
+                if not any(self.pending[qk] for qk in qkeys):
+                    self.active_src.pop(key, None)
                 continue
-            qk, f, denied = None, None, None
+            qk, f, denied, idx = None, None, None, 0
             for cand in qkeys:
                 q = self.srcq[cand]
                 if not q:
                     continue
-                cf = q[0]
-                if not self._may_inject(node, plane, cf):
+                for i, cf in enumerate(q):
+                    if self._may_inject(node, plane, cf):
+                        qk, f, idx = cand, cf, i
+                        break
                     if denied is None:
                         denied = cf
-                    continue
-                qk, f = cand, cf
-                break
+                if f is not None:
+                    break
             if f is None:
                 if denied is None:
                     continue
@@ -675,7 +737,7 @@ class StackBaseSim:
                         self.i_tag[rk].add(node)
                         self.st["n_itag_raised"] += 1
                 continue
-            self.srcq[qk].popleft()
+            del self.srcq[qk][idx]
             self._admit(qk)
             self.vc_rr[key] += 1
             if all(self._src_idle(k) for k in qkeys):
@@ -816,6 +878,7 @@ class StackBaseSim:
             if self.p.core_outstanding > 0:
                 self.core_outst[txn.core] = max(
                     0, self.core_outst[txn.core] - 1)
+                self._wake_core(txn.core)
             self._on_txn_done(txn, f)
 
     def _retry_stats(self) -> dict[str, Any]:
