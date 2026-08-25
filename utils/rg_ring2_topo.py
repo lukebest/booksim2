@@ -79,8 +79,12 @@ _VC_OF: dict[str, ChiVc] = {
     "dbid": "rsp",      # DBIDResp (write)
     "comp": "rsp",      # Comp (write)
     "wdata": "dat",     # WriteData (write)
-    "retry": "rsp",     # RetryAck: completer out of protocol credit
-    "pcrd": "rsp",      # PCrdGrant: the credit that lets the REQ come back
+    # Credit-based retry. A completer with no tracker entry rejects the
+    # request with RetryAck and later hands out a PCrdGrant, at which point
+    # the requester re-sends. Both are ordinary RSP-channel messages, so the
+    # retry loop costs real RSP and REQ bandwidth rather than being free.
+    "retry": "rsp",     # RetryAck
+    "pcrd": "rsp",      # PCrdGrant
 }
 
 

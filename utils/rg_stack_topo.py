@@ -658,19 +658,27 @@ class StackTopology:
 # ---------------------------------------------------------------------------
 
 def build_uniform_write(topo: StackTopology, *, k: int = 400,
-                        m_wdata: int = 4, seed: int = 0) -> list[Txn]:
+                        m_wdata: int = 4, seed: int = 0,
+                        dies: Sequence[int] | None = None) -> list[Txn]:
     """Every AI core writes `k` times, uniformly over all 96 HAs.
 
     Each core draws a fresh permutation-based cycle over the HA list so the
     per-core destination histogram is as flat as the count allows: demand is
     symmetric by construction, and anything unequal in the result is the
     fabric's doing.
+
+    `dies` restricts the traffic to the cores of those top dies. The same
+    fabric under a lighter load wants a *larger* per-core concurrency, not a
+    smaller one -- which is the whole reason a single configured limit cannot
+    be right everywhere.
     """
     rng = random.Random(seed)
     hs = list(topo.has)
     out: list[Txn] = []
     tid = 0
-    for c in topo.cores:
+    cs = ([c for c in topo.cores if topo.nodes[c].die in set(dies)]
+          if dies is not None else topo.cores)
+    for c in cs:
         bag: list[int] = []
         while len(bag) < k:
             chunk = hs[:]

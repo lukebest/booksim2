@@ -67,7 +67,7 @@
  {
   "name": "makespan_ge_bound",
   "ok": true,
-  "note": "makespan 717 >= bound 524"
+  "note": "makespan 700 >= bound 524"
  },
  {
   "name": "links_stay_bufferless",
@@ -77,7 +77,7 @@
  {
   "name": "fifo_occupancy_bounded",
   "ok": true,
-  "note": "turn peak 16/16, d2d peak 7/32 over 183+96 FIFOs"
+  "note": "turn peak 16/16, d2d peak 7/32 over 181+95 FIFOs"
  },
  {
   "name": "fabric_util_matches_capacity_model",
@@ -85,9 +85,14 @@
   "note": "per-fabric link counts and utilisation self-consistent"
  },
  {
-  "name": "shallow_turn_fifo_is_adequate_at_workable_concurrency",
-  "ok": false,
-  "note": "should be stable at both"
+  "name": "turn_fifo_depth_is_a_real_requirement",
+  "ok": true,
+  "note": "depth 4 livelocks (168 txns done, FIFO pinned at 4/4) while depth 64 drains in 2,700 cycles"
+ },
+ {
+  "name": "lower_concurrency_also_lowers_the_buffer_requirement",
+  "ok": true,
+  "note": "at turn depth 24: oc=3 drains in 2,834 cycles, oc=5 does not (475 txns) -- less concurrency, less buffer"
  },
  {
   "name": "s16_unbounded_equals_s0",
@@ -107,22 +112,22 @@
  {
   "name": "s17_latch_is_bounded_and_off_by_default",
   "ok": true,
-  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 1,745 yields"
+  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 1,695 yields"
  },
  {
   "name": "s17_gain_is_real_but_immaterial",
   "ok": true,
-  "note": "mean Jain 0.97892 -> at best 0.97934 (+0.00042), worst-case max/min unchanged at 2.00: real but immaterial"
+  "note": "mean Jain 0.97796 -> at best 0.98176 (+0.00380), worst-case max/min unchanged at 2.08: real but immaterial"
  },
  {
   "name": "lower_outstanding_wins_on_both_axes",
   "ok": true,
-  "note": "oc 600->5: mean Jain 0.90594 -> 0.97976 and mean makespan 20663 -> 2204 (both better, zero hardware)"
+  "note": "oc 600->5: mean Jain 0.90557 -> 0.97955 and mean makespan 20607 -> 2236 (both better, zero hardware)"
  },
  {
   "name": "baseline_unfairness_is_structural_not_random",
   "ok": true,
-  "note": "max/min 1.82-2.00 across 3 seeds; die 3 beats die 5 by 1.43x on the 3-seed mean"
+  "note": "max/min 1.74-2.11 across 3 seeds; die 3 beats die 5 by 1.40x on the 3-seed mean"
  },
  {
   "name": "flow_control_cannot_fix_an_over_concurrency_collapse",
@@ -132,11 +137,46 @@
  {
   "name": "collapse_needs_sustained_load",
   "ok": true,
-  "note": "oc=600: k=6 completes in 411, k=50 collapses (837 txns done)"
+  "note": "oc=600: k=6 completes in 412, k=50 collapses (824 txns done)"
  },
  {
   "name": "horizontal_ring_assignment_changes_the_collapse_point",
   "ok": true,
-  "note": "identical bound 2112, yet at oc=6 split survives 3/3 seeds and stack only 1/3"
+  "note": "identical bound 2112, yet at oc=6 split survives 2/3 seeds and stack only 1/3"
+ },
+ {
+  "name": "binding_follows_the_mod4_rule",
+  "ok": true,
+  "note": "all 48 (die, column) pairs use the bridge at (col mod 4)"
+ },
+ {
+  "name": "retry_costs_bandwidth_and_parks_outstanding",
+  "ok": true,
+  "note": "pos=4: 302 bounces, 302 re-sends, effective concurrency 0.761 of nominal, parked 189 cycles on average"
+ },
+ {
+  "name": "shallow_completer_tracker_is_involuntary_admission_control",
+  "ok": true,
+  "note": "unlimited: 824/3000 done; pos=4: 3000/3000, Jain 0.9094 -> 0.9876"
+ },
+ {
+  "name": "no_single_static_outstanding_serves_both_loads",
+  "ok": true,
+  "note": "full load: oc=5 1.111 drains, oc=32 0.041 collapses; light load: oc=5 only 0.381 vs oc=32 0.752"
+ },
+ {
+  "name": "s18_tracks_the_window_across_scenarios",
+  "ok": true,
+  "note": "window settles at 8.6 under full load and 16.8 under light load (peak 32), rtt_min ~78 cycles"
+ },
+ {
+  "name": "group_view_exposes_imbalance_the_core_view_hides",
+  "ok": true,
+  "note": "per-core Jain 0.9094 looks mild, yet die-level max/min is 88x and the three starved dies [0, 2, 4] are all left-half"
+ },
+ {
+  "name": "admission_control_removes_the_group_imbalance",
+  "ok": true,
+  "note": "die-level max/min 1.66 at oc=600 falls to 1.34 at oc=5, and every die retires the same amount"
  }
 ]
