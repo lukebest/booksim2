@@ -36,9 +36,8 @@ from rg_stack_topo import (GROUP_COLS, N_COLS, TOP_BRIDGES, V_LEN,
                            StackTopology, Txn, build_uniform_write)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
-# Filled in main() from the topology: one outstanding slot is held from REQ
-# inject to Comp retire, so the register is sized to the longest write RTT.
-CORE_OUTSTANDING_WR = 0
+# Per-core write outstanding. Held from REQ inject to Comp retire.
+CORE_OUTSTANDING_WR = 128
 # CHI request-tracker entries per HA. A completer that runs out answers
 # RetryAck rather than silently queueing. 16 is deep enough that the fabric
 # still drains at the RTT-sized window, and shallow enough that the retry
@@ -934,7 +933,7 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     # writes/core the batch is long enough that a retry valley can sit
     # idle for longer than that without being dead.
     stall = max(80_000, 100 * args.k)
-    print(f"[focus] outstanding={oc} (max write RTT)  HA POS={pos}  "
+    print(f"[focus] outstanding={oc}  HA POS={pos}  "
           f"k={args.k}  ntxn={len(txns)}  stall_after={stall}", flush=True)
     names = ("s0", "s1")
     for name in names:
@@ -978,24 +977,26 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
 
 
 def main() -> None:
+    global CORE_OUTSTANDING_WR
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=800,
                     help="write requests per AI core (closed-batch workload)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
+    ap.add_argument("--oc", type=int, default=CORE_OUTSTANDING_WR,
+                    help="per-core write outstanding (in-flight cap)")
     ap.add_argument("--oc-work", type=int, default=5,
                     help="workable per-core outstanding limit")
     ap.add_argument("--pos-depth", type=int, default=HA_POS_DEPTH,
                     help="HA request tracker entries; 0 = unlimited")
     ap.add_argument("--focus", action="store_true",
-                    help="RTT-sized outstanding + HA retry + S0/S1 time series")
+                    help="S0/S1 time series at the configured outstanding")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
 
     topo0 = StackTopology()
     rtt = topo0.max_write_rtt(m_wdata=M_WDATA)
-    global CORE_OUTSTANDING_WR
-    CORE_OUTSTANDING_WR = rtt["outstanding"]
+    CORE_OUTSTANDING_WR = args.oc
     FABRIC["core_outstanding"] = CORE_OUTSTANDING_WR
     FABRIC["ha_pos_depth"] = args.pos_depth
 

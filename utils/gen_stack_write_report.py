@@ -776,8 +776,8 @@ def setup_table(b: dict) -> str:
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
         ["每 core outstanding", f"<b>{m['core_outstanding']}</b>",
-         "按最长无拥塞写 RTT 设定：从 REQ 上环到 Comp 回来，"
-         "一个额度要盖住这段往返"],
+         "在途上限：从 REQ 上环占到 Comp 回来。"
+         f"最长无拥塞写 RTT 是 { (m.get('rtt') or t.get('rtt') or {}).get('rtt', '—') } cycle"],
         ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
          "超出后对后续 REQ 回 RetryAck，再发 PCrdGrant 后重传"],
         ["转向 / D2D FIFO 深度",
@@ -1182,8 +1182,9 @@ code {{ font-size: 0.86em; }}
 <p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
 挂接点转向 {t.get('turn_lat', 5)} cycle。
 每 core 请求数 = <b>{m['k']}</b>（closed batch，共 {n_txn:,} 笔），
-每 core outstanding = <b>{oc}</b>（最长写 RTT，在途上限），
-每个 HA 跟踪表 <b>{pos}</b> 项，超出回 RetryAck。</p>
+每 core outstanding = <b>{oc}</b>（在途上限），
+每个 HA 跟踪表 <b>{pos}</b> 项，超出回 RetryAck。
+最长无拥塞写 RTT = {rtt.get('rtt')} cycle。</p>
 <div class="def"><b>k 和 outstanding 不是一回事。</b>
 k = {m['k']} 是每个 AI core 这一批要发的写请求总数。
 outstanding = {oc} 是同时能挂在网上的笔数：一笔从 REQ 上环占到 Comp 回来。
@@ -1193,13 +1194,15 @@ S1 在同样的 outstanding + slot 条件之上，再加 AIMD 源端注入预算
 
 <h2>结论</h2>
 <div class="key"><ol>
-<li><b>outstanding 按最长写 RTT 取值是 {oc}。</b>
+<li><b>outstanding 设为 {oc}。</b>
 无拥塞的 WriteNoSnp 往返 = REQ 去程 + DBID 回程 + WriteData 去程
 （{m['m_wdata']} flit 流水，最后一拍比第一拍晚 {m['m_wdata'] - 1} cycle）+ Comp 回程。
 最坏一对 (core {rtt.get('core')}, HA {rtt.get('ha')}) 的去程
 {rtt.get('fwd')} cycle、回程 {rtt.get('rev')} cycle，合计
-<b>{rtt.get('rtt')} cycle</b>。额度从 REQ 上环一直占到 Comp 回来，
-所以寄存器就写成这个数。{bind_txt}</li>
+<b>{rtt.get('rtt')} cycle</b>。额度从 REQ 上环一直占到 Comp 回来。
+窗口 {oc}{" 小于" if oc < (rtt.get("rtt") or oc) else " 相对"}最长 RTT
+{rtt.get('rtt')}，长路径上 core 会先把 {oc} 个槽占满再等 Comp。
+{bind_txt}</li>
 
 <li><b>HA 跟踪表满了就 retry。S0 不另加源端控速，S1 才控速。</b>
 每个 HA 同时只能收 {pos} 个请求；再来的 REQ 走
@@ -1261,7 +1264,7 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 
 <h2>4　复现</h2>
 <div class="def">
-<code>python3 utils/dse_stack_write_fair.py --focus --k {m['k']}</code><br>
+<code>python3 utils/dse_stack_write_fair.py --focus --k {m['k']} --oc {oc}</code><br>
 <code>python3 utils/gen_stack_write_report.py</code>
 <br><br>
 仿真 {m.get('wall_s', 0):.0f} s。outstanding = {oc}，HA POS = {pos}。

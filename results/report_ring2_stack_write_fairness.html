@@ -22,62 +22,62 @@ code { font-size: 0.86em; }
 <h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
 <p>bottom die 横环 4 cycle / 纵环 6 cycle /
 挂接点转向 5 cycle。
-每 core outstanding = <b>413</b>（最长写 RTT），
+每 core 请求数 = <b>800</b>（closed batch，共 48,000 笔），
+每 core outstanding = <b>128</b>（在途上限），
 每个 HA 跟踪表 <b>16</b> 项，超出回 RetryAck。
-workload：60 个 AI core 均匀写 96 个 HA，
-每 core 50 笔，共 3,000 笔。</p>
+最长无拥塞写 RTT = 413 cycle。</p>
+<div class="def"><b>k 和 outstanding 不是一回事。</b>
+k = 800 是每个 AI core 这一批要发的写请求总数。
+outstanding = 128 是同时能挂在网上的笔数：一笔从 REQ 上环占到 Comp 回来。
+S0 <b>没有源端流控</b>——只要该 core 还有 outstanding 空位、注入口当前 cycle
+ring 上有空 slot，就把下一条 REQ 发出；HA 跟踪表满回 RetryAck，那是完成方反压，不是源端控速。
+S1 在同样的 outstanding + slot 条件之上，再加 AIMD 源端注入预算。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
-<li><b>outstanding 按最长写 RTT 取值是 413，不是一个拍脑袋的 600。</b>
+<li><b>outstanding 设为 128。</b>
 无拥塞的 WriteNoSnp 往返 = REQ 去程 + DBID 回程 + WriteData 去程
 （4 flit 流水，最后一拍比第一拍晚 3 cycle）+ Comp 回程。
 最坏一对 (core 4, HA 231) 的去程
 58 cycle、回程 147 cycle，合计
-<b>413 cycle</b>。额度从 REQ 上环一直占到 Comp 回来，
-所以寄存器就写成这个数。本批次每 core 只有 50 笔，
-峰值占用 50，
-<b>413 这个上限本身没有打满</b>——它保证的是再长的往返也不会把 core 饿在等 Comp 上。</li>
+<b>413 cycle</b>。额度从 REQ 上环一直占到 Comp 回来。
+窗口 128 小于最长 RTT
+413，长路径上 core 会先把 128 个槽占满再等 Comp。
+本批次每 core 800 笔，大于窗口 128，实测峰值占用 128，<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。</li>
 
-<li><b>HA 跟踪表满了就 retry，S0 / S1 都没有拥塞崩溃。</b>
+<li><b>HA 跟踪表满了就 retry。S0 不另加源端控速，S1 才控速。</b>
 每个 HA 同时只能收 16 个请求；再来的 REQ 走
 RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
-S0 完成 <b>3,000/3,000</b>，makespan 2,327 cycle，
-RetryAck 1,350 次，有效并发是名义值的
-80.6%；
-S1 同样排空（3,000/3,000，2,359 cycle，
-retry 1,343）。
-<b>两个方案都没有活锁、没有停在停滞检测器上。</b></li>
+S0 完成 <b>48,000/48,000</b>，makespan 35,269 cycle，
+RetryAck 37,236 次，有效并发是名义值的
+22.1%；
+S1 完成 48,000/48,000，35,063 cycle，
+retry 37,257。
+两个方案都排空，没有活锁、没有停在停滞检测器上。</li>
 
-<li><b>按 top die 一组（10 个 AI core）看，写带宽在时间上是齐步走的，
-die 之间的完成量相同。</b>
+<li><b>按 top die 一组（10 个 AI core）看写带宽随时间的变化。</b>
 S0 组间完成量 max/min = 1.00，
-组间 Jain 0.9897；
-S1 为 1.00 / 0.9872。
-六个 die 最终写下的量一样，差异只在谁先跑完、过程中谁的瞬时带宽高一点。
+组间 Jain 1.0000；
+S1 为 1.00 / 1.0000。
 下图是各 group 写带宽随时间的曲线。</li>
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
-<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>CoV</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,327</td><td>56.2%</td><td><b>0.98636</b></td><td>1.92</td><td>0.1176</td><td>5,029</td></tr><tr><td>S1 拥塞等级 AIMD</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,359</td><td>55.4%</td><td><b>0.98239</b></td><td>2.27</td><td>0.1339</td><td>4,765</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,099</td><td>62.3%</td><td><b>0.97448</b></td><td>2.27</td><td>0.1618</td><td>6,484</td></tr><tr><td>S17 挂接点转向仲裁（本文提出）</td><td><b style="color:#16a34a">完成</b></td><td>3,000 / 3,000</td><td>2,384</td><td>54.9%</td><td><b>0.98258</b></td><td>2.17</td><td>0.1332</td><td>5,070</td></tr></tbody></table>
+<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>CoV</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#16a34a">完成</b></td><td>48,000 / 48,000</td><td>35,269</td><td>59.5%</td><td><b>0.99998</b></td><td>1.02</td><td>0.0049</td><td>75,450</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#16a34a">完成</b></td><td>48,000 / 48,000</td><td>35,063</td><td>59.9%</td><td><b>0.99994</b></td><td>1.04</td><td>0.0077</td><td>76,629</td></tr></tbody></table>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （50 cycle 滑窗）。
 六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
 就是这个 die 被饿死。
-S0 没有显式流控，瞬时带宽靠织物仲裁和 HA retry 成形：
-先有一段 100–400 cycle 的齐发射峰，随后跟踪表打满、RetryAck 把注入按住，
-中间出现低谷，P-Credit 回来后再起第二波。
-S1 的 AIMD 把第一峰压低了一点（约 5 vs S0 的 6+ flit/cycle），
-但六条线的相对位置和两波结构与 S0 几乎相同——
-在这个工作点上，真正限速的是 HA 跟踪表，不是 S1 的注入窗。
-S0 每核 Jain 0.9864、组间 CoV 0.102；
-S1 每核 Jain 0.9824、组间 CoV 0.114。</div>
+S0 瞬时带宽只受 outstanding、ring slot 和 HA retry 成形；
+S1 再叠一层源端 AIMD。
+S0 每核 Jain 1.0000、组间 CoV 0.004；
+S1 每核 Jain 0.9999、组间 CoV 0.007。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
 
 <h2>1　拓扑与硬件 setup</h2>
 <h3>1.1 总体结构</h3>
-<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>top die 数量</td><td>6</td><td>每个是 20 节点、双平面、双向 full ring</td></tr><tr><td>每 die 节点角色</td><td>10 core / 8 D2D bridge / 2 非终端</td><td>偶数号为 AI core；节点 9、19 既非 core 也非 HA，只转发</td></tr><tr><td>AI core 总数</td><td>60</td><td>发起方</td></tr><tr><td>HA 总数</td><td>96</td><td>bottom die，12 行 × 8 列</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 die 8 条，双向，跨 SerDes</td></tr><tr><td>挂接点</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，共 6 组挂 6 个 top die</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 half ring</td><td>half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列</td></tr><tr><td>有向链路总数</td><td>768</td><td>top 480 / D2D 96 / 横 48 / 纵 144</td></tr><tr><td>CHI 虚通道</td><td>req / rsp / dat</td><td>REQ、RSP、DAT 各自独占链路带宽，互不阻塞</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>每 core outstanding</td><td><b>413</b></td><td>按最长无拥塞写 RTT 设定：从 REQ 上环到 Comp 回来，一个额度要盖住这段往返</td></tr><tr><td>HA 请求跟踪表</td><td><b>16</b> 项 / HA</td><td>超出后对后续 REQ 回 RetryAck，再发 PCrdGrant 后重传</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>workload</td><td>每 core 50 笔，均匀写全部 96 个 HA</td><td>需求完全对称，任何不均衡都是织物造成的</td></tr></tbody></table>
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>top die 数量</td><td>6</td><td>每个是 20 节点、双平面、双向 full ring</td></tr><tr><td>每 die 节点角色</td><td>10 core / 8 D2D bridge / 2 非终端</td><td>偶数号为 AI core；节点 9、19 既非 core 也非 HA，只转发</td></tr><tr><td>AI core 总数</td><td>60</td><td>发起方</td></tr><tr><td>HA 总数</td><td>96</td><td>bottom die，12 行 × 8 列</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 die 8 条，双向，跨 SerDes</td></tr><tr><td>挂接点</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，共 6 组挂 6 个 top die</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 half ring</td><td>half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列</td></tr><tr><td>有向链路总数</td><td>768</td><td>top 480 / D2D 96 / 横 48 / 纵 144</td></tr><tr><td>CHI 虚通道</td><td>req / rsp / dat</td><td>REQ、RSP、DAT 各自独占链路带宽，互不阻塞</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>每 core outstanding</td><td><b>128</b></td><td>在途上限：从 REQ 上环占到 Comp 回来。最长无拥塞写 RTT 是 413 cycle</td></tr><tr><td>HA 请求跟踪表</td><td><b>16</b> 项 / HA</td><td>超出后对后续 REQ 回 RetryAck，再发 PCrdGrant 后重传</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>workload</td><td>每 core <b>800</b> 个写请求，均匀写全部 96 个 HA</td><td>这是请求总数，不是在途上限；共 48,000 笔。需求对称，不均衡来自织物</td></tr></tbody></table>
 <h3>1.2 链路延迟</h3>
 <table><thead><tr><th>链路</th><th>延迟</th><th>说明</th></tr></thead><tbody><tr><td>top die 环内链路</td><td>1 / 2 / 3 / 4 cycle</td><td>共 20 段，按位置不同；两个平面各一份</td></tr><tr><td>D2D 跨 die</td><td>4 cycle</td><td>SerDes + 跨时钟域</td></tr><tr><td>bottom die 横环节点间</td><td><b>4</b> cycle</td><td>挂接点 → 挂接点，单向 half ring</td></tr><tr><td>bottom die 纵环节点间</td><td><b>6</b> cycle</td><td>HA ↔ 挂接点，单向 half ring</td></tr><tr><td>挂接点转向</td><td><b>5</b> cycle</td><td>横环 ↔ 纵环，经转向 FIFO，不计入 D2D 落地</td></tr></tbody></table>
 <div class="def">横环一跳 4 cycle，纵环一跳
@@ -94,18 +94,18 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 4 cycle 里�
 <h2>2　按 top die 分组的写带宽</h2>
 <p>一个 top die 的 10 个 AI core 共用一条环、一组 8 个挂接点和 8 条 D2D，
 是不可再往下调度的单位。下表是整次运行的合计；上图是同一指标的时间展开。</p>
-<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计</th><th>die 间<br>max/min<br>（按完成量）</th><th>die 间 Jain<br>（竞争窗口）</th><th>die 间<br>max/min</th><th>die 间 CoV</th><th>最差 die</th><th>Jain<br>（按 core）</th><th>最差 die 内部<br>的 Jain</th></tr></thead><tbody><tr><td>413</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>0.859 / 0.859 / 0.859 / 0.859 / 0.859 / 0.859</td><td>5.157</td><td>1.00</td><td>0.9897</td><td>1.39</td><td>0.102</td><td>die 1</td><td>0.9864</td><td>0.9890</td></tr><tr><td>413</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>0.848 / 0.848 / 0.848 / 0.848 / 0.848 / 0.848</td><td>5.087</td><td>1.00</td><td>0.9872</td><td>1.46</td><td>0.114</td><td>die 1</td><td>0.9824</td><td>0.9850</td></tr><tr><td>413</td><td>S16</td><td><b style="color:#16a34a">完成</b></td><td>0.953 / 0.953 / 0.953 / 0.953 / 0.953 / 0.953</td><td>5.717</td><td>1.00</td><td>0.9779</td><td>1.62</td><td>0.150</td><td>die 1</td><td>0.9745</td><td>0.9866</td></tr><tr><td>413</td><td>S17</td><td><b style="color:#16a34a">完成</b></td><td>0.839 / 0.839 / 0.839 / 0.839 / 0.839 / 0.839</td><td>5.034</td><td>1.00</td><td>0.9865</td><td>1.47</td><td>0.117</td><td>die 1</td><td>0.9826</td><td>0.9836</td></tr></tbody></table>
+<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计</th><th>die 间<br>max/min<br>（按完成量）</th><th>die 间 Jain<br>（竞争窗口）</th><th>die 间<br>max/min</th><th>die 间 CoV</th><th>最差 die</th><th>Jain<br>（按 core）</th><th>最差 die 内部<br>的 Jain</th></tr></thead><tbody><tr><td>128</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>0.907 / 0.907 / 0.907 / 0.907 / 0.907 / 0.907</td><td>5.444</td><td>1.00</td><td>1.0000</td><td>1.01</td><td>0.004</td><td>die 2</td><td>1.0000</td><td>1.0000</td></tr><tr><td>128</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>0.913 / 0.913 / 0.913 / 0.913 / 0.913 / 0.913</td><td>5.476</td><td>1.00</td><td>1.0000</td><td>1.02</td><td>0.007</td><td>die 2</td><td>0.9999</td><td>1.0000</td></tr></tbody></table>
 
 <h2>3　理论下界</h2>
-<table><thead><tr><th>下界来源</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>链路下界（分 VC 取最大）</td><td>1,184</td><td>最忙的一条有向链路上、单个 VC 需要搬运的 flit 数</td></tr><tr><td>　└ 分 VC 明细</td><td>dat 1,184 / req 296 / rsp 652</td><td>DAT 是 4 flit/笔，通常是它决定链路下界</td></tr><tr><td>端口下界</td><td>250</td><td>某个站点注入或弹出端口的总需求（各 VC 合并，端口只有一个）</td></tr><tr><td>　└ 分织物明细</td><td>d2d 219 / h 871 / top 218 / v 1,308</td><td>纵环 144 条、横环 48 条，横环少但只承担换列流量</td></tr><tr><td>织物切割下界</td><td>1,308</td><td>某类织物的总 flit·跳 ÷ 该类链路数</td></tr><tr><td>单事务时延下界</td><td>609</td><td>一笔写的四段握手串行时延，与并发无关</td></tr><tr><td><b>综合下界</b></td><td><b>1,308</b></td><td>以上四者取最大</td></tr></tbody></table>
-<p class="note">S0 效率 0.56，S1 0.55
+<table><thead><tr><th>下界来源</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>链路下界（分 VC 取最大）</td><td>18,060</td><td>最忙的一条有向链路上、单个 VC 需要搬运的 flit 数</td></tr><tr><td>　└ 分 VC 明细</td><td>dat 18,060 / req 4,515 / rsp 10,026</td><td>DAT 是 4 flit/笔，通常是它决定链路下界</td></tr><tr><td>端口下界</td><td>4,000</td><td>某个站点注入或弹出端口的总需求（各 VC 合并，端口只有一个）</td></tr><tr><td>　└ 分织物明细</td><td>d2d 3,500 / h 13,991 / top 3,502 / v 21,001</td><td>纵环 144 条、横环 48 条，横环少但只承担换列流量</td></tr><tr><td>织物切割下界</td><td>21,001</td><td>某类织物的总 flit·跳 ÷ 该类链路数</td></tr><tr><td>单事务时延下界</td><td>609</td><td>一笔写的四段握手串行时延，与并发无关</td></tr><tr><td><b>综合下界</b></td><td><b>21,001</b></td><td>以上四者取最大</td></tr></tbody></table>
+<p class="note">S0 效率 0.60，S1 0.60
 （下界 / makespan）。</p>
 
 <h2>4　复现</h2>
 <div class="def">
-<code>python3 utils/dse_stack_write_fair.py --focus --k 50</code><br>
+<code>python3 utils/dse_stack_write_fair.py --focus --k 800 --oc 128</code><br>
 <code>python3 utils/gen_stack_write_report.py</code>
 <br><br>
-仿真 24 s。outstanding = 413，HA POS = 16。
+仿真 828 s。outstanding = 128，HA POS = 16。
 </div>
 </body></html>
