@@ -198,4 +198,4 @@ class Ring2GrantSim(GrantMixin, Ring2BaseSim):
 
     def _emit_dbid(self, txn: Txn) -> None:
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+                         self.t + self._ha_delay(txn, "dbid"))

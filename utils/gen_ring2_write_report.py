@@ -54,17 +54,44 @@ def _use_cjk_font() -> None:
             return
 
 
-def _table(headers: list[str], rows: list[list]) -> str:
+def _table(headers: list[str], rows: list[list], *, hl: list[bool] | None = None
+           ) -> str:
     th = "".join(f"<th>{h}</th>" for h in headers)
-    body = ["<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>"
-            for r in rows]
+    body = []
+    for i, r in enumerate(rows):
+        cls = ' class="imbal"' if hl and i < len(hl) and hl[i] else ""
+        body.append("<tr" + cls + ">" + "".join(f"<td>{c}</td>" for c in r)
+                    + "</tr>")
     return (f"<table><thead><tr>{th}</tr></thead>"
             f"<tbody>{''.join(body)}</tbody></table>")
 
 
+def _dir_imbal(a: int, b: int, *, min_n: int = 50, ratio: float = 2.0) -> bool:
+    if a + b < min_n:
+        return False
+    lo = min(a, b)
+    return lo == 0 or max(a, b) / lo >= ratio
+
+
+def _present_schemes(pat: dict, wanted: tuple[str, ...] | None = None
+                     ) -> tuple[str, ...]:
+    have = pat.get("schemes") or {}
+    order = wanted or SCHEMES
+    return tuple(s for s in order if s in have)
+
+
 def _cores(pat: dict) -> list[str]:
-    return sorted(pat["schemes"][SCHEMES[0]]["fairness"]["bw_by_core"],
+    have = _present_schemes(pat) or tuple((pat.get("schemes") or {}))
+    return sorted(pat["schemes"][have[0]]["fairness"]["bw_by_core"],
                   key=int)
+
+
+def _jit_label(meta: dict) -> str:
+    hi = int(meta.get("ha_rsp_jit") or 0)
+    if hi <= 0:
+        return f"{meta.get('t_ha_service', 0)}（常数）"
+    lo = int(meta.get("ha_rsp_jit_lo") or 0)
+    return f"U{{{lo}..{hi}}}"
 
 
 def _sch(pat: dict, s: str, *, s0_unbounded: bool = False) -> dict:
@@ -121,7 +148,9 @@ def plot_topology(meta: dict, path: Path) -> None:
         tag = {"core": f"C{i}", "mem": f"M{i}"}.get(r, f"N{i}")
         ax.text(x, y, tag, ha="center", va="center", fontsize=7.2,
                 color="white", fontweight="700", zorder=5)
-    ax.text(0, 0.10, "plane ×2", ha="center", fontsize=11, color="#334155")
+    n_pl = int(meta.get("n_planes") or 2)
+    ax.text(0, 0.10, f"plane ×{n_pl}", ha="center", fontsize=11,
+            color="#334155")
     ax.text(0, -0.02, "双向闭合 full ring · 最短路", ha="center", fontsize=11,
             color="#334155")
     others = any(_role(i, meta) == "other" for i in range(n))
@@ -133,9 +162,11 @@ def plot_topology(meta: dict, path: Path) -> None:
                 color="#64748b")
     ax.set_xlim(-1.45, 1.45)
     ax.set_ylim(-1.45, 1.45)
-    ax.set_title("20 节点双 plane 闭合 full ring · 边上数字 = hop 时延（拍）\n"
-                 f"蓝 = AI core（{n_core}），橙 = memory HA（{n_mem}）{extra}",
-                 fontsize=12, pad=8)
+    ax.set_title(
+        f"20 节点{('单' if n_pl == 1 else '双')} plane 闭合 full ring · "
+        f"边上数字 = hop 时延（拍）\n"
+        f"蓝 = AI core（{n_core}），橙 = memory HA（{n_mem}）{extra}",
+        fontsize=12, pad=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -334,7 +365,7 @@ def plot_hop_bw(pat: dict, cap: int, path: Path) -> None:
     """Ring-wide hop bandwidth against the 3-VC cap."""
     _use_cjk_font()
     fig, ax = plt.subplots(figsize=(10.2, 3.6))
-    for s in SCHEMES:
+    for s in _present_schemes(pat):
         hb = pat["schemes"][s]["hop_bw"]
         ax.plot(hb["t"], hb["rate"], lw=1.3, color=COLOR[s], label=LABEL[s])
     ax.axhline(cap, color="black", ls=":", lw=1.4,
@@ -566,6 +597,141 @@ def plot_rate_trace(study: dict, path: Path) -> None:
     plt.close(fig)
 
 
+_CORE_COL = (
+    "#2563eb", "#dc2626", "#16a34a", "#a855f7", "#ea580c",
+    "#0891b2", "#db2777", "#65a30d", "#7c3aed", "#0f766e",
+)
+
+
+def _ost_by_oc(repro: dict) -> dict[int, dict]:
+    return {r["core_outstanding"]: r for r in repro.get("ost") or []
+            if not r.get("tag")}
+
+
+def plot_ost_repro(repro: dict, path: Path) -> None:
+    """Silicon-style overlay: write BW and effective ost share a shape."""
+    _use_cjk_font()
+    by = _ost_by_oc(repro)
+    fig, axes = plt.subplots(2, 2, figsize=(11.4, 6.4), sharex="col")
+    for col, oc, title in ((0, 16, "ost=16（刚好盖住延迟）"),
+                           (1, 128, "ost=128（开太大）")):
+        r = by[oc]
+        wr, ost = r["wr_binned"], r["ost"]
+        axes[0][col].plot(wr["t"], wr["rate"], color="#0f172a", lw=1.4,
+                          label="写带宽")
+        ax2 = axes[0][col].twinx()
+        ax2.plot(ost["t"], ost["eff_mean"], color="#dc2626", lw=1.3,
+                 label="有效 ost")
+        ax2.plot(ost["t"], ost["used_mean"], color="#94a3b8", lw=1.0, ls="--",
+                 label="已分配 ost")
+        axes[0][col].set_title(title, fontsize=10)
+        axes[0][col].set_ylabel("写带宽 flit/cycle")
+        ax2.set_ylabel("每 core outstanding")
+        h1, l1 = axes[0][col].get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        axes[0][col].legend(h1 + h2, l1 + l2, fontsize=7.5, loc="upper right")
+        axes[0][col].grid(alpha=0.3)
+        for i, c in enumerate(ost["cores"]):
+            series = [row[i] for row in ost["used"]]
+            axes[1][col].plot(ost["t"], series, lw=0.9,
+                              color=_CORE_COL[i % len(_CORE_COL)],
+                              label=f"C{c}")
+        axes[1][col].set_ylabel("该 AIC 已分配 ost")
+        axes[1][col].set_xlabel("cycle")
+        axes[1][col].grid(alpha=0.3)
+        if col == 1:
+            axes[1][col].legend(fontsize=6.5, ncol=2, loc="upper right")
+    fig.suptitle(
+        f"复现：ost 太少盖不住延迟，太多被乱序/重试吃掉"
+        f"（ost=16 时 BW↔有效 ost r={by[16]['bw_eff_corr']}；"
+        f"ost=128 时 r={by[128]['bw_eff_corr']}）",
+        fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def plot_ost_inorder(repro: dict, path: Path) -> None:
+    """Same ost=128 run with in-order retirement: waste moves to HOL."""
+    _use_cjk_font()
+    row = next((r for r in repro.get("ost") or [] if r.get("tag") == "inorder"),
+               None)
+    if not row:
+        return
+    ost = row["ost"]
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 3.5), sharex=True)
+    axes[0].plot(ost["t"], ost["used_mean"], color="#94a3b8", lw=1.3,
+                 label="已分配")
+    axes[0].plot(ost["t"], ost["eff_mean"], color="#2563eb", lw=1.4,
+                 label="有效")
+    axes[0].plot(ost["t"], ost["park_mean"], color="#f59e0b", lw=1.2, ls="--",
+                 label="停摆（等 PCrd）")
+    axes[0].plot(ost["t"], ost["hol_mean"], color="#dc2626", lw=1.2,
+                 label="队头阻塞（等前序）")
+    axes[0].set_ylabel("每 core 槽位")
+    axes[0].set_title("按序退休：空等记在 HOL 上", fontsize=10)
+    axes[0].legend(fontsize=8)
+    axes[0].grid(alpha=0.3)
+    wr = row["wr_binned"]
+    axes[1].plot(wr["t"], wr["rate"], color="#0f172a", lw=1.4, label="写带宽")
+    ax2 = axes[1].twinx()
+    ax2.plot(ost["t"], ost["eff_mean"], color="#dc2626", lw=1.3,
+             label="有效 ost")
+    axes[1].set_ylabel("写带宽 flit/cycle")
+    ax2.set_ylabel("有效 ost")
+    axes[1].set_title(f"带宽仍跟着有效 ost（r={row['bw_eff_corr']}）",
+                      fontsize=10)
+    h1, l1 = axes[1].get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    axes[1].legend(h1 + h2, l1 + l2, fontsize=8)
+    axes[1].grid(alpha=0.3)
+    for ax in axes:
+        ax.set_xlabel("cycle")
+    fig.suptitle("double-buffer / 保序窗口的空等：A、B 都做到 99% 时，"
+                 "有效 ost 塌成只剩还没回来的那几笔", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def plot_blocker_repro(repro: dict, path: Path) -> None:
+    """Victim vs control, with and without the circling blockers."""
+    _use_cjk_font()
+    rows = {r["tag"]: r for r in repro.get("blocker") or []}
+    order = ("solo", "blockers_track0", "blockers_track32")
+    lab = {"solo": "无挡路",
+           "blockers_track0": "挡路 · tracker=∞",
+           "blockers_track32": "挡路 · tracker=32"}
+    xs = list(range(len(order)))
+    fig, axes = plt.subplots(1, 3, figsize=(12.4, 3.6))
+    w = 0.34
+    for i, tag in enumerate(order):
+        r = rows[tag]
+        axes[0].bar(i - w / 2, r["victim"]["bw_run"], w, color="#2563eb",
+                    label="受害者 C10→M15" if i == 0 else None)
+        axes[0].bar(i + w / 2, r["control"]["bw_run"], w, color="#16a34a",
+                    label="对照 C16→M17" if i == 0 else None)
+        axes[1].bar(i - w / 2, r["victim"]["hop_busy_dat"], w, color="#2563eb")
+        axes[1].bar(i + w / 2, r["control"]["hop_busy_dat"], w, color="#16a34a")
+        axes[2].bar(i, r["n_eject_defl_hot"], color="#dc2626")
+    axes[0].set_ylabel("写带宽 flit/cycle（该核自己的 finish）")
+    axes[0].set_title("谁被挡住", fontsize=10)
+    axes[0].legend(fontsize=8)
+    axes[1].set_ylabel("WriteData 因 hop 被占而没上环")
+    axes[1].set_title("10→11 上的挡路石", fontsize=10)
+    axes[2].set_ylabel("M11 下环失败而转圈")
+    axes[2].set_title("移动障碍（eject deflect）", fontsize=10)
+    for ax in axes:
+        ax.set_xticks(xs)
+        ax.set_xticklabels([lab[t] for t in order], fontsize=8)
+        ax.grid(alpha=0.3, axis="y")
+    fig.suptitle("复现：流量 2 上环堵在环上，把本来能走的流量 3 堵住",
+                 fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # tables
 # ---------------------------------------------------------------------------
@@ -573,7 +739,8 @@ def plot_rate_trace(study: dict, path: Path) -> None:
 def _setup_table(meta: dict) -> str:
     rows = [
         ["节点数 / plane 数", f"{len(meta['link_lats'])} / {meta['n_planes']}",
-         "两个独立的双向闭合 full ring，共用同一套几何"],
+         ("一个双向闭合 full ring" if int(meta.get("n_planes") or 2) == 1
+          else "两个独立的双向闭合 full ring，共用同一套几何")],
         ["AI core", f"{len(meta['core_nodes'])} 个：" +
          ", ".join(f"C{c}" for c in meta["core_nodes"]), "写发起方（CHI RN）"],
         ["memory 节点", f"{len(meta['mem_nodes'])} 个：" +
@@ -586,7 +753,9 @@ def _setup_table(meta: dict) -> str:
              "在环上转发，但既不发起也不接收写"])
     rows += [
         ["路由", "最短路（跳数平局走 CW）", "S0 及全部方案一致"],
-        ["plane 选择", meta["plane_sel"], "两个 plane 之间做负载均衡"],
+        ["plane 选择", meta["plane_sel"],
+         ("单平面，无 plane 选择" if int(meta.get("n_planes") or 2) == 1
+          else "两个 plane 之间做负载均衡")],
         ["每 core outstanding", meta["core_outstanding"],
          "同时在飞的写事务上限"],
         ["CHI VC", " / ".join(meta["vcs"]).upper(),
@@ -601,6 +770,16 @@ def _setup_table(meta: dict) -> str:
         ["下环队列深度", meta["eject_depth"], "每 (node, plane)"],
         ["I-tag 门限 t_inj", meta["t_inj"], "限制注入饥饿时长"],
         ["E-tag 门限 t_xfer", meta["t_xfer"], "限制偏转次数"],
+        ["写激励",
+         f"{meta.get('burst_b', 128)}B burst / "
+         f"{meta.get('stride_b', 4096)}B stride / "
+         f"{(meta.get('tile_b') or 65536) // 1024}KB tile",
+         f"1 flit = {meta.get('flit_b', 64)}B，每笔 WriteData ×{meta['W']}；"
+         "地址哈希已把 8 个 mem 均衡"],
+        ["HA RSP 时延", _jit_label(meta),
+         "写请求到达 memory 后，DBIDResp / RetryAck / Comp 各自独立抽"],
+        ["拥塞总线时延", f"{meta.get('bus_lat', 1)} 拍",
+         "S1 / S15 专用广播，不占环上 hop；窗口 64 拍"],
     ]
     return _table(["项目", "取值", "说明"], rows)
 
@@ -686,6 +865,178 @@ def _track_table(pat: dict) -> str:
     return _table(["每 completer 的请求 tracker", "makespan", "吞吐",
                    "max/min", "最低 BW", "最高 BW", "重试/事务",
                    "峰值占用表项", "有效 outstanding", "延迟 p99"], rows)
+
+
+def _board_dir_rows(pat: dict, scheme: str = "S0") -> tuple[list[list], list[bool]]:
+    d = (pat["schemes"].get(scheme) or {}).get("board_dir") or {}
+    rows, hl = [], []
+    for c in _cores(pat):
+        r = d.get(c) or {}
+        ok_cw, ok_ccw = int(r.get("ok_cw", 0)), int(r.get("ok_ccw", 0))
+        fl_cw, fl_ccw = int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0))
+        ok, fail = ok_cw + ok_ccw, fl_cw + fl_ccw
+        ok_r = (max(ok_cw, ok_ccw) / min(ok_cw, ok_ccw)
+                if min(ok_cw, ok_ccw) else float("inf") if ok else 0)
+        fl_r = (max(fl_cw, fl_ccw) / min(fl_cw, fl_ccw)
+                if min(fl_cw, fl_ccw) else float("inf") if fail else 0)
+        mark = _dir_imbal(ok_cw, ok_ccw) or _dir_imbal(fl_cw, fl_ccw)
+        rows.append([
+            f"C{c}", ok_cw, ok_ccw,
+            "∞" if ok_r == float("inf") else f"{ok_r:.2f}",
+            fl_cw, fl_ccw,
+            "∞" if fl_r == float("inf") else f"{fl_r:.2f}",
+            "偏" if mark else "",
+        ])
+        hl.append(mark)
+    return rows, hl
+
+
+def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
+    """Forecast vs what this run actually did. Do not rewrite the forecast."""
+    recv = (pat["schemes"]["S0"].get("wr_recv_by_ha") or {})
+    xs = [int(v) for v in recv.values()]
+    spread = (max(xs) - min(xs)) if xs else 0
+    s0 = pat["schemes"]["S0"]
+    s1 = (pat["schemes"].get("S1") or {})
+    rows0, hl0 = _board_dir_rows(pat, "S0")
+    rows1, hl1 = _board_dir_rows(pat, "S1") if s1 else ([], [])
+    n0 = sum(1 for x in hl0 if x)
+    n1 = sum(1 for x in hl1 if x)
+    bu = meta.get("belief_update") or {}
+    b0 = bu.get("s0_board") or {}
+    b1 = bu.get("s1_board") or {}
+    fc = fc or {}
+    f1 = s1.get("fairness") or {}
+    f0 = s0.get("fairness") or {}
+    thr_note = ""
+    if f1.get("throughput") is not None and f0.get("throughput"):
+        d = 100.0 * (f1["throughput"] - f0["throughput"]) / f0["throughput"]
+        thr_note = (f"S1 吞吐 {f1['throughput']}（{d:+.1f}% vs S0 "
+                    f"{f0['throughput']}）。")
+    bus_fc = meta.get("bus_lat_forecast") or {}
+    bus_note = ""
+    if bus_fc:
+        bus_note = (
+            f"<br><b>总线时延 {meta.get('bus_lat', '—')} 拍的预测</b>"
+            f"（置信度 {bus_fc.get('confidence', '—')}）："
+            f"{bus_fc.get('hypothesis', '')} "
+            f"证伪：{bus_fc.get('falsify', '')}"
+            f"<br>对照：S1 总线实测 {bu.get('s1_bus_lat', '—')} 拍。"
+        )
+    return f"""
+<div class="def">
+<b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
+{fc.get('hypothesis', '')}
+证伪：{fc.get('falsify', '')}{bus_note}<br>
+<b>对照。</b>
+{len(xs)} 个 mem 收到的 WriteData
+{'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
+ else f'极差 {spread}'}。
+S0 延迟 p50 = {s0.get('lat_p50')}，max/min = {f0.get('max_min')}。
+{thr_note}
+S0 上环方向高亮 {n0}/{len(rows0)} 个核
+（成功偏 {b0.get('n_ok_imbal', '—')}，失败偏 {b0.get('n_fail_imbal', '—')}，
+失败最大比 {b0.get('max_fail_ratio', '—')}）；
+S1 高亮 {n1}/{len(rows1) or 0} 个核
+（失败最大比 {b1.get('max_fail_ratio', '—')}）。
+预测写在 <code>meta.stimulus_forecast</code>，对照写在
+<code>meta.belief_update</code>，前者不改。
+</div>
+"""
+
+
+def _sec431(pat: dict, imgs: dict, schemes: tuple[str, ...] = ("S0", "S1")
+            ) -> str:
+    """§4.3.1: per-scheme CW/CCW board tables. Uniform only."""
+    parts = [
+        "<p>每个 AI core 的上环口按最短路把 REQ / WriteData 送进 CW（+1）或 "
+        "CCW（−1）。次数是<b>该核作为源</b>的上环（不是 HA 回 RSP）。"
+        "黄底行是两方向比 ≥ 2 的核。</p>"]
+    for s in schemes:
+        rec = (pat.get("schemes") or {}).get(s) or {}
+        if not rec.get("board_dir"):
+            continue
+        key = "board_dir" if s == "S0" else f"board_dir_{s.lower()}"
+        img = imgs.get(key, "")
+        img_html = (f'<img src="{img}" alt="{s} board CW vs CCW">'
+                    if img else "")
+        parts.append(f"<p><b>{s}</b> · {LABEL.get(s, s)}</p>{img_html}"
+                     f"{_board_dir_table(pat, s)}")
+        parts.append(_board_dir_obs(pat, s))
+    return "\n".join(parts)
+
+
+def _board_dir_obs(pat: dict, scheme: str) -> str:
+    """Name the one-sided cores even when they miss the ≥2 highlight."""
+    d = (pat["schemes"].get(scheme) or {}).get("board_dir") or {}
+    heavy = []
+    for c in _cores(pat):
+        r = d.get(c) or {}
+        a, b = int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0))
+        if a + b < 50 or min(a, b) == 0:
+            if a + b >= 50 and min(a, b) == 0:
+                heavy.append(f"C{c} 整侧为 0")
+            continue
+        ratio = max(a, b) / min(a, b)
+        if ratio >= 1.5:
+            side = "CW" if a > b else "CCW"
+            heavy.append(f"C{c} 失败偏 {side}（{ratio:.2f}）")
+    if not heavy:
+        return ""
+    return (f'<p class="note">{scheme} 失败比 ≥ 1.5 的核：'
+            + "；".join(heavy)
+            + "。高亮线仍是 ≥ 2，不因本轮结果改。</p>")
+
+
+def _board_dir_table(pat: dict, scheme: str = "S0") -> str:
+    rows, hl = _board_dir_rows(pat, scheme)
+    n = sum(1 for x in hl if x)
+    return (
+        _table(["core", "成功 CW", "成功 CCW", "成功比",
+                "失败 CW", "失败 CCW", "失败比", ""],
+               rows, hl=hl)
+        + f'<p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2'
+        f'（该侧合计 ≥ 50）。{scheme} 上 <b>{n}/{len(rows)}</b> 个核偏了。</p>'
+    )
+
+
+def plot_board_dir(pat: dict, path: Path, *, scheme: str = "S0") -> None:
+    """Per-core board ok/fail split by CW vs CCW."""
+    _use_cjk_font()
+    d = (pat["schemes"].get(scheme) or {}).get("board_dir") or {}
+    cs = _cores(pat)
+    xs = list(range(len(cs)))
+    ok_cw = [int((d.get(c) or {}).get("ok_cw", 0)) for c in cs]
+    ok_ccw = [int((d.get(c) or {}).get("ok_ccw", 0)) for c in cs]
+    fl_cw = [int((d.get(c) or {}).get("fail_cw", 0)) for c in cs]
+    fl_ccw = [int((d.get(c) or {}).get("fail_ccw", 0)) for c in cs]
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.8), sharex=True)
+    w = 0.36
+    axes[0].bar([x - w / 2 for x in xs], ok_cw, w, color="#2563eb", label="CW")
+    axes[0].bar([x + w / 2 for x in xs], ok_ccw, w, color="#ea580c", label="CCW")
+    axes[0].set_ylabel("上环成功次数")
+    axes[0].set_title("成功", fontsize=10)
+    axes[1].bar([x - w / 2 for x in xs], fl_cw, w, color="#2563eb", label="CW")
+    axes[1].bar([x + w / 2 for x in xs], fl_ccw, w, color="#ea580c", label="CCW")
+    axes[1].set_ylabel("上环失败次数")
+    axes[1].set_title("失败", fontsize=10)
+    marks = [_dir_imbal(a, b) or _dir_imbal(c, d)
+             for a, b, c, d in zip(ok_cw, ok_ccw, fl_cw, fl_ccw)]
+    labels = [f"C{c}" + ("*" if m else "") for c, m in zip(cs, marks)]
+    for ax in axes:
+        ax.set_xticks(xs)
+        ax.set_xticklabels(labels, fontsize=8)
+        for i, m in enumerate(marks):
+            if m:
+                ax.axvspan(i - 0.45, i + 0.45, color="#fde68a", zorder=0,
+                           alpha=0.7)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3, axis="y")
+    fig.suptitle(f"{scheme}：每 core 上环成功 / 失败 × CW / CCW"
+                 "（* = 两方向比 ≥ 2）", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
 
 
 def _rc_table(pat: dict) -> str:
@@ -1037,7 +1388,8 @@ S17/S18 管"把标称 outstanding 自动压到有效 outstanding 附近"。</li>
 """
 
 
-def _retry_sections(study: dict, imgs: dict, meta: dict, pat: dict) -> str:
+def _retry_sections(study: dict, imgs: dict, meta: dict, pat: dict,
+                    repro: dict | None = None) -> str:
     f = _retry_facts(study)
     m = study["meta"]
     kn = m.get("knobs") or {}
@@ -1059,6 +1411,7 @@ def _retry_sections(study: dict, imgs: dict, meta: dict, pat: dict) -> str:
     rr = f.get("rate_rows") or [{}]
     i = rr.index(rb) if rb in rr else 0
     rlo, rhi = rr[max(0, i - 1)], rr[min(len(rr) - 1, i + 1)]
+    repro_html = _repro_sections(repro, imgs) if repro else ""
     return f"""
 <h2>9. 第二个理由：outstanding 开大之后重试爆炸，有效 outstanding 反而变少</h2>
 <p>第 3 节已经给出了基线（tracker = {study['meta']['ha_track']}）
@@ -1201,7 +1554,182 @@ completer 侧压力大得多。</p>
 {other} 需要更大的标称值，才能换来更小的有效值。
 表里最后两列是"把 outstanding 写死在 {oc}"要付的吞吐。
 <b>一个静态常数没法同时服务两个场景，这就是需要动态流控的直接证据。</b></div>
+{repro_html}
+""" + _retry_s10(study, imgs, meta, pat)
 
+
+def _repro_sections(repro: dict, imgs: dict) -> str:
+    """Judgment + time-series / three-flow reproduction of over-injection."""
+    if not repro:
+        return ""
+    m = repro["meta"]
+    bu = repro.get("belief_update") or {}
+    fc = m.get("forecast") or {}
+    by = _ost_by_oc(repro)
+    lo, hi, huge = by.get(16, {}), by.get(128, {}), by.get(256, {})
+    inn = next((r for r in repro.get("ost") or []
+                if r.get("tag") == "inorder"), {})
+    blk = {r["tag"]: r for r in repro.get("blocker") or []}
+    solo, t0, t32 = (blk.get("solo") or {}, blk.get("blockers_track0") or {},
+                     blk.get("blockers_track32") or {})
+    hops = " → ".join(str(a) for a, _ in m.get("victim_hops") or [])
+    hops = f"{hops} → {m['victim_ha']}" if hops else f"C{m['victim']}→M{m['victim_ha']}"
+    e1, e2 = bu.get("ex1") or {}, bu.get("ex2") or {}
+    f1, f2 = fc.get("ex1") or {}, fc.get("ex2") or {}
+
+    def _ok(pred: bool) -> str:
+        return "命中" if pred else "未命中"
+
+    ex1_core = (
+        e1.get("oc16_retry") == 0
+        and e1.get("oc128_thr_lt_oc16")
+        and 20 <= (e1.get("oc128_eff") or 0) <= 26
+    )
+    ex1_corr = (e1.get("bw_eff_corr_128") or 0) >= 0.6
+    ex1_hit = ex1_core and ex1_corr
+    vdrop = e2.get("victim_drop_pct")
+    cdrop = e2.get("control_drop_pct")
+    ex2_hit = (vdrop is not None and vdrop <= -30
+               and cdrop is not None and abs(cdrop) <= 15)
+    vdrop_s = f"{vdrop:+.1f}" if vdrop is not None else "—"
+    cdrop_s = f"{cdrop:+.1f}" if cdrop is not None else "—"
+    return f"""
+<h3>9.6 先判断，再复现：路上包太多会挡别人</h3>
+<p>流控要解决的不是“环挤了所以限速”，而是<b>还没轮到你的时候不要出去</b>：
+出去也得不到服务，只会站在队头变成别人的挡路石。两条机理事先写下来，
+再在本仿真里对着硅上 ost=600 / ost=1000 那组图做时间序列复现。</p>
+
+<div class="def">
+<b>例子 1 — HA 过载 → RetryAck → 乱序 → 有效 ost 塌缩。</b>
+请求堆到 HA 的 tracker 上，HA 回 RetryAck，接受顺序被打乱。
+队列里 10 人和 100 人，最坏乱序从等 10 人变成等 100 人。
+AIC 指令可以乱序，但有窗口：double buffer 下下一个 load A
+必须等上一个 load A 做完，否则覆盖同一地址。乱序时 A、B 都做到 99%、
+只等最后两个包，AIC 就只剩 ~2 个有效 ost。完全保序则 A 一完成就能发
+下一个 load A，和 load B 并行。
+硅上 ost=1000 时带宽曲线和有效 ost 曲线几乎同一形状，且远低于 1000、
+也低于 600 这条地板；ost=600 时 ost 用满、没有抖动。
+<b>判断：本仿真已经有这条机理。</b>
+retry 扫描里 ost=16 零重试、有效=已分配；ost=128 有效钉在 ~23，
+吞吐反而掉。缺的是时间序列——下面补上。
+</div>
+
+<div class="def">
+<b>例子 2 — 环上转圈的移动障碍。</b>
+流量 1、2 都去节点 4，4 接收能力有限，数据在 ring 上转圈，
+本来能走的流量 3 被堵住。不下环的包变成移动障碍，转圈还加大乱序。
+<b>判断：本仿真只是部分具备。</b>
+环是无缓存的，在环 flit 从不排队（<code>n_inring_blocked = 0</code>）。
+目的端溢出的协议回答是 RetryAck，不是站着的队列；WriteData
+没有 DBIDResp 上不了环。能转圈的是下环口满了之后的
+<code>_deflect</code>。均匀/热点混合流量里偏转次数已经上万，
+但还没有“无辜流 vs 挡路流”的对照——下面用三条角色流补上。
+</div>
+
+<p class="note"><b>事先预测（跑数前写进源码，不回改）：</b>
+例 1 置信度 {f1.get('confidence')} —
+{f1.get('hypothesis')}
+证伪条件：{f1.get('falsify')}。
+例 2 置信度 {f2.get('confidence')} —
+{f2.get('hypothesis')}
+证伪条件：{f2.get('falsify')}。</p>
+
+<h3>9.7 例子 1 复现：ost=16 用满不抖，ost=128 有效 ost 带着带宽塌</h3>
+<img src="{imgs.get('ost_repro', '')}" alt="ost time series">
+<p>S0、均匀写、tracker={m.get('ha_track')}、每 core {m.get('K')} 笔，
+与第 9.2 节同一套扫描，只是把每 {m.get('outst_sample')} 拍的样本留下来：</p>
+{_table(["标称 ost", "写吞吐", "重试/事务", "已分配", "停摆", "有效",
+         "乱序比例", "带宽↔有效 ost"],
+        [[oc,
+          r.get("throughput"), r.get("retry_per_txn"),
+          r.get("outst_used"), r.get("outst_park"), r.get("outst_eff"),
+          r.get("ooo_frac"), r.get("bw_eff_corr")]
+         for oc, r in ((16, lo), (128, hi), (256, huge))])}
+<div class="def {'good' if ex1_core else 'bad'}">
+<b>预测对照：主结论{_ok(ex1_core)}，
+相关系数{_ok(ex1_corr)}。</b>
+ost=16：重试 {e1.get('oc16_retry')}（预测 0），
+有效 {e1.get('oc16_eff')} ≈ 已分配 {e1.get('oc16_used')}，
+每核贴着上限——对应硅上 ost=600。
+ost=128：已分配涨到 {e1.get('oc128_used')}，有效钉在
+{e1.get('oc128_eff')}（预测 20–26），吞吐更低
+（{hi.get('throughput')} &lt; {lo.get('throughput')}）。
+带宽↔有效 ost 在 ost=16 时 r={e1.get('bw_eff_corr_16')}，
+ost=128 时 <b>r={e1.get('bw_eff_corr_128')}</b>
+（预测 ≥0.6，略低：写数据突发和 ost 采样对不齐，
+但有效 ost 已经封顶，带宽跟着它走低）。
+ost=256 有效仍然是 {huge.get('outst_eff')}，多出来的全是停摆。
+<b>带宽塌是因为乱序/重试把实际 ost 压到远小于标称值。</b>
+</div>
+<img src="{imgs.get('ost_inorder', '')}" alt="inorder HOL">
+<p>把退休改成按发起顺序（保序窗口 / double-buffer 的空等）之后，
+ost=128 的浪费从“等 PCrd”换成“等前序”：停摆
+{inn.get('outst_park')} + 队头阻塞 {inn.get('outst_hol')}，
+有效仍是 {inn.get('outst_eff')}，吞吐
+{inn.get('throughput')}。峰值 HOL {inn.get('max_hol_hold')} 笔——
+就是“A、B 都做到 99%，只等最后两个乱序包”那段时间。</p>
+
+<h3>9.8 例子 2 复现：挡路流把无辜流堵在 10→11</h3>
+<p>三条角色，最短路事先钉死：挡路核 C{'/'.join(str(c) for c in m.get('blockers', []))}
+全部写 M{m.get('block_ha')}，CW 都经过受害者的第一跳
+{m.get('shared_hop')}；受害者 {hops}；
+对照 C{m.get('control')}→M{m.get('control_ha')} 只有一跳、不经过 10→11。
+无缓存环上挡路的方式不是把在环 flit 刹住，而是<b>占住 outgoing slot，
+让受害者这一拍上不了环</b>；M{m.get('block_ha')} 下环口满了之后，
+这些包继续转圈，变成移动障碍。</p>
+<img src="{imgs.get('blocker', '')}" alt="blocker experiment">
+{_table(["场景", "受害者带宽", "对照带宽", "受害者 DAT hop_busy",
+         "对照 DAT hop_busy", "M11 转圈", "全环偏转", "RetryAck"],
+        [[tag,
+          r.get("victim", {}).get("bw_run"),
+          r.get("control", {}).get("bw_run"),
+          r.get("victim", {}).get("hop_busy_dat"),
+          r.get("control", {}).get("hop_busy_dat"),
+          r.get("n_eject_defl_hot"),
+          r.get("n_deflections"),
+          r.get("n_retry")]
+         for tag, r in (("无挡路", solo),
+                        ("挡路 · tracker=∞", t0),
+                        ("挡路 · tracker=32", t32))])}
+<div class="def {'good' if ex2_hit else 'bad'}">
+<b>预测对照：{_ok(ex2_hit)}。</b>
+加上挡路之后受害者带宽
+<b>{vdrop_s}%</b>（预测 −30% 到 −90%），
+对照
+<b>{cdrop_s}%</b>（预测 −5% 到 +15%；
+C2→M11 的 RSP 回程会擦过 C16，对照不是完全隔离，这是预测里漏掉的）。
+更干净的证据是 hop_busy：受害者 WriteData 被占
+{t32.get('victim', {}).get('hop_busy_dat')} 次，对照只有
+{t32.get('control', {}).get('hop_busy_dat')} 次。
+tracker=∞ 时 M11 转圈 {e2.get('eject_defl_m11_track0')} 次——
+接收能力不够，WriteData 在环上转；tracker=32 时转圈
+{e2.get('eject_defl_m11_track32')} 次，RetryAck 把请求再送上环，
+同样占着 10→11。
+<b>流量 2 出去也得不到更好的服务，却把流量 3 变成过路障碍的受害者。</b>
+</div>
+<p class="note">本环做不到硅上那种“反压数据在 ring 上站着排队”：
+在环 flit 绝对优先、从不 stall。移动障碍在这里的形态是
+<b>下环失败后的整圈偏转</b>。机理相同：不该现在发的包，发出去就是挡路石。
+例子 1 里 B 发太多挡了 A；例子 2 里流量 2 上环挡了流量 3。
+场景不同，需要的 ost 也不同，所以只能动态流控。</p>
+"""
+
+
+def _retry_s10(study: dict, imgs: dict, meta: dict, pat: dict) -> str:
+    f = _retry_facts(study)
+    m = study["meta"]
+    kn = m.get("knobs") or {}
+    u = f["pats"][0]
+    oc, track = f["oc"], f["track"]
+    hd = f["base"]
+    s17 = f["rate"].get("S17", {})
+    s18 = f["rate"].get("S18", {})
+    s16 = f["rate"].get("S16", {})
+    rb = f.get("rate_best") or {}
+    rr = f.get("rate_rows") or [{}]
+    i = rr.index(rb) if rb in rr else 0
+    rlo, rhi = rr[max(0, i - 1)], rr[min(len(rr) - 1, i + 1)]
+    return f"""
 <h2>10. rate-based 对照：TIMELY 与 DCQCN</h2>
 <p>S15 和 S16 动的都是<b>谁能用这一拍</b>。数据中心传输领域从另一头解决同一个
 问题：仲裁不动，<b>把源端的发送速率压下去</b>，让拥塞根本不形成。
@@ -1622,6 +2150,202 @@ max/min {u['S18']['mm']}）；S17 重试也降了，但 max/min 是适用方案�
 
 # ---------------------------------------------------------------------------
 
+def _html_style() -> str:
+    return """
+body { font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
+       "Noto Sans CJK SC", sans-serif;
+       margin: 2rem auto; max-width: 980px; color: #111; line-height: 1.65; }
+h1,h2,h3 { font-weight: 650; }
+h2 { margin-top: 2.2rem; border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 0.25rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th,td { border: 1px solid #e5e7eb; padding: 0.35rem 0.5rem; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+td:last-child, th:last-child { text-align: left; }
+th { background: #f8fafc; }
+code { background: #f1f5f9; padding: 0.1rem 0.3rem; }
+img { max-width: 100%; border: 1px solid #e5e7eb; }
+.note { color: #475569; font-size: 0.9rem; }
+.def { background: #f8fafc; border-left: 3px solid #94a3b8;
+        padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
+.bad { border-left-color: #dc2626; background: #fef2f2; }
+tr.imbal td { background: #fef3c7; }
+tr.imbal td:first-child { font-weight: 650; }
+.good { border-left-color: #16a34a; background: #f0fdf4; }
+.key { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid
+        #2563eb; padding: 0.8rem 1.1rem; margin: 1rem 0; border-radius: 4px; }
+.key ol { margin: 0.4rem 0 0 1.1rem; }
+.key li { margin: 0.45rem 0; }
+"""
+
+
+def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
+    """Uniform-only S0/S1 report: setup, 3.1, §4.3, S1."""
+    s0 = pat["schemes"]["S0"]["fairness"]
+    s1 = (pat["schemes"].get("S1") or {}).get("fairness") or s0
+    rc = pat.get("root_cause") or {}
+    ref = pat.get("s0_unbounded") or {}
+    sref = ref.get("fairness") or s0
+    rcref = pat.get("root_cause_unbounded") or rc
+    q0 = pat["schemes"]["S0"].get("retry") or {}
+    qref = ref.get("retry") or {}
+    t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / max(1e-9, s0["throughput"])
+    t_ref = 100.0 * (s0["throughput"] - sref["throughput"]) / max(
+        1e-9, sref["throughput"])
+    b = pat["bounds"]
+    _lb_txt = {
+        "link_lb": "最忙的那条有向链路上、DAT VC 的容量",
+        "port_lb": "每 (node, plane) 只有一个上下环端口，三条 VC 共享",
+        "cut_lb": "跨割面的流量除以割面上的有向链路数",
+        "txn_lb": "单笔事务四拍握手的串行链",
+    }
+    bind_key = max(_lb_txt, key=lambda k: b.get(k, 0))
+    bind_lb = {"link_lb": "LB_link", "port_lb": "LB_port",
+               "cut_lb": "LB_cut", "txn_lb": "LB_txn"}[bind_key]
+    bind_txt = _lb_txt[bind_key]
+    rows = (rcref.get("rows") or rc.get("rows") or [{}])
+    mean_hop = rows[0].get("mean_hop_to_mem", 0.0)
+    adj_varies = len({r.get("adj_mem") for r in rows}) > 1
+    n_mem = len(meta.get("mem_nodes") or [])
+    bw0 = sref.get("bw_by_core") or s0.get("bw_by_core") or {}
+    adj = {str(r["core"]): r.get("adj_mem") for r in rows}
+    losers = sorted((c for c in bw0 if adj.get(c) == 1), key=int)
+    winners = sorted((c for c in bw0 if adj.get(c) == 2), key=int)
+    lo_s = "、".join(f"C{c}" for c in losers)
+    hi_s = "、".join(f"C{c}" for c in winners)
+    if adj_varies:
+        sec4_geom = f"""
+<h3>4.1 先排除“离 mem 更远”</h3>
+<div class="def">到 {n_mem} 个 mem 的平均跳数全部等于
+<b>{mean_hop}</b>。r(带宽, 平均跳数) =
+<b>{rcref.get('corr_bw_meanhop')}</b>。失衡的来源不是距离。</div>
+<h3>4.2 真正的判据：紧邻的 mem 有几个</h3>
+<ul>
+<li>{hi_s or '—'} 两侧都是 mem → 相邻 mem = 2；</li>
+<li>{lo_s or '—'} 有一侧是非终端 → 相邻 mem = 1。</li>
+</ul>
+<div class="def bad">带宽与相邻 mem 个数 r =
+<b>{rcref.get('corr_bw_adjmem')}</b>
+（Spearman {rcref.get('rank_bw_adjmem')}）。
+单平面上这条链没有被 retry 盖住：有限 tracker 几乎不咬
+（重试 {q0.get('retry_per_txn')} 次/事务）。</div>"""
+    else:
+        sec4_geom = f"""
+<h3>4.1 对称性：距离和相邻 mem 都没有方差</h3>
+<div class="def">每个 core 到 {n_mem} 个 HA 的平均跳数全部等于
+<b>{mean_hop}</b>，相邻 mem 全部等于 2。
+r(带宽, 平均跳数) = {rcref.get('corr_bw_meanhop')}，
+r(带宽, 相邻 mem) = {rcref.get('corr_bw_adjmem')}。</div>
+<h3>4.2 残余差从哪来</h3>
+<p>边 hop 时延 1–4 拍不均。带宽与上环成功率 r =
+<b>{rcref.get('corr_bw_succ')}</b>，
+与出边时延 r = {rcref.get('corr_bw_lat')}。</p>"""
+    s1_fc = (pat["schemes"].get("S1") or {}).get("fc") or {}
+    html = f"""<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>无缓存环上的 per-core 写带宽公平性（单平面 · S0/S1）</title>
+<style>{_html_style()}</style></head><body>
+
+<h1>无缓存环上的 per-core 写带宽公平性</h1>
+<p class="note">本次只跑 <b>1 个 plane / 1 条 ring</b>、均匀 tiled 写、
+S0 与 S1。每 core {meta['K']} 笔 WriteNoSnp
+（请求量 ×10），每笔 {meta['W']} 个 WriteData flit。
+HA 回 RSP / Comp 时延 <b>{_jit_label(meta)}</b> 拍。</p>
+
+<h2>结论</h2>
+<div class="key">
+<ol>
+<li><b>单平面把注入口砍半。</b>S0 吞吐
+<b>{s0['throughput']}</b> flit/cycle，max/min
+<b>{s0['max_min']}</b>，重试 {q0.get('retry_per_txn')} 次/事务，
+延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。</li>
+<li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
+{s0['max_min']} → {s1['max_min']}。</li>
+<li><b>§4.3 上环方向见下。</b>黄底 = CW/CCW 比 ≥ 2
+（该侧合计 ≥ 50）。预测写在跑数前，对照见 1.2.1。</li>
+</ol>
+</div>
+
+<h2>1. 拓扑与硬件配置</h2>
+<img src="{imgs.get('topo', '')}" alt="topology">
+{_setup_table(meta)}
+
+<h3>1.1 每条边的 hop 时延</h3>
+{_link_table(meta)}
+
+<h3>1.2 协议：CHI WriteNoSnp 四拍握手</h3>
+<p>一笔写 = REQ → DBIDResp → WriteData×{meta['W']} → Comp。
+per-core 写带宽 = 争用窗口内成功上环的 WriteData flit / cycle。</p>
+
+<h3>1.2.1 写激励</h3>
+<p>地址走 tile × 64KB + (i mod 16) × 4KB，interleave 已均衡。
+completer 侧每条 RSP（DBIDResp / RetryAck / Comp）独立抽
+<code>{_jit_label(meta)}</code> 拍；同一笔事务在 S0 / S1 抽到同一份时延。
+本轮 <b>{meta.get('n_planes')} plane</b>、K = {meta['K']}。</p>
+{_stimulus_note(meta, pat, d.get("stimulus_forecast") or meta.get("stimulus_forecast"))}
+
+<h2>2. 两个指标：max/min 与吞吐</h2>
+<p>验收线仍是 max/min ≤ 1.05 且吞吐相对基线不下降超过 1%。</p>
+
+<h2>3. 下界与失衡现象</h2>
+{_bounds_table(pat['bounds'])}
+<p class="note">makespan 下界 {pat['bounds']['bound']} 拍，由 <b>{bind_lb}</b> 决定，
+即 {bind_txt}。</p>
+
+<h3>3.1 均匀写 · S0 / S1</h3>
+{_summary_table(pat, schemes=("S0", "S1"))}
+<div class="def">S0 max/min <b>{s0['max_min']}</b>，
+最慢 {s0['bw_min']} vs 最快 {s0['bw_max']}；
+吞吐 {s0['throughput']}。
+无限 tracker 参照 max/min {sref['max_min']}、吞吐 {sref['throughput']}
+（相对有限 tracker {t_ref:+.1f}%）。
+S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
+{_track_table(pat)}
+<img src="{imgs.get('bars31', '')}" alt="per-core BW uniform">
+<img src="{imgs.get('panels31', '')}" alt="per-core BW over time">
+<img src="{imgs.get('overlay31', '')}" alt="slowest vs fastest">
+
+<h2>4. 根因</h2>
+<p class="note">归因在无限 tracker（环受限）参照上做；4.4 回到有限 tracker。</p>
+{_rc_table(pat)}
+<img src="{imgs.get('scatter', '')}" alt="bw vs explanations">
+{sec4_geom}
+
+<h3>4.3 落到硬件上：上环成功率</h3>
+<p>带宽与上环成功率 r = <b>{rcref.get('corr_bw_succ')}</b>
+（Spearman {rcref.get('rank_bw_succ')}），
+与解析过路流量 r = {rcref.get('corr_bw_pt_eff')}。
+成功次数几乎按最短路 1:1 切开；不平衡出在<b>失败</b>次数——
+邻 mem = 1 的核失败集中在朝向仅剩那个 mem 的一侧。</p>
+
+<h3>4.3.1 上环方向：CW / CCW 成功与失败</h3>
+{_sec431(pat, imgs, ("S0", "S1"))}
+
+<h3>4.4 有限 tracker</h3>
+<div class="def">max/min 从 {sref['max_min']} 到 {s0['max_min']}，
+吞吐相对无限 tracker {t_ref:+.1f}%。
+峰值占用 {qref.get('max_ha_used', '—')} 表项；
+有限 tracker 下重试 {q0.get('retry_per_txn')} 次/事务。</div>
+
+<h2>5. S1</h2>
+<p>拥塞总线延迟 <b>{s1_fc.get('bus_lat', '—')}</b> 拍，控制窗口
+{s1_fc.get('window', 64)} 拍。
+反馈只在窗口边界写入并在下一窗口边界读取：
+30 &lt; 64，所以 30 拍与 1 拍都在下一次 AIMD 之前送到，
+本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan {pat['schemes']['S1']['makespan']}）。</p>
+{_sweep_table(pat) if pat.get('sweep') else ''}
+<img src="{imgs.get('s1trace', '')}" alt="S1 control trace">
+
+<p class="note" style="margin-top:2rem">
+数据：<code>results/ring2_write_fair.json</code>
+（K={meta['K']}、W={meta['W']}、n_planes={meta.get('n_planes')}、
+seed={meta['seed']}，生成于 {meta['generated_at']}）。</p>
+</body></html>
+"""
+    OUT.write_text(html, encoding="utf-8")
+    print(f"wrote {OUT}")
+
+
 def main() -> None:
     if not DATA.exists():
         raise SystemExit(f"missing {DATA}; run utils/dse_ring2_write_fair.py")
@@ -1631,20 +2355,25 @@ def main() -> None:
     cap = meta["hop_bw_cap"]
 
     imgs = {}
+    have = _present_schemes(pat)
+    have31 = _present_schemes(pat, SEC31)
     p = IMG / "ring2_wfair_topo.png"
     plot_topology(meta, p)
     imgs["topo"] = p.name
     for tag, fn in (("bars", plot_bw_bars), ("panels", plot_bw_panels),
-                    ("overlay", plot_bw_overlay), ("scatter", plot_scatter)):
+                    ("overlay", plot_bw_overlay)):
         p = IMG / f"ring2_wfair_{tag}.png"
-        fn(pat, p)
+        fn(pat, p, schemes=have)
         imgs[tag] = p.name
-    # Section 3.1: reported baseline (tracker = 32), no S15, plus S17 / S18.
-    # No hatched unbounded-S0 overlay — that comparison lives in the table.
+    p = IMG / "ring2_wfair_scatter.png"
+    plot_scatter(pat, p)
+    imgs["scatter"] = p.name
+    # Section 3.1: reported baseline (tracker = 32). Only plot schemes
+    # that actually ran — a 1-plane S0/S1 pass does not have S16.
     for tag, fn in (("bars31", plot_bw_bars), ("panels31", plot_bw_panels),
                     ("overlay31", plot_bw_overlay)):
         p = IMG / f"ring2_wfair_{tag}.png"
-        kw = dict(schemes=SEC31, s0_unbounded=False)
+        kw = dict(schemes=have31, s0_unbounded=False)
         if fn is plot_bw_bars:
             kw.update(extra_ref=False,
                       title="均匀写 · 每 core 写带宽（tracker = 32），"
@@ -1684,6 +2413,19 @@ def main() -> None:
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name
+    if (pat["schemes"].get("S0") or {}).get("board_dir"):
+        p = IMG / "ring2_wfair_board_dir.png"
+        plot_board_dir(pat, p)
+        imgs["board_dir"] = p.name
+    if (pat["schemes"].get("S1") or {}).get("board_dir"):
+        p = IMG / "ring2_wfair_board_dir_s1.png"
+        plot_board_dir(pat, p, scheme="S1")
+        imgs["board_dir_s1"] = p.name
+    hot_for_dir = d["patterns"].get("hot")
+    if hot_for_dir and (hot_for_dir["schemes"].get("S0") or {}).get("board_dir"):
+        p = IMG / "ring2_wfair_board_dir_hot.png"
+        plot_board_dir(hot_for_dir, p)
+        imgs["board_dir_hot"] = p.name
     if (pat["schemes"].get("S1") or {}).get("fc", {}).get("trace"):
         p = IMG / "ring2_wfair_s1trace.png"
         plot_s1_trace(pat, p)
@@ -1695,6 +2437,21 @@ def main() -> None:
             p = IMG / f"ring2_wfair_{tag}.png"
             fn(study, p)
             imgs[tag] = p.name
+    repro = d.get("congestion_repro")
+    if repro and repro.get("ost"):
+        p = IMG / "ring2_wfair_ost_repro.png"
+        plot_ost_repro(repro, p)
+        imgs["ost_repro"] = p.name
+        p = IMG / "ring2_wfair_ost_inorder.png"
+        plot_ost_inorder(repro, p)
+        imgs["ost_inorder"] = p.name
+        p = IMG / "ring2_wfair_blocker.png"
+        plot_blocker_repro(repro, p)
+        imgs["blocker"] = p.name
+
+    if "S15" not in (pat.get("schemes") or {}):
+        _write_s0_s1_report(d, meta, pat, imgs)
+        return
 
     s0 = pat["schemes"]["S0"]["fairness"]
     s1 = pat["schemes"]["S1"]["fairness"]
@@ -1876,7 +2633,8 @@ M{'/M'.join(str(x) for x in hot_has)} 之后，
     j_spread = 100.0 * (max(_js) - min(_js)) / max(1e-9, min(_js))
     m_spread = 100.0 * (max(_ms) - min(_ms)) / max(1e-9, min(_ms))
 
-    sec9 = _retry_sections(study, imgs, meta, pat) if study else ""
+    sec9 = _retry_sections(study, imgs, meta, pat,
+                           repro=d.get("congestion_repro")) if study else ""
     concl_retry = _retry_conclusion(_retry_facts(study)) if study else ""
     taxo = _taxonomy_section(pat, d["patterns"].get("hot"), imgs, meta)
 
@@ -1901,6 +2659,8 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
 .def {{ background: #f8fafc; border-left: 3px solid #94a3b8;
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }}
 .bad {{ border-left-color: #dc2626; background: #fef2f2; }}
+tr.imbal td {{ background: #fef3c7; }}
+tr.imbal td:first-child {{ font-weight: 650; }}
 .good {{ border-left-color: #16a34a; background: #f0fdf4; }}
 .key {{ background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid
         #2563eb; padding: 0.8rem 1.1rem; margin: 1rem 0; border-radius: 4px; }}
@@ -1910,9 +2670,12 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
 
 <h1>无缓存环上的 per-core 写带宽公平性</h1>
 <p class="note">workload：<b>{len(meta['core_nodes'])} 个 AI core 对
-{len(meta['mem_nodes'])} 个 memory 节点做均匀写</b>，每 core
+{len(meta['mem_nodes'])} 个 memory 节点做 tiled 写</b>
+（{meta.get('burst_b', 128)}B burst、{meta.get('stride_b', 4096)}B stride、
+{(meta.get('tile_b') or 65536) // 1024}KB tile，interleave 已均衡），每 core
 {meta['K']} 笔 <code>WriteNoSnp</code>、每笔 {meta['W']} 个 WriteData flit
 （每 core {pat['flits_per_core']} 个数据 flit，共 {pat['n_txn']} 笔事务）。
+HA 回 RSP 的时延为 <b>{_jit_label(meta)}</b> 拍。
 {('节点 ' + '、'.join(str(x) for x in meta['non_terminal'])
   + ' 既不是 memory 也不是 AI core。')
  if meta.get('non_terminal') else
@@ -2007,8 +2770,20 @@ S15 {s15['max_min']}（{t15:+.1f}%）·
 <p>一笔写 = <code>REQ(core→mem)</code> → <code>DBIDResp(mem→core)</code>
 → <code>WriteData×{meta['W']}(core→mem)</code> →
 <code>Comp(mem→core)</code>，因此实例化 REQ / RSP / DAT
-三条独立 CHI VC。<b>per-core 写带宽 = 该 core 在争用窗口内成功上环的
+三条独立 CHI VC（1 flit = {meta.get('flit_b', 64)}B，
+所以 WriteData×{meta['W']} = {meta.get('burst_b', 128)}B burst）。
+<b>per-core 写带宽 = 该 core 在争用窗口内成功上环的
 WriteData flit / cycle。</b></p>
+
+<h3>1.2.1 写激励：burst / stride / tile，以及不一致的 memory 回包</h3>
+<p>地址走 <code>tile × 64KB + (i mod 16) × 4KB</code>，
+每 core 自带高位（<code>core &lt;&lt; 20</code>）避免十个核锁步打同一 HA。
+interleave 按 4KB line + core 偏移把 8 个 mem 铺平
+（朴素的 <code>(addr/128)%8</code> 会因为 4096/128=32≡0 让整条 stride
+坐在同一个 HA 上）。completer 侧每条 RSP（DBIDResp / RetryAck / Comp）
+独立抽 <code>{_jit_label(meta)}</code> 拍，
+同一笔事务在两个方案里抽到同一份时延。</p>
+{_stimulus_note(meta, pat, d.get("stimulus_forecast") or meta.get("stimulus_forecast"))}
 
 <h3>1.3 前提：环是无缓存的，在环流量绝对优先</h3>
 <p><code>_launch</code> 从不阻塞已在环上的 flit，只占用槽位；本地注入由
@@ -2130,6 +2905,12 @@ S17 的 max/min 反而是五个里最高的。注意纵轴已截断。</p>
 I-tag 类失败占比很小：<code>_itag_blocks</code> 只压制<b>竞争的其他注入者</b>，
 对在环 flit 无效，所以它能限制饥饿时长，却造不出槽位。</p>
 
+<h3>4.3.1 上环方向：CW / CCW 成功与失败</h3>
+{_sec431(pat, imgs, ("S0", "S1"))}
+{f'''<p>不均匀写（全部打进 M11/M13）同一套统计（S0）：</p>
+<img src="{imgs.get("board_dir_hot", "")}" alt="hot board CW vs CCW">
+{_board_dir_table(hot)}''' if imgs.get('board_dir_hot') and hot else ''}
+
 <h3>4.4 有限 tracker 为什么把这条因果链盖住</h3>
 <p>上面三小节说的是：<b>能不能上环</b>决定了一个 core 的带宽，
 而能不能上环取决于它身边的过路流量，也就是位置。
@@ -2245,8 +3026,7 @@ max/min <b>{s0['max_min']} → {s15['max_min']}</b>，
 {_seed_table(pat)}
 <div class="def bad">
 S15 的 max/min 落在 {rng_m}，而同样这几个种子上 S0 是
-{min(r['S0']['max_min'] for r in pat['seed_sweep']):.3f} ~
-{max(r['S0']['max_min'] for r in pat['seed_sweep']):.3f}，
+{s0_seed_rng}，
 两个区间<b>互相重叠</b>——在有限 tracker 的基线上
 <b>S15 的公平性改善已经不稳定了</b>，有的种子上好、有的种子上反而差，
 而吞吐代价 {rng_t} 是每个种子都要付的。

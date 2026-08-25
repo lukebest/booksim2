@@ -1,7 +1,7 @@
 {
-  "n_total": 50,
-  "n_ok": 50,
-  "all_ok": true,
+  "n_total": 56,
+  "n_ok": 54,
+  "all_ok": false,
   "rows": [
     {
       "name": "topo_roles_and_wrap",
@@ -148,6 +148,14 @@
       "ok": true
     },
     {
+      "name": "tiled_interleave_balanced",
+      "ok": true
+    },
+    {
+      "name": "ha_rsp_jit_bounded",
+      "ok": true
+    },
+    {
       "name": "study_topology_roles",
       "ok": true
     },
@@ -173,7 +181,9 @@
     },
     {
       "name": "s16_bufferless_and_fair",
-      "ok": true
+      "ok": false,
+      "error": "(0.48254, 0.47253)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1258, in test_s16_is_bufferless_and_fair\n    assert fb[\"bw_min\"] > fa[\"bw_min\"], (fa[\"bw_min\"], fb[\"bw_min\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (0.48254, 0.47253)\n"
     },
     {
       "name": "retry_off_equals_baseline",
@@ -192,8 +202,18 @@
       "ok": true
     },
     {
-      "name": "s16_grants_below_tracker",
+      "name": "outst_trace_when_asked",
       "ok": true
+    },
+    {
+      "name": "blocker_paths_share_hop",
+      "ok": true
+    },
+    {
+      "name": "s16_grants_below_tracker",
+      "ok": false,
+      "error": "(1738, 1741)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1137, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] > sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1738, 1741)\n"
     },
     {
       "name": "rate_pinned_equals_s0",
@@ -202,7 +222,15 @@
     {
       "name": "rate_control_cuts_retries",
       "ok": true
+    },
+    {
+      "name": "window_pinned_equals_s0",
+      "ok": true
+    },
+    {
+      "name": "window_control_acts",
+      "ok": true
     }
   ],
-  "generated_at": "2026-08-24T11:20:01Z"
+  "generated_at": "2026-08-25T03:49:33Z"
 }

@@ -88,6 +88,13 @@ class Ring2BaseParams:
     t_xfer: int = 4               # failed leaves -> E-tag
     eject_bw: int = 1             # PE drain per (node, plane) per cycle
     t_ha_service: int = 0         # cycles HA waits before emitting responses
+    # Inclusive bounds of a per-RSP uniform delay at the completer.
+    # `ha_rsp_jit == 0` = use `t_ha_service` only. Drawn from
+    # (seed, txn, kind, seq) so two schemes that accept the same
+    # transaction see the same memory latency. Default lo=0 keeps
+    # older U{0..hi} callers unchanged.
+    ha_rsp_jit_lo: int = 0
+    ha_rsp_jit: int = 0
     # One boarding queue per CHI VC instead of one per (node, plane). Required
     # by WriteNoSnp: a core's REQ flits held back by the outstanding cap would
     # otherwise sit in front of the WriteData that has to drain to release it.
@@ -124,6 +131,9 @@ class Ring2BaseParams:
     # Sample the outstanding / parked / head-of-line occupancy every N
     # cycles. 0 = off, which is what keeps a plain run untouched.
     outst_sample: int = 0
+    # Keep the per-sample series, not just the time integrals. Off by
+    # default: a closed-batch run at sample=16 is thousands of rows.
+    outst_trace: bool = False
 
 
 @dataclass
@@ -158,6 +168,8 @@ class Ring2BaseSim:
         self.topo = topo
         self.p = params or Ring2BaseParams()
         self.rng = random.Random(seed)
+        self._seed = seed
+        self._ha_rsp_seq: dict[int, int] = defaultdict(int)
         self.t = 0
         self.n = topo.n
         self.n_planes = topo.n_planes
@@ -280,6 +292,9 @@ class Ring2BaseSim:
         self._park_area: dict[int, int] = defaultdict(int)
         self._hol_area: dict[int, int] = defaultdict(int)
         self._n_samples = 0
+        self.n_eject_defl_by_dst: dict[int, int] = defaultdict(int)
+        self.ost_trace: dict[str, Any] = {
+            "t": [], "cores": [], "used": [], "park": [], "hol": [], "eff": []}
         self.st["n_retry"] = 0
         self.st["n_pcrd"] = 0
         self.st["max_ha_used"] = 0
@@ -658,6 +673,7 @@ class Ring2BaseSim:
                     self._on_arrive_station(f)
                 else:
                     self.st["n_eject_full_deflect"] += 1
+                    self.n_eject_defl_by_dst[node] += 1
                     self._deflect(f)
 
         self._release_ready_resps()
@@ -776,10 +792,45 @@ class Ring2BaseSim:
             self._outst_area[c] += v
             self._park_area[c] += len(self.parked[c])
             self._hol_area[c] += len(self.done_seq[c])
+        if not self.p.outst_trace:
+            return
+        if not self.ost_trace["cores"]:
+            self.ost_trace["cores"] = list(self.topo.cores)
+        used, park, hol, eff = [], [], [], []
+        for c in self.ost_trace["cores"]:
+            u = int(self.core_outst.get(c, 0))
+            p = len(self.parked[c])
+            h = len(self.done_seq[c])
+            used.append(u)
+            park.append(p)
+            hol.append(h)
+            eff.append(max(0, u - p - h))
+        self.ost_trace["t"].append(self.t)
+        self.ost_trace["used"].append(used)
+        self.ost_trace["park"].append(park)
+        self.ost_trace["hol"].append(hol)
+        self.ost_trace["eff"].append(eff)
 
     def _on_arrive_station(self, f: Flit) -> None:
         """Flit has entered the eject queue; occupancy already charged."""
         return
+
+    def _ha_delay(self, txn: Txn, kind: str) -> int:
+        """Completer think time before this RSP is offered to the ring.
+
+        `ha_rsp_jit == 0` keeps the old constant `t_ha_service`. Otherwise
+        each (txn, kind, occurrence) draws U{lo..hi} from its own stream, so
+        a scheme that only changes *when* a request is accepted does not also
+        change *how long* the memory takes.
+        """
+        hi = self.p.ha_rsp_jit
+        if hi <= 0:
+            return self.p.t_ha_service
+        lo = min(max(0, self.p.ha_rsp_jit_lo), hi)
+        n = self._ha_rsp_seq[txn.txn_id]
+        self._ha_rsp_seq[txn.txn_id] = n + 1
+        rng = random.Random(f"{self._seed}:{txn.txn_id}:{kind}:{n}")
+        return rng.randint(lo, hi)
 
     def _on_req_at_completer(self, txn: Txn) -> None:
         """Completer decides when to grant the write buffer.
@@ -789,7 +840,7 @@ class Ring2BaseSim:
         arrival; a receiver-driven scheme overrides this to pace the grant.
         """
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+                         self.t + self._ha_delay(txn, "dbid"))
 
     # -- request tracker: accept, or send the requester away ----------------
 
@@ -828,7 +879,7 @@ class Ring2BaseSim:
         self.parked[txn.core].add(txn.txn_id)
         self.pcrd_q[txn.ha].append(txn)
         self._emit_write(txn, "retry", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+                         self.t + self._ha_delay(txn, "retry"))
         self._pump_pcrd(txn.ha)
 
     def _release_track(self, ha: int) -> None:
@@ -891,7 +942,7 @@ class Ring2BaseSim:
             self.wdata_left[f.txn_id] = left
             if left == 0:
                 self._emit_write(txn, "comp", txn.ha, txn.core, 1,
-                                 self.t + self.p.t_ha_service)
+                                 self.t + self._ha_delay(txn, "comp"))
                 self._on_write_data_complete(txn)
                 self._release_track(txn.ha)
         else:                                   # Comp: the txn retires
@@ -996,6 +1047,10 @@ class Ring2BaseSim:
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
             out["retry"] = self.retry_summary()
+            if self.n_eject_defl_by_dst:
+                out["n_eject_defl_by_dst"] = {
+                    str(k): v for k, v in
+                    sorted(self.n_eject_defl_by_dst.items())}
         return out
 
     # -- retry / reordering / effective outstanding --------------------------
@@ -1045,7 +1100,7 @@ class Ring2BaseSim:
                 (self._outst_area[c] - self._park_area[c]
                  - self._hol_area[c]) / ns, 2)
         n_cores = max(1, len(eff))
-        return {
+        out = {
             "ha_track": self.p.ha_track,
             "inorder_retire": self.p.inorder_retire,
             "core_outstanding": self.p.core_outstanding,
@@ -1068,6 +1123,9 @@ class Ring2BaseSim:
             "outst_park_mean": round(sum(park.values()) / n_cores, 2),
             "outst_hol_mean": round(sum(hol.values()) / n_cores, 2),
         }
+        if self.p.outst_trace and self.ost_trace["t"]:
+            out["ost_trace"] = self.ost_trace
+        return out
 
     # -- write-path introspection -------------------------------------------
 

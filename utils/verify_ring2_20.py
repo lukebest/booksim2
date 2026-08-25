@@ -30,8 +30,9 @@ from rg_ring2_rg import RING2_ALGOS, RGConfig, replay_ok, run_batch as run_rg
 from rg_ring2_rg import requirements, schedule
 from rg_ring2_fc import Ring2FcParams, Ring2FcSim
 from rg_ring2_topo import (
-    CHI_VCS_WRITE, Ring2Topology, build_allpairs, build_hot_write,
-    build_uniform, build_uniform_write, hop_count, is_core, is_ha,
+    BURST_BYTES, CHI_VCS_WRITE, Ring2Topology, STRIDE_BYTES, TILE_BYTES,
+    build_allpairs, build_hot_write, build_tiled_write, build_uniform,
+    build_uniform_write, hop_count, interleave_ha, is_core, is_ha,
     paths_for_txns, shortest_dir, vc_of, write_bounds, write_paths_for_txns,
 )
 from dse_ring2_write_fair import fairness_stats
@@ -780,6 +781,47 @@ def test_s15_beats_s0_fairness() -> None:
         (s0["throughput"], s15["throughput"])
 
 
+def test_tiled_interleave_is_balanced() -> None:
+    """The 4KB stride must not collapse onto one HA under 8-way interleave."""
+    from dse_ring2_write_fair import CORE_NODES, MEM_NODES
+    from collections import Counter
+    txns = build_tiled_write(k=128, m_wdata=2, mem=MEM_NODES,
+                             core_set=CORE_NODES)
+    assert {t.ha for t in txns} == set(MEM_NODES)
+    for c in CORE_NODES:
+        cnt = Counter(t.ha for t in txns if t.core == c)
+        xs = list(cnt.values())
+        assert max(xs) - min(xs) <= 1, (c, cnt)
+    mem = list(MEM_NODES)
+    hashed = {interleave_ha(i * STRIDE_BYTES, mem) for i in range(16)}
+    assert len(hashed) == 8, hashed
+    naive = {((i * STRIDE_BYTES) // BURST_BYTES) % 8 for i in range(16)}
+    assert len(naive) == 1, naive
+    assert TILE_BYTES // STRIDE_BYTES == 16
+    assert BURST_BYTES == 128
+
+
+def test_ha_rsp_jit_is_per_txn_and_bounded() -> None:
+    """Memory RSP delay is U{lo..hi} and identical across schemes for a txn."""
+    from dse_ring2_write_fair import FABRIC
+    assert FABRIC.get("ha_rsp_jit") == 64, FABRIC.get("ha_rsp_jit")
+    assert FABRIC.get("ha_rsp_jit_lo") == 4, FABRIC.get("ha_rsp_jit_lo")
+    topo, txns, sim = _run_write(k=30, W=2, pattern="study",
+                                 cfg={"ha_rsp_jit_lo": 4, "ha_rsp_jit": 64})
+    s = sim.summary()
+    assert s["completed"]
+    delays = []
+    for txn in txns[:20]:
+        d0 = sim._ha_delay(txn, "probe")
+        # rewind the seq so a second draw of the same occurrence matches
+        sim._ha_rsp_seq[txn.txn_id] -= 1
+        d1 = sim._ha_delay(txn, "probe")
+        sim._ha_rsp_seq[txn.txn_id] -= 1
+        assert d0 == d1 and 4 <= d0 <= 64, (txn.txn_id, d0, d1)
+        delays.append(d0)
+    assert min(delays) < max(delays), delays
+
+
 def test_study_topology_roles() -> None:
     """The reported workload: 10 cores, 8 mem, nodes 9 and 19 terminal-free."""
     from dse_ring2_write_fair import CORE_NODES, MEM_NODES, NON_TERMINAL
@@ -796,7 +838,7 @@ def test_study_topology_roles() -> None:
 def test_study_baseline_is_position_unfair() -> None:
     """Symmetric demand, asymmetric outcome: the phenomenon under study."""
     from dse_ring2_write_fair import MEM_NODES
-    topo, _, sim = _run_write(k=600, pattern="study")
+    topo, _, sim = _run_write(k=600, pattern="study", cfg={"ha_rsp_jit": 0})
     f = fairness_stats(sim.summary()["wr_inject_by_core"],
                        sim.summary()["makespan"], 600 * 4)
     assert f["max_min"] > 1.05, f"baseline unexpectedly fair: {f['max_min']}"
@@ -1042,6 +1084,33 @@ def test_inorder_retire_is_never_better() -> None:
     assert q["outst_hol_mean"] > 1.0 and q["outst_park_mean"] > 1.0, q
 
 
+def test_outst_trace_records_when_asked() -> None:
+    """The silicon-style plots need the per-sample series, not just means."""
+    _, _, sim = _run_retry("S0", k=40, cfg={
+        "core_outstanding": 16, "ha_track": 32,
+        "outst_sample": 16, "outst_trace": True})
+    q = sim.retry_summary()
+    tr = q["ost_trace"]
+    assert tr["t"] and tr["cores"], tr
+    assert len(tr["t"]) == len(tr["used"]) == len(tr["eff"])
+    assert len(tr["used"][0]) == len(tr["cores"])
+    assert "ost_trace" not in _run_retry("S0", k=20, cfg={
+        "outst_sample": 16})[2].retry_summary()
+
+
+def test_blocker_paths_share_victim_hop() -> None:
+    """Example 2 is meaningless if the innocent flow misses the contested hop."""
+    from dse_ring2_write_fair import (
+        REPRO_BLOCKERS, REPRO_BLOCK_HA, REPRO_CONTROL, REPRO_CONTROL_HA,
+        REPRO_VICTIM, REPRO_VICTIM_HA, _directed_hops)
+    v0 = _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA)[0]
+    assert v0 == (10, 11), v0
+    for c in REPRO_BLOCKERS:
+        hops = _directed_hops(c, REPRO_BLOCK_HA)
+        assert v0 in hops, (c, hops)
+    assert v0 not in _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA)
+
+
 def test_s16_needs_to_grant_below_the_tracker() -> None:
     """A finite tracker already does the job S16's overcommit was doing.
 
@@ -1053,16 +1122,17 @@ def test_s16_needs_to_grant_below_the_tracker() -> None:
     S16 that the earlier unlimited-tracker model could not see.
     """
     track = 32
-    _, _, base = _run_retry("S0", k=200, cfg={"ha_track": track,
-                                              "outst_sample": 16})
+    frozen = {"ha_track": track, "outst_sample": 16,
+              "ha_rsp_jit_lo": 0, "ha_rsp_jit": 0}
+    _, _, base = _run_retry("S0", k=200, cfg=frozen)
     sb = base.summary()
     _, _, same = _run_retry("S16", k=200, cfg={
-        "ha_track": track, "overcommit": track, "outst_sample": 16})
+        **frozen, "overcommit": track})
     ss = same.summary()
     for key in ("makespan", "n_delivered_flits", "n_retry", "n_board_fail"):
         assert ss[key] == sb[key], f"{key}: {ss[key]} vs {sb[key]}"
     _, _, low = _run_retry("S16", k=200, cfg={
-        "ha_track": track, "overcommit": track // 2, "outst_sample": 16})
+        **frozen, "overcommit": track // 2})
     sl = low.summary()
     assert sl["completed"]
     assert sl["n_retry"] > sb["n_retry"], (sl["n_retry"], sb["n_retry"])
@@ -1176,8 +1246,9 @@ def test_s16_is_bufferless_and_fair() -> None:
     below the tracker now costs a little completer idle time. What must still
     hold is that it never buffers a ring flit and never loses much throughput.
     """
-    _, _, a = _run_write(k=600, pattern="study")
-    _, _, b = _run_s16(k=600)
+    frozen = {"ha_rsp_jit_lo": 0, "ha_rsp_jit": 0}
+    _, _, a = _run_write(k=600, pattern="study", cfg=frozen)
+    _, _, b = _run_s16(k=600, cfg=frozen)
     fa = fairness_stats(a.summary()["wr_inject_by_core"],
                         a.summary()["makespan"], 600 * 4)
     fb = fairness_stats(b.summary()["wr_inject_by_core"],
@@ -1229,6 +1300,8 @@ def main() -> None:
     c.add("write_makespan_ge_bound", test_write_makespan_ge_bound)
     c.add("write_fairness_metrics_sane", test_write_fairness_metrics_sane)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
+    c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
+    c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)
     c.add("study_topology_roles", test_study_topology_roles)
     c.add("study_baseline_unfair", test_study_baseline_is_position_unfair)
     c.add("baseline_tracker_masks_imbalance",
@@ -1242,6 +1315,8 @@ def main() -> None:
           test_retry_conserves_and_never_deadlocks)
     c.add("retry_parks_outstanding", test_retry_parks_outstanding_and_reorders)
     c.add("inorder_retire_never_better", test_inorder_retire_is_never_better)
+    c.add("outst_trace_when_asked", test_outst_trace_records_when_asked)
+    c.add("blocker_paths_share_hop", test_blocker_paths_share_victim_hop)
     c.add("s16_grants_below_tracker", test_s16_needs_to_grant_below_the_tracker)
     c.add("rate_pinned_equals_s0", test_rate_pinned_reproduces_baseline)
     c.add("rate_control_cuts_retries", test_rate_control_cuts_retries)

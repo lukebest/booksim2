@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
-<title>无缓存环上的 per-core 写带宽公平性</title>
+<title>无缓存环上的 per-core 写带宽公平性（单平面 · S0/S1）</title>
 <style>
 body { font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
        "Noto Sans CJK SC", sans-serif;
@@ -19,6 +19,8 @@ img { max-width: 100%; border: 1px solid #e5e7eb; }
 .def { background: #f8fafc; border-left: 3px solid #94a3b8;
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
 .bad { border-left-color: #dc2626; background: #fef2f2; }
+tr.imbal td { background: #fef3c7; }
+tr.imbal td:first-child { font-weight: 650; }
 .good { border-left-color: #16a34a; background: #f0fdf4; }
 .key { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid
         #2563eb; padding: 0.8rem 1.1rem; margin: 1rem 0; border-radius: 4px; }
@@ -27,1050 +29,133 @@ img { max-width: 100%; border: 1px solid #e5e7eb; }
 </style></head><body>
 
 <h1>无缓存环上的 per-core 写带宽公平性</h1>
-<p class="note">workload：<b>10 个 AI core 对
-8 个 memory 节点做均匀写</b>，每 core
-2000 笔 <code>WriteNoSnp</code>、每笔 4 个 WriteData flit
-（每 core 8000 个数据 flit，共 20000 笔事务）。
-节点 9、19 既不是 memory 也不是 AI core。</p>
+<p class="note">本次只跑 <b>1 个 plane / 1 条 ring</b>、均匀 tiled 写、
+S0 与 S1。每 core 20000 笔 WriteNoSnp
+（请求量 ×10），每笔 2 个 WriteData flit。
+HA 回 RSP / Comp 时延 <b>U{4..64}</b> 拍。</p>
 
 <h2>结论</h2>
 <div class="key">
 <ol>
-<li><b>基线现在带一个有限的 completer 请求 tracker（32
-个表项），这改变了整份报告的主线。</b>
-tracker 满时 completer 必须回 <code>RetryAck</code>，
-在 outstanding = 128 下
-<b>几乎每笔事务都要被弹回一次</b>（0.9721 次/事务）。
-瓶颈因此从"环上的槽位"移到了"completer 的表项"，
-吞吐从放开 tracker 时的 5.8038 掉到
-<b>5.1911</b> flit/cycle（<b>-10.6%</b>）。</li>
-
-
-<li><b>位置相关的失衡真实存在，但只在环受限时才显露。</b>
-放开 tracker（环是唯一约束）时 max/min = <b>1.176</b>，
-最慢 0.54863 vs 最快 0.64516 flit/cycle，
-而需求完全对称。<b>加上有限 tracker 之后它被压到
-1.0436</b>——不是被修好，而是 retry 背压
-把所有 core 一起拖慢。公平性必须和吞吐一起读。</li>
-<li><b>根因是“身边有几个 mem”，不是“离 mem 多远”。</b>
-每个 core 到 8 个 mem 的平均跳数全部等于 5.0，
-r(带宽, 平均跳数) = <b>0.0</b>。
-真正决定带宽的是紧邻 mem 个数：r = <b>0.9651</b>。
-C0、C8、C10、C18 各只有 1 个相邻 mem，带宽 ≤ 0.56323；
-C2、C4、C6、C12、C14、C16 两侧都是 mem，带宽 ≥ 0.61524。</li>
-
-<li><b>S1（拥塞等级 + AIMD）不但没修好，还把两个指标同时弄坏。</b>
-max/min 1.0436 → <b>1.2103</b>，
-吞吐 <b>-14.8%</b>。三条失效机理都被数据证实，且都不是调参能修的：
-<b>(a)</b> max 聚合让同一通路上的 core 乘同一个 α，等比缩小不改变贫富比值；
-<b>(b)</b> 差值规则让受害者惩罚自己——它 <code>own_total_fail</code> 高，
-而赢家的 <code>net_fail</code> 低，于是差值大的反倒是受害者；
-<b>(c)</b> 在环流量绝对优先，源端限速让出的空拍立刻被过路 flit 吃掉，
-<b>造不出槽位</b>。</li>
-
-<li><b>S15 / S16 在这个基线上都变成了"用吞吐买一点公平"的差交易。</b>
-S0 本身已经接近均衡（跨 2 个种子 max/min
-1.037 ~ 1.079），
-留给公平性方案的空间很小：
-S16 把 max/min 稳定收到 1.004 ~ 1.011（唯一稳定有效的），
-S15 是 1.005 ~ 1.052（<b>并不稳定，个别种子上还不如 S0</b>），
-而两者的吞吐代价都是 -2.2% ~ -2.3% / -2.7% ~ -3.5%。
-<b>按验收线（max/min ≤ 1.05 且吞吐差 ≤ 1%）判定：
-S15 未达成 max/min ≤ 1.05、吞吐差 ≤ 1%；S16 达成 max/min ≤ 1.05；未达成 吞吐差 ≤ 1%。</b>
-在无限 tracker 的参照上这两个方案都明显更值
-（那里有 max/min = 1.176 的不公平可供消除），
-<b>一旦承认 completer 有限，该优先解决的就不是公平性了。</b></li>
-
-<li><b>真正该花力气的地方是那 11% 的重试浪费。</b>
-它与公平性无关，也不是任何一个公平性方案能碰到的：
-一笔被弹回的事务白跑一个 REQ、一个 RetryAck、一个 PCrdGrant，
-并且在整个往返期间占着 outstanding 槽位零进展——
-标称 128 个槽位里只有
-23.6 个真正在推进。第 9、10 节专讲这件事。</li>
-
-<li><b>在这两个方案之间，授权仍然比槽预约便宜。</b>
-预约一个环上槽位意味着<b>禁止</b>上游注入该槽，
-预约者若没用上，这一拍就白扔了；扣住一个授权只是让占优的 core
-<b>手上暂时没数据</b>，槽位仍然归"谁能用谁用"。
-所以在同样的吞吐代价下 S16 换到的公平性更多
-（max/min 1.007 vs S15 的 1.0511），
-而且不需要总线、不需要槽预约逻辑。
-<span class="note">注意 S16 在无限 tracker 的参照上是<b>吞吐更高</b>的
-（拉平速率消掉了尾部拖延）；在有限 tracker 的基线上这份收益被
-retry 背压提前吃掉了，只剩下 -2.2% 的净代价，见 7.3。</span></li>
-
-
-<li><b>流控的第二个理由：没有流控时 outstanding 开大反而更慢，
-因为 completer 会 RetryAck。</b>
-给每个 completer 一个 32 表项的 CHI 请求 tracker 之后，
-S0 的吞吐对标称 outstanding 呈<b>倒 U 形</b>：
-16 是最优点（5.5392 flit/cycle），
-继续开到 256 反而掉到 4.8795
-（<b>-11.9%</b>）。原因不是环挤了，
-而是 <b>outstanding 槽位被停摆的事务占住了</b>：
-在 outstanding=128 时，平均 <b>99.95</b> 个槽位被分配，
-其中 <b>76.8</b> 个正在等 PCrdGrant，
-真正在推进的只有 <b>23.15</b> 个
-（<b>标称的 18%</b>）。
-每笔事务平均要被退回 <b>0.9589</b> 次，
-接受顺序里 <b>90%</b> 的事务被后发的事务超越。</li>
-
-<li><b>最优 outstanding 随场景漂移，所以静态值调不出来。</b>
-同一套硬件上，uniform 的最优点在 <b>16</b>，
-而 hot 的最优点在
-<b>128</b>
-（1.8945 flit/cycle）。
-两者不重合——
-把任何一个值写死，另一个场景就要付吞吐。
-这正是需要<b>动态流控</b>而不是一个调好的常数的原因。</li>
-
-<li><b>重试是纯浪费：只要把注入速率限对，吞吐反而涨
-+10%。</b>
-把漏桶速率钉成常数、不用任何控制器，扫一遍发现
-<b>0.15 REQ/cycle/core</b> 这一点吞吐
-5.6348（S0 是 5.1126），
-同时重试从 0.9589 掉到 0.1214。
-<b>但这个窗口窄到 ±30% 的误差就吃掉全部收益</b>，
-而最优值同时取决于 tracker 大小和 workload。
-<b>好速率存在但猜不到</b>，这是"必须动态"最直接的证据。</li>
-
-<li><b>TIMELY（S17）与 DCQCN（S18）能自动找到那个速率，
-但反应式控制吃不到全部收益。</b>
-在 outstanding=128、tracker=32 下，
-S17 把重试从 0.9589 降到
-<b>0.2707</b>，吞吐
-<b>+4.6%</b>；
-S18 降到 <b>0.3566</b>，吞吐
-<b>+3.2%</b>。
-两者的<b>平均</b>速率都逼近最优点，但一直在振荡，
-所以比钉死最优速率还差 5% /
-6%。
-信号都不要新报文：TIMELY 量的是协议本来就要发的
-<code>DBIDResp</code> 往返，DCQCN 的标记算在 completer 的 tracker
-占用率上、搭 1 bit 在同一个 <code>DBIDResp</code> / <code>RetryAck</code>
-上，<b>连 CNP 都不需要</b>。
-<span class="note">重要前提：<b>两篇论文的阈值常数必须重设</b>。
-照搬 <code>T_high = 4·minRTT</code> 会让 S17 的吞吐掉到 S0 的 1/40
-——本环 RTT 的主要成分是 completer 该有的服务队列，
-不是不该有的网络排队（见 10.3.1）。</span></li>
-
-<li><b>但速率控制管不了公平：它改的是<u>速率</u>，
-不是<u>谁能用这一拍的槽位</u>。</b>
-S17 / S18 的 max/min 是 1.1852 / 1.1348，
-几乎就是 S0 的 1.0936，而 S16 是 1.039。
-在环绝对优先下源端限速造不出槽位（第 5.2 节）。
-<b>所以两者互补</b>：S16 管公平与缓冲上限，
-S17/S18 管"把标称 outstanding 自动压到有效 outstanding 附近"。</li>
-
-<li><b>源端流控按“谁决定 / 窗口还是速率 / 靠什么触发”分类；
-这颗 NoC 只用得上 S15–S20。</b>
-PFC、HPCC、CUBIC、BBR、INT 没有对应物（无队列、不丢包、无遥测）。
-均匀写下窗口方案（S19 / S20）把重试压下去、写吞吐
-+9.6% / +9.2%，max/min 略差；
-S16 仍然最齐。不均匀写下窗口会误伤热点旁的核，
-只有 S15 的预约还在加吞吐。对照见“源端流控”一节。</li>
-<li><b>全程严格无缓存。</b>所有方案的
-<code>n_inring_blocked = 0</code>、<code>max_inring_hold = 0</code>：
-S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit；
-S16 根本不碰环上仲裁。两者都不需要在环上增加缓冲。</li>
+<li><b>单平面把注入口砍半。</b>S0 吞吐
+<b>2.6707</b> flit/cycle，max/min
+<b>1.0765</b>，重试 0.0027 次/事务，
+延迟 p50 = 74166。</li>
+<li><b>S1 相对 S0 吞吐 -0.1%</b>，max/min
+1.0765 → 1.0819。</li>
+<li><b>§4.3 上环方向见下。</b>黄底 = CW/CCW 比 ≥ 2
+（该侧合计 ≥ 50）。预测写在跑数前，对照见 1.2.1。</li>
 </ol>
 </div>
 
-<p class="note"><b>四个方案一眼看完</b>（seed 0，
-括号内为相对基线的吞吐差）：
-S0 max/min 1.0436 ·
-S1 1.2103（-14.8%）·
-S15 1.0511（-2.2%）·
-<b>S16 1.007（-2.2%）</b>。</p>
-
 <h2>1. 拓扑与硬件配置</h2>
 <img src="ring2_wfair_topo.png" alt="topology">
-<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>节点数 / plane 数</td><td>20 / 2</td><td>两个独立的双向闭合 full ring，共用同一套几何</td></tr><tr><td>AI core</td><td>10 个：C0, C2, C4, C6, C8, C10, C12, C14, C16, C18</td><td>写发起方（CHI RN）</td></tr><tr><td>memory 节点</td><td>8 个：M1, M3, M5, M7, M11, M13, M15, M17</td><td>写目的地（completer）</td></tr><tr><td>非终端节点</td><td>N9, N19</td><td>在环上转发，但既不发起也不接收写</td></tr><tr><td>路由</td><td>最短路（跳数平局走 CW）</td><td>S0 及全部方案一致</td></tr><tr><td>plane 选择</td><td>least_occupied</td><td>两个 plane 之间做负载均衡</td></tr><tr><td>每 core outstanding</td><td>128</td><td>同时在飞的写事务上限</td></tr><tr><td>CHI VC</td><td>REQ / RSP / DAT</td><td>REQ、RSP、DAT 三条独立 VC，各自独立信用</td></tr><tr><td>hop 容量</td><td>240 flit/cycle</td><td>20 节点 × 2 方向 × 2 plane × 3 VC，σ=1</td></tr><tr><td>端口</td><td>inject 1 / leave 1（每 node 每 plane）</td><td>三条 VC 共享同一个上下环端口</td></tr><tr><td>上环队列深度</td><td>8</td><td>每 (node, plane, VC)</td></tr><tr><td>下环队列深度</td><td>4</td><td>每 (node, plane)</td></tr><tr><td>I-tag 门限 t_inj</td><td>64</td><td>限制注入饥饿时长</td></tr><tr><td>E-tag 门限 t_xfer</td><td>4</td><td>限制偏转次数</td></tr></tbody></table>
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>节点数 / plane 数</td><td>20 / 1</td><td>一个双向闭合 full ring</td></tr><tr><td>AI core</td><td>10 个：C0, C2, C4, C6, C8, C10, C12, C14, C16, C18</td><td>写发起方（CHI RN）</td></tr><tr><td>memory 节点</td><td>8 个：M1, M3, M5, M7, M11, M13, M15, M17</td><td>写目的地（completer）</td></tr><tr><td>非终端节点</td><td>N9, N19</td><td>在环上转发，但既不发起也不接收写</td></tr><tr><td>路由</td><td>最短路（跳数平局走 CW）</td><td>S0 及全部方案一致</td></tr><tr><td>plane 选择</td><td>least_occupied</td><td>单平面，无 plane 选择</td></tr><tr><td>每 core outstanding</td><td>128</td><td>同时在飞的写事务上限</td></tr><tr><td>CHI VC</td><td>REQ / RSP / DAT</td><td>REQ、RSP、DAT 三条独立 VC，各自独立信用</td></tr><tr><td>hop 容量</td><td>120 flit/cycle</td><td>20 节点 × 2 方向 × 1 plane × 3 VC，σ=1</td></tr><tr><td>端口</td><td>inject 1 / leave 1（每 node 每 plane）</td><td>三条 VC 共享同一个上下环端口</td></tr><tr><td>上环队列深度</td><td>8</td><td>每 (node, plane, VC)</td></tr><tr><td>下环队列深度</td><td>4</td><td>每 (node, plane)</td></tr><tr><td>I-tag 门限 t_inj</td><td>64</td><td>限制注入饥饿时长</td></tr><tr><td>E-tag 门限 t_xfer</td><td>4</td><td>限制偏转次数</td></tr><tr><td>写激励</td><td>128B burst / 4096B stride / 64KB tile</td><td>1 flit = 64B，每笔 WriteData ×2；地址哈希已把 8 个 mem 均衡</td></tr><tr><td>HA RSP 时延</td><td>U{4..64}</td><td>写请求到达 memory 后，DBIDResp / RetryAck / Comp 各自独立抽</td></tr><tr><td>拥塞总线时延</td><td>30 拍</td><td>S1 / S15 专用广播，不占环上 hop；窗口 64 拍</td></tr></tbody></table>
 
 <h3>1.1 每条边的 hop 时延</h3>
-<p>边上的数字是<b>该无向边的 hop 时延（拍）</b>，两个方向相同。
-节点 index 顺时针递增（+1 = CW）。</p>
 <table><thead><tr><th>无向边</th><th>hop 时延（拍）</th><th>备注</th></tr></thead><tbody><tr><td>C0 — M1</td><td>2</td><td></td></tr><tr><td>M1 — C2</td><td>2</td><td></td></tr><tr><td>C2 — M3</td><td>2</td><td></td></tr><tr><td>M3 — C4</td><td>3</td><td></td></tr><tr><td>C4 — M5</td><td>1</td><td></td></tr><tr><td>M5 — C6</td><td>3</td><td></td></tr><tr><td>C6 — M7</td><td>1</td><td></td></tr><tr><td>M7 — C8</td><td>1</td><td></td></tr><tr><td>C8 — N9</td><td>2</td><td></td></tr><tr><td>N9 — C10</td><td>4</td><td></td></tr><tr><td>C10 — M11</td><td>1</td><td></td></tr><tr><td>M11 — C12</td><td>1</td><td></td></tr><tr><td>C12 — M13</td><td>3</td><td></td></tr><tr><td>M13 — C14</td><td>1</td><td></td></tr><tr><td>C14 — M15</td><td>3</td><td></td></tr><tr><td>M15 — C16</td><td>2</td><td></td></tr><tr><td>C16 — M17</td><td>2</td><td></td></tr><tr><td>M17 — C18</td><td>2</td><td></td></tr><tr><td>C18 — N19</td><td>3</td><td></td></tr><tr><td>N19 — C0</td><td>3</td><td>闭合边（N19 ↔ C0）</td></tr></tbody></table>
 
 <h3>1.2 协议：CHI WriteNoSnp 四拍握手</h3>
-<p>一笔写 = <code>REQ(core→mem)</code> → <code>DBIDResp(mem→core)</code>
-→ <code>WriteData×4(core→mem)</code> →
-<code>Comp(mem→core)</code>，因此实例化 REQ / RSP / DAT
-三条独立 CHI VC。<b>per-core 写带宽 = 该 core 在争用窗口内成功上环的
-WriteData flit / cycle。</b></p>
+<p>一笔写 = REQ → DBIDResp → WriteData×2 → Comp。
+per-core 写带宽 = 争用窗口内成功上环的 WriteData flit / cycle。</p>
 
-<h3>1.3 前提：环是无缓存的，在环流量绝对优先</h3>
-<p><code>_launch</code> 从不阻塞已在环上的 flit，只占用槽位；本地注入由
-<code>_can_board</code> 拒绝——要么该有向 hop 的这条 VC 被占，要么
-<code>arr_set</code> 显示 σ 拍内有在环 flit 即将到达。</p>
-<div class="def">在环流量<b>先于</b>本地注入预定槽位。一个节点想上环，
-必须等到一个没有任何过路 flit 经过的空拍。
-关键推论：<b>源端限速无法凭空造出槽位</b>——让上游少发，
-让出来的空拍会被下一个过路 flit 顺手拿走。这决定了第 5 节 S1 为什么失败。</div>
+<h3>1.2.1 写激励</h3>
+<p>地址走 tile × 64KB + (i mod 16) × 4KB，interleave 已均衡。
+completer 侧每条 RSP（DBIDResp / RetryAck / Comp）独立抽
+<code>U{4..64}</code> 拍；同一笔事务在 S0 / S1 抽到同一份时延。
+本轮 <b>1 plane</b>、K = 20000。</p>
 
-<h3>1.4 前提：completer 的接收资源是有限的</h3>
-<p>每个 completer 有一个 <b>32 表项的请求 tracker</b>，
-一个 REQ 从被接受起占用一个表项，直到该 completer 发出 <code>Comp</code>
-才释放。<b>表项用完时 completer 不排队，而是按 CHI 规定回
-<code>RetryAck</code> 把请求方打发走</b>，请求方必须等到一个
-<code>PCrdGrant</code> 才能重发（机制细节见 9.1）。</p>
-<div class="def">这是<b>基线的一部分，不是某个方案的功能</b>：
-S0 / S1 / S15 / S16 全部在同一个 tracker 预算下测量。
-把它做成有限的理由很直接——放开之后，基线策略实测峰值会同时压着
-<b>183</b> 个未完成请求
-（每个还对应 4 flit 的写数据缓冲），真实的 HA 不会有那么大的
-tracker。每 core 的 outstanding 上限是
-<b>128</b>，远大于 tracker，
-所以本报告的基线是一个<b>重试压力饱和</b>的工作点：
-平均每笔事务被退回 0.9721 次。
-第 3 节量化它对公平性的影响，第 9 节量化它对效率的影响。</div>
+<div class="def">
+<b>跑数前的预测</b>（置信度 0.55）：
+单平面、请求量 ×10、DBIDResp/RetryAck/Comp 各抽 U{4..64} 的均匀 tiled 写：成功上环仍按最短路接近 1:1；失败次数比双平面更偏，邻 mem 少的核失败比 ≥ 2；S1 两边一起限速，改不了方向比，吞吐低于 S0。
+证伪：成功比 ≥ 2，或所有核失败比仍 < 2（与双平面一样），或 S1 吞吐不低于 S0<br><b>总线时延 30 拍的预测</b>（置信度 0.7）：拥塞总线时延改为 30 拍（控制窗口 64 的一半）后，S1 用的是更旧的拥塞等级；上一轮总线=1 时 S1 已几乎等于 S0，更晚的反馈再拉开吞吐的空间很小。CW/CCW 失败比仍由邻 mem 几何决定，S1 改不了。 证伪：S1 吞吐相对 S0 掉超过 2%，或失败偏的核/方向翻面<br>对照：S1 总线实测 30 拍。<br>
+<b>对照。</b>
+8 个 mem 收到的 WriteData
+完全一样（50000 / HA）。
+S0 延迟 p50 = 74166，max/min = 1.0765。
+S1 吞吐 2.6683（-0.1% vs S0 2.6707）。
+S0 上环方向高亮 0/10 个核
+（成功偏 0，失败偏 0，
+失败最大比 1.904）；
+S1 高亮 0/10 个核
+（失败最大比 1.911）。
+预测写在 <code>meta.stimulus_forecast</code>，对照写在
+<code>meta.belief_update</code>，前者不改。
+</div>
+
 
 <h2>2. 两个指标：max/min 与吞吐</h2>
-<p>设 <i>n</i> 个 core 实测到的写带宽为
-<i>x</i><sub>1</sub>, …, <i>x</i><sub>n</sub>（单位 WriteData flit/cycle，
-统计窗口是所有 core 都还在发的争用窗口）。全文只用两个数：</p>
-<ul>
-<li><b>max/min</b> = max <i>x<sub>i</sub></i> / min <i>x<sub>i</sub></i>。
-公平性看这一个，因为它<b>直接读最坏的那个 core</b>：
-1.0 是完全均等，1.2 就是最慢的 core 只有最快的 83%。</li>
-<li><b>吞吐</b> = Σ <i>x<sub>i</sub></i>，全环每拍搬走的 WriteData flit。
-效率看这一个。公平性可以靠“把所有人一起压慢”买到，
-所以任何公平性改善都必须和吞吐一起报。</li>
-</ul>
-<div class="def">验收线沿用两条：<b>max/min ≤ 1.05</b>（最慢的 core
-不低于最快的 95%）且<b>吞吐相对基线不下降超过 1%</b>。
-两条都按最坏随机种子判定，不看单一种子。</div>
-
-<h3>2.1 为什么不用 Jain 指数</h3>
-<p>Jain 指数 J = (Σ<i>x<sub>i</sub></i>)<sup>2</sup> /
-(<i>n</i>·Σ<i>x<sub>i</sub></i><sup>2</sup>) 是这类研究的常用指标，
-本研究<b>实测它区分不出方案</b>，因此不再列入表格。</p>
-<div class="def bad">同一批数据上，四个方案的 Jain 只差
-<b>0.4%</b>（0.99626 ~ 0.99999），
-而 max/min 差 <b>20%</b>（1.007 ~ 1.210）。
-Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
-<p>原因是 Jain 是<b>二次</b>指标，由多数节点主导，
-少数被饿死的节点对它影响有限：10 个 core 里 9 个完全均等、
-剩下 1 个只有其余的 1/10，Jain 仍有 <b>0.9191</b>，
-而 max/min 已经是 <b>10</b>。变异系数 CoV 与它是同一个信息的两种写法
-（J = 1/(1+CoV<sup>2</sup>)），所以一并去掉。</p>
-<p class="note">Jain 还有一条性质与第 5 节直接相关：
-所有 <i>x<sub>i</sub></i> 同乘一个常数 J 不变。也就是说
-<b>整体限速不改变 Jain</b>——S1 之所以“看起来没把公平性搞坏”，
-一部分就是这个数学假象，换成 max/min 就暴露了。</p>
-
-
-<h2>源端流控：分类、NoC 尺度调整与对照</h2>
-<p>除基线 S0 和按规格实现的 S1 之外，源端流控按三轴分类：
-<b>谁做决定</b>（发送端 / 接收端）、<b>执行器</b>（窗口 / 速率）、
-<b>触发信号</b>。下面先分类并写清原理与利弊，再只保留能映射到
-这颗无缓存环（上下环各 1 flit/cycle/node、RTT 以十到百拍计、
-completer tracker 有限）的方案，做尺度调整，最后在<b>同一套
-均匀写 / 不均匀写</b>上比 max/min 和写带宽吞吐。</p>
-
-<h3>三个分类轴</h3>
-<ul>
-<li><b>发送端 vs 接收端。</b>
-发送端根据本地观测（RTT、标记、总线）自己收油门；
-接收端（completer）决定谁还可以再发。
-CHI 写已经把数据相位的决定权给了接收端（没有 <code>DBIDResp</code>
-不能发 WriteData），所以接收端方案几乎是零线格式成本；
-发送端方案则必须另找一个执行器（漏桶或 outstanding 窗口）。</li>
-<li><b>窗口 vs 速率。</b>
-窗口限制在途事务数，一个槽一空就可以再发，所以有突发；
-速率限制单位时间的新 REQ，突发被漏桶削平。
-窗口对齐 BDP，速率对齐 tracker 的到达过程。
-同一信号可以配两种执行器——S17 与 S19 共享时延，S18 与 S20 共享 ECN。</li>
-<li><b>触发。</b>
-时延 / RTT 梯度、显式标记（ECN / RetryAck）、
-接收端调度（least-served）、以及本环特有的拥塞总线 + 槽预约。
-丢包、逐跳队列、INT 在这颗 NoC 上没有对应物。</li>
-</ul>
-<table><thead><tr><th>方案</th><th>驱动端</th><th>执行器</th><th>触发信号</th><th>本 fabric 是否采用</th></tr></thead><tbody><tr><td>S15 公平份额 + 槽预约</td><td>混合：源端窗口 + 跳预约</td><td>窗口（每窗注入预算）+ 有界 hole</td><td>拥塞总线：达成计数的 max-min / 欠账</td><td>采用（已在环上实现）</td></tr><tr><td>S16 Homa 式授权</td><td>接收端</td><td>窗口（completer 同时授权数）</td><td>least-served：给累计服务最少的源</td><td>采用；overcommit = 16（必须低于 tracker）</td></tr><tr><td>S17 TIMELY</td><td>发送端</td><td>速率（REQ 漏桶）</td><td>RTT 梯度（REQ 上环 → DBIDResp 落地）</td><td>采用；T_low/T_high = 8.0/24.0·minRTT</td></tr><tr><td>S18 DCQCN</td><td>发送端（标记在接收端算）</td><td>速率（REQ 漏桶）</td><td>completer tracker 占用的 RED + RetryAck</td><td>采用；k = 0.8–1.0·tracker，p_max = 0.05</td></tr><tr><td>S19 Swift</td><td>发送端</td><td>窗口（在途事务数）</td><td>时延：RTT 相对共享目标</td><td>采用；目标 = 8.0·max(minRTT, 20.0)，β = 0.4</td></tr><tr><td>S20 DCTCP</td><td>发送端</td><td>窗口（在途事务数）</td><td>与 S18 同一套 tracker ECN</td><td>采用；同一 RED，窗口初值 16.0、下限 8.0</td></tr><tr><td>PFC / 跳级暂停</td><td>接收端</td><td>暂停（XOFF）</td><td>下游队列过水线</td><td>不用：无缓存环没有可暂停的队列；暂停会冻住绝对优先的在环流量</td></tr><tr><td>HPCC / INT</td><td>发送端</td><td>速率</td><td>逐跳队列遥测</td><td>不用：无缓存、无逐跳队列，没有可量的 INT</td></tr><tr><td>CUBIC / Reno / 丢包窗口</td><td>发送端</td><td>窗口</td><td>丢包 / 超时</td><td>不用：本协议不丢包。RetryAck 是信用耗尽，事务还在</td></tr><tr><td>BBR</td><td>发送端</td><td>速率 + 窗口</td><td>瓶颈带宽探测 + RTT</td><td>不用：没有可排空的 FIFO 队列，带宽探测读不到 BtlBw</td></tr><tr><td>Homa SRPT + 优先级队列</td><td>接收端</td><td>授权 + 多优先级</td><td>剩余消息长度</td><td>只用授权一半（即 S16）。无缓存环不能再叠优先级队列</td></tr><tr><td>IB / CHI 信用（PCrd）</td><td>接收端</td><td>窗口（表项）</td><td>completer 信用</td><td>已经是基线：ha_track + RetryAck + PCrdGrant，不是新方案</td></tr><tr><td>XCP / RCP</td><td>路由器</td><td>速率</td><td>逐包显式反馈</td><td>不用：节点不是计算速率的路由器</td></tr></tbody></table>
-
-<h3>适用方案：原理、优缺点、NoC 调整</h3>
-
-<h4>S15 · 混合 · 窗口 + 跳预约 · 总线 max-min</h4>
-<p><b>原理。</b>沿用 S1 的专用拥塞总线，但聚合从“取 max 等级”换成
-各跳达成计数的 max-min 公平份额，并给落后节点预约有界 hole：
-上游注入让出那一拍，预约者自己上环。
-这是唯一一个<b>试图造槽</b>而不是只让别人少发的方案。</p>
-<p><b>优点。</b>直接针对“在环绝对优先 → 源端限速造不出槽”这条死路；
-总线不占 NoC 带宽。</p>
-<p><b>缺点。</b>预约是离散的：预约者没用上，这一拍就空了；
-总线、每跳 hole 状态都是额外硬件；有限 tracker 已经把均匀写压得较齐，
-预约常变成用吞吐换一点 max/min。</p>
-<p><b>NoC 调整。</b>窗口 64 拍（约 3 个 unloaded RTT，不是毫秒）；
-<code>reserve_gap = 16</code>、<code>reserve_max = 32</code>，
-只让真正的落后节点发 hole，避免互相取消。</p>
-
-<h4>S16 · 接收端 · 授权窗口 · least-served</h4>
-<p><b>原理。</b>Homa 的核心是接收端调度网络。CHI 写已经有授权：
-completer 不立刻回 <code>DBIDResp</code>，而是把同时未完成的授权
-压在 <code>overcommit</code> 以下，并优先给累计服务最少的源。
-固定长度的写让 SRPT 退化成公平排队。扣住授权<b>不会造气泡</b>——
-占优的核只是暂时没数据，槽位仍归谁能用谁用。</p>
-<p><b>优点。</b>无新报文、无总线、无环上预约；
-均匀写下 max/min 最齐。</p>
-<p><b>缺点。</b><code>overcommit</code> 必须低于 tracker，否则与 S0
-逐位相同；再扣一层授权会让 completer 更闲，吞吐掉一点。
-不均匀写时授权解决不了入口 hop 被过路流量占满。</p>
-<p><b>NoC 调整。</b>overcommit = 16
-（tracker 的一半）。论文的 RTTbytes 在这里就是“同时覆盖一轮握手
-又不把 tracker 灌满”的授权数，不是字节。</p>
-
-<h4>S17 · 发送端 · 速率 · RTT 梯度（TIMELY）</h4>
-<p><b>原理。</b><code>WriteNoSnp</code> 从 REQ 上环到 DBIDResp 落地
-本来就是一个 RTT，含 RetryAck 往返。梯度领先绝对时延，
-在队列（这里是 tracker）堆满之前收油门。执行器是 REQ 漏桶：
-灌满 tracker 的是 REQ 到达，WriteData 不能抢在授权前面。</p>
-<p><b>优点。</b>不改线格式；均匀写下把重试从 ~1 次/事务压到 ~0.3，
-少占环。</p>
-<p><b>缺点。</b>必须有精确时间戳；按每核自己的 minRTT 定门槛时，
-幸运短路径的核会更狠地收油门，max/min 变差；
-不均匀写上 RTT 已被热点服务时间主导，梯度几乎帮不上忙。</p>
-<p><b>NoC 调整。</b>论文 <code>T_high = 4·minRTT</code> 假定超出 minRTT
-的全是该消的排队。这里 unloaded RTT ~20，有效工作点 ~150
-（completer 服务，不该消掉），照搬会把吞吐打到 S0 的几十分之一。
-门槛改成 8.0 / 24.0·minRTT；
-<code>delta = 1/16</code>，匹配每核只有几十个样本的规模。</p>
-
-<h4>S18 · 发送端 · 速率 · tracker ECN（DCQCN）</h4>
-<p><b>原理。</b>无缓存环没有可标记的队列。真正溢出的是 completer
-的请求 tracker。RED 画在 tracker 占用上，RetryAck 视为 p = 1 的标记。
-标记搭在协议已有的 DBIDResp / RetryAck 上，不需要 CNP。</p>
-<p><b>优点。</b>不需要时间戳；均匀写下重试下降且吞吐略高于 S0
-（少了空转的 REQ/RetryAck）。</p>
-<p><b>缺点。</b>标记来得晚（tracker 已经 80%+）；
-定时器必须从微秒改成拍，否则回升太慢。</p>
-<p><b>NoC 调整。</b>论文 k_min = 0.4、p_max = 0.5 会把正常工作的
-tracker 当成拥塞。改为 k = 0.8–1.0、
-p_max = 0.05；α / rate 定时器 = 8 / 24 拍。</p>
-
-<h4>S19 · 发送端 · 窗口 · 时延（Swift）</h4>
-<p><b>原理。</b>与 S17 同一类信号，执行器换成在途事务窗口：
-RTT 低于共享目标则 +1/w，高于则按超出比例乘减。
-窗口对齐 BDP，一个槽空了立刻补上，比漏桶更突发。</p>
-<p><b>优点。</b>均匀写下窗口自己落到 ~16.0–32，
-重试降到 0.1 以下，写吞吐高于速率方案。</p>
-<p><b>缺点。</b>乘减比漏桶狠：目标设低了会把窗口按到 BDP 以下，
-核与核的 minRTT 若各自为政，幸运核会被多砍一刀；
-不均匀写上时延差的是 destination，不是该被窗口抹平的拥塞。</p>
-<p><b>NoC 调整。</b>论文 β = 0.8、目标贴着 minRTT，会把窗口按死
-（试跑 max/min &gt; 8、吞吐腰斩）。
-改为<b>全环共享</b> base RTT，并设地板
-20.0 拍——相邻 3 拍的幸运样本不得当 base；
-目标 = 8.0·base（约 160 拍，对着有效工作点）；
-β = 0.4；窗口下限 8.0
-（U 形曲线左侧悬崖在 4）。</p>
-
-<h4>S20 · 发送端 · 窗口 · tracker ECN（DCTCP）</h4>
-<p><b>原理。</b>与 S18 同一套 RED 标记，DCTCP 的窗口更新：
-未标记 +1/w，标记则按 α/2 乘减。α 是标记分数的 EWMA。</p>
-<p><b>优点。</b>和 S18 比，只换执行器，便于看窗口 vs 速率；
-均匀写下重试压得更低（窗口本身就接近 U 形最优点）。</p>
-<p><b>缺点。</b>RetryAck 若每次都砍窗口，一笔事务会在 RetryAck
-和随后的 DBIDResp 上被砍两次；热点上窗口会顶在下限，max/min 变差。</p>
-<p><b>NoC 调整。</b>RED 与 S18 共用；每个标记周期最多乘减一次
-（对齐 S18 的 marked 锁）；窗口初值 16.0、
-下限 8.0，单位是事务不是字节。</p>
-
-<h3>不适用的方案</h3>
-<table><thead><tr><th>方案族</th><th>为什么在这颗 NoC 上不适用</th></tr></thead><tbody><tr><td>PFC</td><td>作用对象是队列。环上没有队列；在环 flit 绝对优先，一暂停就把过路流量冻在注入口。</td></tr><tr><td>HPCC / INT</td><td>依赖 hop 队列深度。bufferless 的 hop 占用是 0/1，不是可以积分的队列。</td></tr><tr><td>丢包窗口（CUBIC 等）</td><td>CHI 写不丢包。RetryAck 之后事务继续，当成丢包会把窗口砍在一次往返都覆盖不了的深度。</td></tr><tr><td>BBR</td><td>用排队排空估带宽。这里的 RTT 胀大多半是 completer 服务，不是该消掉的网络队列。</td></tr><tr><td>Homa 优先级</td><td>SRPT 需要多优先级出口。本环每 (node, plane) 一个端口、三条 VC 共享，没有第二套优先级仲裁。</td></tr><tr><td>XCP / RCP</td><td>要把速率写进包，由路由器算。本节点只做 I-tag / E-tag。</td></tr></tbody></table>
-
-<h3>对照：同一 pattern 下的 max/min 与写带宽吞吐</h3>
-<p>硬件相同：上下环各 1 个端口、tracker = 32、
-outstanding = 128、K = 2000。
-S0 是对照基线，不参与“源端方案”分类。</p>
-<img src="ring2_wfair_fc_compare.png" alt="FC max/min and throughput">
-<p><b>均匀写</b>：</p>
-<table><thead><tr><th>流量</th><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>均匀写</td><td>S0 基线（tracker = 32）</td><td>15411</td><td>1.0436</td><td>0.51059</td><td>0.53284</td><td>5.1911</td><td>+0.0%</td><td>0.9721</td><td>37441</td><td>209453</td></tr><tr><td>均匀写</td><td>S15 公平份额 + 槽预约</td><td>15751</td><td>1.0511</td><td>0.49674</td><td>0.52213</td><td>5.079</td><td>-2.2%</td><td>0.984</td><td>36847</td><td>198463</td></tr><tr><td>均匀写</td><td>S16 接收端授权（Homa 式）</td><td>15757</td><td>1.007</td><td>0.51067</td><td>0.51427</td><td>5.0771</td><td>-2.2%</td><td>0.9853</td><td>35976</td><td>190306</td></tr><tr><td>均匀写</td><td>S17 TIMELY（RTT 梯度）</td><td>15757</td><td>1.2413</td><td>0.50109</td><td>0.62199</td><td>5.0771</td><td>-2.2%</td><td>0.2885</td><td>25444</td><td>145824</td></tr><tr><td>均匀写</td><td>S18 DCQCN（tracker ECN）</td><td>15198</td><td>1.1025</td><td>0.50413</td><td>0.55583</td><td>5.2639</td><td>+1.4%</td><td>0.3669</td><td>27477</td><td>156319</td></tr><tr><td>均匀写</td><td>S19 Swift（时延窗口）</td><td>14057</td><td>1.1562</td><td>0.54579</td><td>0.63106</td><td>5.6911</td><td>+9.6%</td><td>0.0871</td><td>24514</td><td>157729</td></tr><tr><td>均匀写</td><td>S20 DCTCP（ECN 窗口）</td><td>14110</td><td>1.2244</td><td>0.52134</td><td>0.63831</td><td>5.6697</td><td>+9.2%</td><td>0.0272</td><td>23322</td><td>154343</td></tr></tbody></table>
-<img src="ring2_wfair_fc_bars.png" alt="uniform FC per-core BW">
-<div class="def">均匀写下，有限 tracker 已经把 S0 的 max/min 压到
-1.0436。再做公平性空间很小：S16 最齐（1.007）
-但吞吐 -2.2%；S15 几乎贴着验收线。
-<b>窗口方案做的是另一件事</b>——把标称 outstanding 收到有效 BDP 附近：
-S19 / S20 重试从 0.9721 降到 0.0871 / 0.0272，
-写吞吐 5.6911 / 5.6697
-（+9.6% / +9.2%），
-代价是 max/min 走到 1.1562 / 1.2244。
-速率方案里 S18 是较稳的折中（吞吐 +1.4%，
-max/min 1.1025）；S17 重试也降了，但 max/min 是适用方案里
-均匀写最差的（1.2413）。</div>
-
-<p><b>不均匀写</b>（全部写入相邻的 M11/M13）：</p>
-<table><thead><tr><th>流量</th><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>不均匀写</td><td>S0 基线（tracker = 32）</td><td>48719</td><td>1.2508</td><td>0.15409</td><td>0.19273</td><td>1.6421</td><td>+0.0%</td><td>0.8908</td><td>60106</td><td>95778</td></tr><tr><td>不均匀写</td><td>S15 公平份额 + 槽预约</td><td>43707</td><td>1.2864</td><td>0.16855</td><td>0.21681</td><td>1.8304</td><td>+11.5%</td><td>0.9609</td><td>62383</td><td>101936</td></tr><tr><td>不均匀写</td><td>S16 接收端授权（Homa 式）</td><td>55649</td><td>1.3089</td><td>0.13372</td><td>0.17502</td><td>1.4376</td><td>-12.5%</td><td>0.9172</td><td>48825</td><td>66606</td></tr><tr><td>不均匀写</td><td>S17 TIMELY（RTT 梯度）</td><td>48661</td><td>1.2937</td><td>0.15401</td><td>0.19923</td><td>1.644</td><td>+0.1%</td><td>0.8752</td><td>61306</td><td>96352</td></tr><tr><td>不均匀写</td><td>S18 DCQCN（tracker ECN）</td><td>48027</td><td>1.2469</td><td>0.15494</td><td>0.19319</td><td>1.6657</td><td>+1.4%</td><td>0.8886</td><td>62059</td><td>92236</td></tr><tr><td>不均匀写</td><td>S19 Swift（时延窗口）</td><td>51710</td><td>1.7036</td><td>0.12147</td><td>0.20694</td><td>1.5471</td><td>-5.8%</td><td>0.5373</td><td>51895</td><td>65675</td></tr><tr><td>不均匀写</td><td>S20 DCTCP（ECN 窗口）</td><td>51044</td><td>1.6447</td><td>0.12434</td><td>0.2045</td><td>1.5673</td><td>-4.6%</td><td>0.5084</td><td>51691</td><td>64540</td></tr></tbody></table>
-<img src="ring2_wfair_fc_bars_hot.png" alt="hot FC per-core BW">
-<p class="note">destination 几何重新拉开各核。窗口方案（S19 / S20）
-把窗口压到下限附近，max/min 走到
-1.7036 / 1.6447，
-吞吐也略低于 S0。
-S15 的槽预约在这个场景反而把吞吐抬到 <b>1.8304</b>
-（+11.5%）——热点把过路流量堆在少数 hop 上，
-hole 第一次真正造出了槽位。
-S16 两个指标都不如 S0：授权再扣一层，completer 更闲。</p>
-
-<p class="note">读法：要齐，看 S16（只在均匀、可接受少许吞吐时）；
-要吞吐、且流量接近均匀，看 S19 / S20 / S18；
-流量打进少数 mem 时，只有 S15 的预约还在加吞吐，
-窗口/速率都会误伤离热点近的核。S1 两条都更差，见第 5 节。</p>
-
+<p>验收线仍是 max/min ≤ 1.05 且吞吐相对基线不下降超过 1%。</p>
 
 <h2>3. 下界与失衡现象</h2>
-<table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link 每 VC 独立链路</td><td>7120</td><td>REQ/RSP/DAT 各占一条 VC，取三者最大</td></tr><tr><td>LB_port 端口合并</td><td>6353</td><td>inject / leave 每 (node, plane) 只有一个端口，三 VC 共享</td></tr><tr><td>LB_cut 割集</td><td>5012</td><td>跨割面的流量除以割面上的有向链路数</td></tr><tr><td>LB_txn 事务串行链</td><td>91</td><td>REQ→DBIDResp→WriteData→Comp 两个来回</td></tr><tr><td><b>bound</b></td><td><b>7120</b></td><td>以上取最大</td></tr></tbody></table>
-<p class="note">makespan 下界 7120 拍，由 <b>LB_link</b> 决定，
-即<b>最忙的那条有向链路上、DAT VC 的容量</b>。</p>
+<table><thead><tr><th>下界</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>LB_link 每 VC 独立链路</td><td>70000</td><td>REQ/RSP/DAT 各占一条 VC，取三者最大</td></tr><tr><td>LB_port 端口合并</td><td>75000</td><td>inject / leave 每 (node, plane) 只有一个端口，三 VC 共享</td></tr><tr><td>LB_cut 割集</td><td>50000</td><td>跨割面的流量除以割面上的有向链路数</td></tr><tr><td>LB_txn 事务串行链</td><td>89</td><td>REQ→DBIDResp→WriteData→Comp 两个来回</td></tr><tr><td><b>bound</b></td><td><b>75000</b></td><td>以上取最大</td></tr></tbody></table>
+<p class="note">makespan 下界 75000 拍，由 <b>LB_port</b> 决定，
+即 每 (node, plane) 只有一个上下环端口，三条 VC 共享。</p>
 
-<h3>3.1 基线 S0 下各核是否不均</h3>
-<p>五个方案都在 <b>tracker = 32</b>、
-outstanding = 128 下测量。
-S0 是无流控基线；对照是 S1、S16，以及 S17 / S18。</p>
-<p><b>均匀写</b>（每个 core 均匀写全部 8 个 mem）：</p>
-<table><thead><tr><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = 32）</td><td>15411</td><td>1.0436</td><td>0.51059</td><td>0.53284</td><td>5.1911</td><td>+0.0%</td><td>0.9721</td><td>37441</td><td>209453</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>18084</td><td>1.2103</td><td>0.41675</td><td>0.50438</td><td>4.4238</td><td>-14.8%</td><td>0.7715</td><td>27987</td><td>123574</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>15757</td><td>1.007</td><td>0.51067</td><td>0.51427</td><td>5.0771</td><td>-2.2%</td><td>0.9853</td><td>35976</td><td>190306</td></tr><tr><td>S17 TIMELY（RTT 梯度）</td><td>15757</td><td>1.2413</td><td>0.50109</td><td>0.62199</td><td>5.0771</td><td>-2.2%</td><td>0.2885</td><td>25444</td><td>145824</td></tr><tr><td>S18 DCQCN（tracker ECN）</td><td>15198</td><td>1.1025</td><td>0.50413</td><td>0.55583</td><td>5.2639</td><td>+1.4%</td><td>0.3669</td><td>27477</td><td>156319</td></tr></tbody></table>
-<div class="def">均匀写下 S0 的 max/min 只有 <b>1.0436</b>，
-最慢 0.51059 vs 最快 0.53284 flit/cycle。
-闭合 full ring 上需求与角色图都对称，这首先是几何的结果；
-completer tracker 再把残余压一层：每笔事务平均被 RetryAck
-<b>0.9721</b> 次。
-同一份 S0 把 tracker 放开之后 max/min 为 1.176、
-吞吐从 5.1911 到 5.8038
-（见下表）。</div>
-<table><thead><tr><th>每 completer 的请求 tracker</th><th>makespan</th><th>吞吐</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>重试/事务</th><th>峰值占用表项</th><th>有效 outstanding</th><th>延迟 p99</th></tr></thead><tbody><tr><td>∞（环受限）</td><td>13784</td><td>5.8038</td><td>1.176</td><td>0.54863</td><td>0.64516</td><td>0.0</td><td>183</td><td>114.2</td><td>13341</td></tr><tr><td>32（本报告基线）</td><td>15411</td><td>5.1911</td><td>1.0436</td><td>0.51059</td><td>0.53284</td><td>0.9721</td><td>32</td><td>23.6</td><td>15160</td></tr></tbody></table>
+<h3>3.1 均匀写 · S0 / S1</h3>
+<table><thead><tr><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = 32）</td><td>149775</td><td>1.0765</td><td>0.25911</td><td>0.27892</td><td>2.6707</td><td>+0.0%</td><td>0.0027</td><td>198482</td><td>1110451</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>149907</td><td>1.0819</td><td>0.25801</td><td>0.27914</td><td>2.6683</td><td>-0.1%</td><td>0.0024</td><td>198792</td><td>1109671</td></tr></tbody></table>
+<div class="def">S0 max/min <b>1.0765</b>，
+最慢 0.25911 vs 最快 0.27892；
+吞吐 2.6707。
+无限 tracker 参照 max/min 1.0869、吞吐 2.6702
+（相对有限 tracker +0.0%）。
+S1 吞吐差 <b>-0.1%</b>。</div>
+<table><thead><tr><th>每 completer 的请求 tracker</th><th>makespan</th><th>吞吐</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>重试/事务</th><th>峰值占用表项</th><th>有效 outstanding</th><th>延迟 p99</th></tr></thead><tbody><tr><td>∞（环受限）</td><td>149804</td><td>2.6702</td><td>1.0869</td><td>0.25794</td><td>0.28036</td><td>0.0</td><td>39</td><td>31.35</td><td>147429</td></tr><tr><td>32（本报告基线）</td><td>149775</td><td>2.6707</td><td>1.0765</td><td>0.25911</td><td>0.27892</td><td>0.0027</td><td>32</td><td>29.5</td><td>147611</td></tr></tbody></table>
 <img src="ring2_wfair_bars31.png" alt="per-core BW uniform">
-<p class="note">S16 最齐（max/min
-1.007）但更矮；
-S17 / S18 把重试压到 0.2885 / 0.3669，
-S17 的 max/min 反而是五个里最高的。注意纵轴已截断。</p>
 <img src="ring2_wfair_panels31.png" alt="per-core BW over time">
 <img src="ring2_wfair_overlay31.png" alt="slowest vs fastest">
 
-<p><b>不均匀写</b>（全部写入相邻的 M11/M13，
-角色不变、只改目的地几何）：</p>
-<table><thead><tr><th>方案</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = 32）</td><td>48719</td><td>1.2508</td><td>0.15409</td><td>0.19273</td><td>1.6421</td><td>+0.0%</td><td>0.8908</td><td>60106</td><td>95778</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>49629</td><td>1.4288</td><td>0.14879</td><td>0.2126</td><td>1.612</td><td>-1.8%</td><td>0.9593</td><td>53228</td><td>83351</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>55649</td><td>1.3089</td><td>0.13372</td><td>0.17502</td><td>1.4376</td><td>-12.5%</td><td>0.9172</td><td>48825</td><td>66606</td></tr><tr><td>S17 TIMELY（RTT 梯度）</td><td>48661</td><td>1.2937</td><td>0.15401</td><td>0.19923</td><td>1.644</td><td>+0.1%</td><td>0.8752</td><td>61306</td><td>96352</td></tr><tr><td>S18 DCQCN（tracker ECN）</td><td>48027</td><td>1.2469</td><td>0.15494</td><td>0.19319</td><td>1.6657</td><td>+1.4%</td><td>0.8886</td><td>62059</td><td>92236</td></tr></tbody></table>
-<div class="def bad">流量一不均匀，S0 的 max/min 就从 1.0436
-回到 <b>1.2508</b>，吞吐从 5.1911
-掉到 <b>1.6421</b> flit/cycle
-（重试 0.8908 次/事务）。
-<b>destination 几何重新拉开了各核，有限 tracker 盖不住。</b>
-离热点近的 core 注入的 hop 已经被所有人的过路流量占满，
-离热点远的 core 反而有一段相对空的入口。</div>
-
-<img src="ring2_wfair_bars31_hot.png" alt="hot per-core BW">
-<p class="note">不均匀写把全部流量灌进 M11/M13。
-S0 的 max/min 从均匀写的 1.0436 回到 <b>1.2508</b>——
-destination 几何重新拉开了各核，retry 背压盖不住。
-S1 两个指标同时更差；S16 在这个场景上吞吐和公平性都不如 S0；
-S17 / S18 与 S0 几乎贴在一起，重试也压不下去
-（0.8908 次/事务）。</p>
-<img src="ring2_wfair_panels31_hot.png" alt="hot per-core BW over time">
-<img src="ring2_wfair_overlay31_hot.png" alt="hot slowest vs fastest">
-
-
 <h2>4. 根因</h2>
-<p class="note">本节的归因全部在<b>无限 tracker</b>（环受限）的参照上做，
-因为只有那里环是唯一约束、位置效应没有被 retry 背压压平；
-4.4 再回到有限 tracker 的基线，说明这条因果链被什么盖住了。</p>
-<table><thead><tr><th>core</th><th>相邻 mem 数</th><th>到 mem 平均跳数</th><th>S0 写带宽</th><th>上环成功率</th><th>hop_busy 失败</th><th>I-tag 失败</th><th>outstanding 失败</th><th>出向平均 λ</th></tr></thead><tbody><tr><td>C0</td><td>1</td><td>5.0</td><td>0.51412</td><td>0.3505</td><td>14813</td><td>9</td><td>0</td><td>2.5</td></tr><tr><td>C2</td><td>2</td><td>5.0</td><td>0.53184</td><td>0.3708</td><td>13564</td><td>13</td><td>0</td><td>2.0</td></tr><tr><td>C4</td><td>2</td><td>5.0</td><td>0.53284</td><td>0.3737</td><td>13407</td><td>3</td><td>0</td><td>2.0</td></tr><tr><td>C6</td><td>2</td><td>5.0</td><td>0.52917</td><td>0.3728</td><td>13448</td><td>13</td><td>0</td><td>2.0</td></tr><tr><td>C8</td><td>1</td><td>5.0</td><td>0.51059</td><td>0.3424</td><td>15343</td><td>19</td><td>0</td><td>1.5</td></tr><tr><td>C10</td><td>1</td><td>5.0</td><td>0.51472</td><td>0.3481</td><td>14974</td><td>10</td><td>0</td><td>2.5</td></tr><tr><td>C12</td><td>2</td><td>5.0</td><td>0.52944</td><td>0.365</td><td>13915</td><td>4</td><td>0</td><td>2.0</td></tr><tr><td>C14</td><td>2</td><td>5.0</td><td>0.5323</td><td>0.3696</td><td>13630</td><td>15</td><td>0</td><td>2.0</td></tr><tr><td>C16</td><td>2</td><td>5.0</td><td>0.5307</td><td>0.3649</td><td>13925</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C18</td><td>1</td><td>5.0</td><td>0.52717</td><td>0.3522</td><td>14704</td><td>13</td><td>0</td><td>2.5</td></tr></tbody></table>
+<p class="note">归因在无限 tracker（环受限）参照上做；4.4 回到有限 tracker。</p>
+<table><thead><tr><th>core</th><th>相邻 mem 数</th><th>到 mem 平均跳数</th><th>S0 写带宽</th><th>上环成功率</th><th>hop_busy 失败</th><th>I-tag 失败</th><th>outstanding 失败</th><th>出向平均 λ</th></tr></thead><tbody><tr><td>C0</td><td>1</td><td>5.0</td><td>0.25911</td><td>0.3373</td><td>78583</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C2</td><td>2</td><td>5.0</td><td>0.27562</td><td>0.3539</td><td>73038</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C4</td><td>2</td><td>5.0</td><td>0.27789</td><td>0.3577</td><td>71830</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C6</td><td>2</td><td>5.0</td><td>0.27678</td><td>0.3554</td><td>72535</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C8</td><td>1</td><td>5.0</td><td>0.26008</td><td>0.3385</td><td>78182</td><td>0</td><td>0</td><td>1.5</td></tr><tr><td>C10</td><td>1</td><td>5.0</td><td>0.25921</td><td>0.3382</td><td>78286</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C12</td><td>2</td><td>5.0</td><td>0.27554</td><td>0.3539</td><td>73042</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C14</td><td>2</td><td>5.0</td><td>0.27892</td><td>0.3578</td><td>71801</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C16</td><td>2</td><td>5.0</td><td>0.27508</td><td>0.3529</td><td>73336</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C18</td><td>1</td><td>5.0</td><td>0.26022</td><td>0.3389</td><td>78041</td><td>0</td><td>0</td><td>2.5</td></tr></tbody></table>
 <img src="ring2_wfair_scatter.png" alt="bw vs explanations">
 
-
 <h3>4.1 先排除“离 mem 更远”</h3>
-<div class="def">每个 core 到 8 个 mem 的平均跳数全部等于
-<b>5.0</b> 跳。实测 r(带宽, 平均跳数) =
-<b>0.0</b>。<b>失衡的来源不是距离。</b></div>
+<div class="def">到 8 个 mem 的平均跳数全部等于
+<b>5.0</b>。r(带宽, 平均跳数) =
+<b>0.0</b>。失衡的来源不是距离。</div>
 <h3>4.2 真正的判据：紧邻的 mem 有几个</h3>
 <ul>
-<li>C2、C4、C6、C12、C14、C16 两侧都是 mem → <b>相邻 mem = 2</b>；</li>
-<li>C0、C8、C10、C18 有一侧不是 mem → <b>相邻 mem = 1</b>。</li>
+<li>C2、C4、C6、C12、C14、C16 两侧都是 mem → 相邻 mem = 2；</li>
+<li>C0、C8、C10、C18 有一侧是非终端 → 相邻 mem = 1。</li>
 </ul>
 <div class="def bad">带宽与相邻 mem 个数 r =
-<b>0.9651</b>（Spearman 0.8528）。
-相邻 2 的最低 0.61524 ＞ 相邻 1 的最高 0.56323。</div>
+<b>0.9764</b>
+（Spearman 0.8528）。
+单平面上这条链没有被 retry 盖住：有限 tracker 几乎不咬
+（重试 0.0027 次/事务）。</div>
 
 <h3>4.3 落到硬件上：上环成功率</h3>
-<p>带宽与实测上环成功率的相关是
-<b>r = 0.973</b>（Spearman 0.9483），
-与 <code>hop_busy</code> 失败次数强负相关；
-与解析过路流量的相关很弱（r = 0.0191）——
-过路流量的<b>总量</b>差别不大，差别在于它<b>什么时候</b>正好卡住本地注入。
-I-tag 类失败占比很小：<code>_itag_blocks</code> 只压制<b>竞争的其他注入者</b>，
-对在环 flit 无效，所以它能限制饥饿时长，却造不出槽位。</p>
+<p>带宽与上环成功率 r = <b>0.9936</b>
+（Spearman 1.0），
+与解析过路流量 r = 0.0。
+成功次数几乎按最短路 1:1 切开；不平衡出在<b>失败</b>次数——
+邻 mem = 1 的核失败集中在朝向仅剩那个 mem 的一侧。</p>
 
-<h3>4.4 有限 tracker 为什么把这条因果链盖住</h3>
-<p>上面三小节说的是：<b>能不能上环</b>决定了一个 core 的带宽，
-而能不能上环取决于它身边的过路流量，也就是位置。
-这条链有一个前提——<b>上了环就一定被接收</b>。
-把 completer 的请求 tracker 收到 32 个表项之后，
-这个前提不再成立。</p>
-<ul>
-<li>占优的 core 仍然更容易抢到环上的槽位，它的 REQ 仍然更快到达 completer；</li>
-<li>但 tracker 满了以后，<b>先到的那个 REQ 一样被 RetryAck 弹回来</b>，
-位置优势换不到一个表项；</li>
-<li>被弹回的事务在整个 PCrdGrant 往返期间<b>占着 outstanding 槽位却零进展</b>，
-于是占优的 core 也推进不下去，被迫慢下来等信用。</li>
-</ul>
-<div class="def">结果就是 3.1 里那张表：max/min 从 1.176
-压到 1.0436，代价是全环吞吐 -10.6%。
-<b>retry 背压是一个“把所有人一起拖慢”的均衡器</b>——它确实让各 core
-更接近，但用的是第 2 节点明的那种最廉价的公平：降低所有人的速度。
-这也解释了为什么本报告要把公平性和吞吐一起报，
-只看公平性指标会把这种退化误读成改进。</div>
-<p class="note">有限 tracker 下带宽与相邻 mem 的相关 r =
-0.8639，无限 tracker 下 r = 0.9651。
-full ring 上这两个都接近零；不均匀写才把位置重新拉开。</p>
+<h3>4.3.1 上环方向：CW / CCW 成功与失败</h3>
+<p>每个 AI core 的上环口按最短路把 REQ / WriteData 送进 CW（+1）或 CCW（−1）。次数是<b>该核作为源</b>的上环（不是 HA 回 RSP）。黄底行是两方向比 ≥ 2 的核。</p>
+<p><b>S0</b> · S0 基线（无流控）</p><img src="ring2_wfair_board_dir.png" alt="S0 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr><td>C0</td><td>30028</td><td>30015</td><td>1.00</td><td>58482</td><td>31137</td><td>1.88</td><td></td></tr><tr><td>C2</td><td>30030</td><td>30034</td><td>1.00</td><td>47819</td><td>36998</td><td>1.29</td><td></td></tr><tr><td>C4</td><td>30020</td><td>30041</td><td>1.00</td><td>41605</td><td>42183</td><td>1.01</td><td></td></tr><tr><td>C6</td><td>30021</td><td>30033</td><td>1.00</td><td>36493</td><td>47796</td><td>1.31</td><td></td></tr><tr><td>C8</td><td>30020</td><td>30027</td><td>1.00</td><td>30763</td><td>58578</td><td>1.90</td><td></td></tr><tr><td>C10</td><td>30031</td><td>30037</td><td>1.00</td><td>58064</td><td>31422</td><td>1.85</td><td></td></tr><tr><td>C12</td><td>30033</td><td>30022</td><td>1.00</td><td>47516</td><td>37256</td><td>1.28</td><td></td></tr><tr><td>C14</td><td>30035</td><td>30018</td><td>1.00</td><td>41323</td><td>42033</td><td>1.02</td><td></td></tr><tr><td>C16</td><td>30042</td><td>30018</td><td>1.00</td><td>36916</td><td>48138</td><td>1.30</td><td></td></tr><tr><td>C18</td><td>30018</td><td>30020</td><td>1.00</td><td>30919</td><td>58449</td><td>1.89</td><td></td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S0 上 <b>0/10</b> 个核偏了。</p>
+<p class="note">S0 失败比 ≥ 1.5 的核：C0 失败偏 CW（1.88）；C8 失败偏 CCW（1.90）；C10 失败偏 CW（1.85）；C18 失败偏 CCW（1.89）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
+<p><b>S1</b> · S1 拥塞等级 AIMD</p><img src="ring2_wfair_board_dir_s1.png" alt="S1 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr><td>C0</td><td>30026</td><td>30025</td><td>1.00</td><td>58461</td><td>30722</td><td>1.90</td><td></td></tr><tr><td>C2</td><td>30021</td><td>30026</td><td>1.00</td><td>47567</td><td>36765</td><td>1.29</td><td></td></tr><tr><td>C4</td><td>30012</td><td>30040</td><td>1.00</td><td>41954</td><td>41450</td><td>1.01</td><td></td></tr><tr><td>C6</td><td>30012</td><td>30036</td><td>1.00</td><td>37050</td><td>47376</td><td>1.28</td><td></td></tr><tr><td>C8</td><td>30026</td><td>30013</td><td>1.00</td><td>30714</td><td>58683</td><td>1.91</td><td></td></tr><tr><td>C10</td><td>30022</td><td>30025</td><td>1.00</td><td>57516</td><td>31532</td><td>1.82</td><td></td></tr><tr><td>C12</td><td>30019</td><td>30017</td><td>1.00</td><td>47507</td><td>36429</td><td>1.30</td><td></td></tr><tr><td>C14</td><td>30040</td><td>30013</td><td>1.00</td><td>41334</td><td>41842</td><td>1.01</td><td></td></tr><tr><td>C16</td><td>30040</td><td>30017</td><td>1.00</td><td>36718</td><td>47760</td><td>1.30</td><td></td></tr><tr><td>C18</td><td>30022</td><td>30019</td><td>1.00</td><td>30984</td><td>57898</td><td>1.87</td><td></td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S1 上 <b>0/10</b> 个核偏了。</p>
+<p class="note">S1 失败比 ≥ 1.5 的核：C0 失败偏 CW（1.90）；C8 失败偏 CCW（1.91）；C10 失败偏 CW（1.82）；C18 失败偏 CCW（1.87）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
 
-<h2>5. S1：按规格实现的拥塞等级 AIMD</h2>
-<ul>
-<li><b>拥塞检测</b>：每节点每窗口分别统计上环失败（up）与 eject 偏转（down）的
-<code>total_fail</code> 与 <code>net_fail</code>（只计纯粹由在环占用造成的失败），
-等级 <code>= min(7, count // 8)</code>。</li>
-<li><b>拥塞传递</b>：<code>CongestionBus</code> 专用广播总线，不占环上 hop，
-延迟 1 拍。</li>
-<li><b>拥塞反馈</b>：每节点维护自己的<b>通路节点</b>表，对该集合取 <b>max</b>。</li>
-<li><b>流量控制</b>：最终等级 <code>= level_of(own_total_fail −
-max_received_net_fail)</code>；罚则 <code>budget ← max(min, ⌊budget·α⌋)</code>，
-α = 0.75 / 0.5 / 0.25；奖励 <code>budget ← min(window, budget + β)</code>，
-β = 16 / 8 / 2。</li>
-</ul>
-<table><thead><tr><th>window</th><th>α/β 档位</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐</th></tr></thead><tbody><tr><td>64</td><td>spec</td><td>18084</td><td>1.2103</td><td>0.41675</td><td>0.50438</td><td>4.4238</td></tr><tr><td>64</td><td>harsh</td><td>22544</td><td>1.1645</td><td>0.33607</td><td>0.39135</td><td>3.5486</td></tr><tr><td>64</td><td>gentle</td><td>16031</td><td>1.1045</td><td>0.48425</td><td>0.53487</td><td>4.9903</td></tr><tr><td>128</td><td>spec</td><td>24119</td><td>1.171</td><td>0.31889</td><td>0.37341</td><td>3.3169</td></tr><tr><td>128</td><td>harsh</td><td>29882</td><td>1.1871</td><td>0.26</td><td>0.30865</td><td>2.6772</td></tr><tr><td>128</td><td>gentle</td><td>18852</td><td>1.171</td><td>0.40508</td><td>0.47433</td><td>4.2436</td></tr></tbody></table>
-<p class="note">window × α/β 档位扫描。</p>
+<h3>4.4 有限 tracker</h3>
+<div class="def">max/min 从 1.0869 到 1.0765，
+吞吐相对无限 tracker +0.0%。
+峰值占用 39 表项；
+有限 tracker 下重试 0.0027 次/事务。</div>
 
-<h3>5.1 结果：既没拉平，又欠吞吐</h3>
-<div class="def bad">S1 把 max/min 从 1.0436
-<b>升到 1.2103</b>（更不均），吞吐 <b>-14.8%</b>，
-makespan 从 15411 拉长到
-18084 拍。
-<b>两个指标同时变坏</b>，上面整张扫描表里没有一个参数点能同时改善两者。</div>
+<h2>5. S1</h2>
+<p>拥塞总线延迟 <b>30</b> 拍，控制窗口
+64 拍。
+反馈只在窗口边界写入并在下一窗口边界读取：
+30 &lt; 64，所以 30 拍与 1 拍都在下一次 AIMD 之前送到，
+本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan 149907）。</p>
+
 <img src="ring2_wfair_s1trace.png" alt="S1 control trace">
 
-<h3>5.2 为什么效果不好</h3>
-<p>三条机理，都被数据证实，而且都不是调参能修的——
-它们来自 S1 的<b>聚合方式</b>与<b>执行端</b>，不是来自 α/β 的取值。</p>
-<p><b>(a) max 聚合保住了贫富比例。</b>共享同一条通路的 core 收到同一个
-拥塞等级，于是乘以同一个 α。<b>等比缩小不改变贫富比值</b>：
-所有人的预算一起乘 0.75，最快与最慢的<b>比</b>一分不变，
-只有总量下降。这就是第 2 节那条“同乘常数 Jain 不变”的性质在起作用——
-也正因为如此，用 Jain 看 S1 会觉得“公平性没坏”，
-换成 max/min 才看得到它其实更差了。</p>
-<p><b>(b) 差值规则把信号搞反了。</b>被饿死的 core
-<code>own_total_fail</code> 很高；而占优的 core 正在<b>赢</b>，
-它的 <code>net_fail</code> 很低，于是受害者收到的
-<code>max_received_net_fail</code> 很小、差值很大 →
-<b>受害者惩罚自己</b>；赢家差值 ≈ 0，继续 <code>+β</code>。
-这是放大不公平的正反馈。</p>
-<p><b>(c) 源端速率造不出槽位。</b>在环优先是绝对的，被限速的 core
-让出的空拍立刻被过路 flit 吃掉，被饿死的 core 一无所获。
-所以 S1 只是把总量压下去。</p>
-
-<h2>6. S15：最大最小公平份额 + 槽预约</h2>
-<p>保留专用总线和窗口结构，换掉<b>聚合什么</b>，并加一个仲裁钩子。</p>
-<ul>
-<li><b>检测</b>：额外记录成功上环数、累计成功数与 active 标志。</li>
-<li><b>传递</b>：同一条总线多播 <code>(等级, 本窗口成功数, 累计成功数,
-active, 各出向公平份额)</code>。</li>
-<li><b>反馈</b>：用<b>最大最小公平份额</b>替代 max-of-levels。每个共享资源
-（有向 hop、以及目的 mem 的 leave 端口）按<b>观测到的吞吐峰值</b>作为容量，
-除以其上的活跃竞争者，广播一个份额；节点取自己路径上所有资源份额的最小值。
-容量取实测峰值而非理论值，回路因此自校准，不会把吞吐一路压下去。</li>
-<li><b>控制</b>：AIMD 跟踪这个目标，并按<b>累计欠账</b>而非瞬时速率修正，
-避免开局阶段的抢占决定全局。</li>
-<li><b>槽预约（真正的修复）</b>：落后于全环平均累计进度超过
-<code>reserve_gap</code> 的节点，通过总线预约未来若干拍的
-<code>(plane, dir, VC)</code> 槽；<b>上游节点不得注入会在预约窗口内到达该槽的
-flit</b>。资格用<b>全环累计量</b>判定而不是各自的本地目标——按本地判定时几乎
-每个节点都认为自己落后，预约互相抵消，全环白白付出上万次让路。</li>
-<li><b>只在真的不公平时介入</b>：总线上的累计进度离散度低于
-<code>fair_tol</code> 时控制器完全不接管，公平的场景下零代价。</li>
-</ul>
-
-<div class="def">预约只压制<b>注入</b>，从不停住已经在环上的 flit，
-所以不需要任何缓冲：<code>n_inring_blocked</code> 与
-<code>max_inring_hold</code> 全程为 0，无缓存前提没有被偷偷放弃。</div>
-
-<h3>6.1 结果</h3>
-<div class="def bad">
-max/min <b>1.0436 → 1.0511</b>，
-每 core 带宽收敛到 <b>0.49674 ~ 0.52213</b>，
-吞吐 <b>-2.2%</b>。
-在这个种子上 S15 的 max/min 反而比基线略差——
-基线本身已经被 retry 背压压到 1.0436，
-留给槽预约的空间几乎没有了。</div>
-<img src="ring2_wfair_bars.png" alt="per-core BW">
-<img src="ring2_wfair_hopbw.png" alt="hop bandwidth vs cap">
-<p class="note">吞吐这点损失来自预约压制上游注入时留下的空拍。
-在环受限的参照上这笔钱是花得值的（那里 max/min 是 1.176，
-最慢 core 能被实实在在抬上来）；
-在有限 tracker 的基线上最慢 core 只从 0.51059 变成
-0.49674（0.97 倍），
-<b>钱花了，货没买到多少</b>。</p>
-
-<h3>6.2 换种子还成立吗</h3>
-<p>预约是离散机制，单一种子容易把某个参数点衬托得过好，
-所以把 S0 与 S15 在多个随机种子上重跑。</p>
-<table><thead><tr><th>seed</th><th>S0 max/min</th><th>S0 吞吐</th><th>S15 max/min</th><th>S15 吞吐差</th><th>S16 max/min</th><th>S16 吞吐差</th></tr></thead><tbody><tr><td>1</td><td>1.0785</td><td>5.1706</td><td>1.0054</td><td>-2.29%</td><td>1.0106</td><td>-2.67%</td></tr><tr><td>2</td><td>1.0373</td><td>5.2005</td><td>1.0521</td><td>-2.16%</td><td>1.0045</td><td>-3.47%</td></tr></tbody></table>
-<div class="def bad">
-S15 的 max/min 落在 1.005 ~ 1.052，而同样这几个种子上 S0 是
-1.037 ~
-1.079，
-两个区间<b>互相重叠</b>——在有限 tracker 的基线上
-<b>S15 的公平性改善已经不稳定了</b>，有的种子上好、有的种子上反而差，
-而吞吐代价 -2.2% ~ -2.3% 是每个种子都要付的。
-<b>按最坏种子对照验收线：未达成 max/min ≤ 1.05、吞吐差 ≤ 1%。</b></div>
-<p>结论要分两句说清楚，因为它们指向不同的事：</p>
-<ul>
-<li><b>机制本身是有效的。</b>在环受限的参照上（max/min
-1.176）槽预约确实能把最慢 core 抬起来，
-第 4 节归因的那个位置效应它是对症的。</li>
-<li><b>但在这个基线上它不划算。</b>retry 背压已经把 max/min 压到
-1.0436，剩下的余量比 S15 自己的抖动还小，
-于是那 2.3% 的吞吐买不回等价的公平性。</li>
-</ul>
-<p class="note">吞吐代价的来源没有变：在严格无缓存、在环绝对优先的环上，
-唯一能把槽位让给弱者的手段就是让强者的上游空一拍，
-这一拍在强者本来能用满的时候就是净损失。</p>
-
-<h2>7. S16：接收端驱动的授权（Homa 式），代价压到最低</h2>
-<p>S15 的问题不在于不公平，而在于<b>为公平付的钱太贵</b>：
-一条专用广播总线、每 (node, VC) 的 AIMD 状态机、
-再加上环上的槽预约逻辑，换来 2.2% 的吞吐下降，
-而且换到的公平性还不稳定。下面这条路几乎不花硬件。</p>
-
-<div class="def"><b>关键观察：CHI 里已经有 Homa 的 GRANT 了。</b>
-Homa 的核心是<b>接收端驱动</b>——发送端在收到接收端的 GRANT 之前不得发送
-被调度的数据，接收端同时授权给若干发送端（overcommitment），
-使自己的入口链路不会因为某个发送端反应慢而空转。
-而 <code>WriteNoSnp</code> 明文规定：<b>拿到 <code>DBIDResp</code>
-之前不许发 WriteData</b>。也就是说，
-<b>completer 本来就掌握着"哪个 core、什么时候可以把写数据放上环"的授权权</b>，
-它就是 Homa 的 GRANT。基线把这个权力浪费了——REQ 一到就立刻授权。
-S16 不改任何报文格式，只改<b>发放时机与发放顺序</b>。</div>
-
-<h3>7.1 机制</h3>
-<ul>
-<li><b>排队而非即授</b>：REQ 到达 completer 后进入按源 core 分开的授权队列。</li>
-<li><b>overcommitment</b>：一个 completer 最多同时持有
-<code>overcommit</code> 个未完成授权。这是 Homa 的过量授权度，
-也对应 Homa 的 RTTbytes：太小则 completer 自己空转，
-太大则退化成无管控的基线。<b>这是唯一的旋钮。</b></li>
-<li><b>调度顺序</b>：在排队的请求方中，选<b>累计被服务最少</b>的那个。
-写请求都是 4 个 flit 的等长报文，
-Homa 的 SRPT 在等长下退化为公平排队，所以直接均衡累计授权量。</li>
-<li><b>eager 授权</b>：completer 未饱和时立即授权，
-低负载下不引入任何额外延迟。这是 Homa 的 unscheduled bytes 的对应物
-（CHI 无法真正表达"未授权就发"，所以只能用这种方式近似）。</li>
-</ul>
-
-<div class="def good"><b>为什么这能拉平带宽。</b>
-每个 core 均匀写全部 8 个 mem，
-若每个 mem 都在自己的请求方之间均分授权，
-那么 core <i>i</i> 得到的授权率 =
-Σ<sub>mem</sub>（该 mem 的授权率 / 10），
-<b>对所有 core 相同</b>。占优的 core（邻接 2 个 mem）虽然能更快地把
-授权用掉，但调度器只在它重新变成"被服务最少"时才再给它授权，
-<b>所以它跑不到前面去</b>。位置优势被授权配额直接抵消，
-不需要知道任何拓扑信息。</div>
-
-<h3>7.2 overcommit 扫描：唯一的旋钮，且必须低于 tracker</h3>
-<table><thead><tr><th>overcommit</th><th>makespan</th><th>max/min</th><th>吞吐</th><th>实测峰值授权</th><th>授权等待均值</th><th>事务延迟 p99</th></tr></thead><tbody><tr><td>2</td><td>45285</td><td>1.0106</td><td>1.7666</td><td>2</td><td>481.85</td><td>43697</td></tr><tr><td>4</td><td>28082</td><td>1.0097</td><td>2.8488</td><td>4</td><td>271.85</td><td>27171</td></tr><tr><td>8</td><td>19047</td><td>1.0087</td><td>4.2001</td><td>8</td><td>140.78</td><td>18665</td></tr><tr><td>16</td><td>15757</td><td>1.007</td><td>5.0771</td><td>16</td><td>51.84</td><td>15494</td></tr><tr><td>24</td><td>15422</td><td>1.0668</td><td>5.1874</td><td>24</td><td>12.49</td><td>15139</td></tr><tr><td>32</td><td>15411</td><td>1.0436</td><td>5.1911</td><td>32</td><td>0.0</td><td>15160</td></tr><tr><td>48</td><td>15411</td><td>1.0436</td><td>5.1911</td><td>32</td><td>0.0</td><td>15160</td></tr><tr><td>64</td><td>15411</td><td>1.0436</td><td>5.1911</td><td>32</td><td>0.0</td><td>15160</td></tr><tr><td>128</td><td>15411</td><td>1.0436</td><td>5.1911</td><td>32</td><td>0.0</td><td>15160</td></tr><tr><td>∞（= S0 的授权策略）</td><td>15411</td><td>1.0436</td><td>5.1911</td><td>32</td><td>0.0</td><td>15160</td></tr></tbody></table>
-<div class="def">读法有三层：</div>
-<ul>
-<li><b>吞吐随 overcommit 单调上升然后走平</b>——太小的话 completer
-手上没有足够多的活跃请求方，自己的 leave 端口就会空转。</li>
-<li><b>公平性在能起作用的区间里几乎不动</b>：
-授权配额决定了带宽，与 overcommit 的具体取值无关。</li>
-<li><b>关键：<code>overcommit ≥ 32</code>
-（= 请求 tracker 的表项数）之后，整行数字与 S0 逐位相同。</b>
-原因是 S16 唯一的动作是<b>扣住</b>授权，
-而它只能从 tracker 之下扣——一个 REQ 既然被 tracker 收下了，
-在配额高于 tracker 时就一定是可授权的，S16 于是退化成"一到就授权"，
-也就是 S0 换了个名字。最后一行 <code>overcommit = ∞</code>
-就是基线策略，max/min 回到 1.0436。</li>
-</ul>
-<div class="def">所以本报告把 S16 的 overcommit 定在
-<b>16</b>（低于 tracker 的
-32），这是它能真正扣住授权的前提。
-这一点由回归 <code>test_s16_grants_below_the_tracker</code> 钉住，
-避免以后有人把它调到 tracker 之上、得到一份"S16 == S0"的假结果。</div>
-
-<h3>7.3 结果</h3>
-<div class="def ">
-max/min <b>1.0436 → 1.007</b>
-（10 个 core 收敛到
-0.51067 ~ 0.51427 flit/cycle），
-吞吐 <b>-2.2%</b>，事务延迟 p99 <b>15160 → 15494</b>。
-跨 2 个种子：max/min 1.004 ~ 1.011、吞吐差 -2.7% ~ -3.5%。
-<b>按最坏种子判定：达成 max/min ≤ 1.05；未达成 吞吐差 ≤ 1%。</b></div>
-
-<p><b>吞吐这一点损失是从哪来的？</b>在有限 tracker 的基线上，
-S16 不再像无限 tracker 时那样"更公平又更快"。
-原因是<b>它要压制的那个不公平已经被 retry 背压压掉了大半</b>
-（4.4 节），剩下的位置优势只值 1.0436 → 1.007
-这一小段，而把 overcommit 压到 16
-（tracker 的一半）就会让 completer 在切换请求方的间隙偶尔空转，
-这部分是净损失。
-<b>换句话说，tracker 已经替 S16 做了一部分工作，
-S16 能再赚到的公平性变少了，但它要付的空转代价没变。</b></p>
-<p class="note">这也是为什么 S16 在无限 tracker 的参照上更好看：
-那里 max/min 是 1.176，有大量不公平可供消除，
-拉平尾部换来的 makespan 收益盖得住空转损失。</p>
-
-<h3>7.4 拆开看哪一部分在起作用</h3>
-<table><thead><tr><th>变体</th><th>makespan</th><th>max/min</th><th>吞吐</th><th>授权等待均值</th></tr></thead><tbody><tr><td>least_served + eager</td><td>15757</td><td>1.007</td><td>5.0771</td><td>51.84</td></tr><tr><td>round_robin</td><td>15776</td><td>1.0201</td><td>5.071</td><td>51.41</td></tr><tr><td>no eager grant</td><td>15757</td><td>1.007</td><td>5.0771</td><td>51.47</td></tr></tbody></table>
-<p class="note">把"累计被服务最少优先"换成朴素轮询，公平性会退一档
-——说明<b>跟踪累计服务量</b>是必要的，仅靠顺序轮转不够，
-因为不同 core 把授权兑现成上环的速度本来就不一样。
-关掉 eager 授权在满载下没有区别（满载时本来就没有"未饱和"的时刻），
-它只影响轻载延迟，所以是免费的。</p>
-
-<h3>7.5 代价对比</h3>
-<table><thead><tr><th>代价项</th><th>S0</th><th>S15</th><th>S16</th><th>S17</th><th>S18</th></tr></thead><tbody><tr><td>专用拥塞总线</td><td>无</td><td>有，79 bit × 4920 次</td><td>无</td><td>无</td><td>无</td></tr><tr><td>环上槽预约逻辑</td><td>无</td><td>有，52774 次预约</td><td>无</td><td>无</td><td>无</td></tr><tr><td>新增报文类型</td><td>无</td><td>无（走总线）</td><td>无（复用 DBIDResp）</td><td>无（RTT 从 DBIDResp 量）</td><td>无（标记位搭 DBIDResp / RetryAck，不需要 CNP）</td></tr><tr><td>completer 写缓冲（峰值授权）</td><td>32（≈128 flit，由 tracker 夹住）</td><td>32（同基线，不额外约束）</td><td>16（≈64 flit，主动压到 tracker 之下）</td><td>32（同基线）</td><td>32（同基线）</td></tr><tr><td>核内速率控制器</td><td>无</td><td>每 (node,VC) AIMD 预算 + 累计欠账</td><td>无</td><td>每 core：漏桶 + minRTT + RTT 梯度 EWMA</td><td>每 core：漏桶 + α EWMA + 两个定时器</td></tr><tr><td>completer 侧状态</td><td>无</td><td>无</td><td>每源 core 的授权队列 + 累计服务量</td><td>无</td><td>tracker 占用率比较器 + RED 随机数</td></tr><tr><td>需要精确时间戳</td><td>否</td><td>否</td><td>否</td><td><b>是</b>（RTT 是唯一信号）</td><td>否</td></tr></tbody></table>
-<div class="def">S16 仍然不需要总线、不需要新报文、不需要槽预约，
-但它在写缓冲上的优势<b>比无限 tracker 时小得多</b>，
-因为有限 tracker 已经替它做了一半：
-一个未完成的 DBID 就是 completer 上一块已经承诺出去的写数据缓冲，
-而 tracker 只有 32 个表项，
-所以基线的峰值授权已经被硬性夹在 <b>32</b> 个
-（≈128 flit）。S16 把它进一步钉在
-<b>16</b> 个（≈64 flit），
-<b>缓冲需求是基线的 1/2.0</b>。</div>
-<div class="def">这里有一个值得单独记下的结论：
-<b>"给 completer 的写缓冲加一个上限"这件事，
-有限 tracker 本身就做到了，而且是免费的</b>——
-它是协议已经要求的资源，不是新加的机制。
-无限 tracker 的参照里这个峰值是失控的：
-<b>同一个 S0 在放开 tracker 后实测峰值要 183
-个表项</b>，那才是 S16 当初能把缓冲砍到 1/5 以上的来源。
-换句话说，S16 的"负代价"论点在承认 completer 有限之后，
-大部分归功于 tracker，剩下给 S16 的是再砍一半。</div>
-
-<h3>7.6 哪些 Homa 的东西用不上</h3>
-<ul>
-<li><b>SRPT 优先级</b>：Homa 靠"短报文优先"压低小报文延迟。
-这里所有写都是 4 个 flit 的等长报文，SRPT 退化为公平排队。
-如果将来引入不等长写（例如部分写 / 原子操作），
-这一条会重新变得有意义。</li>
-<li><b>网络内多级优先级</b>：Homa 依赖交换机的多个优先级队列。
-本环是<b>严格无缓存</b>的，环上没有队列可供排序，
-在环流量绝对优先是硬性规则——这条搬不过来。</li>
-<li><b>未授权先发（unscheduled bytes）</b>：Homa 允许先发 RTTbytes
-再等 GRANT。CHI 不允许在 DBIDResp 之前发 WriteData，
-所以只能用 7.1 里的 eager 授权近似，代价是低负载下多一个环回延迟。</li>
-</ul>
-
-<h2>8. 总线的代价</h2>
-<table><thead><tr><th>方案</th><th>window</th><th>广播次数</th><th>每次 bit</th><th>总 bit</th><th>预算拒绝</th><th>AIMD 降</th><th>AIMD 升</th><th>预约槽</th><th>预约命中</th></tr></thead><tbody><tr><td>S1 拥塞等级 AIMD</td><td>64</td><td>5640</td><td>6</td><td>33840</td><td>137461</td><td>256</td><td>2564</td><td>0</td><td>0</td></tr><tr><td>S15 公平份额 + 槽预约</td><td>64</td><td>4920</td><td>79</td><td>388680</td><td>4820</td><td>62</td><td>177</td><td>52774</td><td>8932</td></tr></tbody></table>
-<p class="note">专用广播总线不占用任何环上 hop，按窗口边界发一次。
-S1 每次 6 bit（两个 3 bit 等级）；S15 增加 8 bit 本窗口成功数、
-16 bit 累计数、1 bit active，以及 6 个 8 bit 出向公平份额。
-窗口 64 拍发一次，
-折算到每拍的线上开销可以忽略；面积在
-<code>rg_sched_cost.py</code> 中单列。
-<b>S16 不在这张表里，因为它没有总线</b>——它的控制信号就是协议本来要发的 <code>DBIDResp</code>。</p>
-
-<h2>9. 第二个理由：outstanding 开大之后重试爆炸，有效 outstanding 反而变少</h2>
-<p>第 3 节已经给出了基线（tracker = 32）
-与放开 tracker 的对照：<b>让 completer 变成无限接收资源，
-基线策略实测峰值会同时压着 185 个未完成请求</b>，
-真实的 HA 不可能有那么大的请求 tracker。
-前面几节关心的是这个压力对<b>公平性</b>做了什么，
-本节关心它对<b>效率</b>做了什么——为什么把 outstanding 开大不再有收益，
-以及为什么最优值不是一个可以静态写死的常数。</p>
-
-<h3>9.1 CHI RetryAck / PCrdGrant 机制与建模</h3>
-<div class="def"><b>CHI 对"completer 满了"的回答不是排队，而是退回。</b>
-completer 的请求 tracker 没有空位时，它回一个 <code>RetryAck</code>
-把请求方打发走；请求方<b>不得自行重发</b>，必须等到一个
-<code>PCrdGrant</code>（protocol credit grant）才能再送一次。
-两者都是单 flit 的 RSP，<b>不需要新增 VC，也不需要新增总线</b>。</div>
-
-<p>建模要点，以及每一条为什么必须这样：</p>
-<ul>
-<li><b>信用是<u>预留</u>的</b>：发出 <code>PCrdGrant</code> 的那一刻就把
-tracker 表项记在被授信者名下，重发的 REQ 到达时无条件接受。
-否则一个新发的 REQ 会抢走这个表项，被授信者再次被退回，
-形成活锁。</li>
-<li><b>重发的 REQ 不再占一个 outstanding 槽位</b>：它从第一次上环起就一直
-占着同一个槽位。若重发时再检查 outstanding 上限，
-当所有槽位都被停摆事务占满时，能释放槽位的那次重发反而永远上不了环——死锁。</li>
-<li><b>重发的 REQ 走上环端口的<u>优先</u>通路</b>：上环队列里排着的是
-"还没发出去的活"，而重发是"已经发出去、手上有信用的活"。
-把它排在后面同样会死锁，因为前面那些请求正被 outstanding 上限拒绝。
-物理上这就是 AIC 的 outstanding tracker 直接驱动上环端口的一个 mux。</li>
-<li><b>tracker 表项在 completer 发出 <code>Comp</code> 时释放</b>，
-随即把信用交给等待队列的队首。</li>
-<li><b>一笔重试的净开销</b>：白跑一趟的 REQ + 1 个 RetryAck +
-1 个 PCrdGrant + 重发的 REQ，四份环上带宽，
-一个字节的写数据都没搬动；加上整个往返期间那个 outstanding 槽位零进展。</li>
-<li><b><code>ha_track = 0</code> 时全部逻辑惰性</b>，
-与第 3 节那张对照表里"tracker = ∞"那一行完全等价（回归
-<code>retry_off_equals_baseline</code> 逐位比对 makespan、
-上环时刻、板载失败数），所以两个基线之间唯一的差别就是这一个参数。</li>
-</ul>
-
-<h3>9.2 outstanding 扫描：倒 U 形曲线</h3>
-<img src="ring2_wfair_outst.png" alt="outstanding sweep">
-<p>S0 在 uniform 上的逐点数据（★ 为吞吐最优点）：</p>
-<table><thead><tr><th>标称 outstanding</th><th>makespan</th><th>吞吐</th><th>有效 outstanding</th><th>已分配均值</th><th>其中停摆</th><th>重试/事务</th><th>乱序比例</th><th>最大位移</th><th>max/min</th><th>延迟 p99</th></tr></thead><tbody><tr><td>4</td><td>13100</td><td>2.4427</td><td>3.82</td><td>3.82</td><td>0.0</td><td>0.0</td><td>0.58875</td><td>367</td><td>1.08</td><td>12801</td></tr><tr><td>8</td><td>8151</td><td>3.9259</td><td>7.57</td><td>7.57</td><td>0.0</td><td>0.0</td><td>0.64463</td><td>284</td><td>1.0767</td><td>7890</td></tr><tr><td>16 ★</td><td>5777</td><td>5.5392</td><td>15.03</td><td>15.03</td><td>0.0</td><td>0.0</td><td>0.66963</td><td>149</td><td>1.0649</td><td>5665</td></tr><tr><td>32</td><td>5804</td><td>5.5134</td><td>23.14</td><td>28.64</td><td>5.51</td><td>0.4001</td><td>0.76925</td><td>138</td><td>1.1573</td><td>5683</td></tr><tr><td>64</td><td>6175</td><td>5.1822</td><td>23.04</td><td>54.31</td><td>31.27</td><td>0.8785</td><td>0.88225</td><td>209</td><td>1.0951</td><td>6041</td></tr><tr><td>128</td><td>6259</td><td>5.1126</td><td>23.15</td><td>99.95</td><td>76.8</td><td>0.9589</td><td>0.90113</td><td>190</td><td>1.0936</td><td>6142</td></tr><tr><td>256</td><td>6558</td><td>4.8795</td><td>22.59</td><td>167.83</td><td>145.24</td><td>0.9617</td><td>0.90725</td><td>276</td><td>1.0892</td><td>6388</td></tr></tbody></table>
-<div class="def bad"><b>两端都不好，原因完全不同。</b>
-太小（4）时一次重试都没有
-（0.0），每个槽位都是有效槽位
-（有效 3.82 ≈ 已分配 3.82），
-但吞吐只有 2.4427——<b>在飞的事务不够覆盖往返时延</b>。
-太大（256）时吞吐反而跌到
-4.8795（-11.9%）：
-已分配槽位涨到 167.83，
-其中 145.24 个在等信用，
-<b>有效槽位钉在 22.59 一动不动</b>。
-最优点在 <b>16</b>。</div>
-<p class="note">注意<b>有效 outstanding 在拐点之后就饱和了</b>，
-这是整节的核心：它的上限由 completer 的 tracker 决定
-（8 个 completer × 32 表项，
-分给 10 个 core），
-标称值超过这条线之后，多出来的每一个槽位都只是多一个停摆的槽位。</p>
-
-<h3>9.3 有效 outstanding：槽位到底去哪了</h3>
-<div class="def">同一时刻，一个 core 手上的 outstanding 槽位分三类：
-<b>（a）在推进</b>——请求已被接受，正在走 DBIDResp / WriteData / Comp；
-<b>（b）停摆</b>——被 RetryAck 退回，在等 PCrdGrant，零进展；
-<b>（c）队头阻塞</b>——事务其实已经做完了，但更老的事务还没退休，
-槽位放不掉（只在按序退休时存在）。<br>
-<b>有效 outstanding = 时间平均(已分配 − 停摆 − 队头阻塞)</b>，
-每 16 拍采样一次。</div>
-
-<p>把 tracker 从紧到松扫一遍，看重试压力与乱序怎么跟着走：</p>
-<img src="ring2_wfair_retry.png" alt="retry vs tracker">
-<div class="def">tracker = 8 时每笔事务要退回
-0.9916 次，有效槽位只剩 6.16；
-tracker = ∞ 时一次不退，105.66 个槽位全部有效。
-<b>重试不是网络拥塞，是接收端资源不足</b>——
-这也说明为什么限制源端速率能缓解它。</div>
-
-<h3>9.4 乱序的两个来源，以及按序退休的代价</h3>
-<p>本模型里乱序有两个独立来源，必须分开说，否则会把网络本身的乱序
-记到重试头上：</p>
-<ul>
-<li><b>双 plane 负载均衡</b>：一笔事务的 REQ 只走一个 plane，
-两个 plane 的上环队列排空速度不同，所以<b>即使一次重试都没有</b>，
-接受顺序也已经偏离发起顺序——
-uniform 在 outstanding=4 时
-乱序比例已有 0.58875，最大位移 367 笔。
-这是既有设计的固有属性，不是本节引入的。</li>
-<li><b>重试</b>：在此之上叠加。同一 workload 开到
-outstanding=128 时乱序比例升到 0.90113，
-最大位移升到 190 笔。
-<b>增量才是重试的账</b>。</li>
-</ul>
-<p>如果 core 必须<b>按发起顺序</b>释放槽位（in-order 完成队列，
-真实 AIC 常见），乱序就直接变成队头阻塞：</p>
-<table><thead><tr><th>tracker</th><th>退休方式</th><th>makespan</th><th>吞吐</th><th>已分配槽位</th><th>停摆（等信用）</th><th>队头阻塞（等前序）</th><th>有效槽位</th><th>峰值滞留</th><th>接受乱序</th><th>退休乱序</th></tr></thead><tbody><tr><td>∞</td><td>乱序</td><td>5571</td><td>5.744</td><td>105.66</td><td>0.0</td><td>0.0</td><td>105.66</td><td>0</td><td>0.662</td><td>0.85587</td></tr><tr><td>∞</td><td>按序</td><td>5497</td><td>5.8214</td><td>107.18</td><td>0.0</td><td>19.94</td><td>87.23</td><td>67</td><td>0.6175</td><td>0.81937</td></tr><tr><td>32</td><td>乱序</td><td>6259</td><td>5.1126</td><td>99.95</td><td>76.8</td><td>0.0</td><td>23.15</td><td>0</td><td>0.90113</td><td>0.913</td></tr><tr><td>32</td><td>按序</td><td>6206</td><td>5.1563</td><td>101.97</td><td>43.29</td><td>35.68</td><td>23.0</td><td>93</td><td>0.867</td><td>0.89563</td></tr></tbody></table>
-<div class="def">读法分两段。<b>tracker = ∞</b>（没有重试）：
-按序退休滞留 19.94 个已完成事务的槽位
-（峰值 67 个），
-有效槽位从 105.66 掉到
-87.23；但吞吐几乎不动
-（5.744 → 5.8214），
-因为剩下的并行度仍然够用——<b>浪费槽位不等于浪费吞吐</b>。<br>
-<b>tracker = 32</b>（有重试）：这里出现了本节最干净的一个结果。
-乱序退休时浪费 = 停摆 76.8；
-按序退休时浪费 = 停摆 43.29 + 队头阻塞
-35.68。<b>两者的总和几乎相等</b>
-（76.8 vs
-79.0），
-有效槽位也几乎相等（23.15 vs
-23.0），吞吐同样几乎相等
-（5.1126 → 5.1563）。<br>
-<b>结论：浪费掉多少 outstanding 是 completer 的 tracker 决定的，
-退休规则只决定这些浪费记在哪个账上</b>——
-按序退休把"等信用"的停摆换成了"等前序"的队头阻塞，
-总量不变。所以要提高有效 outstanding，
-只能去动 tracker 侧的压力（限速或授权），改 core 的退休规则没用。</div>
-<p class="note">建模时踩到一个真实的坑，值得记下来：
-按序退休时<b>不能用"未完成事务计数"来做 outstanding 门槛</b>。
-计数会被<b>更年轻的、已完成但不许退休的</b>事务填满，
-而唯一能解开它们的那笔老事务就再也发不出去——真死锁。
-正确的门槛是<b>发起序号的连续窗口</b>
-（<code>seq &lt; retire_head + outstanding</code>），
-也就是 reorder buffer 本来的样子。回归
-<code>inorder_retire_never_better</code> 用一个足够长的批次钉住这一点。</p>
-
-<h3>9.5 场景漂移：为什么必须动态</h3>
-<p><code>hot</code> 保持同样的角色分配，
-只把所有写集中到 2 个相邻的 memory 节点上
-（M11、M13），
-completer 侧压力大得多。</p>
-<table><thead><tr><th>workload</th><th>方案</th><th>最优标称 outstanding</th><th>该点吞吐</th><th>该点有效 outstanding</th><th>该点重试/事务</th><th>固定 128 的吞吐</th><th>固定值的损失</th></tr></thead><tbody><tr><td>uniform</td><td>S0 基线（无流控）</td><td>16</td><td>5.5392</td><td>15.03</td><td>0.0</td><td>5.1126</td><td>-7.7%</td></tr><tr><td>uniform</td><td>S16 接收端授权（Homa 式）</td><td>32</td><td>5.4293</td><td>21.79</td><td>0.4475</td><td>5.0251</td><td>-7.4%</td></tr><tr><td>uniform</td><td>S17 TIMELY（RTT 梯度）</td><td>128</td><td>5.3476</td><td>21.09</td><td>0.2707</td><td>5.3476</td><td>+0.0%</td></tr><tr><td>uniform</td><td>S18 DCQCN（tracker ECN）</td><td>16</td><td>5.5392</td><td>15.03</td><td>0.0</td><td>5.2744</td><td>-4.8%</td></tr><tr><td>hot</td><td>S0 基线（无流控）</td><td>128</td><td>1.8945</td><td>6.91</td><td>0.992</td><td>1.8945</td><td>+0.0%</td></tr><tr><td>hot</td><td>S16 接收端授权（Homa 式）</td><td>128</td><td>1.7433</td><td>6.74</td><td>0.992</td><td>1.7433</td><td>+0.0%</td></tr><tr><td>hot</td><td>S17 TIMELY（RTT 梯度）</td><td>128</td><td>1.9132</td><td>6.9</td><td>0.9902</td><td>1.9132</td><td>+0.0%</td></tr><tr><td>hot</td><td>S18 DCQCN（tracker ECN）</td><td>128</td><td>1.9178</td><td>6.82</td><td>0.992</td><td>1.9178</td><td>+0.0%</td></tr></tbody></table>
-<div class="def bad">
-uniform 的最优标称 outstanding 是 <b>16</b>，
-hot 的是 <b>128</b>。
-<b>两者不重合</b>，
-而且两个场景在最优点上的<b>有效</b> outstanding 差得更远
-（15.03 vs 6.91）——
-hot 需要更大的标称值，才能换来更小的有效值。
-表里最后两列是"把 outstanding 写死在 128"要付的吞吐。
-<b>一个静态常数没法同时服务两个场景，这就是需要动态流控的直接证据。</b></div>
-
-<h2>10. rate-based 对照：TIMELY 与 DCQCN</h2>
-<p>S15 和 S16 动的都是<b>谁能用这一拍</b>。数据中心传输领域从另一头解决同一个
-问题：仲裁不动，<b>把源端的发送速率压下去</b>，让拥塞根本不形成。
-这条路上有两个定义性方案，而且都能<b>不加任何新报文</b>地映射到 CHI。</p>
-
-<h3>10.1 信号映射：两个都不需要新报文</h3>
-<ul>
-<li><b>S17 TIMELY（延迟型）</b>。信号是 RTT，而 CHI 本来就在量一个：
-<code>WriteNoSnp</code> 规定拿到 <code>DBIDResp</code> 之前不许发数据，
-所以<b>"REQ 上环 → DBIDResp 被排空"就是一个 RTT 样本</b>，
-量在协议本来就要发的报文上，<b>零额外开销</b>。
-TIMELY 的洞见是 <b>RTT 的梯度比绝对值更早</b>：队列还没堆起来时梯度就已经转正。
-更新式用论文原式，阈值以实测 minRTT 的倍数表示
-（<code>T_low = 8.0·minRTT</code>、
-<code>T_high = 24.0·minRTT</code>、
-β = 0.8、δ = 0.06250、HAI 门槛
-5 次）。
-关键是<b>样本跨越重试往返</b>，所以被退回的请求会表现为一个很大的 RTT，
-控制器看得见。</li>
-<li><b>S18 DCQCN（ECN 型）</b>。无缓存环上<b>没有队列可以标记</b>——
-按定义环上不存在占用率会越过阈值的缓冲。但产生重试的拥塞根本不在环上，
-而在 <b>completer 的请求 tracker</b>，那个是有占用率的。
-所以标记算在那里（RED：占用率低于 0.8·tracker 不标，
-到 1.0·tracker 线性升到 0.05），
-而<b>一个 RetryAck 就是概率 1 的标记</b>——completer 明说自己满了。
-标记位搭在本来就要发的 <code>DBIDResp</code> / <code>RetryAck</code>
-上（+1 bit），<b>连 CNP 报文都不需要</b>，
-比真实 DCQCN 还便宜。速率侧是标准 QCN 状态机
-（α 的 EWMA g = 0.06250、每 8 拍最多降一次、
-fast recovery 5 轮 → additive → hyper）。</li>
-</ul>
-<div class="def"><b>执行端两者相同</b>：REQ 上环前的一个漏桶，
-令牌单位是 REQ/cycle。选 REQ 而不选 WriteData 有两个原因：
-冲垮 tracker 的是 REQ 的到达率；而且没有 DBIDResp 就发不出 WriteData，
-压住请求就等于压住数据。<b>outstanding 上限不动</b>，
-所以这里量的是"同样的标称预算下，速率控制能捞回多少<b>有效</b>
-outstanding"。速率钉在物理上限（每 plane 一个上环端口 = 2 REQ/cycle）时
-S17 / S18 逐位复现 S0，回归 <code>rate_pinned_equals_s0</code> 保证了
-漏桶是它们唯一改动的东西。</div>
-
-<h3>10.2 先做对照实验：把速率钉死，不要控制器</h3>
-<p>在评价两个控制器之前，先问一个更基本的问题：
-<b>存在一个好的注入速率吗？</b>把漏桶的速率钉成常数
-（<code>pace_min = pace_init = pace_max</code>，控制器完全不动），
-扫一遍：</p>
-<table><thead><tr><th>钉死的注入速率 REQ/cycle/core</th><th>makespan</th><th>吞吐</th><th>重试/事务</th><th>有效 outstanding</th><th>已分配均值</th><th>max/min</th><th>延迟 p99</th></tr></thead><tbody><tr><td>0.06</td><td>13372</td><td>2.3931</td><td>0.0</td><td>3.73</td><td>3.73</td><td>1.0038</td><td>13208</td></tr><tr><td>0.1</td><td>8081</td><td>3.9599</td><td>0.0</td><td>7.54</td><td>7.54</td><td>1.0038</td><td>7959</td></tr><tr><td>0.125</td><td>6543</td><td>4.8907</td><td>0.0</td><td>11.24</td><td>11.24</td><td>1.0044</td><td>6409</td></tr><tr><td>0.15 ★</td><td>5679</td><td>5.6348</td><td>0.1214</td><td>20.55</td><td>22.65</td><td>1.0289</td><td>5571</td></tr><tr><td>0.2</td><td>6183</td><td>5.1755</td><td>0.8465</td><td>23.16</td><td>78.8</td><td>1.0551</td><td>6022</td></tr><tr><td>0.3</td><td>6236</td><td>5.1315</td><td>0.9357</td><td>22.93</td><td>92.17</td><td>1.0782</td><td>6059</td></tr><tr><td>0.5</td><td>6307</td><td>5.0737</td><td>0.9473</td><td>22.87</td><td>96.57</td><td>1.1323</td><td>6136</td></tr><tr><td>1.0</td><td>6305</td><td>5.0753</td><td>0.9556</td><td>22.91</td><td>97.05</td><td>1.1103</td><td>6132</td></tr><tr><td>2.0</td><td>6259</td><td>5.1126</td><td>0.9589</td><td>23.15</td><td>99.95</td><td>1.0936</td><td>6142</td></tr></tbody></table>
-<div class="def good"><b>存在，而且收益很大。</b>钉在
-<b>0.15 REQ/cycle/core</b> 时吞吐
-<b>5.6348</b>（比 S0 <b>+10.2%</b>），
-同时把重试从 0.9589 压到 <b>0.1214</b>，
-max/min 也从 1.0936 收到 1.0289。
-<b>这说明重试确实是纯浪费</b>——只要不去撞 tracker，
-省下来的环上带宽直接变成吞吐。</div>
-<div class="def bad"><b>但这个窗口非常窄。</b>速率再低一档
-（0.125）吞吐掉到 4.8907，
-<b>反而低于 S0 的 5.1126</b>——completer 开始空转；
-再高一档（0.2）重试立刻回到
-0.8465，吞吐 5.1755。
-<b>±33% 的速率误差就吃掉全部收益</b>，
-而这个最优速率既取决于 tracker 大小，也取决于 workload（9.5 节）。
-所以它必须被<b>自动找到</b>，不能写死——
-这就是下面两个控制器要做的事。</div>
-
-<h3>10.3 两个控制器的结果</h3>
-<img src="ring2_wfair_rate.png" alt="rate control traces">
-<p>uniform，outstanding=128、tracker=32
-（S16 的 overcommit = 16，理由见 10.4）：</p>
-<table><thead><tr><th>方案</th><th>makespan</th><th>吞吐</th><th>max/min</th><th>重试/事务</th><th>有效 outstanding</th><th>乱序比例</th><th>延迟 p99</th><th>平均注入速率</th><th>ECN 标记数</th></tr></thead><tbody><tr><td>S0 基线（无流控）</td><td>6259</td><td>5.1126</td><td>1.0936</td><td>0.9589</td><td>23.15</td><td>0.90113</td><td>6142</td><td>—</td><td>—</td></tr><tr><td>S16 接收端授权（Homa 式）</td><td>6368</td><td>5.0251</td><td>1.039</td><td>0.964</td><td>23.47</td><td>0.8705</td><td>6176</td><td>—</td><td>—</td></tr><tr><td>S17 TIMELY（RTT 梯度）</td><td>5984</td><td>5.3476</td><td>1.1852</td><td>0.2707</td><td>21.09</td><td>0.72725</td><td>5828</td><td>0.15781</td><td>—</td></tr><tr><td>S18 DCQCN（tracker ECN）</td><td>6067</td><td>5.2744</td><td>1.1348</td><td>0.3566</td><td>20.45</td><td>0.7275</td><td>5914</td><td>0.41792</td><td>2901</td></tr></tbody></table>
-<div class="def">两个方案都把注入压到
-0.15781 / 0.41792 REQ/cycle/core
-——<b>均值离最优的 0.15 已经很近</b>——
-重试从 0.9589 降到
-0.2707 / 0.3566，
-吞吐 <b>+4.6%</b> /
-<b>+3.2%</b>。
-<b>方向对了，而且是自动找到的</b>，不需要知道 tracker 有多大。</div>
-<div class="def bad"><b>但都没吃到全部收益</b>：
-和钉死最优速率的 5.6348 相比，
-S17 差 <b>-5.1%</b>、
-S18 差 <b>-6.4%</b>。
-原因在左图看得很清楚：<b>均值对了，但一直在振荡</b>，
-而 10.2 的曲线两侧都很陡，所以在最优点附近来回摆动的平均收益
-低于稳定停在最优点。<b>这就是"反应式"的代价，
-不是调参能消掉的</b>。<br>
-公平性方面 max/min 基本没动（S0 1.0936 →
-1.1852 / 1.1348），
-远不如 S16 的 1.039。</div>
-
-<h3>10.3.1 论文里的常数搬不过来</h3>
-<div class="def"><b>直接用 TIMELY / DCQCN 论文的阈值会把系统限死。</b>
-两者的默认值都假设"RTT 超出 minRTT / 队列非空"本身就是坏事。
-在这里不是：RTT 的主要成分是 <b>completer 自己的服务队列</b>，
-而那个队列<b>应该</b>非空——空了就是 completer 在空转。
-本环空载 RTT 约 20 拍，而高效工作点的 RTT 在 150 拍附近，
-所以 <code>T_high = 4·minRTT</code> 等于宣布"永久拥塞"，
-控制器一路降到地板。实测：用论文值时 S17 的吞吐只有 0.117
-（比 S0 差 40 倍），rate 被压到 1/512 就再也上不来。<br>
-第二个陷阱是<b>反馈依附在流量上</b>：速率降到接近零之后，
-带回 RTT 样本 / ECN 标记的报文也几乎没有了，
-控制器<b>自己饿死了自己</b>，升不回去。所以速率地板
-<code>pace_min = 0.0625</code> 不是随便设的，
-它必须高到让反馈回路继续有输入。<br>
-第三个是<b>时间尺度</b>：QCN 的定时器在数据中心是微秒级，
-搬到这里 <code>rate_timer = 300</code> 拍意味着控制器要连续两个往返
-待在它已知安全的速率之下。改成 24 拍后
-S18 从 4.03 抬到 5.2744。<br>
-<b>本节采用的阈值</b>：T_low/T_high = 8.0/24.0
-倍 minRTT，RED 区间 [0.8, 1.0]·tracker、
-p_max = 0.05。都在
-<code>rg_ring2_rate.py</code> 里连同理由一起记着。</div>
-
-<h3>10.4 有限 tracker 补上了 S16 论证里的一个洞</h3>
-<div class="def bad">之前的 S16 分析有一处不诚实：<code>gq</code> 可以无限排队 REQ。
-tracker 有限之后，代价被诚实拆成两笔——
-<b>便宜的 tracker 表项</b>（地址 + srcID + 少量状态）和
-<b>贵的写数据缓冲</b>（每笔 4 flit），
-而 S0 把两者 1:1 绑死。S16 只压住后者。<br>
-更要紧的是：<b>overcommit ≥ tracker 时 S16 完全退化成 S0</b>
-——completer 手上的已接受请求本来就不可能超过 tracker 表项数，
-授权泵永远不需要扣住任何授权。所以本节把 S16 的 overcommit 设为
-16（tracker 的一半）它才起作用；
-而它起作用的方式是<b>让请求在已经占着 tracker 表项的状态下等授权</b>，
-于是重试反而比 S0 <b>更多</b>
-（0.9589 → 0.964）。
-两条都由回归 <code>s16_grants_below_tracker</code> 钉住。<br>
-<b>这是一个真实的取舍，不是 S16 的反例</b>：S16 用更多的廉价 tracker
-压力换来 1/N 的昂贵数据缓冲。但它说明 S16 的 overcommit
-必须和 completer 的 tracker 一起选，不能各自独立调。</div>
-
-<h3>10.5 rate-based 只解决一半</h3>
-<ol>
-<li><b>反应式，必然过冲。</b>控制器只能在 RTT 已经涨上去、
-或者请求已经被退回之后才降速，每一次都是先付出代价再纠正。
-10.3 已经把这笔账量出来了：均值找对了，振荡还要吃掉
-5%~6%。
-S16 的授权是<b>先申请后使用</b>，结构上不存在过冲。</li>
-<li><b>在环绝对优先下，源端限速造不出槽位。</b>这正是第 5.2(c) 节
-S1 失败的同一条理由：让上游少发，让出来的空拍会被下一个过路 flit
-顺手拿走，弱者拿不到。所以速率控制能减少<b>浪费</b>
-（少退回、少白跑），但不能改变<b>分配</b>——
-表里 max/min 几乎不动就是这一点的直接证据。</li>
-<li><b>它们管的是错误的量。</b>需要被限制的是 completer
-的接收资源占用；rate-based 通过限制源端速率<b>间接</b>影响它，
-S16 直接控制它。间接的代价就是 10.2 里那点残余重试。</li>
-</ol>
-<div class="def good"><b>因此两者互补，不是竞争。</b>
-S16（授权调度）负责<b>公平与缓冲上限</b>，
-S17/S18（速率控制）负责<b>把标称 outstanding 压到有效 outstanding
-附近，省掉白跑的重试</b>。而 9.5 已经证明这个"附近"随场景漂移，
-必须动态确定——这就是速率控制在这套系统里真正的位置：
-不是替代授权，而是<b>自动找到那个不该写死的 outstanding</b>。</div>
-
-<h3>10.6 代价对比（含 S17 / S18）</h3>
-<table><thead><tr><th>代价项</th><th>S0</th><th>S15</th><th>S16</th><th>S17</th><th>S18</th></tr></thead><tbody><tr><td>专用拥塞总线</td><td>无</td><td>有，79 bit × 4920 次</td><td>无</td><td>无</td><td>无</td></tr><tr><td>环上槽预约逻辑</td><td>无</td><td>有，52774 次预约</td><td>无</td><td>无</td><td>无</td></tr><tr><td>新增报文类型</td><td>无</td><td>无（走总线）</td><td>无（复用 DBIDResp）</td><td>无（RTT 从 DBIDResp 量）</td><td>无（标记位搭 DBIDResp / RetryAck，不需要 CNP）</td></tr><tr><td>completer 写缓冲（峰值授权）</td><td>32（≈128 flit，由 tracker 夹住）</td><td>32（同基线，不额外约束）</td><td>16（≈64 flit，主动压到 tracker 之下）</td><td>32（同基线）</td><td>32（同基线）</td></tr><tr><td>核内速率控制器</td><td>无</td><td>每 (node,VC) AIMD 预算 + 累计欠账</td><td>无</td><td>每 core：漏桶 + minRTT + RTT 梯度 EWMA</td><td>每 core：漏桶 + α EWMA + 两个定时器</td></tr><tr><td>completer 侧状态</td><td>无</td><td>无</td><td>每源 core 的授权队列 + 累计服务量</td><td>无</td><td>tracker 占用率比较器 + RED 随机数</td></tr><tr><td>需要精确时间戳</td><td>否</td><td>否</td><td>否</td><td><b>是</b>（RTT 是唯一信号）</td><td>否</td></tr></tbody></table>
-<p class="note">S17 唯一的额外要求是<b>精确时间戳</b>：RTT 是它唯一的信号，
-时钟域或测量点的抖动会直接变成误判。S18 不需要时间戳，
-但需要在 completer 侧加一个占用率比较器和一个随机数源。
-两者都不需要新报文、不需要总线、不碰环上仲裁。</p>
-
-
 <p class="note" style="margin-top:2rem">
-数据：<code>results/ring2_write_fair.json</code>（K=2000、
-W=4、seed=0，生成于 2026-08-25T02:04:57Z）。
-回归：<code>utils/verify_ring2_20.py</code>。</p>
+数据：<code>results/ring2_write_fair.json</code>
+（K=20000、W=2、n_planes=1、
+seed=0，生成于 2026-08-25T04:51:57Z）。</p>
 </body></html>
