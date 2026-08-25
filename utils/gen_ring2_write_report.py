@@ -764,10 +764,16 @@ def _setup_table(meta: dict) -> str:
          f"{len(meta['link_lats'])} 节点 × 2 方向 × {meta['n_planes']} plane "
          f"× {meta['n_vc']} VC，σ={meta['sigma']}"],
         ["端口", f"inject {meta['board_ports']} / leave "
-                 f"{meta['leave_ports']}（每 node 每 plane）",
-         "三条 VC 共享同一个上下环端口"],
+                 f"{meta['leave_ports']}"
+                 + ("（每 node 每 plane 每 VC）" if meta.get("per_vc_ports")
+                    else "（每 node 每 plane）"),
+         ("REQ / RSP / DAT 各有独立上下环口，互不占槽"
+          if meta.get("per_vc_ports")
+          else "三条 VC 共享同一个上下环端口")],
         ["上环队列深度", meta["inj_depth"], "每 (node, plane, VC)"],
-        ["下环队列深度", meta["eject_depth"], "每 (node, plane)"],
+        ["下环队列深度", meta["eject_depth"],
+         ("每 (node, plane, VC)" if meta.get("per_vc_ports")
+          else "每 (node, plane)")],
         ["I-tag 门限 t_inj", meta["t_inj"], "限制注入饥饿时长"],
         ["E-tag 门限 t_xfer", meta["t_xfer"], "限制偏转次数"],
         ["写激励",
@@ -799,12 +805,21 @@ def _link_table(meta: dict) -> str:
     return _table(["无向边", "hop 时延（拍）", "备注"], rows)
 
 
+def _port_lb_txt(b: dict) -> str:
+    if not b.get("merge_port_vcs", True):
+        return "每 (node, plane, VC) 一口，三通道不再叠在一起"
+    return "每 (node, plane) 只有一个上下环端口，三条 VC 共享"
+
+
 def _bounds_table(b: dict) -> str:
     rows = [
         ["LB_link 每 VC 独立链路", b["link_lb"],
          "REQ/RSP/DAT 各占一条 VC，取三者最大"],
-        ["LB_port 端口合并", b["port_lb"],
-         "inject / leave 每 (node, plane) 只有一个端口，三 VC 共享"],
+        ["LB_port " + ("每 VC 独立端口" if not b.get("merge_port_vcs", True)
+                       else "端口合并"), b["port_lb"],
+         ("inject / leave 每 (node, plane, VC) 一口，三通道不再叠在一起"
+          if not b.get("merge_port_vcs", True)
+          else "inject / leave 每 (node, plane) 只有一个端口，三 VC 共享")],
         ["LB_cut 割集", b["cut_lb"], "跨割面的流量除以割面上的有向链路数"],
         ["LB_txn 事务串行链", b["txn_lb"],
          "REQ→DBIDResp→WriteData→Comp 两个来回"],
@@ -923,11 +938,25 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"证伪：{bus_fc.get('falsify', '')}"
             f"<br>对照：S1 总线实测 {bu.get('s1_bus_lat', '—')} 拍。"
         )
+    vc_fc = meta.get("vc_indep_forecast") or {}
+    vc_note = ""
+    if vc_fc:
+        b = pat.get("bounds") or {}
+        vc_note = (
+            f"<br><b>三通道链路独立的预测</b>"
+            f"（置信度 {vc_fc.get('confidence', '—')}）："
+            f"{vc_fc.get('hypothesis', '')} "
+            f"证伪：{vc_fc.get('falsify', '')}"
+            f"<br>对照：per_vc_ports={meta.get('per_vc_ports')}，"
+            f"bound={b.get('bound')}（link {b.get('link_lb')} / "
+            f"port {b.get('port_lb')}），"
+            f"S0 吞吐 {f0.get('throughput')}，max/min {f0.get('max_min')}。"
+        )
     return f"""
 <div class="def">
 <b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
 {fc.get('hypothesis', '')}
-证伪：{fc.get('falsify', '')}{bus_note}<br>
+证伪：{fc.get('falsify', '')}{bus_note}{vc_note}<br>
 <b>对照。</b>
 {len(xs)} 个 mem 收到的 WriteData
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
@@ -2150,6 +2179,54 @@ max/min {u['S18']['mm']}）；S17 重试也降了，但 max/min 是适用方案�
 
 # ---------------------------------------------------------------------------
 
+def _ideal_rate_section(meta: dict, pat: dict) -> str:
+    """Equal-rate ideal CC with independent REQ / RSP / DAT hops."""
+    n_c = len(meta.get("core_nodes") or [])
+    n_m = len(meta.get("mem_nodes") or [])
+    w = int(meta.get("W") or 2)
+    # Hottest DAT/RSP hop carries 14 of the 80 (core, HA) pairs.
+    # Each pair is λ/n_m; DAT multiplies by W, RSP by 2.
+    n_hot = 14
+    coef_dat = n_hot * w / n_m
+    coef_rsp = n_hot * 2 / n_m
+    coef_req = n_hot / n_m
+    lam = 1.0 / max(coef_dat, coef_rsp, coef_req)
+    r_dat = w * lam
+    tot = n_c * r_dat
+    meas = ((pat.get("schemes") or {}).get("S0") or {}).get("fairness", {})
+    thr = meas.get("throughput")
+    gap = (100.0 * thr / tot) if thr and tot else None
+    unb = ((pat.get("s0_unbounded") or {}).get("fairness") or {})
+    thr_u = unb.get("throughput")
+    gap_u = (100.0 * thr_u / tot) if thr_u and tot else None
+    return f"""
+<h3>4.5 理想拥塞控制下的注入率（三 VC 链路独立）</h3>
+<p>REQ / RSP / DAT 的有向 hop 各有一份 σ=1 信用，互不占槽。
+一笔事务仍要三条腿都走完，所以事务率受三张平面里最紧的那张限制：
+<code>λ ≤ min(λ_REQ, λ_RSP, λ_DAT)</code>。
+本小节<b>不把三 VC 叠进同一个上下环口</b>。</p>
+<p>均匀最短路下，热 hop（0→1、8→7、10→11、18→17 及其反向）
+各被 {n_hot} 条 (core, HA) 流穿过。系数
+DAT = {n_hot}·{w}/{n_m} = {coef_dat:.2f}，
+RSP = {n_hot}·2/{n_m} = {coef_rsp:.2f}，
+REQ = {n_hot}/{n_m} = {coef_req:.2f}。</p>
+<div class="def">
+λ_DAT = λ_RSP = 1/{coef_dat:.2f} = <b>2/7 ≈ {lam:.4f}</b> txn/cycle/core，
+λ_REQ = 4/7（更松）。
+每核 WriteData <b>r* = {w}·(2/7) = 4/7 ≈ {r_dat:.4f}</b> flit/cycle，
+全环 <b>R* = {n_c}·4/7 = 40/7 ≈ {tot:.4f}</b> flit/cycle。
+对分（4 条有向 hop）在 λ* 上 DAT/RSP 占用 5/7，打不满；
+先满的是四条热 hop。
+S0 实测 {thr}，约为这条链路理想的
+{f'{gap:.1f}%' if gap is not None else '—'}
+（有限 tracker）。无限 tracker 参照 {thr_u}，约为
+{f'{gap_u:.1f}%' if gap_u is not None else '—'}。
+</div>
+{'' if meta.get('per_vc_ports') else '''<p class="note">若上下环口仍是三 VC 共用 1 个端口，另有一条更紧的
+λ ≤ 4/15（mem leave），见此前端口合并分析。</p>'''}
+"""
+
+
 def _html_style() -> str:
     return """
 body { font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
@@ -2195,7 +2272,7 @@ def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
     b = pat["bounds"]
     _lb_txt = {
         "link_lb": "最忙的那条有向链路上、DAT VC 的容量",
-        "port_lb": "每 (node, plane) 只有一个上下环端口，三条 VC 共享",
+        "port_lb": _port_lb_txt(b),
         "cut_lb": "跨割面的流量除以割面上的有向链路数",
         "txn_lb": "单笔事务四拍握手的串行链",
     }
@@ -2248,19 +2325,27 @@ r(带宽, 相邻 mem) = {rcref.get('corr_bw_adjmem')}。</div>
 
 <h1>无缓存环上的 per-core 写带宽公平性</h1>
 <p class="note">本次只跑 <b>1 个 plane / 1 条 ring</b>、均匀 tiled 写、
-S0 与 S1。每 core {meta['K']} 笔 WriteNoSnp
+S0 与 S1。REQ / RSP / DAT <b>上下环口独立</b>。
+每 core {meta['K']} 笔 WriteNoSnp
 （请求量 ×10），每笔 {meta['W']} 个 WriteData flit。
 HA 回 RSP / Comp 时延 <b>{_jit_label(meta)}</b> 拍。</p>
 
 <h2>结论</h2>
 <div class="key">
 <ol>
-<li><b>单平面把注入口砍半。</b>S0 吞吐
+<li><b>三通道链路独立。</b>makespan 下界改由最忙 DAT/RSP hop
+决定（bound {b['bound']}，port {b.get('port_lb')} 已松）。
+Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
+<li><b>有限 tracker 现在才是实测瓶颈。</b>S0 吞吐
 <b>{s0['throughput']}</b> flit/cycle，max/min
 <b>{s0['max_min']}</b>，重试 {q0.get('retry_per_txn')} 次/事务，
-延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。</li>
+延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。
+无限 tracker 参照吞吐 {sref['throughput']}、max/min {sref['max_min']}
+（峰值占用 {qref.get('max_ha_used', '—')} 表项）。
+端口拆开让 REQ 更快堆到 HA，32 表项把大家一起压住，所以看起来更公平、吞吐更低。</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
-{s0['max_min']} → {s1['max_min']}。</li>
+{s0['max_min']} → {s1['max_min']}。
+源端限速略减 RetryAck，帮不上 hop 理想。</li>
 <li><b>§4.3 上环方向见下。</b>黄底 = CW/CCW 比 ≥ 2
 （该侧合计 ≥ 50）。预测写在跑数前，对照见 1.2.1。</li>
 </ol>
@@ -2326,10 +2411,14 @@ S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
 吞吐相对无限 tracker {t_ref:+.1f}%。
 峰值占用 {qref.get('max_ha_used', '—')} 表项；
 有限 tracker 下重试 {q0.get('retry_per_txn')} 次/事务。</div>
+{_ideal_rate_section(meta, pat)}
 
 <h2>5. S1</h2>
 <p>拥塞总线延迟 <b>{s1_fc.get('bus_lat', '—')}</b> 拍，控制窗口
 {s1_fc.get('window', 64)} 拍。
+{"端口拆开后 S1 的节点预算上限按 VC 数放大（窗口 × 3），"
+ "避免把三通道独立注入口误限成 1 flit/cycle。"
+ if meta.get("per_vc_ports") else ""}
 反馈只在窗口边界写入并在下一窗口边界读取：
 30 &lt; 64，所以 30 拍与 1 拍都在下一次 AIMD 之前送到，
 本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan {pat['schemes']['S1']['makespan']}）。</p>
@@ -2614,7 +2703,7 @@ M{'/M'.join(str(x) for x in hot_has)} 之后，
     # Name the binding bound from the data so the prose cannot go stale.
     _lb_txt = {
         "link_lb": "最忙的那条有向链路上、DAT VC 的容量",
-        "port_lb": "每 (node, plane) 只有一个上下环端口，三条 VC 共享",
+        "port_lb": _port_lb_txt(b),
         "cut_lb": "跨割面的流量除以割面上的有向链路数",
         "txn_lb": "单笔事务四拍握手的串行链",
     }

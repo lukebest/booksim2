@@ -373,12 +373,19 @@ class Ring2FcSim(Ring2BaseSim):
             self.st["n_reserve_yield"] += 1
             self._deny_cause = "fc_budget"
             return False
-        init = self.p.budget_init if self.p.mode == "s15" else self.p.window
+        init = self.p.budget_init if self.p.mode == "s15" else self._s1_win_cap()
         if self.spent[bk] >= self._allowed(bk, init):
             self.st["n_fc_deny"] += 1
             self._deny_cause = "fc_budget"
             return False
         return True
+
+    def _s1_win_cap(self) -> int:
+        """S1's per-node budget ceiling. Scale by VC count when ports split."""
+        w = self.p.window
+        if self.p.per_vc_ports:
+            return w * max(1, len(self._vc_list))
+        return w
 
     def _allowed(self, bk: tuple, init: int) -> int:
         """Flits releasable so far this window.
@@ -522,11 +529,11 @@ class Ring2FcSim(Ring2BaseSim):
             own = max(self.fail_tot[i], self.defl_win[i])
             final = level_of(max(0, own - LEVEL_STEP * recv))
             if not self._controlled(i):
-                rec_b.append(self.budget.get(i, p.window))
+                rec_b.append(self.budget.get(i, self._s1_win_cap()))
                 rec_l.append(final)
                 rec_r.append(recv); rec_ok.append(self.ok_win[i])
                 continue
-            b = self.budget.get(i, p.window)
+            b = self.budget.get(i, self._s1_win_cap())
             if final > 0:
                 a = (alpha["lo"] if final <= 2 else
                      alpha["mid"] if final <= 5 else alpha["hi"])
@@ -535,7 +542,7 @@ class Ring2FcSim(Ring2BaseSim):
             else:
                 g = (beta["clear"] if recv == 0 else
                      beta["lo"] if recv <= 2 else beta["hi"])
-                b = min(p.window, b + g)
+                b = min(self._s1_win_cap(), b + g)
                 self.st["n_aimd_increase"] += 1
             self.budget[i] = b
             rec_b.append(b); rec_l.append(final)

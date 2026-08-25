@@ -100,6 +100,9 @@ class Ring2BaseParams:
     # otherwise sit in front of the WriteData that has to drain to release it.
     # The board port stays single — VC queues take turns round-robin.
     per_vc_srcq: bool = False
+    # Independent board / leave / eject per CHI VC. Hops are already
+    # per-VC; this stops REQ / RSP / DAT from sharing the 1-flit ports.
+    per_vc_ports: bool = False
     plane_sel: PlaneSel = "least_occupied"
     # Aligned across S0/S1/S2/S3: max in-flight reads per AI core
     # (request injected, last response not yet PE-drained). 0 = unlimited.
@@ -507,8 +510,12 @@ class Ring2BaseSim:
             cap += self.p.resv_ej
         return cap
 
+    def _ej_key(self, f: Flit) -> Any:
+        return ((f.dst, f.plane, f.vc) if self.p.per_vc_ports
+                else (f.dst, f.plane))
+
     def _try_eject(self, f: Flit) -> bool:
-        key = (f.dst, f.plane)
+        key = self._ej_key(f)
         q = self.ejectq[key]
         cap = self.p.eject_depth
         if len(q) < cap:
@@ -553,6 +560,44 @@ class Ring2BaseSim:
     def _inject_keys(self) -> list:
         """Source queues to visit this cycle. Default: set order."""
         return list(self.active_src)
+
+    def _finish_board(self, node: int, plane: PlaneId, key: Any,
+                      qkeys: Sequence[Any], qk: Any, f: Flit, t: int) -> None:
+        starve_key = (node, plane, f.vc) if self.p.per_vc_ports else key
+        if self._itag_blocks(f, node):
+            self._fail_cause = "itag"
+        elif not self._can_board(f.plane, f.dir, f.idx, f.vc):
+            self._fail_cause = "hop_busy"
+        else:
+            self._fail_cause = ""
+        if self._fail_cause:
+            self._on_board_fail(node, f)
+            self.inj_starve[starve_key] += 1
+            self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
+                                            self.inj_starve[starve_key])
+            if self.inj_starve[starve_key] >= self.p.t_inj and \
+                    self._should_raise_itag(node, f):
+                rk = (f.plane, f.dir, f.vc)
+                if node not in self.i_tag[rk]:
+                    self.i_tag[rk].add(node)
+                    self.st["n_itag_raised"] += 1
+            return
+        q = self._q(qk)
+        if f is q[0]:
+            q.popleft()
+        else:
+            q.remove(f)
+        self._admit(qk)
+        self.vc_rr[key] += 1
+        if self._src_idle_all(qkeys):
+            self.active_src.discard(key)
+        self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
+        self.inj_starve[starve_key] = 0
+        f.t_inject = t
+        self.st["n_injected"] += 1
+        self._note_board(f, ok=True)
+        self._on_inject(f)
+        self._launch(f, inring=False)
 
     def _select_inject_flit(self, node: int, plane: PlaneId, q) -> Flit | None:
         """Which boarding-queue flit tries the inject port. Default: FIFO head."""
@@ -660,11 +705,14 @@ class Ring2BaseSim:
             if f.target > 0:
                 self._launch(f, inring=True)
                 continue
-            leave_req[(f.dst, f.plane)].append(f)
+            if self.p.per_vc_ports:
+                leave_req[(f.dst, f.plane, f.vc)].append(f)
+            else:
+                leave_req[(f.dst, f.plane)].append(f)
 
-        # at most one leave per (node, plane): RR across the two dirs
+        # at most one leave per (node, plane), or per VC when split
         for key, reqs in leave_req.items():
-            node, plane = key
+            node, plane = key[0], key[1]
             order = self._leave_order(node, plane, reqs)
             ejected = False
             for f in order:
@@ -678,7 +726,7 @@ class Ring2BaseSim:
 
         self._release_ready_resps()
 
-        # local injection: one flit per (node, plane) if the slot is free
+        # local injection: one flit per (node, plane), or per VC when split
         self._pre_inject()
         for key in self._inject_keys():
             node, plane = key
@@ -691,7 +739,25 @@ class Ring2BaseSim:
                 self.st["n_admit_stall"] += 1
             if not any(self._q(qk) for qk in qkeys):
                 self.inj_starve[key] = 0
+                if self.p.per_vc_ports:
+                    for qk in qkeys:
+                        self.inj_starve[qk] = 0
                 self.active_src.discard(key)
+                continue
+            if self.p.per_vc_ports:
+                # One board port per CHI VC: REQ / RSP / DAT do not share.
+                for cand in qkeys:
+                    q = self._q(cand)
+                    if not q:
+                        continue
+                    cf = self._select_inject_flit(node, plane, q)
+                    if cf is None:
+                        continue
+                    if not self._may_inject(node, plane, cf):
+                        self._note_deny(node, cf)
+                        self.i_tag[(cf.plane, cf.dir, cf.vc)].discard(node)
+                        continue
+                    self._finish_board(node, plane, key, qkeys, cand, cf, t)
                 continue
             # One board port: the VC queues take turns, and a queue whose head
             # a policy refuses hands the port to the next VC instead of
@@ -723,40 +789,7 @@ class Ring2BaseSim:
                 self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
                 self.inj_starve[key] = 0
                 continue
-            if self._itag_blocks(f, node):
-                self._fail_cause = "itag"
-            elif not self._can_board(f.plane, f.dir, f.idx, f.vc):
-                self._fail_cause = "hop_busy"
-            else:
-                self._fail_cause = ""
-            if self._fail_cause:
-                self._on_board_fail(node, f)
-                self.inj_starve[key] += 1
-                self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
-                                                self.inj_starve[key])
-                if self.inj_starve[key] >= self.p.t_inj and \
-                        self._should_raise_itag(node, f):
-                    rk = (f.plane, f.dir, f.vc)
-                    if node not in self.i_tag[rk]:
-                        self.i_tag[rk].add(node)
-                        self.st["n_itag_raised"] += 1
-                continue
-            q = self._q(qk)
-            if f is q[0]:
-                q.popleft()
-            else:
-                q.remove(f)
-            self._admit(qk)
-            self.vc_rr[key] += 1
-            if self._src_idle_all(qkeys):
-                self.active_src.discard(key)
-            self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
-            self.inj_starve[key] = 0
-            f.t_inject = t
-            self.st["n_injected"] += 1
-            self._note_board(f, ok=True)
-            self._on_inject(f)
-            self._launch(f, inring=False)
+            self._finish_board(node, plane, key, qkeys, qk, f, t)
 
         # PE drains the per-plane eject queue
         for key in list(self.active_ej):

@@ -292,8 +292,8 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
 # Every scheme rides the same fabric: shortest-path routing, one plane
-# (one bidirectional ring), one board and one leave port per node, per-VC
-# boarding queues, and a finite request tracker at every completer. The
+# (one bidirectional ring), independent board / leave / eject per CHI VC,
+# per-VC boarding queues, and a finite request tracker at every completer. The
 # tracker is part of the baseline, not of one scheme: a real completer has
 # to RetryAck when it runs out of entries, and with the cap at
 # CORE_OUTSTANDING_WR every scheme below is measured with that pressure on.
@@ -302,6 +302,7 @@ HA_RSP_JIT = 64
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
+              per_vc_ports=True,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
@@ -344,6 +345,24 @@ BUS_LAT_FORECAST = {
     },
     "confidence": 0.7,
     "falsify": "S1 吞吐相对 S0 掉超过 2%，或失败偏的核/方向翻面",
+}
+# Written before the per-VC-port re-run. Do not edit after seeing results.
+VC_INDEP_FORECAST = {
+    "hypothesis": (
+        "REQ/RSP/DAT 上下环口拆开后，端口不再叠三 VC；"
+        "均等最短路的上限改由最忙 DAT/RSP hop 决定，"
+        "λ*=2/7，全环 WriteData R*=40/7≈5.714。"
+        "S0 仍受在环优先，到不了这条线，但应明显高于共用端口时的 2.67。"
+        "位置效应更明显；S1 按窗口×3 放大预算后仍接近 S0。"
+    ),
+    "predicted": {
+        "s0_thr": [3.5, 5.5],
+        "bound": 70000,
+        "s0_max_min_gt": 1.08,
+        "s1_thr_delta_pct": [-2.0, 1.0],
+    },
+    "confidence": 0.6,
+    "falsify": "S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定",
 }
 
 
@@ -1136,7 +1155,8 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
     txns = build_pattern(pattern, k=k, W=W, seed=seed)
     flits_per_core = k * W
     vp = write_paths_for_txns(topo, txns, strategy="least_occupied")
-    bounds = write_bounds(topo, vp, m_req=M_REQ, m_rsp=M_RSP, m_wdata=W)
+    bounds = write_bounds(topo, vp, m_req=M_REQ, m_rsp=M_RSP, m_wdata=W,
+                          merge_port_vcs=not FABRIC.get("per_vc_ports"))
     print(f"\n[{pattern}] K={k} W={W} txns={len(txns)} "
           f"wdata/core={flits_per_core} bound={bounds['bound']}", flush=True)
 
@@ -1387,6 +1407,8 @@ def main() -> None:
             "ha_rsp_jit": bp.ha_rsp_jit,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
+            "per_vc_ports": bp.per_vc_ports,
+            "vc_indep_forecast": VC_INDEP_FORECAST,
             "flit_b": FLIT_BYTES, "burst_b": BURST_BYTES,
             "stride_b": STRIDE_BYTES, "tile_b": TILE_BYTES,
             "stimulus_forecast": STIMULUS_FORECAST,
@@ -1412,7 +1434,8 @@ def main() -> None:
     old_meta = (old_payload or {}).get("meta") or {}
     same_fabric = all(
         old_meta.get(k) == payload["meta"].get(k)
-        for k in ("n_planes", "K", "W", "ha_rsp_jit", "ha_rsp_jit_lo"))
+        for k in ("n_planes", "K", "W", "ha_rsp_jit", "ha_rsp_jit_lo",
+                  "per_vc_ports"))
     if retry_out is None and same_fabric and old_payload:
         if old_payload.get("retry_study") is not None:
             payload["retry_study"] = old_payload["retry_study"]
