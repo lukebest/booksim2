@@ -1121,6 +1121,52 @@ def test_rate_control_cuts_retries() -> None:
     assert dc.fc_summary()["n_mark"] >= dc.summary()["n_retry"] > 0
 
 
+def test_window_pinned_reproduces_baseline() -> None:
+    """S19 / S20 must be exactly S0 when the window cannot shrink.
+
+    The window is a count of in-flight transactions sitting under the
+    static outstanding cap. Pinning it to that cap leaves only the
+    datapath, so any remaining difference would be a hook bug.
+    """
+    pin = {"win_min": 128, "win_init": 128, "win_max": 128,
+           "outst_sample": 16}
+    for track in (0, 32):
+        _, _, base = _run_retry("S0", k=200, cfg={
+            "ha_track": track, "outst_sample": 16})
+        sb = base.summary()
+        for scheme in ("S19", "S20"):
+            _, _, sim = _run_retry(scheme, k=200,
+                                   cfg={"ha_track": track, **pin})
+            s = sim.summary()
+            for key in ("makespan", "n_delivered_flits", "n_board_fail",
+                        "n_deflections", "n_retry"):
+                assert s[key] == sb[key], \
+                    f"{scheme} track={track} {key}: {s[key]} vs {sb[key]}"
+            assert s["wr_inject_by_core"] == sb["wr_inject_by_core"], scheme
+
+
+def test_window_control_acts() -> None:
+    """The window actuator has to bind, and the run still has to finish.
+
+    Starting at 16 (the U-curve peak on this fabric) is already below the
+    static cap of 128, so some fresh REQs must be refused. A RetryAck
+    still has to board: it already owns its slot.
+    """
+    cfg = {"core_outstanding": 128, "ha_track": 32, "outst_sample": 16}
+    _, _, base = _run_retry("S0", k=300, cfg=cfg)
+    sb = base.summary()
+    for scheme in ("S19", "S20"):
+        _, _, sim = _run_retry(scheme, k=300, cfg=cfg)
+        s = sim.summary()
+        fc = sim.fc_summary()
+        assert s["completed"], scheme
+        assert s["n_txn_done"] == sb["n_txn_done"], scheme
+        assert s["n_inring_blocked"] == 0, scheme
+        assert fc["actuator"] == "outstanding_window", scheme
+        assert fc["n_win_deny"] > 0, f"{scheme} never bound the window"
+        assert fc["win_mean_all"] < 128, (scheme, fc["win_mean_all"])
+
+
 def test_s16_is_bufferless_and_fair() -> None:
     """The payoff: fairer than S0 and still bufferless, at a small throughput
     cost.
@@ -1199,6 +1245,8 @@ def main() -> None:
     c.add("s16_grants_below_tracker", test_s16_needs_to_grant_below_the_tracker)
     c.add("rate_pinned_equals_s0", test_rate_pinned_reproduces_baseline)
     c.add("rate_control_cuts_retries", test_rate_control_cuts_retries)
+    c.add("window_pinned_equals_s0", test_window_pinned_reproduces_baseline)
+    c.add("window_control_acts", test_window_control_acts)
     res = {
         "n_total": len(c.rows), "n_ok": c.n_ok,
         "all_ok": c.n_ok == len(c.rows),

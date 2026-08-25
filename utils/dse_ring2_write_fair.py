@@ -26,6 +26,8 @@ S15  max-min fair share over the same bus plus bounded slot reservation.
 S16  receiver-driven grant pacing (Homa-style) over the stock DBIDResp.
 S17  TIMELY: RTT-gradient rate control, paced on REQ.
 S18  DCQCN: RED marks off the completer's request tracker, paced on REQ.
+S19  Swift-like: delay-triggered outstanding window.
+S20  DCTCP-like: tracker-ECN-triggered outstanding window.
 
 Every completer has a finite CHI request tracker (`ha_track`), so one that is
 over-subscribed must answer RetryAck instead of accepting. That is part of the
@@ -317,10 +319,12 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
         # accepted is grantable and S16 is S0 under another name.
         kw = {"overcommit": S16_OVERCOMMIT, **kw}
         return Ring2GrantSim(topo, Ring2GrantParams(**kw), seed=seed)
-    if scheme in ("S17", "S18"):
-        from rg_ring2_rate import (Ring2DcqcnSim, Ring2RateParams,
+    if scheme in ("S17", "S18", "S19", "S20"):
+        from rg_ring2_rate import (Ring2DcqcnSim, Ring2DctcpSim,
+                                   Ring2RateParams, Ring2SwiftSim,
                                    Ring2TimelySim)
-        cls = Ring2TimelySim if scheme == "S17" else Ring2DcqcnSim
+        cls = {"S17": Ring2TimelySim, "S18": Ring2DcqcnSim,
+               "S19": Ring2SwiftSim, "S20": Ring2DctcpSim}[scheme]
         return cls(topo, Ring2RateParams(**kw), seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
     p = Ring2FcParams(mode="s1" if scheme == "S1" else "s15", **kw)
@@ -495,14 +499,10 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
 # main
 # ---------------------------------------------------------------------------
 
-# Node 9 and node 19 are not memory. Two readings of that, both measured,
-# because they give materially different answers: either those two nodes are
-# simply not write destinations (the ring still has 10 cores), or they are
-# compute like every other non-memory node (12 cores).
-# Nodes 9 and 19 are neither memory nor AI core. They still sit on the ring
-# and still forward, but they never source or sink a write, so the memory set
-# is the eight remaining odd nodes and the ring is no longer rotationally
-# symmetric about the memory placement.
+# The ring is a closed full ring (19 wraps onto 0). Nodes 9 and 19 sit on
+# that ring and forward, but they are neither memory nor AI core — they
+# never source or sink a write. The memory set is the eight remaining odd
+# nodes, so the role map is no longer rotationally symmetric.
 NON_TERMINAL = (9, 19)
 MEM_NODES = tuple(h for h in has(N_NODES) if h not in NON_TERMINAL)
 CORE_NODES = tuple(cores(N_NODES))
@@ -536,7 +536,9 @@ def _rate_knobs() -> dict[str, Any]:
     return {k: getattr(p, k) for k in
             ("pace_max", "pace_min", "pace_burst", "t_low_mult",
              "t_high_mult", "timely_beta", "delta", "hai_n", "k_min", "k_max",
-             "p_max", "g", "alpha_timer", "rate_timer", "fast_recovery")}
+             "p_max", "g", "alpha_timer", "rate_timer", "fast_recovery",
+             "win_init", "win_min", "win_max", "swift_t_mult",
+             "swift_rtt_floor", "swift_beta", "swift_ai", "dctcp_g")}
 
 
 def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
@@ -852,8 +854,8 @@ def main() -> None:
     ap.add_argument("--W", type=int, default=W_FLITS)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--quick", action="store_true", help="K=200 smoke run")
-    ap.add_argument("--schemes", default="S0,S1,S15,S16")
-    ap.add_argument("--patterns", default="uniform")
+    ap.add_argument("--schemes", default="S0,S1,S15,S16,S17,S18,S19,S20")
+    ap.add_argument("--patterns", default="uniform,hot")
     ap.add_argument("--seeds", default="",
                     help="extra seeds for the S0/S15 robustness sweep")
     ap.add_argument("--sweep", action="store_true",
@@ -863,6 +865,8 @@ def main() -> None:
     ap.add_argument("--retry-k", type=int, default=RETRY_K,
                     help="batch size for the retry sweeps")
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--merge", action="store_true",
+                    help="add --schemes into an existing JSON; do not replace")
     args = ap.parse_args()
 
     k = 200 if args.quick else args.k
@@ -872,6 +876,36 @@ def main() -> None:
 
     topo = Ring2Topology(vcs=CHI_VCS_WRITE)
     t0 = time.perf_counter()
+    if args.merge:
+        out = Path(args.out)
+        if not out.exists():
+            raise SystemExit(f"--merge needs an existing {out}")
+        payload = json.loads(out.read_text())
+        old_k = payload.get("meta", {}).get("K", k)
+        if not args.quick and old_k != k:
+            raise SystemExit(f"--merge K={k} != existing K={old_k}")
+        bin_w = payload.get("meta", {}).get("bin_w", bin_w)
+        for pattern in patterns:
+            pat = payload.setdefault("patterns", {}).setdefault(pattern, {})
+            if "schemes" not in pat:
+                raise SystemExit(f"--merge: no existing pattern {pattern}")
+            txns = build_pattern(pattern, k=old_k, W=args.W, seed=args.seed)
+            flits = pat.get("flits_per_core") or old_k * args.W
+            print(f"\n[merge {pattern}] K={old_k} + {schemes}", flush=True)
+            for scheme in schemes:
+                r = run_scheme(scheme, topo, txns, seed=args.seed)
+                pat["schemes"][scheme] = digest(
+                    r, flits_per_core=flits, bin_w=bin_w)
+            _report(pat)
+        payload["meta"]["schemes"] = sorted(
+            set(payload["meta"].get("schemes") or []) | set(schemes),
+            key=lambda s: (len(s), s))
+        payload["meta"]["generated_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        payload["wall_secs"] = round(time.perf_counter() - t0, 1)
+        out.write_text(json.dumps(payload, indent=1))
+        print(f"\nmerged {out}  {payload['wall_secs']}s")
+        return
     out_pats = {
         p: run_pattern(p, topo, k=k, W=args.W, seed=args.seed, bin_w=bin_w,
                        schemes=schemes, sweep_s1=args.sweep,

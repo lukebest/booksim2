@@ -29,13 +29,18 @@ SCHEMES = ("S0", "S1", "S15", "S16")
 # Section 3.1: the reported baseline (tracker = 32). S15 is left out;
 # S17 / S18 take its place as the rate-based answers to retry waste.
 SEC31 = ("S0", "S1", "S16", "S17", "S18")
+# Source-end FC except S0/S1, plus S0 as the baseline they are judged on.
+FC_CMP = ("S0", "S15", "S16", "S17", "S18", "S19", "S20")
 COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb",
-         "S16": "#16a34a", "S17": "#0ea5e9", "S18": "#a855f7"}
+         "S16": "#16a34a", "S17": "#0ea5e9", "S18": "#a855f7",
+         "S19": "#ea580c", "S20": "#db2777"}
 LABEL = {"S0": "S0 基线（无流控）", "S1": "S1 拥塞等级 AIMD",
          "S15": "S15 公平份额 + 槽预约",
          "S16": "S16 接收端授权（Homa 式）",
          "S17": "S17 TIMELY（RTT 梯度）",
-         "S18": "S18 DCQCN（tracker ECN）"}
+         "S18": "S18 DCQCN（tracker ECN）",
+         "S19": "S19 Swift（时延窗口）",
+         "S20": "S20 DCTCP（ECN 窗口）"}
 
 
 def _use_cjk_font() -> None:
@@ -117,14 +122,19 @@ def plot_topology(meta: dict, path: Path) -> None:
         ax.text(x, y, tag, ha="center", va="center", fontsize=7.2,
                 color="white", fontweight="700", zorder=5)
     ax.text(0, 0.10, "plane ×2", ha="center", fontsize=11, color="#334155")
-    ax.text(0, -0.02, "双向全环 · 最短路", ha="center", fontsize=11,
+    ax.text(0, -0.02, "双向闭合 full ring · 最短路", ha="center", fontsize=11,
             color="#334155")
-    ax.text(0, -0.14, "灰 = 非终端（不收发写）", ha="center", fontsize=9.5,
-            color="#64748b")
+    others = any(_role(i, meta) == "other" for i in range(n))
+    n_core = sum(1 for i in range(n) if _role(i, meta) == "core")
+    n_mem = sum(1 for i in range(n) if _role(i, meta) == "mem")
+    extra = "，灰 = 非终端" if others else ""
+    if others:
+        ax.text(0, -0.14, "灰 = 非终端（不收发写）", ha="center", fontsize=9.5,
+                color="#64748b")
     ax.set_xlim(-1.45, 1.45)
     ax.set_ylim(-1.45, 1.45)
-    ax.set_title("20 节点双 plane 环 · 边上数字 = 该边 hop 时延（拍）\n"
-                 "蓝 = AI core（10），橙 = memory（8），灰 = 节点 9 / 19",
+    ax.set_title("20 节点双 plane 闭合 full ring · 边上数字 = hop 时延（拍）\n"
+                 f"蓝 = AI core（{n_core}），橙 = memory HA（{n_mem}）{extra}",
                  fontsize=12, pad=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
@@ -240,6 +250,49 @@ def plot_bw_overlay(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES
     plt.close(fig)
 
 
+def plot_fc_compare(pats: dict[str, dict], path: Path,
+                    schemes: tuple[str, ...] = FC_CMP) -> None:
+    """max/min and write throughput of every applicable source-end scheme."""
+    _use_cjk_font()
+    names = list(pats)
+    fig, axes = plt.subplots(len(names), 2, figsize=(11.4, 3.4 * len(names)))
+    if len(names) == 1:
+        axes = [axes]
+    for row, name in enumerate(names):
+        pat = pats[name]
+        mm, thr, cols, labs = [], [], [], []
+        for s in schemes:
+            rec = pat["schemes"].get(s)
+            if not rec:
+                continue
+            f = rec["fairness"]
+            mm.append(f["max_min"])
+            thr.append(f["throughput"])
+            cols.append(COLOR[s])
+            labs.append(s)
+        x = range(len(labs))
+        ax0, ax1 = axes[row]
+        ax0.bar(x, mm, color=cols, edgecolor="white")
+        ax0.axhline(1.05, color="#94a3b8", ls="--", lw=0.9)
+        ax0.set_ylabel("max/min")
+        ax0.set_title(f"{name} · max/min（虚线 = 验收 1.05）")
+        ax0.set_xticks(list(x))
+        ax0.set_xticklabels(labs)
+        ax0.grid(axis="y", alpha=0.3)
+        ax1.bar(x, thr, color=cols, edgecolor="white")
+        if "S0" in pat["schemes"]:
+            ax1.axhline(pat["schemes"]["S0"]["fairness"]["throughput"],
+                        color=COLOR["S0"], ls=":", lw=1.0)
+        ax1.set_ylabel("写带宽吞吐 flit/cycle")
+        ax1.set_title(f"{name} · 写带宽吞吐（虚线 = S0）")
+        ax1.set_xticks(list(x))
+        ax1.set_xticklabels(labs)
+        ax1.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
 def plot_scatter(pat: dict, path: Path) -> None:
     """Bandwidth against the two candidate explanations."""
     _use_cjk_font()
@@ -249,7 +302,8 @@ def plot_scatter(pat: dict, path: Path) -> None:
     for ax, key, xl, r, sp in (
         (axes[0], "adj_mem", "相邻 mem 个数", rc["corr_bw_adjmem"],
          rc["rank_bw_adjmem"]),
-        (axes[1], "mean_hop_to_mem", "到 8 个 mem 的平均跳数",
+        (axes[1], "mean_hop_to_mem",
+         f"到 {len(rc.get('mem') or [])} 个 mem 的平均跳数",
          rc["corr_bw_meanhop"], None),
         (axes[2], "succ_rate", "上环成功率 ok/(ok+fail)",
          rc["corr_bw_succ"], rc["rank_bw_succ"]),
@@ -265,8 +319,12 @@ def plot_scatter(pat: dict, path: Path) -> None:
         ax.set_xlabel(xl)
         ax.set_ylabel("S0 实测写带宽")
         ax.grid(alpha=0.3)
-    fig.suptitle("位置依赖的确切形式：决定带宽的是“身边有几个 mem”，"
-                 "不是“离 mem 多远”", fontsize=11)
+    adj_set = {x.get("adj_mem") for x in rows}
+    fig.suptitle(
+        "full ring 上相邻 mem 数与平均跳数都无方差，残余看上环成功率"
+        if len(adj_set) <= 1 else
+        "位置依赖的确切形式：决定带宽的是“身边有几个 mem”，不是“离 mem 多远”",
+        fontsize=11)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -515,13 +573,18 @@ def plot_rate_trace(study: dict, path: Path) -> None:
 def _setup_table(meta: dict) -> str:
     rows = [
         ["节点数 / plane 数", f"{len(meta['link_lats'])} / {meta['n_planes']}",
-         "两个独立的双向 ring plane，共用同一套几何"],
+         "两个独立的双向闭合 full ring，共用同一套几何"],
         ["AI core", f"{len(meta['core_nodes'])} 个：" +
          ", ".join(f"C{c}" for c in meta["core_nodes"]), "写发起方（CHI RN）"],
         ["memory 节点", f"{len(meta['mem_nodes'])} 个：" +
-         ", ".join(f"M{h}" for h in meta["mem_nodes"]), "写目的地（completer）"],
-        ["非终端节点", ", ".join(f"N{x}" for x in meta["non_terminal"]),
-         "在环上转发，但既不发起也不接收写"],
+         ", ".join(f"M{h}" for h in meta["mem_nodes"]),
+         "写目的地（completer）"],
+    ]
+    if meta.get("non_terminal"):
+        rows.append(
+            ["非终端节点", ", ".join(f"N{x}" for x in meta["non_terminal"]),
+             "在环上转发，但既不发起也不接收写"])
+    rows += [
         ["路由", "最短路（跳数平局走 CW）", "S0 及全部方案一致"],
         ["plane 选择", meta["plane_sel"], "两个 plane 之间做负载均衡"],
         ["每 core outstanding", meta["core_outstanding"],
@@ -552,7 +615,7 @@ def _link_table(meta: dict) -> str:
 
     rows = []
     for i, lat in enumerate(lats):
-        note = "闭合边（N19 ↔ C0）" if i == n - 1 else ""
+        note = f"闭合边（{tag(i)} ↔ {tag(0)}）" if i == n - 1 else ""
         rows.append([f"{tag(i)} — {tag((i + 1) % n)}", lat, note])
     return _table(["无向边", "hop 时延（拍）", "备注"], rows)
 
@@ -571,11 +634,12 @@ def _bounds_table(b: dict) -> str:
     return _table(["下界", "cycle", "含义"], rows)
 
 
-def _summary_table(pat: dict, *, pattern: str = "") -> str:
-    """Section 3.1: S0 is the reported baseline (tracker = 32)."""
+def _summary_table(pat: dict, *, pattern: str = "",
+                   schemes: tuple[str, ...] = SEC31) -> str:
+    """Per-scheme max/min and write throughput. S0 is tracker = 32."""
     rows = []
     thr0 = pat["schemes"]["S0"]["fairness"]["throughput"]
-    for s in SEC31:
+    for s in schemes:
         if s not in pat["schemes"]:
             continue
         sch = pat["schemes"][s]
@@ -1300,6 +1364,262 @@ S17/S18（速率控制）负责<b>把标称 outstanding 压到有效 outstanding
 """
 
 
+def _fc_knobs() -> dict:
+    from dse_ring2_write_fair import S16_OVERCOMMIT
+    from rg_ring2_rate import Ring2RateParams
+    p = Ring2RateParams()
+    return {
+        "s16_overcommit": S16_OVERCOMMIT,
+        "t_low_mult": p.t_low_mult, "t_high_mult": p.t_high_mult,
+        "k_min": p.k_min, "k_max": p.k_max, "p_max": p.p_max,
+        "pace_max": p.pace_max, "win_init": p.win_init, "win_min": p.win_min,
+        "swift_t_mult": p.swift_t_mult, "swift_rtt_floor": p.swift_rtt_floor,
+        "swift_beta": p.swift_beta, "dctcp_g": p.dctcp_g,
+    }
+
+
+def _taxonomy_section(uni: dict, hot: dict | None, imgs: dict, meta: dict
+                      ) -> str:
+    """Classification, NoC-scale adapt, and same-pattern results."""
+    kn = _fc_knobs()
+    hot_ok = bool(hot and all(s in (hot.get("schemes") or {}) for s in FC_CMP))
+    tbl_u = _summary_table(uni, pattern="均匀写", schemes=FC_CMP)
+    tbl_h = _summary_table(hot, pattern="不均匀写", schemes=FC_CMP) \
+        if hot_ok else ""
+    axis = _table(
+        ["方案", "驱动端", "执行器", "触发信号", "本 fabric 是否采用"],
+        [
+            ["S15 公平份额 + 槽预约", "混合：源端窗口 + 跳预约",
+             "窗口（每窗注入预算）+ 有界 hole",
+             "拥塞总线：达成计数的 max-min / 欠账", "采用（已在环上实现）"],
+            ["S16 Homa 式授权", "接收端", "窗口（completer 同时授权数）",
+             "least-served：给累计服务最少的源",
+             f"采用；overcommit = {kn['s16_overcommit']}（必须低于 tracker）"],
+            ["S17 TIMELY", "发送端", "速率（REQ 漏桶）",
+             "RTT 梯度（REQ 上环 → DBIDResp 落地）",
+             f"采用；T_low/T_high = {kn['t_low_mult']}/{kn['t_high_mult']}·minRTT"],
+            ["S18 DCQCN", "发送端（标记在接收端算）", "速率（REQ 漏桶）",
+             "completer tracker 占用的 RED + RetryAck",
+             f"采用；k = {kn['k_min']}–{kn['k_max']}·tracker，p_max = {kn['p_max']}"],
+            ["S19 Swift", "发送端", "窗口（在途事务数）",
+             "时延：RTT 相对共享目标",
+             f"采用；目标 = {kn['swift_t_mult']}·max(minRTT, "
+             f"{kn['swift_rtt_floor']})，β = {kn['swift_beta']}"],
+            ["S20 DCTCP", "发送端", "窗口（在途事务数）",
+             "与 S18 同一套 tracker ECN",
+             f"采用；同一 RED，窗口初值 {kn['win_init']}、下限 {kn['win_min']}"],
+            ["PFC / 跳级暂停", "接收端", "暂停（XOFF）", "下游队列过水线",
+             "不用：无缓存环没有可暂停的队列；暂停会冻住绝对优先的在环流量"],
+            ["HPCC / INT", "发送端", "速率", "逐跳队列遥测",
+             "不用：无缓存、无逐跳队列，没有可量的 INT"],
+            ["CUBIC / Reno / 丢包窗口", "发送端", "窗口", "丢包 / 超时",
+             "不用：本协议不丢包。RetryAck 是信用耗尽，事务还在"],
+            ["BBR", "发送端", "速率 + 窗口", "瓶颈带宽探测 + RTT",
+             "不用：没有可排空的 FIFO 队列，带宽探测读不到 BtlBw"],
+            ["Homa SRPT + 优先级队列", "接收端", "授权 + 多优先级",
+             "剩余消息长度",
+             "只用授权一半（即 S16）。无缓存环不能再叠优先级队列"],
+            ["IB / CHI 信用（PCrd）", "接收端", "窗口（表项）", "completer 信用",
+             "已经是基线：ha_track + RetryAck + PCrdGrant，不是新方案"],
+            ["XCP / RCP", "路由器", "速率", "逐包显式反馈",
+             "不用：节点不是计算速率的路由器"],
+        ])
+    drop = _table(
+        ["方案族", "为什么在这颗 NoC 上不适用"],
+        [
+            ["PFC", "作用对象是队列。环上没有队列；在环 flit 绝对优先，"
+             "一暂停就把过路流量冻在注入口。"],
+            ["HPCC / INT", "依赖 hop 队列深度。bufferless 的 hop 占用是 0/1，"
+             "不是可以积分的队列。"],
+            ["丢包窗口（CUBIC 等）", "CHI 写不丢包。RetryAck 之后事务继续，"
+             "当成丢包会把窗口砍在一次往返都覆盖不了的深度。"],
+            ["BBR", "用排队排空估带宽。这里的 RTT 胀大多半是 completer 服务，"
+             "不是该消掉的网络队列。"],
+            ["Homa 优先级", "SRPT 需要多优先级出口。本环每 (node, plane) "
+             "一个端口、三条 VC 共享，没有第二套优先级仲裁。"],
+            ["XCP / RCP", "要把速率写进包，由路由器算。本节点只做 I-tag / E-tag。"],
+        ])
+
+    def _row(pat: dict, s: str) -> dict:
+        sch = pat["schemes"][s]
+        f = sch["fairness"]
+        q = sch.get("retry") or {}
+        t0 = pat["schemes"]["S0"]["fairness"]["throughput"]
+        return {
+            "mm": f["max_min"], "thr": f["throughput"],
+            "d": 100.0 * (f["throughput"] - t0) / t0,
+            "r": q.get("retry_per_txn"),
+        }
+
+    u = {s: _row(uni, s) for s in FC_CMP if s in uni["schemes"]}
+    h = {s: _row(hot, s) for s in FC_CMP if hot_ok and s in hot["schemes"]} \
+        if hot_ok else {}
+    bars = imgs.get("fc_bars", "")
+    bars_h = imgs.get("fc_bars_hot", "")
+    cmp = imgs.get("fc_compare", "")
+    hot_has = (hot.get("mem") if hot else None) or meta.get("hot_has") \
+        or [11, 13]
+    hot_note = ""
+    if hot_ok:
+        hot_note = f"""
+<p><b>不均匀写</b>（全部写入相邻的 M{'/M'.join(str(x) for x in hot_has)}）：</p>
+{tbl_h}
+<img src="{bars_h}" alt="hot FC per-core BW">
+<p class="note">destination 几何重新拉开各核。窗口方案（S19 / S20）
+把窗口压到下限附近，max/min 走到
+{h.get('S19', {}).get('mm')} / {h.get('S20', {}).get('mm')}，
+吞吐也略低于 S0。
+S15 的槽预约在这个场景反而把吞吐抬到 <b>{h.get('S15', {}).get('thr')}</b>
+（{h.get('S15', {}).get('d'):+.1f}%）——热点把过路流量堆在少数 hop 上，
+hole 第一次真正造出了槽位。
+S16 两个指标都不如 S0：授权再扣一层，completer 更闲。</p>
+"""
+    return f"""
+<h2>源端流控：分类、NoC 尺度调整与对照</h2>
+<p>除基线 S0 和按规格实现的 S1 之外，源端流控按三轴分类：
+<b>谁做决定</b>（发送端 / 接收端）、<b>执行器</b>（窗口 / 速率）、
+<b>触发信号</b>。下面先分类并写清原理与利弊，再只保留能映射到
+这颗无缓存环（上下环各 1 flit/cycle/node、RTT 以十到百拍计、
+completer tracker 有限）的方案，做尺度调整，最后在<b>同一套
+均匀写 / 不均匀写</b>上比 max/min 和写带宽吞吐。</p>
+
+<h3>三个分类轴</h3>
+<ul>
+<li><b>发送端 vs 接收端。</b>
+发送端根据本地观测（RTT、标记、总线）自己收油门；
+接收端（completer）决定谁还可以再发。
+CHI 写已经把数据相位的决定权给了接收端（没有 <code>DBIDResp</code>
+不能发 WriteData），所以接收端方案几乎是零线格式成本；
+发送端方案则必须另找一个执行器（漏桶或 outstanding 窗口）。</li>
+<li><b>窗口 vs 速率。</b>
+窗口限制在途事务数，一个槽一空就可以再发，所以有突发；
+速率限制单位时间的新 REQ，突发被漏桶削平。
+窗口对齐 BDP，速率对齐 tracker 的到达过程。
+同一信号可以配两种执行器——S17 与 S19 共享时延，S18 与 S20 共享 ECN。</li>
+<li><b>触发。</b>
+时延 / RTT 梯度、显式标记（ECN / RetryAck）、
+接收端调度（least-served）、以及本环特有的拥塞总线 + 槽预约。
+丢包、逐跳队列、INT 在这颗 NoC 上没有对应物。</li>
+</ul>
+{axis}
+
+<h3>适用方案：原理、优缺点、NoC 调整</h3>
+
+<h4>S15 · 混合 · 窗口 + 跳预约 · 总线 max-min</h4>
+<p><b>原理。</b>沿用 S1 的专用拥塞总线，但聚合从“取 max 等级”换成
+各跳达成计数的 max-min 公平份额，并给落后节点预约有界 hole：
+上游注入让出那一拍，预约者自己上环。
+这是唯一一个<b>试图造槽</b>而不是只让别人少发的方案。</p>
+<p><b>优点。</b>直接针对“在环绝对优先 → 源端限速造不出槽”这条死路；
+总线不占 NoC 带宽。</p>
+<p><b>缺点。</b>预约是离散的：预约者没用上，这一拍就空了；
+总线、每跳 hole 状态都是额外硬件；有限 tracker 已经把均匀写压得较齐，
+预约常变成用吞吐换一点 max/min。</p>
+<p><b>NoC 调整。</b>窗口 64 拍（约 3 个 unloaded RTT，不是毫秒）；
+<code>reserve_gap = 16</code>、<code>reserve_max = 32</code>，
+只让真正的落后节点发 hole，避免互相取消。</p>
+
+<h4>S16 · 接收端 · 授权窗口 · least-served</h4>
+<p><b>原理。</b>Homa 的核心是接收端调度网络。CHI 写已经有授权：
+completer 不立刻回 <code>DBIDResp</code>，而是把同时未完成的授权
+压在 <code>overcommit</code> 以下，并优先给累计服务最少的源。
+固定长度的写让 SRPT 退化成公平排队。扣住授权<b>不会造气泡</b>——
+占优的核只是暂时没数据，槽位仍归谁能用谁用。</p>
+<p><b>优点。</b>无新报文、无总线、无环上预约；
+均匀写下 max/min 最齐。</p>
+<p><b>缺点。</b><code>overcommit</code> 必须低于 tracker，否则与 S0
+逐位相同；再扣一层授权会让 completer 更闲，吞吐掉一点。
+不均匀写时授权解决不了入口 hop 被过路流量占满。</p>
+<p><b>NoC 调整。</b>overcommit = {kn['s16_overcommit']}
+（tracker 的一半）。论文的 RTTbytes 在这里就是“同时覆盖一轮握手
+又不把 tracker 灌满”的授权数，不是字节。</p>
+
+<h4>S17 · 发送端 · 速率 · RTT 梯度（TIMELY）</h4>
+<p><b>原理。</b><code>WriteNoSnp</code> 从 REQ 上环到 DBIDResp 落地
+本来就是一个 RTT，含 RetryAck 往返。梯度领先绝对时延，
+在队列（这里是 tracker）堆满之前收油门。执行器是 REQ 漏桶：
+灌满 tracker 的是 REQ 到达，WriteData 不能抢在授权前面。</p>
+<p><b>优点。</b>不改线格式；均匀写下把重试从 ~1 次/事务压到 ~0.3，
+少占环。</p>
+<p><b>缺点。</b>必须有精确时间戳；按每核自己的 minRTT 定门槛时，
+幸运短路径的核会更狠地收油门，max/min 变差；
+不均匀写上 RTT 已被热点服务时间主导，梯度几乎帮不上忙。</p>
+<p><b>NoC 调整。</b>论文 <code>T_high = 4·minRTT</code> 假定超出 minRTT
+的全是该消的排队。这里 unloaded RTT ~20，有效工作点 ~150
+（completer 服务，不该消掉），照搬会把吞吐打到 S0 的几十分之一。
+门槛改成 {kn['t_low_mult']} / {kn['t_high_mult']}·minRTT；
+<code>delta = 1/16</code>，匹配每核只有几十个样本的规模。</p>
+
+<h4>S18 · 发送端 · 速率 · tracker ECN（DCQCN）</h4>
+<p><b>原理。</b>无缓存环没有可标记的队列。真正溢出的是 completer
+的请求 tracker。RED 画在 tracker 占用上，RetryAck 视为 p = 1 的标记。
+标记搭在协议已有的 DBIDResp / RetryAck 上，不需要 CNP。</p>
+<p><b>优点。</b>不需要时间戳；均匀写下重试下降且吞吐略高于 S0
+（少了空转的 REQ/RetryAck）。</p>
+<p><b>缺点。</b>标记来得晚（tracker 已经 80%+）；
+定时器必须从微秒改成拍，否则回升太慢。</p>
+<p><b>NoC 调整。</b>论文 k_min = 0.4、p_max = 0.5 会把正常工作的
+tracker 当成拥塞。改为 k = {kn['k_min']}–{kn['k_max']}、
+p_max = {kn['p_max']}；α / rate 定时器 = 8 / 24 拍。</p>
+
+<h4>S19 · 发送端 · 窗口 · 时延（Swift）</h4>
+<p><b>原理。</b>与 S17 同一类信号，执行器换成在途事务窗口：
+RTT 低于共享目标则 +1/w，高于则按超出比例乘减。
+窗口对齐 BDP，一个槽空了立刻补上，比漏桶更突发。</p>
+<p><b>优点。</b>均匀写下窗口自己落到 ~{kn['win_init']}–32，
+重试降到 0.1 以下，写吞吐高于速率方案。</p>
+<p><b>缺点。</b>乘减比漏桶狠：目标设低了会把窗口按到 BDP 以下，
+核与核的 minRTT 若各自为政，幸运核会被多砍一刀；
+不均匀写上时延差的是 destination，不是该被窗口抹平的拥塞。</p>
+<p><b>NoC 调整。</b>论文 β = 0.8、目标贴着 minRTT，会把窗口按死
+（试跑 max/min &gt; 8、吞吐腰斩）。
+改为<b>全环共享</b> base RTT，并设地板
+{kn['swift_rtt_floor']} 拍——相邻 3 拍的幸运样本不得当 base；
+目标 = {kn['swift_t_mult']}·base（约 160 拍，对着有效工作点）；
+β = {kn['swift_beta']}；窗口下限 {kn['win_min']}
+（U 形曲线左侧悬崖在 4）。</p>
+
+<h4>S20 · 发送端 · 窗口 · tracker ECN（DCTCP）</h4>
+<p><b>原理。</b>与 S18 同一套 RED 标记，DCTCP 的窗口更新：
+未标记 +1/w，标记则按 α/2 乘减。α 是标记分数的 EWMA。</p>
+<p><b>优点。</b>和 S18 比，只换执行器，便于看窗口 vs 速率；
+均匀写下重试压得更低（窗口本身就接近 U 形最优点）。</p>
+<p><b>缺点。</b>RetryAck 若每次都砍窗口，一笔事务会在 RetryAck
+和随后的 DBIDResp 上被砍两次；热点上窗口会顶在下限，max/min 变差。</p>
+<p><b>NoC 调整。</b>RED 与 S18 共用；每个标记周期最多乘减一次
+（对齐 S18 的 marked 锁）；窗口初值 {kn['win_init']}、
+下限 {kn['win_min']}，单位是事务不是字节。</p>
+
+<h3>不适用的方案</h3>
+{drop}
+
+<h3>对照：同一 pattern 下的 max/min 与写带宽吞吐</h3>
+<p>硬件相同：上下环各 1 个端口、tracker = {meta.get('ha_track')}、
+outstanding = {meta.get('core_outstanding')}、K = {meta.get('K')}。
+S0 是对照基线，不参与“源端方案”分类。</p>
+<img src="{cmp}" alt="FC max/min and throughput">
+<p><b>均匀写</b>：</p>
+{tbl_u}
+<img src="{bars}" alt="uniform FC per-core BW">
+<div class="def">均匀写下，有限 tracker 已经把 S0 的 max/min 压到
+{u['S0']['mm']}。再做公平性空间很小：S16 最齐（{u['S16']['mm']}）
+但吞吐 {u['S16']['d']:+.1f}%；S15 几乎贴着验收线。
+<b>窗口方案做的是另一件事</b>——把标称 outstanding 收到有效 BDP 附近：
+S19 / S20 重试从 {u['S0']['r']} 降到 {u['S19']['r']} / {u['S20']['r']}，
+写吞吐 {u['S19']['thr']} / {u['S20']['thr']}
+（{u['S19']['d']:+.1f}% / {u['S20']['d']:+.1f}%），
+代价是 max/min 走到 {u['S19']['mm']} / {u['S20']['mm']}。
+速率方案里 S18 是较稳的折中（吞吐 {u['S18']['d']:+.1f}%，
+max/min {u['S18']['mm']}）；S17 重试也降了，但 max/min 是适用方案里
+均匀写最差的（{u['S17']['mm']}）。</div>
+{hot_note}
+<p class="note">读法：要齐，看 S16（只在均匀、可接受少许吞吐时）；
+要吞吐、且流量接近均匀，看 S19 / S20 / S18；
+流量打进少数 mem 时，只有 S15 的预约还在加吞吐，
+窗口/速率都会误伤离热点近的核。S1 两条都更差，见第 5 节。</p>
+"""
+
+
 # ---------------------------------------------------------------------------
 
 def main() -> None:
@@ -1345,6 +1665,22 @@ def main() -> None:
         p = IMG / "ring2_wfair_overlay31_hot.png"
         plot_bw_overlay(hot, p, schemes=SEC31, s0_unbounded=False)
         imgs["overlay31_hot"] = p.name
+    if all(s in pat.get("schemes", {}) for s in FC_CMP):
+        p = IMG / "ring2_wfair_fc_bars.png"
+        plot_bw_bars(pat, p, schemes=FC_CMP, extra_ref=False,
+                     title="源端流控对照 · 均匀写 · 每 core 写带宽"
+                           "（tracker = 32），虚线 = 该方案均值，纵轴已截断")
+        imgs["fc_bars"] = p.name
+        hot_fc = d["patterns"].get("hot")
+        if hot_fc and all(s in hot_fc.get("schemes", {}) for s in FC_CMP):
+            p = IMG / "ring2_wfair_fc_bars_hot.png"
+            plot_bw_bars(hot_fc, p, schemes=FC_CMP, extra_ref=False,
+                         title="源端流控对照 · 不均匀写 · 每 core 写带宽"
+                               "（tracker = 32），虚线 = 该方案均值，纵轴已截断")
+            imgs["fc_bars_hot"] = p.name
+            p = IMG / "ring2_wfair_fc_compare.png"
+            plot_fc_compare({"均匀写": pat, "不均匀写": hot_fc}, p)
+            imgs["fc_compare"] = p.name
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name
@@ -1368,6 +1704,12 @@ def main() -> None:
     t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / s0["throughput"]
     t15 = 100.0 * (s15["throughput"] - s0["throughput"]) / s0["throughput"]
     t16 = 100.0 * (s16["throughput"] - s0["throughput"]) / s0["throughput"]
+    s19 = (pat["schemes"].get("S19") or {}).get("fairness") or {}
+    s20 = (pat["schemes"].get("S20") or {}).get("fairness") or {}
+    t19 = 100.0 * (s19["throughput"] - s0["throughput"]) / s0["throughput"] \
+        if s19 else 0.0
+    t20 = 100.0 * (s20["throughput"] - s0["throughput"]) / s0["throughput"] \
+        if s20 else 0.0
     fc16 = pat["schemes"]["S16"].get("fc") or {}
     oc_rows = {r["overcommit"]: r for r in pat.get("sweep_oc", [])}
     base_peak = (oc_rows.get(None) or {}).get("peak_grants") or 0
@@ -1417,6 +1759,73 @@ S17 / S18 与 S0 几乎贴在一起，重试也压不下去
     lo_bw = max(bw0[c] for c in losers) if losers else 0.0
     hi_bw = min(bw0[c] for c in winners) if winners else 0.0
     mean_hop = rc["rows"][0].get("mean_hop_to_mem", 0.0)
+    adj_varies = len({r.get("adj_mem") for r in rcref["rows"]}) > 1
+    n_mem = len(meta.get("mem_nodes") or [])
+    ss0 = [r["S0"]["max_min"] for r in pat.get("seed_sweep", [])
+           if r.get("S0")]
+    s0_seed_rng = (f"{min(ss0):.3f} ~ {max(ss0):.3f}" if ss0
+                   else f"{s0['max_min']:.3f}")
+    if adj_varies:
+        concl_pos = f"""
+<li><b>位置相关的失衡真实存在，但只在环受限时才显露。</b>
+放开 tracker（环是唯一约束）时 max/min = <b>{sref['max_min']}</b>，
+最慢 {sref['bw_min']} vs 最快 {sref['bw_max']} flit/cycle，
+而需求完全对称。<b>加上有限 tracker 之后它被压到
+{s0['max_min']}</b>——不是被修好，而是 retry 背压
+把所有 core 一起拖慢。公平性必须和吞吐一起读。</li>
+<li><b>根因是“身边有几个 mem”，不是“离 mem 多远”。</b>
+每个 core 到 {n_mem} 个 mem 的平均跳数全部等于 {mean_hop}，
+r(带宽, 平均跳数) = <b>{rcref['corr_bw_meanhop']}</b>。
+真正决定带宽的是紧邻 mem 个数：r = <b>{rcref['corr_bw_adjmem']}</b>。
+{lo_s} 各只有 1 个相邻 mem，带宽 ≤ {lo_bw}；
+{hi_s} 两侧都是 mem，带宽 ≥ {hi_bw}。</li>"""
+        sec4_geom = f"""
+<h3>4.1 先排除“离 mem 更远”</h3>
+<div class="def">每个 core 到 {n_mem} 个 mem 的平均跳数全部等于
+<b>{mean_hop}</b> 跳。实测 r(带宽, 平均跳数) =
+<b>{rcref['corr_bw_meanhop']}</b>。<b>失衡的来源不是距离。</b></div>
+<h3>4.2 真正的判据：紧邻的 mem 有几个</h3>
+<ul>
+<li>{hi_s} 两侧都是 mem → <b>相邻 mem = 2</b>；</li>
+<li>{lo_s} 有一侧不是 mem → <b>相邻 mem = 1</b>。</li>
+</ul>
+<div class="def bad">带宽与相邻 mem 个数 r =
+<b>{rcref['corr_bw_adjmem']}</b>（Spearman {rcref['rank_bw_adjmem']}）。
+相邻 2 的最低 {hi_bw} ＞ 相邻 1 的最高 {lo_bw}。</div>"""
+    else:
+        concl_pos = f"""
+<li><b>闭合 full ring 上均匀写在几何上是对称的。</b>
+偶数 core、奇数 HA，19 与 0 相邻；每个 core 两侧都是 mem，
+到 {n_mem} 个 HA 的平均跳数全部等于 {mean_hop}。
+无限 tracker 下 max/min = <b>{sref['max_min']}</b>，
+有限 tracker 下 <b>{s0['max_min']}</b>，吞吐
+{sref['throughput']} → {s0['throughput']}（{t_ref:+.1f}%）。
+<b>位置失衡出现在不均匀写</b>
+（S0 max/min {h0.get('max_min', '—')}），不是均匀写的角色图。</li>
+<li><b>相邻 mem 个数在这张图上没有方差，解释不了残余差。</b>
+r(带宽, 相邻 mem) = {rcref['corr_bw_adjmem']}，
+r(带宽, 平均跳数) = {rcref['corr_bw_meanhop']}。
+边时延仍是 1–4 拍不均，上环成功率相关
+r = <b>{rcref['corr_bw_succ']}</b>，
+出边时延相关 r = {rcref['corr_bw_lat']}。
+挖掉对顶 HA 才会造出“相邻 = 1 / 2”两档，本拓扑不这么做。</li>"""
+        sec4_geom = f"""
+<h3>4.1 对称性：距离和相邻 mem 都没有方差</h3>
+<div class="def">10/10 交替的闭合 full ring 上，每个 core 到
+{n_mem} 个 HA 的平均跳数全部等于 <b>{mean_hop}</b>，
+相邻 mem 全部等于 <b>2</b>。
+r(带宽, 平均跳数) = {rcref['corr_bw_meanhop']}，
+r(带宽, 相邻 mem) = {rcref['corr_bw_adjmem']}，
+两者都没有解释力——自变量是常数。</div>
+<h3>4.2 残余差从哪来</h3>
+<p>边 hop 时延从 1 拍到 4 拍，环不是度量均匀的。
+有限 K 的均匀采样也会留下几个百分点的抖动。
+带宽与上环成功率 r = <b>{rcref['corr_bw_succ']}</b>，
+与出边时延 r = {rcref['corr_bw_lat']}。
+<b>真正的位置依赖留给不均匀写</b>：全部写入
+M{'/M'.join(str(x) for x in hot_has)} 之后，
+入口 hop 被过路流量占满，离热点近的核反而更慢
+（S0 max/min {h0.get('max_min', '—')}）。</p>"""
 
     # Judge on the whole seed sweep, not just the headline seed: the
     # reservation mechanism is discrete and one seed can flatter a tuning.
@@ -1469,6 +1878,7 @@ S17 / S18 与 S0 几乎贴在一起，重试也压不下去
 
     sec9 = _retry_sections(study, imgs, meta, pat) if study else ""
     concl_retry = _retry_conclusion(_retry_facts(study)) if study else ""
+    taxo = _taxonomy_section(pat, d["patterns"].get("hot"), imgs, meta)
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -1503,7 +1913,10 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; }}
 {len(meta['mem_nodes'])} 个 memory 节点做均匀写</b>，每 core
 {meta['K']} 笔 <code>WriteNoSnp</code>、每笔 {meta['W']} 个 WriteData flit
 （每 core {pat['flits_per_core']} 个数据 flit，共 {pat['n_txn']} 笔事务）。
-节点 9、19 既不是 memory 也不是 AI core。</p>
+{('节点 ' + '、'.join(str(x) for x in meta['non_terminal'])
+  + ' 既不是 memory 也不是 AI core。')
+ if meta.get('non_terminal') else
+ '拓扑是闭合 full ring，每个节点都是终端。'}</p>
 
 <h2>结论</h2>
 <div class="key">
@@ -1517,25 +1930,7 @@ tracker 满时 completer 必须回 <code>RetryAck</code>，
 吞吐从放开 tracker 时的 {sref['throughput']} 掉到
 <b>{s0['throughput']}</b> flit/cycle（<b>{t_ref:+.1f}%</b>）。</li>
 
-<li><b>位置相关的失衡真实存在，但只在环受限时才显露。</b>
-放开 tracker（环是唯一约束）时 max/min = <b>{sref['max_min']}</b>，
-最慢 {sref['bw_min']} vs 最快 {sref['bw_max']} flit/cycle，
-而需求完全对称。<b>加上有限 tracker 之后它被压到
-{s0['max_min']}</b>——不是被修好，而是 retry 背压
-把所有 core 一起拖慢，位置优势换不到一个 tracker 表项（见 4.4）。
-<b>这是本报告最重要的一条：公平性指标变好可能只是因为大家一起变慢了，
-所以公平性必须和吞吐一起读。</b></li>
-
-<li><b>根因是“身边有几个 mem”，不是“离 mem 多远”。</b>
-9 和 19 在环上正好对顶，把这一对从 memory 里去掉之后，
-每个 core 到 8 个 mem 的<b>平均跳数仍然全部等于 {mean_hop} 跳</b>，
-r(带宽, 平均跳数) = <b>{rcref['corr_bw_meanhop']}</b>，没有解释力。
-真正决定带宽的是<b>紧邻的 mem 个数</b>：
-r = <b>{rcref['corr_bw_adjmem']}</b>（Spearman
-{rcref['rank_bw_adjmem']}）。
-{lo_s} 各只有 1 个相邻 mem（另一侧正对着非终端的 9 或 19），
-带宽全部 ≤ {lo_bw}；其余 {hi_s} 两侧都是 mem，带宽全部 ≥ {hi_bw}。
-链条是：紧邻 mem 多 → 短程写多 → 过路流量少 → 上环成功率高。</li>
+{concl_pos}
 
 <li><b>S1（拥塞等级 + AIMD）不但没修好，还把两个指标同时弄坏。</b>
 max/min {s0['max_min']} → <b>{s1['max_min']}</b>，
@@ -1547,9 +1942,8 @@ max/min {s0['max_min']} → <b>{s1['max_min']}</b>，
 <b>造不出槽位</b>。</li>
 
 <li><b>S15 / S16 在这个基线上都变成了"用吞吐买一点公平"的差交易。</b>
-S0 本身已经接近均衡（跨 {n_seed} 个种子 max/min
-{min(r['S0']['max_min'] for r in pat['seed_sweep']):.3f} ~
-{max(r['S0']['max_min'] for r in pat['seed_sweep']):.3f}），
+S0 本身已经接近均衡（跨 {n_seed or 1} 个种子 max/min
+{s0_seed_rng}），
 留给公平性方案的空间很小：
 S16 把 max/min 稳定收到 {v16['rng_m']}（唯一稳定有效的），
 S15 是 {rng_m}（<b>并不稳定，个别种子上还不如 S0</b>），
@@ -1579,6 +1973,13 @@ S15 {verdict}；S16 {v16['verdict']}。</b>
 retry 背压提前吃掉了，只剩下 {t16:+.1f}% 的净代价，见 7.3。</span></li>
 
 {concl_retry}
+<li><b>源端流控按“谁决定 / 窗口还是速率 / 靠什么触发”分类；
+这颗 NoC 只用得上 S15–S20。</b>
+PFC、HPCC、CUBIC、BBR、INT 没有对应物（无队列、不丢包、无遥测）。
+均匀写下窗口方案（S19 / S20）把重试压下去、写吞吐
+{t19:+.1f}% / {t20:+.1f}%，max/min 略差；
+S16 仍然最齐。不均匀写下窗口会误伤热点旁的核，
+只有 S15 的预约还在加吞吐。对照见“源端流控”一节。</li>
 <li><b>全程严格无缓存。</b>所有方案的
 <code>n_inring_blocked = 0</code>、<code>max_inring_hold = 0</code>：
 S15 的预约只压制<b>上游注入</b>，从不停住已经在环上的 flit；
@@ -1669,6 +2070,8 @@ Jain 把所有方案都压在 0.99 以上，读不出差别。</div>
 <b>整体限速不改变 Jain</b>——S1 之所以“看起来没把公平性搞坏”，
 一部分就是这个数学假象，换成 max/min 就暴露了。</p>
 
+{taxo}
+
 <h2>3. 下界与失衡现象</h2>
 {_bounds_table(pat['bounds'])}
 <p class="note">makespan 下界 {pat['bounds']['bound']} 拍，由 <b>{bind_lb}</b> 决定，
@@ -1681,13 +2084,12 @@ S0 是无流控基线；对照是 S1、S16，以及 S17 / S18。</p>
 <p><b>均匀写</b>（每个 core 均匀写全部 {len(meta.get('mem_nodes', []))} 个 mem）：</p>
 {_summary_table(pat)}
 <div class="def">均匀写下 S0 的 max/min 只有 <b>{s0['max_min']}</b>，
-最慢 {s0['bw_min']} vs 最快 {s0['bw_max']} flit/cycle，
-几乎落在 1.05 的验收线内。
-这不是各核本来就齐，而是 completer 的 tracker 成了公共瓶颈：
-每笔事务平均被 RetryAck <b>{q0.get('retry_per_txn')}</b> 次，
-位置优势换不到一个表项。
-同一份 S0 把 tracker 放开之后 max/min 回到 {sref['max_min']}、
-吞吐从 {s0['throughput']} 升到 {sref['throughput']}
+最慢 {s0['bw_min']} vs 最快 {s0['bw_max']} flit/cycle。
+闭合 full ring 上需求与角色图都对称，这首先是几何的结果；
+completer tracker 再把残余压一层：每笔事务平均被 RetryAck
+<b>{q0.get('retry_per_txn')}</b> 次。
+同一份 S0 把 tracker 放开之后 max/min 为 {sref['max_min']}、
+吞吐从 {s0['throughput']} 到 {sref['throughput']}
 （见下表）。</div>
 {_track_table(pat)}
 <img src="{imgs['bars31']}" alt="per-core BW uniform">
@@ -1717,29 +2119,7 @@ S17 的 max/min 反而是五个里最高的。注意纵轴已截断。</p>
 {_rc_table(pat)}
 <img src="{imgs['scatter']}" alt="bw vs explanations">
 
-<h3>4.1 先排除“离 mem 更远”</h3>
-<div class="def">9 和 19 在环上正好对顶，把这一对从 memory 里拿掉之后，
-每个 core 到 8 个 mem 的<b>平均跳数全部等于 {mean_hop} 跳</b>，
-连距离的多重集分布都只是重排。实测
-r(带宽, 平均跳数) = <b>{rcref['corr_bw_meanhop']}</b>，精确为零。
-<b>失衡的来源不是距离。</b></div>
-
-<h3>4.2 真正的判据：紧邻的 mem 有几个</h3>
-<p>写到隔壁 mem 的 flit 只占用一段链路就下环了；写到远处的 flit
-要一路占着沿途每个节点的出向槽位，在“在环优先”下既更多地挡住别人，
-也更多地被别人挡住。去掉 9、19 之后：</p>
-<ul>
-<li>{hi_s} 两侧都是 mem → <b>相邻 mem = 2</b>，
-2/{len(meta['mem_nodes'])} = {2 / len(meta['mem_nodes']) * 100:.1f}%
-的写只走一跳；</li>
-<li>{lo_s} 有一侧正对非终端节点 → <b>相邻 mem = 1</b>，
-只有 {1 / len(meta['mem_nodes']) * 100:.1f}%。</li>
-</ul>
-<div class="def bad">带宽与<b>相邻 mem 个数</b>的相关系数
-<b>r = {rcref['corr_bw_adjmem']}</b>（Spearman
-{rcref['rank_bw_adjmem']}），两档之间<b>完全不重叠</b>：
-相邻 2 个的最低带宽 {hi_bw} ＞ 相邻 1 个的最高带宽 {lo_bw}。
-<b>这就是位置依赖的确切形式。</b></div>
+{sec4_geom}
 
 <h3>4.3 落到硬件上：上环成功率</h3>
 <p>带宽与实测上环成功率的相关是
@@ -1769,11 +2149,9 @@ I-tag 类失败占比很小：<code>_itag_blocks</code> 只压制<b>竞争的其
 更接近，但用的是第 2 节点明的那种最廉价的公平：降低所有人的速度。
 这也解释了为什么本报告要把公平性和吞吐一起报，
 只看公平性指标会把这种退化误读成改进。</div>
-<p class="note">这条因果链在有限 tracker 下并没有消失，只是被压低：
-本节开头那张 per-core 明细表就是基线（tracker = {meta.get('ha_track')}）
-的数据，其中带宽与相邻 mem 个数的相关仍然为正，
-r = {rc['corr_bw_adjmem']}，而无限 tracker 下是
-r = {rcref['corr_bw_adjmem']}。</p>
+<p class="note">有限 tracker 下带宽与相邻 mem 的相关 r =
+{rc['corr_bw_adjmem']}，无限 tracker 下 r = {rcref['corr_bw_adjmem']}。
+full ring 上这两个都接近零；不均匀写才把位置重新拉开。</p>
 
 <h2>5. S1：按规格实现的拥塞等级 AIMD</h2>
 <ul>
