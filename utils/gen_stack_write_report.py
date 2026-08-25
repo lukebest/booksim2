@@ -820,7 +820,7 @@ def setup_table(b: dict) -> str:
          "在途上限：从 REQ 上环占到 Comp 回来。"
          f"最长无拥塞写 RTT 是 { (m.get('rtt') or t.get('rtt') or {}).get('rtt', '—') } cycle"],
         ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
-         "同时最多收这么多 REQ；超出回 RetryAck，再发 PCrdGrant 后重传"],
+         "满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ"],
         ["转向 / D2D FIFO 深度",
          f"{m['fabric']['turn_depth']} / {m['fabric']['d2d_depth']}",
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
@@ -1238,9 +1238,11 @@ tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
 （每核 {k_core} 笔 WriteNoSnp，共 {n_txn:,} 笔）。
 地址按 {burst} B 交织到 {t['n_has']} 个 HA，每核覆盖全部 HA
 （每核打到同一 HA 的次数 {hist.get('per_core_lo', '?')}–{hist.get('per_core_hi', '?')}）。
-每 core outstanding = <b>{oc}</b>，每个 HA 最多收 <b>{pos}</b> 个 REQ，超出回 RetryAck。</p>
+每 core outstanding = <b>{oc}</b>。
+每个 HA 跟踪表 <b>{pos}</b> 项，满了走<b>请求 retry</b>
+（RetryAck → PCrdGrant → 重发 REQ），不是源端控速。</p>
 <div class="def">S0 <b>没有源端流控</b>——只要 outstanding 有空位、ring 上有 slot 就发。
-S1 再加 AIMD 源端控速。HA 跟踪表满是完成方反压，不是源端控速。</div>
+S1 再加 AIMD 源端控速。HA 跟踪表满触发的是 CHI 请求 retry，不是源端控速。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
@@ -1254,7 +1256,7 @@ S1 再加 AIMD 源端控速。HA 跟踪表满是完成方反压，不是源端�
 {rtt.get('rtt')}，长路径上 core 会先把 {oc} 个槽占满再等 Comp。
 {bind_txt}</li>
 
-<li><b>HA 跟踪表满了就 retry。S0 不另加源端控速，S1 才控速。</b>
+<li><b>HA 跟踪表满是请求 retry 机制。S0 不另加源端控速，S1 才控速。</b>
 每个 HA 同时只能收 {pos} 个请求；再来的 REQ 走
 RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
 S0 完成 <b>{s0['n_txn_done']:,}/{n_txn:,}</b>，makespan {s0['makespan']:,} cycle，
@@ -1282,7 +1284,7 @@ CW / CCW 成败见第 2.1 节（CC = CW，顺时针）。</li>
 （{b['group_series']['s0']['window']} cycle 滑窗）。
 六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
 就是这个 die 被饿死。
-S0 瞬时带宽只受 outstanding、ring slot 和 HA retry 成形；
+S0 瞬时带宽只受 outstanding、ring slot 和 HA 请求 retry 成形；
 S1 再叠一层源端 AIMD。
 S0 每核 Jain {_f(f0.get('jain'))}、组间 CoV {_f(g0.get('cov'), 3)}；
 S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>

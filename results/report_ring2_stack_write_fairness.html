@@ -27,9 +27,11 @@ tiling_size <b>64 KB</b> × 4 tile / core
 （每核 2048 笔 WriteNoSnp，共 122,880 笔）。
 地址按 128 B 交织到 96 个 HA，每核覆盖全部 HA
 （每核打到同一 HA 的次数 21–22）。
-每 core outstanding = <b>128</b>，每个 HA 最多收 <b>32</b> 个 REQ，超出回 RetryAck。</p>
+每 core outstanding = <b>128</b>。
+每个 HA 跟踪表 <b>32</b> 项，满了走<b>请求 retry</b>
+（RetryAck → PCrdGrant → 重发 REQ），不是源端控速。</p>
 <div class="def">S0 <b>没有源端流控</b>——只要 outstanding 有空位、ring 上有 slot 就发。
-S1 再加 AIMD 源端控速。HA 跟踪表满是完成方反压，不是源端控速。</div>
+S1 再加 AIMD 源端控速。HA 跟踪表满触发的是 CHI 请求 retry，不是源端控速。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
@@ -43,7 +45,7 @@ S1 再加 AIMD 源端控速。HA 跟踪表满是完成方反压，不是源端�
 413，长路径上 core 会先把 128 个槽占满再等 Comp。
 本批次每 core 2048 笔，大于窗口 128，实测峰值占用 128，<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。</li>
 
-<li><b>HA 跟踪表满了就 retry。S0 不另加源端控速，S1 才控速。</b>
+<li><b>HA 跟踪表满是请求 retry 机制。S0 不另加源端控速，S1 才控速。</b>
 每个 HA 同时只能收 32 个请求；再来的 REQ 走
 RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
 S0 完成 <b>122,880/122,880</b>，makespan 78,671 cycle，
@@ -69,7 +71,7 @@ CW / CCW 成败见第 2.1 节（CC = CW，顺时针）。</li>
 （50 cycle 滑窗）。
 六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
 就是这个 die 被饿死。
-S0 瞬时带宽只受 outstanding、ring slot 和 HA retry 成形；
+S0 瞬时带宽只受 outstanding、ring slot 和 HA 请求 retry 成形；
 S1 再叠一层源端 AIMD。
 S0 每核 Jain 1.0000、组间 CoV 0.002；
 S1 每核 Jain 1.0000、组间 CoV 0.002。</div>
@@ -77,7 +79,7 @@ S1 每核 Jain 1.0000、组间 CoV 0.002。</div>
 
 <h2>1　拓扑与硬件 setup</h2>
 <h3>1.1 总体结构</h3>
-<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>top die 数量</td><td>6</td><td>每个是 20 节点、双平面、双向 full ring</td></tr><tr><td>每 die 节点角色</td><td>10 core / 8 D2D bridge / 2 非终端</td><td>偶数号为 AI core；节点 9、19 既非 core 也非 HA，只转发</td></tr><tr><td>AI core 总数</td><td>60</td><td>发起方</td></tr><tr><td>HA 总数</td><td>96</td><td>bottom die，12 行 × 8 列</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 die 8 条，双向，跨 SerDes</td></tr><tr><td>挂接点</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，共 6 组挂 6 个 top die</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 half ring</td><td>half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列</td></tr><tr><td>有向链路总数</td><td>768</td><td>top 480 / D2D 96 / 横 48 / 纵 144</td></tr><tr><td>CHI 虚通道</td><td>req / rsp / dat</td><td>REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 1 REQ + 1 RSP + 1 DAT，互不抢槽</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>每 core outstanding</td><td><b>128</b></td><td>在途上限：从 REQ 上环占到 Comp 回来。最长无拥塞写 RTT 是 413 cycle</td></tr><tr><td>HA 请求跟踪表</td><td><b>32</b> 项 / HA</td><td>同时最多收这么多 REQ；超出回 RetryAck，再发 PCrdGrant 后重传</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>workload</td><td>burst 128 B / stride 4096 B / tile 64 KB × 4（每核 2048 笔）</td><td>二维密铺：每行 stride/burst 笔，tile/stride 行。128 B 交织到 96 个 HA，每核均匀覆盖全部 HA</td></tr></tbody></table>
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>top die 数量</td><td>6</td><td>每个是 20 节点、双平面、双向 full ring</td></tr><tr><td>每 die 节点角色</td><td>10 core / 8 D2D bridge / 2 非终端</td><td>偶数号为 AI core；节点 9、19 既非 core 也非 HA，只转发</td></tr><tr><td>AI core 总数</td><td>60</td><td>发起方</td></tr><tr><td>HA 总数</td><td>96</td><td>bottom die，12 行 × 8 列</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 die 8 条，双向，跨 SerDes</td></tr><tr><td>挂接点</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，共 6 组挂 6 个 top die</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 half ring</td><td>half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列</td></tr><tr><td>有向链路总数</td><td>768</td><td>top 480 / D2D 96 / 横 48 / 纵 144</td></tr><tr><td>CHI 虚通道</td><td>req / rsp / dat</td><td>REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 1 REQ + 1 RSP + 1 DAT，互不抢槽</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>每 core outstanding</td><td><b>128</b></td><td>在途上限：从 REQ 上环占到 Comp 回来。最长无拥塞写 RTT 是 413 cycle</td></tr><tr><td>HA 请求跟踪表</td><td><b>32</b> 项 / HA</td><td>满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>workload</td><td>burst 128 B / stride 4096 B / tile 64 KB × 4（每核 2048 笔）</td><td>二维密铺：每行 stride/burst 笔，tile/stride 行。128 B 交织到 96 个 HA，每核均匀覆盖全部 HA</td></tr></tbody></table>
 <h3>1.2 链路延迟</h3>
 <table><thead><tr><th>链路</th><th>延迟</th><th>说明</th></tr></thead><tbody><tr><td>top die 环内链路</td><td>1 / 2 / 3 / 4 cycle</td><td>共 20 段，按位置不同；两个平面各一份</td></tr><tr><td>D2D 跨 die</td><td>4 cycle</td><td>SerDes + 跨时钟域</td></tr><tr><td>bottom die 横环节点间</td><td><b>4</b> cycle</td><td>挂接点 → 挂接点，单向 half ring</td></tr><tr><td>bottom die 纵环节点间</td><td><b>6</b> cycle</td><td>HA ↔ 挂接点，单向 half ring</td></tr><tr><td>挂接点转向</td><td><b>5</b> cycle</td><td>横环 ↔ 纵环，经转向 FIFO，不计入 D2D 落地</td></tr></tbody></table>
 <div class="def">横环一跳 4 cycle，纵环一跳
