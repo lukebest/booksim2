@@ -77,6 +77,83 @@ def _pct(x: float) -> str:
     return f"{100 * x:.1f}%"
 
 
+def _jain(xs) -> float:
+    xs = [float(x) for x in xs]
+    s2 = sum(x * x for x in xs)
+    return 0.0 if s2 <= 0 else (sum(xs) ** 2) / (len(xs) * s2)
+
+
+def ideal_group_write_bw(b: dict) -> dict[str, Any]:
+    """Equal-share WriteData rate if the batch hits the makespan bound.
+
+    Total WriteData flits = n_txn * m_wdata. The bound is the V-ring cut
+    (all CHI VCs). Six groups split that rate equally.
+    """
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    bd = mand.get("bounds") or {}
+    n_txn = mand.get("n_txn") or 0
+    m_wdata = (b.get("meta") or {}).get("m_wdata", 4)
+    n_g = 6
+    bound = bd.get("bound") or 0
+    total = (n_txn * m_wdata / bound) if bound else 0.0
+    return {
+        "n_groups": n_g, "bound": bound, "n_txn": n_txn, "m_wdata": m_wdata,
+        "cut_lb": bd.get("cut_lb"), "link_lb": bd.get("link_lb"),
+        "ideal_total": total, "ideal_per_group": total / n_g if n_g else 0.0,
+    }
+
+
+def inst_group_fairness(ser: dict, t_fair: float | None = None
+                        ) -> dict[str, Any]:
+    """E[Jain_t] on per-window group write bandwidth.
+
+    Windows with zero total WriteData are skipped. If `t_fair` is set
+    (first core out of work), only the contention window is kept — the
+    same interval the long-run group Jain uses.
+    """
+    t = ser.get("t") or []
+    bw = ser.get("bw_by_group") or {}
+    dies = sorted(bw, key=int)
+    if not dies or not t:
+        return {}
+    cols = list(zip(*[bw[d] for d in dies]))
+    js, used = [], []
+    for i, row in enumerate(cols):
+        if sum(row) <= 0:
+            continue
+        if t_fair is not None and t[i] > t_fair:
+            continue
+        js.append(_jain(row))
+        used.append(i)
+    if not js:
+        return {}
+    means = [sum(bw[d][i] for i in used) / len(used) for d in dies]
+    jem = _jain(means)
+    ej = sum(js) / len(js)
+    return {
+        "window": ser.get("window", 50),
+        "nwin": len(js),
+        "mean_jain": round(ej, 5),
+        "min_jain": round(min(js), 5),
+        "p50_jain": round(sorted(js)[len(js) // 2], 5),
+        "frac_lt_090": round(sum(1 for x in js if x < 0.90) / len(js), 4),
+        "jain_of_mean": round(jem, 5),
+        "turn_index": round(1 - ej / jem, 4) if jem > 0 else 0.0,
+        "t_fair": t_fair,
+    }
+
+
+def _fair_lookup(b: dict) -> dict[str, dict[str, Any]]:
+    gs = b.get("group_series") or {}
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    out = {}
+    for name in ("s0", "s1"):
+        ser = gs.get(name) or {}
+        t_fair = ((mand.get(name) or {}).get("group") or {}).get("t_fair")
+        out[name] = inst_group_fairness(ser, t_fair)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # plots
 # ---------------------------------------------------------------------------
@@ -602,6 +679,10 @@ def plot_group(b: dict, path: Path) -> None:
         ax.set_xticks([j + 0.4 - w / 2 for j in range(len(dies))])
         ax.set_xticklabels([f"die {d}" for d in dies], fontsize=8)
         ax.set_ylabel("该 die 10 个 core 合计的写吞吐 (flit/cycle)", fontsize=9)
+        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        if ideal > 0:
+            ax.axhline(ideal, color="#111827", ls="--", lw=1.1,
+                       label="均衡理想 %s flit/cycle" % _f(ideal, 3))
         # A 88x spread is invisible on a linear axis next to a scheme that
         # drained, and the spread is the whole point of this panel.
         wide = max((r["goodput_max_min"] for r in sub
@@ -641,12 +722,54 @@ def plot_group_series(b: dict, path: Path) -> None:
             ax.plot(t, bw[d], "-",
                     color=colors[i % len(colors)], lw=1.5,
                     label=f"die {d}（10 个 AI core）")
+        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        if ideal > 0:
+            ax.axhline(ideal, color="#111827", ls="--", lw=1.3,
+                       label=f"均衡理想 {_f(ideal, 3)}")
         ax.set_title(title, fontsize=11)
         ax.set_xlabel("时间 (cycle)", fontsize=9)
         ax.set_ylabel(f"组写带宽 (flit/cycle，窗={w} cycle)", fontsize=9)
         ax.grid(alpha=0.25)
         ax.legend(fontsize=7.5, ncol=2, loc="upper right")
-    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计写带宽（flit/cycle）",
+    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计写带宽（flit/cycle）；"
+                 "虚线 = 均衡流量下的理想每组写带宽",
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def plot_group_jain_series(b: dict, path: Path) -> None:
+    """Per-window group Jain vs time, S0 vs S1."""
+    gs = b.get("group_series") or {}
+    _cjk()
+    fig, ax = plt.subplots(figsize=(13.2, 3.6))
+    colors = {"s0": "#2563eb", "s1": "#ea5800"}
+    labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
+    fair = _fair_lookup(b)
+    for name in ("s0", "s1"):
+        ser = gs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw_by_group") or {}
+        dies = sorted(bw, key=int)
+        if not dies or not t:
+            continue
+        cols = list(zip(*[bw[d] for d in dies]))
+        ys = [_jain(row) if sum(row) > 0 else float("nan") for row in cols]
+        ax.plot(t, ys, "-", color=colors[name], lw=1.1, alpha=0.85,
+                label=labels[name])
+        ej = (fair.get(name) or {}).get("mean_jain")
+        if ej:
+            ax.axhline(ej, color=colors[name], ls=":", lw=1.1,
+                       label=f"{labels[name]}  E[Jain$_t$]={ej:.3f}")
+    ax.axhline(1.0, color="#111827", ls="--", lw=1.0,
+               label="Jain(E[x]) = 1（全程完成量）")
+    ax.set_ylim(0.15, 1.05)
+    ax.set_xlabel("时间 (cycle)", fontsize=9)
+    ax.set_ylabel("组间 Jain$_t$", fontsize=9)
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=7.5, ncol=3, loc="lower left")
+    fig.suptitle("瞬时组间均衡度：每个 50-cycle 窗上六个 group 写带宽的 Jain",
                  fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
@@ -797,24 +920,68 @@ def group_table(b: dict) -> str:
             static.append(r)
     ordered = sorted(static, key=lambda r: (-r["outstanding"], r["scheme"]))
     ordered += [ad[k] for k in sorted(ad)]
+    inst = _fair_lookup(b)
     for r in ordered:
         gp = r["goodput_by_group"]
+        ej = (inst.get(r["scheme"]) or {}).get("mean_jain")
         rows.append([
             r["outstanding"] if r["scheme"] not in ("s18", "s19")
             else "自适应", r["scheme"].upper(), _ok(r["completed"]),
             " / ".join(_f(v, 4) for v in
                        [gp[d] for d in sorted(gp, key=int)]),
             _f(r["goodput_total"], 4), _f(r["goodput_max_min"], 2),
-            _f(r["group_jain"]), _f(r["group_max_min"], 2),
+            _f(ej), _f(r["group_jain"]), _f(r["group_max_min"], 2),
             _f(r["group_cov"], 3), f"die {r['worst_group']}",
             _f(r["core_jain"]), _f(r["jain_within_worst"]),
         ])
     return _t(["outstanding", "方案", "排空",
                "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
                "合计 flit/cycle", "die 间<br>max/min<br>（按完成量）",
+               "E[Jain<sub>t</sub>]<br>（瞬时）",
                "die 间 Jain<br>（竞争窗口）", "die 间<br>max/min",
                "die 间 CoV", "最差 die",
                "Jain<br>（按 core）", "最差 die 内部<br>的 Jain"], rows)
+
+
+def inst_fair_table(b: dict) -> str:
+    inst = _fair_lookup(b)
+    i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
+    ideal = ideal_group_write_bw(b)
+    rows = [
+        ["E[Jain<sub>t</sub>]（瞬时均衡度）",
+         _f(i0.get("mean_jain")), _f(i1.get("mean_jain")),
+         "每个 50-cycle 窗上六个 group 写带宽的 Jain，再对竞争窗口平均。"
+         "1 = 每个窗都均；1/6 ≈ 0.17 = 一窗只一家"],
+        ["Jain(E[x])（全程完成量）",
+         _f(i0.get("jain_of_mean")), _f(i1.get("jain_of_mean")),
+         "先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1"],
+        ["轮换指数 1 − E[Jain<sub>t</sub>]/Jain(E[x])",
+         _f(i0.get("turn_index"), 3), _f(i1.get("turn_index"), 3),
+         "长程均、短时不均的程度。0 = 每个窗都均"],
+        ["窗内 Jain 中位数 / 最小",
+         f"{_f(i0.get('p50_jain'))} / {_f(i0.get('min_jain'))}",
+         f"{_f(i1.get('p50_jain'))} / {_f(i1.get('min_jain'))}",
+         "竞争窗口内"],
+        ["Jain<sub>t</sub> &lt; 0.90 的窗占比",
+         _pct(i0.get("frac_lt_090") or 0), _pct(i1.get("frac_lt_090") or 0),
+         "短时明显不均的时间比例"],
+        ["窗长 / 计入窗数",
+         f"{i0.get('window', 50)} / {i0.get('nwin', 0):,}",
+         f"{i1.get('window', 50)} / {i1.get('nwin', 0):,}",
+         "只计 t ≤ t_fair 且该窗总写带宽 &gt; 0"],
+        ["均衡理想每组写带宽",
+         f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
+         f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
+         f"n_txn × WriteData / 综合下界 / 6 组 "
+         f"= {ideal.get('n_txn', 0):,} × {ideal.get('m_wdata', 4)} / "
+         f"{ideal.get('bound', 0):,} / 6。"
+         f"下界是纵环切割 {ideal.get('cut_lb', 0):,} cycle"],
+        ["均衡理想六组合计",
+         f"{_f(ideal.get('ideal_total'), 3)} flit/cycle",
+         f"{_f(ideal.get('ideal_total'), 3)} flit/cycle",
+         "若跑到下界且组间均分，全芯片 WriteData 上环速率"],
+    ]
+    return _t(["指标", "S0", "S1", "含义"], rows)
 
 
 def mod4_table(b: dict) -> str:
@@ -1380,15 +1547,20 @@ def write_focus_report(b: dict) -> None:
         f"本批次每 core {k_core} 笔，实测峰值占用 {peak0}，"
         f"<b>{oc} 这个上限本身没有打满</b>。"
     )
-    balanced = (g0.get("goodput_max_min", 9) <= 1.02
-                and g1.get("goodput_max_min", 9) <= 1.02)
 
     plot_topology(b, IMG / "stack_topology.png")
     plot_binding(b, IMG / "stack_binding.png")
     plot_group_series(b, IMG / "stack_group_bw_series.png")
+    plot_group_jain_series(b, IMG / "stack_group_jain_series.png")
     plot_fabric_series(b, IMG / "stack_fabric_bw_series.png")
     if b.get("group"):
         plot_group(b, IMG / "stack_group.png")
+    inst = _fair_lookup(b)
+    i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
+    ideal = ideal_group_write_bw(b)
+    r_star = ideal.get("ideal_per_group") or 0
+    gp0 = (g0.get("goodput_by_group") or {}).get("0") or g0.get("goodput_total", 0) / 6
+    gp1 = (g1.get("goodput_by_group") or {}).get("0") or g1.get("goodput_total", 0) / 6
     fab0 = _fabric_full_txt(b, "s0")
     fab1 = _fabric_full_txt(b, "s1")
     death = _write_bw_death(b, "s1")
@@ -1535,13 +1707,18 @@ retry {q1.get('n_retry', 0):,}。
  if s0["completed"] and s1["completed"]
  else death_txt + " 根因见第 2.3 节。"}</li>
 
-<li><b>六个 top die 的写带宽{"均衡" if balanced else "不均衡"}。</b>
-S0 组间完成量 max/min = {_f(g0.get('goodput_max_min'), 2)}，
-组间 Jain {_f(g0.get('goodput_jain', g0.get('jain')))}；
-S1 为 {_f(g1.get('goodput_max_min'), 2)} /
-{_f(g1.get('goodput_jain', g1.get('jain')))}。
-下图是各 group 写带宽随时间的曲线；die 0 十个核的上环
-CW / CCW 成败见第 2.1 节（CC = CW，顺时针）。</li>
+<li><b>全程完成量均衡，瞬时不均衡。瞬时均衡度用 E[Jain<sub>t</sub>]。</b>
+六个 die 写完同样多的 flit，Jain(E[x]) = 1.00，完成量 max/min = 1.00。
+每个 50-cycle 窗上再算组间 Jain，竞争窗口内
+S0 的 E[Jain<sub>t</sub>] = <b>{_f(i0.get('mean_jain'))}</b>，
+S1 为 <b>{_f(i1.get('mean_jain'))}</b>
+（约 {_pct(i0.get('frac_lt_090') or 0)} 的窗 &lt; 0.90）。
+均衡流量下理想每组写带宽是
+<b>{_f(r_star, 3)} flit/cycle</b>
+（总 WriteData / 综合下界 / 6；下界 {ideal.get('bound', 0):,} cycle，
+由纵环切割决定）。S0 全程平均每组 {_f(gp0)}，
+约是理想的 {_pct(gp0 / r_star if r_star else 0)}。
+虚线画在组写带宽曲线上。</li>
 
 <li><b>对分 / 环带宽按瞬时口径看。</b>
 S0：{fab0}。
@@ -1554,14 +1731,19 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
+<img src="stack_group_jain_series.png" alt="每窗组间 Jain 随时间">
 <div class="def">{scheme_table(b, "mandated")}
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
-六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
-就是这个 die 被饿死。
-S0 瞬时带宽只受 outstanding、ring slot 和 HA 请求 retry 成形；
-S1 再叠一层源端 AIMD。
+<b>黑色虚线</b>是均衡流量下的理想每组写带宽
+{_f(r_star, 3)} flit/cycle
+（{ideal.get('n_txn', 0):,} 笔 × {ideal.get('m_wdata', 4)} WriteData
+/ 下界 {ideal.get('bound', 0):,} cycle / 6 组）。
+六条线若贴着这条虚线且缠在一起，才是瞬时也均衡；
+贴着虚线但上下散开，就是长程均、短时轮流抢。
+下面一张是每个窗的组间 Jain<sub>t</sub>，点线是 E[Jain<sub>t</sub>]，
+虚线 1.0 是全程 Jain(E[x])。
 S0 每核 Jain {_f(f0.get('jain'))}、组间 CoV {_f(g0.get('cov'), 3)}；
 S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
@@ -1589,8 +1771,29 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 是不可再往下调度的单位。下表是整次运行的合计（flit/cycle）；上图是同一指标的时间展开。
 S0 每 die 平均
 {_f(g0.get('goodput_by_group', {}).get('0', 0))} flit/cycle，
-六 die 合计 {_f(g0.get('goodput_total', 0))} flit/cycle。</p>
+六 die 合计 {_f(g0.get('goodput_total', 0))} flit/cycle。
+均衡理想每组 <b>{_f(r_star, 3)}</b> flit/cycle
+（六组合计 {_f(ideal.get('ideal_total'), 3)}）。</p>
 {group_table(b)}
+
+<h3>2.0 瞬时组间均衡度 E[Jain<sub>t</sub>]</h3>
+<p>全程 Jain / max/min 是时间积分：每个 die 写完同样多的 WriteData，
+排空后必为 1。瞬时（或 50-cycle 窗）六条线可以轮流高低。
+因此用每个窗上六个 group 写带宽的 Jain，再对竞争窗口
+（t ≤ t_fair）取平均，记为 <b>E[Jain<sub>t</sub>]</b>，作为瞬时均衡度。
+S0 = {_f(i0.get('mean_jain'))}，S1 = {_f(i1.get('mean_jain'))}，
+和 AIMD 几乎无关。窗越长这个数字越接近 1，比较方案时固定 50 cycle。</p>
+{inst_fair_table(b)}
+<div class="def">均衡理想怎么来的。综合下界 {ideal.get('bound', 0):,} cycle
+由纵环切割决定（fabric_lb.v = {ideal.get('cut_lb', 0):,}；
+最忙 DAT 链路下界 {ideal.get('link_lb', 0):,}）。
+总 WriteData = {ideal.get('n_txn', 0):,} × {ideal.get('m_wdata', 4)} flit。
+若六个 group 均分且跑到下界，每组写带宽 =
+总 WriteData / 下界 / 6 = <b>{_f(r_star, 3)} flit/cycle</b>。
+S0 实测每组 {_f(gp0)}（理想的 {_pct(gp0 / r_star if r_star else 0)}），
+S1 每组 {_f(gp1)}（{_pct(gp1 / r_star if r_star else 0)}），
+与效率 {s0.get('eff', 0):.2f} / {s1.get('eff', 0):.2f} 一致——
+差的是绝对吞吐，不是组间完成量。</div>
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
 <p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
