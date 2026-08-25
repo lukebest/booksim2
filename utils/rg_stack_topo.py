@@ -723,7 +723,7 @@ STRIDE = 4096
 TILING_SIZE = 64 * 1024
 FLIT_BYTES = 32          # 128 B burst -> 4 WriteData flits
 TXN_PER_TILE = TILING_SIZE // BURST_LEN   # 512 WriteNoSnp / 64 KB tile
-TXN_PER_CORE = 5120                       # 10 tiles
+TXN_PER_CORE = 2048                       # 4 tiles
 N_TILES = TXN_PER_CORE // TXN_PER_TILE
 
 

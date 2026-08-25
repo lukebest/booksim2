@@ -703,6 +703,12 @@ def scenario_table(b: dict) -> str:
                "Jain<br>（按 die）"], rows)
 
 
+def _cw_ccw_ratio(cw: int, ccw: int) -> str:
+    if ccw == 0:
+        return "∞" if cw else "—"
+    return f"{cw / ccw:.2f}"
+
+
 def die0_board_table(b: dict, scheme: str) -> str:
     """Top die 0: per-core CW / CCW board success and failure."""
     rows_in = (b.get("die0_board") or {}).get(scheme) or []
@@ -717,20 +723,24 @@ def die0_board_table(b: dict, scheme: str) -> str:
         tot["fail_ccw"] += fccw
         rows.append([
             f"core {r['core']}（环位 {r['idx']}）",
-            f"{ok_cw:,}", f"{ok_ccw:,}", f"{ok_cw + ok_ccw:,}",
-            f"{fcw:,}", f"{fccw:,}", f"{fcw + fccw:,}",
+            f"{ok_cw:,}", f"{ok_ccw:,}", _cw_ccw_ratio(ok_cw, ok_ccw),
+            f"{ok_cw + ok_ccw:,}",
+            f"{fcw:,}", f"{fccw:,}", _cw_ccw_ratio(fcw, fccw),
+            f"{fcw + fccw:,}",
         ])
     if rows:
         rows.append([
             "<b>die 0 合计</b>",
             f"<b>{tot['ok_cw']:,}</b>", f"<b>{tot['ok_ccw']:,}</b>",
+            f"<b>{_cw_ccw_ratio(tot['ok_cw'], tot['ok_ccw'])}</b>",
             f"<b>{tot['ok_cw'] + tot['ok_ccw']:,}</b>",
             f"<b>{tot['fail_cw']:,}</b>", f"<b>{tot['fail_ccw']:,}</b>",
+            f"<b>{_cw_ccw_ratio(tot['fail_cw'], tot['fail_ccw'])}</b>",
             f"<b>{tot['fail_cw'] + tot['fail_ccw']:,}</b>",
         ])
     return _t(["die 0 AI core",
-               "上环成功 CW", "上环成功 CCW", "成功合计",
-               "上环失败 CW", "上环失败 CCW", "失败合计"], rows)
+               "成功 CW", "成功 CCW", "成功 CW/CCW", "成功合计",
+               "失败 CW", "失败 CCW", "失败 CW/CCW", "失败合计"], rows)
 
 
 def group_table(b: dict) -> str:
@@ -801,7 +811,8 @@ def setup_table(b: dict) -> str:
         ["有向链路总数", f"{t['directed_links']:,}",
          f"top {cap['top']} / D2D {cap['d2d']} / 横 {cap['h']} / 纵 {cap['v']}"],
         ["CHI 虚通道", " / ".join(t["vcs"]),
-         "REQ、RSP、DAT 各自独占链路带宽，互不阻塞"],
+         "REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 "
+         "1 REQ + 1 RSP + 1 DAT，互不抢槽"],
         ["每笔写的 flit 数",
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
@@ -815,7 +826,8 @@ def setup_table(b: dict) -> str:
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
          f"burst {m.get('burst_len', 128)} B / stride {m.get('stride', 4096)} B / "
-         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 10)}",
+         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 4)}"
+         f"（每核 {m.get('txn_per_core', m.get('n_tiles', 4) * 512)} 笔）",
          "二维密铺：每行 stride/burst 笔，tile/stride 行。"
          f"128 B 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
     ]
@@ -1299,7 +1311,8 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
 <p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
-失败 = 环 slot 忙或 I-tag 挡住，<b>不含</b> outstanding / AIMD 拒发。</p>
+失败 = 环 slot 忙或 I-tag 挡住，<b>不含</b> outstanding / AIMD 拒发。
+<b>成功 CW/CCW</b>、<b>失败 CW/CCW</b> 是次数比（CW ÷ CCW）。</p>
 <h4>S0 无源端流控</h4>
 {die0_board_table(b, "s0")}
 <h4>S1 源端 AIMD 控速</h4>
