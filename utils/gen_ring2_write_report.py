@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "results" / "ring2_write_fair.json"
+DIRBAL = ROOT / "results" / "ring2_s1_dirbal.json"
 OUT = ROOT / "results" / "report_ring2_write_fairness.html"
 IMG = ROOT / "results"
 
@@ -2384,7 +2385,7 @@ S1_TUNE_PROBE = {
 }
 
 
-def _s1_tune_section(pat: dict) -> str:
+def _s1_tune_section(pat: dict, imgs: dict | None = None) -> str:
     """Tuning S1 to shrink the fail ratio does not raise throughput to λ*."""
     s0 = pat["schemes"]["S0"]["fairness"]
     s1 = (pat["schemes"].get("S1") or {}).get("fairness") or {}
@@ -2428,6 +2429,163 @@ S1 失败比没有变小
 节点 AIMD 会误伤邻 mem = 1 的核。
 要接近 2/7，需要按热 hop 的配额（或先把 tracker 从 32 松开），
 不是把 S1 的 α/β 拧得更狠。</p>
+{_s1_dirbal_section(pat, imgs or {})}
+"""
+
+
+def _dirbal_payload() -> dict | None:
+    if not DIRBAL.exists():
+        return None
+    try:
+        return json.loads(DIRBAL.read_text())
+    except (ValueError, OSError):
+        return None
+
+
+def _dirbal_closest(db: dict) -> dict | None:
+    """Lowest max_fail_ratio among official-K confirms that did not explode."""
+    rows = [r for r in (db.get("confirm") or [])
+            if r.get("K") == 20000
+            and (r.get("max_fail_ratio") or 99) < 4]
+    if not rows:
+        return None
+    return min(rows, key=lambda r: (r.get("max_fail_ratio") or 99,
+                                    -float(r.get("throughput") or 0)))
+
+
+def plot_s1_dirbal(pat: dict, path: Path) -> None:
+    """Default S1 vs closest fail-ratio tune: per-core write BW."""
+    db = _dirbal_payload()
+    rec = _dirbal_closest(db or {})
+    s1 = (pat.get("schemes") or {}).get("S1") or {}
+    bw0 = (s1.get("fairness") or {}).get("bw_by_core") or {}
+    bw1 = (rec or {}).get("bw_by_core") or {}
+    if not bw0 or not bw1:
+        return
+    _use_cjk_font()
+    cs = sorted(set(bw0) | set(bw1), key=int)
+    x = list(range(len(cs)))
+    y0 = [float(bw0.get(c, 0)) for c in cs]
+    y1 = [float(bw1.get(c, 0)) for c in cs]
+    fig, ax = plt.subplots(figsize=(10.2, 3.6))
+    w = 0.36
+    ax.bar([i - w / 2 for i in x], y0, w, color="#f59e0b", label="S1 默认")
+    ax.bar([i + w / 2 for i in x], y1, w, color="#2563eb",
+           label=rec.get("tag", "S1 调参"))
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"C{c}" for c in cs])
+    ax.set_ylabel("写带宽（WriteData flit/cycle）")
+    ax.set_title("各核写带宽：默认 S1 vs 失败比最接近 <2 的参数")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def _s1_dirbal_section(pat: dict, imgs: dict) -> str:
+    """Official-K S1 search for CW/CCW fail ratio < 2, plus BW compare."""
+    db = _dirbal_payload()
+    if not db:
+        return ""
+    s1 = (pat.get("schemes") or {}).get("S1") or {}
+    f1 = s1.get("fairness") or {}
+    d1 = s1.get("board_dir") or {}
+    def _max_fl(d):
+        xs = []
+        for r in d.values():
+            a, b = int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0))
+            if min(a, b):
+                xs.append(max(a, b) / min(a, b))
+        return max(xs) if xs else None
+    default_r = _max_fl(d1)
+    rec = _dirbal_closest(db)
+    rows = []
+    for r in db.get("confirm") or []:
+        cfg = r.get("cfg") or {}
+        knobs = []
+        if cfg.get("dir_split"):
+            knobs.append("dir_split")
+        if cfg.get("band") and cfg.get("band") != "spec":
+            knobs.append(cfg["band"])
+        if cfg.get("window") and cfg.get("window") != 64:
+            knobs.append(f"w={cfg['window']}")
+        if cfg.get("cap_scale") not in (None, 1, 1.0):
+            knobs.append(f"cap={cfg['cap_scale']}")
+        if cfg.get("scope") == "both":
+            knobs.append("scope=both")
+        if not knobs:
+            knobs.append("默认 band=spec")
+        mark = "← 最接近" if rec and r.get("tag") == rec.get("tag") else ""
+        rows.append([
+            r.get("tag"), "、".join(knobs),
+            r.get("throughput"), r.get("max_min"),
+            r.get("max_fail_ratio"),
+            "、".join(f"C{c}" for c in (r.get("fail_imbal_cores") or [])) or "无",
+            mark,
+        ])
+    imbal0 = [f"C{c}" for c in _cores(pat)
+              if _dir_imbal(int((d1.get(c) or {}).get("fail_cw", 0)),
+                            int((d1.get(c) or {}).get("fail_ccw", 0)))]
+    rows.insert(0, [
+        "S1 默认（官方）", "band=spec，cap=1",
+        f1.get("throughput"), f1.get("max_min"),
+        None if default_r is None else round(default_r, 3),
+        "、".join(imbal0) or "无",
+        "",
+    ])
+    fc = db.get("forecast") or {}
+    ds_fc = db.get("dir_split_forecast") or {}
+    bw0 = f1.get("bw_by_core") or {}
+    bw1 = (rec or {}).get("bw_by_core") or {}
+    cmp_rows = []
+    for c in sorted(set(bw0) | set(bw1), key=int):
+        a, b = float(bw0.get(c, 0)), float(bw1.get(c, 0))
+        dlt = 100.0 * (b - a) / a if a else None
+        cmp_rows.append([
+            f"C{c}", f"{a:.5f}", f"{b:.5f}",
+            "—" if dlt is None else f"{dlt:+.2f}%",
+        ])
+    img = imgs.get("s1dirbal", "")
+    img_html = (f'<img src="{img}" alt="S1 default vs tuned per-core BW">'
+                if img else "")
+    thr0, thr1 = f1.get("throughput"), (rec or {}).get("throughput")
+    tdelta = (100.0 * (thr1 - thr0) / thr0) if thr0 and thr1 else None
+    passed = bool(rec and (rec.get("max_fail_ratio") or 99) < 2
+                  and not rec.get("fail_imbal_cores"))
+    return f"""
+<h3>5.2 官方 K=20000：把失败比压到 &lt; 2</h3>
+<p>预测写在跑数前（<code>results/ring2_s1_dirbal.json</code> 的
+<code>forecast</code> / <code>dir_split_forecast</code>），对照写在下面，
+前者不改。</p>
+<div class="def">
+<b>节点级预测</b>（置信度 {fc.get('confidence', '—')}）：
+{fc.get('hypothesis', '')} 证伪：{fc.get('falsify', '')}<br>
+<b>按方向拆预算的预测</b>（置信度 {ds_fc.get('confidence', '—')}）：
+{ds_fc.get('hypothesis', '')} 证伪：{ds_fc.get('falsify', '')}
+</div>
+<p><b>对照。</b>官方规模上<b>没有</b>一组参数让所有核失败比都 &lt; 2。
+cap_scale=0.25 / 0.15 几乎不限住（吞吐仍 ≈ 1.92–1.94），失败比仍 ≥ 2。
+cap_scale=0.08 / 0.05 把总预算绑死：吞吐掉到 1.36 / 0.94，失败比炸到 12 / 11。
+dir_split + harsh 最接近目标（最大失败比
+<b>{(rec or {}).get('max_fail_ratio')}</b>，仍有
+{', '.join('C'+str(c) for c in ((rec or {}).get('fail_imbal_cores') or []))}
+≥ 2）。
+{('已找到全核 &lt; 2。' if passed else '目标未达到。')}
+K=8000 筛选会误判（默认 S1 那时已经 &lt; 2），必须以 K=20000 为准。</p>
+{_table(["配置", "旋钮", "吞吐", "max/min", "最大失败比", "失败比≥2 的核", ""],
+        rows)}
+<h4>最接近配置 vs 默认 S1：各核写带宽</h4>
+<p>最接近 = <code>{(rec or {}).get('tag')}</code>
+（dir_split + band=harsh）。
+全环吞吐 {thr1} vs 默认 {thr0}
+（{f'{tdelta:+.1f}%' if tdelta is not None else '—'}）。
+max/min 两边都 ≈ 1.001：有限 tracker 下各核写带宽本来就是一条平线，
+调参改变的是<b>绝对高度</b>，不是核间相对关系。</p>
+{img_html}
+{_table(["core", "默认 S1", "dir_split+harsh", "差"], cmp_rows) if cmp_rows else ''}
+<p class="note">结论：节点总预算限不住方向比；限狠了更偏。
+按方向拆 AIMD 只能从 2.24 收到 2.07，到不了 &lt; 2。
+几何（邻 mem=1 + 热 hop + 在环优先）比 S1 的旋钮硬。</p>
 """
 
 
@@ -2556,8 +2714,9 @@ Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
 它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
-<li><b>把 S1 调到失败比变小，不会把吞吐送到 λ*。</b>
-节点 AIMD 还会误伤这些核。见 5.1。</li>
+<li><b>官方 K 上没有一组 S1 参数让所有核失败比都 &lt; 2。</b>
+最接近是 dir_split + harsh（2.07，仍有 C0/C8）。
+各核写带宽仍是一条平线，只比默认 S1 低约 4%。见 5.2。</li>
 </ol>
 </div>
 
@@ -2635,7 +2794,7 @@ S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
 本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan {pat['schemes']['S1']['makespan']}）。</p>
 {_sweep_table(pat) if pat.get('sweep') else ''}
 <img src="{imgs.get('s1trace', '')}" alt="S1 control trace">
-{_s1_tune_section(pat)}
+{_s1_tune_section(pat, imgs)}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
@@ -2731,6 +2890,11 @@ def main() -> None:
         p = IMG / "ring2_wfair_s1trace.png"
         plot_s1_trace(pat, p)
         imgs["s1trace"] = p.name
+    if _dirbal_payload() and (pat.get("schemes") or {}).get("S1"):
+        p = IMG / "ring2_wfair_s1_dirbal.png"
+        plot_s1_dirbal(pat, p)
+        if p.exists():
+            imgs["s1dirbal"] = p.name
     study = d.get("retry_study")
     if study:
         for tag, fn in (("outst", plot_outst_sweep), ("retry", plot_retry_track),

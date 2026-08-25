@@ -57,8 +57,9 @@ Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
 它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
-<li><b>把 S1 调到失败比变小，不会把吞吐送到 λ*。</b>
-节点 AIMD 还会误伤这些核。见 5.1。</li>
+<li><b>官方 K 上没有一组 S1 参数让所有核失败比都 &lt; 2。</b>
+最接近是 dir_split + harsh（2.07，仍有 C0/C8）。
+各核写带宽仍是一条平线，只比默认 S1 低约 4%。见 5.2。</li>
 </ol>
 </div>
 
@@ -272,6 +273,40 @@ S1 失败比没有变小
 节点 AIMD 会误伤邻 mem = 1 的核。
 要接近 2/7，需要按热 hop 的配额（或先把 tracker 从 32 松开），
 不是把 S1 的 α/β 拧得更狠。</p>
+
+<h3>5.2 官方 K=20000：把失败比压到 &lt; 2</h3>
+<p>预测写在跑数前（<code>results/ring2_s1_dirbal.json</code> 的
+<code>forecast</code> / <code>dir_split_forecast</code>），对照写在下面，
+前者不改。</p>
+<div class="def">
+<b>节点级预测</b>（置信度 0.55）：
+band/window/scope 仍会留下至少 1 个核失败比≥2。把 S1 节点预算天花板 cap_scale 降到 ≤0.5，两边尝试都变少，热侧 hop_busy 掉得更快，才能让所有核失败比<2。该配置各核写带宽不超过默认 S1，全环吞吐下降。 证伪：cap_scale=1 的某个 band/scope 就让所有核<2，或 cap_scale=0.25 各核 BW 都高于默认 S1<br>
+<b>按方向拆预算的预测</b>（置信度 0.5）：
+按方向独立 AIMD 后热侧预算先降，K=20000 上所有核失败比<2。吞吐接近默认 S1。 证伪：仍有核失败比≥2，或吞吐掉出 1.70 以下
+</div>
+<p><b>对照。</b>官方规模上<b>没有</b>一组参数让所有核失败比都 &lt; 2。
+cap_scale=0.25 / 0.15 几乎不限住（吞吐仍 ≈ 1.92–1.94），失败比仍 ≥ 2。
+cap_scale=0.08 / 0.05 把总预算绑死：吞吐掉到 1.36 / 0.94，失败比炸到 12 / 11。
+dir_split + harsh 最接近目标（最大失败比
+<b>2.067</b>，仍有
+C0, C8
+≥ 2）。
+目标未达到。
+K=8000 筛选会误判（默认 S1 那时已经 &lt; 2），必须以 K=20000 为准。</p>
+<table><thead><tr><th>配置</th><th>旋钮</th><th>吞吐</th><th>max/min</th><th>最大失败比</th><th>失败比≥2 的核</th><th></th></tr></thead><tbody><tr><td>S1 默认（官方）</td><td>band=spec，cap=1</td><td>1.9428</td><td>1.0012</td><td>2.237</td><td>C0、C8</td><td></td></tr><tr><td>S1-gentle</td><td>gentle</td><td>1.9558</td><td>1.002</td><td>2.336</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.25</td><td>cap=0.25</td><td>1.9175</td><td>1.0008</td><td>2.176</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.15</td><td>cap=0.15</td><td>1.9361</td><td>1.0009</td><td>2.147</td><td>C10、C18</td><td></td></tr><tr><td>S1-cap0.08</td><td>cap=0.08</td><td>1.3599</td><td>1.0024</td><td>12.871</td><td>C0、C6、C8、C10、C12、C18</td><td></td></tr><tr><td>S1-cap0.05</td><td>cap=0.05</td><td>0.9375</td><td>1.0011</td><td>11.685</td><td>C0、C2、C6、C8、C10、C12、C16、C18</td><td></td></tr><tr><td>S1-dir_split</td><td>dir_split</td><td>1.9125</td><td>1.0008</td><td>2.16</td><td>C0、C8</td><td></td></tr><tr><td>S1-dir_split-harsh</td><td>dir_split、harsh</td><td>1.8652</td><td>1.0007</td><td>2.067</td><td>C0、C8</td><td>← 最接近</td></tr><tr><td>S1-dir_split-harsh-w32</td><td>dir_split、harsh、w=32</td><td>1.9229</td><td>1.0009</td><td>2.204</td><td>C10、C18</td><td></td></tr><tr><td>S1-dir_split-harsh-cap0.7</td><td>dir_split、harsh、cap=0.7</td><td>1.9145</td><td>1.0009</td><td>2.134</td><td>C10、C18</td><td></td></tr></tbody></table>
+<h4>最接近配置 vs 默认 S1：各核写带宽</h4>
+<p>最接近 = <code>S1-dir_split-harsh</code>
+（dir_split + band=harsh）。
+全环吞吐 1.8652 vs 默认 1.9428
+（-4.0%）。
+max/min 两边都 ≈ 1.001：有限 tracker 下各核写带宽本来就是一条平线，
+调参改变的是<b>绝对高度</b>，不是核间相对关系。</p>
+<img src="ring2_wfair_s1_dirbal.png" alt="S1 default vs tuned per-core BW">
+<table><thead><tr><th>core</th><th>默认 S1</th><th>dir_split+harsh</th><th>差</th></tr></thead><tbody><tr><td>C0</td><td>0.19454</td><td>0.18668</td><td>-4.04%</td></tr><tr><td>C2</td><td>0.19460</td><td>0.18675</td><td>-4.03%</td></tr><tr><td>C4</td><td>0.19461</td><td>0.18676</td><td>-4.03%</td></tr><tr><td>C6</td><td>0.19462</td><td>0.18678</td><td>-4.03%</td></tr><tr><td>C8</td><td>0.19460</td><td>0.18677</td><td>-4.02%</td></tr><tr><td>C10</td><td>0.19455</td><td>0.18674</td><td>-4.01%</td></tr><tr><td>C12</td><td>0.19451</td><td>0.18670</td><td>-4.02%</td></tr><tr><td>C14</td><td>0.19444</td><td>0.18670</td><td>-3.98%</td></tr><tr><td>C16</td><td>0.19439</td><td>0.18667</td><td>-3.97%</td></tr><tr><td>C18</td><td>0.19443</td><td>0.18665</td><td>-4.00%</td></tr></tbody></table>
+<p class="note">结论：节点总预算限不住方向比；限狠了更偏。
+按方向拆 AIMD 只能从 2.24 收到 2.07，到不了 &lt; 2。
+几何（邻 mem=1 + 热 hop + 在环优先）比 S1 的旋钮硬。</p>
+
 
 
 <p class="note" style="margin-top:2rem">
