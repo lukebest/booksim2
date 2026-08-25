@@ -20,6 +20,14 @@ R2  tap   -- a flit may only *leave* a given ring at a given station once per
 R3  eject -- the destination PE's eject queue is `eject_depth` deep.
 R4  turn  -- changing ring, or crossing the die boundary, passes through a
              bounded transfer FIFO.
+R5  SWAP  -- HPCA'22 (Wang et al.): two flits at one bridge, each wanting
+             the other's fabric, exchange through a bypass and take the slot
+             the partner vacates. No FIFO, no turn_lat. Applied at H↔V
+             attach points and at D2D↔H / D2D↔V bridges.
+R6  D2D landing buffer -- a bounded queue per (attach, dest ring, VC). A
+             D2D arrival that misses SWAP and the ring FIFO sits here
+             instead of an unbounded landing hold, and is re-offered next
+             cycle so it can SWAP with a ring flit going the other way.
 
 In-ring priority is absolute and is enforced by *ordering*, not by lookahead:
 arrivals claim their outgoing edge before any FIFO or PE gets to try, so a
@@ -68,6 +76,14 @@ class StackBaseParams:
     ha_pos_depth: int = 16
     turn_depth: int = 4             # ring -> ring transfer FIFO
     d2d_depth: int = 8              # die-crossing FIFO
+    # HPCA'22 SWAP: two flits at one bridge, each wanting the other's fabric,
+    # exchange through a bypass and take the slot the other vacates. Breaks
+    # the H↔V and D2D↔ring hold-and-wait deadlock without a VC.
+    swap_rule: bool = True
+    # Bounded landing buffer at the bottom D2D bridge, one queue per
+    # (attach, dest ring). Fresh D2D arrivals that miss SWAP and the ring
+    # FIFO sit here instead of piling onto an unbounded landing hold.
+    d2d_land_depth: int = 16
     resv_ej: int = 1                # eject slots only an E-tagged flit may use
     # Transfer-FIFO entries only an E-tagged flit may occupy. Measured to be
     # counterproductive here and left off by default: it withholds scarce
@@ -152,6 +168,9 @@ class StackBaseSim:
         self.active_xq: dict[Any, None] = {}
         self.xq_peak: dict[Any, int] = defaultdict(int)
         self._land_now: dict[int, int] = defaultdict(int)
+        self.d2d_buf: dict[Any, deque] = defaultdict(deque)
+        self.active_d2d_buf: dict[Any, None] = {}
+        self.d2d_buf_peak: dict[Any, int] = defaultdict(int)
         self._fab_cap = topo.capacity()
         self._fab_names = tuple(self._fab_cap)
         self.fab_win = 50
@@ -192,6 +211,9 @@ class StackBaseSim:
             "max_turn_q": 0, "max_d2d_q": 0, "n_d2d_stall": 0,
             "max_d2d_landing": 0, "n_turn_resv_used": 0,
             "max_inring_hold": 0, "n_turns": 0,
+            "n_swaps": 0, "n_swaps_hv": 0, "n_swaps_d2d": 0,
+            "n_swaps_d2d_h": 0, "n_swaps_d2d_v": 0,
+            "n_d2d_buf_push": 0, "max_d2d_buf": 0,
             "n_fc_deny": 0, "n_aimd_increase": 0, "n_aimd_decrease": 0,
         }
         self.inring_hold: dict[Any, int] = defaultdict(int)
@@ -499,6 +521,144 @@ class StackBaseSim:
             return self.p.d2d_depth
         return self.p.turn_depth
 
+    def _src_fab(self, f: Flit) -> str:
+        return f.ring[0] if f.ring is not None else ""
+
+    def _dst_fab(self, f: Flit) -> str:
+        return self.topo.edge_ring[self._next_edge(f)][0]
+
+    def _d2d_buf_key(self, f: Flit) -> tuple:
+        nxt = self.topo.edge_ring[self._next_edge(f)]
+        return (f.node, nxt, f.vc)
+
+    def _offer_d2d_buf(self, leave: dict[Any, list]) -> set[int]:
+        """Heads of the landing buffer act as D2D arrivals this cycle."""
+        from_land: set[int] = set()
+        for key, q in list(self.d2d_buf.items()):
+            if not q:
+                self.active_d2d_buf.pop(key, None)
+                continue
+            f = q[0]
+            leave[(f.node, f.ring)].append(f)
+            from_land.add(id(f))
+        return from_land
+
+    def _pop_d2d_buf(self, ids: set[int]) -> None:
+        if not ids:
+            return
+        for key, q in list(self.d2d_buf.items()):
+            if q and id(q[0]) in ids:
+                q.popleft()
+                if not q:
+                    self.active_d2d_buf.pop(key, None)
+
+    def _push_d2d_buf(self, f: Flit) -> bool:
+        key = self._d2d_buf_key(f)
+        q = self.d2d_buf[key]
+        if len(q) >= self.p.d2d_land_depth:
+            return False
+        q.append(f)
+        self.active_d2d_buf[key] = None
+        self.st["n_d2d_buf_push"] += 1
+        self.d2d_buf_peak[key] = max(self.d2d_buf_peak[key], len(q))
+        self.st["max_d2d_buf"] = max(self.st["max_d2d_buf"], len(q))
+        f.fail_eject += 1
+        if f.fail_eject >= self.p.t_xfer and not f.e_tag:
+            f.e_tag = True
+            self.st["n_etag_raised"] += 1
+        return True
+
+    def _try_swap(self, a: Flit, b: Flit) -> bool:
+        """HPCA'22 SWAP: each takes the hop the other vacates.
+
+        Half-rings are unidirectional, so the vacated slot is the unique
+        outgoing hop. Both hops are checked before either launch. SWAP
+        bypasses the transfer FIFO and does not charge turn_lat.
+
+        Same-VC pairs free the exact hop the partner needs. CHI writes also
+        meet as DAT/REQ down vs RSP up; those still swap if both hops are
+        free, so a full FIFO cannot hold-and-wait across the bridge.
+        """
+        if self._at_dest(a) or self._at_dest(b):
+            return False
+        if a.node != b.node:
+            return False
+        ea, eb = self._next_edge(a), self._next_edge(b)
+        if self.seg_free[(ea, a.vc)] > self.t:
+            return False
+        if self.seg_free[(eb, b.vc)] > self.t:
+            return False
+        sa, sb = self._src_fab(a), self._src_fab(b)
+        da, db = self._dst_fab(a), self._dst_fab(b)
+        if sa == sb or da != sb or db != sa:
+            return False
+        self.st["n_swaps"] += 1
+        pair = {sa, sb}
+        if pair == {"h", "v"}:
+            self.st["n_swaps_hv"] += 1
+        else:
+            self.st["n_swaps_d2d"] += 1
+            for s, d in ((sa, da), (sb, db)):
+                if s == "d2d" and d == "h":
+                    self.st["n_swaps_d2d_h"] += 1
+                elif s == "d2d" and d == "v":
+                    self.st["n_swaps_d2d_v"] += 1
+        self._launch(a, inring=False)
+        self._launch(b, inring=False)
+        return True
+
+    def _pair_swaps(self, by_src: dict[str, list], swapped: set[int],
+                    tapped: set[tuple]) -> None:
+        for a_fab, b_fab in (("d2d", "v"), ("d2d", "h"), ("h", "v")):
+            ia = [f for f in by_src[a_fab]
+                  if id(f) not in swapped and self._dst_fab(f) == b_fab]
+            ib = [f for f in by_src[b_fab]
+                  if id(f) not in swapped and self._dst_fab(f) == a_fab]
+            for fa, fb in zip(ia, ib):
+                na, ra, nb, rb = fa.node, fa.ring, fb.node, fb.ring
+                if self._try_swap(fa, fb):
+                    swapped.add(id(fa))
+                    swapped.add(id(fb))
+                    for node, ring in ((na, ra), (nb, rb)):
+                        if ring is not None and ring[0] != "d2d":
+                            tapped.add((node, ring))
+                else:
+                    break
+
+    def _do_swaps(self, leave: dict[Any, list]) -> tuple[set[int], set[tuple]]:
+        """Pair complementary leaves at one station.
+
+        Same VC first (the hop the partner vacates is the one we need).
+        Then DAT/REQ vs RSP across VCs, which is how a write actually
+        crosses a D2D bridge in both directions at once.
+        D2D↔ring before H↔V: that is the hold-and-wait that parks
+        Comp/PCrd under descending WriteData.
+        """
+        same: dict[Any, dict[str, list[Flit]]] = defaultdict(
+            lambda: defaultdict(list))
+        any_vc: dict[int, dict[str, list[Flit]]] = defaultdict(
+            lambda: defaultdict(list))
+        for (node, ring), reqs in leave.items():
+            for f in reqs:
+                if self._at_dest(f):
+                    continue
+                src = ring[0] if ring is not None else self._src_fab(f)
+                try:
+                    dst = self._dst_fab(f)
+                except (IndexError, KeyError):
+                    continue
+                if src == dst:
+                    continue
+                same[(node, f.vc)][src].append(f)
+                any_vc[node][src].append(f)
+        swapped: set[int] = set()
+        tapped: set[tuple] = set()
+        for by_src in same.values():
+            self._pair_swaps(by_src, swapped, tapped)
+        for by_src in any_vc.values():
+            self._pair_swaps(by_src, swapped, tapped)
+        return swapped, tapped
+
     def _try_turn(self, f: Flit) -> bool:
         """Hand a flit to the transfer FIFO of the ring it wants next.
 
@@ -644,14 +804,27 @@ class StackBaseSim:
             else:
                 leave[(f.node, f.ring)].append(f)
 
-        # Phase 2 -- leaving a ring: to a PE, or to another ring's FIFO.
-        # One flit may leave a given ring at a given station per cycle; the
-        # rest deflect a full revolution.
+        # Phase 2a -- HPCA'22 SWAP at H/V attach points and D2D bridges.
+        # A flit sitting in the D2D landing buffer is a first-class D2D
+        # arrival this cycle, so it can swap with a ring flit going the
+        # other way.
+        from_land = self._offer_d2d_buf(leave)
+        if self.p.swap_rule:
+            swapped, swap_tapped = self._do_swaps(leave)
+        else:
+            swapped, swap_tapped = set(), set()
+        self._pop_d2d_buf(from_land & swapped)
+
+        # Phase 2b -- remaining leaves: PE eject or transfer FIFO. One flit
+        # may leave a given ring at a given station per cycle; the rest
+        # deflect a full revolution. D2D leftovers go to the landing buffer.
         for key, reqs in leave.items():
             node, ring = key
             on_ring = ring is not None and ring[0] != "d2d"
-            tapped = False
-            for f in self._tap_order(node, ring, reqs) if on_ring else reqs:
+            leftover = [f for f in reqs if id(f) not in swapped]
+            tapped = key in swap_tapped
+            for f in self._tap_order(node, ring, leftover) if on_ring \
+                    else leftover:
                 if tapped:
                     self.st["n_tap_deflect"] += 1
                     self._deflect(f)
@@ -660,6 +833,8 @@ class StackBaseSim:
                       else self._try_turn(f))
                 if ok:
                     tapped = on_ring
+                    if id(f) in from_land:
+                        self._pop_d2d_buf({id(f)})
                     continue
                 if self._at_dest(f):
                     self.st["n_eject_full_deflect"] += 1
@@ -667,11 +842,11 @@ class StackBaseSim:
                     self.st["n_turn_full_deflect"] += 1
                 if on_ring:
                     self._deflect(f)
+                elif id(f) in from_land:
+                    continue          # already sitting in the landing buffer
+                elif self._push_d2d_buf(f):
+                    continue
                 else:
-                    # Arrived over a die crossing, which is not a ring, so
-                    # there is nowhere to circulate: hold at the landing and
-                    # escalate, or the flit would wait on an equal footing
-                    # with fresh arrivals for as long as the FIFO stays full.
                     self.st["n_d2d_stall"] += 1
                     f.fail_eject += 1
                     if f.fail_eject >= self.p.t_xfer and not f.e_tag:
@@ -1027,6 +1202,7 @@ class StackBaseSim:
         return (sum(len(v) for v in self.arrivals.values())
                 + sum(len(q) for q in self.ejectq.values())
                 + sum(len(q) for q in self.xq.values())
+                + sum(len(q) for q in self.d2d_buf.values())
                 + len(self._stash))
 
     def backlog(self) -> int:
@@ -1052,12 +1228,22 @@ class StackBaseSim:
             "turn_peak": max(turn.values()) if turn else 0,
             "d2d_peak": max(d2d.values()) if d2d else 0,
             "turn_depth": self.p.turn_depth, "d2d_depth": self.p.d2d_depth,
+            "d2d_land_depth": self.p.d2d_land_depth,
+            "swap_rule": self.p.swap_rule,
             "turn_flits": sum(turn.values()), "d2d_flits": sum(d2d.values()),
             "d2d_landing_peak": self.st["max_d2d_landing"],
             "n_d2d_stall": self.st["n_d2d_stall"],
+            "n_swaps": self.st["n_swaps"],
+            "n_swaps_hv": self.st["n_swaps_hv"],
+            "n_swaps_d2d": self.st["n_swaps_d2d"],
+            "n_swaps_d2d_h": self.st["n_swaps_d2d_h"],
+            "n_swaps_d2d_v": self.st["n_swaps_d2d_v"],
+            "d2d_buf_peak": self.st["max_d2d_buf"],
+            "n_d2d_buf_push": self.st["n_d2d_buf_push"],
+            "residual_xq": sum(len(q) for q in self.xq.values()),
+            "residual_d2d_buf": sum(len(q) for q in self.d2d_buf.values()),
             "resv_turn": self.p.resv_turn,
             "n_turn_resv_used": self.st["n_turn_resv_used"],
-            "residual_xq": sum(len(q) for q in self.xq.values()),
         }
 
     def fabric_util(self, makespan: int) -> dict[str, Any]:

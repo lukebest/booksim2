@@ -358,14 +358,30 @@ def _c5b():
     """Bottom D2D landing: H and V are their own FIFOs, not the H↔V turn."""
     _, _, r = _run("s0", k=12, turn_depth=16, d2d_depth=32)
     f = r["fifo"]
-    # Both ring interfaces of the bottom D2D landing must have been used.
-    assert f.get("n_d2d_land_h", 0) > 0 and f.get("n_d2d_land_v", 0) > 0, f
+    # Both ring interfaces of the bottom D2D landing must have been used
+    # (FIFO board or SWAP bypass).
+    used_h = f.get("n_d2d_land_h", 0) + f.get("n_swaps_d2d_h", 0)
+    used_v = f.get("n_d2d_land_v", 0) + f.get("n_swaps_d2d_v", 0)
+    assert used_h > 0 and used_v > 0, f
     ser = r.get("fabric_series") or {}
     assert ser.get("t") and ser.get("bw", {}).get("d2d"), ser.keys()
     d2d = r["fabric"]["d2d"]
     assert "peak_inst_bw" in d2d and d2d["peak_inst_util"] <= 1.0
-    return (f"D2D land H={f['n_d2d_land_h']} V={f['n_d2d_land_v']}; "
+    return (f"D2D land H={used_h} V={used_v}; "
             f"D2D peak inst {d2d['peak_inst_bw']} flit/cycle")
+
+
+@check("swap_fires_at_bridges")
+def _c5c():
+    """HPCA'22 SWAP must fire at H↔V and D2D bridges under mixed traffic."""
+    _, _, r = _run("s0", k=20)
+    f = r["fifo"]
+    assert r["n_swaps"] > 0, r["n_swaps"]
+    assert f["n_swaps_hv"] + f["n_swaps_d2d"] == r["n_swaps"], f
+    assert f["n_swaps_hv"] > 0 and f["n_swaps_d2d"] > 0, f
+    return (f"swaps {r['n_swaps']} (H↔V {f['n_swaps_hv']}, "
+            f"D2D {f['n_swaps_d2d']}; land SWAP H={f['n_swaps_d2d_h']} "
+            f"V={f['n_swaps_d2d_v']})")
 
 
 @check("fabric_util_matches_capacity_model")
@@ -390,8 +406,8 @@ def _c7():
     1-flit turn FIFO drains. The FIFO is still on the critical path:
     it pins at its depth and a shallow one stretches makespan.
     """
-    _, _, sh = _run("s0", k=50, turn_depth=1, d2d_depth=8)
-    _, _, dp = _run("s0", k=50, turn_depth=64, d2d_depth=128)
+    _, _, sh = _run("s0", k=50, turn_depth=1, d2d_depth=8, swap_rule=False)
+    _, _, dp = _run("s0", k=50, turn_depth=64, d2d_depth=128, swap_rule=False)
     assert sh["completed"] and dp["completed"]
     assert sh["fifo"]["turn_peak"] == 1, sh["fifo"]
     assert sh["makespan"] > dp["makespan"], \
@@ -408,9 +424,9 @@ def _c7b():
     tracks concurrency: oc=5 needs a deeper peak than oc=3.
     """
     _, _, lo = _run("s0", k=50, core_outstanding=3, turn_depth=24,
-                    d2d_depth=48)
+                    d2d_depth=48, swap_rule=False)
     _, _, hi = _run("s0", k=50, core_outstanding=5, turn_depth=24,
-                    d2d_depth=48)
+                    d2d_depth=48, swap_rule=False)
     assert lo["completed"] and hi["completed"]
     assert hi["fifo"]["turn_peak"] > lo["fifo"]["turn_peak"], \
         (lo["fifo"]["turn_peak"], hi["fifo"]["turn_peak"])

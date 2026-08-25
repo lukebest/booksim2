@@ -67,12 +67,12 @@
  {
   "name": "no_flit_lost_at_turn_or_d2d",
   "ok": true,
-  "note": "13,266 turns, nothing stranded"
+  "note": "13,076 turns, nothing stranded"
  },
  {
   "name": "makespan_ge_bound",
   "ok": true,
-  "note": "makespan 1162 >= bound 603"
+  "note": "makespan 1149 >= bound 603"
  },
  {
   "name": "links_stay_bufferless",
@@ -87,7 +87,12 @@
  {
   "name": "d2d_landing_has_two_ring_interfaces",
   "ok": true,
-  "note": "D2D land H=24 V=24; D2D peak inst 32 flit/cycle"
+  "note": "D2D land H=34 V=72; D2D peak inst 32 flit/cycle"
+ },
+ {
+  "name": "swap_fires_at_bridges",
+  "ok": true,
+  "note": "swaps 184 (H\u2194V 69, D2D 115; land SWAP H=16 V=99)"
  },
  {
   "name": "fabric_util_matches_capacity_model",
@@ -96,13 +101,13 @@
  },
  {
   "name": "turn_fifo_depth_is_a_real_requirement",
-  "ok": false,
-  "note": "depth 4 no longer livelocks; the depth requirement has changed"
+  "ok": true,
+  "note": "depth 1 drains pinned at 1/1 in 5,575c; depth 64 drains in 3,734c"
  },
  {
   "name": "lower_concurrency_also_lowers_the_buffer_requirement",
-  "ok": false,
-  "note": "oc=5 now drains at depth 24; the coupling has changed"
+  "ok": true,
+  "note": "at turn depth 24: oc=3 peak 14, oc=5 peak 21 -- more concurrency, more buffer"
  },
  {
   "name": "s16_unbounded_equals_s0",
@@ -117,32 +122,32 @@
  {
   "name": "s1_bus_never_uses_the_noc",
   "ok": true,
-  "note": "3,960 posts, 23,760 bits, mean 80.8 controlled nodes per source"
+  "note": "3,696 posts, 22,176 bits, mean 80.8 controlled nodes per source"
  },
  {
   "name": "s17_latch_is_bounded_and_off_by_default",
   "ok": true,
-  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 252 yields"
+  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 247 yields"
  },
  {
   "name": "s17_gain_is_real_but_immaterial",
-  "ok": true,
-  "note": "mean Jain 0.99928 -> at best 0.99951 (+0.00023), worst-case max/min unchanged at 1.14: real but immaterial"
+  "ok": false,
+  "note": "patience=1 now improves worst-case max/min (1.163 -> 1.111); revisit the S17 verdict"
  },
  {
   "name": "rtt_window_drains_on_every_seed",
   "ok": true,
-  "note": "oc=413 HA POS=16: 3/3 seeds drained, mean Jain 0.98331"
+  "note": "oc=413 HA POS=16: 3/3 seeds drained, mean Jain 0.98178"
  },
  {
   "name": "baseline_unfairness_is_structural_not_random",
   "ok": false,
-  "note": "expected a real spread, got [1.2121, 1.1765, 1.1765]"
+  "note": "expected a real spread, got [1.1765, 1.1429, 1.1765]"
  },
  {
   "name": "rtt_window_and_ha_retry_do_not_collapse",
   "ok": true,
-  "note": "s0 2249c retry=1418; s1 2208c retry=1422"
+  "note": "s0 2334c retry=1416; s1 2159c retry=1407"
  },
  {
   "name": "ha_retry_fires_when_the_tracker_fills",
@@ -167,7 +172,7 @@
  {
   "name": "batch_larger_than_outstanding_does_not_hol_block_retry",
   "ok": true,
-  "note": "k=20 oc=6 drained 1200; 212 re-sends after 212 retries"
+  "note": "k=20 oc=6 drained 1200; 223 re-sends after 223 retries"
  },
  {
   "name": "shallow_tracker_retries_but_still_drains",
@@ -181,13 +186,13 @@
  },
  {
   "name": "s18_tracks_the_window_across_scenarios",
-  "ok": false,
-  "note": "{'full': (24.72, 40.0, True, 261.3), 'light': (26.4, 34.0, True, 260.4)}"
+  "ok": true,
+  "note": "window settles at 24.0 under full load and 26.4 under light load (peak 34), rtt_min ~262 cycles"
  },
  {
   "name": "group_goodput_is_equal_when_the_batch_drains",
   "ok": true,
-  "note": "6 groups x 10 cores, goodput max/min 1.00, group Jain 0.9954"
+  "note": "6 groups x 10 cores, goodput max/min 1.00, group Jain 0.9962"
  },
  {
   "name": "s0_and_s1_group_series_cover_the_run",

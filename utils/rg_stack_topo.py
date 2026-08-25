@@ -33,7 +33,10 @@ column's vertical ring. The bottom-side D2D bridge there has **two
 independent interfaces**: one taps the horizontal ring, the other taps
 the vertical ring of that column. D2D landing onto H, D2D landing onto V,
 and an H↔V turn are three separate ports; they share only the outgoing
-ring hop (R1), not a FIFO or a boarding slot.
+ring hop (R1), not a FIFO or a boarding slot. Cross-fabric deadlock at
+these ports is broken by the HPCA'22 SWAP rule (two flits, each wanting
+the other's fabric, exchange and take the vacated hop) plus a bounded
+D2D landing buffer that re-offers a stalled arrival so it can SWAP.
 
 Attach grouping
 ---------------
@@ -89,6 +92,10 @@ R3  leaving mutual exclusion  -- <= leave_ports per (station, plane) / cycle
 R4  turn / D2D hand-off       -- crossing rings or dies passes through a
                                  bounded transfer FIFO; strict bufferlessness
                                  holds on the links, not at the crossings
+R5  SWAP                      -- complementary flits at an H↔V or D2D
+                                 bridge exchange and take each other's hop
+R6  D2D landing buffer        -- bounded hold at the bottom bridge when
+                                 SWAP and the ring FIFO both miss
 """
 
 from __future__ import annotations

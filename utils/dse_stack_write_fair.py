@@ -45,9 +45,10 @@ CORE_OUTSTANDING_WR = 512
 HA_POS_DEPTH = 32
 BW_WINDOW = 50
 
-# The crossing FIFOs are the one place strict bufferlessness does not hold,
-# so their depth is a hardware cost that has to be stated, not assumed.
+# Crossing FIFOs plus the HPCA'22 SWAP bypass and a bounded D2D landing
+# buffer. Depths are a hardware cost that has to be stated, not assumed.
 FABRIC = dict(turn_depth=64, d2d_depth=128,
+              swap_rule=True, d2d_land_depth=16,
               core_outstanding=CORE_OUTSTANDING_WR,
               ha_pos_depth=HA_POS_DEPTH,
               inj_depth=8, eject_depth=4, eject_bw=1, per_vc_srcq=True)
@@ -965,11 +966,15 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
                                       die=0)
         f, g, q = r["fairness"], r["group"], r.get("retry", {})
         print("      %-4s %-8s t=%6d done=%d/%d jain=%.4f "
-              "grp_jain=%.4f gp_mm=%.2f retry=%d"
+              "grp_jain=%.4f gp_mm=%.2f retry=%d "
+              "swap=%d (hv=%d d2d=%d) d2d_buf=%d"
               % (name, "OK" if r["completed"] else "COLLAPSE",
                  r["makespan"], r["n_txn_done"], len(txns),
                  f.get("jain", 0), g.get("jain", 0),
-                 g.get("goodput_max_min", 0), q.get("n_retry", 0)),
+                 g.get("goodput_max_min", 0), q.get("n_retry", 0),
+                 r.get("n_swaps", 0), r.get("n_swaps_hv", 0),
+                 r.get("n_swaps_d2d", 0),
+                 (r.get("fifo") or {}).get("d2d_buf_peak", 0)),
               flush=True)
     blob["schemes"] = {"mandated": per, "work": per}
     blob["group_series"] = series

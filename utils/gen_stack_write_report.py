@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 _UTILS = Path(__file__).resolve().parent
 if str(_UTILS) not in sys.path:
@@ -637,14 +638,15 @@ def plot_group_series(b: dict, path: Path) -> None:
         bw = ser.get("bw_by_group") or {}
         w = ser.get("window", 50)
         for i, d in enumerate(sorted(bw, key=int)):
-            ax.plot(t, bw[d], "-", color=colors[i % len(colors)], lw=1.5,
+            ax.plot(t, bw[d], "-",
+                    color=colors[i % len(colors)], lw=1.5,
                     label=f"die {d}（10 个 AI core）")
         ax.set_title(title, fontsize=11)
         ax.set_xlabel("时间 (cycle)", fontsize=9)
-        ax.set_ylabel(f"组写带宽 (WriteData flit / cycle，窗={w})", fontsize=9)
+        ax.set_ylabel(f"组写带宽 (flit/cycle，窗={w} cycle)", fontsize=9)
         ax.grid(alpha=0.25)
         ax.legend(fontsize=7.5, ncol=2, loc="upper right")
-    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计的写带宽随时间变化",
+    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计写带宽（flit/cycle）",
                  fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
@@ -800,16 +802,16 @@ def group_table(b: dict) -> str:
         rows.append([
             r["outstanding"] if r["scheme"] not in ("s18", "s19")
             else "自适应", r["scheme"].upper(), _ok(r["completed"]),
-            " / ".join(_f(v, 3) for v in
+            " / ".join(_f(v, 4) for v in
                        [gp[d] for d in sorted(gp, key=int)]),
-            _f(r["goodput_total"], 3), _f(r["goodput_max_min"], 2),
+            _f(r["goodput_total"], 4), _f(r["goodput_max_min"], 2),
             _f(r["group_jain"]), _f(r["group_max_min"], 2),
             _f(r["group_cov"], 3), f"die {r['worst_group']}",
             _f(r["core_jain"]), _f(r["jain_within_worst"]),
         ])
     return _t(["outstanding", "方案", "排空",
                "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
-               "合计", "die 间<br>max/min<br>（按完成量）",
+               "合计 flit/cycle", "die 间<br>max/min<br>（按完成量）",
                "die 间 Jain<br>（竞争窗口）", "die 间<br>max/min",
                "die 间 CoV", "最差 die",
                "Jain<br>（按 core）", "最差 die 内部<br>的 Jain"], rows)
@@ -846,7 +848,7 @@ def setup_table(b: dict) -> str:
          f"按“2 横 × {t['group_cols']} 列 = 8 个”一组。"
          "每个 D2D landing <b>两个独立接口</b>：一个接该处横环，"
          "一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，"
-         "只在出环 hop 上互斥"],
+         "只在出环 hop 上互斥；交叉方向靠 SWAP 解死锁"],
         ["bottom die NoC", "6 横 + 8 纵 half ring",
          "half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向"],
         ["纵环长度", t["v_len"], "12 个 HA + 6 个挂接点交替排列"],
@@ -855,6 +857,15 @@ def setup_table(b: dict) -> str:
         ["CHI 虚通道", " / ".join(t["vcs"]),
          "REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 "
          "1 REQ + 1 RSP + 1 DAT，互不抢槽"],
+        ["写带宽单位", "flit/cycle",
+         "WriteData 上环速率；织物瞬时 hop 同单位"],
+        ["SWAP（HPCA'22）",
+         "开" if m["fabric"].get("swap_rule", True) else "关",
+         "横↔纵挂接点、D2D↔横、D2D↔纵：两拍 flit 互换，各走对方腾出的 hop，"
+         "不进 FIFO、不加转向时延"],
+        ["D2D 落地 buffer",
+         f"{m['fabric'].get('d2d_land_depth', 16)} / (挂接点, 目标环, VC)",
+         "SWAP 和环 FIFO 都没进时的有界落地队列，下拍再参与 SWAP"],
         ["每笔写的 flit 数",
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
@@ -1025,6 +1036,84 @@ def _fabric_full_txt(b: dict, scheme: str) -> str:
         full = "打满" if val >= 0.90 else ("接近打满" if val >= 0.70 else "未打满")
         bits.append(f"{labels[key]} {vc.upper()} 瞬时 {_pct(val)}（{full}）")
     return "；".join(bits)
+
+
+def _write_bw_death(b: dict, scheme: str, floor: float = 0.05
+                    ) -> dict[str, Any]:
+    """When group WriteData injection fell below `floor` flit/cycle total."""
+    ser = (b.get("group_series") or {}).get(scheme) or {}
+    t = ser.get("t") or []
+    bw = ser.get("bw_by_group") or {}
+    if not t or not bw:
+        return {}
+    tot = [sum(bw[d][i] for d in bw) for i in range(len(t))]
+    useful = [i for i, v in enumerate(tot) if v > floor]
+    peak_i = max(range(len(tot)), key=lambda i: tot[i])
+    return {
+        "peak_t": t[peak_i], "peak_fc": tot[peak_i],
+        "last_t": t[useful[-1]] if useful else None,
+        "last_fc": tot[useful[-1]] if useful else 0,
+        "n_zero_win": len(t) - 1 - useful[-1] if useful else len(t),
+    }
+
+
+def collapse_table(b: dict) -> str:
+    """Protocol leftovers that show why S1 stopped making progress."""
+    s0 = ((b.get("schemes") or {}).get("mandated") or {}).get("s0") or {}
+    s1 = ((b.get("schemes") or {}).get("mandated") or {}).get("s1") or {}
+    q0, q1 = s0.get("retry") or {}, s1.get("retry") or {}
+    rows = [
+        ["完成事务",
+         f"{s0.get('n_txn_done', 0):,}/{s0.get('n_txn_target', 0):,}",
+         f"{s1.get('n_txn_done', 0):,}/{s1.get('n_txn_target', 0):,}"],
+        ["停滞检测",
+         "否" if s0.get("completed") else "是",
+         "否" if s1.get("completed") else "<b>是（连续无 flit 交付）</b>"],
+        ["RetryAck / PCrdGrant / REQ 重发",
+         f"{q0.get('n_retry', 0):,} / {s0.get('n_pcrd', 0):,} / "
+         f"{s0.get('n_req_resent', 0):,}",
+         f"{q1.get('n_retry', 0):,} / {s1.get('n_pcrd', 0):,} / "
+         f"{s1.get('n_req_resent', 0):,}"],
+        ["未兑现的 PCrd（Retry − 重发）",
+         f"{q0.get('n_retry', 0) - s0.get('n_req_resent', 0):,}",
+         f"<b>{q1.get('n_retry', 0) - s1.get('n_req_resent', 0):,}</b>"],
+        ["HA 上环失败（RSP）",
+         f"{sum(sum(v.values()) for k, v in (s0.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}",
+         f"<b>{sum(sum(v.values()) for k, v in (s1.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}</b>"],
+        ["纵环 RSP 瞬时占用",
+         _pct(((s0.get("fabric") or {}).get("v") or {})
+              .get("peak_inst_util_by_vc", {}).get("rsp", 0)),
+         _pct(((s1.get("fabric") or {}).get("v") or {})
+              .get("peak_inst_util_by_vc", {}).get("rsp", 0))],
+        ["转向 / D2D FIFO 峰值",
+         f"{(s0.get('fifo') or {}).get('turn_peak', 0)} / "
+         f"{(s0.get('fifo') or {}).get('d2d_peak', 0)}",
+         f"{(s1.get('fifo') or {}).get('turn_peak', 0)} / "
+         f"{(s1.get('fifo') or {}).get('d2d_peak', 0)}"],
+        ["SWAP 次数（H↔V / D2D）",
+         f"{s0.get('n_swaps', 0):,} "
+         f"({s0.get('n_swaps_hv', 0):,} / {s0.get('n_swaps_d2d', 0):,})",
+         f"{s1.get('n_swaps', 0):,} "
+         f"({s1.get('n_swaps_hv', 0):,} / {s1.get('n_swaps_d2d', 0):,})"],
+        ["D2D 落地 buffer 峰值 / 残留",
+         f"{(s0.get('fifo') or {}).get('d2d_buf_peak', 0)} / "
+         f"{(s0.get('fifo') or {}).get('residual_d2d_buf', 0)}",
+         f"{(s1.get('fifo') or {}).get('d2d_buf_peak', 0)} / "
+         f"{(s1.get('fifo') or {}).get('residual_d2d_buf', 0)}"],
+        ["结束时 FIFO 残留 / 在途 / 源端积压",
+         f"{(s0.get('fifo') or {}).get('residual_xq', 0)} / "
+         f"{s0.get('in_flight', 0)} / {s0.get('backlog', 0)}",
+         f"{(s1.get('fifo') or {}).get('residual_xq', 0)} / "
+         f"{s1.get('in_flight', 0)} / {s1.get('backlog', 0)}"],
+        ["AIMD 升窗 / 降窗 / 拒发",
+         "—（S0 无源端控速）",
+         f"{s1.get('n_aimd_increase', 0):,} / {s1.get('n_aimd_decrease', 0):,} / "
+         f"{s1.get('n_fc_deny', 0):,}"],
+        ["有效并发 / 名义 outstanding",
+         _pct(q0.get("eff_frac", 1)),
+         _pct(q1.get("eff_frac", 1))],
+    ]
+    return _t(["证据", "S0", "S1"], rows)
 
 
 def oc_table(b: dict) -> str:
@@ -1302,6 +1391,87 @@ def write_focus_report(b: dict) -> None:
         plot_group(b, IMG / "stack_group.png")
     fab0 = _fabric_full_txt(b, "s0")
     fab1 = _fabric_full_txt(b, "s1")
+    death = _write_bw_death(b, "s1")
+    death0 = _write_bw_death(b, "s0")
+    q1r, q0r = s1.get("retry") or {}, s0.get("retry") or {}
+    pcrd_gap = q1r.get("n_retry", 0) - s1.get("n_req_resent", 0)
+    death_t = death.get("last_t")
+    death_txt = (
+        f"S1 的组写带宽在 t≈{death_t:,} cycle 掉到接近 0"
+        f"（峰值 {_f(death.get('peak_fc', 0))} flit/cycle @"
+        f" t={death.get('peak_t', 0):,}），之后 "
+        f"{death.get('n_zero_win', 0)} 个滑窗没有 WriteData 上环，"
+        f"停滞检测在 {s1['makespan']:,} cycle 切断。"
+        if death_t is not None else
+        "S1 写带宽在停滞前已经掉到 0。"
+    )
+    swap0 = (s0.get("n_swaps", 0), s0.get("n_swaps_hv", 0),
+             s0.get("n_swaps_d2d", 0))
+    swap1 = (s1.get("n_swaps", 0), s1.get("n_swaps_hv", 0),
+             s1.get("n_swaps_d2d", 0))
+    both_ok = bool(s0.get("completed") and s1.get("completed"))
+    s23_body = (
+        f"""<li><b>SWAP 让交叉方向不必互相等 FIFO。</b>
+下降 WriteData（D2D→纵/横）与上升 Comp/PCrd（纵/横→D2D）在同一
+挂接点互换，各走对方腾出的 hop，不进 FIFO、不加
+{t.get('turn_lat', 5)} cycle 转向。远列 H↔V 转向同样互换。
+S0 SWAP {swap0[0]:,} 次（H↔V {swap0[1]:,} / D2D {swap0[2]:,}），
+S1 {swap1[0]:,} 次（H↔V {swap1[1]:,} / D2D {swap1[2]:,}）。</li>
+<li><b>D2D 落地 buffer 把无界 stall 收成有界队列。</b>
+错过 SWAP 和环 FIFO 的落地 flit 进
+{(s1.get('fifo') or {}).get('d2d_land_depth', 16)} 深的
+(挂接点, 目标环, VC) 队列，下拍再作为 D2D 到达参与 SWAP。
+S1 峰值占用 {(s1.get('fifo') or {}).get('d2d_buf_peak', 0)}，
+残留 {(s1.get('fifo') or {}).get('residual_d2d_buf', 0)}。</li>
+<li><b>retry 环能闭环。</b>
+S1 RetryAck {q1r.get('n_retry', 0):,}、重发
+{s1.get('n_req_resent', 0):,}，未兑现 PCrd {pcrd_gap:,}。
+有效并发 {_pct(q1r.get('eff_frac', 0))}。</li>"""
+        if both_ok else
+        f"""<li><b>触发点在 bottom 纵环的 RSP，不是 top die，也不是 D2D 对分。</b>
+双接口让 D2D 落地可以同时上横环和纵环，纵环 DAT/RSP 瞬时被打满
+（S1 纵环 RSP 瞬时 {_pct(((s1.get('fabric') or {}).get('v') or {}).get('peak_inst_util_by_vc', {}).get('rsp', 0))}）。
+96 个 HA 的 RSP 上环失败合计
+{sum(sum(v.values()) for k, v in (s1.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}
+次，几乎全是 <code>hop_busy</code> / I-tag，说明 HA 要把
+RetryAck、PCrdGrant、Comp 送上纵环时，槽已经被在环流量占住。</li>
+<li><b>CHI retry 环被掐断，outstanding 槽回不来。</b>
+RetryAck {q1r.get('n_retry', 0):,} 次，但 REQ 只重发了
+{s1.get('n_req_resent', 0):,} 次，差 <b>{pcrd_gap:,}</b> 笔：
+PCrdGrant 发不出（或发在网上走不到 core），core 就一直占着
+outstanding。有效并发只剩名义值的 {_pct(q1r.get('eff_frac', 0))}，
+峰值挂起 {q1r.get('max_parked', 0):,} 笔。新 REQ 发不出，
+P-Credit 重发也发不出，写数据在 t≈{death_t or 0:,} 之后为 0。</li>
+<li><b>S1 的 AIMD 没有刹住这场风暴。</b>
+升窗 {s1.get('n_aimd_increase', 0):,} 次、降窗只有
+{s1.get('n_aimd_decrease', 0):,} 次，结束时每核预算都顶在窗口 64。
+S1 把路径上的拥塞等级从本节点失败里减掉，core 自己上环失败不多，
+于是判定“该加窗”；真正挤爆的是 HA 侧 RSP。
+<code>scope=core_only</code> 也不限 HA。窗口上限 64 flit / 64 cycle
+等于每核最多 1 flit/cycle，反而把写数据变慢，retry 风暴有更长时间
+把纵环锁死。S0 没有这个 1 flit/cycle 帽子，在 {s0['makespan']:,}
+cycle 冲完，retry 与重发数量对齐，FIFO 残留 0。</li>
+<li><b>锁死后出不去。</b>
+结束时转向/D2D FIFO 仍坐着 {(s1.get('fifo') or {}).get('residual_xq', 0)} 个 flit，
+在途 {s1.get('in_flight', 0):,}、源端积压 {s1.get('backlog', 0):,}。
+FIFO 深度已经顶满（转向 64、D2D 128），偏转把纵环喂饱，
+HA 更上不去环。连续 {max(80_000, 160 * k_core):,} cycle
+没有任何 flit 交付，停滞检测判定崩溃——不是“慢”，是死锁。</li>"""
+    )
+    s1_item = (
+        f"<b>SWAP + D2D 落地 buffer 解除交叉死锁。</b>"
+        f"S0 SWAP {swap0[0]:,} 次（H↔V {swap0[1]:,}，D2D {swap0[2]:,}）；"
+        f"S1 {swap1[0]:,} 次（H↔V {swap1[1]:,}，D2D {swap1[2]:,}）。"
+        f"下降的 WriteData 与上升的 Comp/PCrd 在 D2D bridge 互换 hop；"
+        f"远列转向在横↔纵挂接点互换。落地 buffer 峰值 "
+        f"{(s1.get('fifo') or {}).get('d2d_buf_peak', 0)}。"
+        if both_ok else
+        f"<b>S1 崩溃是纵环 RSP + retry 环被掐断，不是 AIMD 把源端刹死。</b> "
+        f"{death_txt} AIMD 几乎只升窗（{s1.get('n_aimd_increase', 0):,} vs 降窗 "
+        f"{s1.get('n_aimd_decrease', 0):,}）。锁死链：纵环 RSP 打满 → "
+        f"HA 发不出 PCrd/Comp → {pcrd_gap:,} 笔 retry 没有对应重发 → "
+        f"outstanding 挂死 → 写带宽归零。细节在第 2.3 节。"
+    )
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -1327,8 +1497,9 @@ code {{ font-size: 0.86em; }}
 <h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
 <p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
 挂接点转向 {t.get('turn_lat', 5)} cycle。
-D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环）。
-带宽口径为<b>瞬时带宽</b>（滑窗 flit/cycle，并报单周期峰值）。
+D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环），
+并用 HPCA'22 <b>SWAP</b> 与有界落地 buffer 解交叉死锁。
+带宽口径为<b>瞬时带宽</b>，写带宽单位为 <b>flit/cycle</b>。
 workload：burst <b>{burst} B</b>、stride <b>{stride} B</b>、
 tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
 （每核 {k_core} 笔 WriteNoSnp，共 {n_txn:,} 笔）。
@@ -1362,7 +1533,7 @@ S1 完成 {s1['n_txn_done']:,}/{n_txn:,}，{s1['makespan']:,} cycle，
 retry {q1.get('n_retry', 0):,}。
 {"两个方案都排空，没有活锁、没有停在停滞检测器上。"
  if s0["completed"] and s1["completed"]
- else "有方案没有排空，见下表。"}</li>
+ else death_txt + " 根因见第 2.3 节。"}</li>
 
 <li><b>六个 top die 的写带宽{"均衡" if balanced else "不均衡"}。</b>
 S0 组间完成量 max/min = {_f(g0.get('goodput_max_min'), 2)}，
@@ -1378,13 +1549,15 @@ S1：{fab1}。
 “打满”看最忙那条 CHI VC 的瞬时峰值是否达到该织物有向边数；
 全程平均会把排空尾部算进去，会低估峰值占用。
 D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上环。</li>
+
+<li>{s1_item}</li>
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <div class="def">{scheme_table(b, "mandated")}
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
-（{b['group_series']['s0']['window']} cycle 滑窗）。
+（flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
 六条线若始终缠在一起，说明分组公平；若某条线长期贴底，
 就是这个 die 被饿死。
 S0 瞬时带宽只受 outstanding、ring slot 和 HA 请求 retry 成形；
@@ -1403,6 +1576,7 @@ S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
 {t.get('turn_lat', 5)} cycle。
 D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
 落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
+交叉方向（横↔纵、D2D↔环）走 SWAP，不进 FIFO、不加转向时延。
 纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
 {rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
 <img src="stack_topology.png" alt="bottom die 与挂接点分组">
@@ -1412,7 +1586,10 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 
 <h2>2　按 top die 分组的写带宽</h2>
 <p>一个 top die 的 10 个 AI core 共用一条环、一组 8 个挂接点和 8 条 D2D，
-是不可再往下调度的单位。下表是整次运行的合计；上图是同一指标的时间展开。</p>
+是不可再往下调度的单位。下表是整次运行的合计（flit/cycle）；上图是同一指标的时间展开。
+S0 每 die 平均
+{_f(g0.get('goodput_by_group', {}).get('0', 0))} flit/cycle，
+六 die 合计 {_f(g0.get('goodput_total', 0))} flit/cycle。</p>
 {group_table(b)}
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
@@ -1436,6 +1613,17 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 {fabric_inst_table(b, "s1")}
 <div class="def">点线是该织物单 VC 容量（= 有向边数），虚线是三 VC 合计。
 S0：{fab0}。<br>S1：{fab1}。</div>
+
+<h3>2.3 {"SWAP 与 D2D buffer" if both_ok else "S1 拥塞崩溃的原因"}</h3>
+<p>{"两个方案都排空。下表对照 SWAP / 落地 buffer / retry。"
+   if both_ok else death_txt}
+S0 同期峰值 {_f(death0.get('peak_fc', 0))} flit/cycle（六 die 合计），
+全程平均 {_f(g0.get('goodput_total', 0))} flit/cycle，并在
+{s0['makespan']:,} cycle 排空。</p>
+{collapse_table(b)}
+<div class="def"><ol>
+{s23_body}
+</ol></div>
 
 <h2>3　理论下界</h2>
 {bounds_table(bd)}
