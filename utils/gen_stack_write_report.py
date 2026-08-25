@@ -703,6 +703,36 @@ def scenario_table(b: dict) -> str:
                "Jain<br>（按 die）"], rows)
 
 
+def die0_board_table(b: dict, scheme: str) -> str:
+    """Top die 0: per-core CW / CCW board success and failure."""
+    rows_in = (b.get("die0_board") or {}).get(scheme) or []
+    rows = []
+    tot = {"ok_cw": 0, "ok_ccw": 0, "fail_cw": 0, "fail_ccw": 0}
+    for r in rows_in:
+        ok_cw, ok_ccw = r["ok_cw"], r["ok_ccw"]
+        fcw, fccw = r["fail_cw"], r["fail_ccw"]
+        tot["ok_cw"] += ok_cw
+        tot["ok_ccw"] += ok_ccw
+        tot["fail_cw"] += fcw
+        tot["fail_ccw"] += fccw
+        rows.append([
+            f"core {r['core']}（环位 {r['idx']}）",
+            f"{ok_cw:,}", f"{ok_ccw:,}", f"{ok_cw + ok_ccw:,}",
+            f"{fcw:,}", f"{fccw:,}", f"{fcw + fccw:,}",
+        ])
+    if rows:
+        rows.append([
+            "<b>die 0 合计</b>",
+            f"<b>{tot['ok_cw']:,}</b>", f"<b>{tot['ok_ccw']:,}</b>",
+            f"<b>{tot['ok_cw'] + tot['ok_ccw']:,}</b>",
+            f"<b>{tot['fail_cw']:,}</b>", f"<b>{tot['fail_ccw']:,}</b>",
+            f"<b>{tot['fail_cw'] + tot['fail_ccw']:,}</b>",
+        ])
+    return _t(["die 0 AI core",
+               "上环成功 CW", "上环成功 CCW", "成功合计",
+               "上环失败 CW", "上环失败 CCW", "失败合计"], rows)
+
+
 def group_table(b: dict) -> str:
     rows = []
     # The adaptive schemes set their own limit, so they appear once under
@@ -779,14 +809,15 @@ def setup_table(b: dict) -> str:
          "在途上限：从 REQ 上环占到 Comp 回来。"
          f"最长无拥塞写 RTT 是 { (m.get('rtt') or t.get('rtt') or {}).get('rtt', '—') } cycle"],
         ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
-         "超出后对后续 REQ 回 RetryAck，再发 PCrdGrant 后重传"],
+         "同时最多收这么多 REQ；超出回 RetryAck，再发 PCrdGrant 后重传"],
         ["转向 / D2D FIFO 深度",
          f"{m['fabric']['turn_depth']} / {m['fabric']['d2d_depth']}",
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
-         f"每 core <b>{m['k']}</b> 个写请求，均匀写全部 {t['n_has']} 个 HA",
-         "这是请求总数，不是在途上限；共 "
-         f"{m['k'] * t['n_cores']:,} 笔。需求对称，不均衡来自织物"],
+         f"burst {m.get('burst_len', 128)} B / stride {m.get('stride', 4096)} B / "
+         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 1)}",
+         "二维密铺：每行 stride/burst 笔，tile/stride 行。"
+         f"128 B 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
     ]
     return _t(["项目", "取值", "说明"], rows)
 
@@ -1137,19 +1168,28 @@ def write_focus_report(b: dict) -> None:
     n_txn = mand["n_txn"]
     bd = mand["bounds"]
     oc = m["core_outstanding"]
-    pos = m.get("pos_depth", 16)
+    pos = m.get("pos_depth", 32)
+    wl = b.get("workload") or {}
+    hist = wl.get("ha_hist") or mand.get("ha_hist") or {}
+    k_core = hist.get("per_core_txn") or (n_txn // max(1, t["n_cores"]))
+    burst = wl.get("burst_len", m.get("burst_len", 128))
+    stride = wl.get("stride", m.get("stride", 4096))
+    tile = wl.get("tiling_size", m.get("tiling_size", 65536))
+    n_tiles = wl.get("n_tiles", m.get("n_tiles", 1))
     q0, q1 = s0.get("retry", {}), s1.get("retry", {})
     g0, g1 = s0["group"], s1["group"]
     f0, f1 = s0["fairness"], s1["fairness"]
     peak0 = s0.get("max_core_outstanding", 0)
     binds = peak0 >= oc
     bind_txt = (
-        f"本批次每 core {m['k']} 笔，大于窗口 {oc}，实测峰值占用 {peak0}，"
+        f"本批次每 core {k_core} 笔，大于窗口 {oc}，实测峰值占用 {peak0}，"
         f"<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。"
         if binds else
-        f"本批次每 core {m['k']} 笔，实测峰值占用 {peak0}，"
-        f"<b>{oc} 这个上限本身没有打满</b>——它保证的是再长的往返也不会把 core 饿在等 Comp 上。"
+        f"本批次每 core {k_core} 笔，实测峰值占用 {peak0}，"
+        f"<b>{oc} 这个上限本身没有打满</b>。"
     )
+    balanced = (g0.get("goodput_max_min", 9) <= 1.02
+                and g1.get("goodput_max_min", 9) <= 1.02)
 
     plot_topology(b, IMG / "stack_topology.png")
     plot_binding(b, IMG / "stack_binding.png")
@@ -1181,16 +1221,14 @@ code {{ font-size: 0.86em; }}
 <h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
 <p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
 挂接点转向 {t.get('turn_lat', 5)} cycle。
-每 core 请求数 = <b>{m['k']}</b>（closed batch，共 {n_txn:,} 笔），
-每 core outstanding = <b>{oc}</b>（在途上限），
-每个 HA 跟踪表 <b>{pos}</b> 项，超出回 RetryAck。
-最长无拥塞写 RTT = {rtt.get('rtt')} cycle。</p>
-<div class="def"><b>k 和 outstanding 不是一回事。</b>
-k = {m['k']} 是每个 AI core 这一批要发的写请求总数。
-outstanding = {oc} 是同时能挂在网上的笔数：一笔从 REQ 上环占到 Comp 回来。
-S0 <b>没有源端流控</b>——只要该 core 还有 outstanding 空位、注入口当前 cycle
-ring 上有空 slot，就把下一条 REQ 发出；HA 跟踪表满回 RetryAck，那是完成方反压，不是源端控速。
-S1 在同样的 outstanding + slot 条件之上，再加 AIMD 源端注入预算。</div>
+workload：burst <b>{burst} B</b>、stride <b>{stride} B</b>、
+tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
+（每核 {k_core} 笔 WriteNoSnp，共 {n_txn:,} 笔）。
+地址按 {burst} B 交织到 {t['n_has']} 个 HA，每核覆盖全部 HA
+（每核打到同一 HA 的次数 {hist.get('per_core_lo', '?')}–{hist.get('per_core_hi', '?')}）。
+每 core outstanding = <b>{oc}</b>，每个 HA 最多收 <b>{pos}</b> 个 REQ，超出回 RetryAck。</p>
+<div class="def">S0 <b>没有源端流控</b>——只要 outstanding 有空位、ring 上有 slot 就发。
+S1 再加 AIMD 源端控速。HA 跟踪表满是完成方反压，不是源端控速。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
@@ -1216,11 +1254,13 @@ retry {q1.get('n_retry', 0):,}。
  if s0["completed"] and s1["completed"]
  else "有方案没有排空，见下表。"}</li>
 
-<li><b>按 top die 一组（10 个 AI core）看写带宽随时间的变化。</b>
+<li><b>六个 top die 的写带宽{"均衡" if balanced else "不均衡"}。</b>
 S0 组间完成量 max/min = {_f(g0.get('goodput_max_min'), 2)}，
-组间 Jain {_f(g0.get('jain'))}；
-S1 为 {_f(g1.get('goodput_max_min'), 2)} / {_f(g1.get('jain'))}。
-下图是各 group 写带宽随时间的曲线。</li>
+组间 Jain {_f(g0.get('goodput_jain', g0.get('jain')))}；
+S1 为 {_f(g1.get('goodput_max_min'), 2)} /
+{_f(g1.get('goodput_jain', g1.get('jain')))}。
+下图是各 group 写带宽随时间的曲线；die 0 十个核的上环
+CW / CCW 成败见第 2.1 节（CC = CW，顺时针）。</li>
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
@@ -1257,6 +1297,14 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 是不可再往下调度的单位。下表是整次运行的合计；上图是同一指标的时间展开。</p>
 {group_table(b)}
 
+<h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
+<p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
+失败 = 环 slot 忙或 I-tag 挡住，<b>不含</b> outstanding / AIMD 拒发。</p>
+<h4>S0 无源端流控</h4>
+{die0_board_table(b, "s0")}
+<h4>S1 源端 AIMD 控速</h4>
+{die0_board_table(b, "s1")}
+
 <h2>3　理论下界</h2>
 {bounds_table(bd)}
 <p class="note">S0 效率 {s0.get('eff', 0):.2f}，S1 {s1.get('eff', 0):.2f}
@@ -1264,7 +1312,7 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 
 <h2>4　复现</h2>
 <div class="def">
-<code>python3 utils/dse_stack_write_fair.py --focus --k {m['k']} --oc {oc}</code><br>
+<code>python3 utils/dse_stack_write_fair.py --focus --oc {oc} --pos-depth {pos}</code><br>
 <code>python3 utils/gen_stack_write_report.py</code>
 <br><br>
 仿真 {m.get('wall_s', 0):.0f} s。outstanding = {oc}，HA POS = {pos}。

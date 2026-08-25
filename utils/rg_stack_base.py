@@ -215,6 +215,10 @@ class StackBaseSim:
         self.pass_through: dict[Any, int] = defaultdict(int)
         self.inj_ok_at: dict[Any, int] = defaultdict(int)
         self.inj_fail_at: dict[Any, int] = defaultdict(int)
+        # Top-die ring direction: +1 CW (index+), -1 CCW. Counted only for
+        # AI-core injects (REQ + WriteData). Policy denials are not failures.
+        self.board_ok_dir: dict[tuple[int, int], int] = defaultdict(int)
+        self.board_fail_dir: dict[tuple[int, int], int] = defaultdict(int)
         self._fail_cause = "hop_busy"
         self._deny_cause = "outstanding"
 
@@ -506,9 +510,22 @@ class StackBaseSim:
     def _note_deny(self, node: int, f: Flit) -> None:
         self.board_fail_cause[(node, f.vc)][self._deny_cause] += 1
 
+    def _inject_dir(self, f: Flit) -> int:
+        """CW (+1) or CCW (-1) of the first hop this flit will take."""
+        return self.topo.edge_dir[self._next_edge(f)]
+
+    def _note_core_board(self, f: Flit, *, ok: bool) -> None:
+        if not self._is_core[f.src]:
+            return
+        d = self._inject_dir(f)
+        f.dir = d
+        slot = self.board_ok_dir if ok else self.board_fail_dir
+        slot[(f.src, d)] += 1
+
     def _on_inject(self, f: Flit) -> None:
         self.board_ok_by_src[(f.src, f.vc)] += 1
         self.inj_ok_at[(f.src, f.vc)] += 1
+        self._note_core_board(f, ok=True)
         if f.kind == "wdata":
             self.wr_inject_times[f.src].append(self.t)
         if f.kind != "req" or not self._is_core[f.src]:
@@ -537,6 +554,7 @@ class StackBaseSim:
         self.st["n_board_fail"] += 1
         self.board_fail_cause[(node, f.vc)][self._fail_cause] += 1
         self.inj_fail_at[(node, f.vc)] += 1
+        self._note_core_board(f, ok=False)
 
     def _on_arrive_station(self, f: Flit) -> None:
         return
@@ -1001,6 +1019,21 @@ class StackBaseSim:
         out["board_fail_by_src"] = {
             f"{n}:{vc}": dict(row) for (n, vc), row
             in sorted(self.board_fail_cause.items())}
+        out["board_by_core_dir"] = self.board_dir_report()
+        return out
+
+    def board_dir_report(self) -> dict[str, dict[str, int]]:
+        """Per-core top-die CW/CCW board successes and failures."""
+        out: dict[str, dict[str, int]] = {}
+        for c in self.topo.cores:
+            nd = self.topo.nodes[c]
+            out[str(c)] = {
+                "die": nd.die, "idx": nd.idx,
+                "ok_cw": self.board_ok_dir.get((c, 1), 0),
+                "ok_ccw": self.board_ok_dir.get((c, -1), 0),
+                "fail_cw": self.board_fail_dir.get((c, 1), 0),
+                "fail_ccw": self.board_fail_dir.get((c, -1), 0),
+            }
         return out
 
 

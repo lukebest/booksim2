@@ -714,6 +714,98 @@ class StackTopology:
 # workload
 # ---------------------------------------------------------------------------
 
+# Address-stream parameters. One WriteNoSnp is `burst_len` bytes; consecutive
+# bursts in a row are `burst_len` apart; the next row is `stride` away; a
+# tile is `tiling_size` bytes. Interleave is already wired: HA =
+# (addr / burst_len) mod n_ha, so a dense tile walks every completer.
+BURST_LEN = 128
+STRIDE = 4096
+TILING_SIZE = 64 * 1024
+FLIT_BYTES = 32          # 128 B burst -> 4 WriteData flits
+
+
+def ha_of_addr(topo: StackTopology, addr: int, *,
+               burst_len: int = BURST_LEN) -> int:
+    """Line-interleaved HA map: each burst_len granule is the next HA."""
+    hs = topo.has
+    return hs[(addr // burst_len) % len(hs)]
+
+
+def tiled_addrs(*, burst_len: int = BURST_LEN, stride: int = STRIDE,
+                tiling_size: int = TILING_SIZE, n_tiles: int = 1,
+                base: int = 0) -> list[int]:
+    """2-D dense tile: `tiling_size/stride` rows of `stride/burst_len` bursts."""
+    if (stride % burst_len) or (tiling_size % stride):
+        raise ValueError("tile/stride/burst must divide evenly")
+    out: list[int] = []
+    for tile in range(n_tiles):
+        tile_base = base + tile * tiling_size
+        for row in range(0, tiling_size, stride):
+            for col in range(0, stride, burst_len):
+                out.append(tile_base + row + col)
+    return out
+
+
+def build_tiled_write(topo: StackTopology, *,
+                      burst_len: int = BURST_LEN, stride: int = STRIDE,
+                      tiling_size: int = TILING_SIZE, n_tiles: int = 1,
+                      m_wdata: int | None = None, seed: int = 0,
+                      dies: Sequence[int] | None = None) -> list[Txn]:
+    """Each AI core writes `n_tiles` dense 64 KB tiles.
+
+    Addresses are private per core (`core_rank * n_tiles * tiling_size`) so
+    cores do not alias, but the line-interleaved HA map still sends every
+    core to every HA equally. `seed` is accepted for call-site compatibility
+    and does not change the address stream.
+    """
+    del seed
+    if m_wdata is None:
+        m_wdata = max(1, burst_len // FLIT_BYTES)
+    cs = ([c for c in topo.cores if topo.nodes[c].die in set(dies)]
+          if dies is not None else list(topo.cores))
+    out: list[Txn] = []
+    tid = 0
+    for rank, c in enumerate(cs):
+        base = rank * n_tiles * tiling_size
+        for addr in tiled_addrs(burst_len=burst_len, stride=stride,
+                                tiling_size=tiling_size, n_tiles=n_tiles,
+                                base=base):
+            out.append(Txn(tid, c, ha_of_addr(topo, addr,
+                                              burst_len=burst_len),
+                           1, 0, "write", m_wdata))
+            tid += 1
+    return out
+
+
+def ha_histogram(topo: StackTopology, txns: Sequence[Txn]
+                 ) -> dict[str, Any]:
+    """Per-core and global HA destination counts (interleave check)."""
+    per: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    tot: dict[int, int] = defaultdict(int)
+    for x in txns:
+        per[x.core][x.ha] += 1
+        tot[x.ha] += 1
+    cores = sorted(per)
+    n_ha = len(topo.has)
+    spreads = []
+    for c in cores:
+        vs = [per[c].get(h, 0) for h in topo.has]
+        spreads.append((max(vs) - min(vs), max(vs), min(vs)))
+    gv = [tot.get(h, 0) for h in topo.has]
+    return {
+        "n_ha": n_ha, "n_core": len(cores),
+        "n_txn": len(txns),
+        "per_core_txn": (len(txns) // max(1, len(cores))),
+        "per_core_max_min": max(s[0] for s in spreads) if spreads else 0,
+        "per_core_hi": max(s[1] for s in spreads) if spreads else 0,
+        "per_core_lo": min(s[2] for s in spreads) if spreads else 0,
+        "global_max": max(gv) if gv else 0,
+        "global_min": min(gv) if gv else 0,
+        "covers_all_ha": all(min(per[c].get(h, 0) for h in topo.has) > 0
+                             for c in cores) if cores else False,
+    }
+
+
 def build_uniform_write(topo: StackTopology, *, k: int = 800,
                         m_wdata: int = 4, seed: int = 0,
                         dies: Sequence[int] | None = None) -> list[Txn]:
