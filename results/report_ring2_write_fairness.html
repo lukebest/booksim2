@@ -51,8 +51,14 @@ Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
 <li><b>S1 相对 S0 吞吐 +2.1%</b>，max/min
 1.0008 → 1.0012。
 源端限速略减 RetryAck，帮不上 hop 理想。</li>
-<li><b>§4.3 上环方向见下。</b>黄底 = CW/CCW 比 ≥ 2
-（该侧合计 ≥ 50）。预测写在跑数前，对照见 1.2.1。</li>
+<li><b>完成事务率远低于 λ* = 2/7。</b>S0 / S1 只有理想的约 33–34%；
+含重试的 REQ 上环更高，多的是重发。无限 tracker 也只到约 61%。
+见 4.5。</li>
+<li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
+不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
+它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
+<li><b>把 S1 调到失败比变小，不会把吞吐送到 λ*。</b>
+节点 AIMD 还会误伤这些核。见 5.1。</li>
 </ol>
 </div>
 
@@ -127,11 +133,11 @@ S1 吞吐差 <b>+2.1%</b>。</div>
 <li>C2、C4、C6、C12、C14、C16 两侧都是 mem → 相邻 mem = 2；</li>
 <li>C0、C8、C10、C18 有一侧是非终端 → 相邻 mem = 1。</li>
 </ul>
-<div class="def bad">带宽与相邻 mem 个数 r =
+<div class="def bad">无限 tracker 上带宽与相邻 mem 个数 r =
 <b>0.9972</b>
 （Spearman 0.8528）。
-单平面上这条链没有被 retry 盖住：有限 tracker 几乎不咬
-（重试 0.7735 次/事务）。</div>
+有限 tracker 把这条链盖住：重试 0.7735 次/事务，
+max/min 从 1.1382 收到 1.0008。</div>
 
 <h3>4.3 落到硬件上：上环成功率</h3>
 <p>带宽与上环成功率 r = <b>0.9993</b>
@@ -147,6 +153,41 @@ S1 吞吐差 <b>+2.1%</b>。</div>
 <p><b>S1</b> · S1 拥塞等级 AIMD</p><img src="ring2_wfair_board_dir_s1.png" alt="S1 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr class="imbal"><td>C0</td><td>39984</td><td>33772</td><td>1.18</td><td>21286</td><td>9516</td><td>2.24</td><td>偏</td></tr><tr><td>C2</td><td>38477</td><td>35275</td><td>1.09</td><td>17620</td><td>11814</td><td>1.49</td><td></td></tr><tr><td>C4</td><td>36938</td><td>36827</td><td>1.00</td><td>14697</td><td>14279</td><td>1.03</td><td></td></tr><tr><td>C6</td><td>35256</td><td>38505</td><td>1.09</td><td>11704</td><td>17751</td><td>1.52</td><td></td></tr><tr class="imbal"><td>C8</td><td>33782</td><td>39985</td><td>1.18</td><td>9596</td><td>21263</td><td>2.22</td><td>偏</td></tr><tr><td>C10</td><td>33777</td><td>39983</td><td>1.18</td><td>16542</td><td>12029</td><td>1.38</td><td></td></tr><tr><td>C12</td><td>35278</td><td>38479</td><td>1.09</td><td>14647</td><td>12197</td><td>1.20</td><td></td></tr><tr><td>C14</td><td>36819</td><td>36933</td><td>1.00</td><td>13586</td><td>13327</td><td>1.02</td><td></td></tr><tr><td>C16</td><td>38504</td><td>35257</td><td>1.09</td><td>12653</td><td>14554</td><td>1.15</td><td></td></tr><tr><td>C18</td><td>39985</td><td>33762</td><td>1.18</td><td>12177</td><td>16436</td><td>1.35</td><td></td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S1 上 <b>2/10</b> 个核偏了。</p>
 <p class="note">S1 失败比 ≥ 1.5 的核：C0 失败偏 CW（2.24）；C6 失败偏 CCW（1.52）；C8 失败偏 CCW（2.22）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
 
+<h3>4.3.2 上环失败比大代表什么</h3>
+<p>「失败比」是<b>同一个核两条出边的失败次数比</b>
+<code>max(CW, CCW) / min</code>，不是失败率。
+黄底仍是比 ≥ 2 且该侧合计 ≥ 50。</p>
+<p>S0 各核失败率其实都差不多（27%–29%）。
+大的是方向比：成功比最大 1.13，失败比最大 2.12。
+S0 失败偏的核 C10、C18，
+S1 为 C0、C8。</p>
+<div class="def">
+<b>不会造成 8 个 mem 收写不均。</b>
+地址 interleave 已均衡，本轮 HA 收到的 WriteData
+全部相同（50000 / HA）。
+<b>本轮有限 tracker 下，也不会造成核间写带宽不均</b>
+（S0 max/min = 1.0008）。
+32 表项把十个核一起压住。
+<b>环成为瓶颈时会：</b>无限 tracker 下 max/min = 1.1382，
+带宽与邻 mem 数 r = 0.9972。
+失败比大的核就是邻 mem = 1 的那些核。
+失败比大 = 这一侧出 hop 常被在环 flit 占着，本地尝试打不进去；
+它是位置效应的症状，不是 mem 收包不均的原因。
+本研究是纯写；读的 CompData 走反向同一组热 hop，机制相同。</div>
+<h4>为什么失败比会很大</h4>
+<ol>
+<li>最短路确定。N9 / N19 不接 HA，C10 的近端在 CW（M11），
+C18 在 CCW（M17）。成功次数已经按这个需求偏到约 1.13。</li>
+<li>偏的那一侧正好是全环最热的 hop（0→1、8→7、10→11、18→17），
+各被 14/80 条 (core, HA) 流穿过。</li>
+<li>在环 DAT / RSP 有绝对优先，本地注入只能等空槽。
+热侧是「尝试更多 × 成功率更低」，成功比仍约 1.13，
+失败比被放大到 ≥ 2。两侧都是 mem 的核（如 C4 / C14）失败比 ≈ 1。</li>
+</ol>
+<p>S1 改的是节点总预算，不改最短路，也不改在环优先，
+所以失败比还在，只是换了一批核。</p>
+
+
 <h3>4.4 有限 tracker</h3>
 <div class="def">max/min 从 1.1382 到 1.0008，
 吞吐相对无限 tracker -45.7%。
@@ -157,7 +198,8 @@ S1 吞吐差 <b>+2.1%</b>。</div>
 <p>REQ / RSP / DAT 的有向 hop 各有一份 σ=1 信用，互不占槽。
 一笔事务仍要三条腿都走完，所以事务率受三张平面里最紧的那张限制：
 <code>λ ≤ min(λ_REQ, λ_RSP, λ_DAT)</code>。
-本小节<b>不把三 VC 叠进同一个上下环口</b>。</p>
+本小节<b>不把三 VC 叠进同一个上下环口</b>。
+λ* 是<b>完成事务率</b>，不是含重试的 REQ 上环次数。</p>
 <p>均匀最短路下，热 hop（0→1、8→7、10→11、18→17 及其反向）
 各被 14 条 (core, HA) 流穿过。系数
 DAT = 14·2/8 = 3.50，
@@ -169,12 +211,34 @@ REQ = 14/8 = 1.75。</p>
 每核 WriteData <b>r* = 2·(2/7) = 4/7 ≈ 0.5714</b> flit/cycle，
 全环 <b>R* = 10·4/7 = 40/7 ≈ 5.7143</b> flit/cycle。
 对分（4 条有向 hop）在 λ* 上 DAT/RSP 占用 5/7，打不满；
-先满的是四条热 hop。
-S0 实测 1.9028，约为这条链路理想的
-33.3%
-（有限 tracker）。无限 tracker 参照 3.5017，约为
-61.3%。
-</div>
+先满的是四条热 hop。</div>
+<table><thead><tr><th></th><th>完成 λ</th><th>占 λ*</th><th>含重试的 REQ 上环 / 核</th><th>WriteData 全环吞吐</th><th>重试/事务</th><th>max/min</th></tr></thead><tbody><tr><td>理想 CC</td><td>0.2857</td><td>100%</td><td>0.2857</td><td>5.714</td><td>0</td><td>1</td></tr><tr><td>S0</td><td>0.0951</td><td>33.3%</td><td>0.1687</td><td>1.9028</td><td>0.7735</td><td>1.0008</td></tr><tr><td>S1</td><td>0.0971</td><td>34.0%</td><td>0.1640</td><td>1.9428</td><td>0.6879</td><td>1.0012</td></tr><tr><td>S0 无限 tracker</td><td>0.1751</td><td>61.3%</td><td>0.1751</td><td>3.5017</td><td>0.0</td><td>1.1382</td></tr></tbody></table>
+<p>S0 / S1 的 REQ 上环高于完成 λ，多出来的几乎全是 RetryAck 之后的重发，
+不增加完成事务，还占 REQ / RSP hop。</p>
+<h4>4.5.1 为什么 S0 / S1 到不了 λ*</h4>
+<ol>
+<li><b>有限 tracker 是本轮主因。</b>8 个 HA 各 32 表项，10 核 ×
+128 outstanding 往里灌。
+S0 重试 0.7735 次/事务。理想模型没有 RetryAck / PCrd /
+重发 REQ。去掉 tracker 后吞吐从 1.9028 升到 3.5017，
+完成 λ 从 0.0951 升到 0.1751（仍只占 λ* 的
+61.3%）。</li>
+<li><b>即使环受限也只有约 61%。</b>无缓存 + 在环绝对优先：本地要上环必须
+hop 空着；偏转 flit 再绕一圈（S0 偏转
+122465 次）。
+S0 有空就灌，不是按热 hop 的 2/7 均速注。贪心对撞加上
+HA 抖动 U{4..64}，无限 tracker 的 makespan
+114229 vs 下界
+70000。</li>
+<li><b>S1 不是理想 CC。</b>按节点、按窗口失败次数做 AIMD，
+不按 hop 做 max-min，也不能在环上留槽。
+预算上限 192 flit / 64 拍
+≈ 3 flit/cycle/核，
+高于理想自有流量 3λ* ≈ 0.86。
+它只是略减 Retry（0.6879 vs 0.7735），
+完成 λ 仍是 0.0971。总线 30 拍 &lt; 窗口 64，
+到不了“按热 hop 配额”。</li>
+</ol>
 
 
 
@@ -187,6 +251,28 @@ S0 实测 1.9028，约为这条链路理想的
 本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan 205893）。</p>
 
 <img src="ring2_wfair_s1trace.png" alt="S1 control trace">
+
+<h3>5.1 把 S1 调到失败比变小，吞吐会怎样</h3>
+<p>S1 没有“按方向压失败比”的旋钮，只有节点 AIMD。
+热侧失败多 → 等级高 → 先砍的是已经挤不上去的核。</p>
+<div class="def">官方本轮：
+S1 失败比没有变小
+（最大 2.24 vs S0 的 2.12），
+吞吐 +2.1%，完成 λ 仍远低于 2/7。
+失败比变小不会把核吞吐送到 λ*。
+绝对失败次数下降，多半只是注得更少。</div>
+<p>短探测（不是官方 JSON；有限 tracker 用 K=2000，
+环受限用 K=800、ha_track=0）：</p>
+<table><thead><tr><th>方案</th><th>吞吐</th><th>最大失败比</th><th>重试/事务</th></tr></thead><tbody><tr><td>S0</td><td>1.797</td><td>1.875</td><td>0.983</td></tr><tr><td>S1 spec</td><td>1.789</td><td>1.907</td><td>0.983</td></tr><tr><td>S1 harsh</td><td>1.78</td><td>1.856</td><td>0.983</td></tr><tr><td>S1 gentle</td><td>1.795</td><td>1.974</td><td>0.983</td></tr><tr><td>S1 w=16 harsh</td><td>1.791</td><td>1.88</td><td>0.982</td></tr></tbody></table>
+<p class="note">tracker = 32 时 harsh / gentle / 窗口 16 几乎搬不动
+失败比和吞吐。tracker 仍是瓶颈。</p>
+<table><thead><tr><th>方案（ha_track=0）</th><th>吞吐</th><th>最大失败比</th><th>max/min</th></tr></thead><tbody><tr><td>S0</td><td>3.354</td><td>2.315</td><td>1.196</td></tr><tr><td>S1 spec</td><td>3.26</td><td>2.399</td><td>1.28</td></tr><tr><td>S1 harsh</td><td>2.526</td><td>2.544</td><td>2.057</td></tr><tr><td>S1 gentle</td><td>3.348</td><td>2.244</td><td>1.248</td></tr></tbody></table>
+<p>环受限时 harsh 把吞吐从 3.35 打到 2.53，max/min 从 1.20 坏到 2.06，
+失败比不降反升到 2.54；gentle 失败比略降到 2.24，吞吐几乎不变。
+节点 AIMD 会误伤邻 mem = 1 的核。
+要接近 2/7，需要按热 hop 的配额（或先把 tracker 从 32 松开），
+不是把 S1 的 α/β 拧得更狠。</p>
+
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
