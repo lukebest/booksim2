@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-core write-bandwidth fairness on the bufferless 20-node dual-plane ring.
+"""Per-core write-bandwidth fairness on the bufferless 20-node ring.
 
 Workload: every AI core issues `K` CHI WriteNoSnp transactions to a
 uniform-random memory HA. One transaction is the full four-phase handshake
@@ -26,6 +26,8 @@ S15  max-min fair share over the same bus plus bounded slot reservation.
 S16  receiver-driven grant pacing (Homa-style) over the stock DBIDResp.
 S17  TIMELY: RTT-gradient rate control, paced on REQ.
 S18  DCQCN: RED marks off the completer's request tracker, paced on REQ.
+S19  Swift-like: delay-triggered outstanding window.
+S20  DCTCP-like: tracker-ECN-triggered outstanding window.
 
 Every completer has a finite CHI request tracker (`ha_track`), so one that is
 over-subscribed must answer RetryAck instead of accepting. That is part of the
@@ -60,15 +62,17 @@ if str(_UTILS) not in sys.path:
 
 from rg_ring2_base import Ring2BaseParams, Ring2BaseSim
 from rg_ring2_topo import (
-    CHI_VCS_WRITE, N_NODES, Ring2Topology, Txn, build_hot_write,
-    build_uniform_write, cores, has, hop_count, shortest_dir, write_bounds,
-    write_paths_for_txns,
+    BURST_BYTES, BURST_FLITS, CHI_VCS_WRITE, FLIT_BYTES, N_NODES,
+    Ring2Topology, STRIDE_BYTES, TILE_BYTES, Txn, build_hot_write,
+    build_tiled_write, build_uniform_write, cores, has, hop_count,
+    shortest_dir, write_bounds, write_paths_for_txns,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "ring2_write_fair.json"
-K_PER_CORE = 2_000
-W_FLITS = 4
+K_PER_CORE = 20_000
+N_PLANES_STUDY = 1
+W_FLITS = BURST_FLITS   # 128B burst / 64B flit
 BIN_W = 128
 T_MAX = 4_000_000
 # Two adjacent memory nodes standing in for one clustered memory region. Both
@@ -287,15 +291,79 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 
 CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
-# Every scheme rides the same fabric: shortest-path routing, both planes
-# available and picked by occupancy, one board and one leave port per
-# (node, plane), per-VC boarding queues, and a finite request tracker at every
-# completer. The tracker is part of the baseline, not of one scheme: a real
-# completer has to RetryAck when it runs out of entries, and with the cap at
+# Every scheme rides the same fabric: shortest-path routing, one plane
+# (one bidirectional ring), independent board / leave / eject per CHI VC,
+# per-VC boarding queues, and a finite request tracker at every completer. The
+# tracker is part of the baseline, not of one scheme: a real completer has
+# to RetryAck when it runs out of entries, and with the cap at
 # CORE_OUTSTANDING_WR every scheme below is measured with that pressure on.
+HA_RSP_JIT_LO = 4        # inclusive; each HA RSP / Comp is U{lo..hi}
+HA_RSP_JIT = 64
+# Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
+FC_BUS_LAT = 30
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
+              per_vc_ports=True,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
-              outst_sample=OUTST_SAMPLE)
+              outst_sample=OUTST_SAMPLE,
+              ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
+# Written before the run. Do not edit after seeing results.
+STIMULUS_FORECAST = {
+    "hypothesis": (
+        "单平面、请求量 ×10、DBIDResp/RetryAck/Comp 各抽 U{4..64} 的均匀 tiled 写："
+        "成功上环仍按最短路接近 1:1；"
+        "失败次数比双平面更偏，邻 mem 少的核失败比 ≥ 2；"
+        "S1 两边一起限速，改不了方向比，吞吐低于 S0。"
+    ),
+    "predicted": {
+        "n_planes": 1,
+        "ha_count_spread": 0,
+        "s0_ok_ratio_lt": 1.5,
+        "s0_fail_ratio_ge2_gap_cores": True,
+        "gap_cores": [0, 8, 10, 18],
+        "s1_thr_lt_s0": True,
+        "thr_range": [1.2, 2.2],
+    },
+    "confidence": 0.55,
+    "falsify": (
+        "成功比 ≥ 2，或所有核失败比仍 < 2（与双平面一样），"
+        "或 S1 吞吐不低于 S0"
+    ),
+}
+# Written before the bus_lat=30 re-run. Do not edit after seeing results.
+BUS_LAT_FORECAST = {
+    "hypothesis": (
+        "拥塞总线时延改为 30 拍（控制窗口 64 的一半）后，"
+        "S1 用的是更旧的拥塞等级；上一轮总线=1 时 S1 已几乎等于 S0，"
+        "更晚的反馈再拉开吞吐的空间很小。"
+        "CW/CCW 失败比仍由邻 mem 几何决定，S1 改不了。"
+    ),
+    "predicted": {
+        "s1_thr_delta_pct": [-1.0, 0.5],
+        "s1_max_min": [1.07, 1.12],
+        "fail_imbal_cores": [0, 8, 10, 18],
+        "max_fail_ratio": [1.8, 2.0],
+    },
+    "confidence": 0.7,
+    "falsify": "S1 吞吐相对 S0 掉超过 2%，或失败偏的核/方向翻面",
+}
+# Written before the per-VC-port re-run. Do not edit after seeing results.
+VC_INDEP_FORECAST = {
+    "hypothesis": (
+        "REQ/RSP/DAT 上下环口拆开后，端口不再叠三 VC；"
+        "均等最短路的上限改由最忙 DAT/RSP hop 决定，"
+        "λ*=2/7，全环 WriteData R*=40/7≈5.714。"
+        "S0 仍受在环优先，到不了这条线，但应明显高于共用端口时的 2.67。"
+        "位置效应更明显；S1 按窗口×3 放大预算后仍接近 S0。"
+    ),
+    "predicted": {
+        "s0_thr": [3.5, 5.5],
+        "bound": 70000,
+        "s0_max_min_gt": 1.08,
+        "s1_thr_delta_pct": [-2.0, 1.0],
+    },
+    "confidence": 0.6,
+    "falsify": "S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定",
+}
 
 
 def base_params() -> Ring2BaseParams:
@@ -317,12 +385,15 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
         # accepted is grantable and S16 is S0 under another name.
         kw = {"overcommit": S16_OVERCOMMIT, **kw}
         return Ring2GrantSim(topo, Ring2GrantParams(**kw), seed=seed)
-    if scheme in ("S17", "S18"):
-        from rg_ring2_rate import (Ring2DcqcnSim, Ring2RateParams,
+    if scheme in ("S17", "S18", "S19", "S20"):
+        from rg_ring2_rate import (Ring2DcqcnSim, Ring2DctcpSim,
+                                   Ring2RateParams, Ring2SwiftSim,
                                    Ring2TimelySim)
-        cls = Ring2TimelySim if scheme == "S17" else Ring2DcqcnSim
+        cls = {"S17": Ring2TimelySim, "S18": Ring2DcqcnSim,
+               "S19": Ring2SwiftSim, "S20": Ring2DctcpSim}[scheme]
         return cls(topo, Ring2RateParams(**kw), seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
+    kw = {"bus_lat": FC_BUS_LAT, **kw}
     p = Ring2FcParams(mode="s1" if scheme == "S1" else "s15", **kw)
     return Ring2FcSim(topo, p, seed=seed)
 
@@ -375,6 +446,7 @@ def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
         "n_txn_done": r.get("n_txn_done"), "n_txn_target": r.get("n_txn_target"),
         "n_board_fail": r.get("n_board_fail", 0),
         "n_deflections": r.get("n_deflections", 0),
+        "n_eject_full_deflect": r.get("n_eject_full_deflect", 0),
         "n_inring_blocked": r.get("n_inring_blocked", 0),
         "max_inring_hold": r.get("max_inring_hold", 0),
         "n_itag_raised": r.get("n_itag_raised", 0),
@@ -393,12 +465,86 @@ def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
                           for h, v in (r.get("wr_recv_by_ha") or {}).items()},
         "hop_bw": {"t": hop_xs, "rate": [round(y, 3) for y in hop_ys],
                    "n_hops": len(r.get("hop_starts") or [])},
+        "board_dir": board_dir_from_inj(r.get("inj_by_hop") or {},
+                                        sorted(inj)),
     }
     if "fc" in r:
         out["fc"] = r["fc"]
     if "retry" in r:
         out["retry"] = r["retry"]
     return out
+
+
+def board_dir_from_inj(inj_by_hop: dict[str, dict[str, int]],
+                       cores: Sequence[int]) -> dict[str, dict[str, int]]:
+    """Per-core inject wins/losses split by CW (+1) and CCW (−1)."""
+    out: dict[str, dict[str, int]] = {}
+    for c in cores:
+        cw = inj_by_hop.get(f"{c}:1") or {}
+        ccw = inj_by_hop.get(f"{c}:-1") or {}
+        ok_cw, ok_ccw = int(cw.get("ok", 0)), int(ccw.get("ok", 0))
+        fl_cw, fl_ccw = int(cw.get("fail", 0)), int(ccw.get("fail", 0))
+        out[str(c)] = {
+            "ok_cw": ok_cw, "ok_ccw": ok_ccw,
+            "fail_cw": fl_cw, "fail_ccw": fl_ccw,
+            "ok": ok_cw + ok_ccw, "fail": fl_cw + fl_ccw,
+        }
+    return out
+
+
+def dir_imbalanced(a: int, b: int, *, min_n: int = 50, ratio: float = 2.0
+                   ) -> bool:
+    """True when one direction has at least `ratio` times the other."""
+    if a + b < min_n:
+        return False
+    lo = min(a, b)
+    return True if lo == 0 else max(a, b) / lo >= ratio
+
+
+def _dir_ratio(a: int, b: int) -> float:
+    if a + b <= 0:
+        return 0.0
+    lo = min(a, b)
+    return float("inf") if lo == 0 else max(a, b) / lo
+
+
+def uniform_belief(pats: dict[str, Any]) -> dict[str, Any]:
+    uni = pats.get("uniform") or {}
+    s0u = (uni.get("schemes") or {}).get("S0") or {}
+    s1u = (uni.get("schemes") or {}).get("S1") or {}
+    return {
+        "s0_thr": (s0u.get("fairness") or {}).get("throughput"),
+        "s1_thr": (s1u.get("fairness") or {}).get("throughput"),
+        "s0_max_min": (s0u.get("fairness") or {}).get("max_min"),
+        "s1_max_min": (s1u.get("fairness") or {}).get("max_min"),
+        "s0_board": board_dir_belief(s0u.get("board_dir") or {}),
+        "s1_board": board_dir_belief(s1u.get("board_dir") or {}),
+        "s1_bus_lat": ((s1u.get("fc") or {}).get("bus_lat")),
+    }
+
+
+def board_dir_belief(board_dir: dict[str, dict[str, int]]
+                     ) -> dict[str, Any]:
+    """Summarise CW/CCW imbalance without rewriting the forecast."""
+    ok_imbal, fail_imbal = [], []
+    max_ok, max_fail = 0.0, 0.0
+    for c, r in board_dir.items():
+        ok_r = _dir_ratio(int(r.get("ok_cw", 0)), int(r.get("ok_ccw", 0)))
+        fl_r = _dir_ratio(int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0)))
+        max_ok, max_fail = max(max_ok, ok_r), max(max_fail, fl_r)
+        if dir_imbalanced(int(r.get("ok_cw", 0)), int(r.get("ok_ccw", 0))):
+            ok_imbal.append(int(c))
+        if dir_imbalanced(int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0))):
+            fail_imbal.append(int(c))
+    return {
+        "ok_imbal_cores": sorted(ok_imbal),
+        "fail_imbal_cores": sorted(fail_imbal),
+        "max_ok_ratio": None if max_ok == float("inf") else round(max_ok, 3),
+        "max_fail_ratio": (None if max_fail == float("inf")
+                           else round(max_fail, 3)),
+        "n_ok_imbal": len(ok_imbal),
+        "n_fail_imbal": len(fail_imbal),
+    }
 
 
 def bin_rate(times: Sequence[int], t_max: int, bin_w: int = BIN_W
@@ -495,14 +641,10 @@ def root_cause(topo: Ring2Topology, txns: Sequence[Txn],
 # main
 # ---------------------------------------------------------------------------
 
-# Node 9 and node 19 are not memory. Two readings of that, both measured,
-# because they give materially different answers: either those two nodes are
-# simply not write destinations (the ring still has 10 cores), or they are
-# compute like every other non-memory node (12 cores).
-# Nodes 9 and 19 are neither memory nor AI core. They still sit on the ring
-# and still forward, but they never source or sink a write, so the memory set
-# is the eight remaining odd nodes and the ring is no longer rotationally
-# symmetric about the memory placement.
+# The ring is a closed full ring (19 wraps onto 0). Nodes 9 and 19 sit on
+# that ring and forward, but they are neither memory nor AI core — they
+# never source or sink a write. The memory set is the eight remaining odd
+# nodes, so the role map is no longer rotationally symmetric.
 NON_TERMINAL = (9, 19)
 MEM_NODES = tuple(h for h in has(N_NODES) if h not in NON_TERMINAL)
 CORE_NODES = tuple(cores(N_NODES))
@@ -511,15 +653,16 @@ CORE_NODES = tuple(cores(N_NODES))
 def build_pattern(name: str, *, k: int, W: int, seed: int) -> list[Txn]:
     """The workloads under study.
 
-    `uniform` is the headline one: 10 AI cores writing uniformly to 8 mem.
+    `uniform` is the headline one: 10 AI cores walking a 128B / 4KB / 64KB
+    tiled write whose channel hash already balances the 8 memory nodes.
     `hot` keeps the same roles but funnels every write into one two-node
     memory cluster, which loads the completers far harder for the same
     injection rate. It exists to show that the best outstanding cap is a
     property of the workload, not of the fabric.
     """
     if name == "uniform":
-        return build_uniform_write(k=k, m_wdata=W, seed=seed, mem=MEM_NODES,
-                                   core_set=CORE_NODES)
+        return build_tiled_write(k=k, m_wdata=W, mem=MEM_NODES,
+                                 core_set=CORE_NODES)
     if name == "hot":
         return build_hot_write(k=k, m_wdata=W, hot_has=HOT_HAS, n=N_NODES)
     raise ValueError(f"unknown pattern {name}")
@@ -536,7 +679,9 @@ def _rate_knobs() -> dict[str, Any]:
     return {k: getattr(p, k) for k in
             ("pace_max", "pace_min", "pace_burst", "t_low_mult",
              "t_high_mult", "timely_beta", "delta", "hai_n", "k_min", "k_max",
-             "p_max", "g", "alpha_timer", "rate_timer", "fast_recovery")}
+             "p_max", "g", "alpha_timer", "rate_timer", "fast_recovery",
+             "win_init", "win_min", "win_max", "swift_t_mult",
+             "swift_rtt_floor", "swift_beta", "swift_ai", "dctcp_g")}
 
 
 def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
@@ -671,6 +816,308 @@ def retry_study(topo: Ring2Topology, *, k: int, W: int, seed: int,
     return out
 
 
+# ---------------------------------------------------------------------------
+# Congestion reproduction: ost collapse (ex1) and innocent-flow block (ex2)
+# ---------------------------------------------------------------------------
+# Forecasts are part of the source. Do not edit them after a run; the
+# belief_update field is what records the surprise.
+
+REPRO_BLOCKERS = (2, 4, 6, 8)
+REPRO_BLOCK_HA = 11
+REPRO_VICTIM = 10
+REPRO_VICTIM_HA = 15
+REPRO_CONTROL = 16
+REPRO_CONTROL_HA = 17
+
+REPRO_FORECAST = {
+    "ex1": {
+        "hypothesis": (
+            "oc=16: used≈eff, flat near the cap, retry=0, like silicon ost=600. "
+            "oc=128/256: used high and jittery, park large, eff pinned ~23, "
+            "write-BW tracks eff and sits below the oc=16 run."
+        ),
+        "predicted": {
+            "oc16_retry": 0.0,
+            "oc16_eff_used_gap": "<0.5",
+            "oc128_eff": [20, 26],
+            "oc128_used": [80, 120],
+            "oc128_thr_lt_oc16": True,
+            "bw_eff_corr": [0.6, 1.0],
+        },
+        "confidence": 0.85,
+        "falsify": "oc=128 eff near the cap, or BW does not track eff",
+    },
+    "ex2": {
+        "hypothesis": (
+            "CW blockers 2/4/6/8→M11 occupy hop 10→11, so victim C10→M15 "
+            "loses inject slots; control C16→M17 shares no hop and barely moves. "
+            "Unlimited tracker puts more WriteData on the ring (higher eject "
+            "deflect at M11); tracker=32 adds REQ/Retry circling instead."
+        ),
+        "predicted": {
+            "victim_drop_pct": [30, 90],
+            "control_drop_pct": [-5, 15],
+            "eject_defl_m11_with_blockers": ">>0",
+        },
+        "confidence": 0.65,
+        "falsify": "victim throughput unchanged, or control drops as much as victim",
+    },
+}
+
+
+def _directed_hops(src: int, dst: int, n: int = N_NODES) -> list[tuple[int, int]]:
+    d = shortest_dir(src, dst, n)
+    hops, i = [], src
+    for _ in range(hop_count(src, dst, d, n)):
+        nxt = (i + d) % n
+        hops.append((i, nxt))
+        i = nxt
+    return hops
+
+
+def build_blocker_write(*, k: int, W: int, blockers: bool) -> list[Txn]:
+    """Victim and control always; the four CW writers to M11 are optional."""
+    out: list[Txn] = []
+    tid = 0
+    roles = [(REPRO_VICTIM, REPRO_VICTIM_HA),
+             (REPRO_CONTROL, REPRO_CONTROL_HA)]
+    if blockers:
+        roles = [(c, REPRO_BLOCK_HA) for c in REPRO_BLOCKERS] + roles
+    for core, ha in roles:
+        for _ in range(k):
+            out.append(Txn(tid, core, ha, 1, 0, "write", W))
+            tid += 1
+    return out
+
+
+def _role_row(r: dict[str, Any], core: int, k: int, W: int) -> dict[str, Any]:
+    inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+    ts = inj.get(core) or []
+    finish = max(ts) if ts else 0
+    fails = r.get("board_fail_by_src") or {}
+    dat = fails.get(f"{core}:dat") or {}
+    req = fails.get(f"{core}:req") or {}
+    hop = (r.get("inj_by_hop") or {}).get(f"{core}:1") or {}
+    n_wr = k * W
+    return {
+        "core": core,
+        "n_wr": len(ts),
+        "finish": finish,
+        "bw_run": round(n_wr / finish, 5) if finish else 0.0,
+        "hop_busy_dat": int(dat.get("hop_busy", 0)),
+        "hop_busy_req": int(req.get("hop_busy", 0)),
+        "ok_dat": int(dat.get("ok", 0)),
+        "inj_ok": int(hop.get("ok", 0)),
+        "inj_fail": int(hop.get("fail", 0)),
+    }
+
+
+def _ost_series(q: dict[str, Any]) -> dict[str, Any]:
+    tr = q.get("ost_trace") or {}
+    t = tr.get("t") or []
+    used, park, hol, eff = (tr.get(k) or [] for k in
+                            ("used", "park", "hol", "eff"))
+    mean = []
+    for row in (used, park, hol, eff):
+        mean.append([round(sum(xs) / max(1, len(xs)), 3) for xs in row])
+    return {
+        "t": t,
+        "cores": tr.get("cores") or [],
+        "used": used, "park": park, "hol": hol, "eff": eff,
+        "used_mean": mean[0], "park_mean": mean[1],
+        "hol_mean": mean[2], "eff_mean": mean[3],
+    }
+
+
+def _bw_eff_corr(wr_t: Sequence[int], ost_t: Sequence[int],
+                 ost_eff: Sequence[float], bin_w: int, t_max: int) -> float:
+    xs, rate = bin_rate(wr_t, t_max, bin_w)
+    if len(xs) < 4 or not ost_t:
+        return 0.0
+    # Align each BW bin to the last ost sample at or before the bin centre.
+    aligned = []
+    j = 0
+    for x in xs:
+        mid = x + bin_w // 2
+        while j + 1 < len(ost_t) and ost_t[j + 1] <= mid:
+            j += 1
+        aligned.append(ost_eff[j] if ost_eff else 0.0)
+    # Drop the empty tail after the last write.
+    last = max((i for i, y in enumerate(rate) if y > 0), default=0)
+    return round(pearson(rate[:last + 1], aligned[:last + 1]), 4)
+
+
+def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
+               seed: int, k: int, W: int, cfg: dict[str, Any],
+               bin_w: int) -> dict[str, Any]:
+    r = run_scheme(scheme, topo, txns, seed=seed, cfg=cfg, quiet=True)
+    q = r.get("retry") or {}
+    inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+    all_wr = [t for ts in inj.values() for t in ts]
+    f = fairness_stats(inj, r["makespan"] or 1, k * W)
+    tr = _ost_series(q)
+    row = {
+        "scheme": scheme,
+        "core_outstanding": cfg.get("core_outstanding"),
+        "ha_track": cfg.get("ha_track", RETRY_TRACK),
+        "inorder_retire": bool(cfg.get("inorder_retire")),
+        "makespan": r.get("makespan"),
+        "completed": r.get("completed"),
+        "throughput": f.get("throughput", 0.0),
+        "retry_per_txn": q.get("retry_per_txn", 0.0),
+        "ooo_frac": q.get("ooo_frac", 0.0),
+        "max_min": f.get("max_min", 0.0),
+        "outst_eff": q.get("outst_eff_mean", 0.0),
+        "outst_used": q.get("outst_used_mean", 0.0),
+        "outst_park": q.get("outst_park_mean", 0.0),
+        "outst_hol": q.get("outst_hol_mean", 0.0),
+        "max_hol_hold": q.get("max_hol_hold", 0),
+        "n_deflections": r.get("n_deflections", 0),
+        "n_eject_full_deflect": r.get("n_eject_full_deflect", 0),
+        "wr_binned": {"t": [], "rate": []},
+        "ost": tr,
+        "bw_eff_corr": 0.0,
+        "wall_secs": r.get("wall_secs"),
+    }
+    if all_wr:
+        xs, ys = bin_rate(all_wr, r["makespan"] or 1, bin_w)
+        row["wr_binned"] = {"t": xs, "rate": [round(y, 4) for y in ys]}
+        row["bw_eff_corr"] = _bw_eff_corr(
+            all_wr, tr["t"], tr["eff_mean"], bin_w, r["makespan"] or 1)
+    return row
+
+
+def _blocker_point(topo: Ring2Topology, txns: Sequence[Txn], *,
+                   seed: int, k: int, W: int, cfg: dict[str, Any],
+                   tag: str) -> dict[str, Any]:
+    r = run_scheme("S0", topo, txns, seed=seed, cfg=cfg, quiet=True)
+    defl = r.get("n_eject_defl_by_dst") or {}
+    victim = _role_row(r, REPRO_VICTIM, k, W)
+    control = _role_row(r, REPRO_CONTROL, k, W)
+    print(f"    {tag} mk={r['makespan']} "
+          f"V.bw={victim['bw_run']:.3f} C.bw={control['bw_run']:.3f} "
+          f"defl={r.get('n_deflections', 0)} "
+          f"eject@{REPRO_BLOCK_HA}={defl.get(str(REPRO_BLOCK_HA), 0)}",
+          flush=True)
+    return {
+        "tag": tag,
+        "ha_track": cfg.get("ha_track"),
+        "core_outstanding": cfg.get("core_outstanding"),
+        "makespan": r.get("makespan"),
+        "completed": r.get("completed"),
+        "n_deflections": r.get("n_deflections", 0),
+        "n_eject_full_deflect": r.get("n_eject_full_deflect", 0),
+        "n_eject_defl_hot": int(defl.get(str(REPRO_BLOCK_HA), 0)),
+        "n_retry": (r.get("retry") or {}).get("n_retry", 0),
+        "victim": victim,
+        "control": control,
+        "wall_secs": r.get("wall_secs"),
+    }
+
+
+def congestion_repro(topo: Ring2Topology, *, k: int, W: int, seed: int
+                     ) -> dict[str, Any]:
+    """Reproduce the two over-injection stories with traces, not just means.
+
+    Example 1 is the same uniform write as the retry study, but this time the
+    outstanding samples are kept as a series so bandwidth can be overlaid on
+    effective ost the way the silicon plots do. Example 2 is a three-role
+    pattern that the closed-batch uniform/hot mixes cannot isolate.
+    """
+    bin_w = 32
+    oc_points = (16, 128, 256)
+    out: dict[str, Any] = {
+        "meta": {
+            "K": k, "W": W, "seed": seed, "ha_track": RETRY_TRACK,
+            "outst_sample": OUTST_SAMPLE, "bin_w": bin_w,
+            "oc_points": list(oc_points),
+            "blockers": list(REPRO_BLOCKERS),
+            "block_ha": REPRO_BLOCK_HA,
+            "victim": REPRO_VICTIM, "victim_ha": REPRO_VICTIM_HA,
+            "control": REPRO_CONTROL, "control_ha": REPRO_CONTROL_HA,
+            "victim_hops": _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA),
+            "control_hops": _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA),
+            "blocker_hops": {
+                str(c): _directed_hops(c, REPRO_BLOCK_HA)
+                for c in REPRO_BLOCKERS
+            },
+            "forecast": REPRO_FORECAST,
+        },
+        "ost": [],
+        "blocker": [],
+    }
+    shared = {REPRO_VICTIM_HA: _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA)[:1]}
+    out["meta"]["shared_hop"] = shared[REPRO_VICTIM_HA]
+    # Geometry pin: every blocker must ride the victim's first hop; control
+    # must not. If this ever fails the experiment is measuring the wrong thing.
+    v0 = tuple(out["meta"]["victim_hops"][0])
+    assert all(v0 in hops for hops in out["meta"]["blocker_hops"].values()), \
+        out["meta"]["blocker_hops"]
+    assert v0 not in out["meta"]["control_hops"], out["meta"]["control_hops"]
+
+    txns = build_pattern("uniform", k=k, W=W, seed=seed)
+    print(f"\n  [repro:ex1] outstanding traces, ha_track={RETRY_TRACK}",
+          flush=True)
+    for oc in oc_points:
+        row = _ost_point(
+            "S0", topo, txns, seed=seed, k=k, W=W, bin_w=bin_w,
+            cfg={"core_outstanding": oc, "ha_track": RETRY_TRACK,
+                 "outst_sample": OUTST_SAMPLE, "outst_trace": True})
+        out["ost"].append(row)
+        _say(f"repro outst={oc}", row)
+        print(f"      bw~eff r={row['bw_eff_corr']}", flush=True)
+    row = _ost_point(
+        "S0", topo, txns, seed=seed, k=k, W=W, bin_w=bin_w,
+        cfg={"core_outstanding": 128, "ha_track": RETRY_TRACK,
+             "inorder_retire": True, "outst_sample": OUTST_SAMPLE,
+             "outst_trace": True})
+    row["tag"] = "inorder"
+    out["ost"].append(row)
+    _say("repro outst=128 inorder", row)
+
+    print("\n  [repro:ex2] innocent-flow vs circling blockers", flush=True)
+    cfg0 = {"core_outstanding": CORE_OUTSTANDING_WR, "ha_track": RETRY_TRACK,
+            "outst_sample": 0}
+    solo = build_blocker_write(k=k, W=W, blockers=False)
+    both = build_blocker_write(k=k, W=W, blockers=True)
+    out["blocker"].append(_blocker_point(
+        topo, solo, seed=seed, k=k, W=W, cfg=cfg0, tag="solo"))
+    out["blocker"].append(_blocker_point(
+        topo, both, seed=seed, k=k, W=W,
+        cfg={**cfg0, "ha_track": 0}, tag="blockers_track0"))
+    out["blocker"].append(_blocker_point(
+        topo, both, seed=seed, k=k, W=W, cfg=cfg0, tag="blockers_track32"))
+
+    by_oc = {r["core_outstanding"]: r for r in out["ost"]
+             if not r.get("tag")}
+    lo, hi = by_oc[16], by_oc[128]
+    by_tag = {r["tag"]: r for r in out["blocker"]}
+    v0 = by_tag["solo"]["victim"]["bw_run"]
+    c0 = by_tag["solo"]["control"]["bw_run"]
+    v32 = by_tag["blockers_track32"]["victim"]["bw_run"]
+    c32 = by_tag["blockers_track32"]["control"]["bw_run"]
+    out["belief_update"] = {
+        "ex1": {
+            "oc16_retry": lo["retry_per_txn"],
+            "oc16_eff": lo["outst_eff"], "oc16_used": lo["outst_used"],
+            "oc128_retry": hi["retry_per_txn"],
+            "oc128_eff": hi["outst_eff"], "oc128_used": hi["outst_used"],
+            "oc128_thr_lt_oc16": hi["throughput"] < lo["throughput"],
+            "bw_eff_corr_16": lo["bw_eff_corr"],
+            "bw_eff_corr_128": hi["bw_eff_corr"],
+        },
+        "ex2": {
+            "victim_drop_pct": round(100.0 * (v32 - v0) / max(1e-9, v0), 1),
+            "control_drop_pct": round(100.0 * (c32 - c0) / max(1e-9, c0), 1),
+            "eject_defl_m11_track32": by_tag["blockers_track32"][
+                "n_eject_defl_hot"],
+            "eject_defl_m11_track0": by_tag["blockers_track0"][
+                "n_eject_defl_hot"],
+        },
+    }
+    return out
+
+
 def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
                seeds: Sequence[int], schemes: Sequence[str]
                ) -> list[dict[str, Any]]:
@@ -708,7 +1155,8 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
     txns = build_pattern(pattern, k=k, W=W, seed=seed)
     flits_per_core = k * W
     vp = write_paths_for_txns(topo, txns, strategy="least_occupied")
-    bounds = write_bounds(topo, vp, m_req=M_REQ, m_rsp=M_RSP, m_wdata=W)
+    bounds = write_bounds(topo, vp, m_req=M_REQ, m_rsp=M_RSP, m_wdata=W,
+                          merge_port_vcs=not FABRIC.get("per_vc_ports"))
     print(f"\n[{pattern}] K={k} W={W} txns={len(txns)} "
           f"wdata/core={flits_per_core} bound={bounds['bound']}", flush=True)
 
@@ -852,8 +1300,9 @@ def main() -> None:
     ap.add_argument("--W", type=int, default=W_FLITS)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--quick", action="store_true", help="K=200 smoke run")
-    ap.add_argument("--schemes", default="S0,S1,S15,S16")
+    ap.add_argument("--schemes", default="S0,S1")
     ap.add_argument("--patterns", default="uniform")
+    ap.add_argument("--n-planes", type=int, default=N_PLANES_STUDY)
     ap.add_argument("--seeds", default="",
                     help="extra seeds for the S0/S15 robustness sweep")
     ap.add_argument("--sweep", action="store_true",
@@ -862,7 +1311,11 @@ def main() -> None:
                     help="finite completer tracker: sweep the outstanding cap")
     ap.add_argument("--retry-k", type=int, default=RETRY_K,
                     help="batch size for the retry sweeps")
+    ap.add_argument("--repro", action="store_true",
+                    help="ost time-series + innocent-flow blocker experiment")
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--merge", action="store_true",
+                    help="add --schemes into an existing JSON; do not replace")
     args = ap.parse_args()
 
     k = 200 if args.quick else args.k
@@ -870,8 +1323,57 @@ def main() -> None:
     schemes = [s for s in args.schemes.split(",") if s]
     patterns = [s for s in args.patterns.split(",") if s]
 
-    topo = Ring2Topology(vcs=CHI_VCS_WRITE)
+    topo = Ring2Topology(vcs=CHI_VCS_WRITE, n_planes=args.n_planes)
     t0 = time.perf_counter()
+    if args.merge:
+        out = Path(args.out)
+        if not out.exists():
+            raise SystemExit(f"--merge needs an existing {out}")
+        payload = json.loads(out.read_text())
+        old_k = payload.get("meta", {}).get("K", k)
+        if not args.quick and old_k != k:
+            raise SystemExit(f"--merge K={k} != existing K={old_k}")
+        bin_w = payload.get("meta", {}).get("bin_w", bin_w)
+        for pattern in patterns:
+            pat = payload.setdefault("patterns", {}).setdefault(pattern, {})
+            if "schemes" not in pat:
+                raise SystemExit(f"--merge: no existing pattern {pattern}")
+            txns = build_pattern(pattern, k=old_k, W=args.W, seed=args.seed)
+            flits = pat.get("flits_per_core") or old_k * args.W
+            print(f"\n[merge {pattern}] K={old_k} + {schemes}", flush=True)
+            for scheme in schemes:
+                r = run_scheme(scheme, topo, txns, seed=args.seed)
+                pat["schemes"][scheme] = digest(
+                    r, flits_per_core=flits, bin_w=bin_w)
+            _report(pat)
+        payload["meta"]["schemes"] = sorted(
+            set(payload["meta"].get("schemes") or []) | set(schemes),
+            key=lambda s: (len(s), s))
+        payload["meta"]["bus_lat"] = FC_BUS_LAT
+        payload["meta"]["bus_lat_forecast"] = BUS_LAT_FORECAST
+        payload["meta"]["belief_update"] = uniform_belief(
+            payload.get("patterns") or {})
+        payload["meta"]["generated_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        payload["wall_secs"] = round(time.perf_counter() - t0, 1)
+        out.write_text(json.dumps(payload, indent=1))
+        print(f"\nmerged {out}  {payload['wall_secs']}s")
+        return
+    if args.repro:
+        out = Path(args.out)
+        if not out.exists():
+            raise SystemExit(f"--repro needs an existing {out}")
+        payload = json.loads(out.read_text())
+        rk = 100 if args.quick else args.retry_k
+        print(f"\n[repro] K={rk} W={args.W} seed={args.seed}", flush=True)
+        payload["congestion_repro"] = congestion_repro(
+            topo, k=rk, W=args.W, seed=args.seed)
+        payload["meta"]["generated_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        payload["wall_secs"] = round(time.perf_counter() - t0, 1)
+        out.write_text(json.dumps(payload, indent=1))
+        print(f"\nrepro -> {out}  {payload['wall_secs']}s")
+        return
     out_pats = {
         p: run_pattern(p, topo, k=k, W=args.W, seed=args.seed, bin_w=bin_w,
                        schemes=schemes, sweep_s1=args.sweep,
@@ -901,6 +1403,15 @@ def main() -> None:
             "t_inj": bp.t_inj, "per_vc_srcq": bp.per_vc_srcq,
             "core_outstanding": bp.core_outstanding,
             "ha_track": bp.ha_track, "s16_overcommit": S16_OVERCOMMIT,
+            "ha_rsp_jit_lo": bp.ha_rsp_jit_lo,
+            "ha_rsp_jit": bp.ha_rsp_jit,
+            "bus_lat": FC_BUS_LAT,
+            "bus_lat_forecast": BUS_LAT_FORECAST,
+            "per_vc_ports": bp.per_vc_ports,
+            "vc_indep_forecast": VC_INDEP_FORECAST,
+            "flit_b": FLIT_BYTES, "burst_b": BURST_BYTES,
+            "stride_b": STRIDE_BYTES, "tile_b": TILE_BYTES,
+            "stimulus_forecast": STIMULUS_FORECAST,
             "m_req": M_REQ, "m_rsp": M_RSP,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         },
@@ -909,17 +1420,27 @@ def main() -> None:
     }
     if retry_out is not None:
         payload["retry_study"] = retry_out
+    payload["meta"]["belief_update"] = uniform_belief(out_pats)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Keep an existing retry study when this run did not redo it, so the two
-    # halves of the report can be regenerated independently.
-    if retry_out is None and out.exists():
+    # Keep an existing retry / repro only when the fabric matches.
+    # A 1-plane / new-jitter run must not inherit dual-plane leftovers.
+    old_payload = None
+    if out.exists():
         try:
-            old = json.loads(out.read_text()).get("retry_study")
+            old_payload = json.loads(out.read_text())
         except (ValueError, OSError):
-            old = None
-        if old is not None:
-            payload["retry_study"] = old
+            old_payload = None
+    old_meta = (old_payload or {}).get("meta") or {}
+    same_fabric = all(
+        old_meta.get(k) == payload["meta"].get(k)
+        for k in ("n_planes", "K", "W", "ha_rsp_jit", "ha_rsp_jit_lo",
+                  "per_vc_ports"))
+    if retry_out is None and same_fabric and old_payload:
+        if old_payload.get("retry_study") is not None:
+            payload["retry_study"] = old_payload["retry_study"]
+    if same_fabric and old_payload and old_payload.get("congestion_repro"):
+        payload["congestion_repro"] = old_payload["congestion_repro"]
     out.write_text(json.dumps(payload, indent=1))
     print(f"\nwrote {out}  {payload['wall_secs']}s")
     for pat in out_pats.values():

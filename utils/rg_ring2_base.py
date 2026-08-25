@@ -88,11 +88,21 @@ class Ring2BaseParams:
     t_xfer: int = 4               # failed leaves -> E-tag
     eject_bw: int = 1             # PE drain per (node, plane) per cycle
     t_ha_service: int = 0         # cycles HA waits before emitting responses
+    # Inclusive bounds of a per-RSP uniform delay at the completer.
+    # `ha_rsp_jit == 0` = use `t_ha_service` only. Drawn from
+    # (seed, txn, kind, seq) so two schemes that accept the same
+    # transaction see the same memory latency. Default lo=0 keeps
+    # older U{0..hi} callers unchanged.
+    ha_rsp_jit_lo: int = 0
+    ha_rsp_jit: int = 0
     # One boarding queue per CHI VC instead of one per (node, plane). Required
     # by WriteNoSnp: a core's REQ flits held back by the outstanding cap would
     # otherwise sit in front of the WriteData that has to drain to release it.
     # The board port stays single — VC queues take turns round-robin.
     per_vc_srcq: bool = False
+    # Independent board / leave / eject per CHI VC. Hops are already
+    # per-VC; this stops REQ / RSP / DAT from sharing the 1-flit ports.
+    per_vc_ports: bool = False
     plane_sel: PlaneSel = "least_occupied"
     # Aligned across S0/S1/S2/S3: max in-flight reads per AI core
     # (request injected, last response not yet PE-drained). 0 = unlimited.
@@ -124,6 +134,9 @@ class Ring2BaseParams:
     # Sample the outstanding / parked / head-of-line occupancy every N
     # cycles. 0 = off, which is what keeps a plain run untouched.
     outst_sample: int = 0
+    # Keep the per-sample series, not just the time integrals. Off by
+    # default: a closed-batch run at sample=16 is thousands of rows.
+    outst_trace: bool = False
 
 
 @dataclass
@@ -158,6 +171,8 @@ class Ring2BaseSim:
         self.topo = topo
         self.p = params or Ring2BaseParams()
         self.rng = random.Random(seed)
+        self._seed = seed
+        self._ha_rsp_seq: dict[int, int] = defaultdict(int)
         self.t = 0
         self.n = topo.n
         self.n_planes = topo.n_planes
@@ -280,6 +295,9 @@ class Ring2BaseSim:
         self._park_area: dict[int, int] = defaultdict(int)
         self._hol_area: dict[int, int] = defaultdict(int)
         self._n_samples = 0
+        self.n_eject_defl_by_dst: dict[int, int] = defaultdict(int)
+        self.ost_trace: dict[str, Any] = {
+            "t": [], "cores": [], "used": [], "park": [], "hol": [], "eff": []}
         self.st["n_retry"] = 0
         self.st["n_pcrd"] = 0
         self.st["max_ha_used"] = 0
@@ -492,8 +510,12 @@ class Ring2BaseSim:
             cap += self.p.resv_ej
         return cap
 
+    def _ej_key(self, f: Flit) -> Any:
+        return ((f.dst, f.plane, f.vc) if self.p.per_vc_ports
+                else (f.dst, f.plane))
+
     def _try_eject(self, f: Flit) -> bool:
-        key = (f.dst, f.plane)
+        key = self._ej_key(f)
         q = self.ejectq[key]
         cap = self.p.eject_depth
         if len(q) < cap:
@@ -538,6 +560,44 @@ class Ring2BaseSim:
     def _inject_keys(self) -> list:
         """Source queues to visit this cycle. Default: set order."""
         return list(self.active_src)
+
+    def _finish_board(self, node: int, plane: PlaneId, key: Any,
+                      qkeys: Sequence[Any], qk: Any, f: Flit, t: int) -> None:
+        starve_key = (node, plane, f.vc) if self.p.per_vc_ports else key
+        if self._itag_blocks(f, node):
+            self._fail_cause = "itag"
+        elif not self._can_board(f.plane, f.dir, f.idx, f.vc):
+            self._fail_cause = "hop_busy"
+        else:
+            self._fail_cause = ""
+        if self._fail_cause:
+            self._on_board_fail(node, f)
+            self.inj_starve[starve_key] += 1
+            self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
+                                            self.inj_starve[starve_key])
+            if self.inj_starve[starve_key] >= self.p.t_inj and \
+                    self._should_raise_itag(node, f):
+                rk = (f.plane, f.dir, f.vc)
+                if node not in self.i_tag[rk]:
+                    self.i_tag[rk].add(node)
+                    self.st["n_itag_raised"] += 1
+            return
+        q = self._q(qk)
+        if f is q[0]:
+            q.popleft()
+        else:
+            q.remove(f)
+        self._admit(qk)
+        self.vc_rr[key] += 1
+        if self._src_idle_all(qkeys):
+            self.active_src.discard(key)
+        self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
+        self.inj_starve[starve_key] = 0
+        f.t_inject = t
+        self.st["n_injected"] += 1
+        self._note_board(f, ok=True)
+        self._on_inject(f)
+        self._launch(f, inring=False)
 
     def _select_inject_flit(self, node: int, plane: PlaneId, q) -> Flit | None:
         """Which boarding-queue flit tries the inject port. Default: FIFO head."""
@@ -645,11 +705,14 @@ class Ring2BaseSim:
             if f.target > 0:
                 self._launch(f, inring=True)
                 continue
-            leave_req[(f.dst, f.plane)].append(f)
+            if self.p.per_vc_ports:
+                leave_req[(f.dst, f.plane, f.vc)].append(f)
+            else:
+                leave_req[(f.dst, f.plane)].append(f)
 
-        # at most one leave per (node, plane): RR across the two dirs
+        # at most one leave per (node, plane), or per VC when split
         for key, reqs in leave_req.items():
-            node, plane = key
+            node, plane = key[0], key[1]
             order = self._leave_order(node, plane, reqs)
             ejected = False
             for f in order:
@@ -658,11 +721,12 @@ class Ring2BaseSim:
                     self._on_arrive_station(f)
                 else:
                     self.st["n_eject_full_deflect"] += 1
+                    self.n_eject_defl_by_dst[node] += 1
                     self._deflect(f)
 
         self._release_ready_resps()
 
-        # local injection: one flit per (node, plane) if the slot is free
+        # local injection: one flit per (node, plane), or per VC when split
         self._pre_inject()
         for key in self._inject_keys():
             node, plane = key
@@ -675,7 +739,25 @@ class Ring2BaseSim:
                 self.st["n_admit_stall"] += 1
             if not any(self._q(qk) for qk in qkeys):
                 self.inj_starve[key] = 0
+                if self.p.per_vc_ports:
+                    for qk in qkeys:
+                        self.inj_starve[qk] = 0
                 self.active_src.discard(key)
+                continue
+            if self.p.per_vc_ports:
+                # One board port per CHI VC: REQ / RSP / DAT do not share.
+                for cand in qkeys:
+                    q = self._q(cand)
+                    if not q:
+                        continue
+                    cf = self._select_inject_flit(node, plane, q)
+                    if cf is None:
+                        continue
+                    if not self._may_inject(node, plane, cf):
+                        self._note_deny(node, cf)
+                        self.i_tag[(cf.plane, cf.dir, cf.vc)].discard(node)
+                        continue
+                    self._finish_board(node, plane, key, qkeys, cand, cf, t)
                 continue
             # One board port: the VC queues take turns, and a queue whose head
             # a policy refuses hands the port to the next VC instead of
@@ -707,40 +789,7 @@ class Ring2BaseSim:
                 self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
                 self.inj_starve[key] = 0
                 continue
-            if self._itag_blocks(f, node):
-                self._fail_cause = "itag"
-            elif not self._can_board(f.plane, f.dir, f.idx, f.vc):
-                self._fail_cause = "hop_busy"
-            else:
-                self._fail_cause = ""
-            if self._fail_cause:
-                self._on_board_fail(node, f)
-                self.inj_starve[key] += 1
-                self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
-                                                self.inj_starve[key])
-                if self.inj_starve[key] >= self.p.t_inj and \
-                        self._should_raise_itag(node, f):
-                    rk = (f.plane, f.dir, f.vc)
-                    if node not in self.i_tag[rk]:
-                        self.i_tag[rk].add(node)
-                        self.st["n_itag_raised"] += 1
-                continue
-            q = self._q(qk)
-            if f is q[0]:
-                q.popleft()
-            else:
-                q.remove(f)
-            self._admit(qk)
-            self.vc_rr[key] += 1
-            if self._src_idle_all(qkeys):
-                self.active_src.discard(key)
-            self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
-            self.inj_starve[key] = 0
-            f.t_inject = t
-            self.st["n_injected"] += 1
-            self._note_board(f, ok=True)
-            self._on_inject(f)
-            self._launch(f, inring=False)
+            self._finish_board(node, plane, key, qkeys, qk, f, t)
 
         # PE drains the per-plane eject queue
         for key in list(self.active_ej):
@@ -776,10 +825,45 @@ class Ring2BaseSim:
             self._outst_area[c] += v
             self._park_area[c] += len(self.parked[c])
             self._hol_area[c] += len(self.done_seq[c])
+        if not self.p.outst_trace:
+            return
+        if not self.ost_trace["cores"]:
+            self.ost_trace["cores"] = list(self.topo.cores)
+        used, park, hol, eff = [], [], [], []
+        for c in self.ost_trace["cores"]:
+            u = int(self.core_outst.get(c, 0))
+            p = len(self.parked[c])
+            h = len(self.done_seq[c])
+            used.append(u)
+            park.append(p)
+            hol.append(h)
+            eff.append(max(0, u - p - h))
+        self.ost_trace["t"].append(self.t)
+        self.ost_trace["used"].append(used)
+        self.ost_trace["park"].append(park)
+        self.ost_trace["hol"].append(hol)
+        self.ost_trace["eff"].append(eff)
 
     def _on_arrive_station(self, f: Flit) -> None:
         """Flit has entered the eject queue; occupancy already charged."""
         return
+
+    def _ha_delay(self, txn: Txn, kind: str) -> int:
+        """Completer think time before this RSP is offered to the ring.
+
+        `ha_rsp_jit == 0` keeps the old constant `t_ha_service`. Otherwise
+        each (txn, kind, occurrence) draws U{lo..hi} from its own stream, so
+        a scheme that only changes *when* a request is accepted does not also
+        change *how long* the memory takes.
+        """
+        hi = self.p.ha_rsp_jit
+        if hi <= 0:
+            return self.p.t_ha_service
+        lo = min(max(0, self.p.ha_rsp_jit_lo), hi)
+        n = self._ha_rsp_seq[txn.txn_id]
+        self._ha_rsp_seq[txn.txn_id] = n + 1
+        rng = random.Random(f"{self._seed}:{txn.txn_id}:{kind}:{n}")
+        return rng.randint(lo, hi)
 
     def _on_req_at_completer(self, txn: Txn) -> None:
         """Completer decides when to grant the write buffer.
@@ -789,7 +873,7 @@ class Ring2BaseSim:
         arrival; a receiver-driven scheme overrides this to pace the grant.
         """
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+                         self.t + self._ha_delay(txn, "dbid"))
 
     # -- request tracker: accept, or send the requester away ----------------
 
@@ -828,7 +912,7 @@ class Ring2BaseSim:
         self.parked[txn.core].add(txn.txn_id)
         self.pcrd_q[txn.ha].append(txn)
         self._emit_write(txn, "retry", txn.ha, txn.core, 1,
-                         self.t + self.p.t_ha_service)
+                         self.t + self._ha_delay(txn, "retry"))
         self._pump_pcrd(txn.ha)
 
     def _release_track(self, ha: int) -> None:
@@ -891,7 +975,7 @@ class Ring2BaseSim:
             self.wdata_left[f.txn_id] = left
             if left == 0:
                 self._emit_write(txn, "comp", txn.ha, txn.core, 1,
-                                 self.t + self.p.t_ha_service)
+                                 self.t + self._ha_delay(txn, "comp"))
                 self._on_write_data_complete(txn)
                 self._release_track(txn.ha)
         else:                                   # Comp: the txn retires
@@ -996,6 +1080,10 @@ class Ring2BaseSim:
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
             out["retry"] = self.retry_summary()
+            if self.n_eject_defl_by_dst:
+                out["n_eject_defl_by_dst"] = {
+                    str(k): v for k, v in
+                    sorted(self.n_eject_defl_by_dst.items())}
         return out
 
     # -- retry / reordering / effective outstanding --------------------------
@@ -1045,7 +1133,7 @@ class Ring2BaseSim:
                 (self._outst_area[c] - self._park_area[c]
                  - self._hol_area[c]) / ns, 2)
         n_cores = max(1, len(eff))
-        return {
+        out = {
             "ha_track": self.p.ha_track,
             "inorder_retire": self.p.inorder_retire,
             "core_outstanding": self.p.core_outstanding,
@@ -1068,6 +1156,9 @@ class Ring2BaseSim:
             "outst_park_mean": round(sum(park.values()) / n_cores, 2),
             "outst_hol_mean": round(sum(hol.values()) / n_cores, 2),
         }
+        if self.p.outst_trace and self.ost_trace["t"]:
+            out["ost_trace"] = self.ost_trace
+        return out
 
     # -- write-path introspection -------------------------------------------
 

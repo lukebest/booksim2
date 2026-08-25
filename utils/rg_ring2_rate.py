@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""S17 / S18: rate-based congestion control over the bufferless ring.
+"""S17–S20: sender-driven congestion control over the bufferless ring.
+
+S17 / S18 pace REQ boardings (rate). S19 / S20 cap in-flight transactions
+(window). The two axes share signals and only the actuator changes.
 
 S15 and S16 both act on *who may use a slot*. The datacentre-transport
 literature attacks the same problem from the other end: leave arbitration
@@ -32,12 +35,16 @@ That makes S18 cheaper than real DCQCN in two ways: the mark needs one bit
 on a `DBIDResp` the protocol already sends, and no CNP packet is needed at
 all, because the marked response is itself travelling to the source.
 
-Both schemes actuate the same way: a leaky bucket in front of the REQ
-boarding queue. Pacing REQs is the right lever because it is REQ arrivals
-that overrun the tracker, and because WriteData cannot move ahead of its
-grant anyway -- slowing requests slows data by construction. The outstanding
-cap is left alone, so what the sweep measures is how much *effective*
-outstanding a rate controller recovers out of the same nominal budget.
+S17 / S18 actuate a leaky bucket in front of the REQ boarding queue.
+S19 / S20 actuate the outstanding window instead: the same signals, a
+count of in-flight transactions. Pacing REQs and shrinking the window
+both slow new issues; they differ in burstiness (a window can dump its
+whole count the moment a slot frees, a rate cannot).
+
+The static outstanding cap stays as a hard ceiling. Thresholds are
+fabric-scale, not paper-scale: unloaded RTT is ~20 cycles and the useful
+operating point sits near 150, so a datacentre `T_high = 4·minRTT` starves
+this ring.
 """
 
 from __future__ import annotations
@@ -128,7 +135,55 @@ class DcqcnKnobs:
 
 
 @dataclass
-class Ring2RateParams(Ring2BaseParams, RateKnobs, TimelyKnobs, DcqcnKnobs):
+class WindowKnobs:
+    """Actuator for the window-based counterparts of S17 / S18.
+
+    A window is a count of in-flight transactions, the same unit as
+    `core_outstanding`. The static cap stays as a hard ceiling; the
+    controller only ever subtracts. Starting near 16 is the U-curve peak
+    on this fabric: smaller does not cover RTT, larger parks slots.
+    """
+
+    win_init: float = 16.0
+    # Below ~8 the window no longer covers this fabric's useful RTT
+    # (~150 cycles, BDP ≈ 16-24 txns). 4 is the left cliff of the U-curve.
+    win_min: float = 8.0
+    win_max: float = 128.0
+
+
+@dataclass
+class SwiftKnobs:
+    """Swift-shaped delay window, thresholds moved to fabric scale.
+
+    The paper targets a microsecond standing queue. Here the useful RTT is
+    ~8-12× the unloaded one (completer service, not a network queue), so
+    the single target is a multiple of minRTT, same correction TIMELY got.
+    """
+
+    # Target = mult × max(fabric minRTT, floor). The floor is the whole
+    # adaptation: a lucky 3-cycle adjacent-hop sample must not become the
+    # base, or the controller spends the run in multiplicative decrease.
+    swift_t_mult: float = 8.0
+    swift_rtt_floor: float = 20.0
+    swift_beta: float = 0.4
+    swift_ai: float = 1.0
+
+
+@dataclass
+class DctcpKnobs:
+    """DCTCP-shaped window on the same tracker marks as S18.
+
+    Additive increase is per unmarked DBIDResp, in window units. The RED
+    curve is inherited from DcqcnKnobs so the two ECN schemes see the
+    same congestion signal and only the actuator differs.
+    """
+
+    dctcp_g: float = 1.0 / 16
+
+
+@dataclass
+class Ring2RateParams(Ring2BaseParams, RateKnobs, TimelyKnobs, DcqcnKnobs,
+                     WindowKnobs, SwiftKnobs, DctcpKnobs):
     """One params object; each scheme reads only the knobs it owns."""
 
 
@@ -403,3 +458,186 @@ class Ring2DcqcnSim(DcqcnMixin, Ring2BaseSim):
                  seed: int = 0) -> None:
         super().__init__(topo, params or Ring2RateParams(), seed=seed)
         self._dcqcn_init()
+
+
+# ---------------------------------------------------------------------------
+# Window actuator (S19 Swift, S20 DCTCP)
+# ---------------------------------------------------------------------------
+
+class WindowMixin:
+    """Per-core outstanding window. The static cap remains the ceiling."""
+
+    mode = "window"
+
+    def _win_init(self) -> None:
+        p = self.p                             # type: ignore[attr-defined]
+        self.win: dict[int, float] = defaultdict(lambda: p.win_init)
+        self.win_area: dict[int, float] = defaultdict(float)
+        self.rtt_min: dict[int, float] = {}
+        self.rtt_last: dict[int, float] = {}
+        self.n_sample: dict[int, int] = defaultdict(int)
+        self.st["n_win_down"] = 0              # type: ignore[attr-defined]
+        self.st["n_win_up"] = 0                # type: ignore[attr-defined]
+        self.st["n_win_deny"] = 0              # type: ignore[attr-defined]
+
+    def _win_clamp(self, w: float) -> float:
+        p = self.p                             # type: ignore[attr-defined]
+        hi = p.win_max
+        if p.core_outstanding > 0:
+            hi = min(hi, float(p.core_outstanding))
+        return max(p.win_min, min(hi, w))
+
+    def _outst_full(self, core: int) -> bool:
+        # Retried REQs never reach here (`_may_inject` lets them through).
+        if super()._outst_full(core):          # type: ignore[misc]
+            return True
+        if self.core_outst[core] >= int(self.win[core]):  # type: ignore[attr-defined]
+            self.st["n_win_deny"] += 1         # type: ignore[attr-defined]
+            return True
+        return False
+
+    def _ctrl_issue(self) -> None:
+        super()._ctrl_issue()                  # type: ignore[misc]
+        for c in self.topo.cores:              # type: ignore[attr-defined]
+            self.win_area[c] += self.win[c]
+
+    def _note_rtt(self, core: int, rtt: int) -> None:
+        self.n_sample[core] += 1
+        self.rtt_last[core] = float(rtt)
+        prev = self.rtt_min.get(core)
+        if prev is None or rtt < prev:
+            self.rtt_min[core] = float(rtt)
+
+    def _on_dbid_at_core(self, txn: Txn) -> None:
+        t0 = self.req_inject_t.get(txn.txn_id)  # type: ignore[attr-defined]
+        if t0 is not None:
+            self._note_rtt(txn.core, self.t - t0)  # type: ignore[attr-defined]
+        self._on_win_sample(txn)
+
+    def _on_win_sample(self, txn: Txn) -> None:
+        return
+
+    def fc_summary(self) -> dict[str, Any]:
+        cs = self.topo.cores                   # type: ignore[attr-defined]
+        span = max(1, self.t)                  # type: ignore[attr-defined]
+        wm = [self.win_area[c] / span for c in cs]
+        return {
+            "mode": self.mode,
+            "actuator": "outstanding_window",
+            "bus_posts": 0, "bus_bits": 0,
+            "n_win_deny": self.st.get("n_win_deny", 0),
+            "n_win_down": self.st.get("n_win_down", 0),
+            "n_win_up": self.st.get("n_win_up", 0),
+            "win_final": {str(c): round(self.win[c], 2) for c in cs},
+            "win_mean": {str(c): round(self.win_area[c] / span, 2)
+                         for c in cs},
+            "win_mean_all": round(sum(wm) / max(1, len(wm)), 2),
+            "rtt_min": {str(c): self.rtt_min.get(c, 0.0) for c in cs},
+        }
+
+
+class SwiftMixin(WindowMixin):
+    """Delay-based window: Swift's rule, fabric-scale target."""
+
+    mode = "s19"
+
+    def _swift_base(self) -> float:
+        """One ring, one base RTT. Per-core minima just record luck."""
+        p = self.p
+        seen = [v for v in self.rtt_min.values() if v]
+        mn = min(seen) if seen else p.swift_rtt_floor
+        return max(p.swift_rtt_floor, mn)
+
+    def _on_win_sample(self, txn: Txn) -> None:
+        p = self.p
+        c = txn.core
+        rtt = self.rtt_last.get(c) or 0.0
+        target = p.swift_t_mult * self._swift_base()
+        w = self.win[c]
+        if rtt <= target:
+            w += p.swift_ai / max(w, 1.0)
+            self.st["n_win_up"] += 1
+        else:
+            w *= 1.0 - p.swift_beta * min(1.0, (rtt - target) / rtt)
+            self.st["n_win_down"] += 1
+        self.win[c] = self._win_clamp(w)
+
+
+class Ring2SwiftSim(SwiftMixin, Ring2BaseSim):
+    """S19: sender-driven, window-based, delay-triggered."""
+
+    def __init__(self, topo: Ring2Topology,
+                 params: Ring2RateParams | None = None, *,
+                 seed: int = 0) -> None:
+        super().__init__(topo, params or Ring2RateParams(), seed=seed)
+        self._win_init()
+
+
+class DctcpMixin(WindowMixin):
+    """Window + tracker ECN. Same mark as S18, DCTCP's window update."""
+
+    mode = "s20"
+
+    def _dctcp_init(self) -> None:
+        self._win_init()
+        self.alpha: dict[int, float] = defaultdict(float)
+        # One multiplicative cut per mark epoch, matching S18: a RetryAck
+        # and the DBIDResp that eventually accepts the same transaction
+        # would otherwise halve the window twice for one congestion event.
+        self.marked: dict[int, bool] = defaultdict(bool)
+        self.st["n_mark"] = 0
+
+    def _mark_prob(self, used: int) -> float:
+        cap = self.p.ha_track
+        if cap <= 0:
+            return 0.0
+        lo, hi = self.p.k_min * cap, self.p.k_max * cap
+        if used <= lo:
+            return 0.0
+        if used >= hi:
+            return self.p.p_max
+        return self.p.p_max * (used - lo) / max(1e-9, hi - lo)
+
+    def _on_win_sample(self, txn: Txn) -> None:
+        used = self.acc_used.get(txn.txn_id, 0)
+        marked = self.rng.random() < self._mark_prob(used)
+        self._apply_dctcp(txn.core, marked)
+
+    def _on_retry_at_core(self, txn: Txn) -> None:
+        super()._on_retry_at_core(txn)
+        self._apply_dctcp(txn.core, True)
+
+    def _apply_dctcp(self, core: int, marked: bool) -> None:
+        g = self.p.dctcp_g
+        if marked:
+            self.st["n_mark"] += 1
+            if self.marked[core]:
+                return
+            self.marked[core] = True
+            self.alpha[core] = (1.0 - g) * self.alpha[core] + g
+            self.win[core] = self._win_clamp(
+                self.win[core] * (1.0 - self.alpha[core] / 2.0))
+            self.st["n_win_down"] += 1
+        else:
+            self.marked[core] = False
+            self.alpha[core] = (1.0 - g) * self.alpha[core]
+            self.win[core] = self._win_clamp(
+                self.win[core] + 1.0 / max(self.win[core], 1.0))
+            self.st["n_win_up"] += 1
+
+    def fc_summary(self) -> dict[str, Any]:
+        out = super().fc_summary()
+        out["n_mark"] = self.st.get("n_mark", 0)
+        out["alpha_final"] = {str(c): round(self.alpha[c], 5)
+                              for c in self.topo.cores}
+        return out
+
+
+class Ring2DctcpSim(DctcpMixin, Ring2BaseSim):
+    """S20: sender-driven, window-based, tracker-ECN-triggered."""
+
+    def __init__(self, topo: Ring2Topology,
+                 params: Ring2RateParams | None = None, *,
+                 seed: int = 0) -> None:
+        super().__init__(topo, params or Ring2RateParams(), seed=seed)
+        self._dctcp_init()

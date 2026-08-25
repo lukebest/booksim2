@@ -612,6 +612,54 @@ def build_hot_write(*, k: int = 100, m_wdata: int = 4,
     return out
 
 
+# Write stimulus used by the fairness report: 128B bursts, 4KB stride,
+# 64KB tiles. One CHI WriteData flit is one 64B beat, so a burst is 2 flits.
+FLIT_BYTES = 64
+BURST_BYTES = 128
+STRIDE_BYTES = 4096
+TILE_BYTES = 65536
+BURST_FLITS = BURST_BYTES // FLIT_BYTES
+
+
+def interleave_ha(addr: int, mem: Sequence[int]) -> int:
+    """4KB-grain 8-way interleave, offset by the core so cores do not lockstep.
+
+    `(addr // 128) % 8` aliases: 4096/128 = 32 ≡ 0 (mod 8). Mapping on the
+    4KB line index does not. Adding the core high bits (`addr >> 20`) keeps
+    the ten address streams from landing on the same HA in the same step.
+    """
+    line = addr // STRIDE_BYTES
+    core = addr >> 20
+    return mem[(line + core) % len(mem)]
+
+
+def build_tiled_write(*, k: int = 100, m_wdata: int = BURST_FLITS,
+                      n: int = N_NODES, mem: Sequence[int] | None = None,
+                      core_set: Sequence[int] | None = None) -> list[Txn]:
+    """Per-core tiled write: burst 128B, stride 4KB, tile 64KB.
+
+    Each core has its own address space (`core << 20`) so ten cores do not
+    lockstep onto the same HA. Within a core the walk is
+
+        addr = tile * 64KB + (i % 16) * 4KB
+
+    and `interleave_ha` spreads those lines across `mem`.
+    """
+    cs = list(core_set) if core_set is not None else cores(n)
+    hs = list(mem) if mem is not None else has(n)
+    lines = TILE_BYTES // STRIDE_BYTES
+    out: list[Txn] = []
+    tid = 0
+    for c in cs:
+        for i in range(k):
+            tile, line = divmod(i, lines)
+            addr = (c << 20) + tile * TILE_BYTES + line * STRIDE_BYTES
+            out.append(Txn(tid, c, interleave_ha(addr, hs), 1, 0,
+                           "write", m_wdata))
+            tid += 1
+    return out
+
+
 def paths_for_txns(topo: Ring2Topology, txns: Sequence[Txn], *,
                    strategy: PlaneSel = "static_hash"
                    ) -> tuple[list[Ring2Path], list[Ring2Path]]:
@@ -655,13 +703,14 @@ def write_paths_for_txns(topo: Ring2Topology, txns: Sequence[Txn], *,
 
 def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
                  m_req: int = 1, m_rsp: int = 2, m_wdata: int = 4,
-                 t_ha: int = 0) -> dict[str, Any]:
+                 t_ha: int = 0, merge_port_vcs: bool = True) -> dict[str, Any]:
     """Lower bounds on makespan for a closed WriteNoSnp batch.
 
     Independent CHI VCs mean the hop-occupancy floor is the *max* over VCs,
-    not the sum. Inject / leave ports are still one per (node, plane), so the
-    port floor merges every VC. `LB_txn` is a two-round-trip serial chain:
-    REQ → DBIDResp → WriteData → Comp.
+    not the sum. When `merge_port_vcs` the inject / leave floor still stacks
+    every VC onto one (node, plane) port; when false each VC has its own
+    port and `port_lb` is the max over (kind, node, vc). `LB_txn` is a
+    two-round-trip serial chain: REQ → DBIDResp → WriteData → Comp.
     """
     sig = topo.sigma
     mult = {"req": m_req, "rsp": m_rsp, "dat": m_wdata}
@@ -685,7 +734,9 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
         b, l = topo.port_load(paths, m)
         for d in (b, l):
             for key, val in d.items():
-                port_merged[(key[0], key[1])] += val   # (kind, node)
+                pk = ((key[0], key[1]) if merge_port_vcs
+                      else (key[0], key[1], vc))
+                port_merged[pk] += val
     link_lb = max(link_by_vc.values()) if link_by_vc else 0
     port_lb = math.ceil(_max(port_merged) / n_planes) * sig
 
@@ -717,6 +768,7 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
         "link_by_vc": link_by_vc, "cut_by_vc": cut_by_vc,
         "link_lb": link_lb, "port_lb": port_lb, "cut_lb": cut_lb,
         "txn_lb": txn_lb, "bound": bound,
+        "merge_port_vcs": merge_port_vcs,
         "n_txn": len(vc_paths.get("req") or []),
         "n_vc": topo.n_vc, "hop_bw_cap": topo.hop_bw_cap,
         "m_req": m_req, "m_rsp": m_rsp, "m_wdata": m_wdata,
