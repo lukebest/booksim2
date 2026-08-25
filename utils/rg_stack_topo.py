@@ -28,8 +28,12 @@ ring length.
 
     8 x 18 = 144 = 96 HA + 48 attach.
 
-An attach point is a node on **both** its horizontal ring and its column's
-vertical ring. It is simultaneously the D2D landing point and the turn node.
+An attach point sits at the crossing of one horizontal ring and its
+column's vertical ring. The bottom-side D2D bridge there has **two
+independent interfaces**: one taps the horizontal ring, the other taps
+the vertical ring of that column. D2D landing onto H, D2D landing onto V,
+and an H↔V turn are three separate ports; they share only the outgoing
+ring hop (R1), not a FIFO or a boarding slot.
 
 Attach grouping
 ---------------
@@ -370,8 +374,10 @@ class StackTopology:
                     u, v = self.top(d, i), self.top(d, j)
                     self._link(u, v, lat, p, ("top", d, p))
                     self._link(v, u, lat, p, ("top", d, p))
-        # D2D: bridge <-> attach, both ways. The crossing is one physical
-        # link shared by both top-die planes, so it is plane-agnostic.
+        # D2D: top-die bridge <-> bottom landing, both ways. The SerDes is
+        # one physical link shared by both top-die planes. The landing then
+        # has two ring interfaces (H and V) that the datapath treats as
+        # independent boarding ports; those are not extra graph edges.
         for d in range(self.n_die):
             for j, idx in enumerate(TOP_BRIDGES):
                 u, v = self.top(d, idx), self.bridge_landing(d, idx)

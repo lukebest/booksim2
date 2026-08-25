@@ -5,6 +5,11 @@
   "note": "264 nodes = 6x20 + 96 HA + 48 attach; 8x18=144"
  },
  {
+  "name": "bottom_die_latencies_are_4_6_5",
+  "ok": true,
+  "note": "h=4 v=6 turn=5; longest write RTT 413 (fwd 58, rev 147)"
+ },
+ {
   "name": "topo_v_ring_layout",
   "ok": true,
   "note": "attach vpos = [1,2,8,9,15,16] in every column"
@@ -26,8 +31,8 @@
  },
  {
   "name": "topo_routes_cross_d2d_once",
-  "ok": true,
-  "note": "every core->HA route crosses the die boundary exactly once"
+  "ok": false,
+  "note": "lat: 3 D2D crossings"
  },
  {
   "name": "topo_bound_route_uses_the_bound_bridge",
@@ -46,13 +51,13 @@
  },
  {
   "name": "topo_binding_costs_no_capacity",
-  "ok": true,
-  "note": "mandated routing bound 676->440 better than free routing, mean hops 13.52->16.75"
+  "ok": false,
+  "note": "bound routing 603 not better than free lat 537"
  },
  {
   "name": "topo_h_and_v_are_both_load_bearing",
-  "ok": true,
-  "note": "H peak 294 vs V peak 466: horizontal rings carry real load (5712 flit-hops) but vertical still binds"
+  "ok": false,
+  "note": "expected the vertical rings to still bind"
  },
  {
   "name": "write_four_phase_conservation",
@@ -62,12 +67,12 @@
  {
   "name": "no_flit_lost_at_turn_or_d2d",
   "ok": true,
-  "note": "14,906 turns, nothing stranded"
+  "note": "13,266 turns, nothing stranded"
  },
  {
   "name": "makespan_ge_bound",
   "ok": true,
-  "note": "makespan 700 >= bound 524"
+  "note": "makespan 1162 >= bound 603"
  },
  {
   "name": "links_stay_bufferless",
@@ -77,7 +82,12 @@
  {
   "name": "fifo_occupancy_bounded",
   "ok": true,
-  "note": "turn peak 16/16, d2d peak 7/32 over 181+95 FIFOs"
+  "note": "turn peak 16/16, d2d peak 29/32 over 60+251 FIFOs"
+ },
+ {
+  "name": "d2d_landing_has_two_ring_interfaces",
+  "ok": true,
+  "note": "D2D land H=24 V=24; D2D peak inst 32 flit/cycle"
  },
  {
   "name": "fabric_util_matches_capacity_model",
@@ -86,13 +96,13 @@
  },
  {
   "name": "turn_fifo_depth_is_a_real_requirement",
-  "ok": true,
-  "note": "depth 4 livelocks (168 txns done, FIFO pinned at 4/4) while depth 64 drains in 2,700 cycles"
+  "ok": false,
+  "note": "depth 4 no longer livelocks; the depth requirement has changed"
  },
  {
   "name": "lower_concurrency_also_lowers_the_buffer_requirement",
-  "ok": true,
-  "note": "at turn depth 24: oc=3 drains in 2,834 cycles, oc=5 does not (475 txns) -- less concurrency, less buffer"
+  "ok": false,
+  "note": "oc=5 now drains at depth 24; the coupling has changed"
  },
  {
   "name": "s16_unbounded_equals_s0",
@@ -107,42 +117,42 @@
  {
   "name": "s1_bus_never_uses_the_noc",
   "ok": true,
-  "note": "2,376 posts, 14,256 bits, mean 73.8 controlled nodes per source"
+  "note": "3,960 posts, 23,760 bits, mean 80.8 controlled nodes per source"
  },
  {
   "name": "s17_latch_is_bounded_and_off_by_default",
   "ok": true,
-  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 1,695 yields"
+  "note": "patience=0 -> 0 latch; patience=2 -> latch 1, 252 yields"
  },
  {
   "name": "s17_gain_is_real_but_immaterial",
   "ok": true,
-  "note": "mean Jain 0.97796 -> at best 0.98176 (+0.00380), worst-case max/min unchanged at 2.08: real but immaterial"
+  "note": "mean Jain 0.99928 -> at best 0.99951 (+0.00023), worst-case max/min unchanged at 1.14: real but immaterial"
  },
  {
-  "name": "lower_outstanding_wins_on_both_axes",
+  "name": "rtt_window_drains_on_every_seed",
   "ok": true,
-  "note": "oc 600->5: mean Jain 0.90557 -> 0.97955 and mean makespan 20607 -> 2236 (both better, zero hardware)"
+  "note": "oc=413 HA POS=16: 3/3 seeds drained, mean Jain 0.98331"
  },
  {
   "name": "baseline_unfairness_is_structural_not_random",
-  "ok": true,
-  "note": "max/min 1.74-2.11 across 3 seeds; die 3 beats die 5 by 1.40x on the 3-seed mean"
+  "ok": false,
+  "note": "expected a real spread, got [1.2121, 1.1765, 1.1765]"
  },
  {
-  "name": "flow_control_cannot_fix_an_over_concurrency_collapse",
+  "name": "rtt_window_and_ha_retry_do_not_collapse",
   "ok": true,
-  "note": "S0/S1/S16/S17 all collapse at oc=600; capping at 5 is what fixes it"
+  "note": "s0 2249c retry=1418; s1 2208c retry=1422"
  },
  {
-  "name": "collapse_needs_sustained_load",
+  "name": "ha_retry_fires_when_the_tracker_fills",
   "ok": true,
-  "note": "oc=600: k=6 completes in 412, k=50 collapses (824 txns done)"
+  "note": "pos=4: 816 bounces, eff/nom 0.596, still drained"
  },
  {
   "name": "horizontal_ring_assignment_changes_the_collapse_point",
   "ok": true,
-  "note": "identical bound 2112, yet at oc=6 split survives 2/3 seeds and stack only 1/3"
+  "note": "identical bound 1308; both drain 3/3 seeds at oc=6"
  },
  {
   "name": "binding_follows_the_mod4_rule",
@@ -152,31 +162,36 @@
  {
   "name": "retry_costs_bandwidth_and_parks_outstanding",
   "ok": true,
-  "note": "pos=4: 302 bounces, 302 re-sends, effective concurrency 0.761 of nominal, parked 189 cycles on average"
+  "note": "pos=4: 339 bounces, 339 re-sends, effective concurrency 0.758 of nominal, parked 273 cycles on average"
  },
  {
-  "name": "shallow_completer_tracker_is_involuntary_admission_control",
+  "name": "batch_larger_than_outstanding_does_not_hol_block_retry",
   "ok": true,
-  "note": "unlimited: 824/3000 done; pos=4: 3000/3000, Jain 0.9094 -> 0.9876"
+  "note": "k=20 oc=6 drained 1200; 212 re-sends after 212 retries"
  },
  {
-  "name": "no_single_static_outstanding_serves_both_loads",
+  "name": "shallow_tracker_retries_but_still_drains",
   "ok": true,
-  "note": "full load: oc=5 1.111 drains, oc=32 0.041 collapses; light load: oc=5 only 0.381 vs oc=32 0.752"
+  "note": "both drain 3000; pos=0 retry=0, pos=4 retry=2616"
+ },
+ {
+  "name": "rtt_outstanding_covers_the_longest_round_trip",
+  "ok": true,
+  "note": "window 413 = 2*fwd(58) + 2*rev(147) + (W-1); one-die batch drained in 750"
  },
  {
   "name": "s18_tracks_the_window_across_scenarios",
-  "ok": true,
-  "note": "window settles at 8.6 under full load and 16.8 under light load (peak 32), rtt_min ~78 cycles"
+  "ok": false,
+  "note": "{'full': (24.72, 40.0, True, 261.3), 'light': (26.4, 34.0, True, 260.4)}"
  },
  {
-  "name": "group_view_exposes_imbalance_the_core_view_hides",
+  "name": "group_goodput_is_equal_when_the_batch_drains",
   "ok": true,
-  "note": "per-core Jain 0.9094 looks mild, yet die-level max/min is 88x and the three starved dies [0, 2, 4] are all left-half"
+  "note": "6 groups x 10 cores, goodput max/min 1.00, group Jain 0.9954"
  },
  {
-  "name": "admission_control_removes_the_group_imbalance",
+  "name": "s0_and_s1_group_series_cover_the_run",
   "ok": true,
-  "note": "die-level max/min 1.66 at oc=600 falls to 1.34 at oc=5, and every die retires the same amount"
+  "note": "23 windows of 50c, 6 groups, integral matches 800 write flits/die"
  }
 ]

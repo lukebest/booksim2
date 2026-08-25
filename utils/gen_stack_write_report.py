@@ -651,6 +651,45 @@ def plot_group_series(b: dict, path: Path) -> None:
     plt.close(fig)
 
 
+def plot_fabric_series(b: dict, path: Path) -> None:
+    """Instantaneous fabric bandwidth vs time, S0 vs S1."""
+    fs = b.get("fabric_series") or {}
+    cap = (b.get("topology") or {}).get("capacity") or {}
+    nvc = len((b.get("topology") or {}).get("vcs") or ("req", "rsp", "dat"))
+    _cjk()
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.0), sharey=True)
+    colors = {"top": "#2563eb", "d2d": "#dc2626", "h": "#0891b2", "v": "#ea5800"}
+    labels = {"top": "top die 环", "d2d": "D2D 对分", "h": "bottom 横环",
+              "v": "bottom 纵环"}
+    order = ("top", "d2d", "h", "v")
+    for ax, name, title in ((axes[0], "s0", "S0 基线（无源端流控）"),
+                            (axes[1], "s1", "S1 源端 AIMD 控速")):
+        ser = fs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw") or {}
+        for fab in order:
+            ys = bw.get(fab) or []
+            if not ys:
+                continue
+            ax.plot(t[:len(ys)], ys, "-", color=colors[fab], lw=1.4,
+                    label=labels[fab])
+            links = cap.get(fab, 0)
+            if links:
+                ax.axhline(links, color=colors[fab], ls=":", lw=0.9, alpha=0.7)
+                ax.axhline(links * nvc, color=colors[fab], ls="--", lw=0.7,
+                           alpha=0.35)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel("时间 (cycle)", fontsize=9)
+        ax.set_ylabel("瞬时带宽 (flit / cycle)", fontsize=9)
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=7.5, ncol=2, loc="upper right")
+    fig.suptitle("各织物瞬时带宽（滑窗）；点线 = 单 VC 容量，虚线 = 三 VC 合计容量",
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # tables
 # ---------------------------------------------------------------------------
@@ -803,8 +842,11 @@ def setup_table(b: dict) -> str:
         ["AI core 总数", t["n_cores"], "发起方"],
         ["HA 总数", t["n_has"], "bottom die，12 行 × 8 列"],
         ["D2D 链路", t["n_bridges"], "每 die 8 条，双向，跨 SerDes"],
-        ["挂接点", t["n_attach"],
-         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组，共 6 组挂 6 个 top die"],
+        ["挂接点 / bottom D2D", t["n_attach"],
+         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组。"
+         "每个 D2D landing <b>两个独立接口</b>：一个接该处横环，"
+         "一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，"
+         "只在出环 hop 上互斥"],
         ["bottom die NoC", "6 横 + 8 纵 half ring",
          "half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向"],
         ["纵环长度", t["v_len"], "12 个 HA + 6 个挂接点交替排列"],
@@ -848,7 +890,9 @@ def link_table(b: dict) -> str:
         ["bottom die 纵环节点间", f"<b>{t.get('v_hop_lat', 6)}</b> cycle",
          "HA ↔ 挂接点，单向 half ring"],
         ["挂接点转向", f"<b>{t.get('turn_lat', 5)}</b> cycle",
-         "横环 ↔ 纵环，经转向 FIFO，不计入 D2D 落地"],
+         "横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不再和转向共队列"],
+        ["D2D bottom 双接口", "横环口 + 该列纵环口",
+         "SerDes 仍是一条 D2D 边；落地后可同时上横环和上纵环"],
     ]
     return _t(["链路", "延迟", "说明"], rows)
 
@@ -934,6 +978,53 @@ def scheme_table(b: dict, tag: str) -> str:
         ])
     return _t(["方案", "批次是否排空", "完成事务", "makespan", "达下界比例",
                "Jain", "max/min", "CoV", "偏转次数"], rows)
+
+
+def fabric_inst_table(b: dict, scheme: str) -> str:
+    """Peak instantaneous bandwidth per fabric, vs single-VC and 3-VC caps."""
+    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+    fab = r.get("fabric") or {}
+    cap = (b.get("topology") or {}).get("capacity") or {}
+    names = [("top", "top die 环"), ("d2d", "D2D 对分"),
+             ("h", "bottom 横环"), ("v", "bottom 纵环")]
+    rows = []
+    for key, lab in names:
+        row = fab.get(key) or {}
+        links = row.get("links", cap.get(key, 0))
+        peak = row.get("peak_inst_bw", 0)
+        by = row.get("peak_inst_util_by_vc") or {}
+        rows.append([
+            lab, links, links, links * 3,
+            peak,
+            _pct(row.get("peak_inst_util_link", 0)),
+            _pct(row.get("peak_inst_util", 0)),
+            _pct(by.get("req", 0)), _pct(by.get("rsp", 0)),
+            _pct(by.get("dat", 0)),
+            _pct(row.get("avg_util", row.get("util", 0))),
+        ])
+    return _t(["织物", "有向边", "单 VC 容量<br>flit/cycle",
+               "三 VC 容量<br>flit/cycle", "瞬时峰值<br>flit/cycle",
+               "峰值 / 单 VC", "峰值 / 三 VC",
+               "REQ 峰值", "RSP 峰值", "DAT 峰值",
+               "全程平均<br>（三 VC）"], rows)
+
+
+def _fabric_full_txt(b: dict, scheme: str) -> str:
+    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+    fab = r.get("fabric") or {}
+    bits = []
+    labels = {"top": "top die", "d2d": "D2D 对分", "h": "横环", "v": "纵环"}
+    for key in ("top", "d2d", "h", "v"):
+        row = fab.get(key) or {}
+        by = row.get("peak_inst_util_by_vc") or {}
+        if by:
+            vc = max(by, key=by.get)
+            val = by[vc]
+        else:
+            vc, val = "dat", 0.0
+        full = "打满" if val >= 0.90 else ("接近打满" if val >= 0.70 else "未打满")
+        bits.append(f"{labels[key]} {vc.upper()} 瞬时 {_pct(val)}（{full}）")
+    return "；".join(bits)
 
 
 def oc_table(b: dict) -> str:
@@ -1206,8 +1297,11 @@ def write_focus_report(b: dict) -> None:
     plot_topology(b, IMG / "stack_topology.png")
     plot_binding(b, IMG / "stack_binding.png")
     plot_group_series(b, IMG / "stack_group_bw_series.png")
+    plot_fabric_series(b, IMG / "stack_fabric_bw_series.png")
     if b.get("group"):
         plot_group(b, IMG / "stack_group.png")
+    fab0 = _fabric_full_txt(b, "s0")
+    fab1 = _fabric_full_txt(b, "s1")
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -1233,6 +1327,8 @@ code {{ font-size: 0.86em; }}
 <h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
 <p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
 挂接点转向 {t.get('turn_lat', 5)} cycle。
+D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环）。
+带宽口径为<b>瞬时带宽</b>（滑窗 flit/cycle，并报单周期峰值）。
 workload：burst <b>{burst} B</b>、stride <b>{stride} B</b>、
 tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
 （每核 {k_core} 笔 WriteNoSnp，共 {n_txn:,} 笔）。
@@ -1275,6 +1371,13 @@ S1 为 {_f(g1.get('goodput_max_min'), 2)} /
 {_f(g1.get('goodput_jain', g1.get('jain')))}。
 下图是各 group 写带宽随时间的曲线；die 0 十个核的上环
 CW / CCW 成败见第 2.1 节（CC = CW，顺时针）。</li>
+
+<li><b>对分 / 环带宽按瞬时口径看。</b>
+S0：{fab0}。
+S1：{fab1}。
+“打满”看最忙那条 CHI VC 的瞬时峰值是否达到该织物有向边数；
+全程平均会把排空尾部算进去，会低估峰值占用。
+D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上环。</li>
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
@@ -1299,6 +1402,7 @@ S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
 {t.get('v_hop_lat', 6)} cycle，挂接点 H↔V 转向另加
 {t.get('turn_lat', 5)} cycle。
 D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
+落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
 纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
 {rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
 <img src="stack_topology.png" alt="bottom die 与挂接点分组">
@@ -1319,6 +1423,19 @@ D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']
 {die0_board_table(b, "s0")}
 <h4>S1 源端 AIMD 控速</h4>
 {die0_board_table(b, "s1")}
+
+<h3>2.2 各织物瞬时带宽</h3>
+<p>口径：每个 cycle 该织物上新发出的 hop 数（瞬时带宽，flit/cycle）。
+曲线是 {b.get('fabric_series', {}).get('s0', {}).get('window', 50)} cycle
+滑窗；表里的峰值是单周期最大。REQ / RSP / DAT 独立，所以
+“单 VC 打满”= 峰值达到有向边数，“三 VC 打满”= 达到 3× 边数。</p>
+<img src="stack_fabric_bw_series.png" alt="各织物瞬时带宽随时间">
+<h4>S0</h4>
+{fabric_inst_table(b, "s0")}
+<h4>S1</h4>
+{fabric_inst_table(b, "s1")}
+<div class="def">点线是该织物单 VC 容量（= 有向边数），虚线是三 VC 合计。
+S0：{fab0}。<br>S1：{fab1}。</div>
 
 <h2>3　理论下界</h2>
 {bounds_table(bd)}

@@ -144,11 +144,30 @@ class StackBaseSim:
         self.active_src: dict[Any, None] = {}
         self.active_ej: dict[Any, None] = {}
 
-        # transfer FIFOs: (node, next_ring) -> flits waiting to board it
+        # transfer FIFOs: (node, src_fabric, dest_ring) -> flits waiting to
+        # board dest_ring. Splitting on the source fabric is what gives the
+        # bottom D2D landing two interfaces: D2D→H and D2D→V do not share a
+        # queue with each other or with an H↔V turn at the same station.
         self.xq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.active_xq: dict[Any, None] = {}
         self.xq_peak: dict[Any, int] = defaultdict(int)
         self._land_now: dict[int, int] = defaultdict(int)
+        self._fab_cap = topo.capacity()
+        self._fab_names = tuple(self._fab_cap)
+        self.fab_win = 50
+        self._cyc_hops: dict[str, int] = defaultdict(int)
+        self._cyc_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
+        self.peak_hops: dict[str, int] = defaultdict(int)
+        self.peak_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
+        self._win_hops: dict[str, int] = defaultdict(int)
+        self.fab_series: dict[str, Any] = {
+            "window": self.fab_win, "t": [],
+            "bw": {k: [] for k in self._fab_names},
+            "util": {k: [] for k in self._fab_names},
+            "bw_vc": {f"{k}:{vc}": [] for k in self._fab_names
+                      for vc in topo.vcs},
+        }
+        self._win_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
 
         self.occ: dict[int, int] = defaultdict(int)          # plane balance
         self._vc_list: tuple[str, ...] = tuple(topo.vcs)
@@ -396,12 +415,14 @@ class StackBaseSim:
             f.held = False
             self.inring_hold[seg] -= 1
         self.seg_free[seg] = self.t + self.sigma
-        self.hop_starts.append(self.t)
         rk = self.topo.edge_ring[eid]
         if inring and f.ring == rk:
             self.pass_through[(f.node, rk, f.vc)] += 1
         self.edge_load[eid] += 1
-        self.fabric_hops[rk[0]] += 1
+        fab = rk[0]
+        self.fabric_hops[fab] += 1
+        self._cyc_hops[fab] += 1
+        self._cyc_hops_vc[(fab, f.vc)] += 1
         if f.dpos < len(f.detour):
             f.dpos += 1
             if f.dpos >= len(f.detour):
@@ -453,8 +474,30 @@ class StackBaseSim:
         self._on_arrive_station(f)
         return True
 
-    def _xdepth(self, ring: Any) -> int:
-        return self.p.d2d_depth if ring[0] == "d2d" else self.p.turn_depth
+    def _xfer_key(self, node: int, src_ring: Any, dst_ring: Any) -> tuple:
+        """One FIFO per (station, incoming fabric, outgoing ring).
+
+        Bottom D2D therefore has two landing queues -- onto H and onto V --
+        that do not share occupancy with an H↔V turn at the same attach.
+        """
+        src = src_ring[0] if src_ring is not None else ""
+        return (node, src, dst_ring)
+
+    def _xfer_dest(self, key: Any) -> Any:
+        return key[2] if len(key) >= 3 else key[1]
+
+    def _xfer_is_d2d(self, key: Any) -> bool:
+        if len(key) >= 3:
+            dst = key[2]
+            return key[1] == "d2d" or (dst is not None and dst[0] == "d2d")
+        return key[1][0] == "d2d"
+
+    def _xdepth(self, src_ring: Any, dst_ring: Any) -> int:
+        src = src_ring[0] if src_ring is not None else ""
+        dst = dst_ring[0] if dst_ring is not None else ""
+        if src == "d2d" or dst == "d2d":
+            return self.p.d2d_depth
+        return self.p.turn_depth
 
     def _try_turn(self, f: Flit) -> bool:
         """Hand a flit to the transfer FIFO of the ring it wants next.
@@ -463,9 +506,9 @@ class StackBaseSim:
         flit that has already paid for a revolution is not made to pay again.
         """
         nxt = self.topo.edge_ring[self._next_edge(f)]
-        key = (f.node, nxt)
+        key = self._xfer_key(f.node, f.ring, nxt)
         q = self.xq[key]
-        cap = self._xdepth(nxt)
+        cap = self._xdepth(f.ring, nxt)
         if len(q) >= cap:
             return False
         if len(q) >= cap - self.p.resv_turn:
@@ -486,7 +529,7 @@ class StackBaseSim:
         self.active_xq[key] = None
         depth = len(q)
         self.xq_peak[key] = max(self.xq_peak[key], depth)
-        slot = "max_d2d_q" if nxt[0] == "d2d" else "max_turn_q"
+        slot = "max_d2d_q" if self._xfer_is_d2d(key) else "max_turn_q"
         self.st[slot] = max(self.st[slot], depth)
         return True
 
@@ -667,7 +710,42 @@ class StackBaseSim:
         self._release_ready()
         self._aimd_tick()
         self._ctrl_issue()
+        self._sample_fabric()
         self.t += 1
+
+    def _flush_fab_window(self, t_start: int | None = None,
+                          width: int | None = None) -> None:
+        w = width or self.fab_win
+        cap, nvc = self._fab_cap, self.topo.n_vc
+        self.fab_series["t"].append(
+            self.t + 1 - w if t_start is None else t_start)
+        for fab in self._fab_names:
+            hops = self._win_hops.pop(fab, 0)
+            links = max(1, cap.get(fab, 1))
+            self.fab_series["bw"][fab].append(round(hops / w, 4))
+            self.fab_series["util"][fab].append(
+                round(hops / (w * links * nvc), 4))
+            for vc in self.topo.vcs:
+                vh = self._win_hops_vc.pop((fab, vc), 0)
+                self.fab_series["bw_vc"][f"{fab}:{vc}"].append(
+                    round(vh / w, 4))
+        self._win_hops.clear()
+        self._win_hops_vc.clear()
+
+    def _sample_fabric(self) -> None:
+        """Instantaneous occupancy this cycle, plus a windowed series."""
+        for fab, n in self._cyc_hops.items():
+            if n > self.peak_hops[fab]:
+                self.peak_hops[fab] = n
+            self._win_hops[fab] += n
+        for k, n in self._cyc_hops_vc.items():
+            if n > self.peak_hops_vc[k]:
+                self.peak_hops_vc[k] = n
+            self._win_hops_vc[k] += n
+        self._cyc_hops.clear()
+        self._cyc_hops_vc.clear()
+        if (self.t + 1) % self.fab_win == 0:
+            self._flush_fab_window()
 
     def _tap_order(self, node: int, ring: Any, reqs: list[Flit]) -> list[Flit]:
         """Who gets the ring's tap. Oldest-deflected first, so a flit that
@@ -961,10 +1039,16 @@ class StackBaseSim:
                 and self.st["n_txn_done"] >= self._n_txn_target)
 
     def fifo_report(self) -> dict[str, Any]:
-        turn = {k: v for k, v in self.xq_peak.items() if k[1][0] != "d2d"}
-        d2d = {k: v for k, v in self.xq_peak.items() if k[1][0] == "d2d"}
+        turn = {k: v for k, v in self.xq_peak.items()
+                if not self._xfer_is_d2d(k)}
+        d2d = {k: v for k, v in self.xq_peak.items() if self._xfer_is_d2d(k)}
+        land_h = sum(1 for k in d2d if len(k) >= 3 and k[1] == "d2d"
+                     and k[2][0] == "h")
+        land_v = sum(1 for k in d2d if len(k) >= 3 and k[1] == "d2d"
+                     and k[2][0] == "v")
         return {
             "n_turn_fifo": len(turn), "n_d2d_fifo": len(d2d),
+            "n_d2d_land_h": land_h, "n_d2d_land_v": land_v,
             "turn_peak": max(turn.values()) if turn else 0,
             "d2d_peak": max(d2d.values()) if d2d else 0,
             "turn_depth": self.p.turn_depth, "d2d_depth": self.p.d2d_depth,
@@ -977,13 +1061,27 @@ class StackBaseSim:
         }
 
     def fabric_util(self, makespan: int) -> dict[str, Any]:
-        cap = self.topo.capacity()
+        cap = self._fab_cap
+        nvc = self.topo.n_vc
         out: dict[str, Any] = {}
-        for k, hops in sorted(self.fabric_hops.items()):
-            links = cap.get(k, 1) * self.topo.n_vc
+        for k in self._fab_names:
+            hops = self.fabric_hops.get(k, 0)
+            links = cap.get(k, 1)
+            slots = max(1, links * nvc)
+            peak = self.peak_hops.get(k, 0)
+            by_vc = {vc: self.peak_hops_vc.get((k, vc), 0)
+                     for vc in self.topo.vcs}
             out[k] = {
-                "flit_hops": hops, "links": cap.get(k, 1),
-                "util": round(hops / max(1, links * makespan), 4),
+                "flit_hops": hops, "links": links,
+                "util": round(hops / max(1, slots * makespan), 4),
+                "avg_util": round(hops / max(1, slots * makespan), 4),
+                "peak_inst_bw": peak,
+                "peak_inst_util": round(peak / slots, 4),
+                "peak_inst_util_link": round(peak / max(1, links), 4),
+                "peak_inst_by_vc": by_vc,
+                "peak_inst_util_by_vc": {
+                    vc: round(n / max(1, links), 4) for vc, n in by_vc.items()
+                },
             }
         return out
 
@@ -1018,8 +1116,12 @@ class StackBaseSim:
         # because both are divided by the same makespan.
         out["wr_done_by_core"] = {c: len(v) for c, v
                                   in sorted(self.compl_ranks.items())}
+        leftover = self.t % self.fab_win
+        if leftover and (self._win_hops or self._win_hops_vc):
+            self._flush_fab_window(t_start=self.t - leftover, width=leftover)
         out["fifo"] = self.fifo_report()
         out["fabric"] = self.fabric_util(max(1, self.t))
+        out["fabric_series"] = self.fab_series
         out["board_fail_by_src"] = {
             f"{n}:{vc}": dict(row) for (n, vc), row
             in sorted(self.board_fail_cause.items())}

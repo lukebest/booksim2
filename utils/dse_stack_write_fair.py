@@ -973,6 +973,8 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
               flush=True)
     blob["schemes"] = {"mandated": per, "work": per}
     blob["group_series"] = series
+    blob["fabric_series"] = {name: per[name].get("fabric_series", {})
+                             for name in names}
     blob["die0_board"] = board
     blob["workload"] = {
         "kind": "tiled_write",
@@ -1059,6 +1061,8 @@ def main() -> None:
         "turn_lat": topo0.turn_lat,
         "vcs": list(topo0.vcs),
         "h_assign": topo0.h_assign,
+        "d2d_bot_ifaces": 2,
+        "d2d_bot_iface": ["h", "v"],
         "rtt": rtt,
     }
     blob["binding"] = binding_table(topo0)
