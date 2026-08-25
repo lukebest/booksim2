@@ -39,7 +39,7 @@ from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
 # Per-core write outstanding. Held from REQ inject to Comp retire.
-CORE_OUTSTANDING_WR = 128
+CORE_OUTSTANDING_WR = 512
 # CHI request-tracker entries per HA. A completer that runs out answers
 # RetryAck rather than silently queueing.
 HA_POS_DEPTH = 32
