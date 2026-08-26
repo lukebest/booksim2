@@ -1224,6 +1224,84 @@ def _write_bw_death(b: dict, scheme: str, floor: float = 0.05
     }
 
 
+def cc_pareto_html() -> str:
+    """Cost/benefit Pareto from the CC explore sweep, if present."""
+    src = ROOT / "results" / "stack_cc_pareto.json"
+    png = "stack_cc_pareto.png"
+    if not src.exists():
+        return ""
+    blob = json.loads(src.read_text())
+    rows = blob.get("rows") or []
+    if not rows:
+        return ""
+    front = {p["tag"] for p in blob.get("pareto") or []}
+    best = blob.get("best", "")
+    meta = blob.get("meta") or {}
+    body = []
+    for r in rows:
+        mark = " ← Pareto" if r["tag"] in front else ""
+        star = " <b>（最贴近目标）</b>" if r["tag"] == best else ""
+        body.append([
+            r.get("label", r["tag"]) + star,
+            r.get("axis", ""),
+            _ok(r.get("completed", False)),
+            _f(r.get("mean_jain_t")),
+            f"{_f(r.get('goodput_per_group'))} "
+            f"({_pct(r.get('bw_frac') or 0)})",
+            str(r.get("cost", "")),
+            _f(r.get("benefit"), 3) + mark,
+        ])
+    tbl = _t(["方案", "维度", "排空", "E[Jain<sub>t</sub>]",
+              "每组写带宽<br>（占理想）", "代价", "收益 √(J·η)"], body)
+    by = {r["tag"]: r for r in rows}
+    bits = []
+    if "s16" in by:
+        bits.append(
+            f"S16 HA 授权压低瞬时公平（E[Jain<sub>t</sub>]="
+            f"{_f(by['s16'].get('mean_jain_t'))}）且带宽不升")
+    if "s17" in by:
+        bits.append(
+            f"S17 转向让行接近 S1（"
+            f"{_f(by['s17'].get('mean_jain_t'))} / "
+            f"{_pct(by['s17'].get('bw_frac') or 0)}）")
+    if "s18" in by:
+        bits.append(
+            f"S18 RTT 窗 Jain 最高（"
+            f"{_f(by['s18'].get('mean_jain_t'))}）但带宽只有理想的 "
+            f"{_pct(by['s18'].get('bw_frac') or 0)}")
+    if "s20_leaky" in by and "s20" in by:
+        bits.append(
+            f"S20 漏桶比周期配额更好（Jain "
+            f"{_f(by['s20_leaky'].get('mean_jain_t'))}，带宽 "
+            f"{_pct(by['s20_leaky'].get('bw_frac') or 0)}）但仍低于 S0")
+    if "s1_local" in by:
+        bits.append(
+            f"去掉总线的本地 AIMD 掉到 S0 以下（Jain "
+            f"{_f(by['s1_local'].get('mean_jain_t'))}，带宽 "
+            f"{_pct(by['s1_local'].get('bw_frac') or 0)}）——升窗仍靠路径等级")
+    if "s1_nopath" in by:
+        bits.append(
+            f"质量最优仍是 S1 无路径抵消（Jain "
+            f"{_f(by['s1_nopath'].get('mean_jain_t'))}，带宽 "
+            f"{_pct(by['s1_nopath'].get('bw_frac') or 0)}）")
+    note = ("当前面：" + "；".join(bits) + "。" if bits else "")
+    front_tags = [p.get("label", p["tag"]) for p in blob.get("pareto") or []]
+    if front_tags:
+        note += f"非支配面稳定在 {' / '.join(front_tags)}。"
+    return f"""
+<h2>2.4 拥塞控制：代价–收益 Pareto</h2>
+<p>在 1-tile 同构写上扫发送端/接收端、窗口/速率、触发方式。
+目标：E[Jain<sub>t</sub>] → 1，每组写带宽 → 理想
+{_f(meta.get('ideal_per_group'), 3)} flit/cycle。
+收益 = √(E[Jain<sub>t</sub>] × 写带宽/理想)。代价是相对门数
+（总线 ≫ HA 状态机 ≫ 每核寄存器 ≫ 每 die 计数器）。
+绿点是代价–收益非支配面。扫次 {meta.get('wall_s', '?')} s，
+n_txn={meta.get('n_txn', 0):,}。{note}</p>
+<img src="{png}" alt="拥塞控制代价收益 Pareto">
+{tbl}
+"""
+
+
 def collapse_table(b: dict) -> str:
     """Protocol leftovers that show why S1 stopped making progress."""
     s0 = ((b.get("schemes") or {}).get("mandated") or {}).get("s0") or {}
@@ -1828,6 +1906,7 @@ S0 同期峰值 {_f(death0.get('peak_fc', 0))} flit/cycle（六 die 合计），
 {s23_body}
 </ol></div>
 
+{cc_pareto_html()}
 <h2>3　理论下界</h2>
 {bounds_table(bd)}
 <p class="note">S0 效率 {s0.get('eff', 0):.2f}，S1 {s1.get('eff', 0):.2f}

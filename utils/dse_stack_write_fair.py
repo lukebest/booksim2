@@ -31,7 +31,8 @@ from rg_stack_base import StackBaseParams, StackBaseSim, run_batch
 from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackAdaptTurnSim, StackFairTurnSim,
                          StackFcParams, StackFcSim, StackGrantParams,
-                         StackGrantSim, StackTurnParams)
+                         StackGrantSim, StackPaceParams, StackPaceSim,
+                         StackTurnParams)
 from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
                            TILING_SIZE, TOP_BRIDGES, TXN_PER_CORE, V_LEN,
                            StackTopology, Txn, build_tiled_write,
@@ -76,6 +77,12 @@ def _sim(name: str, *, route: str, **kw) -> tuple[type, Any]:
         return StackAdaptSim, StackAdaptParams(**f)
     if name == "s19":
         return StackAdaptTurnSim, StackAdaptTurnParams(**f)
+    if name == "s20":
+        return StackPaceSim, StackPaceParams(**{**f, "mode": "s20",
+                                               "scope": "core"})
+    if name == "s21":
+        return StackPaceSim, StackPaceParams(**{**f, "mode": "s21",
+                                               "scope": "die"})
     raise ValueError(name)
 
 

@@ -193,6 +193,18 @@ S1 RetryAck 99,618、重发
 有效并发 14.0%。</li>
 </ol></div>
 
+
+<h2>2.4 拥塞控制：代价–收益 Pareto</h2>
+<p>在 1-tile 同构写上扫发送端/接收端、窗口/速率、触发方式。
+目标：E[Jain<sub>t</sub>] → 1，每组写带宽 → 理想
+1.524 flit/cycle。
+收益 = √(E[Jain<sub>t</sub>] × 写带宽/理想)。代价是相对门数
+（总线 ≫ HA 状态机 ≫ 每核寄存器 ≫ 每 die 计数器）。
+绿点是代价–收益非支配面。扫次 4710.8 s，
+n_txn=30,720。当前面：S16 HA 授权压低瞬时公平（E[Jain<sub>t</sub>]=0.7605）且带宽不升；S17 转向让行接近 S1（0.8292 / 58.0%）；S18 RTT 窗 Jain 最高（0.8873）但带宽只有理想的 48.0%；S20 漏桶比周期配额更好（Jain 0.8703，带宽 56.3%）但仍低于 S0；去掉总线的本地 AIMD 掉到 S0 以下（Jain 0.8497，带宽 58.4%）——升窗仍靠路径等级；质量最优仍是 S1 无路径抵消（Jain 0.8742，带宽 62.0%）。非支配面稳定在 S0 无控 / S1 无路径抵消。</p>
+<img src="stack_cc_pareto.png" alt="拥塞控制代价收益 Pareto">
+<table><thead><tr><th>方案</th><th>维度</th><th>排空</th><th>E[Jain<sub>t</sub>]</th><th>每组写带宽<br>（占理想）</th><th>代价</th><th>收益 √(J·η)</th></tr></thead><tbody><tr><td>S0 无控</td><td>无</td><td><b style="color:#16a34a">完成</b></td><td>0.8569</td><td>0.8984 (59.0%)</td><td>0</td><td>0.711 ← Pareto</td></tr><tr><td>S1 AIMD 窗+总线</td><td>发送端 / 窗口 / 拥塞等级</td><td><b style="color:#16a34a">完成</b></td><td>0.8302</td><td>0.9006 (59.1%)</td><td>80</td><td>0.701</td></tr><tr><td>S1 无路径抵消 <b>（最贴近目标）</b></td><td>发送端 / 窗口 / 本地失败</td><td><b style="color:#16a34a">完成</b></td><td>0.8742</td><td>0.9454 (62.0%)</td><td>80</td><td>0.737 ← Pareto</td></tr><tr><td>S1 本地 AIMD</td><td>发送端 / 窗口 / 本地失败无总线</td><td><b style="color:#16a34a">完成</b></td><td>0.8497</td><td>0.8902 (58.4%)</td><td>18</td><td>0.705</td></tr><tr><td>S16 HA 授权</td><td>接收端 / 窗口 / DBID 授权</td><td><b style="color:#16a34a">完成</b></td><td>0.7605</td><td>0.8898 (58.4%)</td><td>48</td><td>0.666</td></tr><tr><td>S17 转向让行</td><td>织物侧 / 饥饿计数 / 转向</td><td><b style="color:#16a34a">完成</b></td><td>0.8292</td><td>0.8836 (58.0%)</td><td>12</td><td>0.693</td></tr><tr><td>S18 RTT 窗口</td><td>发送端 / 窗口 / RTT</td><td><b style="color:#16a34a">完成</b></td><td>0.8873</td><td>0.7312 (48.0%)</td><td>35</td><td>0.652</td></tr><tr><td>S20 每核 DAT 配额</td><td>发送端 / 速率 / 周期配额</td><td><b style="color:#16a34a">完成</b></td><td>0.8381</td><td>0.8237 (54.1%)</td><td>8</td><td>0.673</td></tr><tr><td>S20 漏桶</td><td>发送端 / 速率 / 漏桶</td><td><b style="color:#16a34a">完成</b></td><td>0.8703</td><td>0.8585 (56.3%)</td><td>9</td><td>0.700</td></tr><tr><td>S21 每 die DAT 配额</td><td>发送端 / 速率 / die 配额</td><td><b style="color:#16a34a">完成</b></td><td>0.7890</td><td>0.8559 (56.2%)</td><td>4</td><td>0.666</td></tr><tr><td>S21 漏桶</td><td>发送端 / 速率 / die 漏桶</td><td><b style="color:#16a34a">完成</b></td><td>0.8571</td><td>0.8756 (57.5%)</td><td>5</td><td>0.702</td></tr></tbody></table>
+
 <h2>3　理论下界</h2>
 <table><thead><tr><th>下界来源</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>链路下界（分 VC 取最大）</td><td>46,096</td><td>最忙的一条有向链路上、单个 VC 需要搬运的 flit 数</td></tr><tr><td>　└ 分 VC 明细</td><td>dat 46,096 / req 11,524 / rsp 25,600</td><td>DAT 是 4 flit/笔，通常是它决定链路下界</td></tr><tr><td>端口下界</td><td>10,240</td><td>某个站点注入或弹出端口的总需求（各 VC 合并，端口只有一个）</td></tr><tr><td>　└ 分织物明细</td><td>d2d 8,960 / h 35,840 / top 8,960 / v 53,760</td><td>纵环 144 条、横环 48 条，横环少但只承担换列流量</td></tr><tr><td>织物切割下界</td><td>53,760</td><td>某类织物的总 flit·跳 ÷ 该类链路数</td></tr><tr><td>单事务时延下界</td><td>609</td><td>一笔写的四段握手串行时延，与并发无关</td></tr><tr><td><b>综合下界</b></td><td><b>53,760</b></td><td>以上四者取最大</td></tr></tbody></table>
 <p class="note">S0 效率 0.61，S1 0.59

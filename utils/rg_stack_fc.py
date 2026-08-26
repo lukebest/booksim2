@@ -48,6 +48,14 @@ class StackFcParams(StackBaseParams):
     budget_min: int = 1           # never throttle a station to silence
     band: str = "spec"            # alpha / beta band mapping
     scope: str = "core_only"      # who is rate-controlled
+    # If True, subtract the path's reported congestion from the local
+    # fail count (the spec). That lets a core raise its window while the
+    # HA is the one that cannot board. Set False for a hardware-cheaper
+    # "own fails only" AIMD.
+    path_credit: bool = True
+    # If False, AIMD uses only this station's fail count. No broadcast
+    # bus, no path table. Increase always uses the "path clear" beta.
+    use_bus: bool = True
     trace: bool = True
 
 
@@ -59,7 +67,7 @@ class StackFcSim(StackBaseSim):
         self.p: StackFcParams
         super().__init__(topo, params or StackFcParams(), seed=seed)
         p = self.p
-        self.bus = CongestionBus(self.n, p.bus_lat)
+        self.bus = CongestionBus(self.n, p.bus_lat) if p.use_bus else None
         self.budget: dict[int, int] = {}
         self.spent: dict[int, int] = defaultdict(int)
         self.demand_win: dict[int, int] = defaultdict(int)
@@ -103,12 +111,13 @@ class StackFcSim(StackBaseSim):
         self.spent[f.src] += 1
         self.ok_win[f.src] += 1
         self.cum[f.src] += 1
-        key = (f.src, f.dst, f.plane)
-        if key not in self._path_seen:
-            self._path_seen.add(key)
-            edges = self.topo.edges
-            for eid in f.route[1:]:
-                self.path_nodes[f.src].add(edges[eid][0])
+        if self.p.use_bus:
+            key = (f.src, f.dst, f.plane)
+            if key not in self._path_seen:
+                self._path_seen.add(key)
+                edges = self.topo.edges
+                for eid in f.route[1:]:
+                    self.path_nodes[f.src].add(edges[eid][0])
 
     # -- control -----------------------------------------------------------
 
@@ -128,10 +137,13 @@ class StackFcSim(StackBaseSim):
         return True
 
     def _ctrl_deliver(self) -> None:
-        self.bus.deliver(self.t)
+        if self.bus is not None:
+            self.bus.deliver(self.t)
 
     def _max_recv_level(self, node: int) -> int:
         """拥塞反馈: max level over this node's 受控节点."""
+        if self.bus is None:
+            return 0
         best = 0
         for j in self.path_nodes.get(node, ()):
             m = self.bus.view[j]
@@ -150,6 +162,8 @@ class StackFcSim(StackBaseSim):
             d.clear()
 
     def _broadcast(self) -> None:
+        if self.bus is None:
+            return
         for i in range(self.n):
             self.bus.post(self.t, i, BusMsg(
                 up=level_of(self.fail_net[i]),
@@ -169,7 +183,8 @@ class StackFcSim(StackBaseSim):
             # bus, so a received level is turned back into a count at its
             # bucket's lower edge.
             own = max(self.fail_tot[i], self.defl_win[i])
-            final = level_of(max(0, own - LEVEL_STEP * recv))
+            credit = LEVEL_STEP * recv if p.path_credit else 0
+            final = level_of(max(0, own - credit))
             if self._controlled(i):
                 b = self.budget.get(i, p.window)
                 if final > 0:
@@ -202,9 +217,12 @@ class StackFcSim(StackBaseSim):
         out: dict[str, Any] = {
             "mode": self.p.mode, "window": self.p.window,
             "band": self.p.band, "scope": self.p.scope,
+            "path_credit": self.p.path_credit,
+            "use_bus": self.p.use_bus,
             "bus_lat": self.p.bus_lat,
-            "bus_posts": self.bus.n_posts,
-            "bus_bits": self.bus.n_posts * self.bus.bits_per_post("s1"),
+            "bus_posts": 0 if self.bus is None else self.bus.n_posts,
+            "bus_bits": (0 if self.bus is None else
+                         self.bus.n_posts * self.bus.bits_per_post("s1")),
             "n_fc_deny": self.st.get("n_fc_deny", 0),
             "n_aimd_increase": self.st.get("n_aimd_increase", 0),
             "n_aimd_decrease": self.st.get("n_aimd_decrease", 0),
@@ -577,3 +595,115 @@ class StackAdaptTurnSim(StackFairTurnSim, StackAdaptSim):
                     if k != "mode"})
         out["mode"] = "s19"
         return out
+
+
+@dataclass
+class StackPaceParams(StackBaseParams):
+    """S20/S21: sender-driven rate limiter. One integer token bucket.
+
+    No bus, no completer change. A quota on WriteData injection.
+    S20 is per-core; S21 is one bucket per top die shared by its 10 cores.
+
+    `pace_mode=reset` writes the bucket full every `pace_window` (a
+    saturating register plus a period-W strobe). Unused tokens vanish —
+    a core waiting on DBID wastes the window.
+
+    `pace_mode=leaky` is a residual adder: each cycle add the numerator,
+    emit one token when the residual wraps `pace_window`, saturate at
+    `pace_burst`. Unused tokens bank up to the burst cap. Same gates
+    plus a saturate-compare.
+    """
+    mode: str = "s20"
+    pace_window: int = 64
+    pace_tokens: int = 10         # S20: per core. 10/64 ≈ 0.156 flit/cycle
+    die_tokens: int = 98          # S21: per die. 98/64 ≈ 1.53 flit/cycle
+    pace_burst: int = 8           # S20 leaky cap (two WriteNoSnp DAT)
+    die_burst: int = 40           # S21 leaky cap (10 cores × 4 DAT)
+    pace_mode: str = "reset"      # "reset" | "leaky"
+    scope: str = "core"           # "core" | "die"
+
+
+class StackPaceSim(StackBaseSim):
+    """Rate-based sender pace for WriteData only.
+
+    REQ / RSP stay under outstanding + CHI retry. The burst that wrecks
+    E[Jain_t] is the DAT dump after DBID; that is what the bucket clips.
+    """
+
+    def __init__(self, topo: StackTopology,
+                 params: StackPaceParams | None = None, seed: int = 0):
+        self.p: StackPaceParams
+        super().__init__(topo, params or StackPaceParams(), seed=seed)
+        p = self.p
+        self._die_of = {c: topo.nodes[c].die for c in topo.cores}
+        if p.scope == "die":
+            fill = p.die_burst if p.pace_mode == "leaky" else p.die_tokens
+            self.tokens: dict[int, int] = {d: fill for d in range(topo.n_die)}
+            self._add = p.die_tokens
+            self._cap = p.die_burst if p.pace_mode == "leaky" else p.die_tokens
+        else:
+            fill = p.pace_burst if p.pace_mode == "leaky" else p.pace_tokens
+            self.tokens = {c: fill for c in topo.cores}
+            self._add = p.pace_tokens
+            self._cap = p.pace_burst if p.pace_mode == "leaky" else p.pace_tokens
+        self._acc: dict[int, int] = {k: 0 for k in self.tokens}
+        self._last_refill = 0
+        self.st["n_pace_deny"] = 0
+
+    def _bucket(self, node: int) -> int:
+        if self.p.scope == "die":
+            return self._die_of.get(node, 0)
+        return node
+
+    def _pre_inject(self) -> None:
+        p = self.p
+        if p.pace_mode == "leaky":
+            w = p.pace_window
+            add, cap = self._add, self._cap
+            for k in self.tokens:
+                acc = self._acc[k] + add
+                n, acc = divmod(acc, w)
+                self._acc[k] = acc
+                if n:
+                    self.tokens[k] = min(cap, self.tokens[k] + n)
+            return
+        if self.t - self._last_refill < p.pace_window:
+            return
+        cap = self._cap
+        for k in self.tokens:
+            self.tokens[k] = cap
+        self._last_refill = self.t
+
+    def _may_inject(self, node: int, plane: int, f: Flit | None = None
+                    ) -> bool:
+        if not super()._may_inject(node, plane, f):
+            return False
+        if f is None or f.kind != "wdata" or not self._is_core[node]:
+            return True
+        if self.tokens.get(self._bucket(node), 0) <= 0:
+            self.st["n_pace_deny"] += 1
+            self.st["n_fc_deny"] += 1
+            self._deny_cause = "pace"
+            return False
+        return True
+
+    def _on_inject(self, f: Flit) -> None:
+        super()._on_inject(f)
+        if f.kind == "wdata" and self._is_core[f.src]:
+            k = self._bucket(f.src)
+            if self.tokens.get(k, 0) > 0:
+                self.tokens[k] -= 1
+
+    def fc_summary(self) -> dict[str, Any]:
+        return {
+            "mode": self.p.mode, "scope": self.p.scope,
+            "pace_window": self.p.pace_window,
+            "pace_tokens": self.p.pace_tokens,
+            "die_tokens": self.p.die_tokens,
+            "pace_mode": self.p.pace_mode,
+            "pace_burst": self.p.pace_burst,
+            "die_burst": self.p.die_burst,
+            "n_buckets": len(self.tokens),
+            "n_pace_deny": self.st.get("n_pace_deny", 0),
+            "bus_posts": 0, "bus_bits": 0,
+        }
