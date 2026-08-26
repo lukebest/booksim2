@@ -1208,33 +1208,43 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
     t2_note = ""
     if t2_fc:
         pr = t2_fc.get("predicted", {})
-        unb = (pat.get("s0_unbounded") or {}).get("fairness") or {}
-        unb_q = (pat.get("s0_unbounded") or {}).get("retry") or {}
-        q0 = s0.get("retry") or {}
-        jb = f0.get("jain_bin") or {}
-        hit = (float(q0.get("retry_per_txn") or 0) == 0.0
-               and abs(int(s0.get("makespan") or 0)
-                       - int(pr.get("makespan") or 0))
-               <= 0.01 * max(1, int(pr.get("makespan") or 1)))
+        r = TRACK256_ROUND
         t2_note = (
-            f"<br><b>ha_track = {meta.get('ha_track')} 的预测（本轮）</b>"
+            f"<br><b>ha_track = 256 的预测（上一轮，已成立）</b>"
             f"（置信度 {t2_fc.get('confidence', '—')}）："
             f"{t2_fc.get('hypothesis', '')} "
             f"证伪：{t2_fc.get('falsify', '')}"
-            f"<br><b>对照：{'预测成立' if hit else '预测被推翻'}。</b>"
+            f"<br><b>对照：预测成立。</b>"
             f"预测「等于 ∞ 参照」：makespan {pr.get('makespan')} / 吞吐 "
             f"{pr.get('s0_thr')} / retry {pr.get('retry_per_txn')} / "
             f"峰值占用 {pr.get('max_ha_used')}；"
-            f"实测 makespan <b>{s0.get('makespan')}</b> / 吞吐 "
-            f"<b>{f0.get('throughput')}</b> / retry "
-            f"<b>{q0.get('retry_per_txn')}</b> / 峰值占用 "
-            f"<b>{q0.get('max_ha_used')}</b>。"
-            f"本轮 ∞ 参照自身跑出 {unb.get('throughput')}"
-            f"（makespan {(pat.get('s0_unbounded') or {}).get('makespan')}，"
-            f"峰值 {unb_q.get('max_ha_used')}）。"
-            f"公平性：jain_bin {jb.get('jain_bin_mean')} / 零模型 "
-            f"{jb.get('jain_bin_null')} / ratio {jb.get('jain_bin_ratio')}"
+            f"实测 makespan <b>{r['makespan']}</b> / 吞吐 "
+            f"<b>{r['thr']}</b> / retry <b>{r['retry_per_txn']}</b> / "
+            f"峰值占用 <b>{r['max_ha_used']}</b>。"
+            f"公平性：jain_bin {r['jain_bin']} / 零模型 "
+            f"{r['jain_bin_null']} / ratio {r['jain_bin_ratio']}"
             f"（预测 {pr.get('jain_bin_ratio')}）。"
+        )
+    uq_fc = meta.get("upq_12_8_forecast") or {}
+    uq_note = ""
+    if uq_fc:
+        pr = uq_fc.get("predicted", {})
+        q0 = s0.get("retry") or {}
+        old = TRACK256_ROUND["thr"]
+        got = float(f0.get("throughput") or 0)
+        delta = 100.0 * (got - old) / old
+        lo, hi = pr.get("s0_thr", [None, None])
+        hit = lo is not None and hi is not None and lo <= got <= hi
+        uq_note = (
+            f"<br><b>上环源队列 12+8 的预测（本轮）</b>"
+            f"（置信度 {uq_fc.get('confidence', '—')}）："
+            f"{uq_fc.get('hypothesis', '')} "
+            f"证伪：{uq_fc.get('falsify', '')}"
+            f"<br><b>对照：{'预测成立' if hit else '预测被推翻'}。</b>"
+            f"旧 8+1 基线吞吐 {old}，本轮 12+8 实测 "
+            f"<b>{got}</b>（<b>{delta:+.2f}%</b>）；"
+            f"makespan {s0.get('makespan')}，retry/txn "
+            f"{q0.get('retry_per_txn')}，max_ha_used {q0.get('max_ha_used')}。"
         )
     bj_fc = meta.get("bin50_fair_forecast") or {}
     bj_note = ""
@@ -1255,7 +1265,7 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
 <div class="def">
 <b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
 {fc.get('hypothesis', '')}
-证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}{t2_note}<br>
+证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}{t2_note}{uq_note}<br>
 <b>对照。</b>
 {len(xs)} 个 mem 收到的 WriteData
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
@@ -2611,13 +2621,14 @@ HA 抖动 {_jit_label(meta)}，无限 tracker 的 makespan
 CEILING_PROBE = {
     "k": 4000,
     "track": [
-        ["32（两轮前）", 2.253, 256.5, 0.992],
+        ["32", 2.253, 256.5, 0.992],
         ["64", 2.312, 408.7, 0.808],
-        ["128（上一轮）", 4.424, 551.7, 0.003],
-        ["256（本轮取值）", 4.498, 552.3, 0.000],
+        ["128", 4.424, 551.7, 0.003],
+        ["256", 4.498, 552.3, 0.000],
         ["∞", 4.498, 552.3, 0.000],
     ],
-    # At ha_track=∞, widening any buffer barely moves the plateau.
+    # Historical 8+1 queue probe. At ha_track=∞, widening either source queue
+    # in isolation barely moved the plateau.
     "knobs": [
         ["基准（∞ tracker）", 4.498],
         ["eject_depth 4 → 16", 4.503],
@@ -2660,6 +2671,16 @@ TRACK128_ROUND = {
     "n_per_bin": 15.23, "plateau": 4.5408, "plateau_peak_track": 195,
 }
 
+# Frozen: the immediately preceding round, with ha_track = 256 and the old
+# per-VC up-ring source queues (8-deep shared FIFO + depth-1 per direction).
+# This is the baseline for the current 12+8 queue-depth experiment.
+TRACK256_ROUND = {
+    "thr": 4.5408, "makespan": 88090, "retry_per_txn": 0.0,
+    "max_ha_used": 195, "jain_bin": 0.98183,
+    "jain_bin_null": 0.96197, "jain_bin_ratio": 1.02064,
+    "n_per_bin": 22.79, "plateau": 4.5408,
+}
+
 
 def _jb_of(pat: dict, scheme: str) -> float:
     f = ((pat.get("schemes") or {}).get(scheme) or {}).get("fairness") or {}
@@ -2699,6 +2720,9 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
                      ib["total_min"], ib["total_max"]])
     got = rows[0][1] if rows else 0.0
     thr0 = float((s0.get("fairness") or {}).get("throughput") or got)
+    old_q_thr = TRACK256_ROUND["thr"]
+    q_delta = 100.0 * (thr0 - old_q_thr) / old_q_thr
+    q_material = abs(q_delta) > 3.0
     eff = float((s0.get("retry") or {}).get("outst_eff_mean") or 0)
     t_hold = round(eff * n_c / max(n_txn / mk, 1e-9), 1) if n_txn else None
     hz_ablate = ""
@@ -2805,6 +2829,16 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
         rows)}
 <p>实测均值 {got}，只有 R* 的 <b>{100.0 * got / r_bind:.1f}%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
+<div class="def {'good' if q_material else ''}">
+<b>本轮直接考察上环源队列：每 VC 8+1 → 12+8。</b><br>
+旧配置（8 深共享 FIFO + 每向 1 深 inject Q）S0 =
+{old_q_thr} flit/cycle；本轮（{meta.get('inj_depth')} 深共享 FIFO +
+每向 {meta.get('dir_inj_depth')} 深 inject Q）S0 =
+<b>{thr0}</b>，变化 <b>{q_delta:+.2f}%</b>。<br>
+{'提升超过预设的 3% 证伪线，说明方向 Q 深度确实是欠载的重要来源，下面重新定位新的绑定项。'
+ if q_material else
+ '没有跨过 3% 证伪线：队列能保存更多待发 flit，但不能制造新的环上空槽；总写带宽欠载仍不是源队列容量造成的。'}
+</div>
 <h4>3.1.1 上 / 下环各 1 flit/cycle/node 算进来之后，上限还是 {r_bind:.3f}</h4>
 <p>每节点<b>每 VC</b> 上环 1 flit/cycle、下环 1 flit/cycle
 （上环是两个方向共用那一个口，不是每方向 1；下环是 PE 每拍从该 VC 读 1 flit）。
@@ -2863,29 +2897,40 @@ retry/txn = <b>{(s0.get('retry') or {}).get('retry_per_txn')}</b>，
 <b>completer 表项这一层已经被彻底移除，不再是瓶颈。</b></div>
 {_table(["ha_track", "总写带宽", "makespan", "retry/txn", "峰值占用表项",
          "占 ∞ 平台"],
-        [[f"32（两轮前）", TRACK32_ROUND["thr"], TRACK32_ROUND["makespan"],
+        [["32（历史）", TRACK32_ROUND["thr"], TRACK32_ROUND["makespan"],
           TRACK32_ROUND["retry_per_txn"], 32,
           f"{100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%"],
-         [f"128（上一轮）", TRACK128_ROUND["thr"], TRACK128_ROUND["makespan"],
+         ["128（历史）", TRACK128_ROUND["thr"], TRACK128_ROUND["makespan"],
           TRACK128_ROUND["retry_per_txn"], TRACK128_ROUND["max_ha_used"],
           f"{100.0 * TRACK128_ROUND['thr'] / TRACK128_ROUND['plateau']:.0f}%"],
-         [f"{meta.get('ha_track')}（本轮）", thr0, mk,
+         ["256（旧 8+1 队列）", TRACK256_ROUND["thr"],
+          TRACK256_ROUND["makespan"], TRACK256_ROUND["retry_per_txn"],
+          TRACK256_ROUND["max_ha_used"], "100%"],
+         [f"{meta.get('ha_track')}（本轮 12+8 队列）", thr0, mk,
           (s0.get("retry") or {}).get("retry_per_txn"),
           (s0.get("retry") or {}).get("max_ha_used"),
           f"<b>{100.0 * thr0 / plateau:.0f}%</b>"],
          ["∞（参照）", plateau,
           (pat.get("s0_unbounded") or {}).get("makespan"), 0.0, qref_ha,
           "100%"]])}
-<p class="note">三轮下来这条曲线的形状是：32 → 128 只补回一部分
+<p class="note">tracker 曲线的形状是：32 → 128 只补回一部分
 （{TRACK32_ROUND['thr']} → {TRACK128_ROUND['thr']}），
-128 → {meta.get('ha_track')} 才走完剩下的
-（{TRACK128_ROUND['thr']} → {thr0}）。
+128 → 256 才走完剩下的
+（{TRACK128_ROUND['thr']} → {TRACK256_ROUND['thr']}）。
 判断「够不够」的正确依据不是扫描曲线的拐点，而是
 <b>∞ 参照在官方 K 上的峰值占用</b>（这里是 {qref_ha}）——
 配额只要高过它，动力学就和无限一样。</p>
-<p>剩下那个 {plateau} 的平台不是缓存不够 —— 在 ∞ tracker 下把各级缓存
-单独放宽，带宽都只在 ±1% 内动：</p>
-{_table(["改动（ha_track = ∞）", "总写带宽"], CEILING_PROBE["knobs"])}
+<p>{(
+    f'本轮 12+8 比旧 8+1 提升 {q_delta:+.2f}%，已经跨过 3% 证伪线；'
+    '因此不能再说源队列容量已排除，需要把它列为新的重要因素。'
+    if q_material else
+    f'剩下那个 {plateau} 的平台不是源队列不够。本轮官方 K 已直接把'
+    f'每 VC 上环源队列从 8+1 同时加到 12+8，吞吐只动 {q_delta:+.2f}%。'
+)}
+下面是此前在旧 8+1 配置、∞ tracker、K={CEILING_PROBE['k']} 下的单旋钮
+历史消融；单独把任一级加深也都只在 ±1% 内动：</p>
+{_table(["历史改动（旧 8+1，ha_track = ∞）", "总写带宽"],
+        CEILING_PROBE["knobs"])}
 <p>平台的成因是<b>无缓存环的上环饥饿</b>：在环 flit 优先，核只能挤进空隙。
 此时最忙的 dat 段占用 {CEILING_PROBE['hot_seg_util']}%，
 已经离 R* 假设的 100% 不远，但核每拍仍有约
@@ -2898,9 +2943,15 @@ retry/txn = <b>{(s0.get('retry') or {}).get('retry_per_txn')}</b>，
 第三层（completer 表项）在本轮<b>等于零</b>：实测就等于 ∞ 参照 {plateau}。
 上一轮 128 个表项时它还要再削 {100 - 100.0 * TRACK128_ROUND['thr'] / TRACK128_ROUND['plateau']:.0f}%，
 两轮前 32 个时削 {100 - 100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%。<br>
-<b>所以「S0 为什么达不到 R*」现在只有一个答案：无缓存环的上环仲裁。</b>
-端口速率（{n_m}.0 flit/cycle，见 3.1.1）、各级 buffer 深度、
-completer 表项都已经逐一排除。</div>
+{(
+    '<b>源队列加深已经带来实质提升，但仍未到 R*；剩余缺口需要在'
+    '源队列容量和无缓存环仲裁之间重新拆分。</b>'
+    if q_material else
+    '<b>所以「S0 为什么达不到 R*」仍只有一个已识别的答案：'
+    '无缓存环的上环仲裁。</b>端口速率（'
+    f'{n_m}.0 flit/cycle，见 3.1.1）、源/方向 buffer 深度、'
+    'completer 表项都已经逐一排除。'
+)}</div>
 <p class="note">再往前一版<b>三 VC 共享端口</b>的 fabric（R* = 5.333、端口绑定、
 平台 3.466、实测 2.541）说明的是另一件事：端口拆开抬高了 R* 与平台，
 但在 32 tracker 下实测反而下降，因为 REQ 有专用端口后到达 HA 更快、
@@ -3322,6 +3373,9 @@ def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
     jbr0 = (s0.get("jain_bin") or {}).get("jain_bin_ratio")
     jb1 = (s1.get("jain_bin") or {}).get("jain_bin_mean")
     t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / max(1e-9, s0["throughput"])
+    q_depth_delta = 100.0 * (
+        s0["throughput"] - TRACK256_ROUND["thr"]) / TRACK256_ROUND["thr"]
+    q_depth_material = abs(q_depth_delta) > 3.0
     t_ref = 100.0 * (s0["throughput"] - sref["throughput"]) / max(
         1e-9, sref["throughput"])
     b = pat["bounds"]
@@ -3405,21 +3459,35 @@ S0 吞吐 <b>{s0['throughput']}</b> flit/cycle，
 与无限 tracker 参照<b>逐拍一致</b>（makespan {pat['schemes']['S0']['makespan']}
 vs {(pat.get('s0_unbounded') or {}).get('makespan')}，吞吐同为
 {sref['throughput']}）。<br>
-三轮对照：32 → {TRACK32_ROUND['thr']}，128 → {TRACK128_ROUND['thr']}，
-{meta.get('ha_track')} → {s0['throughput']}。
+旧 8+1 队列上的 tracker 历史：32 → {TRACK32_ROUND['thr']}，
+128 → {TRACK128_ROUND['thr']}，256 → {TRACK256_ROUND['thr']}；
+本轮保持 256、只把队列改成 12+8 → {s0['throughput']}。
 定尺寸的正确依据是 <b>∞ 参照在官方 K 上的峰值占用
 {qref.get('max_ha_used', '—')}</b>，而不是短跑扫描曲线的拐点 ——
 K=4000 的探测说 128 就够，官方 K 上并不够（见 3.1.3）。</li>
+<li><b>每 VC 上环源队列 8+1 → 12+8：</b>
+S0 {TRACK256_ROUND['thr']} → <b>{s0['throughput']}</b> flit/cycle
+（{q_depth_delta:+.2f}%）。
+{(
+    '提升跨过 3% 证伪线，源队列深度应重新列为总带宽的重要因素。'
+    if q_depth_material else
+    '没有跨过 3% 证伪线；更深队列只保存更多待发 flit，'
+    '没有解决 transit flit 抢占出链路造成的空槽时序。'
+)}</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
 {s0['max_min']} → {s1['max_min']}。
 本轮已无 RetryAck 可减，源端限速对 hop 理想毫无帮助。</li>
-<li><b>S0 达不到 R* 只剩一个原因：无缓存环的上环仲裁。</b>
+<li><b>{(
+    'S0 达不到 R* 的剩余缺口需要重新拆分。'
+    if q_depth_material else
+    'S0 达不到 R* 仍只剩一个已识别的原因：无缓存环的上环仲裁。'
+)}</b>
 S0 吞吐是 hop 理想 R* 的
 <b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.0f}%</b>。
-其他候选已逐一排除：端口速率（每节点每 VC 上/下环各 1 flit/cycle
-折算成 {len(meta.get('mem_nodes') or [])}.0 flit/cycle，比 R* 还松，见 3.1.1）、
-各级 buffer 深度（∞ tracker 下单独放宽都只动 ±1%）、
-completer 表项（本轮 retry = 0）。
+其余候选的状态：端口速率已排除（每节点每 VC 上/下环各 1 flit/cycle
+折算成 {len(meta.get('mem_nodes') or [])}.0 flit/cycle，比 R* 还松，见 3.1.1）；
+源/方向 buffer 深度（本轮 8+1 → 12+8 实测 {q_depth_delta:+.2f}%）、
+completer 表项已排除（本轮 retry = 0）。
 剩下的机制是在环 flit 绝对优先，核只能挤进空隙 ——
 决定上环延迟的是空档的<b>分布</b>而不是总量。见 3.1 与 4.5。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，

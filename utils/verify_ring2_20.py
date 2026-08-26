@@ -113,26 +113,31 @@ def test_latency_route_matches_hops_on_this_ring() -> None:
 
 
 def test_shared_inj_depth_and_board_rate() -> None:
-    """Per-VC shared FIFO is 8 deep; each VC port boards 1 flit/cycle."""
+    """Per-VC FIFO is 12 deep, dir Q is 8, port stays 1 flit/cycle."""
+    from dse_ring2_write_fair import base_params
+    bp = base_params()
+    assert bp.shared_inj and bp.per_vc_srcq and bp.per_vc_ports
+    assert (bp.inj_depth, bp.dir_inj_depth) == (12, 8)
+
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
     p = Ring2BaseParams(shared_inj=True, per_vc_srcq=True, per_vc_ports=True,
-                        inj_depth=8, dir_inj_depth=1,
+                        inj_depth=12, dir_inj_depth=8,
                         core_outstanding=0, ha_track=0)
     sim = Ring2BaseSim(topo, p, seed=0)
-    for i in range(10):
+    for i in range(14):
         f = Flit(pid=i, txn_id=i, seq=0, nflit=1, src=0, dst=1,
                  kind="wdata", t_gen=0, plane=0)
         sim._place(f)
         sim._offer_flit(f)
     dat = (0, 0, "dat")
-    assert len(sim.srcq[dat]) == 8, len(sim.srcq[dat])
+    assert len(sim.srcq[dat]) == 12, len(sim.srcq[dat])
     assert len(sim.pending[dat]) == 2
     sim.step()
     assert sim.st["n_injected"] == 1, sim.st["n_injected"]
     left = (len(sim.srcq[dat]) + len(sim.pending[dat])
             + sum(len(sim.srcq[(0, 0, "dat", d)]) for d in (1, -1)))
-    assert left == 9, left
-    assert sim.st["max_srcq"] <= 8, sim.st["max_srcq"]
+    assert left == 13, left
+    assert sim.st["max_srcq"] <= 12, sim.st["max_srcq"]
 
 
 def test_per_vc_ports_board_one_each_per_cycle() -> None:

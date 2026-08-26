@@ -299,8 +299,8 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
 # Every scheme rides the same fabric: one plane, latency-shortest routing
-# (link-delay sum, then hops, then CW), a depth-8 shared up-ring FIFO plus
-# one inject Q per direction, 1 flit/cycle board, a two-write / one-read
+# (link-delay sum, then hops, then CW), a depth-12 shared up-ring FIFO plus
+# a depth-8 inject Q per direction, 1 flit/cycle board, a two-write / one-read
 # leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
 # The tracker is part of the baseline, not of one scheme.
 HA_RSP_JIT_LO = 0        # inclusive; each HA RSP / Comp is U{lo..hi}
@@ -309,7 +309,7 @@ HA_RSP_JIT = 0           # 0 = constant t_ha_service (also 0): no HA think time
 FC_BUS_LAT = 30
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
               per_vc_ports=True, shared_inj=True, two_write_leave=True,
-              inj_depth=8, dir_inj_depth=1,
+              inj_depth=12, dir_inj_depth=8,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
@@ -535,6 +535,32 @@ TRACK256_FORECAST = {
         "出现任何重试（retry > 0），或 makespan 偏离 88090 超过 1% —— "
         "那说明占用峰值本身跟 cap 有关，不动点论证不成立，"
         "或者仿真存在我没考虑到的路径依赖"
+    ),
+}
+
+
+UPQ_12_8_FORECAST = {
+    "hypothesis": (
+        "每 VC 的上环源队列从「8 深双向共享 FIFO + 每向 1 深 inject Q」"
+        "改成「12 深共享 FIFO + 每向 8 深 inject Q」；端口、链路、下环、"
+        "tracker 和路由不变。预测总写带宽仍约 4.54 flit/cycle，变化在 ±1% 内。"
+        "原因是上一轮 tracker 已不绑定，端口最忙也只有 56.8%，而在 ∞ tracker "
+        "历史消融里 inj_depth 8→32 完全不动、dir_inj_depth 1→4 也只动约 1%。"
+        "更深的源队列能保存更多等待 flit，却不能让被 transit flit 占用的"
+        "出链路产生新空槽；因此无缓存环的上环时序冲突应继续绑定。"
+    ),
+    "predicted": {
+        "s0_thr": [4.495, 4.586],
+        "s0_thr_delta_pct": [-1.0, 1.0],
+        "retry_per_txn": 0.0,
+        "bound": 70000,
+        "rstar": 5.714,
+    },
+    "confidence": 0.8,
+    "falsify": (
+        "S0 吞吐相对 4.5408 提升超过 3%（> 4.677），"
+        "或热 DAT hop 利用率明显越过上一轮约 79.7%；"
+        "那说明 depth-1 方向 Q 的短时阻塞确实是欠载的重要来源"
     ),
 }
 
@@ -1663,6 +1689,7 @@ def main() -> None:
             "bin50_fair_forecast": BIN50_FAIR_FORECAST,
             "track128_forecast": TRACK128_FORECAST,
             "track256_forecast": TRACK256_FORECAST,
+            "upq_12_8_forecast": UPQ_12_8_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
