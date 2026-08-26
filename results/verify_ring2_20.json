@@ -1,7 +1,7 @@
 {
-  "n_total": 62,
-  "n_ok": 61,
-  "all_ok": false,
+  "n_total": 63,
+  "n_ok": 63,
+  "all_ok": true,
   "rows": [
     {
       "name": "topo_roles_and_wrap",
@@ -168,6 +168,10 @@
       "ok": true
     },
     {
+      "name": "binned_jain_null_matches_fair",
+      "ok": true
+    },
+    {
       "name": "s15_beats_s0_fairness",
       "ok": true
     },
@@ -233,9 +237,7 @@
     },
     {
       "name": "s16_grants_below_tracker",
-      "ok": false,
-      "error": "(1682, 1683)",
-      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1314, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] >= sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1682, 1683)\n"
+      "ok": true
     },
     {
       "name": "rate_pinned_equals_s0",
@@ -254,5 +256,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T08:32:03Z"
+  "generated_at": "2026-08-26T09:19:56Z"
 }

@@ -542,29 +542,46 @@ def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
     an unfair arbiter.
 
     A bin this short holds few flits per core, so the index also carries
-    counting noise; read it against the equal-probability null model the
-    report prints beside it, not against 1.0.
+    counting noise, and 1.0 is not reachable. `jain_bin_null` is where a
+    perfectly fair arbiter would land when observed through the same window:
+    split each bin's total multinomially over the cores at equal probability
+    and the per-core count has mean N/n and variance N(1/n)(1-1/n), so
+
+        E[J] ~ 1/(1 + CV^2) = N / (N + n - 1)
+
+    per bin. `jain_bin_ratio = mean / null` is then the number to judge:
+    >= 1.0 means the fabric is at least as even as perfectly fair
+    arbitration. An absolute threshold on `jain_bin_mean` would be
+    meaningless, because the floor moves with the flit count per bin and a
+    scheme that costs throughput lowers its own floor.
+
+    The closed form is first order (1/(1+E[CV^2]) rather than E[1/(1+CV^2)]),
+    so it runs ~1e-3 below an actual equal-probability draw -- the acceptance
+    line is lenient by about that much. `verify_ring2_20` pins the gap.
     """
     cs = sorted(inject_times)
     nbin = int(t_fair) // bin_w if bin_w > 0 else 0
     if not cs or nbin <= 0:
         return {}
+    n = len(cs)
     cnt = [[0] * nbin for _ in cs]
     for i, c in enumerate(cs):
         for t in inject_times[c]:
             b = int(t) // bin_w
             if 0 <= b < nbin:
                 cnt[i][b] += 1
-    vals = sorted(jain([cnt[i][b] for i in range(len(cs))])
-                  for b in range(nbin))
+    tot = [sum(cnt[i][b] for i in range(n)) for b in range(nbin)]
+    vals = sorted(jain([cnt[i][b] for i in range(n)]) for b in range(nbin))
     per_bin = sum(vals) / nbin
+    null = sum(N / (N + n - 1) if N else 0.0 for N in tot) / nbin
     return {
-        "bin_w": bin_w, "n_bins": nbin, "n_cores": len(cs),
+        "bin_w": bin_w, "n_bins": nbin, "n_cores": n,
         "jain_bin_mean": round(per_bin, 5),
+        "jain_bin_null": round(null, 5),
+        "jain_bin_ratio": round(per_bin / null, 5) if null else None,
         "jain_bin_p05": round(vals[int(0.05 * nbin)], 5),
         "jain_bin_min": round(vals[0], 5),
-        "flits_per_core_per_bin": round(
-            sum(sum(row) for row in cnt) / len(cs) / nbin, 2),
+        "flits_per_core_per_bin": round(sum(tot) / n / nbin, 2),
     }
 
 
@@ -831,8 +848,9 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
                 keep_trace: bool = False) -> dict[str, Any]:
     """One grid point: what the cap bought, and what the retries cost."""
     r = run_scheme(scheme, topo, txns, seed=seed, cfg=cfg, quiet=True)
-    f = fairness_stats(r.get("wr_inject_by_core") or {}, r["makespan"] or 1,
-                       k * W)
+    inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+    f = fairness_stats(inj, r["makespan"] or 1, k * W)
+    jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
     q = r.get("retry") or {}
     fc = r.get("fc") or {}
     row = {"trace": fc.get("trace")} if keep_trace else {}
@@ -844,6 +862,9 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "inorder_retire": bool(cfg.get("inorder_retire")),
         "makespan": r.get("makespan"), "completed": r.get("completed"),
         "throughput": f.get("throughput", 0.0), "jain": f.get("jain", 0.0),
+        "jain_bin": jb.get("jain_bin_mean"),
+        "jain_bin_null": jb.get("jain_bin_null"),
+        "jain_bin_ratio": jb.get("jain_bin_ratio"),
         "max_min": f.get("max_min", 0.0), "bw_min": f.get("bw_min", 0.0),
         "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
         "n_retry": q.get("n_retry", 0),
@@ -1098,6 +1119,7 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
     all_wr = [t for ts in inj.values() for t in ts]
     f = fairness_stats(inj, r["makespan"] or 1, k * W)
+    jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
     tr = _ost_series(q)
     row = {
         "scheme": scheme,
@@ -1109,6 +1131,9 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "throughput": f.get("throughput", 0.0),
         "retry_per_txn": q.get("retry_per_txn", 0.0),
         "ooo_frac": q.get("ooo_frac", 0.0),
+        "jain_bin": jb.get("jain_bin_mean"),
+        "jain_bin_null": jb.get("jain_bin_null"),
+        "jain_bin_ratio": jb.get("jain_bin_ratio"),
         "max_min": f.get("max_min", 0.0),
         "outst_eff": q.get("outst_eff_mean", 0.0),
         "outst_used": q.get("outst_used_mean", 0.0),
@@ -1277,10 +1302,15 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         thr0 = None
         for scheme in schemes:
             r = run_scheme(scheme, topo, txns, seed=sd, quiet=True)
-            f = fairness_stats(r["wr_inject_by_core"], r["makespan"], k * W)
+            inj = {int(c): v for c, v in r["wr_inject_by_core"].items()}
+            f = fairness_stats(inj, r["makespan"], k * W)
+            jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
             thr0 = f["throughput"] if scheme == "S0" else thr0
             row[scheme] = {
                 "jain": f["jain"], "max_min": f["max_min"],
+                "jain_bin": jb.get("jain_bin_mean"),
+                "jain_bin_null": jb.get("jain_bin_null"),
+                "jain_bin_ratio": jb.get("jain_bin_ratio"),
                 "throughput": f["throughput"],
                 "thr_delta_pct": (
                     round(100.0 * (f["throughput"] - thr0) / thr0, 2)
@@ -1288,7 +1318,8 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             }
         rows.append(row)
         print(f"    seed {sd}: " + "  ".join(
-            f"{s} jain={row[s]['jain']} mm={row[s]['max_min']} "
+            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_null']} "
+            f"mm={row[s]['max_min']} "
             f"({row[s]['thr_delta_pct']:+.2f}%)" for s in schemes), flush=True)
     return rows
 
@@ -1422,13 +1453,15 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
 
 def _report(pat: dict[str, Any]) -> None:
     print(f"\n[{pat['pattern']}]  bound={pat['bounds']['bound']}")
-    print(f"{'scheme':6} {'mk':>8} {'ok':>3} {'jain':>8} {'max/min':>8} "
-          f"{'cov':>8} {'bwmin':>8} {'bwmax':>8} {'thr':>7} {'fail':>9}")
+    print(f"{'scheme':6} {'mk':>8} {'ok':>3} {'Jbin':>8} {'null':>8} "
+          f"{'ratio':>7} {'max/min':>8} {'bwmin':>8} {'thr':>7} {'fail':>9}")
     for name, d in pat["schemes"].items():
         f = d["fairness"]
+        jb = f.get("jain_bin") or {}
         print(f"{name:6} {d['makespan']:>8} {int(bool(d['completed'])):>3} "
-              f"{f['jain']:>8} {f['max_min']:>8} {f['cov']:>8} "
-              f"{f['bw_min']:>8} {f['bw_max']:>8} {f['throughput']:>7} "
+              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_null', 0):>8} "
+              f"{jb.get('jain_bin_ratio', 0):>7} {f['max_min']:>8} "
+              f"{f['bw_min']:>8} {f['throughput']:>7} "
               f"{d['n_board_fail']:>9}")
     rc = pat.get("root_cause")
     if rc:

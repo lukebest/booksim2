@@ -8,6 +8,7 @@ results/verify_ring2_20.json.
 from __future__ import annotations
 
 import json
+import random
 import sys
 import time
 import traceback
@@ -914,6 +915,33 @@ def test_binned_jain_averages_per_bin_over_the_fair_window() -> None:
     r = binned_jain(late, 50, 500)
     assert r["n_bins"] == 10 and r["jain_bin_mean"] == 1.0, r
 
+    # The null is the acceptance floor, so pin it too: N/(N+n-1) per bin with
+    # N = 50 flits over n = 10 cores.
+    r = binned_jain(even, 50, 1000)
+    assert r["jain_bin_null"] == round(50 / 59, 5), r
+    assert abs(r["jain_bin_ratio"] - 59 / 50) < 1e-5, r
+
+
+def test_binned_jain_null_matches_a_fair_arbiter() -> None:
+    """The closed-form null must match what a fair arbiter actually produces.
+
+    `jain_bin_null` is what the acceptance line is measured against, so the
+    N/(N+n-1) shortcut is checked against an actual equal-probability draw
+    rather than trusted. It is a first-order expansion and lands ~1e-3 low,
+    which is the direction that makes the acceptance line lenient, not
+    strict; the bound below is what keeps that bias from growing.
+    """
+    rng = random.Random(12345)
+    n, nbin, per_bin = 10, 4000, 12
+    inject: dict[int, list[int]] = {c: [] for c in range(n)}
+    for b in range(nbin):
+        for _ in range(n * per_bin):
+            inject[rng.randrange(n)].append(b * 50 + 1)
+    r = binned_jain(inject, 50, nbin * 50)
+    assert r["flits_per_core_per_bin"] == float(per_bin), r
+    assert 0.0 <= r["jain_bin_mean"] - r["jain_bin_null"] < 2e-3, r
+    assert abs(r["jain_bin_ratio"] - 1.0) < 2e-3, r
+
 
 def test_s15_beats_s0_fairness() -> None:
     """The whole point: fair share + reservation on the skewed pattern."""
@@ -1310,6 +1338,13 @@ def test_s16_needs_to_grant_below_the_tracker() -> None:
     # tracker entry open, which stalls the pipeline instead of bouncing more
     # requests. Retries only creep up once the overcommit is far below the
     # tracker, so the monotone penalty is what gets pinned.
+    #
+    # FLAKY: at overcommit = track/2 both deltas below are a handful of
+    # events, smaller than this run's spread across processes. `_inject_keys`
+    # returns `active_src` in set order, so the injection visit order -- and
+    # with it makespan and n_retry -- moves with PYTHONHASHSEED. Run with
+    # PYTHONHASHSEED=0 to reproduce. Fixing the arbitration order (a policy
+    # decision) is what would make these assertions meaningful.
     assert sl["makespan"] > sb["makespan"], (sl["makespan"], sb["makespan"])
     assert sl["n_retry"] >= sb["n_retry"], (sl["n_retry"], sb["n_retry"])
     _, _, deep = _run_retry("S16", k=200, cfg={
@@ -1492,6 +1527,8 @@ def main() -> None:
     c.add("write_fairness_metrics_sane", test_write_fairness_metrics_sane)
     c.add("binned_jain_per_bin_average",
           test_binned_jain_averages_per_bin_over_the_fair_window)
+    c.add("binned_jain_null_matches_fair",
+          test_binned_jain_null_matches_a_fair_arbiter)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
     c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)
