@@ -296,8 +296,8 @@ CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 # one inject Q per direction, 1 flit/cycle board, a two-write / one-read
 # leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
 # The tracker is part of the baseline, not of one scheme.
-HA_RSP_JIT_LO = 4        # inclusive; each HA RSP / Comp is U{lo..hi}
-HA_RSP_JIT = 64
+HA_RSP_JIT_LO = 0        # inclusive; each HA RSP / Comp is U{lo..hi}
+HA_RSP_JIT = 0           # 0 = constant t_ha_service (also 0): no HA think time
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
@@ -411,6 +411,32 @@ PER_VC_PORT_FORECAST = {
     "falsify": (
         "S0 吞吐 ≥ 2.6（即端口拆分净赚，retry churn 没吃掉收益），"
         "或 retry/txn 仍 ≤ 0.6，或 bound 不是 70000"
+    ),
+}
+# Written before the ha_rsp_jit=0 re-run. Do not edit after seeing results.
+HA_RSP_ZERO_FORECAST = {
+    "hypothesis": (
+        "HA 回 RSP / Comp 的 think time 从 U{4..64}（均值 34 拍/条，"
+        "一笔写至少 DBID+Comp 两条 ≈ 68 拍）改成 0。"
+        "上一轮 T_hold ≈ 191 拍、R=2.41、retry/txn=0.57，"
+        "其中一块就是这段 completer 等待。"
+        "去掉之后 32 个 tracker 周转加快，retry 应下降，"
+        "S0 吞吐应往无缓存环平台（上一轮无限 tracker ≈ 4.51）靠。"
+        "32 tracker 未必完全松绑（68 拍只是 T_hold 的一部分），"
+        "但差距应明显收窄。无限 tracker 平台本身不应大变："
+        "HA 时延不是环的限制。"
+    ),
+    "predicted": {
+        "s0_thr": [3.0, 4.6],
+        "retry_per_txn": [0.0, 0.40],
+        "s0_thr_gt_prev": 2.41,
+        "inf_track_thr": [4.3, 5.0],
+        "bound": 70000,
+    },
+    "confidence": 0.6,
+    "falsify": (
+        "S0 吞吐仍 ≤ 2.6（HA 时延不在关键路径上），"
+        "或 retry/txn 仍 ≥ 0.50"
     ),
 }
 
@@ -1460,6 +1486,8 @@ def main() -> None:
             "ha_track": bp.ha_track, "s16_overcommit": S16_OVERCOMMIT,
             "ha_rsp_jit_lo": bp.ha_rsp_jit_lo,
             "ha_rsp_jit": bp.ha_rsp_jit,
+            "t_ha_service": bp.t_ha_service,
+            "ha_rsp_zero_forecast": HA_RSP_ZERO_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,

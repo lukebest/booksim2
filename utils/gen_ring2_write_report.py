@@ -91,7 +91,8 @@ def _cores(pat: dict) -> list[str]:
 def _jit_label(meta: dict) -> str:
     hi = int(meta.get("ha_rsp_jit") or 0)
     if hi <= 0:
-        return f"{meta.get('t_ha_service', 0)}（常数）"
+        svc = int(meta.get("t_ha_service") or 0)
+        return "0（无 HA think time）" if svc == 0 else f"{svc}（常数）"
     lo = int(meta.get("ha_rsp_jit_lo") or 0)
     return f"U{{{lo}..{hi}}}"
 
@@ -1153,11 +1154,23 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"port {b.get('port_lb')}），"
             f"S0 吞吐 {f0.get('throughput')}，max/min {f0.get('max_min')}。"
         )
+    hz_fc = meta.get("ha_rsp_zero_forecast") or {}
+    hz_note = ""
+    if hz_fc:
+        hz_note = (
+            f"<br><b>HA RSP 时延 = 0 的预测</b>"
+            f"（置信度 {hz_fc.get('confidence', '—')}）："
+            f"{hz_fc.get('hypothesis', '')} "
+            f"证伪：{hz_fc.get('falsify', '')}"
+            f"<br>对照：HA RSP {_jit_label(meta)}，"
+            f"S0 吞吐 {f0.get('throughput')}，"
+            f"retry/txn {(s0.get('retry') or {}).get('retry_per_txn')}。"
+        )
     return f"""
 <div class="def">
 <b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
 {fc.get('hypothesis', '')}
-证伪：{fc.get('falsify', '')}{bus_note}{vc_note}<br>
+证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}<br>
 <b>对照。</b>
 {len(xs)} 个 mem 收到的 WriteData
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
@@ -2545,6 +2558,32 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
                      ib["total_p05"], ib["total_p50"], ib["total_p95"],
                      ib["total_min"], ib["total_max"]])
     got = rows[0][1] if rows else 0.0
+    thr0 = float((s0.get("fairness") or {}).get("throughput") or got)
+    eff = float((s0.get("retry") or {}).get("outst_eff_mean") or 0)
+    t_hold = round(eff * n_c / max(n_txn / mk, 1e-9), 1) if n_txn else None
+    hz_ablate = ""
+    if int(meta.get("ha_rsp_jit") or 0) <= 0:
+        hz_ablate = f"""
+<h4>3.2.3 HA RSP 时延改成 0：吞吐不动</h4>
+<p>本轮把 completer 的 DBIDResp / RetryAck / Comp 从
+U{{4..64}}（均值 34 拍/条）改成 <b>0</b>。跑数前的预测是
+T_hold 会少掉约 68 拍，32 tracker 周转加快，S0 吞吐往
+{plateau} 靠。官方 K 对照上一轮（同一 fabric，只改这一项）：</p>
+{_table(["量", "U{4..64}（上一轮）", "0（本轮）"],
+        [["S0 总写带宽", 2.410, thr0],
+         ["retry/txn", 0.5689,
+          (s0.get("retry") or {}).get("retry_per_txn")],
+         ["outst_eff / 核", 22.98, eff],
+         ["T_hold（拍）", 190.7, t_hold],
+         ["无限 tracker 平台", 4.514, plateau]])}
+<div class="def warn">预测被推翻：<b>吞吐 2.410 → {thr0}，retry 还略升</b>。
+T_hold 从 190.7 降到 {t_hold}，outst_eff 从 23.0 降到 {eff}，
+两者同比例缩小，所以事务率不变（Little：λ = N / T）。
+HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
+飞行 / 排队决定，DBID / Comp 的 0 拍只是剪掉流水线里的空等待，
+<b>释放速率不变</b>。K=2000 再扫一次 tracker，拐点仍在 128
+（32 → 2.277，128 / ∞ → 4.510）。</div>
+"""
 
     # Per-VC port occupancy, straight from the stored counts.
     ports = [
@@ -2624,6 +2663,7 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
 32 深 tracker 被打得更凶（retry/txn 从 0.4288 升到
 {(s0.get('retry') or {}).get('retry_per_txn')}），churn 吃掉了端口拆分的收益。
 <b>把 fabric 加宽而不加 tracker，净效果是负的。</b></p>
+{hz_ablate}
 
 <h3>3.3 各核瞬时带宽均衡度</h3>
 <p>全窗口 max/min ≈ {s0['fairness']['max_min']} 看起来完美，
@@ -3069,7 +3109,9 @@ Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
 延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。
 无限 tracker 参照吞吐 {sref['throughput']}、max/min {sref['max_min']}
 （峰值占用 {qref.get('max_ha_used', '—')} 表项）。
-端口拆开让 REQ 更快堆到 HA，32 表项把大家一起压住，所以看起来更公平、吞吐更低。</li>
+端口拆开让 REQ 更快堆到 HA，32 表项把大家一起压住，所以看起来更公平、吞吐更低。
+HA RSP 时延改成 0 之后吞吐几乎不动（见 3.2.3）：completer think time
+不在关键路径上。</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
 {s0['max_min']} → {s1['max_min']}。
 源端限速略减 RetryAck，帮不上 hop 理想。</li>

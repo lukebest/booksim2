@@ -1,7 +1,7 @@
 {
   "n_total": 61,
-  "n_ok": 61,
-  "all_ok": true,
+  "n_ok": 60,
+  "all_ok": false,
   "rows": [
     {
       "name": "topo_roles_and_wrap",
@@ -229,7 +229,9 @@
     },
     {
       "name": "s16_grants_below_tracker",
-      "ok": true
+      "ok": false,
+      "error": "(1691, 1694)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1289, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] >= sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1691, 1694)\n"
     },
     {
       "name": "rate_pinned_equals_s0",
@@ -248,5 +250,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T07:07:40Z"
+  "generated_at": "2026-08-26T07:29:06Z"
 }

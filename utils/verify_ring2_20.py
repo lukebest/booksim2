@@ -929,8 +929,8 @@ def test_tiled_interleave_is_balanced() -> None:
 def test_ha_rsp_jit_is_per_txn_and_bounded() -> None:
     """Memory RSP delay is U{lo..hi} and identical across schemes for a txn."""
     from dse_ring2_write_fair import FABRIC
-    assert FABRIC.get("ha_rsp_jit") == 64, FABRIC.get("ha_rsp_jit")
-    assert FABRIC.get("ha_rsp_jit_lo") == 4, FABRIC.get("ha_rsp_jit_lo")
+    assert FABRIC.get("ha_rsp_jit") == 0, FABRIC.get("ha_rsp_jit")
+    assert FABRIC.get("ha_rsp_jit_lo") == 0, FABRIC.get("ha_rsp_jit_lo")
     topo, txns, sim = _run_write(k=30, W=2, pattern="study",
                                  cfg={"ha_rsp_jit_lo": 4, "ha_rsp_jit": 64})
     s = sim.summary()
