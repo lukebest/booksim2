@@ -12,8 +12,9 @@ per plane; the two directions of a plane share that port and its buffer.
 
 Hop delay is per undirected edge (same both directions). Default
 `RING2_LINK_LATS[i]` is the delay between node i and (i+1) mod 20;
-the last entry is mem HA 19 ↔ core 0. Routing is still hop-count
-shortest path (CW on a hop-count tie).
+the last entry is mem HA 19 ↔ core 0. Default routing is hop-count
+shortest path (CW on a hop-count tie). `route="latency"` picks the
+direction with the smaller sum of link delays, then fewer hops, then CW.
 
 Protocol is AMBA CHI, restricted to non-cacheable non-snoopable reads
 (`ReadNoSnp`): cores are RNs, HAs are completers. No SNP channel, no
@@ -209,7 +210,8 @@ class Ring2Topology:
                  board_ports: int = 1, leave_ports: int = 1,
                  spatial_reuse: SpatialReuse = "arc",
                  link_lats: Sequence[int] | None = None,
-                 vcs: Sequence[str] | None = None):
+                 vcs: Sequence[str] | None = None,
+                 route: Literal["hops", "latency"] = "hops"):
         if n < 4 or n % 2:
             raise ValueError("n must be even and >= 4")
         if n_planes < 1:
@@ -239,6 +241,9 @@ class Ring2Topology:
             (p, d) for p in range(n_planes) for d in (1, -1)]
         self.vcs: tuple[str, ...] = tuple(vcs) if vcs else CHI_VCS
         self.n_vc = len(self.vcs)
+        if route not in ("hops", "latency"):
+            raise ValueError(route)
+        self.route = route
         self.directed_links: list[Edge] = self._directed_links()
         self.undirected_links = sorted(
             {(p, min(u, v), max(u, v)) for p, u, v in self.directed_links})
@@ -271,12 +276,30 @@ class Ring2Topology:
             return self.link_lats[v]
         raise ValueError(f"not adjacent: {u}, {v}")
 
+    def choose_dir(self, src: int, dst: int) -> Dir:
+        """Direction used when a caller does not pin one.
+
+        `route="hops"` is hop-count (CW on a hop tie). `route="latency"`
+        is the smaller sum of link delays, then fewer hops, then CW.
+        The standalone `shortest_dir` helper stays hop-count.
+        """
+        if src == dst:
+            return 1
+        if self.route != "latency":
+            return shortest_dir(src, dst, self.n)
+        cw, ccw = self.path_lat(src, dst, 1), self.path_lat(src, dst, -1)
+        if cw < ccw:
+            return 1
+        if ccw < cw:
+            return -1
+        return shortest_dir(src, dst, self.n)
+
     def path_lat(self, src: int, dst: int, direction: Dir | None = None
                  ) -> int:
-        """Sum of link delays along the (shortest, or given) path."""
+        """Sum of link delays along the (chosen, or given) path."""
         if src == dst:
             return 0
-        d = shortest_dir(src, dst, self.n) if direction is None else direction
+        d = self.choose_dir(src, dst) if direction is None else direction
         hops = hop_count(src, dst, d, self.n)
         acc = 0
         node = src
@@ -301,7 +324,7 @@ class Ring2Topology:
                   direction: Dir | None = None) -> Ring2Path:
         if src == dst:
             raise ValueError("src == dst")
-        d = shortest_dir(src, dst, self.n) if direction is None else direction
+        d = self.choose_dir(src, dst) if direction is None else direction
         hops = hop_count(src, dst, d, self.n)
         nodes = tuple((src + d * h) % self.n for h in range(hops + 1))
         return Ring2Path(src=src, dst=dst, plane=plane, dir=d, nodes=nodes)
@@ -764,6 +787,14 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
               + _leg("dat") + m_wdata * sig + t_ha
               + _leg("rsp") + sig)
     bound = max(link_lb, port_lb, cut_lb, txn_lb)
+    pairs_on_hop: dict[tuple[int, int], set] = defaultdict(set)
+    for p in vc_paths.get("dat") or []:
+        for e in p.links():
+            pairs_on_hop[(e[1], e[2])].add((p.src, p.dst))
+    n_hot_dat = max((len(s) for s in pairs_on_hop.values()), default=0)
+    hot_hops_dat = sorted(
+        f"{u}→{v}" for (u, v), s in pairs_on_hop.items()
+        if len(s) == n_hot_dat and n_hot_dat)
     return {
         "link_by_vc": link_by_vc, "cut_by_vc": cut_by_vc,
         "link_lb": link_lb, "port_lb": port_lb, "cut_lb": cut_lb,
@@ -772,6 +803,8 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
         "n_txn": len(vc_paths.get("req") or []),
         "n_vc": topo.n_vc, "hop_bw_cap": topo.hop_bw_cap,
         "m_req": m_req, "m_rsp": m_rsp, "m_wdata": m_wdata,
+        "n_hot_dat": n_hot_dat, "hot_hops_dat": hot_hops_dat,
+        "route": topo.route,
     }
 
 

@@ -240,7 +240,7 @@ def pass_through_load(topo: Ring2Topology, txns: Sequence[Txn]
         for vc, src, dst, m in legs:
             if src == dst or m <= 0:
                 continue
-            d = shortest_dir(src, dst, topo.n)
+            d = topo.choose_dir(src, dst)
             if vc == "dat":
                 own[(src, d)] += m
             node = src
@@ -291,18 +291,18 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 
 CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
-# Every scheme rides the same fabric: shortest-path routing, one plane
-# (one bidirectional ring), independent board / leave / eject per CHI VC,
-# per-VC boarding queues, and a finite request tracker at every completer. The
-# tracker is part of the baseline, not of one scheme: a real completer has
-# to RetryAck when it runs out of entries, and with the cap at
-# CORE_OUTSTANDING_WR every scheme below is measured with that pressure on.
+# Every scheme rides the same fabric: one plane, latency-shortest routing
+# (link-delay sum, then hops, then CW), a depth-8 shared up-ring FIFO plus
+# one inject Q per direction, 1 flit/cycle board, a two-write / one-read
+# leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
+# The tracker is part of the baseline, not of one scheme.
 HA_RSP_JIT_LO = 4        # inclusive; each HA RSP / Comp is U{lo..hi}
 HA_RSP_JIT = 64
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
-FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
-              per_vc_ports=True,
+FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=False,
+              per_vc_ports=False, shared_inj=True, two_write_leave=True,
+              inj_depth=8, dir_inj_depth=1,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
@@ -363,6 +363,25 @@ VC_INDEP_FORECAST = {
     },
     "confidence": 0.6,
     "falsify": "S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定",
+}
+# Written before the shared-buffer / latency-route re-run. Do not edit after.
+SHARED_BUF_FORECAST = {
+    "hypothesis": (
+        "上环两方向共用 8 深 FIFO，其后每向一个 inject Q；"
+        "上环 / 下环各 1 flit/cycle/node，下环两写一读。"
+        "端口重新合并，HA leave 叠三 VC，λ 上限靠近 4/15。"
+        "共享 FIFO 可能 HOL：outstanding 卡住的 REQ 挡后面的 WriteData。"
+        "时延最短在当前 link_lats 上与跳数最短重合（无严格方向翻转）。"
+        "两写一读减少双向同时到站的偏转，但 PE 仍 1/cycle。"
+    ),
+    "predicted": {
+        "s0_thr": [1.0, 2.4],
+        "bound": 75000,
+        "n_dir_flip_strict": 0,
+        "merge_port_vcs": True,
+    },
+    "confidence": 0.5,
+    "falsify": "S0 吞吐 ≥ 3.0（端口仍像拆开），或 bound 仍是 hop 的 70000",
 }
 
 
@@ -865,8 +884,9 @@ REPRO_FORECAST = {
 }
 
 
-def _directed_hops(src: int, dst: int, n: int = N_NODES) -> list[tuple[int, int]]:
-    d = shortest_dir(src, dst, n)
+def _directed_hops(src: int, dst: int, n: int = N_NODES,
+                   topo: Ring2Topology | None = None) -> list[tuple[int, int]]:
+    d = topo.choose_dir(src, dst) if topo is not None else shortest_dir(src, dst, n)
     hops, i = [], src
     for _ in range(hop_count(src, dst, d, n)):
         nxt = (i + d) % n
@@ -1035,10 +1055,10 @@ def congestion_repro(topo: Ring2Topology, *, k: int, W: int, seed: int
             "block_ha": REPRO_BLOCK_HA,
             "victim": REPRO_VICTIM, "victim_ha": REPRO_VICTIM_HA,
             "control": REPRO_CONTROL, "control_ha": REPRO_CONTROL_HA,
-            "victim_hops": _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA),
-            "control_hops": _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA),
+            "victim_hops": _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA, topo=topo),
+            "control_hops": _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA, topo=topo),
             "blocker_hops": {
-                str(c): _directed_hops(c, REPRO_BLOCK_HA)
+                str(c): _directed_hops(c, REPRO_BLOCK_HA, topo=topo)
                 for c in REPRO_BLOCKERS
             },
             "forecast": REPRO_FORECAST,
@@ -1046,7 +1066,8 @@ def congestion_repro(topo: Ring2Topology, *, k: int, W: int, seed: int
         "ost": [],
         "blocker": [],
     }
-    shared = {REPRO_VICTIM_HA: _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA)[:1]}
+    shared = {REPRO_VICTIM_HA: _directed_hops(
+        REPRO_VICTIM, REPRO_VICTIM_HA, topo=topo)[:1]}
     out["meta"]["shared_hop"] = shared[REPRO_VICTIM_HA]
     # Geometry pin: every blocker must ride the victim's first hop; control
     # must not. If this ever fails the experiment is measuring the wrong thing.
@@ -1323,7 +1344,8 @@ def main() -> None:
     schemes = [s for s in args.schemes.split(",") if s]
     patterns = [s for s in args.patterns.split(",") if s]
 
-    topo = Ring2Topology(vcs=CHI_VCS_WRITE, n_planes=args.n_planes)
+    topo = Ring2Topology(vcs=CHI_VCS_WRITE, n_planes=args.n_planes,
+                         route="latency")
     t0 = time.perf_counter()
     if args.merge:
         out = Path(args.out)
@@ -1390,6 +1412,7 @@ def main() -> None:
             "K": k, "W": args.W, "seed": args.seed, "bin_w": bin_w,
             "patterns": patterns, "schemes": schemes,
             "plane_sel": bp.plane_sel, "routing": "shortest_path",
+            "route": topo.route,
             "mem_nodes": list(MEM_NODES), "core_nodes": list(CORE_NODES),
             "non_terminal": list(NON_TERMINAL),
             "n_planes": topo.n_planes, "sigma": topo.sigma,
@@ -1400,6 +1423,8 @@ def main() -> None:
             "hop_bw_cap": topo.hop_bw_cap,
             "link_lats": list(topo.link_lats),
             "inj_depth": bp.inj_depth, "eject_depth": bp.eject_depth,
+            "dir_inj_depth": bp.dir_inj_depth,
+            "shared_inj": bp.shared_inj, "two_write_leave": bp.two_write_leave,
             "t_inj": bp.t_inj, "per_vc_srcq": bp.per_vc_srcq,
             "core_outstanding": bp.core_outstanding,
             "ha_track": bp.ha_track, "s16_overcommit": S16_OVERCOMMIT,
@@ -1409,6 +1434,7 @@ def main() -> None:
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
             "vc_indep_forecast": VC_INDEP_FORECAST,
+            "shared_buf_forecast": SHARED_BUF_FORECAST,
             "flit_b": FLIT_BYTES, "burst_b": BURST_BYTES,
             "stride_b": STRIDE_BYTES, "tile_b": TILE_BYTES,
             "stimulus_forecast": STIMULUS_FORECAST,
@@ -1435,7 +1461,7 @@ def main() -> None:
     same_fabric = all(
         old_meta.get(k) == payload["meta"].get(k)
         for k in ("n_planes", "K", "W", "ha_rsp_jit", "ha_rsp_jit_lo",
-                  "per_vc_ports"))
+                  "per_vc_ports", "route", "shared_inj", "two_write_leave"))
     if retry_out is None and same_fabric and old_payload:
         if old_payload.get("retry_study") is not None:
             payload["retry_study"] = old_payload["retry_study"]
