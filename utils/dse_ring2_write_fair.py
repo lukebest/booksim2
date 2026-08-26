@@ -82,14 +82,14 @@ HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
 # Request tracker entries per completer, and the baseline for every scheme:
-# a completer that runs out of entries must RetryAck. 32 is what S16 pins its
-# write-data buffer to, so holding the tracker there asks every scheme to live
-# inside the same completer budget.
-RETRY_TRACK = 32
+# a completer that runs out of entries must RetryAck. 128 sits just past the
+# knee found by the tracker sweep, so the baseline is no longer retry-bound and
+# what remains is the bufferless ring's own injection limit.
+RETRY_TRACK = 128
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
 # to S0 exactly (pinned by verify_ring2_20.py).
-S16_OVERCOMMIT = 16
+S16_OVERCOMMIT = 64
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
@@ -463,6 +463,38 @@ BIN50_FAIR_FORECAST = {
         f"jain_bin_mean 低于同窗零模型的 null_jain，"
         f"或落到 0.90 以下 —— 那说明 {BIN_W} 拍尺度上存在真实的核间不公平，"
         "而不是抽样波动"
+    ),
+}
+
+
+TRACK128_FORECAST = {
+    "hypothesis": (
+        "ha_track 32 → 128，跨过 tracker 扫描找到的拐点。"
+        "上一轮 32 tracker 下 S0 = 2.385 flit/cycle、retry/txn = 0.63，"
+        "而短探测里 128 给出 4.424、retry/txn = 0.003，"
+        "无限 tracker 平台是 4.498。"
+        "所以预期：吞吐接近翻倍并贴上无缓存环平台，重试基本归零，"
+        "makespan 从 16.8 万降到 9 万附近，"
+        "而 s0_unbounded 参照与 S0 的差距收到几个百分点以内 —— "
+        "瓶颈从 completer 表项换成上环饥饿。"
+        "公平性主指标应仍达标但数值上移：吞吐翻倍使每箱 flit 数从 11.9 涨到约 22，"
+        "零模型地板随之从 0.929 抬到约 0.961，实测约 0.98，ratio 仍在 1.02 附近。"
+        "整份报告的主线会因此改变：第 9、10 节讨论的重试浪费不再是主要损失。"
+    ),
+    "predicted": {
+        "s0_thr": [4.2, 4.7],
+        "retry_per_txn_max": 0.05,
+        "makespan": [85000, 95000],
+        "unbounded_gap_pct_max": 3.0,
+        "jain_bin_mean": [0.972, 0.988],
+        "jain_bin_null": [0.955, 0.966],
+        "jain_bin_ratio": [1.010, 1.030],
+    },
+    "confidence": 0.8,
+    "falsify": (
+        "S0 吞吐仍 ≤ 3.0（128 表项仍不够，或别的东西在绑定），"
+        "或 retry/txn > 0.05，"
+        "或 ratio < 1.0（放开 tracker 反而制造出真实的核间不公平）"
     ),
 }
 
@@ -1589,6 +1621,7 @@ def main() -> None:
             "t_ha_service": bp.t_ha_service,
             "ha_rsp_zero_forecast": HA_RSP_ZERO_FORECAST,
             "bin50_fair_forecast": BIN50_FAIR_FORECAST,
+            "track128_forecast": TRACK128_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
