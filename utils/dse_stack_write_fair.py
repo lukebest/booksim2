@@ -32,17 +32,25 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackAdaptTurnSim, StackFairTurnSim,
                          StackFcParams, StackFcSim, StackGrantParams,
                          StackGrantSim, StackTurnParams)
-from rg_stack_topo import (GROUP_COLS, N_COLS, TOP_BRIDGES, V_LEN,
-                           StackTopology, Txn, build_uniform_write)
+from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
+                           TILING_SIZE, TOP_BRIDGES, TXN_PER_CORE, V_LEN,
+                           StackTopology, Txn, build_tiled_write,
+                           build_uniform_write, ha_histogram)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
-CORE_OUTSTANDING_WR = 600
+# Per-core write outstanding. Held from REQ inject to Comp retire.
+CORE_OUTSTANDING_WR = 512
+# CHI request-tracker entries per HA. A completer that runs out answers
+# RetryAck rather than silently queueing.
+HA_POS_DEPTH = 32
+BW_WINDOW = 50
 
-# The crossing FIFOs are the one place strict bufferlessness does not hold,
-# so their depth is a hardware cost that has to be stated, not assumed. The
-# sweep below shows depth 4 -- the value the plan guessed -- livelocks.
+# Crossing FIFOs plus the HPCA'22 SWAP bypass and a bounded D2D landing
+# buffer. Depths are a hardware cost that has to be stated, not assumed.
 FABRIC = dict(turn_depth=64, d2d_depth=128,
+              swap_rule=True, d2d_land_depth=16,
               core_outstanding=CORE_OUTSTANDING_WR,
+              ha_pos_depth=HA_POS_DEPTH,
               inj_depth=8, eject_depth=4, eject_bw=1, per_vc_srcq=True)
 
 ROUTE_LABEL = {
@@ -144,6 +152,36 @@ def group_stats(topo: StackTopology, inject_times: dict[int, list[int]],
     }
 
 
+def group_bw_series(topo: StackTopology, inject_times: dict[int, list[int]],
+                    window: int = BW_WINDOW, makespan: int = 0
+                    ) -> dict[str, Any]:
+    """Write bandwidth vs time, one series per top-die group.
+
+    Each point is WriteData flits boarded by that die's 10 cores in a
+    `window`-cycle bin, divided by the window -- so the y-axis is flit/cycle
+    and the integral is the completed write traffic.
+    """
+    by_die: dict[int, list[int]] = defaultdict(list)
+    for c, ts in inject_times.items():
+        by_die[topo.nodes[int(c)].die].extend(ts)
+    last = makespan or 0
+    for ts in inject_times.values():
+        if ts:
+            last = max(last, max(ts))
+    nwin = max(1, (last + window) // window)
+    series: dict[str, list[float]] = {}
+    for d in sorted(by_die):
+        hist = [0] * nwin
+        for t in by_die[d]:
+            hist[min(max(0, t // window), nwin - 1)] += 1
+        series[str(d)] = [round(c / window, 5) for c in hist]
+    return {
+        "window": window, "n_windows": nwin, "makespan": last,
+        "t": [i * window for i in range(nwin)],
+        "bw_by_group": series,
+    }
+
+
 def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                route: str, seed: int = 0, keep_trace: bool = False,
                stall_after: int = 6_000, **kw) -> dict[str, Any]:
@@ -160,11 +198,30 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
     r["route"] = route
     r["wall_s"] = round(time.time() - t0, 1)
     r["max_core_outstanding"] = r.get("max_core_outstanding", 0)
+    r["bw_series"] = group_bw_series(topo, r["wr_inject_by_core"],
+                                     window=BW_WINDOW, makespan=r["makespan"])
     r.pop("wr_inject_by_core", None)
     r.pop("wr_done_by_core", None)
     if not keep_trace and "fc" in r:
         r["fc"].pop("trace", None)
     return r
+
+
+def die_board_table(topo: StackTopology, board: dict[str, Any],
+                    die: int = 0) -> list[dict[str, Any]]:
+    """CW / CCW board counts for the 10 AI cores of one top die."""
+    rows = []
+    for c in topo.cores:
+        nd = topo.nodes[c]
+        if nd.die != die:
+            continue
+        rec = board.get(str(c), {})
+        rows.append({
+            "core": c, "idx": nd.idx,
+            "ok_cw": rec.get("ok_cw", 0), "ok_ccw": rec.get("ok_ccw", 0),
+            "fail_cw": rec.get("fail_cw", 0), "fail_ccw": rec.get("fail_ccw", 0),
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -873,18 +930,110 @@ def binding_mod4(topo: StackTopology) -> dict[str, Any]:
             "n_checked": len(rows)}
 
 
+def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
+    """Tiled write + HA retry operating point.
+
+    Each core writes dense 64 KB tiles (128 B burst, 4 KB stride). Line
+    interleave already spreads every core across all 96 HAs. Outstanding
+    is 128; an HA accepts 32 in-flight requests and RetryAcks the rest.
+    S0 has no source-side rate control. S1 adds AIMD.
+    """
+    oc = blob["meta"]["core_outstanding"]
+    pos = args.pos_depth
+    n_tiles = getattr(args, "n_tiles", N_TILES)
+    txns = build_tiled_write(topo, n_tiles=n_tiles, seed=args.seed)
+    hist = ha_histogram(topo, txns)
+    bound = topo.write_bounds(txns, m_req=M_REQ, m_rsp=M_RSP, m_wdata=M_WDATA)
+    per: dict[str, Any] = {"bounds": bound, "n_txn": len(txns),
+                           "outstanding": oc, "pos_depth": pos,
+                           "ha_hist": hist}
+    series: dict[str, Any] = {}
+    stall = max(80_000, 160 * hist["per_core_txn"])
+    print(f"[focus] outstanding={oc}  HA POS={pos}  "
+          f"tiles={n_tiles}  txn/core={hist['per_core_txn']}  "
+          f"ntxn={len(txns)}  HA cover={hist['covers_all_ha']}  "
+          f"per-core HA max/min Δ={hist['per_core_max_min']}", flush=True)
+    names = ("s0", "s1")
+    board: dict[str, Any] = {}
+    for name in names:
+        r = run_scheme(topo, txns, name, route="bound", seed=args.seed,
+                       keep_trace=(name == "s1"), core_outstanding=oc,
+                       ha_pos_depth=pos, stall_after=stall)
+        r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
+        per[name] = r
+        series[name] = r.get("bw_series", {})
+        board[name] = die_board_table(topo, r.get("board_by_core_dir") or {},
+                                      die=0)
+        f, g, q = r["fairness"], r["group"], r.get("retry", {})
+        print("      %-4s %-8s t=%6d done=%d/%d jain=%.4f "
+              "grp_jain=%.4f gp_mm=%.2f retry=%d "
+              "swap=%d (hv=%d d2d=%d) d2d_buf=%d"
+              % (name, "OK" if r["completed"] else "COLLAPSE",
+                 r["makespan"], r["n_txn_done"], len(txns),
+                 f.get("jain", 0), g.get("jain", 0),
+                 g.get("goodput_max_min", 0), q.get("n_retry", 0),
+                 r.get("n_swaps", 0), r.get("n_swaps_hv", 0),
+                 r.get("n_swaps_d2d", 0),
+                 (r.get("fifo") or {}).get("d2d_buf_peak", 0)),
+              flush=True)
+    blob["schemes"] = {"mandated": per, "work": per}
+    blob["group_series"] = series
+    blob["fabric_series"] = {name: per[name].get("fabric_series", {})
+                             for name in names}
+    blob["die0_board"] = board
+    blob["workload"] = {
+        "kind": "tiled_write",
+        "burst_len": BURST_LEN, "stride": STRIDE,
+        "tiling_size": TILING_SIZE, "n_tiles": n_tiles,
+        "ha_hist": hist,
+    }
+    blob["group"] = [{
+        "outstanding": oc, "scheme": name,
+        "completed": per[name]["completed"],
+        "makespan": per[name]["makespan"],
+        "n_txn_done": per[name]["n_txn_done"],
+        **{k: per[name]["group"][k] for k in (
+            "bw_by_group", "goodput_by_group", "goodput_total",
+            "goodput_jain", "goodput_max_min", "finish_by_group",
+            "worst_group", "best_group", "jain_within_group",
+            "jain_within_worst") if k in per[name]["group"]},
+        "group_jain": per[name]["group"].get("jain", 0),
+        "group_max_min": per[name]["group"].get("max_min", 0),
+        "group_cov": per[name]["group"].get("cov", 0),
+        "core_jain": per[name]["fairness"].get("jain", 0),
+        "core_max_min": per[name]["fairness"].get("max_min", 0),
+    } for name in names]
+    seats = vseat_load(topo, txns)
+    blob["root_cause"] = {"mandated": root_cause(topo, per["s0"], seats),
+                          "work": root_cause(topo, per["s0"], seats)}
+
+
 def main() -> None:
+    global CORE_OUTSTANDING_WR
     ap = argparse.ArgumentParser()
-    ap.add_argument("--k", type=int, default=50,
-                    help="write transactions per AI core")
+    ap.add_argument("--k", type=int, default=800,
+                    help="write requests per AI core (closed-batch workload)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
+    ap.add_argument("--oc", type=int, default=CORE_OUTSTANDING_WR,
+                    help="per-core write outstanding (in-flight cap)")
     ap.add_argument("--oc-work", type=int, default=5,
                     help="workable per-core outstanding limit")
-    ap.add_argument("--pos-depth", type=int, default=32,
+    ap.add_argument("--pos-depth", type=int, default=HA_POS_DEPTH,
                     help="HA request tracker entries; 0 = unlimited")
+    ap.add_argument("--n-tiles", type=int, default=N_TILES,
+                    help=f"64 KB tiles per AI core (default {N_TILES} = "
+                         f"{TXN_PER_CORE} WriteNoSnp)")
+    ap.add_argument("--focus", action="store_true",
+                    help="S0/S1 time series at the configured outstanding")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
+
+    topo0 = StackTopology()
+    rtt = topo0.max_write_rtt(m_wdata=M_WDATA)
+    CORE_OUTSTANDING_WR = args.oc
+    FABRIC["core_outstanding"] = CORE_OUTSTANDING_WR
+    FABRIC["ha_pos_depth"] = args.pos_depth
 
     oc_work = args.oc_work
     t_start = time.time()
@@ -894,12 +1043,15 @@ def main() -> None:
             "m_req": M_REQ, "m_rsp": M_RSP, "m_wdata": M_WDATA,
             "core_outstanding": CORE_OUTSTANDING_WR,
             "oc_work": oc_work, "pos_depth": args.pos_depth,
+            "n_tiles": args.n_tiles,
+            "txn_per_core": args.n_tiles * (TILING_SIZE // BURST_LEN),
+            "burst_len": BURST_LEN, "stride": STRIDE,
+            "tiling_size": TILING_SIZE,
             "fabric": dict(FABRIC),
             "route_label": ROUTE_LABEL,
+            "rtt": rtt,
         },
     }
-
-    topo0 = StackTopology()
     blob["topology"] = {
         "n_nodes": topo0.n, "n_die": topo0.n_die,
         "n_cores": len(topo0.cores), "n_has": len(topo0.has),
@@ -909,14 +1061,28 @@ def main() -> None:
         "directed_links": topo0.directed_links,
         "capacity": topo0.capacity(),
         "top_link_lats": list(topo0.top_link_lats),
+        "h_hop_lat": topo0.h_hop_lat, "v_hop_lat": topo0.v_hop_lat,
         "bot_hop_lat": topo0.bot_hop_lat, "d2d_lat": topo0.d2d_lat,
+        "turn_lat": topo0.turn_lat,
         "vcs": list(topo0.vcs),
         "h_assign": topo0.h_assign,
+        "d2d_bot_ifaces": 2,
+        "d2d_bot_iface": ["h", "v"],
+        "rtt": rtt,
     }
     blob["binding"] = binding_table(topo0)
     blob["binding_mod4"] = binding_mod4(topo0)
     blob["v_profile"] = v_ring_profile(topo0, col=0)
     blob["v_profile_right"] = v_ring_profile(topo0, col=N_COLS - 1)
+
+    if args.focus:
+        _run_focus(blob, topo0, args)
+        blob["meta"]["wall_s"] = round(time.time() - t_start, 1)
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(blob, indent=1))
+        print(f"wrote {out}  ({blob['meta']['wall_s']}s)")
+        return
 
     print("[1/12] routing comparison", flush=True)
     blob["routing"] = routing_compare(args.k, args.seed)

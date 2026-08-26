@@ -20,6 +20,14 @@ R2  tap   -- a flit may only *leave* a given ring at a given station once per
 R3  eject -- the destination PE's eject queue is `eject_depth` deep.
 R4  turn  -- changing ring, or crossing the die boundary, passes through a
              bounded transfer FIFO.
+R5  SWAP  -- HPCA'22 (Wang et al.): two flits at one bridge, each wanting
+             the other's fabric, exchange through a bypass and take the slot
+             the partner vacates. No FIFO, no turn_lat. Applied at H↔V
+             attach points and at D2D↔H / D2D↔V bridges.
+R6  D2D landing buffer -- a bounded queue per (attach, dest ring, VC). A
+             D2D arrival that misses SWAP and the ring FIFO sits here
+             instead of an unbounded landing hold, and is re-offered next
+             cycle so it can SWAP with a ring flit going the other way.
 
 In-ring priority is absolute and is enforced by *ordering*, not by lookahead:
 arrivals claim their outgoing edge before any FIFO or PE gets to try, so a
@@ -65,9 +73,17 @@ class StackBaseParams:
     # HA request-tracker entries. A completer that runs out of them cannot
     # queue the request: CHI makes it reject with RetryAck and hand out a
     # PCrdGrant later. 0 keeps the old unlimited-completer behaviour.
-    ha_pos_depth: int = 0
+    ha_pos_depth: int = 16
     turn_depth: int = 4             # ring -> ring transfer FIFO
     d2d_depth: int = 8              # die-crossing FIFO
+    # HPCA'22 SWAP: two flits at one bridge, each wanting the other's fabric,
+    # exchange through a bypass and take the slot the other vacates. Breaks
+    # the H↔V and D2D↔ring hold-and-wait deadlock without a VC.
+    swap_rule: bool = True
+    # Bounded landing buffer at the bottom D2D bridge, one queue per
+    # (attach, dest ring). Fresh D2D arrivals that miss SWAP and the ring
+    # FIFO sit here instead of piling onto an unbounded landing hold.
+    d2d_land_depth: int = 16
     resv_ej: int = 1                # eject slots only an E-tagged flit may use
     # Transfer-FIFO entries only an E-tagged flit may occupy. Measured to be
     # counterproductive here and left off by default: it withholds scarce
@@ -105,6 +121,7 @@ class Flit:
     fail_eject: int = 0
     held: bool = False
     n_turn: int = 0
+    turn_ready: int = 0             # cycle the turn FIFO may launch this flit
 
 
 class StackBaseSim:
@@ -125,6 +142,10 @@ class StackBaseSim:
 
         self.srcq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.pending: dict[Any, deque[Flit]] = defaultdict(deque)
+        # Flits that may try to inject now (P-Credit re-sends, WriteData,
+        # responses). Kept off `pending` so a full outstanding window does
+        # not scan thousands of waiting new REQs every cycle.
+        self.ready: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)   # (ring, vc)
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
@@ -139,11 +160,33 @@ class StackBaseSim:
         self.active_src: dict[Any, None] = {}
         self.active_ej: dict[Any, None] = {}
 
-        # transfer FIFOs: (node, next_ring) -> flits waiting to board it
+        # transfer FIFOs: (node, src_fabric, dest_ring) -> flits waiting to
+        # board dest_ring. Splitting on the source fabric is what gives the
+        # bottom D2D landing two interfaces: D2D→H and D2D→V do not share a
+        # queue with each other or with an H↔V turn at the same station.
         self.xq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.active_xq: dict[Any, None] = {}
         self.xq_peak: dict[Any, int] = defaultdict(int)
         self._land_now: dict[int, int] = defaultdict(int)
+        self.d2d_buf: dict[Any, deque] = defaultdict(deque)
+        self.active_d2d_buf: dict[Any, None] = {}
+        self.d2d_buf_peak: dict[Any, int] = defaultdict(int)
+        self._fab_cap = topo.capacity()
+        self._fab_names = tuple(self._fab_cap)
+        self.fab_win = 50
+        self._cyc_hops: dict[str, int] = defaultdict(int)
+        self._cyc_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
+        self.peak_hops: dict[str, int] = defaultdict(int)
+        self.peak_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
+        self._win_hops: dict[str, int] = defaultdict(int)
+        self.fab_series: dict[str, Any] = {
+            "window": self.fab_win, "t": [],
+            "bw": {k: [] for k in self._fab_names},
+            "util": {k: [] for k in self._fab_names},
+            "bw_vc": {f"{k}:{vc}": [] for k in self._fab_names
+                      for vc in topo.vcs},
+        }
+        self._win_hops_vc: dict[tuple[str, str], int] = defaultdict(int)
 
         self.occ: dict[int, int] = defaultdict(int)          # plane balance
         self._vc_list: tuple[str, ...] = tuple(topo.vcs)
@@ -168,6 +211,9 @@ class StackBaseSim:
             "max_turn_q": 0, "max_d2d_q": 0, "n_d2d_stall": 0,
             "max_d2d_landing": 0, "n_turn_resv_used": 0,
             "max_inring_hold": 0, "n_turns": 0,
+            "n_swaps": 0, "n_swaps_hv": 0, "n_swaps_d2d": 0,
+            "n_swaps_d2d_h": 0, "n_swaps_d2d_v": 0,
+            "n_d2d_buf_push": 0, "max_d2d_buf": 0,
             "n_fc_deny": 0, "n_aimd_increase": 0, "n_aimd_decrease": 0,
         }
         self.inring_hold: dict[Any, int] = defaultdict(int)
@@ -214,6 +260,10 @@ class StackBaseSim:
         self.pass_through: dict[Any, int] = defaultdict(int)
         self.inj_ok_at: dict[Any, int] = defaultdict(int)
         self.inj_fail_at: dict[Any, int] = defaultdict(int)
+        # Top-die ring direction: +1 CW (index+), -1 CCW. Counted only for
+        # AI-core injects (REQ + WriteData). Policy denials are not failures.
+        self.board_ok_dir: dict[tuple[int, int], int] = defaultdict(int)
+        self.board_fail_dir: dict[tuple[int, int], int] = defaultdict(int)
         self._fail_cause = "hop_busy"
         self._deny_cause = "outstanding"
 
@@ -304,21 +354,65 @@ class StackBaseSim:
 
     def _offer_flit(self, f: Flit) -> None:
         key = self._sk(f.src, f.plane, f.vc)
-        self.pending[key].append(f)
+        waiting = (f.kind == "req" and self._is_core[f.src]
+                   and f.txn_id not in self._counted)
+        if waiting:
+            self.pending[key].append(f)
+        else:
+            self.ready[key].append(f)
         self.st["max_pending"] = max(self.st["max_pending"],
-                                     len(self.pending[key]))
+                                     len(self.pending[key]) + len(self.ready[key]))
         self.active_src[(f.src, self._pk(f.src, f.plane))] = None
         self._admit(key)
 
+    def _outst_blocked(self, f: Flit) -> bool:
+        """A new REQ that cannot take an outstanding slot yet.
+
+        These must not occupy the inject-queue head. The rest of the core's
+        closed batch sits behind the window; if they HOL-block a P-Credit
+        re-send, the completer's grant can never be used and the fabric
+        deadlocks with an empty ring and a full pending list. Re-sends
+        already hold their slot (`txn_id in _counted`) and must go first.
+        """
+        return (f.kind == "req"
+                and self._is_core[f.src]
+                and f.txn_id not in self._counted
+                and self._outst_full(f.src))
+
     def _admit(self, key: Any) -> None:
-        q, pend = self.srcq[key], self.pending[key]
+        q, pend, ready = self.srcq[key], self.pending[key], self.ready[key]
+        # Evict new REQs that filled the window after they were admitted.
+        if q and self._outst_blocked(q[0]):
+            stuck = deque()
+            while q and self._outst_blocked(q[0]):
+                stuck.append(q.popleft())
+            stuck.extend(pend)
+            self.pending[key] = pend = stuck
+        while ready and len(q) < self.p.inj_depth:
+            q.append(ready.popleft())
         while pend and len(q) < self.p.inj_depth:
+            if self._outst_blocked(pend[0]):
+                break
             q.append(pend.popleft())
         if q:
             self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
 
     def _src_idle(self, key: Any) -> bool:
-        return not self.srcq[key] and not self.pending[key]
+        return (not self.srcq[key] and not self.pending[key]
+                and not self.ready[key])
+
+    def _clear_itag(self, node: int) -> None:
+        """Drop leftover I-tags. A port with nothing injectable must not
+        keep the ring reserved; that blocks everyone else on an empty hop."""
+        for holders in self.i_tag.values():
+            holders.discard(node)
+
+    def _wake_core(self, core: int) -> None:
+        """Re-admit a core after an outstanding slot is freed."""
+        for plane in range(self.n_planes):
+            self.active_src[(core, plane)] = None
+            for qk in self._src_keys(core, plane):
+                self._admit(qk)
 
     # -- movement -----------------------------------------------------------
 
@@ -343,12 +437,14 @@ class StackBaseSim:
             f.held = False
             self.inring_hold[seg] -= 1
         self.seg_free[seg] = self.t + self.sigma
-        self.hop_starts.append(self.t)
         rk = self.topo.edge_ring[eid]
         if inring and f.ring == rk:
             self.pass_through[(f.node, rk, f.vc)] += 1
         self.edge_load[eid] += 1
-        self.fabric_hops[rk[0]] += 1
+        fab = rk[0]
+        self.fabric_hops[fab] += 1
+        self._cyc_hops[fab] += 1
+        self._cyc_hops_vc[(fab, f.vc)] += 1
         if f.dpos < len(f.detour):
             f.dpos += 1
             if f.dpos >= len(f.detour):
@@ -400,8 +496,168 @@ class StackBaseSim:
         self._on_arrive_station(f)
         return True
 
-    def _xdepth(self, ring: Any) -> int:
-        return self.p.d2d_depth if ring[0] == "d2d" else self.p.turn_depth
+    def _xfer_key(self, node: int, src_ring: Any, dst_ring: Any) -> tuple:
+        """One FIFO per (station, incoming fabric, outgoing ring).
+
+        Bottom D2D therefore has two landing queues -- onto H and onto V --
+        that do not share occupancy with an H↔V turn at the same attach.
+        """
+        src = src_ring[0] if src_ring is not None else ""
+        return (node, src, dst_ring)
+
+    def _xfer_dest(self, key: Any) -> Any:
+        return key[2] if len(key) >= 3 else key[1]
+
+    def _xfer_is_d2d(self, key: Any) -> bool:
+        if len(key) >= 3:
+            dst = key[2]
+            return key[1] == "d2d" or (dst is not None and dst[0] == "d2d")
+        return key[1][0] == "d2d"
+
+    def _xdepth(self, src_ring: Any, dst_ring: Any) -> int:
+        src = src_ring[0] if src_ring is not None else ""
+        dst = dst_ring[0] if dst_ring is not None else ""
+        if src == "d2d" or dst == "d2d":
+            return self.p.d2d_depth
+        return self.p.turn_depth
+
+    def _src_fab(self, f: Flit) -> str:
+        return f.ring[0] if f.ring is not None else ""
+
+    def _dst_fab(self, f: Flit) -> str:
+        return self.topo.edge_ring[self._next_edge(f)][0]
+
+    def _d2d_buf_key(self, f: Flit) -> tuple:
+        nxt = self.topo.edge_ring[self._next_edge(f)]
+        return (f.node, nxt, f.vc)
+
+    def _offer_d2d_buf(self, leave: dict[Any, list]) -> set[int]:
+        """Heads of the landing buffer act as D2D arrivals this cycle."""
+        from_land: set[int] = set()
+        for key, q in list(self.d2d_buf.items()):
+            if not q:
+                self.active_d2d_buf.pop(key, None)
+                continue
+            f = q[0]
+            leave[(f.node, f.ring)].append(f)
+            from_land.add(id(f))
+        return from_land
+
+    def _pop_d2d_buf(self, ids: set[int]) -> None:
+        if not ids:
+            return
+        for key, q in list(self.d2d_buf.items()):
+            if q and id(q[0]) in ids:
+                q.popleft()
+                if not q:
+                    self.active_d2d_buf.pop(key, None)
+
+    def _push_d2d_buf(self, f: Flit) -> bool:
+        key = self._d2d_buf_key(f)
+        q = self.d2d_buf[key]
+        if len(q) >= self.p.d2d_land_depth:
+            return False
+        q.append(f)
+        self.active_d2d_buf[key] = None
+        self.st["n_d2d_buf_push"] += 1
+        self.d2d_buf_peak[key] = max(self.d2d_buf_peak[key], len(q))
+        self.st["max_d2d_buf"] = max(self.st["max_d2d_buf"], len(q))
+        f.fail_eject += 1
+        if f.fail_eject >= self.p.t_xfer and not f.e_tag:
+            f.e_tag = True
+            self.st["n_etag_raised"] += 1
+        return True
+
+    def _try_swap(self, a: Flit, b: Flit) -> bool:
+        """HPCA'22 SWAP: each takes the hop the other vacates.
+
+        Half-rings are unidirectional, so the vacated slot is the unique
+        outgoing hop. Both hops are checked before either launch. SWAP
+        bypasses the transfer FIFO and does not charge turn_lat.
+
+        Same-VC pairs free the exact hop the partner needs. CHI writes also
+        meet as DAT/REQ down vs RSP up; those still swap if both hops are
+        free, so a full FIFO cannot hold-and-wait across the bridge.
+        """
+        if self._at_dest(a) or self._at_dest(b):
+            return False
+        if a.node != b.node:
+            return False
+        ea, eb = self._next_edge(a), self._next_edge(b)
+        if self.seg_free[(ea, a.vc)] > self.t:
+            return False
+        if self.seg_free[(eb, b.vc)] > self.t:
+            return False
+        sa, sb = self._src_fab(a), self._src_fab(b)
+        da, db = self._dst_fab(a), self._dst_fab(b)
+        if sa == sb or da != sb or db != sa:
+            return False
+        self.st["n_swaps"] += 1
+        pair = {sa, sb}
+        if pair == {"h", "v"}:
+            self.st["n_swaps_hv"] += 1
+        else:
+            self.st["n_swaps_d2d"] += 1
+            for s, d in ((sa, da), (sb, db)):
+                if s == "d2d" and d == "h":
+                    self.st["n_swaps_d2d_h"] += 1
+                elif s == "d2d" and d == "v":
+                    self.st["n_swaps_d2d_v"] += 1
+        self._launch(a, inring=False)
+        self._launch(b, inring=False)
+        return True
+
+    def _pair_swaps(self, by_src: dict[str, list], swapped: set[int],
+                    tapped: set[tuple]) -> None:
+        for a_fab, b_fab in (("d2d", "v"), ("d2d", "h"), ("h", "v")):
+            ia = [f for f in by_src[a_fab]
+                  if id(f) not in swapped and self._dst_fab(f) == b_fab]
+            ib = [f for f in by_src[b_fab]
+                  if id(f) not in swapped and self._dst_fab(f) == a_fab]
+            for fa, fb in zip(ia, ib):
+                na, ra, nb, rb = fa.node, fa.ring, fb.node, fb.ring
+                if self._try_swap(fa, fb):
+                    swapped.add(id(fa))
+                    swapped.add(id(fb))
+                    for node, ring in ((na, ra), (nb, rb)):
+                        if ring is not None and ring[0] != "d2d":
+                            tapped.add((node, ring))
+                else:
+                    break
+
+    def _do_swaps(self, leave: dict[Any, list]) -> tuple[set[int], set[tuple]]:
+        """Pair complementary leaves at one station.
+
+        Same VC first (the hop the partner vacates is the one we need).
+        Then DAT/REQ vs RSP across VCs, which is how a write actually
+        crosses a D2D bridge in both directions at once.
+        D2D↔ring before H↔V: that is the hold-and-wait that parks
+        Comp/PCrd under descending WriteData.
+        """
+        same: dict[Any, dict[str, list[Flit]]] = defaultdict(
+            lambda: defaultdict(list))
+        any_vc: dict[int, dict[str, list[Flit]]] = defaultdict(
+            lambda: defaultdict(list))
+        for (node, ring), reqs in leave.items():
+            for f in reqs:
+                if self._at_dest(f):
+                    continue
+                src = ring[0] if ring is not None else self._src_fab(f)
+                try:
+                    dst = self._dst_fab(f)
+                except (IndexError, KeyError):
+                    continue
+                if src == dst:
+                    continue
+                same[(node, f.vc)][src].append(f)
+                any_vc[node][src].append(f)
+        swapped: set[int] = set()
+        tapped: set[tuple] = set()
+        for by_src in same.values():
+            self._pair_swaps(by_src, swapped, tapped)
+        for by_src in any_vc.values():
+            self._pair_swaps(by_src, swapped, tapped)
+        return swapped, tapped
 
     def _try_turn(self, f: Flit) -> bool:
         """Hand a flit to the transfer FIFO of the ring it wants next.
@@ -410,9 +666,9 @@ class StackBaseSim:
         flit that has already paid for a revolution is not made to pay again.
         """
         nxt = self.topo.edge_ring[self._next_edge(f)]
-        key = (f.node, nxt)
+        key = self._xfer_key(f.node, f.ring, nxt)
         q = self.xq[key]
-        cap = self._xdepth(nxt)
+        cap = self._xdepth(f.ring, nxt)
         if len(q) >= cap:
             return False
         if len(q) >= cap - self.p.resv_turn:
@@ -421,11 +677,19 @@ class StackBaseSim:
             self.st["n_turn_resv_used"] += 1
         q.append(f)
         f.n_turn += 1
+        # Attach-point H <-> V turn pays turn_lat before it may re-board.
+        # D2D landings do not: their latency is already on the D2D edge.
+        cur = f.ring[0] if f.ring is not None else None
+        nxtk = nxt[0]
+        if {cur, nxtk} == {"h", "v"}:
+            f.turn_ready = self.t + self.topo.turn_lat
+        else:
+            f.turn_ready = self.t
         self.st["n_turns"] += 1
         self.active_xq[key] = None
         depth = len(q)
         self.xq_peak[key] = max(self.xq_peak[key], depth)
-        slot = "max_d2d_q" if nxt[0] == "d2d" else "max_turn_q"
+        slot = "max_d2d_q" if self._xfer_is_d2d(key) else "max_turn_q"
         self.st[slot] = max(self.st[slot], depth)
         return True
 
@@ -452,9 +716,22 @@ class StackBaseSim:
     def _note_deny(self, node: int, f: Flit) -> None:
         self.board_fail_cause[(node, f.vc)][self._deny_cause] += 1
 
+    def _inject_dir(self, f: Flit) -> int:
+        """CW (+1) or CCW (-1) of the first hop this flit will take."""
+        return self.topo.edge_dir[self._next_edge(f)]
+
+    def _note_core_board(self, f: Flit, *, ok: bool) -> None:
+        if not self._is_core[f.src]:
+            return
+        d = self._inject_dir(f)
+        f.dir = d
+        slot = self.board_ok_dir if ok else self.board_fail_dir
+        slot[(f.src, d)] += 1
+
     def _on_inject(self, f: Flit) -> None:
         self.board_ok_by_src[(f.src, f.vc)] += 1
         self.inj_ok_at[(f.src, f.vc)] += 1
+        self._note_core_board(f, ok=True)
         if f.kind == "wdata":
             self.wr_inject_times[f.src].append(self.t)
         if f.kind != "req" or not self._is_core[f.src]:
@@ -483,6 +760,7 @@ class StackBaseSim:
         self.st["n_board_fail"] += 1
         self.board_fail_cause[(node, f.vc)][self._fail_cause] += 1
         self.inj_fail_at[(node, f.vc)] += 1
+        self._note_core_board(f, ok=False)
 
     def _on_arrive_station(self, f: Flit) -> None:
         return
@@ -526,14 +804,27 @@ class StackBaseSim:
             else:
                 leave[(f.node, f.ring)].append(f)
 
-        # Phase 2 -- leaving a ring: to a PE, or to another ring's FIFO.
-        # One flit may leave a given ring at a given station per cycle; the
-        # rest deflect a full revolution.
+        # Phase 2a -- HPCA'22 SWAP at H/V attach points and D2D bridges.
+        # A flit sitting in the D2D landing buffer is a first-class D2D
+        # arrival this cycle, so it can swap with a ring flit going the
+        # other way.
+        from_land = self._offer_d2d_buf(leave)
+        if self.p.swap_rule:
+            swapped, swap_tapped = self._do_swaps(leave)
+        else:
+            swapped, swap_tapped = set(), set()
+        self._pop_d2d_buf(from_land & swapped)
+
+        # Phase 2b -- remaining leaves: PE eject or transfer FIFO. One flit
+        # may leave a given ring at a given station per cycle; the rest
+        # deflect a full revolution. D2D leftovers go to the landing buffer.
         for key, reqs in leave.items():
             node, ring = key
             on_ring = ring is not None and ring[0] != "d2d"
-            tapped = False
-            for f in self._tap_order(node, ring, reqs) if on_ring else reqs:
+            leftover = [f for f in reqs if id(f) not in swapped]
+            tapped = key in swap_tapped
+            for f in self._tap_order(node, ring, leftover) if on_ring \
+                    else leftover:
                 if tapped:
                     self.st["n_tap_deflect"] += 1
                     self._deflect(f)
@@ -542,6 +833,8 @@ class StackBaseSim:
                       else self._try_turn(f))
                 if ok:
                     tapped = on_ring
+                    if id(f) in from_land:
+                        self._pop_d2d_buf({id(f)})
                     continue
                 if self._at_dest(f):
                     self.st["n_eject_full_deflect"] += 1
@@ -549,11 +842,11 @@ class StackBaseSim:
                     self.st["n_turn_full_deflect"] += 1
                 if on_ring:
                     self._deflect(f)
+                elif id(f) in from_land:
+                    continue          # already sitting in the landing buffer
+                elif self._push_d2d_buf(f):
+                    continue
                 else:
-                    # Arrived over a die crossing, which is not a ring, so
-                    # there is nowhere to circulate: hold at the landing and
-                    # escalate, or the flit would wait on an equal footing
-                    # with fresh arrivals for as long as the FIFO stays full.
                     self.st["n_d2d_stall"] += 1
                     f.fail_eject += 1
                     if f.fail_eject >= self.p.t_xfer and not f.e_tag:
@@ -592,7 +885,42 @@ class StackBaseSim:
         self._release_ready()
         self._aimd_tick()
         self._ctrl_issue()
+        self._sample_fabric()
         self.t += 1
+
+    def _flush_fab_window(self, t_start: int | None = None,
+                          width: int | None = None) -> None:
+        w = width or self.fab_win
+        cap, nvc = self._fab_cap, self.topo.n_vc
+        self.fab_series["t"].append(
+            self.t + 1 - w if t_start is None else t_start)
+        for fab in self._fab_names:
+            hops = self._win_hops.pop(fab, 0)
+            links = max(1, cap.get(fab, 1))
+            self.fab_series["bw"][fab].append(round(hops / w, 4))
+            self.fab_series["util"][fab].append(
+                round(hops / (w * links * nvc), 4))
+            for vc in self.topo.vcs:
+                vh = self._win_hops_vc.pop((fab, vc), 0)
+                self.fab_series["bw_vc"][f"{fab}:{vc}"].append(
+                    round(vh / w, 4))
+        self._win_hops.clear()
+        self._win_hops_vc.clear()
+
+    def _sample_fabric(self) -> None:
+        """Instantaneous occupancy this cycle, plus a windowed series."""
+        for fab, n in self._cyc_hops.items():
+            if n > self.peak_hops[fab]:
+                self.peak_hops[fab] = n
+            self._win_hops[fab] += n
+        for k, n in self._cyc_hops_vc.items():
+            if n > self.peak_hops_vc[k]:
+                self.peak_hops_vc[k] = n
+            self._win_hops_vc[k] += n
+        self._cyc_hops.clear()
+        self._cyc_hops_vc.clear()
+        if (self.t + 1) % self.fab_win == 0:
+            self._flush_fab_window()
 
     def _tap_order(self, node: int, ring: Any, reqs: list[Flit]) -> list[Flit]:
         """Who gets the ring's tap. Oldest-deflected first, so a flit that
@@ -613,6 +941,8 @@ class StackBaseSim:
                 self.active_xq.pop(key, None)
                 continue
             f = q[0]
+            if f.turn_ready > self.t:
+                continue
             if self._launch(f, inring=False):
                 q.popleft()
                 if not q:
@@ -627,25 +957,31 @@ class StackBaseSim:
             stalled = False
             for qk in qkeys:
                 self._admit(qk)
-                stalled = stalled or bool(self.pending[qk])
+                stalled = stalled or bool(self.pending[qk] or self.ready[qk])
             if stalled:
                 self.st["n_admit_stall"] += 1
             if not any(self.srcq[qk] for qk in qkeys):
+                # Pending new REQs may still be waiting on outstanding.
+                # Leave the port active so a later Comp can admit them;
+                # drop I-tag so a full window does not pin the ring.
+                self._clear_itag(node)
                 self.inj_starve[key] = 0
-                self.active_src.pop(key, None)
+                if not any(self.pending[qk] or self.ready[qk] for qk in qkeys):
+                    self.active_src.pop(key, None)
                 continue
-            qk, f, denied = None, None, None
+            qk, f, denied, idx = None, None, None, 0
             for cand in qkeys:
                 q = self.srcq[cand]
                 if not q:
                     continue
-                cf = q[0]
-                if not self._may_inject(node, plane, cf):
+                for i, cf in enumerate(q):
+                    if self._may_inject(node, plane, cf):
+                        qk, f, idx = cand, cf, i
+                        break
                     if denied is None:
                         denied = cf
-                    continue
-                qk, f = cand, cf
-                break
+                if f is not None:
+                    break
             if f is None:
                 if denied is None:
                     continue
@@ -675,7 +1011,7 @@ class StackBaseSim:
                         self.i_tag[rk].add(node)
                         self.st["n_itag_raised"] += 1
                 continue
-            self.srcq[qk].popleft()
+            del self.srcq[qk][idx]
             self._admit(qk)
             self.vc_rr[key] += 1
             if all(self._src_idle(k) for k in qkeys):
@@ -816,6 +1152,7 @@ class StackBaseSim:
             if self.p.core_outstanding > 0:
                 self.core_outst[txn.core] = max(
                     0, self.core_outst[txn.core] - 1)
+                self._wake_core(txn.core)
             self._on_txn_done(txn, f)
 
     def _retry_stats(self) -> dict[str, Any]:
@@ -865,40 +1202,72 @@ class StackBaseSim:
         return (sum(len(v) for v in self.arrivals.values())
                 + sum(len(q) for q in self.ejectq.values())
                 + sum(len(q) for q in self.xq.values())
+                + sum(len(q) for q in self.d2d_buf.values())
                 + len(self._stash))
 
     def backlog(self) -> int:
         return (sum(len(q) for q in self.srcq.values())
-                + sum(len(q) for q in self.pending.values()))
+                + sum(len(q) for q in self.pending.values())
+                + sum(len(q) for q in self.ready.values()))
 
     def done(self) -> bool:
         return (self._n_txn_target > 0
                 and self.st["n_txn_done"] >= self._n_txn_target)
 
     def fifo_report(self) -> dict[str, Any]:
-        turn = {k: v for k, v in self.xq_peak.items() if k[1][0] != "d2d"}
-        d2d = {k: v for k, v in self.xq_peak.items() if k[1][0] == "d2d"}
+        turn = {k: v for k, v in self.xq_peak.items()
+                if not self._xfer_is_d2d(k)}
+        d2d = {k: v for k, v in self.xq_peak.items() if self._xfer_is_d2d(k)}
+        land_h = sum(1 for k in d2d if len(k) >= 3 and k[1] == "d2d"
+                     and k[2][0] == "h")
+        land_v = sum(1 for k in d2d if len(k) >= 3 and k[1] == "d2d"
+                     and k[2][0] == "v")
         return {
             "n_turn_fifo": len(turn), "n_d2d_fifo": len(d2d),
+            "n_d2d_land_h": land_h, "n_d2d_land_v": land_v,
             "turn_peak": max(turn.values()) if turn else 0,
             "d2d_peak": max(d2d.values()) if d2d else 0,
             "turn_depth": self.p.turn_depth, "d2d_depth": self.p.d2d_depth,
+            "d2d_land_depth": self.p.d2d_land_depth,
+            "swap_rule": self.p.swap_rule,
             "turn_flits": sum(turn.values()), "d2d_flits": sum(d2d.values()),
             "d2d_landing_peak": self.st["max_d2d_landing"],
             "n_d2d_stall": self.st["n_d2d_stall"],
+            "n_swaps": self.st["n_swaps"],
+            "n_swaps_hv": self.st["n_swaps_hv"],
+            "n_swaps_d2d": self.st["n_swaps_d2d"],
+            "n_swaps_d2d_h": self.st["n_swaps_d2d_h"],
+            "n_swaps_d2d_v": self.st["n_swaps_d2d_v"],
+            "d2d_buf_peak": self.st["max_d2d_buf"],
+            "n_d2d_buf_push": self.st["n_d2d_buf_push"],
+            "residual_xq": sum(len(q) for q in self.xq.values()),
+            "residual_d2d_buf": sum(len(q) for q in self.d2d_buf.values()),
             "resv_turn": self.p.resv_turn,
             "n_turn_resv_used": self.st["n_turn_resv_used"],
-            "residual_xq": sum(len(q) for q in self.xq.values()),
         }
 
     def fabric_util(self, makespan: int) -> dict[str, Any]:
-        cap = self.topo.capacity()
+        cap = self._fab_cap
+        nvc = self.topo.n_vc
         out: dict[str, Any] = {}
-        for k, hops in sorted(self.fabric_hops.items()):
-            links = cap.get(k, 1) * self.topo.n_vc
+        for k in self._fab_names:
+            hops = self.fabric_hops.get(k, 0)
+            links = cap.get(k, 1)
+            slots = max(1, links * nvc)
+            peak = self.peak_hops.get(k, 0)
+            by_vc = {vc: self.peak_hops_vc.get((k, vc), 0)
+                     for vc in self.topo.vcs}
             out[k] = {
-                "flit_hops": hops, "links": cap.get(k, 1),
-                "util": round(hops / max(1, links * makespan), 4),
+                "flit_hops": hops, "links": links,
+                "util": round(hops / max(1, slots * makespan), 4),
+                "avg_util": round(hops / max(1, slots * makespan), 4),
+                "peak_inst_bw": peak,
+                "peak_inst_util": round(peak / slots, 4),
+                "peak_inst_util_link": round(peak / max(1, links), 4),
+                "peak_inst_by_vc": by_vc,
+                "peak_inst_util_by_vc": {
+                    vc: round(n / max(1, links), 4) for vc, n in by_vc.items()
+                },
             }
         return out
 
@@ -933,11 +1302,30 @@ class StackBaseSim:
         # because both are divided by the same makespan.
         out["wr_done_by_core"] = {c: len(v) for c, v
                                   in sorted(self.compl_ranks.items())}
+        leftover = self.t % self.fab_win
+        if leftover and (self._win_hops or self._win_hops_vc):
+            self._flush_fab_window(t_start=self.t - leftover, width=leftover)
         out["fifo"] = self.fifo_report()
         out["fabric"] = self.fabric_util(max(1, self.t))
+        out["fabric_series"] = self.fab_series
         out["board_fail_by_src"] = {
             f"{n}:{vc}": dict(row) for (n, vc), row
             in sorted(self.board_fail_cause.items())}
+        out["board_by_core_dir"] = self.board_dir_report()
+        return out
+
+    def board_dir_report(self) -> dict[str, dict[str, int]]:
+        """Per-core top-die CW/CCW board successes and failures."""
+        out: dict[str, dict[str, int]] = {}
+        for c in self.topo.cores:
+            nd = self.topo.nodes[c]
+            out[str(c)] = {
+                "die": nd.die, "idx": nd.idx,
+                "ok_cw": self.board_ok_dir.get((c, 1), 0),
+                "ok_ccw": self.board_ok_dir.get((c, -1), 0),
+                "fail_cw": self.board_fail_dir.get((c, 1), 0),
+                "fail_ccw": self.board_fail_dir.get((c, -1), 0),
+            }
         return out
 
 

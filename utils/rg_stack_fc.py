@@ -302,8 +302,24 @@ class StackFairTurnSim(StackBaseSim):
         self._yield_now: set[Any] = set()
 
     def _turn_wants(self, node: int, ring: Any) -> Flit | None:
-        q = self.xq.get((node, ring))
-        return q[0] if q else None
+        """Head of a FIFO at `node` waiting to board `ring`.
+
+        Prefer an H↔V turn over a D2D landing: the yield exists to unstick
+        the attach-point turn, not to let the SerDes barge in.
+        """
+        found = None
+        for key, q in self.xq.items():
+            if not q or key[0] != node or self._xfer_dest(key) != ring:
+                continue
+            src = key[1] if len(key) >= 3 else None
+            if src in ("h", "v"):
+                return q[0]
+            if found is None:
+                found = q[0]
+        return found
+
+    def _wait_key(self, xq_key: Any) -> tuple:
+        return (xq_key[0], self._xfer_dest(xq_key))
 
     def _launch(self, f: Flit, *, inring: bool) -> bool:
         """Let a starved turn FIFO pre-empt a pass-through flit for one cycle."""
@@ -333,21 +349,22 @@ class StackFairTurnSim(StackBaseSim):
         """
         for key in list(self.active_xq):
             q = self.xq[key]
+            wait_key = self._wait_key(key)
             if not q:
                 self.active_xq.pop(key, None)
-                self.turn_wait.pop(key, None)
+                self.turn_wait.pop(wait_key, None)
                 continue
             if self._launch(q[0], inring=False):
                 q.popleft()
-                self.turn_wait[key] = 0
-                if key in self._yield_now:
+                self.turn_wait[wait_key] = 0
+                if wait_key in self._yield_now:
                     self.st["n_turn_win"] += 1
                 if not q:
                     self.active_xq.pop(key, None)
-                    self.turn_wait.pop(key, None)
+                    self.turn_wait.pop(wait_key, None)
             else:
                 self.st["n_turn_board_fail"] += 1
-                self.turn_wait[key] += 1
+                self.turn_wait[wait_key] += 1
         self._yield_now.clear()
 
     def fc_summary(self) -> dict[str, Any]:

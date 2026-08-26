@@ -28,8 +28,15 @@ ring length.
 
     8 x 18 = 144 = 96 HA + 48 attach.
 
-An attach point is a node on **both** its horizontal ring and its column's
-vertical ring. It is simultaneously the D2D landing point and the turn node.
+An attach point sits at the crossing of one horizontal ring and its
+column's vertical ring. The bottom-side D2D bridge there has **two
+independent interfaces**: one taps the horizontal ring, the other taps
+the vertical ring of that column. D2D landing onto H, D2D landing onto V,
+and an H↔V turn are three separate ports; they share only the outgoing
+ring hop (R1), not a FIFO or a boarding slot. Cross-fabric deadlock at
+these ports is broken by the HPCA'22 SWAP rule (two flits, each wanting
+the other's fabric, exchange and take the vacated hop) plus a bounded
+D2D landing buffer that re-offers a stalled arrival so it can SWAP.
 
 Attach grouping
 ---------------
@@ -85,6 +92,10 @@ R3  leaving mutual exclusion  -- <= leave_ports per (station, plane) / cycle
 R4  turn / D2D hand-off       -- crossing rings or dies passes through a
                                  bounded transfer FIFO; strict bufferlessness
                                  holds on the links, not at the crossings
+R5  SWAP                      -- complementary flits at an H↔V or D2D
+                                 bridge exchange and take each other's hop
+R6  D2D landing buffer        -- bounded hold at the bottom bridge when
+                                 SWAP and the ring FIFO both miss
 """
 
 from __future__ import annotations
@@ -127,9 +138,11 @@ ANY_PLANE = -1         # bottom-die and D2D links are shared by both planes
 
 # -- default latencies -------------------------------------------------------
 
-BOT_HOP_LAT = 1        # bottom-die half-ring hop: short, regular array
+H_HOP_LAT = 4          # horizontal half-ring hop (attach -> attach)
+V_HOP_LAT = 6          # vertical half-ring hop (HA <-> attach)
 D2D_LAT = 4            # die-to-die crossing: SerDes + CDC
-TURN_LAT = 1           # horizontal -> vertical hand-off inside an attach point
+TURN_LAT = 5           # attach-point H <-> V turn
+BOT_HOP_LAT = H_HOP_LAT  # leftover alias; the two axes are no longer equal
 
 Role = Literal["core", "bridge", "inert", "attach", "ha"]
 RingKind = Literal["top", "d2d", "h", "v"]
@@ -180,7 +193,9 @@ class StackTopology:
 
     def __init__(self, *, n_die: int = N_TOP_DIE,
                  top_link_lats: Sequence[int] = RING2_LINK_LATS,
-                 bot_hop_lat: int = BOT_HOP_LAT, d2d_lat: int = D2D_LAT,
+                 bot_hop_lat: int | None = None,
+                 h_hop_lat: int = H_HOP_LAT, v_hop_lat: int = V_HOP_LAT,
+                 d2d_lat: int = D2D_LAT,
                  turn_lat: int = TURN_LAT, sigma: int = SIGMA,
                  board_ports: int = 1, leave_ports: int = 1,
                  route_mode: str = "bound", h_assign: str = "split",
@@ -191,7 +206,11 @@ class StackTopology:
             raise ValueError("vertical layout inconsistent")
         self.n_die = n_die
         self.top_link_lats = tuple(int(x) for x in top_link_lats)
-        self.bot_hop_lat = bot_hop_lat
+        if bot_hop_lat is not None:
+            h_hop_lat = v_hop_lat = bot_hop_lat
+        self.h_hop_lat = h_hop_lat
+        self.v_hop_lat = v_hop_lat
+        self.bot_hop_lat = v_hop_lat
         self.d2d_lat = d2d_lat
         self.turn_lat = turn_lat
         self.route_mode = route_mode
@@ -362,8 +381,10 @@ class StackTopology:
                     u, v = self.top(d, i), self.top(d, j)
                     self._link(u, v, lat, p, ("top", d, p))
                     self._link(v, u, lat, p, ("top", d, p))
-        # D2D: bridge <-> attach, both ways. The crossing is one physical
-        # link shared by both top-die planes, so it is plane-agnostic.
+        # D2D: top-die bridge <-> bottom landing, both ways. The SerDes is
+        # one physical link shared by both top-die planes. The landing then
+        # has two ring interfaces (H and V) that the datapath treats as
+        # independent boarding ports; those are not extra graph edges.
         for d in range(self.n_die):
             for j, idx in enumerate(TOP_BRIDGES):
                 u, v = self.top(d, idx), self.bridge_landing(d, idx)
@@ -374,13 +395,13 @@ class StackTopology:
             for c in range(N_COLS):
                 u = self.attach(h, c)
                 v = self.attach(h, (c + 1) % N_COLS)
-                self._link(u, v, self.bot_hop_lat, ANY_PLANE, ("h", h, 0))
+                self._link(u, v, self.h_hop_lat, ANY_PLANE, ("h", h, 0))
         # vertical half rings: unidirectional, wraps
         for c in range(N_COLS):
             for pos in range(V_LEN):
                 u = self._v_node(c, pos)
                 v = self._v_node(c, (pos + 1) % V_LEN)
-                self._link(u, v, self.bot_hop_lat, ANY_PLANE, ("v", c, 0))
+                self._link(u, v, self.v_hop_lat, ANY_PLANE, ("v", c, 0))
 
     def _v_node(self, col: int, pos: int) -> int:
         what, key = V_LAYOUT[pos]
@@ -584,8 +605,56 @@ class StackTopology:
         kccw = (sum(self.edge_lat[e] for e in ccw), len(ccw))
         return cw if kcw <= kccw else ccw
 
+    def hv_turns(self, path: Sequence[int]) -> int:
+        """How many attach-point H <-> V turns a route pays.
+
+        Landing from D2D onto a ring is not a turn -- that latency is already
+        on the D2D edge. The 转向 is only the axis change at an attach point.
+        """
+        n = 0
+        for a, b in zip(path, path[1:]):
+            ka, kb = self.edge_ring[a][0], self.edge_ring[b][0]
+            if {ka, kb} == {"h", "v"}:
+                n += 1
+        return n
+
     def route_lat(self, src: int, dst: int, plane: int = 0) -> int:
-        return sum(self.edge_lat[e] for e in self.route(src, dst, plane))
+        path = self.route(src, dst, plane)
+        return (sum(self.edge_lat[e] for e in path)
+                + self.hv_turns(path) * self.turn_lat)
+
+    def write_rtt(self, core: int, ha: int, *, plane: int = 0,
+                  m_wdata: int = 4, t_ha: int = 0) -> int:
+        """Uncongested WriteNoSnp round trip, REQ inject to Comp retire.
+
+        Outstanding is held for this whole interval, so covering the longest
+        such RTT is what keeps a core from going idle waiting for Comp.
+        WriteData is pipelined: the last of `m_wdata` flits arrives
+        `m_wdata - 1` cycles after the first.
+        """
+        fwd = self.route_lat(core, ha, plane)
+        rev = self.route_lat(ha, core, plane)
+        return (fwd + t_ha + rev
+                + fwd + max(0, m_wdata - 1) + t_ha
+                + rev)
+
+    def max_write_rtt(self, *, m_wdata: int = 4, t_ha: int = 0
+                      ) -> dict[str, Any]:
+        """The longest uncongested write RTT over every (core, HA) pair."""
+        worst = 0
+        who: tuple[int, int] = (-1, -1)
+        for c in self.cores:
+            for h in self.has:
+                rtt = self.write_rtt(c, h, m_wdata=m_wdata, t_ha=t_ha)
+                if rtt > worst:
+                    worst, who = rtt, (c, h)
+        return {
+            "rtt": worst, "core": who[0], "ha": who[1],
+            "fwd": self.route_lat(who[0], who[1]) if who[0] >= 0 else 0,
+            "rev": self.route_lat(who[1], who[0]) if who[0] >= 0 else 0,
+            "m_wdata": m_wdata, "t_ha": t_ha,
+            "outstanding": worst,   # one slot held for the whole RTT
+        }
 
     def pick_plane(self, src: int, dst: int, *,
                    occupancy: dict[int, int] | None = None) -> int:
@@ -628,7 +697,8 @@ class StackTopology:
                 port[("board", self.edges[path[0]][0])] += m
                 port[("leave", self.edges[path[-1]][1])] += m
                 legs[vc] = max(legs[vc],
-                               sum(self.edge_lat[e] for e in path))
+                               sum(self.edge_lat[e] for e in path)
+                               + self.hv_turns(path) * self.turn_lat)
 
         link_by_vc = {vc: (max(d.values()) if d else 0) * sig
                       for vc, d in link.items()}
@@ -657,7 +727,102 @@ class StackTopology:
 # workload
 # ---------------------------------------------------------------------------
 
-def build_uniform_write(topo: StackTopology, *, k: int = 400,
+# Address-stream parameters. One WriteNoSnp is `burst_len` bytes; consecutive
+# bursts in a row are `burst_len` apart; the next row is `stride` away; a
+# tile is `tiling_size` bytes. Interleave is already wired: HA =
+# (addr / burst_len) mod n_ha, so a dense tile walks every completer.
+BURST_LEN = 128
+STRIDE = 4096
+TILING_SIZE = 64 * 1024
+FLIT_BYTES = 32          # 128 B burst -> 4 WriteData flits
+TXN_PER_TILE = TILING_SIZE // BURST_LEN   # 512 WriteNoSnp / 64 KB tile
+TXN_PER_CORE = 2048                       # 4 tiles
+N_TILES = TXN_PER_CORE // TXN_PER_TILE
+
+
+def ha_of_addr(topo: StackTopology, addr: int, *,
+               burst_len: int = BURST_LEN) -> int:
+    """Line-interleaved HA map: each burst_len granule is the next HA."""
+    hs = topo.has
+    return hs[(addr // burst_len) % len(hs)]
+
+
+def tiled_addrs(*, burst_len: int = BURST_LEN, stride: int = STRIDE,
+                tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
+                base: int = 0) -> list[int]:
+    """2-D dense tile: `tiling_size/stride` rows of `stride/burst_len` bursts."""
+    if (stride % burst_len) or (tiling_size % stride):
+        raise ValueError("tile/stride/burst must divide evenly")
+    out: list[int] = []
+    for tile in range(n_tiles):
+        tile_base = base + tile * tiling_size
+        for row in range(0, tiling_size, stride):
+            for col in range(0, stride, burst_len):
+                out.append(tile_base + row + col)
+    return out
+
+
+def build_tiled_write(topo: StackTopology, *,
+                      burst_len: int = BURST_LEN, stride: int = STRIDE,
+                      tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
+                      m_wdata: int | None = None, seed: int = 0,
+                      dies: Sequence[int] | None = None) -> list[Txn]:
+    """Each AI core writes `n_tiles` dense 64 KB tiles.
+
+    Addresses are private per core (`core_rank * n_tiles * tiling_size`) so
+    cores do not alias, but the line-interleaved HA map still sends every
+    core to every HA equally. `seed` is accepted for call-site compatibility
+    and does not change the address stream.
+    """
+    del seed
+    if m_wdata is None:
+        m_wdata = max(1, burst_len // FLIT_BYTES)
+    cs = ([c for c in topo.cores if topo.nodes[c].die in set(dies)]
+          if dies is not None else list(topo.cores))
+    out: list[Txn] = []
+    tid = 0
+    for rank, c in enumerate(cs):
+        base = rank * n_tiles * tiling_size
+        for addr in tiled_addrs(burst_len=burst_len, stride=stride,
+                                tiling_size=tiling_size, n_tiles=n_tiles,
+                                base=base):
+            out.append(Txn(tid, c, ha_of_addr(topo, addr,
+                                              burst_len=burst_len),
+                           1, 0, "write", m_wdata))
+            tid += 1
+    return out
+
+
+def ha_histogram(topo: StackTopology, txns: Sequence[Txn]
+                 ) -> dict[str, Any]:
+    """Per-core and global HA destination counts (interleave check)."""
+    per: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    tot: dict[int, int] = defaultdict(int)
+    for x in txns:
+        per[x.core][x.ha] += 1
+        tot[x.ha] += 1
+    cores = sorted(per)
+    n_ha = len(topo.has)
+    spreads = []
+    for c in cores:
+        vs = [per[c].get(h, 0) for h in topo.has]
+        spreads.append((max(vs) - min(vs), max(vs), min(vs)))
+    gv = [tot.get(h, 0) for h in topo.has]
+    return {
+        "n_ha": n_ha, "n_core": len(cores),
+        "n_txn": len(txns),
+        "per_core_txn": (len(txns) // max(1, len(cores))),
+        "per_core_max_min": max(s[0] for s in spreads) if spreads else 0,
+        "per_core_hi": max(s[1] for s in spreads) if spreads else 0,
+        "per_core_lo": min(s[2] for s in spreads) if spreads else 0,
+        "global_max": max(gv) if gv else 0,
+        "global_min": min(gv) if gv else 0,
+        "covers_all_ha": all(min(per[c].get(h, 0) for h in topo.has) > 0
+                             for c in cores) if cores else False,
+    }
+
+
+def build_uniform_write(topo: StackTopology, *, k: int = 800,
                         m_wdata: int = 4, seed: int = 0,
                         dies: Sequence[int] | None = None) -> list[Txn]:
     """Every AI core writes `k` times, uniformly over all 96 HAs.

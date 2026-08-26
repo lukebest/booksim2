@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 _UTILS = Path(__file__).resolve().parent
 if str(_UTILS) not in sys.path:
@@ -32,7 +33,7 @@ IMG = ROOT / "results"
 
 SCHEMES = ("s0", "s1", "s16", "s17")
 COLOR = {"s0": "#dc2626", "s1": "#f59e0b", "s16": "#2563eb", "s17": "#16a34a"}
-LABEL = {"s0": "S0 基线（无流控）", "s1": "S1 拥塞等级 AIMD",
+LABEL = {"s0": "S0 基线（无源端流控）", "s1": "S1 源端 AIMD 控速",
          "s16": "S16 接收端授权（Homa 式）",
          "s17": "S17 挂接点转向仲裁（本文提出）"}
 DIE_COLOR = ["#1d4ed8", "#dc2626", "#0891b2", "#ea580c", "#4338ca", "#b91c1c"]
@@ -74,6 +75,83 @@ def _ok(b: bool) -> str:
 
 def _pct(x: float) -> str:
     return f"{100 * x:.1f}%"
+
+
+def _jain(xs) -> float:
+    xs = [float(x) for x in xs]
+    s2 = sum(x * x for x in xs)
+    return 0.0 if s2 <= 0 else (sum(xs) ** 2) / (len(xs) * s2)
+
+
+def ideal_group_write_bw(b: dict) -> dict[str, Any]:
+    """Equal-share WriteData rate if the batch hits the makespan bound.
+
+    Total WriteData flits = n_txn * m_wdata. The bound is the V-ring cut
+    (all CHI VCs). Six groups split that rate equally.
+    """
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    bd = mand.get("bounds") or {}
+    n_txn = mand.get("n_txn") or 0
+    m_wdata = (b.get("meta") or {}).get("m_wdata", 4)
+    n_g = 6
+    bound = bd.get("bound") or 0
+    total = (n_txn * m_wdata / bound) if bound else 0.0
+    return {
+        "n_groups": n_g, "bound": bound, "n_txn": n_txn, "m_wdata": m_wdata,
+        "cut_lb": bd.get("cut_lb"), "link_lb": bd.get("link_lb"),
+        "ideal_total": total, "ideal_per_group": total / n_g if n_g else 0.0,
+    }
+
+
+def inst_group_fairness(ser: dict, t_fair: float | None = None
+                        ) -> dict[str, Any]:
+    """E[Jain_t] on per-window group write bandwidth.
+
+    Windows with zero total WriteData are skipped. If `t_fair` is set
+    (first core out of work), only the contention window is kept — the
+    same interval the long-run group Jain uses.
+    """
+    t = ser.get("t") or []
+    bw = ser.get("bw_by_group") or {}
+    dies = sorted(bw, key=int)
+    if not dies or not t:
+        return {}
+    cols = list(zip(*[bw[d] for d in dies]))
+    js, used = [], []
+    for i, row in enumerate(cols):
+        if sum(row) <= 0:
+            continue
+        if t_fair is not None and t[i] > t_fair:
+            continue
+        js.append(_jain(row))
+        used.append(i)
+    if not js:
+        return {}
+    means = [sum(bw[d][i] for i in used) / len(used) for d in dies]
+    jem = _jain(means)
+    ej = sum(js) / len(js)
+    return {
+        "window": ser.get("window", 50),
+        "nwin": len(js),
+        "mean_jain": round(ej, 5),
+        "min_jain": round(min(js), 5),
+        "p50_jain": round(sorted(js)[len(js) // 2], 5),
+        "frac_lt_090": round(sum(1 for x in js if x < 0.90) / len(js), 4),
+        "jain_of_mean": round(jem, 5),
+        "turn_index": round(1 - ej / jem, 4) if jem > 0 else 0.0,
+        "t_fair": t_fair,
+    }
+
+
+def _fair_lookup(b: dict) -> dict[str, dict[str, Any]]:
+    gs = b.get("group_series") or {}
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    out = {}
+    for name in ("s0", "s1"):
+        ser = gs.get(name) or {}
+        t_fair = ((mand.get(name) or {}).get("group") or {}).get("t_fair")
+        out[name] = inst_group_fairness(ser, t_fair)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -601,6 +679,10 @@ def plot_group(b: dict, path: Path) -> None:
         ax.set_xticks([j + 0.4 - w / 2 for j in range(len(dies))])
         ax.set_xticklabels([f"die {d}" for d in dies], fontsize=8)
         ax.set_ylabel("该 die 10 个 core 合计的写吞吐 (flit/cycle)", fontsize=9)
+        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        if ideal > 0:
+            ax.axhline(ideal, color="#111827", ls="--", lw=1.1,
+                       label="均衡理想 %s flit/cycle" % _f(ideal, 3))
         # A 88x spread is invisible on a linear axis next to a scheme that
         # drained, and the spread is the whole point of this panel.
         wide = max((r["goodput_max_min"] for r in sub
@@ -613,8 +695,121 @@ def plot_group(b: dict, path: Path) -> None:
         ax.legend(fontsize=7, ncol=3, loc="upper center",
                   bbox_to_anchor=(0.5, -0.08), frameon=False)
         ax.grid(alpha=0.25, axis="y")
-    fig.suptitle("以 top die 为单位（每组 10 个 AI core）。die 0/2/4 的远端流量"
-                 "并入纵环时位于下游，崩溃时几乎完全被饿死", fontsize=11.5)
+    drained = all(r.get("completed") for r in g)
+    fig.suptitle("以 top die 为单位（每组 10 个 AI core）"
+                 + ("。批次排空后六个 die 完成量相同"
+                    if drained else
+                    "。die 0/2/4 的远端流量并入纵环时位于下游，崩溃时几乎被饿死"),
+                 fontsize=11.5)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def plot_group_series(b: dict, path: Path) -> None:
+    """Write bandwidth vs time, one curve per top-die group, S0 vs S1."""
+    gs = b.get("group_series") or {}
+    _cjk()
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 4.8), sharey=True)
+    colors = ["#2563eb", "#dc2626", "#0891b2", "#ea5800", "#7c3aed", "#16a34a"]
+    for ax, name, title in ((axes[0], "s0", "S0 基线（无源端流控）"),
+                            (axes[1], "s1", "S1 源端 AIMD 控速")):
+        ser = gs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw_by_group") or {}
+        w = ser.get("window", 50)
+        for i, d in enumerate(sorted(bw, key=int)):
+            ax.plot(t, bw[d], "-",
+                    color=colors[i % len(colors)], lw=1.5,
+                    label=f"die {d}（10 个 AI core）")
+        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        if ideal > 0:
+            ax.axhline(ideal, color="#111827", ls="--", lw=1.3,
+                       label=f"均衡理想 {_f(ideal, 3)}")
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel("时间 (cycle)", fontsize=9)
+        ax.set_ylabel(f"组写带宽 (flit/cycle，窗={w} cycle)", fontsize=9)
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=7.5, ncol=2, loc="upper right")
+    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计写带宽（flit/cycle）；"
+                 "虚线 = 均衡流量下的理想每组写带宽",
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def plot_group_jain_series(b: dict, path: Path) -> None:
+    """Per-window group Jain vs time, S0 vs S1."""
+    gs = b.get("group_series") or {}
+    _cjk()
+    fig, ax = plt.subplots(figsize=(13.2, 3.6))
+    colors = {"s0": "#2563eb", "s1": "#ea5800"}
+    labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
+    fair = _fair_lookup(b)
+    for name in ("s0", "s1"):
+        ser = gs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw_by_group") or {}
+        dies = sorted(bw, key=int)
+        if not dies or not t:
+            continue
+        cols = list(zip(*[bw[d] for d in dies]))
+        ys = [_jain(row) if sum(row) > 0 else float("nan") for row in cols]
+        ax.plot(t, ys, "-", color=colors[name], lw=1.1, alpha=0.85,
+                label=labels[name])
+        ej = (fair.get(name) or {}).get("mean_jain")
+        if ej:
+            ax.axhline(ej, color=colors[name], ls=":", lw=1.1,
+                       label=f"{labels[name]}  E[Jain$_t$]={ej:.3f}")
+    ax.axhline(1.0, color="#111827", ls="--", lw=1.0,
+               label="Jain(E[x]) = 1（全程完成量）")
+    ax.set_ylim(0.15, 1.05)
+    ax.set_xlabel("时间 (cycle)", fontsize=9)
+    ax.set_ylabel("组间 Jain$_t$", fontsize=9)
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=7.5, ncol=3, loc="lower left")
+    fig.suptitle("瞬时组间均衡度：每个 50-cycle 窗上六个 group 写带宽的 Jain",
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def plot_fabric_series(b: dict, path: Path) -> None:
+    """Instantaneous fabric bandwidth vs time, S0 vs S1."""
+    fs = b.get("fabric_series") or {}
+    cap = (b.get("topology") or {}).get("capacity") or {}
+    nvc = len((b.get("topology") or {}).get("vcs") or ("req", "rsp", "dat"))
+    _cjk()
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.0), sharey=True)
+    colors = {"top": "#2563eb", "d2d": "#dc2626", "h": "#0891b2", "v": "#ea5800"}
+    labels = {"top": "top die 环", "d2d": "D2D 对分", "h": "bottom 横环",
+              "v": "bottom 纵环"}
+    order = ("top", "d2d", "h", "v")
+    for ax, name, title in ((axes[0], "s0", "S0 基线（无源端流控）"),
+                            (axes[1], "s1", "S1 源端 AIMD 控速")):
+        ser = fs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw") or {}
+        for fab in order:
+            ys = bw.get(fab) or []
+            if not ys:
+                continue
+            ax.plot(t[:len(ys)], ys, "-", color=colors[fab], lw=1.4,
+                    label=labels[fab])
+            links = cap.get(fab, 0)
+            if links:
+                ax.axhline(links, color=colors[fab], ls=":", lw=0.9, alpha=0.7)
+                ax.axhline(links * nvc, color=colors[fab], ls="--", lw=0.7,
+                           alpha=0.35)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlabel("时间 (cycle)", fontsize=9)
+        ax.set_ylabel("瞬时带宽 (flit / cycle)", fontsize=9)
+        ax.grid(alpha=0.25)
+        ax.legend(fontsize=7.5, ncol=2, loc="upper right")
+    fig.suptitle("各织物瞬时带宽（滑窗）；点线 = 单 VC 容量，虚线 = 三 VC 合计容量",
+                 fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
     plt.close(fig)
@@ -672,6 +867,46 @@ def scenario_table(b: dict) -> str:
                "Jain<br>（按 die）"], rows)
 
 
+def _cw_ccw_ratio(cw: int, ccw: int) -> str:
+    if ccw == 0:
+        return "∞" if cw else "—"
+    return f"{cw / ccw:.2f}"
+
+
+def die0_board_table(b: dict, scheme: str) -> str:
+    """Top die 0: per-core CW / CCW board success and failure."""
+    rows_in = (b.get("die0_board") or {}).get(scheme) or []
+    rows = []
+    tot = {"ok_cw": 0, "ok_ccw": 0, "fail_cw": 0, "fail_ccw": 0}
+    for r in rows_in:
+        ok_cw, ok_ccw = r["ok_cw"], r["ok_ccw"]
+        fcw, fccw = r["fail_cw"], r["fail_ccw"]
+        tot["ok_cw"] += ok_cw
+        tot["ok_ccw"] += ok_ccw
+        tot["fail_cw"] += fcw
+        tot["fail_ccw"] += fccw
+        rows.append([
+            f"core {r['core']}（环位 {r['idx']}）",
+            f"{ok_cw:,}", f"{ok_ccw:,}", _cw_ccw_ratio(ok_cw, ok_ccw),
+            f"{ok_cw + ok_ccw:,}",
+            f"{fcw:,}", f"{fccw:,}", _cw_ccw_ratio(fcw, fccw),
+            f"{fcw + fccw:,}",
+        ])
+    if rows:
+        rows.append([
+            "<b>die 0 合计</b>",
+            f"<b>{tot['ok_cw']:,}</b>", f"<b>{tot['ok_ccw']:,}</b>",
+            f"<b>{_cw_ccw_ratio(tot['ok_cw'], tot['ok_ccw'])}</b>",
+            f"<b>{tot['ok_cw'] + tot['ok_ccw']:,}</b>",
+            f"<b>{tot['fail_cw']:,}</b>", f"<b>{tot['fail_ccw']:,}</b>",
+            f"<b>{_cw_ccw_ratio(tot['fail_cw'], tot['fail_ccw'])}</b>",
+            f"<b>{tot['fail_cw'] + tot['fail_ccw']:,}</b>",
+        ])
+    return _t(["die 0 AI core",
+               "成功 CW", "成功 CCW", "成功 CW/CCW", "成功合计",
+               "失败 CW", "失败 CCW", "失败 CW/CCW", "失败合计"], rows)
+
+
 def group_table(b: dict) -> str:
     rows = []
     # The adaptive schemes set their own limit, so they appear once under
@@ -685,24 +920,68 @@ def group_table(b: dict) -> str:
             static.append(r)
     ordered = sorted(static, key=lambda r: (-r["outstanding"], r["scheme"]))
     ordered += [ad[k] for k in sorted(ad)]
+    inst = _fair_lookup(b)
     for r in ordered:
         gp = r["goodput_by_group"]
+        ej = (inst.get(r["scheme"]) or {}).get("mean_jain")
         rows.append([
             r["outstanding"] if r["scheme"] not in ("s18", "s19")
             else "自适应", r["scheme"].upper(), _ok(r["completed"]),
-            " / ".join(_f(v, 3) for v in
+            " / ".join(_f(v, 4) for v in
                        [gp[d] for d in sorted(gp, key=int)]),
-            _f(r["goodput_total"], 3), _f(r["goodput_max_min"], 2),
-            _f(r["group_jain"]), _f(r["group_max_min"], 2),
+            _f(r["goodput_total"], 4), _f(r["goodput_max_min"], 2),
+            _f(ej), _f(r["group_jain"]), _f(r["group_max_min"], 2),
             _f(r["group_cov"], 3), f"die {r['worst_group']}",
             _f(r["core_jain"]), _f(r["jain_within_worst"]),
         ])
     return _t(["outstanding", "方案", "排空",
                "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
-               "合计", "die 间<br>max/min<br>（按完成量）",
+               "合计 flit/cycle", "die 间<br>max/min<br>（按完成量）",
+               "E[Jain<sub>t</sub>]<br>（瞬时）",
                "die 间 Jain<br>（竞争窗口）", "die 间<br>max/min",
                "die 间 CoV", "最差 die",
                "Jain<br>（按 core）", "最差 die 内部<br>的 Jain"], rows)
+
+
+def inst_fair_table(b: dict) -> str:
+    inst = _fair_lookup(b)
+    i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
+    ideal = ideal_group_write_bw(b)
+    rows = [
+        ["E[Jain<sub>t</sub>]（瞬时均衡度）",
+         _f(i0.get("mean_jain")), _f(i1.get("mean_jain")),
+         "每个 50-cycle 窗上六个 group 写带宽的 Jain，再对竞争窗口平均。"
+         "1 = 每个窗都均；1/6 ≈ 0.17 = 一窗只一家"],
+        ["Jain(E[x])（全程完成量）",
+         _f(i0.get("jain_of_mean")), _f(i1.get("jain_of_mean")),
+         "先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1"],
+        ["轮换指数 1 − E[Jain<sub>t</sub>]/Jain(E[x])",
+         _f(i0.get("turn_index"), 3), _f(i1.get("turn_index"), 3),
+         "长程均、短时不均的程度。0 = 每个窗都均"],
+        ["窗内 Jain 中位数 / 最小",
+         f"{_f(i0.get('p50_jain'))} / {_f(i0.get('min_jain'))}",
+         f"{_f(i1.get('p50_jain'))} / {_f(i1.get('min_jain'))}",
+         "竞争窗口内"],
+        ["Jain<sub>t</sub> &lt; 0.90 的窗占比",
+         _pct(i0.get("frac_lt_090") or 0), _pct(i1.get("frac_lt_090") or 0),
+         "短时明显不均的时间比例"],
+        ["窗长 / 计入窗数",
+         f"{i0.get('window', 50)} / {i0.get('nwin', 0):,}",
+         f"{i1.get('window', 50)} / {i1.get('nwin', 0):,}",
+         "只计 t ≤ t_fair 且该窗总写带宽 &gt; 0"],
+        ["均衡理想每组写带宽",
+         f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
+         f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
+         f"n_txn × WriteData / 综合下界 / 6 组 "
+         f"= {ideal.get('n_txn', 0):,} × {ideal.get('m_wdata', 4)} / "
+         f"{ideal.get('bound', 0):,} / 6。"
+         f"下界是纵环切割 {ideal.get('cut_lb', 0):,} cycle"],
+        ["均衡理想六组合计",
+         f"{_f(ideal.get('ideal_total'), 3)} flit/cycle",
+         f"{_f(ideal.get('ideal_total'), 3)} flit/cycle",
+         "若跑到下界且组间均分，全芯片 WriteData 上环速率"],
+    ]
+    return _t(["指标", "S0", "S1", "含义"], rows)
 
 
 def mod4_table(b: dict) -> str:
@@ -732,26 +1011,45 @@ def setup_table(b: dict) -> str:
         ["AI core 总数", t["n_cores"], "发起方"],
         ["HA 总数", t["n_has"], "bottom die，12 行 × 8 列"],
         ["D2D 链路", t["n_bridges"], "每 die 8 条，双向，跨 SerDes"],
-        ["挂接点", t["n_attach"],
-         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组，共 6 组挂 6 个 top die"],
+        ["挂接点 / bottom D2D", t["n_attach"],
+         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组。"
+         "每个 D2D landing <b>两个独立接口</b>：一个接该处横环，"
+         "一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，"
+         "只在出环 hop 上互斥；交叉方向靠 SWAP 解死锁"],
         ["bottom die NoC", "6 横 + 8 纵 half ring",
          "half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向"],
         ["纵环长度", t["v_len"], "12 个 HA + 6 个挂接点交替排列"],
         ["有向链路总数", f"{t['directed_links']:,}",
          f"top {cap['top']} / D2D {cap['d2d']} / 横 {cap['h']} / 纵 {cap['v']}"],
         ["CHI 虚通道", " / ".join(t["vcs"]),
-         "REQ、RSP、DAT 各自独占链路带宽，互不阻塞"],
+         "REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 "
+         "1 REQ + 1 RSP + 1 DAT，互不抢槽"],
+        ["写带宽单位", "flit/cycle",
+         "WriteData 上环速率；织物瞬时 hop 同单位"],
+        ["SWAP（HPCA'22）",
+         "开" if m["fabric"].get("swap_rule", True) else "关",
+         "横↔纵挂接点、D2D↔横、D2D↔纵：两拍 flit 互换，各走对方腾出的 hop，"
+         "不进 FIFO、不加转向时延"],
+        ["D2D 落地 buffer",
+         f"{m['fabric'].get('d2d_land_depth', 16)} / (挂接点, 目标环, VC)",
+         "SWAP 和环 FIFO 都没进时的有界落地队列，下拍再参与 SWAP"],
         ["每笔写的 flit 数",
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
         ["每 core outstanding", f"<b>{m['core_outstanding']}</b>",
-         "本次按要求设定；下文会说明它在这个织物上意味着什么"],
+         "在途上限：从 REQ 上环占到 Comp 回来。"
+         f"最长无拥塞写 RTT 是 { (m.get('rtt') or t.get('rtt') or {}).get('rtt', '—') } cycle"],
+        ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
+         "满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ"],
         ["转向 / D2D FIFO 深度",
          f"{m['fabric']['turn_depth']} / {m['fabric']['d2d_depth']}",
          "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
-         f"每 core {m['k']} 笔，均匀写全部 {t['n_has']} 个 HA",
-         "需求完全对称，任何不均衡都是织物造成的"],
+         f"burst {m.get('burst_len', 128)} B / stride {m.get('stride', 4096)} B / "
+         f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 4)}"
+         f"（每核 {m.get('txn_per_core', m.get('n_tiles', 4) * 512)} 笔）",
+         "二维密铺：每行 stride/burst 笔，tile/stride 行。"
+         f"128 B 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
     ]
     return _t(["项目", "取值", "说明"], rows)
 
@@ -764,10 +1062,15 @@ def link_table(b: dict) -> str:
         ["top die 环内链路", " / ".join(str(v) for v in uniq) + " cycle",
          f"共 {len(lats)} 段，按位置不同；两个平面各一份"],
         ["D2D 跨 die", f"{t['d2d_lat']} cycle",
-         "SerDes + 跨时钟域，是全网最贵的一跳"],
-        ["bottom die 环内跳", f"{t['bot_hop_lat']} cycle",
-         "规则阵列，短线"],
-        ["挂接点内转向", "1 cycle", "横环 → 纵环，经转向 FIFO"],
+         "SerDes + 跨时钟域"],
+        ["bottom die 横环节点间", f"<b>{t.get('h_hop_lat', t.get('bot_hop_lat', 4))}</b> cycle",
+         "挂接点 → 挂接点，单向 half ring"],
+        ["bottom die 纵环节点间", f"<b>{t.get('v_hop_lat', 6)}</b> cycle",
+         "HA ↔ 挂接点，单向 half ring"],
+        ["挂接点转向", f"<b>{t.get('turn_lat', 5)}</b> cycle",
+         "横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不再和转向共队列"],
+        ["D2D bottom 双接口", "横环口 + 该列纵环口",
+         "SerDes 仍是一条 D2D 边；落地后可同时上横环和上纵环"],
     ]
     return _t(["链路", "延迟", "说明"], rows)
 
@@ -853,6 +1156,131 @@ def scheme_table(b: dict, tag: str) -> str:
         ])
     return _t(["方案", "批次是否排空", "完成事务", "makespan", "达下界比例",
                "Jain", "max/min", "CoV", "偏转次数"], rows)
+
+
+def fabric_inst_table(b: dict, scheme: str) -> str:
+    """Peak instantaneous bandwidth per fabric, vs single-VC and 3-VC caps."""
+    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+    fab = r.get("fabric") or {}
+    cap = (b.get("topology") or {}).get("capacity") or {}
+    names = [("top", "top die 环"), ("d2d", "D2D 对分"),
+             ("h", "bottom 横环"), ("v", "bottom 纵环")]
+    rows = []
+    for key, lab in names:
+        row = fab.get(key) or {}
+        links = row.get("links", cap.get(key, 0))
+        peak = row.get("peak_inst_bw", 0)
+        by = row.get("peak_inst_util_by_vc") or {}
+        rows.append([
+            lab, links, links, links * 3,
+            peak,
+            _pct(row.get("peak_inst_util_link", 0)),
+            _pct(row.get("peak_inst_util", 0)),
+            _pct(by.get("req", 0)), _pct(by.get("rsp", 0)),
+            _pct(by.get("dat", 0)),
+            _pct(row.get("avg_util", row.get("util", 0))),
+        ])
+    return _t(["织物", "有向边", "单 VC 容量<br>flit/cycle",
+               "三 VC 容量<br>flit/cycle", "瞬时峰值<br>flit/cycle",
+               "峰值 / 单 VC", "峰值 / 三 VC",
+               "REQ 峰值", "RSP 峰值", "DAT 峰值",
+               "全程平均<br>（三 VC）"], rows)
+
+
+def _fabric_full_txt(b: dict, scheme: str) -> str:
+    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+    fab = r.get("fabric") or {}
+    bits = []
+    labels = {"top": "top die", "d2d": "D2D 对分", "h": "横环", "v": "纵环"}
+    for key in ("top", "d2d", "h", "v"):
+        row = fab.get(key) or {}
+        by = row.get("peak_inst_util_by_vc") or {}
+        if by:
+            vc = max(by, key=by.get)
+            val = by[vc]
+        else:
+            vc, val = "dat", 0.0
+        full = "打满" if val >= 0.90 else ("接近打满" if val >= 0.70 else "未打满")
+        bits.append(f"{labels[key]} {vc.upper()} 瞬时 {_pct(val)}（{full}）")
+    return "；".join(bits)
+
+
+def _write_bw_death(b: dict, scheme: str, floor: float = 0.05
+                    ) -> dict[str, Any]:
+    """When group WriteData injection fell below `floor` flit/cycle total."""
+    ser = (b.get("group_series") or {}).get(scheme) or {}
+    t = ser.get("t") or []
+    bw = ser.get("bw_by_group") or {}
+    if not t or not bw:
+        return {}
+    tot = [sum(bw[d][i] for d in bw) for i in range(len(t))]
+    useful = [i for i, v in enumerate(tot) if v > floor]
+    peak_i = max(range(len(tot)), key=lambda i: tot[i])
+    return {
+        "peak_t": t[peak_i], "peak_fc": tot[peak_i],
+        "last_t": t[useful[-1]] if useful else None,
+        "last_fc": tot[useful[-1]] if useful else 0,
+        "n_zero_win": len(t) - 1 - useful[-1] if useful else len(t),
+    }
+
+
+def collapse_table(b: dict) -> str:
+    """Protocol leftovers that show why S1 stopped making progress."""
+    s0 = ((b.get("schemes") or {}).get("mandated") or {}).get("s0") or {}
+    s1 = ((b.get("schemes") or {}).get("mandated") or {}).get("s1") or {}
+    q0, q1 = s0.get("retry") or {}, s1.get("retry") or {}
+    rows = [
+        ["完成事务",
+         f"{s0.get('n_txn_done', 0):,}/{s0.get('n_txn_target', 0):,}",
+         f"{s1.get('n_txn_done', 0):,}/{s1.get('n_txn_target', 0):,}"],
+        ["停滞检测",
+         "否" if s0.get("completed") else "是",
+         "否" if s1.get("completed") else "<b>是（连续无 flit 交付）</b>"],
+        ["RetryAck / PCrdGrant / REQ 重发",
+         f"{q0.get('n_retry', 0):,} / {s0.get('n_pcrd', 0):,} / "
+         f"{s0.get('n_req_resent', 0):,}",
+         f"{q1.get('n_retry', 0):,} / {s1.get('n_pcrd', 0):,} / "
+         f"{s1.get('n_req_resent', 0):,}"],
+        ["未兑现的 PCrd（Retry − 重发）",
+         f"{q0.get('n_retry', 0) - s0.get('n_req_resent', 0):,}",
+         f"<b>{q1.get('n_retry', 0) - s1.get('n_req_resent', 0):,}</b>"],
+        ["HA 上环失败（RSP）",
+         f"{sum(sum(v.values()) for k, v in (s0.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}",
+         f"<b>{sum(sum(v.values()) for k, v in (s1.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}</b>"],
+        ["纵环 RSP 瞬时占用",
+         _pct(((s0.get("fabric") or {}).get("v") or {})
+              .get("peak_inst_util_by_vc", {}).get("rsp", 0)),
+         _pct(((s1.get("fabric") or {}).get("v") or {})
+              .get("peak_inst_util_by_vc", {}).get("rsp", 0))],
+        ["转向 / D2D FIFO 峰值",
+         f"{(s0.get('fifo') or {}).get('turn_peak', 0)} / "
+         f"{(s0.get('fifo') or {}).get('d2d_peak', 0)}",
+         f"{(s1.get('fifo') or {}).get('turn_peak', 0)} / "
+         f"{(s1.get('fifo') or {}).get('d2d_peak', 0)}"],
+        ["SWAP 次数（H↔V / D2D）",
+         f"{s0.get('n_swaps', 0):,} "
+         f"({s0.get('n_swaps_hv', 0):,} / {s0.get('n_swaps_d2d', 0):,})",
+         f"{s1.get('n_swaps', 0):,} "
+         f"({s1.get('n_swaps_hv', 0):,} / {s1.get('n_swaps_d2d', 0):,})"],
+        ["D2D 落地 buffer 峰值 / 残留",
+         f"{(s0.get('fifo') or {}).get('d2d_buf_peak', 0)} / "
+         f"{(s0.get('fifo') or {}).get('residual_d2d_buf', 0)}",
+         f"{(s1.get('fifo') or {}).get('d2d_buf_peak', 0)} / "
+         f"{(s1.get('fifo') or {}).get('residual_d2d_buf', 0)}"],
+        ["结束时 FIFO 残留 / 在途 / 源端积压",
+         f"{(s0.get('fifo') or {}).get('residual_xq', 0)} / "
+         f"{s0.get('in_flight', 0)} / {s0.get('backlog', 0)}",
+         f"{(s1.get('fifo') or {}).get('residual_xq', 0)} / "
+         f"{s1.get('in_flight', 0)} / {s1.get('backlog', 0)}"],
+        ["AIMD 升窗 / 降窗 / 拒发",
+         "—（S0 无源端控速）",
+         f"{s1.get('n_aimd_increase', 0):,} / {s1.get('n_aimd_decrease', 0):,} / "
+         f"{s1.get('n_fc_deny', 0):,}"],
+        ["有效并发 / 名义 outstanding",
+         _pct(q0.get("eff_frac", 1)),
+         _pct(q1.get("eff_frac", 1))],
+    ]
+    return _t(["证据", "S0", "S1"], rows)
 
 
 def oc_table(b: dict) -> str:
@@ -1090,11 +1518,342 @@ def cost_table(b: dict) -> str:
 # report
 # ---------------------------------------------------------------------------
 
+def write_focus_report(b: dict) -> None:
+    """Report for the RTT-sized outstanding + HA retry operating point."""
+    t, m = b["topology"], b["meta"]
+    rtt = m.get("rtt") or t.get("rtt") or {}
+    mand = b["schemes"]["mandated"]
+    s0, s1 = mand["s0"], mand["s1"]
+    n_txn = mand["n_txn"]
+    bd = mand["bounds"]
+    oc = m["core_outstanding"]
+    pos = m.get("pos_depth", 32)
+    wl = b.get("workload") or {}
+    hist = wl.get("ha_hist") or mand.get("ha_hist") or {}
+    k_core = hist.get("per_core_txn") or (n_txn // max(1, t["n_cores"]))
+    burst = wl.get("burst_len", m.get("burst_len", 128))
+    stride = wl.get("stride", m.get("stride", 4096))
+    tile = wl.get("tiling_size", m.get("tiling_size", 65536))
+    n_tiles = wl.get("n_tiles", m.get("n_tiles", 1))
+    q0, q1 = s0.get("retry", {}), s1.get("retry", {})
+    g0, g1 = s0["group"], s1["group"]
+    f0, f1 = s0["fairness"], s1["fairness"]
+    peak0 = s0.get("max_core_outstanding", 0)
+    binds = peak0 >= oc
+    bind_txt = (
+        f"本批次每 core {k_core} 笔，大于窗口 {oc}，实测峰值占用 {peak0}，"
+        f"<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。"
+        if binds else
+        f"本批次每 core {k_core} 笔，实测峰值占用 {peak0}，"
+        f"<b>{oc} 这个上限本身没有打满</b>。"
+    )
+
+    plot_topology(b, IMG / "stack_topology.png")
+    plot_binding(b, IMG / "stack_binding.png")
+    plot_group_series(b, IMG / "stack_group_bw_series.png")
+    plot_group_jain_series(b, IMG / "stack_group_jain_series.png")
+    plot_fabric_series(b, IMG / "stack_fabric_bw_series.png")
+    if b.get("group"):
+        plot_group(b, IMG / "stack_group.png")
+    inst = _fair_lookup(b)
+    i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
+    ideal = ideal_group_write_bw(b)
+    r_star = ideal.get("ideal_per_group") or 0
+    gp0 = (g0.get("goodput_by_group") or {}).get("0") or g0.get("goodput_total", 0) / 6
+    gp1 = (g1.get("goodput_by_group") or {}).get("0") or g1.get("goodput_total", 0) / 6
+    fab0 = _fabric_full_txt(b, "s0")
+    fab1 = _fabric_full_txt(b, "s1")
+    death = _write_bw_death(b, "s1")
+    death0 = _write_bw_death(b, "s0")
+    q1r, q0r = s1.get("retry") or {}, s0.get("retry") or {}
+    pcrd_gap = q1r.get("n_retry", 0) - s1.get("n_req_resent", 0)
+    death_t = death.get("last_t")
+    death_txt = (
+        f"S1 的组写带宽在 t≈{death_t:,} cycle 掉到接近 0"
+        f"（峰值 {_f(death.get('peak_fc', 0))} flit/cycle @"
+        f" t={death.get('peak_t', 0):,}），之后 "
+        f"{death.get('n_zero_win', 0)} 个滑窗没有 WriteData 上环，"
+        f"停滞检测在 {s1['makespan']:,} cycle 切断。"
+        if death_t is not None else
+        "S1 写带宽在停滞前已经掉到 0。"
+    )
+    swap0 = (s0.get("n_swaps", 0), s0.get("n_swaps_hv", 0),
+             s0.get("n_swaps_d2d", 0))
+    swap1 = (s1.get("n_swaps", 0), s1.get("n_swaps_hv", 0),
+             s1.get("n_swaps_d2d", 0))
+    both_ok = bool(s0.get("completed") and s1.get("completed"))
+    s23_body = (
+        f"""<li><b>SWAP 让交叉方向不必互相等 FIFO。</b>
+下降 WriteData（D2D→纵/横）与上升 Comp/PCrd（纵/横→D2D）在同一
+挂接点互换，各走对方腾出的 hop，不进 FIFO、不加
+{t.get('turn_lat', 5)} cycle 转向。远列 H↔V 转向同样互换。
+S0 SWAP {swap0[0]:,} 次（H↔V {swap0[1]:,} / D2D {swap0[2]:,}），
+S1 {swap1[0]:,} 次（H↔V {swap1[1]:,} / D2D {swap1[2]:,}）。</li>
+<li><b>D2D 落地 buffer 把无界 stall 收成有界队列。</b>
+错过 SWAP 和环 FIFO 的落地 flit 进
+{(s1.get('fifo') or {}).get('d2d_land_depth', 16)} 深的
+(挂接点, 目标环, VC) 队列，下拍再作为 D2D 到达参与 SWAP。
+S1 峰值占用 {(s1.get('fifo') or {}).get('d2d_buf_peak', 0)}，
+残留 {(s1.get('fifo') or {}).get('residual_d2d_buf', 0)}。</li>
+<li><b>retry 环能闭环。</b>
+S1 RetryAck {q1r.get('n_retry', 0):,}、重发
+{s1.get('n_req_resent', 0):,}，未兑现 PCrd {pcrd_gap:,}。
+有效并发 {_pct(q1r.get('eff_frac', 0))}。</li>"""
+        if both_ok else
+        f"""<li><b>触发点在 bottom 纵环的 RSP，不是 top die，也不是 D2D 对分。</b>
+双接口让 D2D 落地可以同时上横环和纵环，纵环 DAT/RSP 瞬时被打满
+（S1 纵环 RSP 瞬时 {_pct(((s1.get('fabric') or {}).get('v') or {}).get('peak_inst_util_by_vc', {}).get('rsp', 0))}）。
+96 个 HA 的 RSP 上环失败合计
+{sum(sum(v.values()) for k, v in (s1.get('board_fail_by_src') or {}).items() if k.endswith(':rsp')):,}
+次，几乎全是 <code>hop_busy</code> / I-tag，说明 HA 要把
+RetryAck、PCrdGrant、Comp 送上纵环时，槽已经被在环流量占住。</li>
+<li><b>CHI retry 环被掐断，outstanding 槽回不来。</b>
+RetryAck {q1r.get('n_retry', 0):,} 次，但 REQ 只重发了
+{s1.get('n_req_resent', 0):,} 次，差 <b>{pcrd_gap:,}</b> 笔：
+PCrdGrant 发不出（或发在网上走不到 core），core 就一直占着
+outstanding。有效并发只剩名义值的 {_pct(q1r.get('eff_frac', 0))}，
+峰值挂起 {q1r.get('max_parked', 0):,} 笔。新 REQ 发不出，
+P-Credit 重发也发不出，写数据在 t≈{death_t or 0:,} 之后为 0。</li>
+<li><b>S1 的 AIMD 没有刹住这场风暴。</b>
+升窗 {s1.get('n_aimd_increase', 0):,} 次、降窗只有
+{s1.get('n_aimd_decrease', 0):,} 次，结束时每核预算都顶在窗口 64。
+S1 把路径上的拥塞等级从本节点失败里减掉，core 自己上环失败不多，
+于是判定“该加窗”；真正挤爆的是 HA 侧 RSP。
+<code>scope=core_only</code> 也不限 HA。窗口上限 64 flit / 64 cycle
+等于每核最多 1 flit/cycle，反而把写数据变慢，retry 风暴有更长时间
+把纵环锁死。S0 没有这个 1 flit/cycle 帽子，在 {s0['makespan']:,}
+cycle 冲完，retry 与重发数量对齐，FIFO 残留 0。</li>
+<li><b>锁死后出不去。</b>
+结束时转向/D2D FIFO 仍坐着 {(s1.get('fifo') or {}).get('residual_xq', 0)} 个 flit，
+在途 {s1.get('in_flight', 0):,}、源端积压 {s1.get('backlog', 0):,}。
+FIFO 深度已经顶满（转向 64、D2D 128），偏转把纵环喂饱，
+HA 更上不去环。连续 {max(80_000, 160 * k_core):,} cycle
+没有任何 flit 交付，停滞检测判定崩溃——不是“慢”，是死锁。</li>"""
+    )
+    s1_item = (
+        f"<b>SWAP + D2D 落地 buffer 解除交叉死锁。</b>"
+        f"S0 SWAP {swap0[0]:,} 次（H↔V {swap0[1]:,}，D2D {swap0[2]:,}）；"
+        f"S1 {swap1[0]:,} 次（H↔V {swap1[1]:,}，D2D {swap1[2]:,}）。"
+        f"下降的 WriteData 与上升的 Comp/PCrd 在 D2D bridge 互换 hop；"
+        f"远列转向在横↔纵挂接点互换。落地 buffer 峰值 "
+        f"{(s1.get('fifo') or {}).get('d2d_buf_peak', 0)}。"
+        if both_ok else
+        f"<b>S1 崩溃是纵环 RSP + retry 环被掐断，不是 AIMD 把源端刹死。</b> "
+        f"{death_txt} AIMD 几乎只升窗（{s1.get('n_aimd_increase', 0):,} vs 降窗 "
+        f"{s1.get('n_aimd_decrease', 0):,}）。锁死链：纵环 RSP 打满 → "
+        f"HA 发不出 PCrd/Comp → {pcrd_gap:,} 笔 retry 没有对应重发 → "
+        f"outstanding 挂死 → 写带宽归零。细节在第 2.3 节。"
+    )
+
+    html = f"""<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>3D 堆叠 NoC 上的 per-group 写带宽</title>
+<style>
+body {{ font-family: ui-sans-serif, system-ui, "WenQuanYi Micro Hei",
+        sans-serif; max-width: 980px; margin: 1.5rem auto; padding: 0 1rem;
+        line-height: 1.55; color: #111; }}
+h1 {{ font-size: 1.45rem; }} h2 {{ font-size: 1.2rem; margin-top: 2rem; }}
+h3 {{ font-size: 1.05rem; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem;
+         margin: 0.6rem 0 1rem; }}
+th, td {{ border: 1px solid #d4d4d8; padding: 0.28rem 0.45rem;
+          text-align: left; vertical-align: top; }}
+th {{ background: #f4f4f5; }}
+.key {{ background: #f8fafc; border: 1px solid #e4e4e7; padding: 0.2rem 1.1rem; }}
+.def {{ background: #eff6ff; border-left: 4px solid #2563eb;
+        padding: 0.6rem 0.9rem; margin: 0.8rem 0; }}
+.good {{ background: #f0fdf4; border-left-color: #16a34a; }}
+img {{ max-width: 100%; height: auto; margin: 0.6rem 0 1rem; }}
+code {{ font-size: 0.86em; }}
+</style></head><body>
+<h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
+<p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
+挂接点转向 {t.get('turn_lat', 5)} cycle。
+D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环），
+并用 HPCA'22 <b>SWAP</b> 与有界落地 buffer 解交叉死锁。
+带宽口径为<b>瞬时带宽</b>，写带宽单位为 <b>flit/cycle</b>。
+workload：burst <b>{burst} B</b>、stride <b>{stride} B</b>、
+tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
+（每核 {k_core} 笔 WriteNoSnp，共 {n_txn:,} 笔）。
+地址按 {burst} B 交织到 {t['n_has']} 个 HA，每核覆盖全部 HA
+（每核打到同一 HA 的次数 {hist.get('per_core_lo', '?')}–{hist.get('per_core_hi', '?')}）。
+每 core outstanding = <b>{oc}</b>。
+每个 HA 跟踪表 <b>{pos}</b> 项，满了走<b>请求 retry</b>
+（RetryAck → PCrdGrant → 重发 REQ），不是源端控速。</p>
+<div class="def">S0 <b>没有源端流控</b>——只要 outstanding 有空位、ring 上有 slot 就发。
+S1 再加 AIMD 源端控速。HA 跟踪表满触发的是 CHI 请求 retry，不是源端控速。</div>
+
+<h2>结论</h2>
+<div class="key"><ol>
+<li><b>outstanding 设为 {oc}。</b>
+无拥塞的 WriteNoSnp 往返 = REQ 去程 + DBID 回程 + WriteData 去程
+（{m['m_wdata']} flit 流水，最后一拍比第一拍晚 {m['m_wdata'] - 1} cycle）+ Comp 回程。
+最坏一对 (core {rtt.get('core')}, HA {rtt.get('ha')}) 的去程
+{rtt.get('fwd')} cycle、回程 {rtt.get('rev')} cycle，合计
+<b>{rtt.get('rtt')} cycle</b>。额度从 REQ 上环一直占到 Comp 回来。
+窗口 {oc}{" 小于" if oc < (rtt.get("rtt") or oc) else " 相对"}最长 RTT
+{rtt.get('rtt')}，长路径上 core 会先把 {oc} 个槽占满再等 Comp。
+{bind_txt}</li>
+
+<li><b>HA 跟踪表满是请求 retry 机制。S0 不另加源端控速，S1 才控速。</b>
+每个 HA 同时只能收 {pos} 个请求；再来的 REQ 走
+RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
+S0 完成 <b>{s0['n_txn_done']:,}/{n_txn:,}</b>，makespan {s0['makespan']:,} cycle，
+RetryAck {q0.get('n_retry', 0):,} 次，有效并发是名义值的
+{_pct(q0.get('eff_frac', 1))}；
+S1 完成 {s1['n_txn_done']:,}/{n_txn:,}，{s1['makespan']:,} cycle，
+retry {q1.get('n_retry', 0):,}。
+{"两个方案都排空，没有活锁、没有停在停滞检测器上。"
+ if s0["completed"] and s1["completed"]
+ else death_txt + " 根因见第 2.3 节。"}</li>
+
+<li><b>全程完成量均衡，瞬时不均衡。瞬时均衡度用 E[Jain<sub>t</sub>]。</b>
+六个 die 写完同样多的 flit，Jain(E[x]) = 1.00，完成量 max/min = 1.00。
+每个 50-cycle 窗上再算组间 Jain，竞争窗口内
+S0 的 E[Jain<sub>t</sub>] = <b>{_f(i0.get('mean_jain'))}</b>，
+S1 为 <b>{_f(i1.get('mean_jain'))}</b>
+（约 {_pct(i0.get('frac_lt_090') or 0)} 的窗 &lt; 0.90）。
+均衡流量下理想每组写带宽是
+<b>{_f(r_star, 3)} flit/cycle</b>
+（总 WriteData / 综合下界 / 6；下界 {ideal.get('bound', 0):,} cycle，
+由纵环切割决定）。S0 全程平均每组 {_f(gp0)}，
+约是理想的 {_pct(gp0 / r_star if r_star else 0)}。
+虚线画在组写带宽曲线上。</li>
+
+<li><b>对分 / 环带宽按瞬时口径看。</b>
+S0：{fab0}。
+S1：{fab1}。
+“打满”看最忙那条 CHI VC 的瞬时峰值是否达到该织物有向边数；
+全程平均会把排空尾部算进去，会低估峰值占用。
+D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上环。</li>
+
+<li>{s1_item}</li>
+</ol></div>
+
+<img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
+<img src="stack_group_jain_series.png" alt="每窗组间 Jain 随时间">
+<div class="def">{scheme_table(b, "mandated")}
+<b>怎么读曲线。</b>
+纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
+（flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
+<b>黑色虚线</b>是均衡流量下的理想每组写带宽
+{_f(r_star, 3)} flit/cycle
+（{ideal.get('n_txn', 0):,} 笔 × {ideal.get('m_wdata', 4)} WriteData
+/ 下界 {ideal.get('bound', 0):,} cycle / 6 组）。
+六条线若贴着这条虚线且缠在一起，才是瞬时也均衡；
+贴着虚线但上下散开，就是长程均、短时轮流抢。
+下面一张是每个窗的组间 Jain<sub>t</sub>，点线是 E[Jain<sub>t</sub>]，
+虚线 1.0 是全程 Jain(E[x])。
+S0 每核 Jain {_f(f0.get('jain'))}、组间 CoV {_f(g0.get('cov'), 3)}；
+S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
+<img src="stack_group.png" alt="各 group 整次运行写吞吐">
+
+<h2>1　拓扑与硬件 setup</h2>
+<h3>1.1 总体结构</h3>
+{setup_table(b)}
+<h3>1.2 链路延迟</h3>
+{link_table(b)}
+<div class="def">横环一跳 {t.get('h_hop_lat', 4)} cycle，纵环一跳
+{t.get('v_hop_lat', 6)} cycle，挂接点 H↔V 转向另加
+{t.get('turn_lat', 5)} cycle。
+D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
+落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
+交叉方向（横↔纵、D2D↔环）走 SWAP，不进 FIFO、不加转向时延。
+纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
+{rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
+<img src="stack_topology.png" alt="bottom die 与挂接点分组">
+<h3>1.3 HA 与 D2D bridge 绑定（mod-4）</h3>
+<img src="stack_binding.png" alt="HA 到 bridge 的绑定">
+{mod4_table(b)}
+
+<h2>2　按 top die 分组的写带宽</h2>
+<p>一个 top die 的 10 个 AI core 共用一条环、一组 8 个挂接点和 8 条 D2D，
+是不可再往下调度的单位。下表是整次运行的合计（flit/cycle）；上图是同一指标的时间展开。
+S0 每 die 平均
+{_f(g0.get('goodput_by_group', {}).get('0', 0))} flit/cycle，
+六 die 合计 {_f(g0.get('goodput_total', 0))} flit/cycle。
+均衡理想每组 <b>{_f(r_star, 3)}</b> flit/cycle
+（六组合计 {_f(ideal.get('ideal_total'), 3)}）。</p>
+{group_table(b)}
+
+<h3>2.0 瞬时组间均衡度 E[Jain<sub>t</sub>]</h3>
+<p>全程 Jain / max/min 是时间积分：每个 die 写完同样多的 WriteData，
+排空后必为 1。瞬时（或 50-cycle 窗）六条线可以轮流高低。
+因此用每个窗上六个 group 写带宽的 Jain，再对竞争窗口
+（t ≤ t_fair）取平均，记为 <b>E[Jain<sub>t</sub>]</b>，作为瞬时均衡度。
+S0 = {_f(i0.get('mean_jain'))}，S1 = {_f(i1.get('mean_jain'))}，
+和 AIMD 几乎无关。窗越长这个数字越接近 1，比较方案时固定 50 cycle。</p>
+{inst_fair_table(b)}
+<div class="def">均衡理想怎么来的。综合下界 {ideal.get('bound', 0):,} cycle
+由纵环切割决定（fabric_lb.v = {ideal.get('cut_lb', 0):,}；
+最忙 DAT 链路下界 {ideal.get('link_lb', 0):,}）。
+总 WriteData = {ideal.get('n_txn', 0):,} × {ideal.get('m_wdata', 4)} flit。
+若六个 group 均分且跑到下界，每组写带宽 =
+总 WriteData / 下界 / 6 = <b>{_f(r_star, 3)} flit/cycle</b>。
+S0 实测每组 {_f(gp0)}（理想的 {_pct(gp0 / r_star if r_star else 0)}），
+S1 每组 {_f(gp1)}（{_pct(gp1 / r_star if r_star else 0)}），
+与效率 {s0.get('eff', 0):.2f} / {s1.get('eff', 0):.2f} 一致——
+差的是绝对吞吐，不是组间完成量。</div>
+
+<h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
+<p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
+失败 = 环 slot 忙或 I-tag 挡住，<b>不含</b> outstanding / AIMD 拒发。
+<b>成功 CW/CCW</b>、<b>失败 CW/CCW</b> 是次数比（CW ÷ CCW）。</p>
+<h4>S0 无源端流控</h4>
+{die0_board_table(b, "s0")}
+<h4>S1 源端 AIMD 控速</h4>
+{die0_board_table(b, "s1")}
+
+<h3>2.2 各织物瞬时带宽</h3>
+<p>口径：每个 cycle 该织物上新发出的 hop 数（瞬时带宽，flit/cycle）。
+曲线是 {b.get('fabric_series', {}).get('s0', {}).get('window', 50)} cycle
+滑窗；表里的峰值是单周期最大。REQ / RSP / DAT 独立，所以
+“单 VC 打满”= 峰值达到有向边数，“三 VC 打满”= 达到 3× 边数。</p>
+<img src="stack_fabric_bw_series.png" alt="各织物瞬时带宽随时间">
+<h4>S0</h4>
+{fabric_inst_table(b, "s0")}
+<h4>S1</h4>
+{fabric_inst_table(b, "s1")}
+<div class="def">点线是该织物单 VC 容量（= 有向边数），虚线是三 VC 合计。
+S0：{fab0}。<br>S1：{fab1}。</div>
+
+<h3>2.3 {"SWAP 与 D2D buffer" if both_ok else "S1 拥塞崩溃的原因"}</h3>
+<p>{"两个方案都排空。下表对照 SWAP / 落地 buffer / retry。"
+   if both_ok else death_txt}
+S0 同期峰值 {_f(death0.get('peak_fc', 0))} flit/cycle（六 die 合计），
+全程平均 {_f(g0.get('goodput_total', 0))} flit/cycle，并在
+{s0['makespan']:,} cycle 排空。</p>
+{collapse_table(b)}
+<div class="def"><ol>
+{s23_body}
+</ol></div>
+
+<h2>3　理论下界</h2>
+{bounds_table(bd)}
+<p class="note">S0 效率 {s0.get('eff', 0):.2f}，S1 {s1.get('eff', 0):.2f}
+（下界 / makespan）。</p>
+
+<h2>4　复现</h2>
+<div class="def">
+<code>python3 utils/dse_stack_write_fair.py --focus --oc {oc} --pos-depth {pos}</code><br>
+<code>python3 utils/gen_stack_write_report.py</code>
+<br><br>
+仿真 {m.get('wall_s', 0):.0f} s。outstanding = {oc}，HA POS = {pos}。
+</div>
+</body></html>
+"""
+    OUT.write_text(html)
+    print(f"wrote {OUT}")
+
+
 def main() -> None:
     if not DATA.exists():
         raise SystemExit(f"missing {DATA}; run dse_stack_write_fair.py first")
     b = json.loads(DATA.read_text())
     t, m = b["topology"], b["meta"]
+    if "group_series" in b and "stability" not in b:
+        write_focus_report(b)
+        return
     for k in ("stability", "depth"):
         if k not in b:
             raise SystemExit(f"missing {k} scan; run dse_stack_stability.py")
