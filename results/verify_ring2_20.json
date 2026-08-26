@@ -1,6 +1,6 @@
 {
-  "n_total": 61,
-  "n_ok": 60,
+  "n_total": 62,
+  "n_ok": 61,
   "all_ok": false,
   "rows": [
     {
@@ -164,6 +164,10 @@
       "ok": true
     },
     {
+      "name": "binned_jain_per_bin_average",
+      "ok": true
+    },
+    {
       "name": "s15_beats_s0_fairness",
       "ok": true
     },
@@ -230,8 +234,8 @@
     {
       "name": "s16_grants_below_tracker",
       "ok": false,
-      "error": "(1691, 1694)",
-      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1289, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] >= sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1691, 1694)\n"
+      "error": "(1682, 1683)",
+      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1314, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] >= sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1682, 1683)\n"
     },
     {
       "name": "rate_pinned_equals_s0",
@@ -250,5 +254,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T07:29:06Z"
+  "generated_at": "2026-08-26T08:32:03Z"
 }

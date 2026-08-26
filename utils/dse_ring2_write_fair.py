@@ -73,7 +73,7 @@ OUT = ROOT / "results" / "ring2_write_fair.json"
 K_PER_CORE = 20_000
 N_PLANES_STUDY = 1
 W_FLITS = BURST_FLITS   # 128B burst / 64B flit
-BIN_W = 128
+BIN_W = 50               # fairness window: Jain of the 10 cores per 50 cycles
 T_MAX = 4_000_000
 # Two adjacent memory nodes standing in for one clustered memory region. Both
 # are memory in this study (9 and 19 are not), so the roles are unchanged and
@@ -440,6 +440,32 @@ HA_RSP_ZERO_FORECAST = {
     ),
 }
 
+BIN50_FAIR_FORECAST = {
+    "hypothesis": (
+        f"公平性主指标改成：{BIN_W} 拍宽的窗内对 10 个核的写带宽算 Jain，"
+        "再对竞争窗口内的所有箱取平均。"
+        "S0 总写带宽 ≈ 2.25 flit/cycle，摊到 10 个核上每核每箱只有约 "
+        "0.225 × 50 ≈ 11 个 flit，因此这个指标会被计数噪声主导："
+        "等概率多项分布的零模型本身就只有 "
+        "1/(1 + var/mean²) ≈ 1/(1 + 10.2/128) ≈ 0.926。"
+        "上一轮 128 拍分箱已看到实测 max/min 低于零模型（亚泊松），"
+        "所以实测均值应落在零模型之上、1.0 之下。"
+        "结论不应改变：仍是采样粒度而非核间不公平。"
+    ),
+    "predicted": {
+        "jain_bin_mean": [0.93, 0.97],
+        "gt_null_jain": True,
+        "flits_per_core_per_bin": [9.0, 13.0],
+        "n_bins_min": 2000,
+    },
+    "confidence": 0.75,
+    "falsify": (
+        f"jain_bin_mean 低于同窗零模型的 null_jain，"
+        f"或落到 0.90 以下 —— 那说明 {BIN_W} 拍尺度上存在真实的核间不公平，"
+        "而不是抽样波动"
+    ),
+}
+
 
 def base_params() -> Ring2BaseParams:
     """Shared datapath settings. Every write scheme rides the same fabric."""
@@ -502,11 +528,52 @@ def run_scheme(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     return r
 
 
+def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
+                t_fair: int) -> dict[str, Any]:
+    """Mean over `bin_w`-cycle bins of Jain across the cores in that bin.
+
+    This is the headline fairness number. A whole-run figure cannot show
+    anything: in a closed batch every core injects the same `K*W` flits, so
+    end-of-run counts are equal by construction and Jain is 1 by arithmetic.
+    Averaging the per-bin index keeps the instantaneous view instead.
+
+    Only bins wholly inside the contention window count. Past `t_fair` the
+    first core has run out of work, and a zero there is an empty queue, not
+    an unfair arbiter.
+
+    A bin this short holds few flits per core, so the index also carries
+    counting noise; read it against the equal-probability null model the
+    report prints beside it, not against 1.0.
+    """
+    cs = sorted(inject_times)
+    nbin = int(t_fair) // bin_w if bin_w > 0 else 0
+    if not cs or nbin <= 0:
+        return {}
+    cnt = [[0] * nbin for _ in cs]
+    for i, c in enumerate(cs):
+        for t in inject_times[c]:
+            b = int(t) // bin_w
+            if 0 <= b < nbin:
+                cnt[i][b] += 1
+    vals = sorted(jain([cnt[i][b] for i in range(len(cs))])
+                  for b in range(nbin))
+    per_bin = sum(vals) / nbin
+    return {
+        "bin_w": bin_w, "n_bins": nbin, "n_cores": len(cs),
+        "jain_bin_mean": round(per_bin, 5),
+        "jain_bin_p05": round(vals[int(0.05 * nbin)], 5),
+        "jain_bin_min": round(vals[0], 5),
+        "flits_per_core_per_bin": round(
+            sum(sum(row) for row in cnt) / len(cs) / nbin, 2),
+    }
+
+
 def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
            ) -> dict[str, Any]:
     """Trim a raw run down to what the report needs."""
     inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
     fair = fairness_stats(inj, r.get("makespan") or 1, flits_per_core)
+    fair["jain_bin"] = binned_jain(inj, bin_w, fair.get("t_fair") or 0)
     t_max = r.get("makespan") or 1
     binned = {}
     for c, ts in sorted(inj.items()):
@@ -1488,6 +1555,7 @@ def main() -> None:
             "ha_rsp_jit": bp.ha_rsp_jit,
             "t_ha_service": bp.t_ha_service,
             "ha_rsp_zero_forecast": HA_RSP_ZERO_FORECAST,
+            "bin50_fair_forecast": BIN50_FAIR_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,

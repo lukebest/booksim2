@@ -35,7 +35,7 @@ from rg_ring2_topo import (
     build_uniform_write, hop_count, interleave_ha, is_core, is_ha,
     paths_for_txns, shortest_dir, vc_of, write_bounds, write_paths_for_txns,
 )
-from dse_ring2_write_fair import fairness_stats
+from dse_ring2_write_fair import binned_jain, fairness_stats
 from rg_sched_cost import distributed_cost, sched_cost
 
 OUT = Path(__file__).resolve().parents[1] / "results" / "verify_ring2_20.json"
@@ -890,6 +890,31 @@ def test_write_fairness_metrics_sane() -> None:
     assert f["throughput"] > 0.0, f
 
 
+def test_binned_jain_averages_per_bin_over_the_fair_window() -> None:
+    """The headline fairness metric, pinned on hand-built traces.
+
+    What is being checked is the definition, not the fabric: Jain of the
+    cores inside each `bin_w` window, averaged over the bins that lie wholly
+    inside the contention window.
+    """
+    even = {c: list(range(0, 1000, 10)) for c in range(10)}
+    r = binned_jain(even, 50, 1000)
+    assert (r["n_bins"], r["n_cores"]) == (20, 10), r
+    assert r["jain_bin_mean"] == 1.0, r
+    assert r["flits_per_core_per_bin"] == 5.0, r
+
+    # One core takes every slot: Jain floors at 1/n in every bin.
+    hog = {0: list(range(1000)), **{c: [] for c in range(1, 10)}}
+    assert abs(binned_jain(hog, 50, 1000)["jain_bin_mean"] - 0.1) < 1e-9
+
+    # Bins past t_fair are dropped, so work done after the first core has
+    # finished cannot drag the metric down.
+    late = {c: list(range(0, 500, 10)) for c in range(10)}
+    late[0] = late[0] + list(range(500, 1000, 10))
+    r = binned_jain(late, 50, 500)
+    assert r["n_bins"] == 10 and r["jain_bin_mean"] == 1.0, r
+
+
 def test_s15_beats_s0_fairness() -> None:
     """The whole point: fair share + reservation on the skewed pattern."""
     out = {}
@@ -1465,6 +1490,8 @@ def main() -> None:
     c.add("write_inring_never_blocked", test_write_inring_never_blocked)
     c.add("write_makespan_ge_bound", test_write_makespan_ge_bound)
     c.add("write_fairness_metrics_sane", test_write_fairness_metrics_sane)
+    c.add("binned_jain_per_bin_average",
+          test_binned_jain_averages_per_bin_over_the_fair_window)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
     c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)
