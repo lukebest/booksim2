@@ -953,6 +953,10 @@ def _setup_table(meta: dict) -> str:
           else "两个 plane 之间做负载均衡")],
         ["每 core outstanding", meta["core_outstanding"],
          "同时在飞的写事务上限"],
+        ["每 completer 请求 tracker",
+         meta.get("ha_track") or "∞",
+         ("表项用尽即回 RetryAck，靠 PCrdGrant 重发"
+          if meta.get("ha_track") else "不限，仅作参照")],
         ["CHI VC", " / ".join(meta["vcs"]).upper(),
          "REQ、RSP、DAT 三条独立 VC，各自独立信用"],
         ["hop 容量", f"{meta['hop_bw_cap']} flit/cycle",
@@ -2702,8 +2706,22 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
     tail = [t for t, j in zip(ib0.get("t") or [], ib0.get("jain") or [])
             if j < 0.8]
     tail_n = len(tail)
-    tail_lo = max((t for t in tail if t < (ib0["t"][-1] / 2)), default=0)
-    tail_hi = min((t for t in tail if t >= (ib0["t"][-1] / 2)), default=0)
+    half = (ib0["t"][-1] / 2) if ib0.get("t") else 0
+    early = [t for t in tail if t < half]
+    late = [t for t in tail if t >= half]
+    if early and late:
+        tail_where = (f"全部落在 t ≤ {max(early)} 的起步段和 "
+                      f"t ≥ {min(late)} 的收尾段 —— "
+                      "前者还有核没发出第一笔 WriteData，"
+                      "后者已有核在清最后几个 flit")
+    elif late:
+        tail_where = (f"全部落在 t ≥ {min(late)} 的收尾段 —— "
+                      "那里已有核清完自己的配额，只剩几个核在收尾")
+    elif early:
+        tail_where = (f"全部落在 t ≤ {max(early)} 的起步段 —— "
+                      "那里还有核没发出第一笔 WriteData")
+    else:
+        tail_where = "没有这样的箱"
     bw_ = meta.get("bin_w")
     wide = max(sw) if sw else 0
     return f"""
@@ -2795,8 +2813,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 最差箱 {jb.get('jain_bin_min')}）。各方案的值见 3.1 汇总表。</p>
 <p class="note">那个 {jb.get('jain_bin_min')} 的最差箱不是稳态：Jain &lt; 0.8 的
 {tail_n} 个箱（占 {100.0 * tail_n / max(1, jb.get('n_bins') or 1):.1f}%）
-全部落在 t ≤ {tail_lo} 的起步段和 t ≥ {tail_hi} 的收尾段 ——
-前者还有核没发出第一笔 WriteData，后者已有核在清最后几个 flit。
+{tail_where}。
 中段没有这种箱，所以 p05 {jb.get('jain_bin_p05')} 比最小值更能代表分布。</p>
 <p>为什么要按箱平均而不是直接看整段：闭环批量下每个核最终都要注入同样的
 K×W 个 flit，把十几万拍平均掉之后 Jain = {s0['fairness']['jain']}、

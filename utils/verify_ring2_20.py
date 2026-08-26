@@ -1038,34 +1038,50 @@ def test_study_baseline_is_position_unfair() -> None:
 def test_finite_tracker_is_in_the_baseline_and_masks_imbalance() -> None:
     """The reported baseline has a finite completer tracker, and that matters.
 
-    Two things are pinned here because the whole report now rests on them.
-    First, the tracker is part of the fabric every scheme rides, not a knob
-    one section turns on. Second, it *masks* the position imbalance rather
-    than fixing it: the cores come out more alike, but only because retry
-    backpressure slows all of them down, so throughput has to fall too. If a
-    later change ever made the tracker look free, this would catch it.
+    Three legs, because the baseline moved from 32 to 128 entries and the two
+    behave differently. What is pinned:
+
+    * The tracker is part of the fabric every scheme rides, not a knob one
+      section turns on -- so it is read from FABRIC, not hardcoded here.
+    * It still bites at the baseline: retries happen, and the unbounded
+      reference wants more entries than the baseline has.
+    * It *masks* the position imbalance rather than fixing it, monotonically:
+      the tighter the tracker, the more alike the cores look, because retry
+      backpressure slows everyone down. 32 masks harder than 128.
+    * That masking is not free at 32 (strictly slower than unbounded), but at
+      128 the cost on this short run has shrunk into the noise. The report's
+      -33% throughput gap is a K=20000 number; k=600 here never builds the
+      steady-state congestion that makes 128 entries bind, which is exactly
+      the K-dependence 3.2.2 documents. So this leg only bounds the cost.
     """
     from dse_ring2_write_fair import FABRIC
-    assert FABRIC.get("ha_track"), "the baseline lost its completer tracker"
+    base = FABRIC.get("ha_track")
+    assert base, "the baseline lost its completer tracker"
     out = {}
-    for tag, track in (("fin", FABRIC["ha_track"]), ("inf", 0)):
+    for tag, track in (("base", base), ("tight", 32), ("inf", 0)):
         _, _, sim = _run_write(k=600, pattern="study",
                                cfg={"ha_track": track, "outst_sample": 16})
         s = sim.summary()
         assert s["completed"], tag
         out[tag] = (fairness_stats(s["wr_inject_by_core"], s["makespan"],
                                    600 * 4), s)
-    (ffin, sfin), (finf, sinf) = out["fin"], out["inf"]
-    # The tracker has to actually bite, and only the finite one can.
+    (fbase, sbase), (ftight, stight), (finf, sinf) = (
+        out["base"], out["tight"], out["inf"])
+    # Only a finite tracker can retry, and the baseline still does.
     assert sinf["n_retry"] == 0, sinf["n_retry"]
-    assert sfin["retry"]["retry_per_txn"] > 0.3, sfin["retry"]
-    # Masked, not fixed: fairer to read, but strictly slower.
-    assert ffin["max_min"] < finf["max_min"], \
-        (finf["max_min"], ffin["max_min"])
-    assert ffin["throughput"] < finf["throughput"], \
-        (finf["throughput"], ffin["throughput"])
+    assert sbase["retry"]["retry_per_txn"] > 0.3, sbase["retry"]
+    assert stight["retry"]["retry_per_txn"] \
+        > sbase["retry"]["retry_per_txn"], (stight["retry"], sbase["retry"])
+    # Masked, not fixed, and monotone in how tight the tracker is.
+    assert ftight["max_min"] < fbase["max_min"] < finf["max_min"], \
+        (ftight["max_min"], fbase["max_min"], finf["max_min"])
+    # Masking costs throughput at 32; at the baseline it is within noise here.
+    assert ftight["throughput"] < finf["throughput"], \
+        (ftight["throughput"], finf["throughput"])
+    assert fbase["throughput"] <= finf["throughput"] * 1.02, \
+        (fbase["throughput"], finf["throughput"])
     # And the unbounded reference is what demands an implausible tracker.
-    assert sinf["max_ha_used"] > FABRIC["ha_track"], sinf["max_ha_used"]
+    assert sinf["max_ha_used"] > base, (sinf["max_ha_used"], base)
 
 
 def test_s15_fixes_study_workload() -> None:
