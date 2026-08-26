@@ -929,18 +929,13 @@ def group_table(b: dict) -> str:
             else "自适应", r["scheme"].upper(), _ok(r["completed"]),
             " / ".join(_f(v, 4) for v in
                        [gp[d] for d in sorted(gp, key=int)]),
-            _f(r["goodput_total"], 4), _f(r["goodput_max_min"], 2),
-            _f(ej), _f(r["group_jain"]), _f(r["group_max_min"], 2),
-            _f(r["group_cov"], 3), f"die {r['worst_group']}",
-            _f(r["core_jain"]), _f(r["jain_within_worst"]),
+            _f(r["goodput_total"], 4),
+            _f(ej),
         ])
     return _t(["outstanding", "方案", "排空",
                "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
-               "合计 flit/cycle", "die 间<br>max/min<br>（按完成量）",
-               "E[Jain<sub>t</sub>]<br>（瞬时）",
-               "die 间 Jain<br>（竞争窗口）", "die 间<br>max/min",
-               "die 间 CoV", "最差 die",
-               "Jain<br>（按 core）", "最差 die 内部<br>的 Jain"], rows)
+               "合计 flit/cycle",
+               "E[Jain<sub>t</sub>]<br>（瞬时）"], rows)
 
 
 def inst_fair_table(b: dict) -> str:
@@ -1141,21 +1136,23 @@ def scheme_table(b: dict, tag: str) -> str:
     per = b["schemes"][tag]
     bd = per["bounds"]["bound"]
     n_txn = per["n_txn"]
+    inst = _fair_lookup(b)
     rows = []
     for s in SCHEMES:
         r = per.get(s)
         if not r:
             continue
-        f = r["fairness"]
+        ej = (inst.get(s) or {}).get("mean_jain")
         rows.append([
             LABEL[s], _ok(r["completed"]),
             f"{r['n_txn_done']:,} / {n_txn:,}",
             f"{r['makespan']:,}", _pct(bd / max(1, r["makespan"])),
-            f"<b>{f['jain']}</b>", _f(f["max_min"], 2), _f(f["cov"], 4),
+            _f(ej),
             f"{r['n_deflections']:,}",
         ])
-    return _t(["方案", "批次是否排空", "完成事务", "makespan", "达下界比例",
-               "Jain", "max/min", "CoV", "偏转次数"], rows)
+    return _t(["方案", "批次是否排空", "完成事务", "makespan",
+               "达下界比例<br>（综合下界 / makespan）",
+               "E[Jain<sub>t</sub>]", "偏转次数"], rows)
 
 
 def fabric_inst_table(b: dict, scheme: str) -> str:
@@ -1615,7 +1612,6 @@ def write_focus_report(b: dict) -> None:
     n_tiles = wl.get("n_tiles", m.get("n_tiles", 1))
     q0, q1 = s0.get("retry", {}), s1.get("retry", {})
     g0, g1 = s0["group"], s1["group"]
-    f0, f1 = s0["fairness"], s1["fairness"]
     peak0 = s0.get("max_core_outstanding", 0)
     binds = peak0 >= oc
     bind_txt = (
@@ -1811,6 +1807,17 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 Jain 随时间">
 <div class="def">{scheme_table(b, "mandated")}
+<p><b>达下界比例</b> = 综合下界 / makespan。
+综合下界是链路、端口、织物切割、单事务时延四条下界的最大值
+（本批次是纵环切割 {ideal.get('bound', 0):,} cycle）。
+100% 表示批次在这个最短可能时间里排空；
+S0 {_pct(s0.get('eff') or (ideal.get('bound') or 0) / max(1, s0['makespan']))}
+表示实际用了下界的
+{s0['makespan'] / max(1, ideal.get('bound') or 1):.2f} 倍时间，
+写带宽也只有理想的同样比例。
+全程完成量 Jain / max/min / CoV 在批次排空后必接近 1，不区分方案，
+表里改列 <b>E[Jain<sub>t</sub>]</b>：每个 50-cycle 窗上六个 group
+写带宽的 Jain，再对竞争窗口平均。</p>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
@@ -1822,8 +1829,8 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 贴着虚线但上下散开，就是长程均、短时轮流抢。
 下面一张是每个窗的组间 Jain<sub>t</sub>，点线是 E[Jain<sub>t</sub>]，
 虚线 1.0 是全程 Jain(E[x])。
-S0 每核 Jain {_f(f0.get('jain'))}、组间 CoV {_f(g0.get('cov'), 3)}；
-S1 每核 Jain {_f(f1.get('jain'))}、组间 CoV {_f(g1.get('cov'), 3)}。</div>
+S0 的 E[Jain<sub>t</sub>] = {_f(i0.get('mean_jain'))}，
+S1 为 {_f(i1.get('mean_jain'))}。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
 
 <h2>1　拓扑与硬件 setup</h2>

@@ -83,7 +83,18 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 Jain 随时间">
-<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例</th><th>Jain</th><th>max/min</th><th>CoV</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>88,504</td><td>60.7%</td><td><b>0.99999</b></td><td>1.01</td><td>0.0036</td><td>376,936</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>90,638</td><td>59.3%</td><td><b>0.99999</b></td><td>1.01</td><td>0.0031</td><td>403,752</td></tr></tbody></table>
+<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例<br>（综合下界 / makespan）</th><th>E[Jain<sub>t</sub>]</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>88,504</td><td>60.7%</td><td>0.8300</td><td>376,936</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>90,638</td><td>59.3%</td><td>0.8277</td><td>403,752</td></tr></tbody></table>
+<p><b>达下界比例</b> = 综合下界 / makespan。
+综合下界是链路、端口、织物切割、单事务时延四条下界的最大值
+（本批次是纵环切割 53,760 cycle）。
+100% 表示批次在这个最短可能时间里排空；
+S0 60.7%
+表示实际用了下界的
+1.65 倍时间，
+写带宽也只有理想的同样比例。
+全程完成量 Jain / max/min / CoV 在批次排空后必接近 1，不区分方案，
+表里改列 <b>E[Jain<sub>t</sub>]</b>：每个 50-cycle 窗上六个 group
+写带宽的 Jain，再对竞争窗口平均。</p>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，50 cycle 滑窗）。
@@ -95,8 +106,8 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 贴着虚线但上下散开，就是长程均、短时轮流抢。
 下面一张是每个窗的组间 Jain<sub>t</sub>，点线是 E[Jain<sub>t</sub>]，
 虚线 1.0 是全程 Jain(E[x])。
-S0 每核 Jain 1.0000、组间 CoV 0.003；
-S1 每核 Jain 1.0000、组间 CoV 0.003。</div>
+S0 的 E[Jain<sub>t</sub>] = 0.8300，
+S1 为 0.8277。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
 
 <h2>1　拓扑与硬件 setup</h2>
@@ -125,7 +136,7 @@ S0 每 die 平均
 六 die 合计 5.5537 flit/cycle。
 均衡理想每组 <b>1.524</b> flit/cycle
 （六组合计 9.143）。</p>
-<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计 flit/cycle</th><th>die 间<br>max/min<br>（按完成量）</th><th>E[Jain<sub>t</sub>]<br>（瞬时）</th><th>die 间 Jain<br>（竞争窗口）</th><th>die 间<br>max/min</th><th>die 间 CoV</th><th>最差 die</th><th>Jain<br>（按 core）</th><th>最差 die 内部<br>的 Jain</th></tr></thead><tbody><tr><td>512</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>0.9256 / 0.9256 / 0.9256 / 0.9256 / 0.9256 / 0.9256</td><td>5.5537</td><td>1.00</td><td>0.8300</td><td>1.0000</td><td>1.01</td><td>0.003</td><td>die 0</td><td>1.0000</td><td>1.0000</td></tr><tr><td>512</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>0.9038 / 0.9038 / 0.9038 / 0.9038 / 0.9038 / 0.9038</td><td>5.4229</td><td>1.00</td><td>0.8277</td><td>1.0000</td><td>1.01</td><td>0.003</td><td>die 1</td><td>1.0000</td><td>1.0000</td></tr></tbody></table>
+<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计 flit/cycle</th><th>E[Jain<sub>t</sub>]<br>（瞬时）</th></tr></thead><tbody><tr><td>512</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>0.9256 / 0.9256 / 0.9256 / 0.9256 / 0.9256 / 0.9256</td><td>5.5537</td><td>0.8300</td></tr><tr><td>512</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>0.9038 / 0.9038 / 0.9038 / 0.9038 / 0.9038 / 0.9038</td><td>5.4229</td><td>0.8277</td></tr></tbody></table>
 
 <h3>2.0 瞬时组间均衡度 E[Jain<sub>t</sub>]</h3>
 <p>全程 Jain / max/min 是时间积分：每个 die 写完同样多的 WriteData，
