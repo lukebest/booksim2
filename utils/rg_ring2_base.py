@@ -391,18 +391,25 @@ class Ring2BaseSim:
 
     # -- boarding queue admission -------------------------------------------
 
+    def _shared_vcs(self) -> list[Any]:
+        """VC slots the shared inject FIFO is replicated over.
+
+        `per_vc_srcq` gives every VC its own FIFO + dir Qs, which is what
+        per-VC board ports need: a single FIFO only ever exposes its head, so
+        three independent ports could not draw from it.
+        """
+        return list(self._vc_list) if self.p.per_vc_srcq else [None]
+
     def _sk(self, node: int, plane: PlaneId, vc: str) -> Any:
         """Boarding-queue key: per (node, plane), or per VC when split."""
         if self.p.shared_inj:
-            return (node, plane)
+            return (node, plane, vc if self.p.per_vc_srcq else None)
         return (node, plane, vc) if self.p.per_vc_srcq else (node, plane)
 
     def _src_keys(self, node: int, plane: PlaneId) -> list[Any]:
-        """Queues feeding this board port, in this cycle's RR order."""
+        """Queues feeding this node's board ports, in this cycle's RR order."""
         if self.p.shared_inj:
-            dirs = (1, -1)
-            off = self.vc_rr[(node, plane)] % 2
-            return [(node, plane, dirs[(off + i) % 2]) for i in range(2)]
+            return [k for g in self._port_groups(node, plane) for k in g]
         if not self.p.per_vc_srcq:
             return [(node, plane)]
         vcs = self._vc_list
@@ -410,8 +417,25 @@ class Ring2BaseSim:
         return [(node, plane, vcs[(off + i) % len(vcs)])
                 for i in range(len(vcs))]
 
+    def _port_groups(self, node: int, plane: PlaneId) -> list[list[Any]]:
+        """Queue keys behind each board port; one inner list per port.
+
+        `per_vc_ports` gives REQ / RSP / DAT a port each, so each VC's group
+        is its own port. Otherwise every queue contends for the single port.
+        """
+        if self.p.shared_inj:
+            dirs = (1, -1)
+            off = self.vc_rr[(node, plane)] % 2
+            groups = [[(node, plane, v, dirs[(off + i) % 2]) for i in range(2)]
+                      for v in self._shared_vcs()]
+        else:
+            groups = [[k] for k in self._src_keys(node, plane)]
+        if self.p.per_vc_ports:
+            return groups
+        return [[k for g in groups for k in g]]
+
     def _q_depth(self, key: Any) -> int:
-        if self.p.shared_inj and isinstance(key, tuple) and len(key) == 3:
+        if self.p.shared_inj and isinstance(key, tuple) and len(key) == 4:
             return self.p.dir_inj_depth
         return self.p.inj_depth
 
@@ -422,28 +446,33 @@ class Ring2BaseSim:
         Q: it would sit there forever and block WriteData that has to drain
         to free the cap. Those REQs stay in the shared FIFO, in order.
         """
-        sk = (node, plane)
-        q = self.srcq[sk]
-        parked: deque[Flit] = deque()
-        while q:
-            f = q[0]
-            if self._req_stalled(f):
-                parked.append(q.popleft())
-                continue
-            dk = (node, plane, f.dir)
-            if len(self.srcq[dk]) >= self.p.dir_inj_depth:
-                break
-            self.srcq[dk].append(q.popleft())
-            self.st["max_srcq"] = max(self.st["max_srcq"], len(self.srcq[dk]))
-        while parked:
-            self.req_pend[sk].appendleft(parked.pop())
+        for v in self._shared_vcs():
+            sk = (node, plane, v)
+            q = self.srcq[sk]
+            parked: deque[Flit] = deque()
+            while q:
+                f = q[0]
+                if self._req_stalled(f):
+                    parked.append(q.popleft())
+                    continue
+                dk = (node, plane, v, f.dir)
+                if len(self.srcq[dk]) >= self.p.dir_inj_depth:
+                    break
+                self.srcq[dk].append(q.popleft())
+                self.st["max_srcq"] = max(self.st["max_srcq"],
+                                          len(self.srcq[dk]))
+            while parked:
+                self.req_pend[sk].appendleft(parked.pop())
 
     def _port_idle(self, node: int, plane: PlaneId) -> bool:
         if not self.p.shared_inj:
             return self._src_idle_all(self._src_keys(node, plane))
-        if not self._src_idle((node, plane)):
-            return False
-        return all(self._src_idle((node, plane, d)) for d in (1, -1))
+        for v in self._shared_vcs():
+            if not self._src_idle((node, plane, v)):
+                return False
+            if not all(self._src_idle((node, plane, v, d)) for d in (1, -1)):
+                return False
+        return True
 
     def _offer_flit(self, f: Flit) -> None:
         """A PE hands a flit over; it waits behind the boarding queue."""
@@ -470,7 +499,7 @@ class Ring2BaseSim:
         """Move flits into the boarding queue while it fits."""
         q, pend = self.srcq[key], self.pending[key]
         depth = self._q_depth(key)
-        if self.p.shared_inj and isinstance(key, tuple) and len(key) == 2:
+        if self.p.shared_inj and isinstance(key, tuple) and len(key) == 3:
             rq = self.retryq[key]
             room = depth - len(q)
             if room > 0 and rq:
@@ -655,7 +684,8 @@ class Ring2BaseSim:
             q.remove(f)
         if self.p.shared_inj:
             self._xfer_shared(node, plane)
-            self._admit((node, plane))
+            for v in self._shared_vcs():
+                self._admit((node, plane, v))
             self._xfer_shared(node, plane)
             if self._port_idle(node, plane):
                 self.active_src.discard(key)
@@ -675,6 +705,56 @@ class Ring2BaseSim:
     def _select_inject_flit(self, node: int, plane: PlaneId, q) -> Flit | None:
         """Which boarding-queue flit tries the inject port. Default: FIFO head."""
         return q[0] if q else None
+
+    def _board_one(self, node: int, plane: PlaneId, key: Any,
+                   group: Sequence[Any], t: int) -> None:
+        """Board at most one flit on one port, drawing from `group` in order.
+
+        A queue whose head a policy refuses hands the port to the next queue
+        instead of blocking it. Under `shared_inj` a refused head is pushed
+        back into the shared FIFO first, so it does not sit in the depth-1
+        dir Q blocking the WriteData that would free the outstanding slot.
+        """
+        qk, f, denied = None, None, None
+        for cand in group:
+            q = self._q(cand)
+            if not q:
+                continue
+            cf = self._select_inject_flit(node, plane, q)
+            if cf is None:
+                continue
+            if not self._may_inject(node, plane, cf):
+                if denied is None:
+                    denied = cf
+                if self.p.shared_inj and q and cf is q[0]:
+                    q.popleft()
+                    self.srcq[cand[:3]].appendleft(cf)
+                    self._xfer_shared(node, plane)
+                    q = self._q(cand)
+                    if q:
+                        cf2 = self._select_inject_flit(node, plane, q)
+                        if cf2 is not None and self._may_inject(
+                                node, plane, cf2):
+                            qk, f = cand, cf2
+                            break
+                continue
+            qk, f = cand, cf
+            break
+        if f is None:
+            if denied is None:
+                return
+            f = denied
+        if qk is None:
+            # Policy denial (AIMD token, S3 receive window) is not hop
+            # starvation. A leftover I-tag would lock out HA responses on this
+            # (plane, dir) while the source is not even trying to board — the
+            # ring goes empty. Drop it and reset starve.
+            self._note_deny(node, f)
+            self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
+            self.inj_starve[(node, plane, f.vc)
+                            if self.p.per_vc_ports else key] = 0
+            return
+        self._finish_board(node, plane, key, group, qk, f, t)
 
     def _req_stalled(self, f: Flit) -> bool:
         """REQ the outstanding window currently refuses. No stats, no cause.
@@ -800,15 +880,16 @@ class Ring2BaseSim:
 
         # at most one leave per (node, plane), or per VC when split.
         # two_write_leave: one write port per incoming direction into the
-        # shared leave buffer; PE drain is still eject_bw (one read).
+        # leave buffer; PE drain is still eject_bw (one read). With per-VC
+        # ports the buffer is per VC, so "two writes" means one per direction
+        # of that VC.
         for key, reqs in leave_req.items():
             node, plane = key[0], key[1]
             order = self._leave_order(node, plane, reqs)
             ejected = False
             taken_dir: set[int] = set()
             for f in order:
-                take = ((self.p.two_write_leave and not self.p.per_vc_ports
-                         and f.dir not in taken_dir)
+                take = ((self.p.two_write_leave and f.dir not in taken_dir)
                         or (not self.p.two_write_leave and not ejected))
                 if take and self._try_eject(f):
                     ejected = True
@@ -821,19 +902,23 @@ class Ring2BaseSim:
 
         self._release_ready_resps()
 
-        # local injection: one flit per (node, plane), or per VC when split
+        # local injection: one flit per board port. `per_vc_ports` gives
+        # REQ / RSP / DAT a port each, so up to one flit per VC per cycle.
         self._pre_inject()
         for key in self._inject_keys():
             node, plane = key
+            groups = self._port_groups(node, plane)
             if self.p.shared_inj:
-                sk = (node, plane)
-                self._admit(sk)
+                stalled = False
+                for v in self._shared_vcs():
+                    sk = (node, plane, v)
+                    self._admit(sk)
+                    stalled = stalled or bool(self.pending[sk]) or \
+                        bool(self.retryq[sk]) or bool(self.req_pend[sk])
                 self._xfer_shared(node, plane)
-                qkeys = self._src_keys(node, plane)
-                stalled = (bool(self.pending[sk]) or bool(self.retryq[sk])
-                           or bool(self.req_pend[sk]))
+                qkeys = [k for g in groups for k in g]
             else:
-                qkeys = self._src_keys(node, plane)
+                qkeys = [k for g in groups for k in g]
                 stalled = False
                 for qk in qkeys:
                     self._admit(qk)
@@ -848,63 +933,8 @@ class Ring2BaseSim:
                 if not self.p.shared_inj or self._port_idle(node, plane):
                     self.active_src.discard(key)
                 continue
-            if self.p.per_vc_ports:
-                # One board port per CHI VC: REQ / RSP / DAT do not share.
-                for cand in qkeys:
-                    q = self._q(cand)
-                    if not q:
-                        continue
-                    cf = self._select_inject_flit(node, plane, q)
-                    if cf is None:
-                        continue
-                    if not self._may_inject(node, plane, cf):
-                        self._note_deny(node, cf)
-                        self.i_tag[(cf.plane, cf.dir, cf.vc)].discard(node)
-                        continue
-                    self._finish_board(node, plane, key, qkeys, cand, cf, t)
-                continue
-            # One board port: the VC queues take turns, and a queue whose head
-            # a policy refuses hands the port to the next VC instead of
-            # blocking it.
-            qk, f, denied = None, None, None
-            for cand in qkeys:
-                q = self._q(cand)
-                if not q:
-                    continue
-                cf = self._select_inject_flit(node, plane, q)
-                if cf is None:
-                    continue
-                if not self._may_inject(node, plane, cf):
-                    if denied is None:
-                        denied = cf
-                    if self.p.shared_inj and q and cf is q[0]:
-                        q.popleft()
-                        self.srcq[(node, plane)].appendleft(cf)
-                        self._xfer_shared(node, plane)
-                        q = self._q(cand)
-                        if q:
-                            cf2 = self._select_inject_flit(node, plane, q)
-                            if cf2 is not None and self._may_inject(
-                                    node, plane, cf2):
-                                qk, f = cand, cf2
-                                break
-                    continue
-                qk, f = cand, cf
-                break
-            if f is None:
-                if denied is None:
-                    continue
-                f = denied
-            if qk is None:
-                # Policy denial (AIMD token, S3 receive window) is not hop
-                # starvation. A leftover I-tag would lock out HA responses
-                # on this (plane, dir) while the source is not even trying
-                # to board — the ring goes empty. Drop it and reset starve.
-                self._note_deny(node, f)
-                self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
-                self.inj_starve[key] = 0
-                continue
-            self._finish_board(node, plane, key, qkeys, qk, f, t)
+            for group in groups:
+                self._board_one(node, plane, key, group, t)
 
         # PE drains the per-plane eject queue
         for key in list(self.active_ej):

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import sys
 from pathlib import Path
 
@@ -276,6 +277,191 @@ def plot_bw_overlay(pat: dict, path: Path, *, schemes: tuple[str, ...] = SCHEMES
     ax.set_ylabel("写注入率 flit/cycle")
     ax.set_title(f"基线最慢 core C{lo} 与最快 core C{hi} 的对比")
     ax.legend(fontsize=8, ncol=3)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def jain(xs) -> float:
+    """(sum x)^2 / (n * sum x^2). 1.0 = perfectly equal, 1/n = one winner."""
+    xs = [float(x) for x in xs]
+    s2 = sum(x * x for x in xs)
+    if not xs or s2 <= 0:
+        return 0.0
+    return (sum(xs) ** 2) / (len(xs) * s2)
+
+
+def _pick(xs: list[float], q: float) -> float:
+    if not xs:
+        return 0.0
+    s = sorted(xs)
+    return s[min(len(s) - 1, max(0, int(q * len(s))))]
+
+
+def _inst_balance(pat: dict, meta: dict, scheme: str,
+                  groups: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64)) -> dict:
+    """Per-bin total write bandwidth and how even the ten cores are in it.
+
+    A bin holds only `bin_w * rate` flits per core, so part of any per-bin
+    spread is counting noise rather than unfairness. The null model is the
+    same per-bin total split multinomially over the cores at equal
+    probability, i.e. perfectly fair arbitration observed through the same
+    window. Comparing against it is what separates the two.
+    """
+    rec = pat["schemes"].get(scheme)
+    if not rec or not rec.get("wr_binned"):
+        return {}
+    bin_w = int(meta.get("bin_w") or 128)
+    wb = rec["wr_binned"]
+    cs = list(sorted(wb, key=int))
+    t_all = wb[cs[0]]["t"]
+    t_fair = int((rec.get("fairness") or {}).get("t_fair") or 0)
+    # Only bins wholly inside the contention window: past t_fair a core has
+    # simply run out of work, so a "gap" there is not unfairness.
+    idx = [i for i in range(len(t_all)) if t_all[i] + bin_w <= t_fair]
+    if not idx:
+        idx = list(range(len(t_all)))
+    cnt = {c: [int(round(wb[c]["rate"][i] * bin_w)) for i in idx] for c in cs}
+    n_c = len(cs)
+
+    def _stats(g: int, rng: random.Random) -> dict:
+        nb = len(idx) // g
+        oj, om, nj, nm, tot = [], [], [], [], []
+        for b in range(nb):
+            v = [sum(cnt[c][b * g:(b + 1) * g]) for c in cs]
+            n = sum(v)
+            tot.append(n)
+            oj.append(jain(v))
+            om.append(max(v) / min(v) if min(v) else float("inf"))
+            u = [0] * n_c
+            for _ in range(n):
+                u[rng.randrange(n_c)] += 1
+            nj.append(jain(u))
+            nm.append(max(u) / min(u) if min(u) else float("inf"))
+        fo = [x for x in om if x != float("inf")]
+        fn = [x for x in nm if x != float("inf")]
+        return {
+            "bin_w": g * bin_w, "n_bins": nb,
+            "count_per_core": round(sum(tot) / max(1, nb) / n_c, 1),
+            "obs_jain": round(sum(oj) / len(oj), 5) if oj else None,
+            "null_jain": round(sum(nj) / len(nj), 5) if nj else None,
+            "obs_mm": round(sum(fo) / len(fo), 3) if fo else None,
+            "null_mm": round(sum(fn) / len(fn), 3) if fn else None,
+        }
+
+    per_bin_j, per_bin_m, total = [], [], []
+    for b in range(len(idx)):
+        v = [cnt[c][b] for c in cs]
+        total.append(sum(v) / bin_w)
+        per_bin_j.append(jain(v))
+        per_bin_m.append(max(v) / min(v) if min(v) else float("inf"))
+    fin_m = [x for x in per_bin_m if x != float("inf")]
+    return {
+        "scheme": scheme, "bin_w": bin_w, "t": [t_all[i] for i in idx],
+        "total": total, "jain": per_bin_j, "n_bins": len(idx),
+        "total_mean": round(sum(total) / len(total), 4),
+        "total_p05": round(_pick(total, 0.05), 4),
+        "total_p50": round(_pick(total, 0.50), 4),
+        "total_p95": round(_pick(total, 0.95), 4),
+        "total_min": round(min(total), 4), "total_max": round(max(total), 4),
+        "jain_mean": round(sum(per_bin_j) / len(per_bin_j), 5),
+        "jain_p05": round(_pick(per_bin_j, 0.05), 5),
+        "jain_min": round(min(per_bin_j), 5),
+        "mm_mean": round(sum(fin_m) / len(fin_m), 3) if fin_m else None,
+        "mm_p95": round(_pick(fin_m, 0.95), 3) if fin_m else None,
+        "mm_max": round(max(fin_m), 3) if fin_m else None,
+        "sweep": [_stats(g, random.Random(12345 + g)) for g in groups],
+    }
+
+
+def _plateau_bw(pat: dict, meta: dict) -> float | None:
+    """Write bandwidth the same fabric reaches with an unlimited tracker."""
+    ref = pat.get("s0_unbounded") or {}
+    mk = ref.get("makespan")
+    if not mk:
+        return None
+    n_c, w = len(meta["core_nodes"]), int(meta["W"])
+    return round(n_c * int(meta["K"]) * w / mk, 3)
+
+
+def plot_total_bw(pat: dict, meta: dict, path: Path,
+                  schemes: tuple[str, ...] = ("S0", "S1")) -> None:
+    """Ring-wide WriteData bandwidth over time against the analytic ceiling."""
+    _use_cjk_font()
+    cc = _ideal_cc(meta)
+    r_bind = cc["tot"]
+    plateau = _plateau_bw(pat, meta)
+    fig, ax = plt.subplots(figsize=(11.6, 4.4))
+    for s in [x for x in schemes if pat["schemes"].get(x)]:
+        ib = _inst_balance(pat, meta, s, groups=())
+        if not ib:
+            continue
+        ax.plot(ib["t"], ib["total"], lw=0.7, color=COLOR[s], alpha=0.35)
+        k = max(1, len(ib["total"]) // 160)
+        ax.plot([ib["t"][i] for i in range(0, len(ib["t"]) - k, k)],
+                [sum(ib["total"][i:i + k]) / k
+                 for i in range(0, len(ib["total"]) - k, k)],
+                lw=1.9, color=COLOR[s],
+                label=f"{s} 实测（均值 {ib['total_mean']}）")
+        ax.axhline(ib["total_mean"], color=COLOR[s], ls=":", lw=1.0)
+    ax.axhline(r_bind, color="#111827", ls="--", lw=2.0,
+               label=f"fabric 理论上限 R* = {r_bind:.3f}（热 hop 的 dat 链路）")
+    if plateau:
+        ax.axhline(plateau, color="#0f766e", ls="--", lw=1.8,
+                   label=f"同一 fabric、无限 tracker 实测 {plateau}")
+    ax.set_ylim(0, r_bind * 1.12)
+    ax.set_xlabel("cycle")
+    ax.set_ylabel("全环 WriteData 带宽 flit/cycle")
+    ax.set_title(f"所有 {int(cc['n_c'])} 个 core 的总写带宽随时间"
+                 f"（细线 = {meta.get('bin_w')} 拍分箱，粗线 = 平滑）")
+    ax.legend(fontsize=8.5, ncol=2, loc="lower right")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+def plot_inst_balance(pat: dict, meta: dict, path: Path,
+                      schemes: tuple[str, ...] = ("S0", "S1")) -> None:
+    """Instantaneous evenness, and how much of it is just counting noise."""
+    _use_cjk_font()
+    ibs = {s: _inst_balance(pat, meta, s) for s in schemes
+           if pat["schemes"].get(s)}
+    ibs = {s: v for s, v in ibs.items() if v}
+    fig, axes = plt.subplots(1, 2, figsize=(12.4, 4.2))
+    ax = axes[0]
+    for s, ib in ibs.items():
+        ax.plot(ib["t"], ib["jain"], lw=0.7, color=COLOR[s], alpha=0.45)
+        ax.axhline(ib["jain_mean"], color=COLOR[s], ls=":", lw=1.2,
+                   label=f"{s} 均值 {ib['jain_mean']:.4f}")
+    nj = [r["null_jain"] for ib in ibs.values() for r in ib["sweep"]
+          if r["bin_w"] == ib["bin_w"]]
+    if nj:
+        ax.axhline(sum(nj) / len(nj), color="#111827", ls="--", lw=1.8,
+                   label=f"完全公平的零模型 {sum(nj) / len(nj):.4f}")
+    ax.set_xlabel("cycle")
+    ax.set_ylabel("该箱内 10 核的 Jain 指数")
+    ax.set_ylim(0.94, 1.003)   # 起步 / 收尾的少数离群箱截掉，见表中 jain_min
+    ax.set_title(f"瞬时均衡度（{meta.get('bin_w')} 拍分箱，纵轴已截断）",
+                 fontsize=10)
+    ax.legend(fontsize=8, loc="lower right")
+    ax.grid(alpha=0.3)
+
+    ax = axes[1]
+    for s, ib in ibs.items():
+        xs = [r["bin_w"] for r in ib["sweep"]]
+        ax.plot(xs, [r["obs_mm"] for r in ib["sweep"]], "o-", lw=1.8,
+                color=COLOR[s], label=f"{s} 实测")
+        ax.plot(xs, [r["null_mm"] for r in ib["sweep"]], "s--", lw=1.4,
+                color=COLOR[s], alpha=0.55, mfc="none",
+                label=f"{s} 完全公平的零模型")
+    ax.set_xscale("log", base=2)
+    ax.axhline(1.0, color="#94a3b8", lw=0.9)
+    ax.set_xlabel("分箱宽度（拍）")
+    ax.set_ylabel("该箱内 max/min")
+    ax.set_title("不均衡随观察窗口衰减：实测始终低于零模型", fontsize=10)
+    ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
@@ -752,50 +938,43 @@ def _setup_table(meta: dict) -> str:
         rows.append(
             ["非终端节点", ", ".join(f"N{x}" for x in meta["non_terminal"]),
              "在环上转发，但既不发起也不接收写"])
-    if meta.get("route") == "latency":
-        route_txt = "最短路（链路时延之和；时延平局再比跳数，再平局 CW）"
-        route_note = "core→mem 与 mem→core 同一规则；当前 link_lats 上与跳数最短重合"
-    else:
-        route_txt = "最短路（跳数平局走 CW）"
-        route_note = "S0 及全部方案一致"
-    if meta.get("shared_inj"):
-        inj_txt = (f"共享 FIFO {meta.get('inj_depth', 8)} + "
-                   f"每向 inject Q {meta.get('dir_inj_depth', 1)}")
-        inj_note = "两方向共用一条 FIFO，再分向 staging；HOL 挡另一方向"
-    else:
-        inj_txt = str(meta["inj_depth"])
-        inj_note = ("每 (node, plane, VC)" if meta.get("per_vc_srcq")
-                    else "每 (node, plane)")
-    if meta.get("two_write_leave"):
-        leave_txt = f"{meta['eject_depth']}（两写一读）"
-        leave_note = "每向最多写 1，PE 每节点每拍读 1"
-    else:
-        leave_txt = str(meta["eject_depth"])
-        leave_note = ("每 (node, plane, VC)" if meta.get("per_vc_ports")
-                      else "每 (node, plane)")
-    if meta.get("per_vc_ports"):
-        port_txt = (f"inject {meta['board_ports']} / leave "
-                    f"{meta['leave_ports']}（每 node 每 plane 每 VC）")
-        port_note = "REQ / RSP / DAT 各有独立上下环口，互不占槽"
-    else:
-        port_txt = (f"inject {meta['board_ports']} / leave "
-                    f"{meta['leave_ports']}（每 node 每 plane）")
-        port_note = "上环 / 下环各 1 flit/cycle/node，三 VC 共享端口"
     rows += [
-        ["路由", route_txt, route_note],
+        ["路由",
+         ("最短路（链路时延之和；时延平局再比跳数，再平局 CW）"
+          if meta.get("route") == "latency" else "最短路（跳数平局走 CW）"),
+         ("core→mem 与 mem→core 同一规则；当前 link_lats 上与跳数最短重合"
+          if meta.get("route") == "latency" else "S0 及全部方案一致")],
         ["plane 选择", meta["plane_sel"],
          ("单平面，无 plane 选择" if int(meta.get("n_planes") or 2) == 1
           else "两个 plane 之间做负载均衡")],
         ["每 core outstanding", meta["core_outstanding"],
          "同时在飞的写事务上限"],
         ["CHI VC", " / ".join(meta["vcs"]).upper(),
-         "REQ、RSP、DAT 三条独立 VC，各自独立 hop 信用"],
+         "REQ、RSP、DAT 三条独立 VC，各自独立信用"],
         ["hop 容量", f"{meta['hop_bw_cap']} flit/cycle",
          f"{len(meta['link_lats'])} 节点 × 2 方向 × {meta['n_planes']} plane "
          f"× {meta['n_vc']} VC，σ={meta['sigma']}"],
-        ["端口", port_txt, port_note],
-        ["上环队列", inj_txt, inj_note],
-        ["下环队列深度", leave_txt, leave_note],
+        ["端口", f"inject {meta['board_ports']} / leave "
+                 f"{meta['leave_ports']}"
+                 + ("（每 node 每 plane 每 VC）" if meta.get("per_vc_ports")
+                    else "（每 node 每 plane）"),
+         ("REQ / RSP / DAT 各有独立上下环口，互不占槽"
+          if meta.get("per_vc_ports")
+          else "三条 VC 共享同一个上下环端口")],
+        ["上环队列",
+         (f"{meta['inj_depth']} 深共享 FIFO + 每向 "
+          f"{meta.get('dir_inj_depth', 1)} 深 inject Q"
+          if meta.get("shared_inj") else str(meta["inj_depth"])),
+         ("每 (node, plane, VC) 一套：两个环方向共用那个 FIFO，"
+          "其后每方向各一个 inject Q，该 VC 每拍上环 1 flit"
+          if meta.get("shared_inj") and meta.get("per_vc_ports")
+          else "每 (node, plane, VC)")],
+        ["下环队列深度", meta["eject_depth"],
+         ("每 (node, plane, VC)；两写一读："
+          "该 VC 两个方向可同拍各写入 1 flit，PE 每拍读 1 flit"
+          if meta.get("per_vc_ports") and meta.get("two_write_leave")
+          else "每 (node, plane, VC)" if meta.get("per_vc_ports")
+          else "每 (node, plane)")],
         ["I-tag 门限 t_inj", meta["t_inj"], "限制注入饥饿时长"],
         ["E-tag 门限 t_xfer", meta["t_xfer"], "限制偏转次数"],
         ["写激励",
@@ -970,21 +1149,6 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"{vc_fc.get('hypothesis', '')} "
             f"证伪：{vc_fc.get('falsify', '')}"
             f"<br>对照：per_vc_ports={meta.get('per_vc_ports')}，"
-            f"bound={b.get('bound')}（link {b.get('link_lb')} / "
-            f"port {b.get('port_lb')}），"
-            f"S0 吞吐 {f0.get('throughput')}，max/min {f0.get('max_min')}。"
-        )
-    sh_fc = meta.get("shared_buf_forecast") or {}
-    if sh_fc:
-        b = pat.get("bounds") or {}
-        vc_note += (
-            f"<br><b>共享上环缓冲 / 时延最短路的预测</b>"
-            f"（置信度 {sh_fc.get('confidence', '—')}）："
-            f"{sh_fc.get('hypothesis', '')} "
-            f"证伪：{sh_fc.get('falsify', '')}"
-            f"<br>对照：shared_inj={meta.get('shared_inj')}，"
-            f"two_write_leave={meta.get('two_write_leave')}，"
-            f"route={meta.get('route')}，"
             f"bound={b.get('bound')}（link {b.get('link_lb')} / "
             f"port {b.get('port_lb')}），"
             f"S0 吞吐 {f0.get('throughput')}，max/min {f0.get('max_min')}。"
@@ -2233,30 +2397,21 @@ def _txn_rate(rec: dict, n_c: int, w: int) -> dict[str, float | None]:
             "max_min": f.get("max_min")}
 
 
-def _ideal_cc(meta: dict, bounds: dict | None = None) -> dict[str, float]:
+def _ideal_cc(meta: dict) -> dict[str, float]:
     n_c = len(meta.get("core_nodes") or [])
     n_m = len(meta.get("mem_nodes") or [])
     w = int(meta.get("W") or 2)
-    b = bounds or {}
-    n_hot = int(b.get("n_hot_dat") or 14)
+    n_hot = 14
     coef_dat = n_hot * w / max(1, n_m)
-    lam_hop = 1.0 / max(coef_dat, n_hot * 2 / max(1, n_m), n_hot / max(1, n_m))
-    merge = b.get("merge_port_vcs")
-    if merge is None:
-        merge = not meta.get("per_vc_ports", False)
-    # HA leave stacks REQ + WriteData when the three VCs share one port.
-    lam_port = ((n_m / n_c) / (1.0 + w)) if merge and n_c else None
-    lam = min(x for x in (lam_hop, lam_port) if x)
+    lam = 1.0 / max(coef_dat, n_hot * 2 / max(1, n_m), n_hot / max(1, n_m))
     return {"n_c": n_c, "n_m": n_m, "w": w, "n_hot": n_hot,
-            "coef_dat": coef_dat, "lam": lam, "lam_hop": lam_hop,
-            "lam_port": lam_port, "merge": bool(merge),
-            "hot_hops": b.get("hot_hops_dat") or [],
-            "r_dat": w * lam, "tot": n_c * w * lam}
+            "coef_dat": coef_dat, "lam": lam, "r_dat": w * lam,
+            "tot": n_c * w * lam}
 
 
 def _ideal_rate_section(meta: dict, pat: dict) -> str:
     """Equal-rate ideal CC, then why S0 / S1 miss it."""
-    cc = _ideal_cc(meta, pat.get("bounds") or {})
+    cc = _ideal_cc(meta)
     n_c, n_m, w = int(cc["n_c"]), int(cc["n_m"]), int(cc["w"])
     n_hot = int(cc["n_hot"])
     lam, r_dat, tot = cc["lam"], cc["r_dat"], cc["tot"]
@@ -2285,33 +2440,25 @@ def _ideal_rate_section(meta: dict, pat: dict) -> str:
          unb["retry_per_txn"] if unb["retry_per_txn"] is not None else "—",
          unb["max_min"] if unb["max_min"] is not None else "—"],
     ]
-    hot = "、".join(cc["hot_hops"][:8]) or "0→1、8→7、10→11、18→17 及其反向"
-    if cc["merge"] and cc["lam_port"]:
-        title = "4.5 理想拥塞控制下的注入率（hop 独立、端口合并）"
-        hop_txt = (f"热 hop 上 λ_hop = 1/{cc['coef_dat']:.2f} = "
-                   f"{cc['lam_hop']:.4f}（DAT/RSP）。"
-                   f"三 VC 共用 1 个下环口时 HA leave 叠 REQ+WriteData，"
-                   f"λ_port = {n_m}/{n_c} / (1+{w}) = "
-                   f"<b>{cc['lam_port']:.4f}</b>。λ* 取更紧的端口。")
-    else:
-        title = "4.5 理想拥塞控制下的注入率（三 VC 链路独立）"
-        hop_txt = (f"λ_DAT = λ_RSP = 1/{cc['coef_dat']:.2f} = "
-                   f"<b>{cc['lam_hop']:.4f}</b> txn/cycle/core，"
-                   f"λ_REQ 更松。本小节不把三 VC 叠进同一个上下环口。")
     return f"""
-<h3>{title}</h3>
+<h3>4.5 理想拥塞控制下的注入率（三 VC 链路独立）</h3>
 <p>REQ / RSP / DAT 的有向 hop 各有一份 σ=1 信用，互不占槽。
-一笔事务仍要三条腿都走完，所以事务率受最紧的 hop 或端口限制。
+一笔事务仍要三条腿都走完，所以事务率受三张平面里最紧的那张限制：
+<code>λ ≤ min(λ_REQ, λ_RSP, λ_DAT)</code>。
+本小节<b>不把三 VC 叠进同一个上下环口</b>。
 λ* 是<b>完成事务率</b>，不是含重试的 REQ 上环次数。</p>
-<p>均匀最短路下，热 hop（{hot}）
+<p>均匀最短路下，热 hop（0→1、8→7、10→11、18→17 及其反向）
 各被 {n_hot} 条 (core, HA) 流穿过。系数
 DAT = {n_hot}·{w}/{n_m} = {cc['coef_dat']:.2f}，
 RSP = {n_hot}·2/{n_m} = {n_hot * 2 / max(1, n_m):.2f}，
 REQ = {n_hot}/{n_m} = {n_hot / max(1, n_m):.2f}。</p>
 <div class="def">
-{hop_txt}
-每核 WriteData <b>r* = {w}·λ* ≈ {r_dat:.4f}</b> flit/cycle，
-全环 <b>R* ≈ {tot:.4f}</b> flit/cycle。</div>
+λ_DAT = λ_RSP = 1/{cc['coef_dat']:.2f} = <b>2/7 ≈ {lam:.4f}</b> txn/cycle/core，
+λ_REQ = 4/7（更松）。
+每核 WriteData <b>r* = {w}·(2/7) = 4/7 ≈ {r_dat:.4f}</b> flit/cycle，
+全环 <b>R* = {n_c}·4/7 = 40/7 ≈ {tot:.4f}</b> flit/cycle。
+对分（4 条有向 hop）在 λ* 上 DAT/RSP 占用 5/7，打不满；
+先满的是四条热 hop。</div>
 {_table(["", "完成 λ", "占 λ*", "含重试的 REQ 上环 / 核",
          "WriteData 全环吞吐", "重试/事务", "max/min"], rows)}
 <p>S0 / S1 的 REQ 上环高于完成 λ，多出来的几乎全是 RetryAck 之后的重发，
@@ -2324,10 +2471,10 @@ S0 重试 {s0['retry_per_txn']} 次/事务。理想模型没有 RetryAck / PCrd 
 重发 REQ。去掉 tracker 后吞吐从 {s0['thr']} 升到 {unb['thr']}，
 完成 λ 从 {_f(s0['lam'])} 升到 {_f(unb['lam'])}（仍只占 λ* 的
 {_pct(unb['lam'])}）。</li>
-<li><b>无缓存 + 在环绝对优先。</b>本地要上环必须 hop 空着；偏转 flit
-再绕一圈（S0 偏转
+<li><b>即使环受限也只有约 61%。</b>无缓存 + 在环绝对优先：本地要上环必须
+hop 空着；偏转 flit 再绕一圈（S0 偏转
 {pat['schemes']['S0'].get('n_deflections')} 次）。
-S0 有空就灌，不是按热 hop / 端口的 λ* 均速注。贪心对撞加上
+S0 有空就灌，不是按热 hop 的 2/7 均速注。贪心对撞加上
 HA 抖动 {_jit_label(meta)}，无限 tracker 的 makespan
 { (pat.get('s0_unbounded') or {}).get('makespan') } vs 下界
 {(pat.get('bounds') or {}).get('bound')}。</li>
@@ -2340,6 +2487,173 @@ HA 抖动 {_jit_label(meta)}，无限 tracker 的 makespan
 完成 λ 仍是 {_f(s1['lam'])}。总线 30 拍 &lt; 窗口 64，
 到不了“按热 hop 配额”。</li>
 </ol>
+{'' if meta.get('per_vc_ports') else '''<p class="note">若上下环口仍是三 VC 共用 1 个端口，另有一条更紧的
+λ ≤ 4/15（mem leave），见此前端口合并分析。</p>'''}
+"""
+
+
+# Short side probe (not the official JSON): uniform write, K=4000, seed 0,
+# 1 plane, official FABRIC otherwise, only `ha_track` swept. `t_hold` is the
+# mean residency of a live transaction (Little's law on outst_eff), which
+# over-counts the tracker-held population — it also contains REQs still on
+# their way to the HA. It is here to show the trend, not as an occupancy.
+CEILING_PROBE = {
+    "k": 4000,
+    "track": [
+        ["32（本轮）", 2.253, 256.5, 0.992],
+        ["64", 2.312, 408.7, 0.808],
+        ["128", 4.424, 551.7, 0.003],
+        ["256", 4.498, 552.3, 0.000],
+        ["∞", 4.498, 552.3, 0.000],
+    ],
+    # At ha_track=∞, widening any buffer barely moves the plateau.
+    "knobs": [
+        ["基准（∞ tracker）", 4.498],
+        ["eject_depth 4 → 16", 4.503],
+        ["inj_depth 8 → 32", 4.498],
+        ["dir_inj_depth 1 → 4", 4.544],
+        ["eject_bw 1 → 2", 4.486],
+        ["core_outstanding 128 → 512", 4.495],
+    ],
+    "plateau": 4.498,
+    "hot_seg_util": 79.7,
+    "board_fail_per_core_cycle": 0.867,
+    "knee": 128,
+}
+
+
+def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
+    """Ring-wide total write bandwidth vs theory, then instantaneous evenness."""
+    cc = _ideal_cc(meta)
+    n_c, n_m, w = int(cc["n_c"]), int(cc["n_m"]), int(cc["w"])
+    r_bind, n_hot = cc["tot"], int(cc["n_hot"])
+    b = pat.get("bounds") or {}
+    s0 = pat["schemes"]["S0"]
+    mk = int(s0["makespan"] or 1)
+    flits = n_c * int(meta["K"]) * w
+    n_txn = int(b.get("n_txn") or 0)
+    n_retry = int(((s0.get("retry") or {}).get("n_retry")) or 0)
+    plateau = _plateau_bw(pat, meta) or CEILING_PROBE["plateau"]
+
+    rows = []
+    for s in ("S0", "S1"):
+        ib = _inst_balance(pat, meta, s)
+        if not ib:
+            continue
+        rows.append([s, ib["total_mean"],
+                     f"{100.0 * ib['total_mean'] / r_bind:.1f}%",
+                     ib["total_p05"], ib["total_p50"], ib["total_p95"],
+                     ib["total_min"], ib["total_max"]])
+    got = rows[0][1] if rows else 0.0
+
+    # Per-VC port occupancy, straight from the stored counts.
+    ports = [
+        ["mem 下环 · req", (n_txn + n_retry) / (n_m * mk),
+         f"{n_txn} REQ + {n_retry} 重发"],
+        ["mem 下环 · dat", n_txn * w / (n_m * mk), f"{n_txn * w} WriteData"],
+        ["core 下环 · rsp", (2 * n_txn + 2 * n_retry) / (n_c * mk),
+         "DBID + Comp + RetryAck + PCrd"],
+        ["core 上环 · dat", n_txn * w / (n_c * mk), f"{n_txn * w} WriteData"],
+        ["core 上环 · req", (n_txn + n_retry) / (n_c * mk),
+         f"{n_txn} REQ + {n_retry} 重发"],
+    ]
+    port_rows = [[k, f"{100 * u:.1f}%", note] for k, u, note in ports]
+
+    ib0 = _inst_balance(pat, meta, "S0")
+    sw = {r["bin_w"]: r for r in (ib0.get("sweep") or [])}
+    bw_ = meta.get("bin_w")
+    wide = max(sw) if sw else 0
+    return f"""
+<h3>3.2 全环总写带宽的理论值，以及实测随时间的曲线</h3>
+<p>三条 VC 各有自己的上 / 下环端口，所以端口不再是最紧的资源，
+反而是<b>最忙那条 dat 链路</b>绑定：{n_hot} 对 (core, mem) 的 WriteData
+要压在同一段 hop 上，每对每笔写 {w} 个 flit。</p>
+<div class="def">热 hop 上的 dat：每笔写占 {n_hot} × {w} ÷ {n_m} =
+{n_hot * w / n_m:.2f} 个 hop-slot，故 λ* = 1/{n_hot * w / n_m:.2f} =
+<b>{cc['lam']:.4f}</b> txn/cycle/核。<br>
+<b>全环理论总写带宽 R* = {n_c} × {w} × {cc['lam']:.4f} =
+{r_bind:.3f} flit/cycle = {r_bind * int(meta.get('flit_b', 64)):.0f} B/cycle。</b><br>
+交叉校验：总 WriteData {flits} flit ÷ makespan 下界 {b.get('bound')} 拍 =
+{flits / max(1, b.get('bound') or 1):.3f}，与上式一致。<br>
+端口界这次松得多（port_lb {b.get('port_lb')} 拍，等价
+{flits / max(1, b.get('port_lb') or 1):.1f} flit/cycle）——
+这正是三 VC 不共享端口带来的变化。</div>
+<img src="{imgs.get('totalbw', '')}" alt="total write bandwidth over time">
+{_table(["方案", "总带宽均值", "占 R*", "p05", "p50", "p95", "最低箱", "最高箱"],
+        rows)}
+<p>实测均值 {got}，只有 R* 的 <b>{100.0 * got / r_bind:.1f}%</b>。
+下面先排除 fabric，再定位真正的瓶颈。</p>
+<h4>3.2.1 端口全都空着</h4>
+<p>按存储的计数反算每个 VC 端口的占用率（{mk} 拍、{n_m} 个 mem、{n_c} 个 core）：</p>
+{_table(["端口", "占用率", "承载"], port_rows)}
+<div class="def">最忙的一个也只有
+{max(100 * u for _k, u, _n in ports):.1f}%，<b>没有任何端口接近饱和</b>。
+所以缺掉的带宽不在端口上。</div>
+<h4>3.2.2 直接扫 tracker：瓶颈在 completer</h4>
+<p>短探测（不是官方 JSON；uniform 写、K={CEILING_PROBE['k']}、seed 0、1 plane，
+其余同官方 FABRIC，只扫 ha_track）：</p>
+{_table(["ha_track", "总写带宽", "在飞事务平均驻留（拍）", "retry/txn"],
+        CEILING_PROBE["track"])}
+<div class="def warn">拐点在 <b>ha_track = {CEILING_PROBE['knee']}</b>：
+32 → 64 几乎不动（2.25 → 2.31，retry/txn 还有 0.8~1.0），
+一到 128 直接跳到 {CEILING_PROBE['track'][2][1]} 且 retry 几乎归零，
+再往上就平了。<b>32 个 tracker 是本轮的主瓶颈</b>，
+它把带宽压到无限 tracker 平台的
+{100 * got / plateau:.0f}%。<br>
+官方 K 下同一 fabric 的无限 tracker 参照跑出 <b>{plateau}</b>
+（makespan {(pat.get('s0_unbounded') or {}).get('makespan')}），
+与探测的 {CEILING_PROBE['plateau']} 一致。</div>
+<p>那个 {plateau} 的平台也不是缓存不够 —— 在 ∞ tracker 下把各级缓存
+单独放宽，带宽都只在 ±1% 内动：</p>
+{_table(["改动（ha_track = ∞）", "总写带宽"], CEILING_PROBE["knobs"])}
+<p>平台的成因是<b>无缓存环的上环饥饿</b>：在环 flit 优先，核只能挤进空隙。
+此时最忙的 dat 段占用 {CEILING_PROBE['hot_seg_util']}%，
+已经离 R* 假设的 100% 不远，但核每拍仍有约
+{CEILING_PROBE['board_fail_per_core_cycle']} 次上环失败 ——
+决定上环延迟的是空档的分布，而不是空档的总量。</p>
+<div class="def">于是完整分解是三层：<br>
+<b>{r_bind:.3f}</b>（热 hop 的 dat 链路界，假设完美打包）
+→ <b>{plateau}</b>（无缓存环上环饥饿）
+→ <b>{got}</b>（32 tracker 再削掉
+{100 - 100 * got / plateau:.0f}%）。<br>
+要往上走，第一步是<b>把 tracker 加到 {CEILING_PROBE['knee']}</b>
+（带宽近乎翻倍），之后才轮到上环仲裁。加 buffer 没有用。</div>
+<p class="note">对照上一版<b>三 VC 共享端口</b>的 fabric：那时 R* = 5.333
+（端口绑定）、平台 3.466、实测 2.541。端口拆开后 R* 与平台都抬高了，
+但实测反而从 2.541 落到 {got} —— REQ 有了专用端口后到达 HA 更快，
+32 深 tracker 被打得更凶（retry/txn 从 0.4288 升到
+{(s0.get('retry') or {}).get('retry_per_txn')}），churn 吃掉了端口拆分的收益。
+<b>把 fabric 加宽而不加 tracker，净效果是负的。</b></p>
+
+<h3>3.3 各核瞬时带宽均衡度</h3>
+<p>全窗口 max/min ≈ {s0['fairness']['max_min']} 看起来完美，
+但那是把十几万拍平均掉的结果。把窗口缩到 {bw_} 拍再看，
+每核每箱只有约 {sw.get(bw_, {}).get('count_per_core', '—')} 个 flit，
+箱内 max/min 平均 {ib0.get('mm_mean')}、p95 {ib0.get('mm_p95')}、最坏
+{ib0.get('mm_max')}。</p>
+<div class="def">这个瞬时差<b>有多少是真不公平，有多少只是计数噪声</b>，
+必须先分开。零模型：把该箱的总 flit 数按等概率多项分布撒到 {n_c} 个核上，
+即<b>完全公平的仲裁透过同一个窗口去看</b>会长什么样。</div>
+{_table(["分箱宽度", "每核 flit 数", "箱数", "实测 Jain", "零模型 Jain",
+         "实测 max/min", "零模型 max/min", "判定"],
+        [[r["bin_w"], r["count_per_core"], r["n_bins"],
+          f"{r['obs_jain']:.5f}", f"{r['null_jain']:.5f}",
+          f"{r['obs_mm']:.3f}", f"{r['null_mm']:.3f}",
+          "低于零模型" if r["obs_mm"] < r["null_mm"] else "高于零模型"]
+         for r in (ib0.get("sweep") or [])])}
+<img src="{imgs.get('instbal', '')}" alt="instantaneous balance vs null model">
+<div class="def good">结论：<b>实测的瞬时不均衡在每一个尺度上都比完全公平的零模型更小</b>
+（{bw_} 拍：Jain {sw.get(bw_, {}).get('obs_jain')} vs
+零模型 {sw.get(bw_, {}).get('null_jain')}；
+max/min {sw.get(bw_, {}).get('obs_mm')} vs
+{sw.get(bw_, {}).get('null_mm')}），
+并且随窗口变宽按 1/√N 衰减（{wide} 拍时已收到
+{sw.get(wide, {}).get('obs_mm')}）。
+所以瞬时 max/min 大<b>完全来自采样粒度，不是不公平</b>；
+环上的 RR + I-tag 仲裁比独立随机到达还要规整（亚泊松）。</div>
+<p class="note">这条判定只针对<b>核间</b>瞬时均衡。同一个核两个方向之间的
+失败次数仍然是偏的（见 4.3.1 / 4.3.2），那是几何造成的，
+与这里的时间粒度无关。</p>
 """
 
 
@@ -2436,8 +2750,7 @@ S1_TUNE_PROBE = {
 }
 
 
-def _s1_tune_section(pat: dict, imgs: dict | None = None,
-                     meta: dict | None = None) -> str:
+def _s1_tune_section(pat: dict, imgs: dict | None = None) -> str:
     """Tuning S1 to shrink the fail ratio does not raise throughput to λ*."""
     s0 = pat["schemes"]["S0"]["fairness"]
     s1 = (pat["schemes"].get("S1") or {}).get("fairness") or {}
@@ -2463,12 +2776,13 @@ def _s1_tune_section(pat: dict, imgs: dict | None = None,
 <p>S1 没有“按方向压失败比”的旋钮，只有节点 AIMD。
 热侧失败多 → 等级高 → 先砍的是已经挤不上去的核。</p>
 <div class="def">官方本轮：
-S1 最大失败比 {r1:.2f} vs S0 的 {r0:.2f}，
-吞吐 {f'{t1:+.1f}%' if t1 is not None else '—'}，完成 λ 仍远低于 λ*。
+S1 失败比没有变小
+（最大 {r1:.2f} vs S0 的 {r0:.2f}），
+吞吐 {f'{t1:+.1f}%' if t1 is not None else '—'}，完成 λ 仍远低于 2/7。
 失败比变小不会把核吞吐送到 λ*。
 绝对失败次数下降，多半只是注得更少。</div>
-{"" if (meta or {}).get("shared_inj") else f'''<p>短探测（不是官方 JSON；有限 tracker 用 K={S1_TUNE_PROBE["track32_k"]}，
-环受限用 K={S1_TUNE_PROBE["track0_k"]}、ha_track=0）：</p>
+<p>短探测（不是官方 JSON；有限 tracker 用 K={S1_TUNE_PROBE['track32_k']}，
+环受限用 K={S1_TUNE_PROBE['track0_k']}、ha_track=0）：</p>
 {_table(["方案", "吞吐", "最大失败比", "重试/事务"],
         [[a, b, c, d] for a, b, c, d in p32])}
 <p class="note">tracker = 32 时 harsh / gentle / 窗口 16 几乎搬不动
@@ -2478,9 +2792,9 @@ S1 最大失败比 {r1:.2f} vs S0 的 {r0:.2f}，
 <p>环受限时 harsh 把吞吐从 3.35 打到 2.53，max/min 从 1.20 坏到 2.06，
 失败比不降反升到 2.54；gentle 失败比略降到 2.24，吞吐几乎不变。
 节点 AIMD 会误伤邻 mem = 1 的核。
-要接近 λ*，需要按热 hop 的配额（或先把 tracker 从 32 松开），
+要接近 2/7，需要按热 hop 的配额（或先把 tracker 从 32 松开），
 不是把 S1 的 α/β 拧得更狠。</p>
-{_s1_dirbal_section(pat, imgs or {})}'''}
+{_s1_dirbal_section(pat, imgs or {})}
 """
 
 
@@ -2731,39 +3045,6 @@ r(带宽, 相邻 mem) = {rcref.get('corr_bw_adjmem')}。</div>
 <b>{rcref.get('corr_bw_succ')}</b>，
 与出边时延 r = {rcref.get('corr_bw_lat')}。</p>"""
     s1_fc = (pat["schemes"].get("S1") or {}).get("fc") or {}
-    cc = _ideal_cc(meta, b)
-    if meta.get("shared_inj"):
-        fabric_note = (
-            "上环两方向共用 8 深 FIFO，其后每向一个 inject Q；"
-            "上环 / 下环各 <b>1 flit/cycle/node</b>，下环两写一读；"
-            "路由按<b>链路时延最短</b>（平局再比跳数，再 CW）。"
-        )
-        conc1 = (
-            f"<b>端口合并 + 共享上环缓冲。</b>makespan 下界 "
-            f"{b['bound']}（link {b.get('link_lb')}，port {b.get('port_lb')}）。"
-            f"理想 λ* ≈ {cc['lam']:.4f}（端口 4/15 与 hop 2/7 取紧），"
-            f"全环 WriteData R* ≈ {cc['tot']:.3f}。"
-        )
-        conc2_tail = "共享 FIFO 可能 HOL；有限 tracker 仍把各核一起压住。"
-    elif meta.get("per_vc_ports"):
-        fabric_note = "REQ / RSP / DAT <b>上下环口独立</b>。"
-        conc1 = (
-            f"<b>三通道链路独立。</b>makespan 下界改由最忙 DAT/RSP hop "
-            f"决定（bound {b['bound']}，port {b.get('port_lb')} 已松）。"
-            f"Hop 理想全环 WriteData R* ≈ {cc['tot']:.3f}。"
-        )
-        conc2_tail = "端口拆开让 REQ 更快堆到 HA，32 表项把大家一起压住，所以看起来更公平、吞吐更低。"
-    else:
-        fabric_note = "三条 VC 共享同一个上下环端口。"
-        conc1 = (
-            f"<b>端口合并。</b>bound {b['bound']}（link {b.get('link_lb')}，"
-            f"port {b.get('port_lb')}）。理想 λ* ≈ {cc['lam']:.4f}。"
-        )
-        conc2_tail = "有限 tracker 把各核一起压住。"
-    bu = d.get("belief_update") or meta.get("belief_update") or {}
-    fl = (bu.get("s0_board") or {}).get("fail_imbal_cores") or []
-    fl_s = "、".join(f"C{c}" for c in fl) or "无"
-    fl_r = (bu.get("s0_board") or {}).get("max_fail_ratio", "—")
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
 <title>无缓存环上的 per-core 写带宽公平性（单平面 · S0/S1）</title>
@@ -2771,7 +3052,7 @@ r(带宽, 相邻 mem) = {rcref.get('corr_bw_adjmem')}。</div>
 
 <h1>无缓存环上的 per-core 写带宽公平性</h1>
 <p class="note">本次只跑 <b>1 个 plane / 1 条 ring</b>、均匀 tiled 写、
-S0 与 S1。{fabric_note}
+S0 与 S1。REQ / RSP / DAT <b>上下环口独立</b>。
 每 core {meta['K']} 笔 WriteNoSnp
 （请求量 ×10），每笔 {meta['W']} 个 WriteData flit。
 HA 回 RSP / Comp 时延 <b>{_jit_label(meta)}</b> 拍。</p>
@@ -2779,23 +3060,28 @@ HA 回 RSP / Comp 时延 <b>{_jit_label(meta)}</b> 拍。</p>
 <h2>结论</h2>
 <div class="key">
 <ol>
-<li>{conc1}</li>
+<li><b>三通道链路独立。</b>makespan 下界改由最忙 DAT/RSP hop
+决定（bound {b['bound']}，port {b.get('port_lb')} 已松）。
+Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
 <li><b>有限 tracker 现在才是实测瓶颈。</b>S0 吞吐
 <b>{s0['throughput']}</b> flit/cycle，max/min
 <b>{s0['max_min']}</b>，重试 {q0.get('retry_per_txn')} 次/事务，
 延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。
 无限 tracker 参照吞吐 {sref['throughput']}、max/min {sref['max_min']}
 （峰值占用 {qref.get('max_ha_used', '—')} 表项）。
-{conc2_tail}</li>
+端口拆开让 REQ 更快堆到 HA，32 表项把大家一起压住，所以看起来更公平、吞吐更低。</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
 {s0['max_min']} → {s1['max_min']}。
-源端限速略减 RetryAck，帮不上 hop / 端口理想。</li>
-<li><b>完成事务率远低于 λ* ≈ {cc['lam']:.4f}。</b>
-S0 完成 λ 见 4.5。含重试的 REQ 上环更高，多的是重发。</li>
+源端限速略减 RetryAck，帮不上 hop 理想。</li>
+<li><b>完成事务率远低于 λ* = 2/7。</b>S0 / S1 只有理想的约 33–34%；
+含重试的 REQ 上环更高，多的是重发。无限 tracker 也只到约 61%。
+见 4.5。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
-失败比 ≥ 2 的核是 {fl_s}
-（S0 最大 {fl_r}）。见 4.3.2。</li>
+它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
+<li><b>官方 K 上没有一组 S1 参数让所有核失败比都 &lt; 2。</b>
+最接近是 dir_split + harsh（2.07，仍有 C0/C8）。
+各核写带宽仍是一条平线，只比默认 S1 低约 4%。见 5.2。</li>
 </ol>
 </div>
 
@@ -2837,6 +3123,7 @@ S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
 <img src="{imgs.get('bars31', '')}" alt="per-core BW uniform">
 <img src="{imgs.get('panels31', '')}" alt="per-core BW over time">
 <img src="{imgs.get('overlay31', '')}" alt="slowest vs fastest">
+{_total_bw_section(meta, pat, imgs)}
 
 <h2>4. 根因</h2>
 <p class="note">归因在无限 tracker（环受限）参照上做；4.4 回到有限 tracker。</p>
@@ -2873,7 +3160,7 @@ S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
 本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan {pat['schemes']['S1']['makespan']}）。</p>
 {_sweep_table(pat) if pat.get('sweep') else ''}
 <img src="{imgs.get('s1trace', '')}" alt="S1 control trace">
-{_s1_tune_section(pat, imgs, meta)}
+{_s1_tune_section(pat, imgs)}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
@@ -2949,6 +3236,12 @@ def main() -> None:
             p = IMG / "ring2_wfair_fc_compare.png"
             plot_fc_compare({"均匀写": pat, "不均匀写": hot_fc}, p)
             imgs["fc_compare"] = p.name
+    p = IMG / "ring2_wfair_totalbw.png"
+    plot_total_bw(pat, meta, p)
+    imgs["totalbw"] = p.name
+    p = IMG / "ring2_wfair_instbal.png"
+    plot_inst_balance(pat, meta, p)
+    imgs["instbal"] = p.name
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name

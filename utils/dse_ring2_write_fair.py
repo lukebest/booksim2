@@ -300,8 +300,8 @@ HA_RSP_JIT_LO = 4        # inclusive; each HA RSP / Comp is U{lo..hi}
 HA_RSP_JIT = 64
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
-FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=False,
-              per_vc_ports=False, shared_inj=True, two_write_leave=True,
+FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
+              per_vc_ports=True, shared_inj=True, two_write_leave=True,
               inj_depth=8, dir_inj_depth=1,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE,
@@ -382,6 +382,36 @@ SHARED_BUF_FORECAST = {
     },
     "confidence": 0.5,
     "falsify": "S0 吞吐 ≥ 3.0（端口仍像拆开），或 bound 仍是 hop 的 70000",
+}
+# Written before the per-VC-port re-run. Do not edit after seeing results.
+# Informed by a K=1000 probe, so the confidence is on the official-K numbers
+# holding the *direction* the probe showed, not on the exact values.
+PER_VC_PORT_FORECAST = {
+    "hypothesis": (
+        "三条 VC 不再共享上 / 下环端口：req/rsp/dat 各自 1 flit/cycle/node，"
+        "整套上环结构按 VC 复制（每 VC 一个 8 深共享 FIFO + 每向 1 深 inject Q），"
+        "下环也是每 VC 一个 4 深 buffer、两写一读。"
+        "端口拆开后 port 界放松到 50000，bound 由 dat 的 link 界 70000 接管，"
+        "R* 升到 400000/70000 ≈ 5.714。"
+        "但吞吐**反而会降**：REQ 有了专用端口后到达 HA 快得多，"
+        "32 深 tracker 被打得更凶，retry/txn 从 0.43 涨到接近 1，"
+        "churn 吃掉端口拆分的收益。瓶颈更彻底地移到 completer。"
+        "下环偏转几乎消失（每 VC 独立 leave buffer）。"
+    ),
+    "predicted": {
+        "bound": 70000,
+        "merge_port_vcs": False,
+        "s0_thr": [2.0, 2.5],
+        "s0_thr_below_merged": True,
+        "retry_per_txn": [0.8, 1.1],
+        "eject_defl_drops": True,
+        "inf_track_thr_above_merged": True,
+    },
+    "confidence": 0.6,
+    "falsify": (
+        "S0 吞吐 ≥ 2.6（即端口拆分净赚，retry churn 没吃掉收益），"
+        "或 retry/txn 仍 ≤ 0.6，或 bound 不是 70000"
+    ),
 }
 
 
@@ -1435,6 +1465,7 @@ def main() -> None:
             "per_vc_ports": bp.per_vc_ports,
             "vc_indep_forecast": VC_INDEP_FORECAST,
             "shared_buf_forecast": SHARED_BUF_FORECAST,
+            "per_vc_port_forecast": PER_VC_PORT_FORECAST,
             "flit_b": FLIT_BYTES, "burst_b": BURST_BYTES,
             "stride_b": STRIDE_BYTES, "tile_b": TILE_BYTES,
             "stimulus_forecast": STIMULUS_FORECAST,

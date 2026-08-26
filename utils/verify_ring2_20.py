@@ -112,9 +112,10 @@ def test_latency_route_matches_hops_on_this_ring() -> None:
 
 
 def test_shared_inj_depth_and_board_rate() -> None:
-    """Shared FIFO is 8 deep; the node boards at most 1 flit/cycle."""
+    """Per-VC shared FIFO is 8 deep; each VC port boards 1 flit/cycle."""
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
-    p = Ring2BaseParams(shared_inj=True, inj_depth=8, dir_inj_depth=1,
+    p = Ring2BaseParams(shared_inj=True, per_vc_srcq=True, per_vc_ports=True,
+                        inj_depth=8, dir_inj_depth=1,
                         core_outstanding=0, ha_track=0)
     sim = Ring2BaseSim(topo, p, seed=0)
     for i in range(10):
@@ -122,15 +123,39 @@ def test_shared_inj_depth_and_board_rate() -> None:
                  kind="wdata", t_gen=0, plane=0)
         sim._place(f)
         sim._offer_flit(f)
-    assert len(sim.srcq[(0, 0)]) == 8, len(sim.srcq[(0, 0)])
-    assert len(sim.pending[(0, 0)]) == 2
+    dat = (0, 0, "dat")
+    assert len(sim.srcq[dat]) == 8, len(sim.srcq[dat])
+    assert len(sim.pending[dat]) == 2
     sim.step()
     assert sim.st["n_injected"] == 1, sim.st["n_injected"]
-    left = (len(sim.srcq[(0, 0)])
-            + len(sim.srcq[(0, 0, 1)]) + len(sim.srcq[(0, 0, -1)])
-            + len(sim.pending[(0, 0)]))
+    left = (len(sim.srcq[dat]) + len(sim.pending[dat])
+            + sum(len(sim.srcq[(0, 0, "dat", d)]) for d in (1, -1)))
     assert left == 9, left
     assert sim.st["max_srcq"] <= 8, sim.st["max_srcq"]
+
+
+def test_per_vc_ports_board_one_each_per_cycle() -> None:
+    """REQ / RSP / DAT do not share the board port: 3 flits can leave at once.
+
+    The merged-port fabric has to serialise the same three flits, so this is
+    what `per_vc_ports` actually buys at the injection side.
+    """
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+
+    def _load(**over):
+        p = Ring2BaseParams(shared_inj=True, inj_depth=8, dir_inj_depth=1,
+                            core_outstanding=0, ha_track=0, **over)
+        sim = Ring2BaseSim(topo, p, seed=0)
+        for i, kind in enumerate(("wdata", "req", "dbid")):
+            f = Flit(pid=i, txn_id=i, seq=0, nflit=1, src=0, dst=1,
+                     kind=kind, t_gen=0, plane=0)
+            sim._place(f)
+            sim._offer_flit(f)
+        sim.step()
+        return sim.st["n_injected"]
+
+    assert _load(per_vc_srcq=True, per_vc_ports=True) == 3
+    assert _load() == 1
 
 
 def test_two_write_leave_accepts_both_dirs() -> None:
@@ -157,6 +182,33 @@ def test_two_write_leave_accepts_both_dirs() -> None:
     one.step()
     assert one.st["n_eject_full_deflect"] == 1, one.st["n_eject_full_deflect"]
     assert len(one.ejectq[(1, 0)]) == 1, len(one.ejectq[(1, 0)])
+
+
+def test_per_vc_leave_is_two_write_one_read_per_vc() -> None:
+    """With per-VC ports the leave buffer is per VC, and each takes two dirs.
+
+    Four flits land at one node in the same cycle: DAT from both directions
+    and REQ from both. Merged ports would keep two (one per direction) and
+    deflect two; per-VC ports keep all four, two per VC buffer.
+    """
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+
+    def _land(**over):
+        p = Ring2BaseParams(two_write_leave=True, eject_depth=4, eject_bw=0,
+                            **over)
+        sim = Ring2BaseSim(topo, p, seed=0)
+        sim.arrivals[0] = [
+            Flit(pid=i, txn_id=i, seq=0, nflit=1, src=s, dst=1, kind=kind,
+                 t_gen=0, plane=0, dir=d, idx=1, target=0, vc=vc)
+            for i, (kind, vc, d, s) in enumerate((
+                ("wdata", "dat", 1, 0), ("wdata", "dat", -1, 2),
+                ("req", "req", 1, 4), ("req", "req", -1, 6)))]
+        sim.step()
+        return sim.st["n_eject_full_deflect"], sum(
+            len(q) for q in sim.ejectq.values())
+
+    assert _land(per_vc_srcq=True, per_vc_ports=True) == (0, 4)
+    assert _land() == (2, 2)
 
 
 def test_workload_counts() -> None:
@@ -1124,8 +1176,12 @@ def test_retry_parks_outstanding_and_reorders() -> None:
     assert hi["outst_eff_mean"] < 1.1 * mid["outst_eff_mean"], rows
     assert hi["outst_park_mean"] > 0.5 * hi["outst_used_mean"], rows
     assert hi["retry_per_txn"] > lo["retry_per_txn"], rows
+    # More of the order is wrong, at both accept and retire. The *magnitude*
+    # of the displacement is not monotone in the cap on the per-VC-port
+    # fabric (max 135 / 118 / 67 for oc 16 / 64 / 256), so the pin is on the
+    # out-of-order fraction, which is.
     assert hi["ooo_frac"] > lo["ooo_frac"], rows
-    assert hi["ooo_max_disp"] > lo["ooo_max_disp"], rows
+    assert hi["retire_ooo_frac"] > lo["retire_ooo_frac"], rows
     # A tracker this small cannot possibly hold the whole nominal window.
     assert hi["outst_eff_mean"] < 0.5 * hi["core_outstanding"], rows
 
@@ -1224,7 +1280,18 @@ def test_s16_needs_to_grant_below_the_tracker() -> None:
         **frozen, "overcommit": track // 2})
     sl = low.summary()
     assert sl["completed"]
-    assert sl["n_retry"] > sb["n_retry"], (sl["n_retry"], sb["n_retry"])
+    # Below the tracker S16 does bite, but on the per-VC-port fabric the price
+    # is makespan rather than extra retries: withholding a grant holds a
+    # tracker entry open, which stalls the pipeline instead of bouncing more
+    # requests. Retries only creep up once the overcommit is far below the
+    # tracker, so the monotone penalty is what gets pinned.
+    assert sl["makespan"] > sb["makespan"], (sl["makespan"], sb["makespan"])
+    assert sl["n_retry"] >= sb["n_retry"], (sl["n_retry"], sb["n_retry"])
+    _, _, deep = _run_retry("S16", k=200, cfg={
+        **frozen, "overcommit": track // 8})
+    sd = deep.summary()
+    assert sd["makespan"] > sl["makespan"], (sd["makespan"], sl["makespan"])
+    assert sd["n_retry"] > sb["n_retry"], (sd["n_retry"], sb["n_retry"])
 
 
 def test_rate_pinned_reproduces_baseline() -> None:
@@ -1361,7 +1428,9 @@ def main() -> None:
     c.add("topo_roles_and_wrap", test_topo)
     c.add("latency_route_matches_hops", test_latency_route_matches_hops_on_this_ring)
     c.add("shared_inj_depth_board_rate", test_shared_inj_depth_and_board_rate)
+    c.add("per_vc_ports_board_one_each", test_per_vc_ports_board_one_each_per_cycle)
     c.add("two_write_leave_both_dirs", test_two_write_leave_accepts_both_dirs)
+    c.add("per_vc_leave_two_write", test_per_vc_leave_is_two_write_one_read_per_vc)
     c.add("workload_counts", test_workload_counts)
     c.add("s0_completes_and_conserves", test_s0_completes_and_conserves)
     c.add("s1_completes_and_conserves", test_s1_completes_and_conserves)

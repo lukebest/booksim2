@@ -1,6 +1,6 @@
 {
-  "n_total": 59,
-  "n_ok": 59,
+  "n_total": 61,
+  "n_ok": 61,
   "all_ok": true,
   "rows": [
     {
@@ -16,7 +16,15 @@
       "ok": true
     },
     {
+      "name": "per_vc_ports_board_one_each",
+      "ok": true
+    },
+    {
       "name": "two_write_leave_both_dirs",
+      "ok": true
+    },
+    {
+      "name": "per_vc_leave_two_write",
       "ok": true
     },
     {
@@ -240,5 +248,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T04:27:43Z"
+  "generated_at": "2026-08-26T07:07:40Z"
 }
