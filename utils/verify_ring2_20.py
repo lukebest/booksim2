@@ -1035,24 +1035,27 @@ def test_study_baseline_is_position_unfair() -> None:
         f"adjacency classes overlap: adj2 {min(two)} vs adj1 {max(one)}"
 
 
-def test_finite_tracker_is_in_the_baseline_and_masks_imbalance() -> None:
-    """The reported baseline has a finite completer tracker, and that matters.
+def test_baseline_tracker_is_sized_above_the_unbounded_peak() -> None:
+    """The baseline tracker is sized so it never binds, and 32 still would.
 
-    Three legs, because the baseline moved from 32 to 128 entries and the two
-    behave differently. What is pinned:
+    The report's headline rests on a fixed-point argument: if the cap is above
+    the peak occupancy the *unbounded* run reaches, the cap never fires, so the
+    trajectory is identical to unbounded -- and that unbounded peak is then
+    self-consistently still below the cap. This pins both halves of it:
 
-    * The tracker is part of the fabric every scheme rides, not a knob one
-      section turns on -- so it is read from FABRIC, not hardcoded here.
-    * It still bites at the baseline: retries happen, and the unbounded
-      reference wants more entries than the baseline has.
-    * It *masks* the position imbalance rather than fixing it, monotonically:
-      the tighter the tracker, the more alike the cores look, because retry
-      backpressure slows everyone down. 32 masks harder than 128.
-    * That masking is not free at 32 (strictly slower than unbounded), but at
-      128 the cost on this short run has shrunk into the noise. The report's
-      -33% throughput gap is a K=20000 number; k=600 here never builds the
-      steady-state congestion that makes 128 entries bind, which is exactly
-      the K-dependence 3.2.2 documents. So this leg only bounds the cost.
+    * The baseline (read from FABRIC, not hardcoded) is above the unbounded
+      peak, retries never happen, and every observable matches unbounded
+      exactly. Not "close to": equal. If someone lowers the tracker below the
+      peak, or makes occupancy depend on the cap, this fails loudly.
+    * A tight tracker (32) is the contrast: it does bite, and it *masks* the
+      position imbalance rather than fixing it -- the cores come out more
+      alike, but only because retry backpressure slows everyone down, so
+      throughput falls too.
+
+    Sizing by the unbounded peak is the lesson from the 128-entry round, where
+    a K=4000 sweep said 128 was past the knee and the official K=20000 run
+    showed occupancy pegged at the cap. The knee is K-dependent; the peak is
+    the thing to measure.
     """
     from dse_ring2_write_fair import FABRIC
     base = FABRIC.get("ha_track")
@@ -1067,21 +1070,23 @@ def test_finite_tracker_is_in_the_baseline_and_masks_imbalance() -> None:
                                    600 * 4), s)
     (fbase, sbase), (ftight, stight), (finf, sinf) = (
         out["base"], out["tight"], out["inf"])
-    # Only a finite tracker can retry, and the baseline still does.
+    # The unbounded peak is what sets the size, and the baseline clears it.
     assert sinf["n_retry"] == 0, sinf["n_retry"]
-    assert sbase["retry"]["retry_per_txn"] > 0.3, sbase["retry"]
-    assert stight["retry"]["retry_per_txn"] \
-        > sbase["retry"]["retry_per_txn"], (stight["retry"], sbase["retry"])
-    # Masked, not fixed, and monotone in how tight the tracker is.
-    assert ftight["max_min"] < fbase["max_min"] < finf["max_min"], \
-        (ftight["max_min"], fbase["max_min"], finf["max_min"])
-    # Masking costs throughput at 32; at the baseline it is within noise here.
+    assert sinf["max_ha_used"] < base, (sinf["max_ha_used"], base)
+    # Cap never fires => identical run, not merely a similar one.
+    assert sbase["n_retry"] == 0, sbase["n_retry"]
+    assert sbase["max_ha_used"] == sinf["max_ha_used"], \
+        (sbase["max_ha_used"], sinf["max_ha_used"])
+    assert sbase["makespan"] == sinf["makespan"], \
+        (sbase["makespan"], sinf["makespan"])
+    assert fbase["throughput"] == finf["throughput"], \
+        (fbase["throughput"], finf["throughput"])
+    # The contrast: 32 entries do bite, and they mask rather than fix.
+    assert stight["retry"]["retry_per_txn"] > 0.3, stight["retry"]
+    assert ftight["max_min"] < finf["max_min"], \
+        (ftight["max_min"], finf["max_min"])
     assert ftight["throughput"] < finf["throughput"], \
         (ftight["throughput"], finf["throughput"])
-    assert fbase["throughput"] <= finf["throughput"] * 1.02, \
-        (fbase["throughput"], finf["throughput"])
-    # And the unbounded reference is what demands an implausible tracker.
-    assert sinf["max_ha_used"] > base, (sinf["max_ha_used"], base)
 
 
 def test_s15_fixes_study_workload() -> None:
@@ -1550,8 +1555,8 @@ def main() -> None:
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)
     c.add("study_topology_roles", test_study_topology_roles)
     c.add("study_baseline_unfair", test_study_baseline_is_position_unfair)
-    c.add("baseline_tracker_masks_imbalance",
-          test_finite_tracker_is_in_the_baseline_and_masks_imbalance)
+    c.add("baseline_tracker_sized_above_peak",
+          test_baseline_tracker_is_sized_above_the_unbounded_peak)
     c.add("s15_fixes_study_workload", test_s15_fixes_study_workload)
     c.add("s16_unbounded_equals_s0", test_s16_unbounded_equals_baseline)
     c.add("s16_respects_grant_budget", test_s16_respects_grant_budget)

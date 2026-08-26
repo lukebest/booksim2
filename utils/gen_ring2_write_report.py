@@ -1182,34 +1182,59 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
     tk_fc = meta.get("track128_forecast") or {}
     tk_note = ""
     if tk_fc:
-        unb = (pat.get("s0_unbounded") or {}).get("fairness") or {}
-        gap = (100.0 * (f0.get("throughput", 0) - unb.get("throughput", 0))
-               / max(1e-9, unb.get("throughput", 1)))
+        r = TRACK128_ROUND
         tk_note = (
-            f"<br><b>ha_track = {meta.get('ha_track')} 的预测</b>"
+            f"<br><b>ha_track = 128 的预测（上一轮，已被推翻）</b>"
             f"（置信度 {tk_fc.get('confidence', '—')}）："
             f"{tk_fc.get('hypothesis', '')} "
             f"证伪：{tk_fc.get('falsify', '')}"
             f"<br><b>对照：预测被推翻。</b>预测 S0 吞吐落在 "
             f"{tk_fc.get('predicted', {}).get('s0_thr')}，"
-            f"实测只有 <b>{f0.get('throughput')}</b>；"
+            f"实测只有 <b>{r['thr']}</b>；"
             f"预测 retry/txn ≤ "
             f"{tk_fc.get('predicted', {}).get('retry_per_txn_max')}，"
-            f"实测 {(s0.get('retry') or {}).get('retry_per_txn')}；"
+            f"实测 {r['retry_per_txn']}；"
             f"预测 makespan {tk_fc.get('predicted', {}).get('makespan')}，"
-            f"实测 {s0.get('makespan')}；"
-            f"预测与 ∞ tracker 参照差 ≤ "
-            f"{tk_fc.get('predicted', {}).get('unbounded_gap_pct_max')}%，"
-            f"实测差 <b>{gap:+.1f}%</b>（参照 {unb.get('throughput')}）。"
-            f"只有公平性那三项落在区间里（详见 3.3）。"
+            f"实测 {r['makespan']}。"
             f"<br><b>错在哪：</b>预测直接引用了 K = {CEILING_PROBE['k']} 的短探测"
             f"（那里 128 给出 {CEILING_PROBE['track'][2][1]}）。"
             f"官方 K = {meta.get('K')} 下稳态拥塞更深，"
-            f"∞ 参照的峰值占用要 "
-            f"{(unb_q := (pat.get('s0_unbounded') or {}).get('retry') or {}).get('max_ha_used')}"
-            f" 个表项，128 装不下，实测峰值就顶在 "
-            f"{(s0.get('retry') or {}).get('max_ha_used')}。"
+            f"∞ 参照的峰值占用要 {r['plateau_peak_track']} 个表项，"
+            f"128 装不下，实测峰值就顶在 {r['max_ha_used']}。"
             f"<b>tracker 的拐点跟 K 有关，短跑会低估所需表项数。</b>"
+            f"这一条正是本轮把 tracker 定到 {meta.get('ha_track')} 的依据。"
+        )
+    t2_fc = meta.get("track256_forecast") or {}
+    t2_note = ""
+    if t2_fc:
+        pr = t2_fc.get("predicted", {})
+        unb = (pat.get("s0_unbounded") or {}).get("fairness") or {}
+        unb_q = (pat.get("s0_unbounded") or {}).get("retry") or {}
+        q0 = s0.get("retry") or {}
+        jb = f0.get("jain_bin") or {}
+        hit = (float(q0.get("retry_per_txn") or 0) == 0.0
+               and abs(int(s0.get("makespan") or 0)
+                       - int(pr.get("makespan") or 0))
+               <= 0.01 * max(1, int(pr.get("makespan") or 1)))
+        t2_note = (
+            f"<br><b>ha_track = {meta.get('ha_track')} 的预测（本轮）</b>"
+            f"（置信度 {t2_fc.get('confidence', '—')}）："
+            f"{t2_fc.get('hypothesis', '')} "
+            f"证伪：{t2_fc.get('falsify', '')}"
+            f"<br><b>对照：{'预测成立' if hit else '预测被推翻'}。</b>"
+            f"预测「等于 ∞ 参照」：makespan {pr.get('makespan')} / 吞吐 "
+            f"{pr.get('s0_thr')} / retry {pr.get('retry_per_txn')} / "
+            f"峰值占用 {pr.get('max_ha_used')}；"
+            f"实测 makespan <b>{s0.get('makespan')}</b> / 吞吐 "
+            f"<b>{f0.get('throughput')}</b> / retry "
+            f"<b>{q0.get('retry_per_txn')}</b> / 峰值占用 "
+            f"<b>{q0.get('max_ha_used')}</b>。"
+            f"本轮 ∞ 参照自身跑出 {unb.get('throughput')}"
+            f"（makespan {(pat.get('s0_unbounded') or {}).get('makespan')}，"
+            f"峰值 {unb_q.get('max_ha_used')}）。"
+            f"公平性：jain_bin {jb.get('jain_bin_mean')} / 零模型 "
+            f"{jb.get('jain_bin_null')} / ratio {jb.get('jain_bin_ratio')}"
+            f"（预测 {pr.get('jain_bin_ratio')}）。"
         )
     bj_fc = meta.get("bin50_fair_forecast") or {}
     bj_note = ""
@@ -1224,13 +1249,13 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"零模型 {jb.get('jain_bin_null')}，"
             f"ratio {jb.get('jain_bin_ratio')}；"
             f"每核每箱 {jb.get('flits_per_core_per_bin')} flit，"
-            f"{jb.get('n_bins')} 个箱（详见 3.3）。"
+            f"{jb.get('n_bins')} 个箱（详见公平性主指标一节）。"
         )
     return f"""
 <div class="def">
 <b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
 {fc.get('hypothesis', '')}
-证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}<br>
+证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}{t2_note}<br>
 <b>对照。</b>
 {len(xs)} 个 mem 收到的 WriteData
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
@@ -2159,7 +2184,7 @@ tracker 有限之后，代价被诚实拆成两笔——
 更要紧的是：<b>overcommit ≥ tracker 时 S16 完全退化成 S0</b>
 ——completer 手上的已接受请求本来就不可能超过 tracker 表项数，
 授权泵永远不需要扣住任何授权。所以本节把 S16 的 overcommit 设为
-{f['s16_oc']}（tracker 的一半）它才起作用；
+{f['s16_oc']}（低于 tracker，且低于环能撑住的在飞量）它才起作用；
 而它起作用的方式是<b>让请求在已经占着 tracker 表项的状态下等授权</b>，
 于是重试反而比 S0 <b>更多</b>
 （{hd['retry_per_txn']} → {s16.get('retry_per_txn')}）。
@@ -2372,7 +2397,7 @@ completer 不立刻回 <code>DBIDResp</code>，而是把同时未完成的授权
 逐位相同；再扣一层授权会让 completer 更闲，吞吐掉一点。
 不均匀写时授权解决不了入口 hop 被过路流量占满。</p>
 <p><b>NoC 调整。</b>overcommit = {kn['s16_overcommit']}
-（tracker 的一半）。论文的 RTTbytes 在这里就是“同时覆盖一轮握手
+（低于 tracker）。论文的 RTTbytes 在这里就是“同时覆盖一轮握手
 又不把 tracker 灌满”的授权数，不是字节。</p>
 
 <h4>S17 · 发送端 · 速率 · RTT 梯度（TIMELY）</h4>
@@ -2545,20 +2570,18 @@ REQ = {n_hot}/{n_m} = {n_hot / max(1, n_m):.2f}。</p>
 先满的是四条热 hop。</div>
 {_table(["", "完成 λ", "占 λ*", "含重试的 REQ 上环 / 核",
          "WriteData 全环吞吐", "重试/事务", "max/min"], rows)}
-<p>S0 / S1 的 REQ 上环高于完成 λ，多出来的几乎全是 RetryAck 之后的重发，
-不增加完成事务，还占 REQ / RSP hop。</p>
+<p>本轮 S0 / S1 的 REQ 上环<b>等于</b>完成 λ：tracker 不再绑定，
+没有 RetryAck，也就没有重发去白占 REQ / RSP hop。
+前两轮不是这样（32 表项时每笔写要多发 {TRACK32_ROUND['retry_per_txn']} 次 REQ）。</p>
 <h4>4.5.1 为什么 S0 / S1 到不了 λ*</h4>
 <ol>
-<li><b>有限 tracker 仍是一半原因。</b>8 个 HA 各
+<li><b>有限 tracker 本轮已排除。</b>8 个 HA 各
 {meta.get('ha_track')} 表项，10 核 × {meta.get('core_outstanding')}
-outstanding 往里灌，S0 重试 {s0['retry_per_txn']} 次/事务。
-理想模型没有 RetryAck / PCrd / 重发 REQ。
-去掉 tracker 后吞吐从 {s0['thr']} 升到 {unb['thr']}、
-完成 λ 从 {_f(s0['lam'])} 升到 {_f(unb['lam'])}
-（仍只占 λ* 的 {_pct(unb['lam'])}）。
-上一轮 32 表项时更狠：吞吐只有 {TRACK32_ROUND['thr']}、
-重试 {TRACK32_ROUND['retry_per_txn']} 次/事务。</li>
-<li><b>另一半：环受限本身也只到 λ* 的 {_pct(unb['lam'])}。</b>
+outstanding 往里灌，但 S0 重试 {s0['retry_per_txn']} 次/事务，
+去掉 tracker 后吞吐仍是 {unb['thr']}、完成 λ 仍是 {_f(unb['lam'])} ——
+<b>一点没变</b>。前两轮它是主因（32 表项吞吐 {TRACK32_ROUND['thr']}、
+128 表项 {TRACK128_ROUND['thr']}）。</li>
+<li><b>环受限本身只到 λ* 的 {_pct(unb['lam'])}，这就是唯一的缺口。</b>
 无缓存 + 在环绝对优先：本地要上环必须
 hop 空着；偏转 flit 再绕一圈（S0 偏转
 {pat['schemes']['S0'].get('n_deflections')} 次）。
@@ -2571,9 +2594,9 @@ HA 抖动 {_jit_label(meta)}，无限 tracker 的 makespan
 预算上限 {64 * (3 if meta.get('per_vc_ports') else 1)} flit / 64 拍
 ≈ {3 if meta.get('per_vc_ports') else 1} flit/cycle/核，
 高于理想自有流量 3λ* ≈ {3 * lam:.2f}。
-它只是略减 Retry（{s1['retry_per_txn']} vs {s0['retry_per_txn']}），
-完成 λ 仍是 {_f(s1['lam'])}。总线 30 拍 &lt; 窗口 64，
-到不了“按热 hop 配额”。</li>
+本轮它连 Retry 都没得减（两者都是
+{s0['retry_per_txn']}），完成 λ 仍是 {_f(s1['lam'])}。
+总线 30 拍 &lt; 窗口 64，到不了“按热 hop 配额”。</li>
 </ol>
 {'' if meta.get('per_vc_ports') else '''<p class="note">若上下环口仍是三 VC 共用 1 个端口，另有一条更紧的
 λ ≤ 4/15（mem leave），见此前端口合并分析。</p>'''}
@@ -2588,10 +2611,10 @@ HA 抖动 {_jit_label(meta)}，无限 tracker 的 makespan
 CEILING_PROBE = {
     "k": 4000,
     "track": [
-        ["32（上一轮）", 2.253, 256.5, 0.992],
+        ["32（两轮前）", 2.253, 256.5, 0.992],
         ["64", 2.312, 408.7, 0.808],
-        ["128（本轮取值）", 4.424, 551.7, 0.003],
-        ["256", 4.498, 552.3, 0.000],
+        ["128（上一轮）", 4.424, 551.7, 0.003],
+        ["256（本轮取值）", 4.498, 552.3, 0.000],
         ["∞", 4.498, 552.3, 0.000],
     ],
     # At ha_track=∞, widening any buffer barely moves the plateau.
@@ -2611,7 +2634,7 @@ CEILING_PROBE = {
 
 # Frozen results from the two previous official rounds, both at ha_track = 32
 # on this same per-VC-port fabric. Kept as constants because the baseline
-# tracker has since moved to 128: the HA-think-time ablation in 3.2.3 is a
+# tracker has since moved to 128: the HA-think-time ablation in 3.1.4 is a
 # track-32 measurement on both sides, and neither column describes the
 # current baseline. Keeping them here stops that section from silently
 # re-labelling old numbers as this round's.
@@ -2624,6 +2647,30 @@ TRACK32_ROUND = {
     "jit_thr": 2.410, "jit_retry": 0.5689, "jit_eff": 22.98,
     "jit_t_hold": 190.7, "jit_plateau": 4.514,
 }
+
+# Frozen: the ha_track = 128 round, same fabric. Its forecast was falsified
+# (predicted 4.2-4.7, got 3.04) because it trusted a K=4000 probe, and the
+# occupancy pegged at the 128-entry cap while the unlimited reference wanted
+# 195. That is the evidence this round's 256 is based on, so the numbers are
+# kept here rather than re-read from the live JSON.
+TRACK128_ROUND = {
+    "thr": 3.04, "makespan": 131580, "retry_per_txn": 0.1078,
+    "max_ha_used": 128, "outst_eff": 31.14,
+    "jain_bin": 0.97618, "jain_bin_null": 0.94041, "jain_bin_ratio": 1.03803,
+    "n_per_bin": 15.23, "plateau": 4.5408, "plateau_peak_track": 195,
+}
+
+
+def _jb_of(pat: dict, scheme: str) -> float:
+    f = ((pat.get("schemes") or {}).get(scheme) or {}).get("fairness") or {}
+    return float((f.get("jain_bin") or {}).get("jain_bin_mean") or 0.0)
+
+
+def _thr_delta(pat: dict, scheme: str) -> float:
+    sch = (pat.get("schemes") or {})
+    a = ((sch.get("S0") or {}).get("fairness") or {}).get("throughput") or 0.0
+    b = ((sch.get(scheme) or {}).get("fairness") or {}).get("throughput") or 0.0
+    return 100.0 * (b - a) / a if a else 0.0
 
 
 def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
@@ -2657,7 +2704,7 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
     hz_ablate = ""
     if int(meta.get("ha_rsp_jit") or 0) <= 0:
         hz_ablate = f"""
-<h4>3.2.3 存档：HA RSP 时延改成 0 并不改吞吐</h4>
+<h4>3.1.4 存档：HA RSP 时延改成 0 并不改吞吐</h4>
 <p class="note">这一小节是<b>历史消融，两列都在 ha_track = 32 上测的</b>，
 和本轮的 {meta.get('ha_track')} 个表项不是同一个工作点 ——
 留在这里是因为它的结论仍然成立，而它的绝对数字不再描述本轮基线。
@@ -2683,7 +2730,7 @@ outst_eff 从 {TRACK32_ROUND['jit_eff']} 降到 {TRACK32_ROUND['outst_eff']}，
 HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
 飞行 / 排队决定，DBID / Comp 的 0 拍只是剪掉流水线里的空等待，
 <b>释放速率不变</b>。真正解开这一层的是把表项本身加到
-{meta.get('ha_track')}（见 3.2.2）。</div>
+{meta.get('ha_track')}（见 3.1.3）。</div>
 """
 
     # Per-VC port occupancy, straight from the stored counts.
@@ -2717,15 +2764,29 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
     elif late:
         tail_where = (f"全部落在 t ≥ {min(late)} 的收尾段 —— "
                       "那里已有核清完自己的配额，只剩几个核在收尾")
-    elif early:
-        tail_where = (f"全部落在 t ≤ {max(early)} 的起步段 —— "
-                      "那里还有核没发出第一笔 WriteData")
     else:
-        tail_where = "没有这样的箱"
+        tail_where = (f"全部落在 t ≤ {max(early or [0])} 的起步段 —— "
+                      "那里还有核没发出第一笔 WriteData")
+    if tail:
+        tail_note = (
+            f'<p class="note">那个 {jb.get("jain_bin_min")} 的最差箱不是稳态：'
+            f'Jain &lt; 0.8 的 {tail_n} 个箱'
+            f'（占 {100.0 * tail_n / max(1, jb.get("n_bins") or 1):.1f}%）'
+            f'{tail_where}。中段没有这种箱，所以 p05 '
+            f'{jb.get("jain_bin_p05")} 比最小值更能代表分布。</p>')
+    else:
+        tail_note = (
+            f'<p class="note">分布没有坏尾：最差的一箱也有 '
+            f'{jb.get("jain_bin_min")}，Jain &lt; 0.8 的箱<b>一个都没有</b>。'
+            f'p05 {jb.get("jain_bin_p05")} 与最小值只差 '
+            f'{(jb.get("jain_bin_p05") or 0) - (jb.get("jain_bin_min") or 0):.3f}，'
+            f'整条分布是紧的。'
+            f'前两轮（tracker 32 / 128）都有起步或收尾段的坏箱，'
+            f'tracker 不再绑定之后这些箱也消失了。</p>')
     bw_ = meta.get("bin_w")
     wide = max(sw) if sw else 0
     return f"""
-<h3>3.2 全环总写带宽的理论值，以及实测随时间的曲线</h3>
+<h3>3.1 全环总写带宽的理论值，以及实测随时间的曲线</h3>
 <p>三条 VC 各有自己的上 / 下环端口，所以端口不再是最紧的资源，
 反而是<b>最忙那条 dat 链路</b>绑定：{n_hot} 对 (core, mem) 的 WriteData
 要压在同一段 hop 上，每对每笔写 {w} 个 flit。</p>
@@ -2738,43 +2799,90 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
 {flits / max(1, b.get('bound') or 1):.3f}，与上式一致。<br>
 端口界这次松得多（port_lb {b.get('port_lb')} 拍，等价
 {flits / max(1, b.get('port_lb') or 1):.1f} flit/cycle）——
-这正是三 VC 不共享端口带来的变化。</div>
+这正是三 VC 不共享端口带来的变化，推导见 3.1.1。</div>
 <img src="{imgs.get('totalbw', '')}" alt="total write bandwidth over time">
 {_table(["方案", "总带宽均值", "占 R*", "p05", "p50", "p95", "最低箱", "最高箱"],
         rows)}
 <p>实测均值 {got}，只有 R* 的 <b>{100.0 * got / r_bind:.1f}%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
-<h4>3.2.1 端口全都空着</h4>
+<h4>3.1.1 上 / 下环各 1 flit/cycle/node 算进来之后，上限还是 {r_bind:.3f}</h4>
+<p>每节点<b>每 VC</b> 上环 1 flit/cycle、下环 1 flit/cycle
+（上环是两个方向共用那一个口，不是每方向 1；下环是 PE 每拍从该 VC 读 1 flit）。
+把这条速率约束单独算成一个上限，要对四类口分别数：</p>
+{_table(["受限的口", "每拍总容量", "每笔写要过几个 flit", "折算成 WriteData 上限"],
+        [[f"core 上环 · dat（{n_c} 个核）", f"{n_c}", f"{w}",
+          f"{n_c:.0f} flit/cycle"],
+         [f"mem 下环 · dat（{n_m} 个 mem）", f"{n_m}", f"{w}",
+          f"<b>{n_m:.0f} flit/cycle</b>（最紧）"],
+         [f"mem 下环 · req（{n_m} 个 mem）", f"{n_m}", "1",
+          f"{n_m * w:.0f} flit/cycle"],
+         [f"mem 上环 · rsp（{n_m} 个 mem）", f"{n_m}", "2（DBID + Comp）",
+          f"{n_m * w / 2:.0f} flit/cycle"],
+         [f"core 下环 · rsp（{n_c} 个核）", f"{n_c}", "2（DBID + Comp）",
+          f"{n_c * w / 2:.0f} flit/cycle"]])}
+<div class="def">最紧的是 <b>{n_m} 个 mem 的 dat 下环口</b>：每个每拍只能交给 PE
+1 个 WriteData flit，所以全环 WriteData ≤ <b>{n_m}.0 flit/cycle</b>。
+这正是 <code>LB_port</code> 报的
+{flits / max(1, b.get('port_lb') or 1):.1f} flit/cycle
+（{flits} flit ÷ {b.get('port_lb')} 拍）。<br>
+<b>但 {n_m}.0 &gt; {r_bind:.3f}，所以这条约束不绑定</b> ——
+理论上限仍由最忙那条 dat 链路给出，R* = {r_bind:.3f} 不变。
+换句话说，端口速率还有 {100.0 * (n_m / r_bind - 1):.0f}% 的余量，
+瓶颈在<b>链路</b>而不是<b>端口</b>。</div>
+<p class="note">为什么链路比端口紧：端口是「每个节点自己的 1 flit/cycle」，
+{n_c} 个核分摊得开；而 {n_hot} 对 (core, mem) 的 WriteData 必须挤过<b>同一段</b>
+hop，那一段每拍也只有 1 flit/cycle。节点数多不解决单段拥塞。
+下一节的实测占用率印证了这一点：端口最忙的也只到
+{max(100 * u for _k, u, _n in ports):.0f}%。</p>
+<h4>3.1.2 端口全都空着</h4>
 <p>按存储的计数反算每个 VC 端口的占用率（{mk} 拍、{n_m} 个 mem、{n_c} 个 core）：</p>
 {_table(["端口", "占用率", "承载"], port_rows)}
 <div class="def">最忙的一个也只有
 {max(100 * u for _k, u, _n in ports):.1f}%，<b>没有任何端口接近饱和</b>。
 所以缺掉的带宽不在端口上。</div>
-<h4>3.2.2 直接扫 tracker：瓶颈在 completer</h4>
+<h4>3.1.3 扫 tracker：本轮 {meta.get('ha_track')} 个表项已经完全不绑定</h4>
 <p>短探测（不是官方 JSON；uniform 写、K={CEILING_PROBE['k']}、seed 0、1 plane，
 其余同官方 FABRIC，只扫 ha_track）：</p>
 {_table(["ha_track", "总写带宽", "在飞事务平均驻留（拍）", "retry/txn"],
         CEILING_PROBE["track"])}
-<div class="def warn">这张探测表<b>在官方 K 上是乐观的</b>，本轮把它推翻了。
-探测里 128 跳到 {CEILING_PROBE['track'][2][1]}、retry 近乎归零；
-官方 K = {meta.get('K')} 下 ha_track = {meta.get('ha_track')} 只跑到
-<b>{thr0}</b>，retry/txn 还有
-{(s0.get('retry') or {}).get('retry_per_txn')}，
-而且<b>峰值占用正顶在 {(s0.get('retry') or {}).get('max_ha_used')}
-个表项上（= ha_track，说明还在削）</b>。<br>
-原因是<b>拐点跟 K 有关</b>：短跑（K = {CEILING_PROBE['k']}）拥塞没长到稳态，
-128 个表项就够用；官方 K 下稳态更深 —— 同一 fabric 的 ∞ tracker 参照
-峰值要用到 <b>{qref_ha} 个表项</b>，128 显然装不下。
-<b>用短探测定 tracker 尺寸会低估。</b></div>
-<div class="def">所以 32 → {meta.get('ha_track')} 是<b>缓解而不是解除</b>：
-吞吐 {TRACK32_ROUND['thr']} → {thr0}
-（{100.0 * (thr0 - TRACK32_ROUND['thr']) / TRACK32_ROUND['thr']:+.0f}%），
-makespan {TRACK32_ROUND['makespan']} → {mk}，
-retry/txn {TRACK32_ROUND['retry_per_txn']} →
-{(s0.get('retry') or {}).get('retry_per_txn')}；
-占无限 tracker 平台的比例从
-{100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}% 抬到
-<b>{100.0 * thr0 / plateau:.0f}%</b>，还差 {100 - 100.0 * thr0 / plateau:.0f}%。</div>
+<p class="note">这张探测表在官方 K 上<b>偏乐观</b>：它说 128 就到顶，
+但官方 K = {meta.get('K')} 下 128 只跑到 {TRACK128_ROUND['thr']}，
+且峰值占用死死顶在 128（详见上一轮记录）。
+原因是<b>拐点跟 K 有关</b>：短跑拥塞长不到稳态，128 够用；
+官方 K 下稳态更深，∞ 参照峰值要 {TRACK128_ROUND['plateau_peak_track']} 个表项。
+<b>按短跑定 tracker 尺寸会低估。</b></p>
+<div class="def good">本轮把 tracker 定在
+<b>{meta.get('ha_track')}</b>（&gt; ∞ 参照的峰值占用 {qref_ha}），
+配额于是<b>从头到尾没有触发过一次</b>：
+retry/txn = <b>{(s0.get('retry') or {}).get('retry_per_txn')}</b>，
+峰值占用 {(s0.get('retry') or {}).get('max_ha_used')} —— 恰好等于 ∞ 参照的
+{qref_ha}，没有顶到 {meta.get('ha_track')}。<br>
+所以 S0 与 ∞ 参照<b>逐拍一致</b>：makespan {mk} vs
+{(pat.get('s0_unbounded') or {}).get('makespan')}，
+吞吐 {thr0} vs {plateau}。
+<b>completer 表项这一层已经被彻底移除，不再是瓶颈。</b></div>
+{_table(["ha_track", "总写带宽", "makespan", "retry/txn", "峰值占用表项",
+         "占 ∞ 平台"],
+        [[f"32（两轮前）", TRACK32_ROUND["thr"], TRACK32_ROUND["makespan"],
+          TRACK32_ROUND["retry_per_txn"], 32,
+          f"{100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%"],
+         [f"128（上一轮）", TRACK128_ROUND["thr"], TRACK128_ROUND["makespan"],
+          TRACK128_ROUND["retry_per_txn"], TRACK128_ROUND["max_ha_used"],
+          f"{100.0 * TRACK128_ROUND['thr'] / TRACK128_ROUND['plateau']:.0f}%"],
+         [f"{meta.get('ha_track')}（本轮）", thr0, mk,
+          (s0.get("retry") or {}).get("retry_per_txn"),
+          (s0.get("retry") or {}).get("max_ha_used"),
+          f"<b>{100.0 * thr0 / plateau:.0f}%</b>"],
+         ["∞（参照）", plateau,
+          (pat.get("s0_unbounded") or {}).get("makespan"), 0.0, qref_ha,
+          "100%"]])}
+<p class="note">三轮下来这条曲线的形状是：32 → 128 只补回一部分
+（{TRACK32_ROUND['thr']} → {TRACK128_ROUND['thr']}），
+128 → {meta.get('ha_track')} 才走完剩下的
+（{TRACK128_ROUND['thr']} → {thr0}）。
+判断「够不够」的正确依据不是扫描曲线的拐点，而是
+<b>∞ 参照在官方 K 上的峰值占用</b>（这里是 {qref_ha}）——
+配额只要高过它，动力学就和无限一样。</p>
 <p>剩下那个 {plateau} 的平台不是缓存不够 —— 在 ∞ tracker 下把各级缓存
 单独放宽，带宽都只在 ±1% 内动：</p>
 {_table(["改动（ha_track = ∞）", "总写带宽"], CEILING_PROBE["knobs"])}
@@ -2783,23 +2891,25 @@ retry/txn {TRACK32_ROUND['retry_per_txn']} →
 已经离 R* 假设的 100% 不远，但核每拍仍有约
 {CEILING_PROBE['board_fail_per_core_cycle']} 次上环失败 ——
 决定上环延迟的是空档的分布，而不是空档的总量。</p>
-<div class="def">于是完整分解仍是三层，只是第三层变薄了：<br>
+<div class="def">于是本轮的分解<b>只剩两层</b>：<br>
 <b>{r_bind:.3f}</b>（热 hop 的 dat 链路界，假设完美打包）
-→ <b>{plateau}</b>（无缓存环上环饥饿）
-→ <b>{thr0}</b>（{meta.get('ha_track')} 个 tracker 再削掉
-{100 - 100.0 * thr0 / plateau:.0f}%；上一轮 32 个时削掉
-{100 - 100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%）。<br>
-<b>两层都还要动</b>：tracker 要装到 ∞ 参照的峰值
-{qref_ha} 个附近才不再削，之后才轮到上环仲裁。加 buffer 仍然没有用。</div>
+→ <b>{thr0}</b>（无缓存环上环饥饿，削掉
+{100 - 100.0 * thr0 / r_bind:.0f}%）。<br>
+第三层（completer 表项）在本轮<b>等于零</b>：实测就等于 ∞ 参照 {plateau}。
+上一轮 128 个表项时它还要再削 {100 - 100.0 * TRACK128_ROUND['thr'] / TRACK128_ROUND['plateau']:.0f}%，
+两轮前 32 个时削 {100 - 100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%。<br>
+<b>所以「S0 为什么达不到 R*」现在只有一个答案：无缓存环的上环仲裁。</b>
+端口速率（{n_m}.0 flit/cycle，见 3.1.1）、各级 buffer 深度、
+completer 表项都已经逐一排除。</div>
 <p class="note">再往前一版<b>三 VC 共享端口</b>的 fabric（R* = 5.333、端口绑定、
 平台 3.466、实测 2.541）说明的是另一件事：端口拆开抬高了 R* 与平台，
 但在 32 tracker 下实测反而下降，因为 REQ 有专用端口后到达 HA 更快、
 tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>：
-本轮把 tracker 放到 {meta.get('ha_track')}，实测才从 2.541 / {TRACK32_ROUND['thr']}
-走到 {thr0}。</p>
+两件都做了之后，实测才从 2.541 / {TRACK32_ROUND['thr']} /
+{TRACK128_ROUND['thr']} 一路走到 {thr0}。</p>
 {hz_ablate}
 
-<h3>3.3 各核瞬时带宽均衡度（主指标）</h3>
+<h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
 {jb.get('bin_w')} 拍的箱，在每一个箱内对 {jb.get('n_cores')} 个 core 的写带宽
 （= 该箱内各核 WriteData flit 数）算一次 Jain 指数，再对<b>所有箱取平均</b>。<br>
@@ -2810,11 +2920,19 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 零模型 {jb.get('jain_bin_null')}，<b>ratio = {jb.get('jain_bin_ratio')}</b>
 （{jb.get('n_bins')} 个箱，每核每箱平均
 {jb.get('flits_per_core_per_bin')} 个 flit；p05 {jb.get('jain_bin_p05')}、
-最差箱 {jb.get('jain_bin_min')}）。各方案的值见 3.1 汇总表。</p>
-<p class="note">那个 {jb.get('jain_bin_min')} 的最差箱不是稳态：Jain &lt; 0.8 的
-{tail_n} 个箱（占 {100.0 * tail_n / max(1, jb.get('n_bins') or 1):.1f}%）
-{tail_where}。
-中段没有这种箱，所以 p05 {jb.get('jain_bin_p05')} 比最小值更能代表分布。</p>
+最差箱 {jb.get('jain_bin_min')}）。</p>
+{_summary_table(pat, track=meta.get("ha_track"), schemes=("S0", "S1"))}
+<p class="note">S1 的分箱 Jain 与 S0 相差
+{abs(_jb_of(pat, 'S1') - (jb.get('jain_bin_mean') or 0)):.5f}，
+远小于箱内噪声；吞吐差 {_thr_delta(pat, 'S1'):+.1f}%。
+均匀写下两者本来就该一样齐（见 2）。</p>
+<img src="{imgs.get('bars31', '')}" alt="per-core BW uniform">
+<img src="{imgs.get('panels31', '')}" alt="per-core BW over time">
+<img src="{imgs.get('overlay31', '')}" alt="slowest vs fastest">
+<p class="note">上面三张图：各核写带宽、随时间的分核曲线、最慢与最快核的叠合。
+均匀写下是一条平线（max/min {s0['fairness']['max_min']}），
+所以主指标要看分箱而不是整窗（下面接着说明）。</p>
+{tail_note}
 <p>为什么要按箱平均而不是直接看整段：闭环批量下每个核最终都要注入同样的
 K×W 个 flit，把十几万拍平均掉之后 Jain = {s0['fairness']['jain']}、
 max/min = {s0['fairness']['max_min']}，接近 1 有一半是配额相同这个算术事实
@@ -2901,11 +3019,12 @@ S1 为 {_cores_txt(b1.get('fail_imbal_cores'))}。</p>
 地址 interleave 已均衡，本轮 HA 收到的 WriteData
 {'全部相同（' + str(recv[0]) + ' / HA）' if recv and spread == 0
  else f'极差 {spread}'}。
-<b>本轮有限 tracker 下，也不会造成核间写带宽不均</b>
+<b>本轮也没有造成核间整窗写带宽不均</b>
 （S0 max/min = {f0.get('max_min')}）。
-有限 tracker 的重试反压把十个核一起压住。
-<b>环成为瓶颈时会：</b>无限 tracker 下 max/min = {funb.get('max_min')}，
-带宽与邻 mem 数 r = {rc.get('corr_bw_adjmem')}。
+闭环批量下每核配额相同，落后的核能在收尾段补回来。
+<b>但它确实对应位置效应：</b>带宽与邻 mem 数
+r = {rc.get('corr_bw_adjmem')}（本轮环就是唯一的瓶颈，
+基线与 ∞ 参照同一条轨迹，max/min = {funb.get('max_min')}）。
 失败比大的核就是邻 mem = 1 的那些核。
 失败比大 = 这一侧出 hop 常被在环 flit 占着，本地尝试打不进去；
 它是位置效应的症状，不是 mem 收包不均的原因。
@@ -3237,11 +3356,17 @@ def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
 <li>{hi_s or '—'} 两侧都是 mem → 相邻 mem = 2；</li>
 <li>{lo_s or '—'} 有一侧是非终端 → 相邻 mem = 1。</li>
 </ul>
-<div class="def bad">无限 tracker 上带宽与相邻 mem 个数 r =
+<div class="def">带宽与相邻 mem 个数 r =
 <b>{rcref.get('corr_bw_adjmem')}</b>
-（Spearman {rcref.get('rank_bw_adjmem')}）。
-有限 tracker 把这条链盖住：重试 {q0.get('retry_per_txn')} 次/事务，
-max/min 从 {sref['max_min']} 收到 {s0['max_min']}。</div>"""
+（Spearman {rcref.get('rank_bw_adjmem')}）——
+位置效应在<b>排序上</b>是清楚的。<br>
+但本轮它在<b>幅度上</b>很小：max/min 只有 {s0['max_min']}
+（{s0['bw_min']} ~ {s0['bw_max']}）。
+原因不是被 tracker 盖住（本轮重试 {q0.get('retry_per_txn')} 次/事务、
+基线与 ∞ 参照逐拍一致），而是<b>闭环批量</b>：
+每个核最终都要注入同样的 K×W 个 flit，
+落后的核在别人清空之后仍能补回来，整窗带宽因此被拉平。
+瞬时的不均衡要看分箱指标（见 3.2）。</div>"""
     else:
         sec4_geom = f"""
 <h3>4.1 对称性：距离和相邻 mem 都没有方差</h3>
@@ -3272,27 +3397,31 @@ HA 回 RSP / Comp 时延 <b>{_jit_label(meta)}</b> 拍。</p>
 <li><b>三通道链路独立。</b>makespan 下界改由最忙 DAT/RSP hop
 决定（bound {b['bound']}，port {b.get('port_lb')} 已松）。
 Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
-<li><b>tracker 从 32 加到 {meta.get('ha_track')}：缓解了，但还没解除。</b>
-S0 吞吐 {TRACK32_ROUND['thr']} → <b>{s0['throughput']}</b> flit/cycle
-（{100.0 * (s0['throughput'] - TRACK32_ROUND['thr']) / TRACK32_ROUND['thr']:+.0f}%），
-重试 {TRACK32_ROUND['retry_per_txn']} → {q0.get('retry_per_txn')} 次/事务，
-延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。<br>
-但<b>峰值占用正顶在 {q0.get('max_ha_used', '—')} 个表项（= ha_track）</b>，
-而无限 tracker 参照要用到 {qref.get('max_ha_used', '—')} 个、吞吐
-{sref['throughput']} —— 本轮只到它的
-<b>{100.0 * s0['throughput'] / max(1e-9, sref['throughput']):.0f}%</b>。
-completer 表项<b>仍在削带宽</b>，只是从削一半变成削三分之一。
-K = {meta.get('K')} 才暴露这一点：K = 4000 的短探测里 128 就够了（见 3.2.2），
-<b>按短跑定 tracker 尺寸会低估</b>。</li>
+<li><b>tracker 加到 {meta.get('ha_track')} 后彻底不再绑定。</b>
+S0 吞吐 <b>{s0['throughput']}</b> flit/cycle，
+重试 <b>{q0.get('retry_per_txn')}</b> 次/事务，
+峰值占用 {q0.get('max_ha_used', '—')} 个表项（没顶到 {meta.get('ha_track')}），
+延迟 p50 = {pat['schemes']['S0'].get('lat_p50')}。
+与无限 tracker 参照<b>逐拍一致</b>（makespan {pat['schemes']['S0']['makespan']}
+vs {(pat.get('s0_unbounded') or {}).get('makespan')}，吞吐同为
+{sref['throughput']}）。<br>
+三轮对照：32 → {TRACK32_ROUND['thr']}，128 → {TRACK128_ROUND['thr']}，
+{meta.get('ha_track')} → {s0['throughput']}。
+定尺寸的正确依据是 <b>∞ 参照在官方 K 上的峰值占用
+{qref.get('max_ha_used', '—')}</b>，而不是短跑扫描曲线的拐点 ——
+K=4000 的探测说 128 就够，官方 K 上并不够（见 3.1.3）。</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
 {s0['max_min']} → {s1['max_min']}。
-源端限速略减 RetryAck，帮不上 hop 理想。</li>
-<li><b>缺口分两层，都不是缓存。</b>S0 吞吐是 hop 理想 R* 的
-<b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.0f}%</b>：
-先被无缓存环的上环饥饿削到 {sref['throughput']}
-（在环 flit 绝对优先，核只能挤进空隙；把 eject / inject / dir
-各级缓存单独放宽都只动 ±1%），再被 {meta.get('ha_track')} 个表项削到
-{s0['throughput']}。见 3.2.2 与 4.5。</li>
+本轮已无 RetryAck 可减，源端限速对 hop 理想毫无帮助。</li>
+<li><b>S0 达不到 R* 只剩一个原因：无缓存环的上环仲裁。</b>
+S0 吞吐是 hop 理想 R* 的
+<b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.0f}%</b>。
+其他候选已逐一排除：端口速率（每节点每 VC 上/下环各 1 flit/cycle
+折算成 {len(meta.get('mem_nodes') or [])}.0 flit/cycle，比 R* 还松，见 3.1.1）、
+各级 buffer 深度（∞ tracker 下单独放宽都只动 ±1%）、
+completer 表项（本轮 retry = 0）。
+剩下的机制是在环 flit 绝对优先，核只能挤进空隙 ——
+决定上环延迟的是空档的<b>分布</b>而不是总量。见 3.1 与 4.5。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
 它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
@@ -3344,27 +3473,12 @@ Jain 到不了 1.0，而且这个地板随吞吐移动，所以绝对阈值没�
 <p class="note">makespan 下界 {pat['bounds']['bound']} 拍，由 <b>{bind_lb}</b> 决定，
 即 {bind_txt}。</p>
 
-<h3>3.1 均匀写 · S0 / S1</h3>
-{_summary_table(pat, track=meta.get("ha_track"), schemes=("S0", "S1"))}
-<div class="def">S0 主指标 <b>Jain@{jbw}拍 = {jb0}</b>，同窗零模型 {jbn0}，
-<b>ratio {jbr0} ≥ 1.0 达标</b>（详见 3.3）；
-max/min <b>{s0['max_min']}</b>（诊断项），最慢 {s0['bw_min']} vs 最快 {s0['bw_max']}；
-吞吐 {s0['throughput']}。
-无限 tracker 参照 Jain@{jbw}拍
-{(sref.get('jain_bin') or {}).get('jain_bin_mean')}、
-max/min {sref['max_min']}、吞吐 {sref['throughput']}
-（相对有限 tracker {t_ref:+.1f}%）。
-S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
-{_track_table(pat, meta.get("ha_track"))}
-<img src="{imgs.get('bars31', '')}" alt="per-core BW uniform">
-<img src="{imgs.get('panels31', '')}" alt="per-core BW over time">
-<img src="{imgs.get('overlay31', '')}" alt="slowest vs fastest">
 {_total_bw_section(meta, pat, imgs)}
 
 <h2>4. 根因</h2>
-<p class="note">归因在无限 tracker（环受限）参照上做；4.4 核对有限 tracker
-基线 —— 本轮 ha_track = {meta.get('ha_track')} 仍在削吞吐，
-但重试已小一个量级，不再盖住几何。</p>
+<p class="note">归因在无限 tracker（环受限）参照上做；本轮 ha_track =
+{meta.get('ha_track')} 的基线与该参照逐拍一致（4.4），
+所以这里的结论直接适用于基线。</p>
 {_rc_table(pat)}
 <img src="{imgs.get('scatter', '')}" alt="bw vs explanations">
 {sec4_geom}
@@ -3380,16 +3494,17 @@ S1 吞吐差 <b>{t1:+.1f}%</b>。</div>
 {_sec431(pat, imgs, ("S0", "S1"))}
 {_fail_ratio_section(meta, pat)}
 
-<h3>4.4 回到有限 tracker（{meta.get('ha_track')} 个表项）</h3>
-<div class="def">吞吐相对无限 tracker <b>{t_ref:+.1f}%</b>，
-max/min 从 {sref['max_min']} 到 {s0['max_min']}，
-重试 {q0.get('retry_per_txn')} 次/事务。
-∞ 参照的峰值占用是 {qref.get('max_ha_used', '—')} 表项，
-本轮 ha_track = {meta.get('ha_track')} <b>装不下</b>
-（实测峰值就顶在 {q0.get('max_ha_used', '—')}），所以它还在削带宽。<br>
-但它已经不再<b>盖住</b>几何：重试从上一轮 32 表项的
-{TRACK32_ROUND['retry_per_txn']} 次/事务降到 {q0.get('retry_per_txn')}，
-retry churn 小了一个量级，上面那套（环受限）的归因基线上也读得出来。</div>
+<h3>4.4 有限 tracker（{meta.get('ha_track')} 个表项）：本轮不影响归因</h3>
+<div class="def good">吞吐相对无限 tracker <b>{t_ref:+.1f}%</b>，
+max/min {s0['max_min']} vs {sref['max_min']}，
+重试 <b>{q0.get('retry_per_txn')}</b> 次/事务。
+∞ 参照峰值占用 {qref.get('max_ha_used', '—')} 表项 &lt;
+ha_track = {meta.get('ha_track')}，配额从未触发，
+所以基线与参照是<b>同一条轨迹</b> ——
+上面那套（环受限）的归因直接就是基线的归因，不需要再折算。<br>
+前两轮不是这样：32 表项时重试 {TRACK32_ROUND['retry_per_txn']} 次/事务、
+吞吐 {TRACK32_ROUND['thr']}，128 表项时 {TRACK128_ROUND['retry_per_txn']} /
+{TRACK128_ROUND['thr']}，retry churn 会把几何因素部分盖住。</div>
 {_ideal_rate_section(meta, pat)}
 
 <h2>5. S1</h2>
@@ -4233,7 +4348,13 @@ Homa 的 SRPT 在等长下退化为公平排队，所以直接均衡累计授权
 <b>{fc16.get('overcommit')}</b>（低于 tracker 的
 {meta.get('ha_track')}），这是它能真正扣住授权的前提。
 这一点由回归 <code>test_s16_grants_below_the_tracker</code> 钉住，
-避免以后有人把它调到 tracker 之上、得到一份"S16 == S0"的假结果。</div>
+避免以后有人把它调到 tracker 之上、得到一份"S16 == S0"的假结果。<br>
+<b>但「低于 tracker」只是必要条件。</b>tracker 放到
+{meta.get('ha_track')} 之后它已经不是绑定项，
+真正要压住的是<b>环能撑住的在飞量</b>：在 study 负载上实测（k=3000），
+overcommit 64 给出 max/min 1.073 且吞吐比 S0 高 2.4%，
+而同样"低于 tracker"的 128 只到 1.177、与 S0 无差别。
+所以 overcommit <b>不随 ha_track 等比放大</b>。</div>
 
 <h3>7.3 结果</h3>
 <div class="def {'good' if not v16['bad'] else ''}">
@@ -4250,7 +4371,7 @@ S16 不再像无限 tracker 时那样"更公平又更快"。
 原因是<b>它要压制的那个不公平已经被 retry 背压压掉了大半</b>
 （4.4 节），剩下的位置优势只值 {s0['max_min']} → {s16['max_min']}
 这一小段，而把 overcommit 压到 {fc16.get('overcommit')}
-（tracker 的一半）就会让 completer 在切换请求方的间隙偶尔空转，
+就会让 completer 在切换请求方的间隙偶尔空转，
 这部分是净损失。
 <b>换句话说，tracker 已经替 S16 做了一部分工作，
 S16 能再赚到的公平性变少了，但它要付的空转代价没变。</b></p>

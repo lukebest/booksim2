@@ -82,13 +82,20 @@ HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
 # Request tracker entries per completer, and the baseline for every scheme:
-# a completer that runs out of entries must RetryAck. 128 sits just past the
-# knee found by the tracker sweep, so the baseline is no longer retry-bound and
-# what remains is the bufferless ring's own injection limit.
-RETRY_TRACK = 128
+# a completer that runs out of entries must RetryAck. 256 is above the peak
+# occupancy the unlimited-tracker reference actually reaches at the official K
+# (195 entries), so the tracker should stop binding altogether and what remains
+# is the bufferless ring's own injection limit. 128 was not enough: the
+# reference needs more than that, so occupancy pegged at the cap.
+RETRY_TRACK = 256
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
-# to S0 exactly (pinned by verify_ring2_20.py).
+# to S0 exactly (pinned by verify_ring2_20.py). Being under the tracker is
+# necessary but not sufficient -- what has to be tight is the in-flight budget
+# the *ring* can sustain, not the tracker. Measured on the study workload at
+# ha_track = 256 (k=3000, peak occupancy ~204): 64 gives max/min 1.073 at
+# +2.4% throughput over S0, while 128 -- also "below the tracker" -- lands at
+# 1.177 and does nothing. So this stays at 64 and is not scaled with ha_track.
 S16_OVERCOMMIT = 64
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
@@ -495,6 +502,39 @@ TRACK128_FORECAST = {
         "S0 吞吐仍 ≤ 3.0（128 表项仍不够，或别的东西在绑定），"
         "或 retry/txn > 0.05，"
         "或 ratio < 1.0（放开 tracker 反而制造出真实的核间不公平）"
+    ),
+}
+
+
+TRACK256_FORECAST = {
+    "hypothesis": (
+        "ha_track 128 → 256。上一轮的预测栽在引用了 K=4000 的短探测，"
+        "这次改用官方 K 上的直接测量：同一 fabric 的 ∞ tracker 参照"
+        "峰值只用到 195 个表项，而 128 装不下（实测占用死死顶在 128）。"
+        "256 > 195，所以配额应当永远不会触发 —— "
+        "一旦不触发，轨迹就与 ∞ 参照逐拍一致（不动点论证："
+        "cap 不生效则动力学与无 cap 相同，而无 cap 下峰值 195 < 256，自洽）。"
+        "因此预测不是「接近 ∞」而是「等于 ∞」：makespan 88090、"
+        "吞吐 4.5408、retry 恰好 0、峰值占用 195。"
+        "剩下与 hop 理想 R* = 5.714 的差距全部归无缓存环的上环饥饿，"
+        "端口那一层（每节点上/下环 1 flit/cycle/VC → 8 flit/cycle）从来不绑定。"
+        "公平性：每箱 flit 数从 15.2 升到约 22.8，"
+        "零模型地板随之抬到约 0.962，实测约 0.982，ratio 约 1.021（仍达标但比 128 时低）。"
+    ),
+    "predicted": {
+        "s0_thr": 4.5408,
+        "makespan": 88090,
+        "retry_per_txn": 0.0,
+        "max_ha_used": 195,
+        "jain_bin_mean": 0.98183,
+        "jain_bin_null": 0.96197,
+        "jain_bin_ratio": 1.02064,
+    },
+    "confidence": 0.85,
+    "falsify": (
+        "出现任何重试（retry > 0），或 makespan 偏离 88090 超过 1% —— "
+        "那说明占用峰值本身跟 cap 有关，不动点论证不成立，"
+        "或者仿真存在我没考虑到的路径依赖"
     ),
 }
 
@@ -1622,6 +1662,7 @@ def main() -> None:
             "ha_rsp_zero_forecast": HA_RSP_ZERO_FORECAST,
             "bin50_fair_forecast": BIN50_FAIR_FORECAST,
             "track128_forecast": TRACK128_FORECAST,
+            "track256_forecast": TRACK256_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,

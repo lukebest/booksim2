@@ -192,7 +192,7 @@
       "ok": true
     },
     {
-      "name": "baseline_tracker_masks_imbalance",
+      "name": "baseline_tracker_sized_above_peak",
       "ok": true
     },
     {
@@ -256,5 +256,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T09:55:12Z"
+  "generated_at": "2026-08-26T10:40:29Z"
 }

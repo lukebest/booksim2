@@ -41,27 +41,31 @@ HA 回 RSP / Comp 时延 <b>0（无 HA think time）</b> 拍。</p>
 <li><b>三通道链路独立。</b>makespan 下界改由最忙 DAT/RSP hop
 决定（bound 70000，port 50000 已松）。
 Hop 理想全环 WriteData R* = 40/7 ≈ 5.714。</li>
-<li><b>tracker 从 32 加到 128：缓解了，但还没解除。</b>
-S0 吞吐 2.3848 → <b>3.04</b> flit/cycle
-（+27%），
-重试 0.602 → 0.1078 次/事务，
-延迟 p50 = 59789。<br>
-但<b>峰值占用正顶在 128 个表项（= ha_track）</b>，
-而无限 tracker 参照要用到 195 个、吞吐
-4.5408 —— 本轮只到它的
-<b>67%</b>。
-completer 表项<b>仍在削带宽</b>，只是从削一半变成削三分之一。
-K = 20000 才暴露这一点：K = 4000 的短探测里 128 就够了（见 3.2.2），
-<b>按短跑定 tracker 尺寸会低估</b>。</li>
-<li><b>S1 相对 S0 吞吐 -1.2%</b>，max/min
-1.0014 → 1.002。
-源端限速略减 RetryAck，帮不上 hop 理想。</li>
-<li><b>缺口分两层，都不是缓存。</b>S0 吞吐是 hop 理想 R* 的
-<b>53%</b>：
-先被无缓存环的上环饥饿削到 4.5408
-（在环 flit 绝对优先，核只能挤进空隙；把 eject / inject / dir
-各级缓存单独放宽都只动 ±1%），再被 128 个表项削到
-3.04。见 3.2.2 与 4.5。</li>
+<li><b>tracker 加到 256 后彻底不再绑定。</b>
+S0 吞吐 <b>4.5408</b> flit/cycle，
+重试 <b>0.0</b> 次/事务，
+峰值占用 195 个表项（没顶到 256），
+延迟 p50 = 43998。
+与无限 tracker 参照<b>逐拍一致</b>（makespan 88090
+vs 88090，吞吐同为
+4.5408）。<br>
+三轮对照：32 → 2.3848，128 → 3.04，
+256 → 4.5408。
+定尺寸的正确依据是 <b>∞ 参照在官方 K 上的峰值占用
+195</b>，而不是短跑扫描曲线的拐点 ——
+K=4000 的探测说 128 就够，官方 K 上并不够（见 3.1.3）。</li>
+<li><b>S1 相对 S0 吞吐 -0.2%</b>，max/min
+1.0104 → 1.0139。
+本轮已无 RetryAck 可减，源端限速对 hop 理想毫无帮助。</li>
+<li><b>S0 达不到 R* 只剩一个原因：无缓存环的上环仲裁。</b>
+S0 吞吐是 hop 理想 R* 的
+<b>79%</b>。
+其他候选已逐一排除：端口速率（每节点每 VC 上/下环各 1 flit/cycle
+折算成 8.0 flit/cycle，比 R* 还松，见 3.1.1）、
+各级 buffer 深度（∞ tracker 下单独放宽都只动 ±1%）、
+completer 表项（本轮 retry = 0）。
+剩下的机制是在环 flit 绝对优先，核只能挤进空隙 ——
+决定上环延迟的是空档的<b>分布</b>而不是总量。见 3.1 与 4.5。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
 它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
@@ -73,7 +77,7 @@ K = 20000 才暴露这一点：K = 4000 的短探测里 128 就够了（见 3.2.
 
 <h2>1. 拓扑与硬件配置</h2>
 <img src="ring2_wfair_topo.png" alt="topology">
-<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>节点数 / plane 数</td><td>20 / 1</td><td>一个双向闭合 full ring</td></tr><tr><td>AI core</td><td>10 个：C0, C2, C4, C6, C8, C10, C12, C14, C16, C18</td><td>写发起方（CHI RN）</td></tr><tr><td>memory 节点</td><td>8 个：M1, M3, M5, M7, M11, M13, M15, M17</td><td>写目的地（completer）</td></tr><tr><td>非终端节点</td><td>N9, N19</td><td>在环上转发，但既不发起也不接收写</td></tr><tr><td>路由</td><td>最短路（链路时延之和；时延平局再比跳数，再平局 CW）</td><td>core→mem 与 mem→core 同一规则；当前 link_lats 上与跳数最短重合</td></tr><tr><td>plane 选择</td><td>least_occupied</td><td>单平面，无 plane 选择</td></tr><tr><td>每 core outstanding</td><td>128</td><td>同时在飞的写事务上限</td></tr><tr><td>每 completer 请求 tracker</td><td>128</td><td>表项用尽即回 RetryAck，靠 PCrdGrant 重发</td></tr><tr><td>CHI VC</td><td>REQ / RSP / DAT</td><td>REQ、RSP、DAT 三条独立 VC，各自独立信用</td></tr><tr><td>hop 容量</td><td>120 flit/cycle</td><td>20 节点 × 2 方向 × 1 plane × 3 VC，σ=1</td></tr><tr><td>端口</td><td>inject 1 / leave 1（每 node 每 plane 每 VC）</td><td>REQ / RSP / DAT 各有独立上下环口，互不占槽</td></tr><tr><td>上环队列</td><td>8 深共享 FIFO + 每向 1 深 inject Q</td><td>每 (node, plane, VC) 一套：两个环方向共用那个 FIFO，其后每方向各一个 inject Q，该 VC 每拍上环 1 flit</td></tr><tr><td>下环队列深度</td><td>4</td><td>每 (node, plane, VC)；两写一读：该 VC 两个方向可同拍各写入 1 flit，PE 每拍读 1 flit</td></tr><tr><td>I-tag 门限 t_inj</td><td>64</td><td>限制注入饥饿时长</td></tr><tr><td>E-tag 门限 t_xfer</td><td>4</td><td>限制偏转次数</td></tr><tr><td>写激励</td><td>128B burst / 4096B stride / 64KB tile</td><td>1 flit = 64B，每笔 WriteData ×2；地址哈希已把 8 个 mem 均衡</td></tr><tr><td>HA RSP 时延</td><td>0（无 HA think time）</td><td>写请求到达 memory 后，DBIDResp / RetryAck / Comp 各自独立抽</td></tr><tr><td>拥塞总线时延</td><td>30 拍</td><td>S1 / S15 专用广播，不占环上 hop；窗口 64 拍</td></tr></tbody></table>
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>节点数 / plane 数</td><td>20 / 1</td><td>一个双向闭合 full ring</td></tr><tr><td>AI core</td><td>10 个：C0, C2, C4, C6, C8, C10, C12, C14, C16, C18</td><td>写发起方（CHI RN）</td></tr><tr><td>memory 节点</td><td>8 个：M1, M3, M5, M7, M11, M13, M15, M17</td><td>写目的地（completer）</td></tr><tr><td>非终端节点</td><td>N9, N19</td><td>在环上转发，但既不发起也不接收写</td></tr><tr><td>路由</td><td>最短路（链路时延之和；时延平局再比跳数，再平局 CW）</td><td>core→mem 与 mem→core 同一规则；当前 link_lats 上与跳数最短重合</td></tr><tr><td>plane 选择</td><td>least_occupied</td><td>单平面，无 plane 选择</td></tr><tr><td>每 core outstanding</td><td>128</td><td>同时在飞的写事务上限</td></tr><tr><td>每 completer 请求 tracker</td><td>256</td><td>表项用尽即回 RetryAck，靠 PCrdGrant 重发</td></tr><tr><td>CHI VC</td><td>REQ / RSP / DAT</td><td>REQ、RSP、DAT 三条独立 VC，各自独立信用</td></tr><tr><td>hop 容量</td><td>120 flit/cycle</td><td>20 节点 × 2 方向 × 1 plane × 3 VC，σ=1</td></tr><tr><td>端口</td><td>inject 1 / leave 1（每 node 每 plane 每 VC）</td><td>REQ / RSP / DAT 各有独立上下环口，互不占槽</td></tr><tr><td>上环队列</td><td>8 深共享 FIFO + 每向 1 深 inject Q</td><td>每 (node, plane, VC) 一套：两个环方向共用那个 FIFO，其后每方向各一个 inject Q，该 VC 每拍上环 1 flit</td></tr><tr><td>下环队列深度</td><td>4</td><td>每 (node, plane, VC)；两写一读：该 VC 两个方向可同拍各写入 1 flit，PE 每拍读 1 flit</td></tr><tr><td>I-tag 门限 t_inj</td><td>64</td><td>限制注入饥饿时长</td></tr><tr><td>E-tag 门限 t_xfer</td><td>4</td><td>限制偏转次数</td></tr><tr><td>写激励</td><td>128B burst / 4096B stride / 64KB tile</td><td>1 flit = 64B，每笔 WriteData ×2；地址哈希已把 8 个 mem 均衡</td></tr><tr><td>HA RSP 时延</td><td>0（无 HA think time）</td><td>写请求到达 memory 后，DBIDResp / RetryAck / Comp 各自独立抽</td></tr><tr><td>拥塞总线时延</td><td>30 拍</td><td>S1 / S15 专用广播，不占环上 hop；窗口 64 拍</td></tr></tbody></table>
 
 <h3>1.1 每条边的 hop 时延</h3>
 <table><thead><tr><th>无向边</th><th>hop 时延（拍）</th><th>备注</th></tr></thead><tbody><tr><td>C0 — M1</td><td>2</td><td></td></tr><tr><td>M1 — C2</td><td>2</td><td></td></tr><tr><td>C2 — M3</td><td>2</td><td></td></tr><tr><td>M3 — C4</td><td>3</td><td></td></tr><tr><td>C4 — M5</td><td>1</td><td></td></tr><tr><td>M5 — C6</td><td>3</td><td></td></tr><tr><td>C6 — M7</td><td>1</td><td></td></tr><tr><td>M7 — C8</td><td>1</td><td></td></tr><tr><td>C8 — N9</td><td>2</td><td></td></tr><tr><td>N9 — C10</td><td>4</td><td></td></tr><tr><td>C10 — M11</td><td>1</td><td></td></tr><tr><td>M11 — C12</td><td>1</td><td></td></tr><tr><td>C12 — M13</td><td>3</td><td></td></tr><tr><td>M13 — C14</td><td>1</td><td></td></tr><tr><td>C14 — M15</td><td>3</td><td></td></tr><tr><td>M15 — C16</td><td>2</td><td></td></tr><tr><td>C16 — M17</td><td>2</td><td></td></tr><tr><td>M17 — C18</td><td>2</td><td></td></tr><tr><td>C18 — N19</td><td>3</td><td></td></tr><tr><td>N19 — C0</td><td>3</td><td>闭合边（N19 ↔ C0）</td></tr></tbody></table>
@@ -91,21 +95,21 @@ completer 侧每条 RSP（DBIDResp / RetryAck / Comp）独立抽
 <div class="def">
 <b>跑数前的预测</b>（置信度 0.55）：
 单平面、请求量 ×10、DBIDResp/RetryAck/Comp 各抽 U{4..64} 的均匀 tiled 写：成功上环仍按最短路接近 1:1；失败次数比双平面更偏，邻 mem 少的核失败比 ≥ 2；S1 两边一起限速，改不了方向比，吞吐低于 S0。
-证伪：成功比 ≥ 2，或所有核失败比仍 < 2（与双平面一样），或 S1 吞吐不低于 S0<br><b>总线时延 30 拍的预测</b>（置信度 0.7）：拥塞总线时延改为 30 拍（控制窗口 64 的一半）后，S1 用的是更旧的拥塞等级；上一轮总线=1 时 S1 已几乎等于 S0，更晚的反馈再拉开吞吐的空间很小。CW/CCW 失败比仍由邻 mem 几何决定，S1 改不了。 证伪：S1 吞吐相对 S0 掉超过 2%，或失败偏的核/方向翻面<br>对照：S1 总线实测 30 拍。<br><b>三通道链路独立的预测</b>（置信度 0.6）：REQ/RSP/DAT 上下环口拆开后，端口不再叠三 VC；均等最短路的上限改由最忙 DAT/RSP hop 决定，λ*=2/7，全环 WriteData R*=40/7≈5.714。S0 仍受在环优先，到不了这条线，但应明显高于共用端口时的 2.67。位置效应更明显；S1 按窗口×3 放大预算后仍接近 S0。 证伪：S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定<br>对照：per_vc_ports=True，bound=70000（link 70000 / port 50000），S0 吞吐 3.04，max/min 1.0014。<br><b>HA RSP 时延 = 0 的预测</b>（置信度 0.6）：HA 回 RSP / Comp 的 think time 从 U{4..64}（均值 34 拍/条，一笔写至少 DBID+Comp 两条 ≈ 68 拍）改成 0。上一轮 T_hold ≈ 191 拍、R=2.41、retry/txn=0.57，其中一块就是这段 completer 等待。去掉之后 32 个 tracker 周转加快，retry 应下降，S0 吞吐应往无缓存环平台（上一轮无限 tracker ≈ 4.51）靠。32 tracker 未必完全松绑（68 拍只是 T_hold 的一部分），但差距应明显收窄。无限 tracker 平台本身不应大变：HA 时延不是环的限制。 证伪：S0 吞吐仍 ≤ 2.6（HA 时延不在关键路径上），或 retry/txn 仍 ≥ 0.50<br>对照：HA RSP 0（无 HA think time），S0 吞吐 3.04，retry/txn 0.1078。<br><b>50 拍窗 Jain 主指标的预测</b>（置信度 0.75）：公平性主指标改成：50 拍宽的窗内对 10 个核的写带宽算 Jain，再对竞争窗口内的所有箱取平均。S0 总写带宽 ≈ 2.25 flit/cycle，摊到 10 个核上每核每箱只有约 0.225 × 50 ≈ 11 个 flit，因此这个指标会被计数噪声主导：等概率多项分布的零模型本身就只有 1/(1 + var/mean²) ≈ 1/(1 + 10.2/128) ≈ 0.926。上一轮 128 拍分箱已看到实测 max/min 低于零模型（亚泊松），所以实测均值应落在零模型之上、1.0 之下。结论不应改变：仍是采样粒度而非核间不公平。 证伪：jain_bin_mean 低于同窗零模型的 null_jain，或落到 0.90 以下 —— 那说明 50 拍尺度上存在真实的核间不公平，而不是抽样波动<br>对照：jain_bin_mean = 0.97618，零模型 0.94041，ratio 1.03803；每核每箱 15.23 flit，2624 个箱（详见 3.3）。<br><b>ha_track = 128 的预测</b>（置信度 0.8）：ha_track 32 → 128，跨过 tracker 扫描找到的拐点。上一轮 32 tracker 下 S0 = 2.385 flit/cycle、retry/txn = 0.63，而短探测里 128 给出 4.424、retry/txn = 0.003，无限 tracker 平台是 4.498。所以预期：吞吐接近翻倍并贴上无缓存环平台，重试基本归零，makespan 从 16.8 万降到 9 万附近，而 s0_unbounded 参照与 S0 的差距收到几个百分点以内 —— 瓶颈从 completer 表项换成上环饥饿。公平性主指标应仍达标但数值上移：吞吐翻倍使每箱 flit 数从 11.9 涨到约 22，零模型地板随之从 0.929 抬到约 0.961，实测约 0.98，ratio 仍在 1.02 附近。整份报告的主线会因此改变：第 9、10 节讨论的重试浪费不再是主要损失。 证伪：S0 吞吐仍 ≤ 3.0（128 表项仍不够，或别的东西在绑定），或 retry/txn > 0.05，或 ratio < 1.0（放开 tracker 反而制造出真实的核间不公平）<br><b>对照：预测被推翻。</b>预测 S0 吞吐落在 [4.2, 4.7]，实测只有 <b>3.04</b>；预测 retry/txn ≤ 0.05，实测 0.1078；预测 makespan [85000, 95000]，实测 131580；预测与 ∞ tracker 参照差 ≤ 3.0%，实测差 <b>-33.1%</b>（参照 4.5408）。只有公平性那三项落在区间里（详见 3.3）。<br><b>错在哪：</b>预测直接引用了 K = 4000 的短探测（那里 128 给出 4.424）。官方 K = 20000 下稳态拥塞更深，∞ 参照的峰值占用要 195 个表项，128 装不下，实测峰值就顶在 128。<b>tracker 的拐点跟 K 有关，短跑会低估所需表项数。</b><br>
+证伪：成功比 ≥ 2，或所有核失败比仍 < 2（与双平面一样），或 S1 吞吐不低于 S0<br><b>总线时延 30 拍的预测</b>（置信度 0.7）：拥塞总线时延改为 30 拍（控制窗口 64 的一半）后，S1 用的是更旧的拥塞等级；上一轮总线=1 时 S1 已几乎等于 S0，更晚的反馈再拉开吞吐的空间很小。CW/CCW 失败比仍由邻 mem 几何决定，S1 改不了。 证伪：S1 吞吐相对 S0 掉超过 2%，或失败偏的核/方向翻面<br>对照：S1 总线实测 30 拍。<br><b>三通道链路独立的预测</b>（置信度 0.6）：REQ/RSP/DAT 上下环口拆开后，端口不再叠三 VC；均等最短路的上限改由最忙 DAT/RSP hop 决定，λ*=2/7，全环 WriteData R*=40/7≈5.714。S0 仍受在环优先，到不了这条线，但应明显高于共用端口时的 2.67。位置效应更明显；S1 按窗口×3 放大预算后仍接近 S0。 证伪：S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定<br>对照：per_vc_ports=True，bound=70000（link 70000 / port 50000），S0 吞吐 4.5408，max/min 1.0104。<br><b>HA RSP 时延 = 0 的预测</b>（置信度 0.6）：HA 回 RSP / Comp 的 think time 从 U{4..64}（均值 34 拍/条，一笔写至少 DBID+Comp 两条 ≈ 68 拍）改成 0。上一轮 T_hold ≈ 191 拍、R=2.41、retry/txn=0.57，其中一块就是这段 completer 等待。去掉之后 32 个 tracker 周转加快，retry 应下降，S0 吞吐应往无缓存环平台（上一轮无限 tracker ≈ 4.51）靠。32 tracker 未必完全松绑（68 拍只是 T_hold 的一部分），但差距应明显收窄。无限 tracker 平台本身不应大变：HA 时延不是环的限制。 证伪：S0 吞吐仍 ≤ 2.6（HA 时延不在关键路径上），或 retry/txn 仍 ≥ 0.50<br>对照：HA RSP 0（无 HA think time），S0 吞吐 4.5408，retry/txn 0.0。<br><b>50 拍窗 Jain 主指标的预测</b>（置信度 0.75）：公平性主指标改成：50 拍宽的窗内对 10 个核的写带宽算 Jain，再对竞争窗口内的所有箱取平均。S0 总写带宽 ≈ 2.25 flit/cycle，摊到 10 个核上每核每箱只有约 0.225 × 50 ≈ 11 个 flit，因此这个指标会被计数噪声主导：等概率多项分布的零模型本身就只有 1/(1 + var/mean²) ≈ 1/(1 + 10.2/128) ≈ 0.926。上一轮 128 拍分箱已看到实测 max/min 低于零模型（亚泊松），所以实测均值应落在零模型之上、1.0 之下。结论不应改变：仍是采样粒度而非核间不公平。 证伪：jain_bin_mean 低于同窗零模型的 null_jain，或落到 0.90 以下 —— 那说明 50 拍尺度上存在真实的核间不公平，而不是抽样波动<br>对照：jain_bin_mean = 0.98183，零模型 0.96197，ratio 1.02064；每核每箱 22.79 flit，1749 个箱（详见公平性主指标一节）。<br><b>ha_track = 128 的预测（上一轮，已被推翻）</b>（置信度 0.8）：ha_track 32 → 128，跨过 tracker 扫描找到的拐点。上一轮 32 tracker 下 S0 = 2.385 flit/cycle、retry/txn = 0.63，而短探测里 128 给出 4.424、retry/txn = 0.003，无限 tracker 平台是 4.498。所以预期：吞吐接近翻倍并贴上无缓存环平台，重试基本归零，makespan 从 16.8 万降到 9 万附近，而 s0_unbounded 参照与 S0 的差距收到几个百分点以内 —— 瓶颈从 completer 表项换成上环饥饿。公平性主指标应仍达标但数值上移：吞吐翻倍使每箱 flit 数从 11.9 涨到约 22，零模型地板随之从 0.929 抬到约 0.961，实测约 0.98，ratio 仍在 1.02 附近。整份报告的主线会因此改变：第 9、10 节讨论的重试浪费不再是主要损失。 证伪：S0 吞吐仍 ≤ 3.0（128 表项仍不够，或别的东西在绑定），或 retry/txn > 0.05，或 ratio < 1.0（放开 tracker 反而制造出真实的核间不公平）<br><b>对照：预测被推翻。</b>预测 S0 吞吐落在 [4.2, 4.7]，实测只有 <b>3.04</b>；预测 retry/txn ≤ 0.05，实测 0.1078；预测 makespan [85000, 95000]，实测 131580。<br><b>错在哪：</b>预测直接引用了 K = 4000 的短探测（那里 128 给出 4.424）。官方 K = 20000 下稳态拥塞更深，∞ 参照的峰值占用要 195 个表项，128 装不下，实测峰值就顶在 128。<b>tracker 的拐点跟 K 有关，短跑会低估所需表项数。</b>这一条正是本轮把 tracker 定到 256 的依据。<br><b>ha_track = 256 的预测（本轮）</b>（置信度 0.85）：ha_track 128 → 256。上一轮的预测栽在引用了 K=4000 的短探测，这次改用官方 K 上的直接测量：同一 fabric 的 ∞ tracker 参照峰值只用到 195 个表项，而 128 装不下（实测占用死死顶在 128）。256 > 195，所以配额应当永远不会触发 —— 一旦不触发，轨迹就与 ∞ 参照逐拍一致（不动点论证：cap 不生效则动力学与无 cap 相同，而无 cap 下峰值 195 < 256，自洽）。因此预测不是「接近 ∞」而是「等于 ∞」：makespan 88090、吞吐 4.5408、retry 恰好 0、峰值占用 195。剩下与 hop 理想 R* = 5.714 的差距全部归无缓存环的上环饥饿，端口那一层（每节点上/下环 1 flit/cycle/VC → 8 flit/cycle）从来不绑定。公平性：每箱 flit 数从 15.2 升到约 22.8，零模型地板随之抬到约 0.962，实测约 0.982，ratio 约 1.021（仍达标但比 128 时低）。 证伪：出现任何重试（retry > 0），或 makespan 偏离 88090 超过 1% —— 那说明占用峰值本身跟 cap 有关，不动点论证不成立，或者仿真存在我没考虑到的路径依赖<br><b>对照：预测成立。</b>预测「等于 ∞ 参照」：makespan 88090 / 吞吐 4.5408 / retry 0.0 / 峰值占用 195；实测 makespan <b>88090</b> / 吞吐 <b>4.5408</b> / retry <b>0.0</b> / 峰值占用 <b>195</b>。本轮 ∞ 参照自身跑出 4.5408（makespan 88090，峰值 195）。公平性：jain_bin 0.98183 / 零模型 0.96197 / ratio 1.02064（预测 1.02064）。<br>
 <b>对照。</b>
 8 个 mem 收到的 WriteData
 完全一样（50000 / HA）。
-S0 延迟 p50 = 59789，主指标 Jain@50拍
-= 0.97618 ÷ 零模型
-0.94041 = <b>ratio
-1.03803</b>；
-诊断项 max/min = 1.0014。
-S1 吞吐 3.004（-1.2% vs S0 3.04）。
-S0 上环方向高亮 3/10 个核
-（成功偏 0，失败偏 3，
-失败最大比 2.444）；
+S0 延迟 p50 = 43998，主指标 Jain@50拍
+= 0.98183 ÷ 零模型
+0.96197 = <b>ratio
+1.02064</b>；
+诊断项 max/min = 1.0104。
+S1 吞吐 4.5308（-0.2% vs S0 4.5408）。
+S0 上环方向高亮 4/10 个核
+（成功偏 0，失败偏 4，
+失败最大比 2.588）；
 S1 高亮 4/10 个核
-（失败最大比 2.38）。
+（失败最大比 2.528）。
 预测写在 <code>meta.stimulus_forecast</code>，对照写在
 <code>meta.belief_update</code>，前者不改。
 </div>
@@ -121,10 +125,10 @@ Jain 到不了 1.0，而且这个地板随吞吐移动，所以绝对阈值没�
 把每箱总数 N 等概率撒到 n 个核上有 E[J] ≈ N/(N+n−1)，逐箱平均即
 <code>jain_bin_null</code>；判定用比值
 <code>ratio = 实测/零模型 ≥ 1.0</code>，含义是<b>至少和完全公平的仲裁一样齐</b>。
-本轮 S0 = 0.97618 / 零模型 0.94041 = <b>ratio 1.03803</b>。</li>
+本轮 S0 = 0.98183 / 零模型 0.96197 = <b>ratio 1.02064</b>。</li>
 <li><b>max/min</b>（整窗）：降为诊断项，不进验收线。它仍然有用，
 因为分箱 Jain 是二次指标、看不见个别核被饿死，而 max/min 直接读最坏的核。
-均匀写下各方案的分箱 Jain 差异小于噪声（S0 0.97618 vs S1 0.97606），
+均匀写下各方案的分箱 Jain 差异小于噪声（S0 0.98183 vs S1 0.98173），
 这是均匀写本来就公平的正确反映；流量不均时它分得很开。</li>
 <li><b>吞吐</b>：公平性可以靠把所有人一起压慢买到，所以必须一起报。</li>
 </ul>
@@ -135,23 +139,8 @@ Jain 到不了 1.0，而且这个地板随吞吐移动，所以绝对阈值没�
 <p class="note">makespan 下界 70000 拍，由 <b>LB_link</b> 决定，
 即 最忙的那条有向链路上、DAT VC 的容量。</p>
 
-<h3>3.1 均匀写 · S0 / S1</h3>
-<table><thead><tr><th>方案</th><th>makespan</th><th>Jain@50拍</th><th>零模型</th><th>ratio（验收）</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = 128）</td><td>131580</td><td>0.97618</td><td>0.94041</td><td>1.03803</td><td>1.0014</td><td>0.30442</td><td>0.30485</td><td>3.04</td><td>+0.0%</td><td>0.1078</td><td>567</td><td>507704</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>133154</td><td>0.97606</td><td>0.94027</td><td>1.03807</td><td>1.002</td><td>0.30106</td><td>0.30165</td><td>3.004</td><td>-1.2%</td><td>0.1116</td><td>466</td><td>494191</td></tr></tbody></table>
-<div class="def">S0 主指标 <b>Jain@50拍 = 0.97618</b>，同窗零模型 0.94041，
-<b>ratio 1.03803 ≥ 1.0 达标</b>（详见 3.3）；
-max/min <b>1.0014</b>（诊断项），最慢 0.30442 vs 最快 0.30485；
-吞吐 3.04。
-无限 tracker 参照 Jain@50拍
-0.98183、
-max/min 1.0104、吞吐 4.5408
-（相对有限 tracker -33.1%）。
-S1 吞吐差 <b>-1.2%</b>。</div>
-<table><thead><tr><th>每 completer 的请求 tracker</th><th>makespan</th><th>吞吐</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>重试/事务</th><th>峰值占用表项</th><th>有效 outstanding</th><th>延迟 p99</th></tr></thead><tbody><tr><td>∞（环受限）</td><td>88090</td><td>4.5408</td><td>1.0104</td><td>0.45243</td><td>0.45715</td><td>0.0</td><td>195</td><td>126.82</td><td>87097</td></tr><tr><td>128（本报告基线）</td><td>131580</td><td>3.04</td><td>1.0014</td><td>0.30442</td><td>0.30485</td><td>0.1078</td><td>128</td><td>31.14</td><td>127648</td></tr></tbody></table>
-<img src="ring2_wfair_bars31.png" alt="per-core BW uniform">
-<img src="ring2_wfair_panels31.png" alt="per-core BW over time">
-<img src="ring2_wfair_overlay31.png" alt="slowest vs fastest">
 
-<h3>3.2 全环总写带宽的理论值，以及实测随时间的曲线</h3>
+<h3>3.1 全环总写带宽的理论值，以及实测随时间的曲线</h3>
 <p>三条 VC 各有自己的上 / 下环端口，所以端口不再是最紧的资源，
 反而是<b>最忙那条 dat 链路</b>绑定：14 对 (core, mem) 的 WriteData
 要压在同一段 hop 上，每对每笔写 2 个 flit。</p>
@@ -164,41 +153,64 @@ S1 吞吐差 <b>-1.2%</b>。</div>
 5.714，与上式一致。<br>
 端口界这次松得多（port_lb 50000 拍，等价
 8.0 flit/cycle）——
-这正是三 VC 不共享端口带来的变化。</div>
+这正是三 VC 不共享端口带来的变化，推导见 3.1.1。</div>
 <img src="ring2_wfair_totalbw.png" alt="total write bandwidth over time">
-<table><thead><tr><th>方案</th><th>总带宽均值</th><th>占 R*</th><th>p05</th><th>p50</th><th>p95</th><th>最低箱</th><th>最高箱</th></tr></thead><tbody><tr><td>S0</td><td>3.0469</td><td>53.3%</td><td>2.46</td><td>2.92</td><td>4.6</td><td>0.4</td><td>5.1</td></tr><tr><td>S1</td><td>3.0138</td><td>52.7%</td><td>2.5</td><td>2.92</td><td>4.52</td><td>0.5</td><td>5.12</td></tr></tbody></table>
-<p>实测均值 3.0469，只有 R* 的 <b>53.3%</b>。
+<table><thead><tr><th>方案</th><th>总带宽均值</th><th>占 R*</th><th>p05</th><th>p50</th><th>p95</th><th>最低箱</th><th>最高箱</th></tr></thead><tbody><tr><td>S0</td><td>4.5586</td><td>79.8%</td><td>4.32</td><td>4.56</td><td>4.82</td><td>3.66</td><td>5.1</td></tr><tr><td>S1</td><td>4.5548</td><td>79.7%</td><td>4.32</td><td>4.56</td><td>4.82</td><td>3.1</td><td>5.12</td></tr></tbody></table>
+<p>实测均值 4.5586，只有 R* 的 <b>79.8%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
-<h4>3.2.1 端口全都空着</h4>
-<p>按存储的计数反算每个 VC 端口的占用率（131580 拍、8 个 mem、10 个 core）：</p>
-<table><thead><tr><th>端口</th><th>占用率</th><th>承载</th></tr></thead><tbody><tr><td>mem 下环 · req</td><td>21.0%</td><td>200000 REQ + 21551 重发</td></tr><tr><td>mem 下环 · dat</td><td>38.0%</td><td>400000 WriteData</td></tr><tr><td>core 下环 · rsp</td><td>33.7%</td><td>DBID + Comp + RetryAck + PCrd</td></tr><tr><td>core 上环 · dat</td><td>30.4%</td><td>400000 WriteData</td></tr><tr><td>core 上环 · req</td><td>16.8%</td><td>200000 REQ + 21551 重发</td></tr></tbody></table>
+<h4>3.1.1 上 / 下环各 1 flit/cycle/node 算进来之后，上限还是 5.714</h4>
+<p>每节点<b>每 VC</b> 上环 1 flit/cycle、下环 1 flit/cycle
+（上环是两个方向共用那一个口，不是每方向 1；下环是 PE 每拍从该 VC 读 1 flit）。
+把这条速率约束单独算成一个上限，要对四类口分别数：</p>
+<table><thead><tr><th>受限的口</th><th>每拍总容量</th><th>每笔写要过几个 flit</th><th>折算成 WriteData 上限</th></tr></thead><tbody><tr><td>core 上环 · dat（10 个核）</td><td>10</td><td>2</td><td>10 flit/cycle</td></tr><tr><td>mem 下环 · dat（8 个 mem）</td><td>8</td><td>2</td><td><b>8 flit/cycle</b>（最紧）</td></tr><tr><td>mem 下环 · req（8 个 mem）</td><td>8</td><td>1</td><td>16 flit/cycle</td></tr><tr><td>mem 上环 · rsp（8 个 mem）</td><td>8</td><td>2（DBID + Comp）</td><td>8 flit/cycle</td></tr><tr><td>core 下环 · rsp（10 个核）</td><td>10</td><td>2（DBID + Comp）</td><td>10 flit/cycle</td></tr></tbody></table>
+<div class="def">最紧的是 <b>8 个 mem 的 dat 下环口</b>：每个每拍只能交给 PE
+1 个 WriteData flit，所以全环 WriteData ≤ <b>8.0 flit/cycle</b>。
+这正是 <code>LB_port</code> 报的
+8.0 flit/cycle
+（400000 flit ÷ 50000 拍）。<br>
+<b>但 8.0 &gt; 5.714，所以这条约束不绑定</b> ——
+理论上限仍由最忙那条 dat 链路给出，R* = 5.714 不变。
+换句话说，端口速率还有 40% 的余量，
+瓶颈在<b>链路</b>而不是<b>端口</b>。</div>
+<p class="note">为什么链路比端口紧：端口是「每个节点自己的 1 flit/cycle」，
+10 个核分摊得开；而 14 对 (core, mem) 的 WriteData 必须挤过<b>同一段</b>
+hop，那一段每拍也只有 1 flit/cycle。节点数多不解决单段拥塞。
+下一节的实测占用率印证了这一点：端口最忙的也只到
+57%。</p>
+<h4>3.1.2 端口全都空着</h4>
+<p>按存储的计数反算每个 VC 端口的占用率（88090 拍、8 个 mem、10 个 core）：</p>
+<table><thead><tr><th>端口</th><th>占用率</th><th>承载</th></tr></thead><tbody><tr><td>mem 下环 · req</td><td>28.4%</td><td>200000 REQ + 0 重发</td></tr><tr><td>mem 下环 · dat</td><td>56.8%</td><td>400000 WriteData</td></tr><tr><td>core 下环 · rsp</td><td>45.4%</td><td>DBID + Comp + RetryAck + PCrd</td></tr><tr><td>core 上环 · dat</td><td>45.4%</td><td>400000 WriteData</td></tr><tr><td>core 上环 · req</td><td>22.7%</td><td>200000 REQ + 0 重发</td></tr></tbody></table>
 <div class="def">最忙的一个也只有
-38.0%，<b>没有任何端口接近饱和</b>。
+56.8%，<b>没有任何端口接近饱和</b>。
 所以缺掉的带宽不在端口上。</div>
-<h4>3.2.2 直接扫 tracker：瓶颈在 completer</h4>
+<h4>3.1.3 扫 tracker：本轮 256 个表项已经完全不绑定</h4>
 <p>短探测（不是官方 JSON；uniform 写、K=4000、seed 0、1 plane，
 其余同官方 FABRIC，只扫 ha_track）：</p>
-<table><thead><tr><th>ha_track</th><th>总写带宽</th><th>在飞事务平均驻留（拍）</th><th>retry/txn</th></tr></thead><tbody><tr><td>32（上一轮）</td><td>2.253</td><td>256.5</td><td>0.992</td></tr><tr><td>64</td><td>2.312</td><td>408.7</td><td>0.808</td></tr><tr><td>128（本轮取值）</td><td>4.424</td><td>551.7</td><td>0.003</td></tr><tr><td>256</td><td>4.498</td><td>552.3</td><td>0.0</td></tr><tr><td>∞</td><td>4.498</td><td>552.3</td><td>0.0</td></tr></tbody></table>
-<div class="def warn">这张探测表<b>在官方 K 上是乐观的</b>，本轮把它推翻了。
-探测里 128 跳到 4.424、retry 近乎归零；
-官方 K = 20000 下 ha_track = 128 只跑到
-<b>3.04</b>，retry/txn 还有
-0.1078，
-而且<b>峰值占用正顶在 128
-个表项上（= ha_track，说明还在削）</b>。<br>
-原因是<b>拐点跟 K 有关</b>：短跑（K = 4000）拥塞没长到稳态，
-128 个表项就够用；官方 K 下稳态更深 —— 同一 fabric 的 ∞ tracker 参照
-峰值要用到 <b>195 个表项</b>，128 显然装不下。
-<b>用短探测定 tracker 尺寸会低估。</b></div>
-<div class="def">所以 32 → 128 是<b>缓解而不是解除</b>：
-吞吐 2.3848 → 3.04
-（+27%），
-makespan 167732 → 131580，
-retry/txn 0.602 →
-0.1078；
-占无限 tracker 平台的比例从
-53% 抬到
-<b>67%</b>，还差 33%。</div>
+<table><thead><tr><th>ha_track</th><th>总写带宽</th><th>在飞事务平均驻留（拍）</th><th>retry/txn</th></tr></thead><tbody><tr><td>32（两轮前）</td><td>2.253</td><td>256.5</td><td>0.992</td></tr><tr><td>64</td><td>2.312</td><td>408.7</td><td>0.808</td></tr><tr><td>128（上一轮）</td><td>4.424</td><td>551.7</td><td>0.003</td></tr><tr><td>256（本轮取值）</td><td>4.498</td><td>552.3</td><td>0.0</td></tr><tr><td>∞</td><td>4.498</td><td>552.3</td><td>0.0</td></tr></tbody></table>
+<p class="note">这张探测表在官方 K 上<b>偏乐观</b>：它说 128 就到顶，
+但官方 K = 20000 下 128 只跑到 3.04，
+且峰值占用死死顶在 128（详见上一轮记录）。
+原因是<b>拐点跟 K 有关</b>：短跑拥塞长不到稳态，128 够用；
+官方 K 下稳态更深，∞ 参照峰值要 195 个表项。
+<b>按短跑定 tracker 尺寸会低估。</b></p>
+<div class="def good">本轮把 tracker 定在
+<b>256</b>（&gt; ∞ 参照的峰值占用 195），
+配额于是<b>从头到尾没有触发过一次</b>：
+retry/txn = <b>0.0</b>，
+峰值占用 195 —— 恰好等于 ∞ 参照的
+195，没有顶到 256。<br>
+所以 S0 与 ∞ 参照<b>逐拍一致</b>：makespan 88090 vs
+88090，
+吞吐 4.5408 vs 4.541。
+<b>completer 表项这一层已经被彻底移除，不再是瓶颈。</b></div>
+<table><thead><tr><th>ha_track</th><th>总写带宽</th><th>makespan</th><th>retry/txn</th><th>峰值占用表项</th><th>占 ∞ 平台</th></tr></thead><tbody><tr><td>32（两轮前）</td><td>2.3848</td><td>167732</td><td>0.602</td><td>32</td><td>53%</td></tr><tr><td>128（上一轮）</td><td>3.04</td><td>131580</td><td>0.1078</td><td>128</td><td>67%</td></tr><tr><td>256（本轮）</td><td>4.5408</td><td>88090</td><td>0.0</td><td>195</td><td><b>100%</b></td></tr><tr><td>∞（参照）</td><td>4.541</td><td>88090</td><td>0.0</td><td>195</td><td>100%</td></tr></tbody></table>
+<p class="note">三轮下来这条曲线的形状是：32 → 128 只补回一部分
+（2.3848 → 3.04），
+128 → 256 才走完剩下的
+（3.04 → 4.5408）。
+判断「够不够」的正确依据不是扫描曲线的拐点，而是
+<b>∞ 参照在官方 K 上的峰值占用</b>（这里是 195）——
+配额只要高过它，动力学就和无限一样。</p>
 <p>剩下那个 4.541 的平台不是缓存不够 —— 在 ∞ tracker 下把各级缓存
 单独放宽，带宽都只在 ±1% 内动：</p>
 <table><thead><tr><th>改动（ha_track = ∞）</th><th>总写带宽</th></tr></thead><tbody><tr><td>基准（∞ tracker）</td><td>4.498</td></tr><tr><td>eject_depth 4 → 16</td><td>4.503</td></tr><tr><td>inj_depth 8 → 32</td><td>4.498</td></tr><tr><td>dir_inj_depth 1 → 4</td><td>4.544</td></tr><tr><td>eject_bw 1 → 2</td><td>4.486</td></tr><tr><td>core_outstanding 128 → 512</td><td>4.495</td></tr></tbody></table>
@@ -207,24 +219,26 @@ retry/txn 0.602 →
 已经离 R* 假设的 100% 不远，但核每拍仍有约
 0.867 次上环失败 ——
 决定上环延迟的是空档的分布，而不是空档的总量。</p>
-<div class="def">于是完整分解仍是三层，只是第三层变薄了：<br>
+<div class="def">于是本轮的分解<b>只剩两层</b>：<br>
 <b>5.714</b>（热 hop 的 dat 链路界，假设完美打包）
-→ <b>4.541</b>（无缓存环上环饥饿）
-→ <b>3.04</b>（128 个 tracker 再削掉
-33%；上一轮 32 个时削掉
-47%）。<br>
-<b>两层都还要动</b>：tracker 要装到 ∞ 参照的峰值
-195 个附近才不再削，之后才轮到上环仲裁。加 buffer 仍然没有用。</div>
+→ <b>4.5408</b>（无缓存环上环饥饿，削掉
+21%）。<br>
+第三层（completer 表项）在本轮<b>等于零</b>：实测就等于 ∞ 参照 4.541。
+上一轮 128 个表项时它还要再削 33%，
+两轮前 32 个时削 47%。<br>
+<b>所以「S0 为什么达不到 R*」现在只有一个答案：无缓存环的上环仲裁。</b>
+端口速率（8.0 flit/cycle，见 3.1.1）、各级 buffer 深度、
+completer 表项都已经逐一排除。</div>
 <p class="note">再往前一版<b>三 VC 共享端口</b>的 fabric（R* = 5.333、端口绑定、
 平台 3.466、实测 2.541）说明的是另一件事：端口拆开抬高了 R* 与平台，
 但在 32 tracker 下实测反而下降，因为 REQ 有专用端口后到达 HA 更快、
 tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>：
-本轮把 tracker 放到 128，实测才从 2.541 / 2.3848
-走到 3.04。</p>
+两件都做了之后，实测才从 2.541 / 2.3848 /
+3.04 一路走到 4.5408。</p>
 
-<h4>3.2.3 存档：HA RSP 时延改成 0 并不改吞吐</h4>
+<h4>3.1.4 存档：HA RSP 时延改成 0 并不改吞吐</h4>
 <p class="note">这一小节是<b>历史消融，两列都在 ha_track = 32 上测的</b>，
-和本轮的 128 个表项不是同一个工作点 ——
+和本轮的 256 个表项不是同一个工作点 ——
 留在这里是因为它的结论仍然成立，而它的绝对数字不再描述本轮基线。
 本轮沿用 HA RSP = 0。</p>
 <p>那一轮把 completer 的 DBIDResp / RetryAck / Comp 从
@@ -239,49 +253,57 @@ outst_eff 从 22.98 降到 17.65，
 HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
 飞行 / 排队决定，DBID / Comp 的 0 拍只是剪掉流水线里的空等待，
 <b>释放速率不变</b>。真正解开这一层的是把表项本身加到
-128（见 3.2.2）。</div>
+256（见 3.1.3）。</div>
 
 
-<h3>3.3 各核瞬时带宽均衡度（主指标）</h3>
+<h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
 50 拍的箱，在每一个箱内对 10 个 core 的写带宽
 （= 该箱内各核 WriteData flit 数）算一次 Jain 指数，再对<b>所有箱取平均</b>。<br>
 只统计完整落在竞争窗口内的箱：过了 t_fair 就有核已经跑完自己的配额，
 那里的 0 是没活干，不是被饿死。<br>
 <b>判定</b>：对照同窗零模型的比值 ratio ≥ 1.0（见 2.1）。</div>
-<p><b>S0 基线：Jain@50拍 = 0.97618</b>，
-零模型 0.94041，<b>ratio = 1.03803</b>
-（2624 个箱，每核每箱平均
-15.23 个 flit；p05 0.9522、
-最差箱 0.36885）。各方案的值见 3.1 汇总表。</p>
-<p class="note">那个 0.36885 的最差箱不是稳态：Jain &lt; 0.8 的
-18 个箱（占 0.7%）
-全部落在 t ≥ 127850 的收尾段 —— 那里已有核清完自己的配额，只剩几个核在收尾。
-中段没有这种箱，所以 p05 0.9522 比最小值更能代表分布。</p>
+<p><b>S0 基线：Jain@50拍 = 0.98183</b>，
+零模型 0.96197，<b>ratio = 1.02064</b>
+（1749 个箱，每核每箱平均
+22.79 个 flit；p05 0.96446、
+最差箱 0.85874）。</p>
+<table><thead><tr><th>方案</th><th>makespan</th><th>Jain@50拍</th><th>零模型</th><th>ratio（验收）</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐 flit/cycle</th><th>吞吐差</th><th>重试/事务</th><th>偏转</th><th>上环失败</th></tr></thead><tbody><tr><td>S0 基线（tracker = 256）</td><td>88090</td><td>0.98183</td><td>0.96197</td><td>1.02064</td><td>1.0104</td><td>0.45243</td><td>0.45715</td><td>4.5408</td><td>+0.0%</td><td>0.0</td><td>1037</td><td>742770</td></tr><tr><td>S1 拥塞等级 AIMD</td><td>88284</td><td>0.98173</td><td>0.96194</td><td>1.02058</td><td>1.0139</td><td>0.45097</td><td>0.45725</td><td>4.5308</td><td>-0.2%</td><td>0.0</td><td>907</td><td>741024</td></tr></tbody></table>
+<p class="note">S1 的分箱 Jain 与 S0 相差
+0.00010，
+远小于箱内噪声；吞吐差 -0.2%。
+均匀写下两者本来就该一样齐（见 2）。</p>
+<img src="ring2_wfair_bars31.png" alt="per-core BW uniform">
+<img src="ring2_wfair_panels31.png" alt="per-core BW over time">
+<img src="ring2_wfair_overlay31.png" alt="slowest vs fastest">
+<p class="note">上面三张图：各核写带宽、随时间的分核曲线、最慢与最快核的叠合。
+均匀写下是一条平线（max/min 1.0104），
+所以主指标要看分箱而不是整窗（下面接着说明）。</p>
+<p class="note">分布没有坏尾：最差的一箱也有 0.85874，Jain &lt; 0.8 的箱<b>一个都没有</b>。p05 0.96446 与最小值只差 0.106，整条分布是紧的。前两轮（tracker 32 / 128）都有起步或收尾段的坏箱，tracker 不再绑定之后这些箱也消失了。</p>
 <p>为什么要按箱平均而不是直接看整段：闭环批量下每个核最终都要注入同样的
-K×W 个 flit，把十几万拍平均掉之后 Jain = 1.0、
-max/min = 1.0014，接近 1 有一半是配额相同这个算术事实
+K×W 个 flit，把十几万拍平均掉之后 Jain = 0.99999、
+max/min = 1.0104，接近 1 有一半是配额相同这个算术事实
 造成的，看不出瞬时行为。缩到 50 拍后箱内 max/min 平均
-1.711、p95 2.286、最坏 13.0。</p>
-<div class="def">但 0.97618 距离 1.0 的这段差，
+1.586、p95 2.0、最坏 3.778。</p>
+<div class="def">但 0.98183 距离 1.0 的这段差，
 <b>有多少是真不公平，有多少只是计数噪声</b>，必须先分开 ——
-每核每箱只有约 15.23 个 flit，
+每核每箱只有约 22.79 个 flit，
 纯抽样波动就足以把 Jain 拉低。零模型：把该箱的总 flit 数按等概率多项分布
 撒到 10 个核上，即<b>完全公平的仲裁透过同一个 50 拍窗口去看</b>
 会长什么样。<b>该跟零模型比，不该跟 1.0 比。</b></div>
-<table><thead><tr><th>分箱宽度</th><th>每核 flit 数</th><th>箱数</th><th>实测 Jain</th><th>零模型 Jain</th><th>实测 max/min</th><th>零模型 max/min</th><th>判定</th></tr></thead><tbody><tr><td>50</td><td>15.2</td><td>2624</td><td>0.97618</td><td>0.94089</td><td>1.711</td><td>2.424</td><td>低于零模型</td></tr><tr><td>100</td><td>30.5</td><td>1312</td><td>0.98822</td><td>0.96968</td><td>1.422</td><td>1.836</td><td>低于零模型</td></tr><tr><td>200</td><td>60.9</td><td>656</td><td>0.99349</td><td>0.98424</td><td>1.258</td><td>1.521</td><td>低于零模型</td></tr><tr><td>400</td><td>121.9</td><td>328</td><td>0.99568</td><td>0.99202</td><td>1.169</td><td>1.339</td><td>低于零模型</td></tr><tr><td>800</td><td>243.8</td><td>164</td><td>0.99672</td><td>0.99602</td><td>1.117</td><td>1.230</td><td>低于零模型</td></tr><tr><td>1600</td><td>487.5</td><td>82</td><td>0.99661</td><td>0.99788</td><td>1.094</td><td>1.156</td><td>低于零模型</td></tr><tr><td>3200</td><td>975.0</td><td>41</td><td>0.99720</td><td>0.99901</td><td>1.072</td><td>1.109</td><td>低于零模型</td></tr></tbody></table>
+<table><thead><tr><th>分箱宽度</th><th>每核 flit 数</th><th>箱数</th><th>实测 Jain</th><th>零模型 Jain</th><th>实测 max/min</th><th>零模型 max/min</th><th>判定</th></tr></thead><tbody><tr><td>50</td><td>22.8</td><td>1749</td><td>0.98183</td><td>0.96190</td><td>1.586</td><td>1.983</td><td>低于零模型</td></tr><tr><td>100</td><td>45.6</td><td>874</td><td>0.99409</td><td>0.98038</td><td>1.287</td><td>1.607</td><td>低于零模型</td></tr><tr><td>200</td><td>91.2</td><td>437</td><td>0.99788</td><td>0.99014</td><td>1.156</td><td>1.390</td><td>低于零模型</td></tr><tr><td>400</td><td>182.4</td><td>218</td><td>0.99937</td><td>0.99509</td><td>1.080</td><td>1.255</td><td>低于零模型</td></tr><tr><td>800</td><td>364.8</td><td>109</td><td>0.99976</td><td>0.99744</td><td>1.044</td><td>1.178</td><td>低于零模型</td></tr><tr><td>1600</td><td>729.8</td><td>54</td><td>0.99988</td><td>0.99877</td><td>1.027</td><td>1.123</td><td>低于零模型</td></tr><tr><td>3200</td><td>1459.7</td><td>27</td><td>0.99993</td><td>0.99930</td><td>1.019</td><td>1.089</td><td>低于零模型</td></tr></tbody></table>
 <img src="ring2_wfair_instbal.png" alt="instantaneous balance vs null model">
-<div class="def good">结论：<b>主指标达标 —— 0.97618 高于同一窗口下
-完全公平的零模型（闭式 0.94041、蒙特卡洛
-0.94089，两者一致），ratio
-1.03803 ≥ 1.0</b>，
+<div class="def good">结论：<b>主指标达标 —— 0.98183 高于同一窗口下
+完全公平的零模型（闭式 0.96197、蒙特卡洛
+0.9619，两者一致），ratio
+1.02064 ≥ 1.0</b>，
 而且实测的瞬时不均衡在每一个尺度上都比零模型更小
-（50 拍：Jain 0.97618 vs
-零模型 0.94089；
-max/min 1.711 vs
-2.424），
+（50 拍：Jain 0.98183 vs
+零模型 0.9619；
+max/min 1.586 vs
+1.983），
 并且随窗口变宽按 1/√N 衰减（3200 拍时已收到
-1.072）。
+1.019）。
 所以主指标没能到 1.0 <b>完全来自 50 拍的采样粒度，不是不公平</b>；
 环上的 RR + I-tag 仲裁比独立随机到达还要规整（亚泊松）。</div>
 <p class="note">这条判定只针对<b>核间</b>瞬时均衡。同一个核两个方向之间的
@@ -290,10 +312,10 @@ max/min 1.711 vs
 
 
 <h2>4. 根因</h2>
-<p class="note">归因在无限 tracker（环受限）参照上做；4.4 核对有限 tracker
-基线 —— 本轮 ha_track = 128 仍在削吞吐，
-但重试已小一个量级，不再盖住几何。</p>
-<table><thead><tr><th>core</th><th>相邻 mem 数</th><th>到 mem 平均跳数</th><th>S0 写带宽</th><th>上环成功率</th><th>hop_busy 失败</th><th>I-tag 失败</th><th>outstanding 失败</th><th>出向平均 λ</th></tr></thead><tbody><tr><td>C0</td><td>1</td><td>5.0</td><td>0.30442</td><td>0.6246</td><td>24042</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C2</td><td>2</td><td>5.0</td><td>0.30465</td><td>0.6337</td><td>23126</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C4</td><td>2</td><td>5.0</td><td>0.30477</td><td>0.6381</td><td>22684</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C6</td><td>2</td><td>5.0</td><td>0.30485</td><td>0.6204</td><td>24476</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C8</td><td>1</td><td>5.0</td><td>0.30476</td><td>0.6134</td><td>25208</td><td>0</td><td>0</td><td>1.5</td></tr><tr><td>C10</td><td>1</td><td>5.0</td><td>0.30474</td><td>0.6234</td><td>24163</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C12</td><td>2</td><td>5.0</td><td>0.30483</td><td>0.6376</td><td>22737</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C14</td><td>2</td><td>5.0</td><td>0.30468</td><td>0.6318</td><td>23313</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C16</td><td>2</td><td>5.0</td><td>0.30457</td><td>0.6281</td><td>23680</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C18</td><td>1</td><td>5.0</td><td>0.30444</td><td>0.6175</td><td>24778</td><td>0</td><td>0</td><td>2.5</td></tr></tbody></table>
+<p class="note">归因在无限 tracker（环受限）参照上做；本轮 ha_track =
+256 的基线与该参照逐拍一致（4.4），
+所以这里的结论直接适用于基线。</p>
+<table><thead><tr><th>core</th><th>相邻 mem 数</th><th>到 mem 平均跳数</th><th>S0 写带宽</th><th>上环成功率</th><th>hop_busy 失败</th><th>I-tag 失败</th><th>outstanding 失败</th><th>出向平均 λ</th></tr></thead><tbody><tr><td>C0</td><td>1</td><td>5.0</td><td>0.45243</td><td>0.4966</td><td>40540</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C2</td><td>2</td><td>5.0</td><td>0.45655</td><td>0.5195</td><td>37002</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C4</td><td>2</td><td>5.0</td><td>0.45681</td><td>0.5206</td><td>36837</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C6</td><td>2</td><td>5.0</td><td>0.45698</td><td>0.5157</td><td>37567</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C8</td><td>1</td><td>5.0</td><td>0.45503</td><td>0.4942</td><td>40935</td><td>0</td><td>0</td><td>1.5</td></tr><tr><td>C10</td><td>1</td><td>5.0</td><td>0.45604</td><td>0.4958</td><td>40675</td><td>0</td><td>0</td><td>2.5</td></tr><tr><td>C12</td><td>2</td><td>5.0</td><td>0.45715</td><td>0.5158</td><td>37546</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C14</td><td>2</td><td>5.0</td><td>0.45695</td><td>0.5221</td><td>36617</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C16</td><td>2</td><td>5.0</td><td>0.45644</td><td>0.5198</td><td>36953</td><td>0</td><td>0</td><td>2.0</td></tr><tr><td>C18</td><td>1</td><td>5.0</td><td>0.45368</td><td>0.4983</td><td>40266</td><td>0</td><td>0</td><td>2.5</td></tr></tbody></table>
 <img src="ring2_wfair_scatter.png" alt="bw vs explanations">
 
 <h3>4.1 先排除“离 mem 更远”</h3>
@@ -305,11 +327,17 @@ max/min 1.711 vs
 <li>C2、C4、C6、C12、C14、C16 两侧都是 mem → 相邻 mem = 2；</li>
 <li>C0、C8、C10、C18 有一侧是非终端 → 相邻 mem = 1。</li>
 </ul>
-<div class="def bad">无限 tracker 上带宽与相邻 mem 个数 r =
+<div class="def">带宽与相邻 mem 个数 r =
 <b>0.8129</b>
-（Spearman 0.8528）。
-有限 tracker 把这条链盖住：重试 0.1078 次/事务，
-max/min 从 1.0104 收到 1.0014。</div>
+（Spearman 0.8528）——
+位置效应在<b>排序上</b>是清楚的。<br>
+但本轮它在<b>幅度上</b>很小：max/min 只有 1.0104
+（0.45243 ~ 0.45715）。
+原因不是被 tracker 盖住（本轮重试 0.0 次/事务、
+基线与 ∞ 参照逐拍一致），而是<b>闭环批量</b>：
+每个核最终都要注入同样的 K×W 个 flit，
+落后的核在别人清空之后仍能补回来，整窗带宽因此被拉平。
+瞬时的不均衡要看分箱指标（见 3.2）。</div>
 
 <h3>4.3 落到硬件上：上环成功率</h3>
 <p>带宽与上环成功率 r = <b>0.7651</b>
@@ -320,28 +348,29 @@ max/min 从 1.0104 收到 1.0014。</div>
 
 <h3>4.3.1 上环方向：CW / CCW 成功与失败</h3>
 <p>每个 AI core 的上环口按最短路把 REQ / WriteData 送进 CW（+1）或 CCW（−1）。次数是<b>该核作为源</b>的上环（不是 HA 回 RSP）。黄底行是两方向比 ≥ 2 的核。</p>
-<p><b>S0</b> · S0 基线（无流控）</p><img src="ring2_wfair_board_dir.png" alt="S0 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr class="imbal"><td>C0</td><td>32164</td><td>30000</td><td>1.07</td><td>19728</td><td>9156</td><td>2.15</td><td>偏</td></tr><tr><td>C2</td><td>32154</td><td>30000</td><td>1.07</td><td>17179</td><td>11053</td><td>1.55</td><td></td></tr><tr><td>C4</td><td>32151</td><td>30000</td><td>1.07</td><td>14781</td><td>13061</td><td>1.13</td><td></td></tr><tr><td>C6</td><td>32151</td><td>30000</td><td>1.07</td><td>12402</td><td>17315</td><td>1.40</td><td></td></tr><tr class="imbal"><td>C8</td><td>30000</td><td>32162</td><td>1.07</td><td>9017</td><td>22042</td><td>2.44</td><td>偏</td></tr><tr><td>C10</td><td>30000</td><td>32157</td><td>1.07</td><td>18991</td><td>10357</td><td>1.83</td><td></td></tr><tr><td>C12</td><td>30000</td><td>32148</td><td>1.07</td><td>16097</td><td>11663</td><td>1.38</td><td></td></tr><tr><td>C14</td><td>30000</td><td>32153</td><td>1.07</td><td>13465</td><td>14523</td><td>1.08</td><td></td></tr><tr><td>C16</td><td>30000</td><td>32153</td><td>1.07</td><td>10937</td><td>16953</td><td>1.55</td><td></td></tr><tr class="imbal"><td>C18</td><td>32158</td><td>30000</td><td>1.07</td><td>8914</td><td>19925</td><td>2.24</td><td>偏</td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S0 上 <b>3/10</b> 个核偏了。</p>
-<p class="note">S0 失败比 ≥ 1.5 的核：C0 失败偏 CW（2.15）；C2 失败偏 CW（1.55）；C8 失败偏 CCW（2.44）；C10 失败偏 CW（1.83）；C16 失败偏 CCW（1.55）；C18 失败偏 CCW（2.24）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
-<p><b>S1</b> · S1 拥塞等级 AIMD</p><img src="ring2_wfair_board_dir_s1.png" alt="S1 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr class="imbal"><td>C0</td><td>30000</td><td>32241</td><td>1.07</td><td>18584</td><td>8845</td><td>2.10</td><td>偏</td></tr><tr><td>C2</td><td>32230</td><td>30000</td><td>1.07</td><td>15779</td><td>10386</td><td>1.52</td><td></td></tr><tr><td>C4</td><td>32225</td><td>30000</td><td>1.07</td><td>13521</td><td>12715</td><td>1.06</td><td></td></tr><tr><td>C6</td><td>32232</td><td>30000</td><td>1.07</td><td>11437</td><td>15554</td><td>1.36</td><td></td></tr><tr class="imbal"><td>C8</td><td>32239</td><td>30000</td><td>1.07</td><td>9769</td><td>19865</td><td>2.03</td><td>偏</td></tr><tr class="imbal"><td>C10</td><td>32236</td><td>30000</td><td>1.07</td><td>20033</td><td>9737</td><td>2.06</td><td>偏</td></tr><tr><td>C12</td><td>30000</td><td>32224</td><td>1.07</td><td>15470</td><td>12392</td><td>1.25</td><td></td></tr><tr><td>C14</td><td>30000</td><td>32234</td><td>1.07</td><td>12925</td><td>14042</td><td>1.09</td><td></td></tr><tr><td>C16</td><td>30000</td><td>32228</td><td>1.07</td><td>10956</td><td>16366</td><td>1.49</td><td></td></tr><tr class="imbal"><td>C18</td><td>30000</td><td>32229</td><td>1.07</td><td>8568</td><td>20390</td><td>2.38</td><td>偏</td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S1 上 <b>4/10</b> 个核偏了。</p>
-<p class="note">S1 失败比 ≥ 1.5 的核：C0 失败偏 CW（2.10）；C2 失败偏 CW（1.52）；C8 失败偏 CCW（2.03）；C10 失败偏 CW（2.06）；C18 失败偏 CCW（2.38）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
+<p><b>S0</b> · S0 基线（无流控）</p><img src="ring2_wfair_board_dir.png" alt="S0 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr class="imbal"><td>C0</td><td>30000</td><td>30000</td><td>1.00</td><td>33425</td><td>13194</td><td>2.53</td><td>偏</td></tr><tr><td>C2</td><td>30000</td><td>30000</td><td>1.00</td><td>26257</td><td>16818</td><td>1.56</td><td></td></tr><tr><td>C4</td><td>30000</td><td>30000</td><td>1.00</td><td>21489</td><td>21508</td><td>1.00</td><td></td></tr><tr><td>C6</td><td>30000</td><td>30000</td><td>1.00</td><td>17124</td><td>26329</td><td>1.54</td><td></td></tr><tr class="imbal"><td>C8</td><td>30000</td><td>30000</td><td>1.00</td><td>13184</td><td>34116</td><td>2.59</td><td>偏</td></tr><tr class="imbal"><td>C10</td><td>30000</td><td>30000</td><td>1.00</td><td>33422</td><td>13441</td><td>2.49</td><td>偏</td></tr><tr><td>C12</td><td>30000</td><td>30000</td><td>1.00</td><td>26384</td><td>17351</td><td>1.52</td><td></td></tr><tr><td>C14</td><td>30000</td><td>30000</td><td>1.00</td><td>21103</td><td>21444</td><td>1.02</td><td></td></tr><tr><td>C16</td><td>30000</td><td>30000</td><td>1.00</td><td>16923</td><td>25788</td><td>1.52</td><td></td></tr><tr class="imbal"><td>C18</td><td>30000</td><td>30000</td><td>1.00</td><td>13218</td><td>33130</td><td>2.51</td><td>偏</td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S0 上 <b>4/10</b> 个核偏了。</p>
+<p class="note">S0 失败比 ≥ 1.5 的核：C0 失败偏 CW（2.53）；C2 失败偏 CW（1.56）；C6 失败偏 CCW（1.54）；C8 失败偏 CCW（2.59）；C10 失败偏 CW（2.49）；C12 失败偏 CW（1.52）；C16 失败偏 CCW（1.52）；C18 失败偏 CCW（2.51）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
+<p><b>S1</b> · S1 拥塞等级 AIMD</p><img src="ring2_wfair_board_dir_s1.png" alt="S1 board CW vs CCW"><table><thead><tr><th>core</th><th>成功 CW</th><th>成功 CCW</th><th>成功比</th><th>失败 CW</th><th>失败 CCW</th><th>失败比</th><th></th></tr></thead><tbody><tr class="imbal"><td>C0</td><td>30000</td><td>30000</td><td>1.00</td><td>33012</td><td>13367</td><td>2.47</td><td>偏</td></tr><tr><td>C2</td><td>30000</td><td>30000</td><td>1.00</td><td>26082</td><td>17151</td><td>1.52</td><td></td></tr><tr><td>C4</td><td>30000</td><td>30000</td><td>1.00</td><td>21015</td><td>20992</td><td>1.00</td><td></td></tr><tr><td>C6</td><td>30000</td><td>30000</td><td>1.00</td><td>16825</td><td>26513</td><td>1.58</td><td></td></tr><tr class="imbal"><td>C8</td><td>30000</td><td>30000</td><td>1.00</td><td>13375</td><td>33812</td><td>2.53</td><td>偏</td></tr><tr class="imbal"><td>C10</td><td>30000</td><td>30000</td><td>1.00</td><td>33514</td><td>13359</td><td>2.51</td><td>偏</td></tr><tr><td>C12</td><td>30000</td><td>30000</td><td>1.00</td><td>26103</td><td>16912</td><td>1.54</td><td></td></tr><tr><td>C14</td><td>30000</td><td>30000</td><td>1.00</td><td>21069</td><td>21581</td><td>1.02</td><td></td></tr><tr><td>C16</td><td>30000</td><td>30000</td><td>1.00</td><td>16739</td><td>26295</td><td>1.57</td><td></td></tr><tr class="imbal"><td>C18</td><td>30000</td><td>30000</td><td>1.00</td><td>13401</td><td>33518</td><td>2.50</td><td>偏</td></tr></tbody></table><p class="note">高亮：该核 CW/CCW 成功或失败次数比 ≥ 2（该侧合计 ≥ 50）。S1 上 <b>4/10</b> 个核偏了。</p>
+<p class="note">S1 失败比 ≥ 1.5 的核：C0 失败偏 CW（2.47）；C2 失败偏 CW（1.52）；C6 失败偏 CCW（1.58）；C8 失败偏 CCW（2.53）；C10 失败偏 CW（2.51）；C12 失败偏 CW（1.54）；C16 失败偏 CCW（1.57）；C18 失败偏 CCW（2.50）。高亮线仍是 ≥ 2，不因本轮结果改。</p>
 
 <h3>4.3.2 上环失败比大代表什么</h3>
 <p>「失败比」是<b>同一个核两条出边的失败次数比</b>
 <code>max(CW, CCW) / min</code>，不是失败率。
 黄底仍是比 ≥ 2 且该侧合计 ≥ 50。</p>
-<p>S0 各核失败率其实都差不多（31%–33%）。
-大的是方向比：成功比最大 1.07，失败比最大 2.44。
-S0 失败偏的核 C0、C8、C18，
+<p>S0 各核失败率其实都差不多（41%–44%）。
+大的是方向比：成功比最大 1.00，失败比最大 2.59。
+S0 失败偏的核 C0、C8、C10、C18，
 S1 为 C0、C8、C10、C18。</p>
 <div class="def">
 <b>不会造成 8 个 mem 收写不均。</b>
 地址 interleave 已均衡，本轮 HA 收到的 WriteData
 全部相同（50000 / HA）。
-<b>本轮有限 tracker 下，也不会造成核间写带宽不均</b>
-（S0 max/min = 1.0014）。
-有限 tracker 的重试反压把十个核一起压住。
-<b>环成为瓶颈时会：</b>无限 tracker 下 max/min = 1.0104，
-带宽与邻 mem 数 r = 0.8129。
+<b>本轮也没有造成核间整窗写带宽不均</b>
+（S0 max/min = 1.0104）。
+闭环批量下每核配额相同，落后的核能在收尾段补回来。
+<b>但它确实对应位置效应：</b>带宽与邻 mem 数
+r = 0.8129（本轮环就是唯一的瓶颈，
+基线与 ∞ 参照同一条轨迹，max/min = 1.0104）。
 失败比大的核就是邻 mem = 1 的那些核。
 失败比大 = 这一侧出 hop 常被在环 flit 占着，本地尝试打不进去；
 它是位置效应的症状，不是 mem 收包不均的原因。
@@ -349,27 +378,28 @@ S1 为 C0、C8、C10、C18。</p>
 <h4>为什么失败比会很大</h4>
 <ol>
 <li>最短路确定。N9 / N19 不接 HA，C10 的近端在 CW（M11），
-C18 在 CCW（M17）。成功次数已经按这个需求偏到约 1.07。</li>
+C18 在 CCW（M17）。成功次数已经按这个需求偏到约 1.00。</li>
 <li>偏的那一侧正好是全环最热的 hop（0→1、8→7、10→11、18→17），
 各被 14/80 条 (core, HA) 流穿过。</li>
 <li>在环 DAT / RSP 有绝对优先，本地注入只能等空槽。
-热侧是「尝试更多 × 成功率更低」，成功比仍约 1.07，
+热侧是「尝试更多 × 成功率更低」，成功比仍约 1.00，
 失败比被放大到 ≥ 2。两侧都是 mem 的核（如 C4 / C14）失败比 ≈ 1。</li>
 </ol>
 <p>S1 改的是节点总预算，不改最短路，也不改在环优先，
 所以失败比还在，只是换了一批核。</p>
 
 
-<h3>4.4 回到有限 tracker（128 个表项）</h3>
-<div class="def">吞吐相对无限 tracker <b>-33.1%</b>，
-max/min 从 1.0104 到 1.0014，
-重试 0.1078 次/事务。
-∞ 参照的峰值占用是 195 表项，
-本轮 ha_track = 128 <b>装不下</b>
-（实测峰值就顶在 128），所以它还在削带宽。<br>
-但它已经不再<b>盖住</b>几何：重试从上一轮 32 表项的
-0.602 次/事务降到 0.1078，
-retry churn 小了一个量级，上面那套（环受限）的归因基线上也读得出来。</div>
+<h3>4.4 有限 tracker（256 个表项）：本轮不影响归因</h3>
+<div class="def good">吞吐相对无限 tracker <b>+0.0%</b>，
+max/min 1.0104 vs 1.0104，
+重试 <b>0.0</b> 次/事务。
+∞ 参照峰值占用 195 表项 &lt;
+ha_track = 256，配额从未触发，
+所以基线与参照是<b>同一条轨迹</b> ——
+上面那套（环受限）的归因直接就是基线的归因，不需要再折算。<br>
+前两轮不是这样：32 表项时重试 0.602 次/事务、
+吞吐 2.3848，128 表项时 0.1078 /
+3.04，retry churn 会把几何因素部分盖住。</div>
 
 <h3>4.5 理想拥塞控制下的注入率（三 VC 链路独立）</h3>
 <p>REQ / RSP / DAT 的有向 hop 各有一份 σ=1 信用，互不占槽。
@@ -389,24 +419,22 @@ REQ = 14/8 = 1.75。</p>
 全环 <b>R* = 10·4/7 = 40/7 ≈ 5.7143</b> flit/cycle。
 对分（4 条有向 hop）在 λ* 上 DAT/RSP 占用 5/7，打不满；
 先满的是四条热 hop。</div>
-<table><thead><tr><th></th><th>完成 λ</th><th>占 λ*</th><th>含重试的 REQ 上环 / 核</th><th>WriteData 全环吞吐</th><th>重试/事务</th><th>max/min</th></tr></thead><tbody><tr><td>理想 CC</td><td>0.2857</td><td>100%</td><td>0.2857</td><td>5.714</td><td>0</td><td>1</td></tr><tr><td>S0</td><td>0.1520</td><td>53.2%</td><td>0.1684</td><td>3.04</td><td>0.1078</td><td>1.0014</td></tr><tr><td>S1</td><td>0.1502</td><td>52.6%</td><td>0.1670</td><td>3.004</td><td>0.1116</td><td>1.002</td></tr><tr><td>S0 无限 tracker</td><td>0.2270</td><td>79.5%</td><td>0.2270</td><td>4.5408</td><td>0.0</td><td>1.0104</td></tr></tbody></table>
-<p>S0 / S1 的 REQ 上环高于完成 λ，多出来的几乎全是 RetryAck 之后的重发，
-不增加完成事务，还占 REQ / RSP hop。</p>
+<table><thead><tr><th></th><th>完成 λ</th><th>占 λ*</th><th>含重试的 REQ 上环 / 核</th><th>WriteData 全环吞吐</th><th>重试/事务</th><th>max/min</th></tr></thead><tbody><tr><td>理想 CC</td><td>0.2857</td><td>100%</td><td>0.2857</td><td>5.714</td><td>0</td><td>1</td></tr><tr><td>S0</td><td>0.2270</td><td>79.5%</td><td>0.2270</td><td>4.5408</td><td>0.0</td><td>1.0104</td></tr><tr><td>S1</td><td>0.2265</td><td>79.3%</td><td>0.2265</td><td>4.5308</td><td>0.0</td><td>1.0139</td></tr><tr><td>S0 无限 tracker</td><td>0.2270</td><td>79.5%</td><td>0.2270</td><td>4.5408</td><td>0.0</td><td>1.0104</td></tr></tbody></table>
+<p>本轮 S0 / S1 的 REQ 上环<b>等于</b>完成 λ：tracker 不再绑定，
+没有 RetryAck，也就没有重发去白占 REQ / RSP hop。
+前两轮不是这样（32 表项时每笔写要多发 0.602 次 REQ）。</p>
 <h4>4.5.1 为什么 S0 / S1 到不了 λ*</h4>
 <ol>
-<li><b>有限 tracker 仍是一半原因。</b>8 个 HA 各
-128 表项，10 核 × 128
-outstanding 往里灌，S0 重试 0.1078 次/事务。
-理想模型没有 RetryAck / PCrd / 重发 REQ。
-去掉 tracker 后吞吐从 3.04 升到 4.5408、
-完成 λ 从 0.1520 升到 0.2270
-（仍只占 λ* 的 79.5%）。
-上一轮 32 表项时更狠：吞吐只有 2.3848、
-重试 0.602 次/事务。</li>
-<li><b>另一半：环受限本身也只到 λ* 的 79.5%。</b>
+<li><b>有限 tracker 本轮已排除。</b>8 个 HA 各
+256 表项，10 核 × 128
+outstanding 往里灌，但 S0 重试 0.0 次/事务，
+去掉 tracker 后吞吐仍是 4.5408、完成 λ 仍是 0.2270 ——
+<b>一点没变</b>。前两轮它是主因（32 表项吞吐 2.3848、
+128 表项 3.04）。</li>
+<li><b>环受限本身只到 λ* 的 79.5%，这就是唯一的缺口。</b>
 无缓存 + 在环绝对优先：本地要上环必须
 hop 空着；偏转 flit 再绕一圈（S0 偏转
-567 次）。
+1037 次）。
 S0 有空就灌，不是按热 hop 的 2/7 均速注。贪心对撞加上
 HA 抖动 0（无 HA think time），无限 tracker 的 makespan
 88090 vs 下界
@@ -416,9 +444,9 @@ HA 抖动 0（无 HA think time），无限 tracker 的 makespan
 预算上限 192 flit / 64 拍
 ≈ 3 flit/cycle/核，
 高于理想自有流量 3λ* ≈ 0.86。
-它只是略减 Retry（0.1116 vs 0.1078），
-完成 λ 仍是 0.1502。总线 30 拍 &lt; 窗口 64，
-到不了“按热 hop 配额”。</li>
+本轮它连 Retry 都没得减（两者都是
+0.0），完成 λ 仍是 0.2265。
+总线 30 拍 &lt; 窗口 64，到不了“按热 hop 配额”。</li>
 </ol>
 
 
@@ -429,8 +457,8 @@ HA 抖动 0（无 HA think time），无限 tracker 的 makespan
 端口拆开后 S1 的节点预算上限按 VC 数放大（窗口 × 3），避免把三通道独立注入口误限成 1 flit/cycle。
 反馈只在窗口边界写入并在下一窗口边界读取：
 30 &lt; 64，所以 30 拍与 1 拍都在下一次 AIMD 之前送到，
-本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan 133154）。</p>
-<table><thead><tr><th>window</th><th>α/β 档位</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐</th></tr></thead><tbody><tr><td>64</td><td>spec</td><td>133154</td><td>1.002</td><td>0.30106</td><td>0.30165</td><td>3.004</td></tr><tr><td>64</td><td>harsh</td><td>149684</td><td>1.0026</td><td>0.26794</td><td>0.26863</td><td>2.6723</td></tr><tr><td>64</td><td>gentle</td><td>138203</td><td>1.0013</td><td>0.28975</td><td>0.29012</td><td>2.8943</td></tr><tr><td>128</td><td>spec</td><td>146049</td><td>1.002</td><td>0.2742</td><td>0.27473</td><td>2.7388</td></tr><tr><td>128</td><td>harsh</td><td>151206</td><td>1.0009</td><td>0.2648</td><td>0.26504</td><td>2.6454</td></tr><tr><td>128</td><td>gentle</td><td>137418</td><td>1.0031</td><td>0.29177</td><td>0.29268</td><td>2.9108</td></tr></tbody></table>
+本轮 S1 与总线=1 时<b>逐拍相同</b>（makespan 88284）。</p>
+<table><thead><tr><th>window</th><th>α/β 档位</th><th>makespan</th><th>max/min</th><th>最低 BW</th><th>最高 BW</th><th>吞吐</th></tr></thead><tbody><tr><td>64</td><td>spec</td><td>88284</td><td>1.0139</td><td>0.45097</td><td>0.45725</td><td>4.5308</td></tr><tr><td>64</td><td>harsh</td><td>103930</td><td>1.3116</td><td>0.34977</td><td>0.45877</td><td>3.8487</td></tr><tr><td>64</td><td>gentle</td><td>88141</td><td>1.0084</td><td>0.45306</td><td>0.45688</td><td>4.5382</td></tr><tr><td>128</td><td>spec</td><td>103044</td><td>1.2378</td><td>0.35316</td><td>0.43714</td><td>3.8818</td></tr><tr><td>128</td><td>harsh</td><td>146369</td><td>1.1625</td><td>0.26232</td><td>0.30495</td><td>2.7328</td></tr><tr><td>128</td><td>gentle</td><td>91994</td><td>1.1709</td><td>0.40832</td><td>0.47811</td><td>4.3481</td></tr></tbody></table>
 <img src="ring2_wfair_s1trace.png" alt="S1 control trace">
 
 <h3>5.1 把 S1 调到失败比变小，吞吐会怎样</h3>
@@ -438,8 +466,8 @@ HA 抖动 0（无 HA think time），无限 tracker 的 makespan
 热侧失败多 → 等级高 → 先砍的是已经挤不上去的核。</p>
 <div class="def">官方本轮：
 S1 失败比没有变小
-（最大 2.38 vs S0 的 2.44），
-吞吐 -1.2%，完成 λ 仍远低于 2/7。
+（最大 2.53 vs S0 的 2.59），
+吞吐 -0.2%，完成 λ 仍远低于 2/7。
 失败比变小不会把核吞吐送到 λ*。
 绝对失败次数下降，多半只是注得更少。</div>
 <p>短探测（不是官方 JSON；<b>ha_track = 32 时代</b>用
@@ -481,16 +509,16 @@ C0, C8
 ≥ 2）。
 目标未达到。
 K=8000 筛选会误判（默认 S1 那时已经 &lt; 2），必须以 K=20000 为准。</p>
-<table><thead><tr><th>配置</th><th>旋钮</th><th>吞吐</th><th>max/min</th><th>最大失败比</th><th>失败比≥2 的核</th><th></th></tr></thead><tbody><tr><td>S1 默认（官方）</td><td>band=spec，cap=1</td><td>3.004</td><td>1.002</td><td>2.38</td><td>C0、C8、C10、C18</td><td></td></tr><tr><td>S1-gentle</td><td>gentle</td><td>1.9558</td><td>1.002</td><td>2.336</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.25</td><td>cap=0.25</td><td>1.9175</td><td>1.0008</td><td>2.176</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.15</td><td>cap=0.15</td><td>1.9361</td><td>1.0009</td><td>2.147</td><td>C10、C18</td><td></td></tr><tr><td>S1-cap0.08</td><td>cap=0.08</td><td>1.3599</td><td>1.0024</td><td>12.871</td><td>C0、C6、C8、C10、C12、C18</td><td></td></tr><tr><td>S1-cap0.05</td><td>cap=0.05</td><td>0.9375</td><td>1.0011</td><td>11.685</td><td>C0、C2、C6、C8、C10、C12、C16、C18</td><td></td></tr><tr><td>S1-dir_split</td><td>dir_split</td><td>1.9125</td><td>1.0008</td><td>2.16</td><td>C0、C8</td><td></td></tr><tr><td>S1-dir_split-harsh</td><td>dir_split、harsh</td><td>1.8652</td><td>1.0007</td><td>2.067</td><td>C0、C8</td><td>← 最接近</td></tr><tr><td>S1-dir_split-harsh-w32</td><td>dir_split、harsh、w=32</td><td>1.9229</td><td>1.0009</td><td>2.204</td><td>C10、C18</td><td></td></tr><tr><td>S1-dir_split-harsh-cap0.7</td><td>dir_split、harsh、cap=0.7</td><td>1.9145</td><td>1.0009</td><td>2.134</td><td>C10、C18</td><td></td></tr></tbody></table>
+<table><thead><tr><th>配置</th><th>旋钮</th><th>吞吐</th><th>max/min</th><th>最大失败比</th><th>失败比≥2 的核</th><th></th></tr></thead><tbody><tr><td>S1 默认（官方）</td><td>band=spec，cap=1</td><td>4.5308</td><td>1.0139</td><td>2.528</td><td>C0、C8、C10、C18</td><td></td></tr><tr><td>S1-gentle</td><td>gentle</td><td>1.9558</td><td>1.002</td><td>2.336</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.25</td><td>cap=0.25</td><td>1.9175</td><td>1.0008</td><td>2.176</td><td>C0、C8</td><td></td></tr><tr><td>S1-cap0.15</td><td>cap=0.15</td><td>1.9361</td><td>1.0009</td><td>2.147</td><td>C10、C18</td><td></td></tr><tr><td>S1-cap0.08</td><td>cap=0.08</td><td>1.3599</td><td>1.0024</td><td>12.871</td><td>C0、C6、C8、C10、C12、C18</td><td></td></tr><tr><td>S1-cap0.05</td><td>cap=0.05</td><td>0.9375</td><td>1.0011</td><td>11.685</td><td>C0、C2、C6、C8、C10、C12、C16、C18</td><td></td></tr><tr><td>S1-dir_split</td><td>dir_split</td><td>1.9125</td><td>1.0008</td><td>2.16</td><td>C0、C8</td><td></td></tr><tr><td>S1-dir_split-harsh</td><td>dir_split、harsh</td><td>1.8652</td><td>1.0007</td><td>2.067</td><td>C0、C8</td><td>← 最接近</td></tr><tr><td>S1-dir_split-harsh-w32</td><td>dir_split、harsh、w=32</td><td>1.9229</td><td>1.0009</td><td>2.204</td><td>C10、C18</td><td></td></tr><tr><td>S1-dir_split-harsh-cap0.7</td><td>dir_split、harsh、cap=0.7</td><td>1.9145</td><td>1.0009</td><td>2.134</td><td>C10、C18</td><td></td></tr></tbody></table>
 <h4>最接近配置 vs 默认 S1：各核写带宽</h4>
 <p>最接近 = <code>S1-dir_split-harsh</code>
 （dir_split + band=harsh）。
-全环吞吐 1.8652 vs 默认 3.004
-（-37.9%）。
+全环吞吐 1.8652 vs 默认 4.5308
+（-58.8%）。
 max/min 两边都 ≈ 1.001：均匀写下各核写带宽本来就是一条平线，
 调参改变的是<b>绝对高度</b>，不是核间相对关系。</p>
 <img src="ring2_wfair_s1_dirbal.png" alt="S1 default vs tuned per-core BW">
-<table><thead><tr><th>core</th><th>默认 S1</th><th>dir_split+harsh</th><th>差</th></tr></thead><tbody><tr><td>C0</td><td>0.30106</td><td>0.18668</td><td>-37.99%</td></tr><tr><td>C2</td><td>0.30129</td><td>0.18675</td><td>-38.02%</td></tr><tr><td>C4</td><td>0.30144</td><td>0.18676</td><td>-38.04%</td></tr><tr><td>C6</td><td>0.30144</td><td>0.18678</td><td>-38.04%</td></tr><tr><td>C8</td><td>0.30132</td><td>0.18677</td><td>-38.02%</td></tr><tr><td>C10</td><td>0.30147</td><td>0.18674</td><td>-38.06%</td></tr><tr><td>C12</td><td>0.30165</td><td>0.18670</td><td>-38.11%</td></tr><tr><td>C14</td><td>0.30144</td><td>0.18670</td><td>-38.06%</td></tr><tr><td>C16</td><td>0.30139</td><td>0.18667</td><td>-38.06%</td></tr><tr><td>C18</td><td>0.30127</td><td>0.18665</td><td>-38.05%</td></tr></tbody></table>
+<table><thead><tr><th>core</th><th>默认 S1</th><th>dir_split+harsh</th><th>差</th></tr></thead><tbody><tr><td>C0</td><td>0.45097</td><td>0.18668</td><td>-58.60%</td></tr><tr><td>C2</td><td>0.45672</td><td>0.18675</td><td>-59.11%</td></tr><tr><td>C4</td><td>0.45720</td><td>0.18676</td><td>-59.15%</td></tr><tr><td>C6</td><td>0.45697</td><td>0.18678</td><td>-59.13%</td></tr><tr><td>C8</td><td>0.45417</td><td>0.18677</td><td>-58.88%</td></tr><tr><td>C10</td><td>0.45446</td><td>0.18674</td><td>-58.91%</td></tr><tr><td>C12</td><td>0.45725</td><td>0.18670</td><td>-59.17%</td></tr><tr><td>C14</td><td>0.45685</td><td>0.18670</td><td>-59.13%</td></tr><tr><td>C16</td><td>0.45677</td><td>0.18667</td><td>-59.13%</td></tr><tr><td>C18</td><td>0.45297</td><td>0.18665</td><td>-58.79%</td></tr></tbody></table>
 <p class="note">结论：节点总预算限不住方向比；限狠了更偏。
 按方向拆 AIMD 只能从 2.24 收到 2.07，到不了 &lt; 2。
 几何（邻 mem=1 + 热 hop + 在环优先）比 S1 的旋钮硬。</p>
@@ -500,5 +528,5 @@ max/min 两边都 ≈ 1.001：均匀写下各核写带宽本来就是一条平�
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
 （K=20000、W=2、n_planes=1、
-seed=0，生成于 2026-08-26T09:37:31Z）。</p>
+seed=0，生成于 2026-08-26T10:51:21Z）。</p>
 </body></html>
