@@ -88,6 +88,14 @@ class Ring2FcParams(Ring2BaseParams):
                                   # as fast as slots allow
     hold_depth: int = 0           # flits a segment may latch for a hole;
                                   # 0 keeps the ring strictly bufferless
+    # Multiply S1's per-node budget ceiling. 1 = window (× VC count when
+    # ports are split). <1 is the only existing-style knob that actually
+    # lowers the 3 flit/cycle cap after per_vc_ports.
+    cap_scale: float = 1.0
+    # Independent AIMD budget per outgoing direction. The node-level
+    # budget cannot equalise CW/CCW board-fail counts: shrinking it
+    # scales both sides together and the ratio stays or grows.
+    dir_split: bool = False
 
 
 @dataclass
@@ -179,6 +187,7 @@ class Ring2FcSim(Ring2BaseSim):
         self.want_dir: dict[Any, dict[int, int]] = defaultdict(
             lambda: defaultdict(int))
         self.fail_tot: dict[int, int] = defaultdict(int)
+        self.fail_dir: dict[Any, int] = defaultdict(int)
         self.fail_net: dict[int, int] = defaultdict(int)
         self.defl_win: dict[int, int] = defaultdict(int)
         self.ok_win: dict[int, int] = defaultdict(int)
@@ -229,15 +238,20 @@ class Ring2FcSim(Ring2BaseSim):
             return True
         return is_core(node)
 
-    def _bkey(self, node: int, vc: str) -> Any:
-        """S1 budgets a node; S15 budgets each of its CHI VCs separately."""
-        return (node, vc) if self.p.mode == "s15" else node
+    def _bkey(self, node: int, vc: str, d: Dir | None = None) -> Any:
+        """S1 budgets a node; S15 a VC; dir_split a (node, direction)."""
+        if self.p.mode == "s15":
+            return (node, vc)
+        if self.p.dir_split and d is not None:
+            return (node, d)
+        return node
 
     # -- detection ----------------------------------------------------------
 
     def _on_board_fail(self, node: int, f: Flit) -> None:
         super()._on_board_fail(node, f)
         self.fail_tot[node] += 1
+        self.fail_dir[(node, f.dir)] += 1
         if self._fail_cause == "hop_busy":
             # Only in-ring occupancy is a congestion signal. An I-tag block or
             # a self-imposed budget denial says nothing about the ring.
@@ -255,7 +269,7 @@ class Ring2FcSim(Ring2BaseSim):
 
     def _on_inject(self, f: Flit) -> None:
         super()._on_inject(f)
-        bk = self._bkey(f.src, f.vc)
+        bk = self._bkey(f.src, f.vc, f.dir)
         self.spent[bk] += 1
         self.ok_win[bk] += 1
         self.cum[bk] += 1
@@ -361,7 +375,7 @@ class Ring2FcSim(Ring2BaseSim):
             return False
         if f is None:
             return True
-        bk = self._bkey(node, f.vc)
+        bk = self._bkey(node, f.vc, f.dir)
         self.demand_win[bk] += 1
         self.want_dir[bk][f.dir] += 1
         if not self._controlled(node):
@@ -384,8 +398,9 @@ class Ring2FcSim(Ring2BaseSim):
         """S1's per-node budget ceiling. Scale by VC count when ports split."""
         w = self.p.window
         if self.p.per_vc_ports:
-            return w * max(1, len(self._vc_list))
-        return w
+            w = w * max(1, len(self._vc_list))
+        scale = self.p.cap_scale if self.p.cap_scale > 0 else 1.0
+        return max(self.p.budget_min, int(round(w * scale)))
 
     def _allowed(self, bk: tuple, init: int) -> int:
         """Flits releasable so far this window.
@@ -520,33 +535,40 @@ class Ring2FcSim(Ring2BaseSim):
         alpha = ALPHA_BANDS[p.band]
         beta = BETA_BANDS[p.band]
         rec_t, rec_b, rec_l, rec_r, rec_ok = [], [], [], [], []
+        cap = self._s1_win_cap()
         for i in range(self.n):
             recv = self._max_recv_level(i)
-            # 流量控制: merge the node's own two directions by max, subtract
-            # what the path is already reporting, then re-bucket. Only levels
-            # travel on the bus, so the received level is turned back into a
-            # count at its bucket's lower edge.
-            own = max(self.fail_tot[i], self.defl_win[i])
-            final = level_of(max(0, own - LEVEL_STEP * recv))
+            keys = ([(i, 1), (i, -1)] if p.dir_split else [i])
             if not self._controlled(i):
-                rec_b.append(self.budget.get(i, self._s1_win_cap()))
-                rec_l.append(final)
-                rec_r.append(recv); rec_ok.append(self.ok_win[i])
+                rec_b.append(self.budget.get(keys[0], cap))
+                rec_l.append(0); rec_r.append(recv)
+                rec_ok.append(sum(self.ok_win.get(bk, 0) for bk in keys))
                 continue
-            b = self.budget.get(i, self._s1_win_cap())
-            if final > 0:
-                a = (alpha["lo"] if final <= 2 else
-                     alpha["mid"] if final <= 5 else alpha["hi"])
-                b = max(p.budget_min, int(b * a))
-                self.st["n_aimd_decrease"] += 1
-            else:
-                g = (beta["clear"] if recv == 0 else
-                     beta["lo"] if recv <= 2 else beta["hi"])
-                b = min(self._s1_win_cap(), b + g)
-                self.st["n_aimd_increase"] += 1
-            self.budget[i] = b
-            rec_b.append(b); rec_l.append(final)
-            rec_r.append(recv); rec_ok.append(self.ok_win[i])
+            node_b, node_lv = 0, 0
+            for bk in keys:
+                if p.dir_split:
+                    own = self.fail_dir.get(bk, 0)
+                else:
+                    own = max(self.fail_tot[i], self.defl_win[i])
+                final = level_of(max(0, own - LEVEL_STEP * recv))
+                b = self.budget.get(bk, cap)
+                if final > 0:
+                    a = (alpha["lo"] if final <= 2 else
+                         alpha["mid"] if final <= 5 else alpha["hi"])
+                    b = max(p.budget_min, int(b * a))
+                    self.st["n_aimd_decrease"] += 1
+                else:
+                    g = (beta["clear"] if recv == 0 else
+                         beta["lo"] if recv <= 2 else beta["hi"])
+                    b = min(cap, b + g)
+                    self.st["n_aimd_increase"] += 1
+                self.budget[bk] = b
+                node_b += b
+                node_lv = max(node_lv, final)
+            rec_b.append(node_b // len(keys))
+            rec_l.append(node_lv)
+            rec_r.append(recv)
+            rec_ok.append(sum(self.ok_win.get(bk, 0) for bk in keys))
         if p.trace:
             self.trace["t"].append(self.t)
             self.trace["budget"].append(rec_b)
@@ -557,6 +579,7 @@ class Ring2FcSim(Ring2BaseSim):
     def _reset_window(self) -> None:
         self.spent.clear()
         self.fail_tot.clear()
+        self.fail_dir.clear()
         self.fail_net.clear()
         self.defl_win.clear()
         self.ok_win.clear()

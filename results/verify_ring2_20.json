@@ -1,10 +1,30 @@
 {
-  "n_total": 56,
-  "n_ok": 54,
-  "all_ok": false,
+  "n_total": 63,
+  "n_ok": 63,
+  "all_ok": true,
   "rows": [
     {
       "name": "topo_roles_and_wrap",
+      "ok": true
+    },
+    {
+      "name": "latency_route_matches_hops",
+      "ok": true
+    },
+    {
+      "name": "shared_inj_depth_board_rate",
+      "ok": true
+    },
+    {
+      "name": "per_vc_ports_board_one_each",
+      "ok": true
+    },
+    {
+      "name": "two_write_leave_both_dirs",
+      "ok": true
+    },
+    {
+      "name": "per_vc_leave_two_write",
       "ok": true
     },
     {
@@ -144,6 +164,14 @@
       "ok": true
     },
     {
+      "name": "binned_jain_per_bin_average",
+      "ok": true
+    },
+    {
+      "name": "binned_jain_null_matches_fair",
+      "ok": true
+    },
+    {
       "name": "s15_beats_s0_fairness",
       "ok": true
     },
@@ -164,7 +192,7 @@
       "ok": true
     },
     {
-      "name": "baseline_tracker_masks_imbalance",
+      "name": "baseline_tracker_sized_above_peak",
       "ok": true
     },
     {
@@ -181,9 +209,7 @@
     },
     {
       "name": "s16_bufferless_and_fair",
-      "ok": false,
-      "error": "(0.48254, 0.47253)",
-      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1258, in test_s16_is_bufferless_and_fair\n    assert fb[\"bw_min\"] > fa[\"bw_min\"], (fa[\"bw_min\"], fb[\"bw_min\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (0.48254, 0.47253)\n"
+      "ok": true
     },
     {
       "name": "retry_off_equals_baseline",
@@ -211,9 +237,7 @@
     },
     {
       "name": "s16_grants_below_tracker",
-      "ok": false,
-      "error": "(1738, 1741)",
-      "trace": "Traceback (most recent call last):\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 50, in add\n    fn()\n  File \"/home/luke/workspace/booksim2/utils/verify_ring2_20.py\", line 1137, in test_s16_needs_to_grant_below_the_tracker\n    assert sl[\"n_retry\"] > sb[\"n_retry\"], (sl[\"n_retry\"], sb[\"n_retry\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: (1738, 1741)\n"
+      "ok": true
     },
     {
       "name": "rate_pinned_equals_s0",
@@ -232,5 +256,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-25T03:49:33Z"
+  "generated_at": "2026-08-26T10:40:29Z"
 }

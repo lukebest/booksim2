@@ -73,7 +73,7 @@ OUT = ROOT / "results" / "ring2_write_fair.json"
 K_PER_CORE = 20_000
 N_PLANES_STUDY = 1
 W_FLITS = BURST_FLITS   # 128B burst / 64B flit
-BIN_W = 128
+BIN_W = 50               # fairness window: Jain of the 10 cores per 50 cycles
 T_MAX = 4_000_000
 # Two adjacent memory nodes standing in for one clustered memory region. Both
 # are memory in this study (9 and 19 are not), so the roles are unchanged and
@@ -82,14 +82,21 @@ HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
 # Request tracker entries per completer, and the baseline for every scheme:
-# a completer that runs out of entries must RetryAck. 32 is what S16 pins its
-# write-data buffer to, so holding the tracker there asks every scheme to live
-# inside the same completer budget.
-RETRY_TRACK = 32
+# a completer that runs out of entries must RetryAck. 256 is above the peak
+# occupancy the unlimited-tracker reference actually reaches at the official K
+# (195 entries), so the tracker should stop binding altogether and what remains
+# is the bufferless ring's own injection limit. 128 was not enough: the
+# reference needs more than that, so occupancy pegged at the cap.
+RETRY_TRACK = 256
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
-# to S0 exactly (pinned by verify_ring2_20.py).
-S16_OVERCOMMIT = 16
+# to S0 exactly (pinned by verify_ring2_20.py). Being under the tracker is
+# necessary but not sufficient -- what has to be tight is the in-flight budget
+# the *ring* can sustain, not the tracker. Measured on the study workload at
+# ha_track = 256 (k=3000, peak occupancy ~204): 64 gives max/min 1.073 at
+# +2.4% throughput over S0, while 128 -- also "below the tracker" -- lands at
+# 1.177 and does nothing. So this stays at 64 and is not scaled with ha_track.
+S16_OVERCOMMIT = 64
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
@@ -240,7 +247,7 @@ def pass_through_load(topo: Ring2Topology, txns: Sequence[Txn]
         for vc, src, dst, m in legs:
             if src == dst or m <= 0:
                 continue
-            d = shortest_dir(src, dst, topo.n)
+            d = topo.choose_dir(src, dst)
             if vc == "dat":
                 own[(src, d)] += m
             node = src
@@ -291,18 +298,18 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 
 CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
 
-# Every scheme rides the same fabric: shortest-path routing, one plane
-# (one bidirectional ring), independent board / leave / eject per CHI VC,
-# per-VC boarding queues, and a finite request tracker at every completer. The
-# tracker is part of the baseline, not of one scheme: a real completer has
-# to RetryAck when it runs out of entries, and with the cap at
-# CORE_OUTSTANDING_WR every scheme below is measured with that pressure on.
-HA_RSP_JIT_LO = 4        # inclusive; each HA RSP / Comp is U{lo..hi}
-HA_RSP_JIT = 64
+# Every scheme rides the same fabric: one plane, latency-shortest routing
+# (link-delay sum, then hops, then CW), a depth-12 shared up-ring FIFO plus
+# a depth-8 inject Q per direction, 1 flit/cycle board, a two-write / one-read
+# leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
+# The tracker is part of the baseline, not of one scheme.
+HA_RSP_JIT_LO = 0        # inclusive; each HA RSP / Comp is U{lo..hi}
+HA_RSP_JIT = 0           # 0 = constant t_ha_service (also 0): no HA think time
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
-              per_vc_ports=True,
+              per_vc_ports=True, shared_inj=True, two_write_leave=True,
+              inj_depth=12, dir_inj_depth=8,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
@@ -363,6 +370,198 @@ VC_INDEP_FORECAST = {
     },
     "confidence": 0.6,
     "falsify": "S0 吞吐仍 ≤ 2.8，或 bound 仍由合并端口的 75000 决定",
+}
+# Written before the shared-buffer / latency-route re-run. Do not edit after.
+SHARED_BUF_FORECAST = {
+    "hypothesis": (
+        "上环两方向共用 8 深 FIFO，其后每向一个 inject Q；"
+        "上环 / 下环各 1 flit/cycle/node，下环两写一读。"
+        "端口重新合并，HA leave 叠三 VC，λ 上限靠近 4/15。"
+        "共享 FIFO 可能 HOL：outstanding 卡住的 REQ 挡后面的 WriteData。"
+        "时延最短在当前 link_lats 上与跳数最短重合（无严格方向翻转）。"
+        "两写一读减少双向同时到站的偏转，但 PE 仍 1/cycle。"
+    ),
+    "predicted": {
+        "s0_thr": [1.0, 2.4],
+        "bound": 75000,
+        "n_dir_flip_strict": 0,
+        "merge_port_vcs": True,
+    },
+    "confidence": 0.5,
+    "falsify": "S0 吞吐 ≥ 3.0（端口仍像拆开），或 bound 仍是 hop 的 70000",
+}
+# Written before the per-VC-port re-run. Do not edit after seeing results.
+# Informed by a K=1000 probe, so the confidence is on the official-K numbers
+# holding the *direction* the probe showed, not on the exact values.
+PER_VC_PORT_FORECAST = {
+    "hypothesis": (
+        "三条 VC 不再共享上 / 下环端口：req/rsp/dat 各自 1 flit/cycle/node，"
+        "整套上环结构按 VC 复制（每 VC 一个 8 深共享 FIFO + 每向 1 深 inject Q），"
+        "下环也是每 VC 一个 4 深 buffer、两写一读。"
+        "端口拆开后 port 界放松到 50000，bound 由 dat 的 link 界 70000 接管，"
+        "R* 升到 400000/70000 ≈ 5.714。"
+        "但吞吐**反而会降**：REQ 有了专用端口后到达 HA 快得多，"
+        "32 深 tracker 被打得更凶，retry/txn 从 0.43 涨到接近 1，"
+        "churn 吃掉端口拆分的收益。瓶颈更彻底地移到 completer。"
+        "下环偏转几乎消失（每 VC 独立 leave buffer）。"
+    ),
+    "predicted": {
+        "bound": 70000,
+        "merge_port_vcs": False,
+        "s0_thr": [2.0, 2.5],
+        "s0_thr_below_merged": True,
+        "retry_per_txn": [0.8, 1.1],
+        "eject_defl_drops": True,
+        "inf_track_thr_above_merged": True,
+    },
+    "confidence": 0.6,
+    "falsify": (
+        "S0 吞吐 ≥ 2.6（即端口拆分净赚，retry churn 没吃掉收益），"
+        "或 retry/txn 仍 ≤ 0.6，或 bound 不是 70000"
+    ),
+}
+# Written before the ha_rsp_jit=0 re-run. Do not edit after seeing results.
+HA_RSP_ZERO_FORECAST = {
+    "hypothesis": (
+        "HA 回 RSP / Comp 的 think time 从 U{4..64}（均值 34 拍/条，"
+        "一笔写至少 DBID+Comp 两条 ≈ 68 拍）改成 0。"
+        "上一轮 T_hold ≈ 191 拍、R=2.41、retry/txn=0.57，"
+        "其中一块就是这段 completer 等待。"
+        "去掉之后 32 个 tracker 周转加快，retry 应下降，"
+        "S0 吞吐应往无缓存环平台（上一轮无限 tracker ≈ 4.51）靠。"
+        "32 tracker 未必完全松绑（68 拍只是 T_hold 的一部分），"
+        "但差距应明显收窄。无限 tracker 平台本身不应大变："
+        "HA 时延不是环的限制。"
+    ),
+    "predicted": {
+        "s0_thr": [3.0, 4.6],
+        "retry_per_txn": [0.0, 0.40],
+        "s0_thr_gt_prev": 2.41,
+        "inf_track_thr": [4.3, 5.0],
+        "bound": 70000,
+    },
+    "confidence": 0.6,
+    "falsify": (
+        "S0 吞吐仍 ≤ 2.6（HA 时延不在关键路径上），"
+        "或 retry/txn 仍 ≥ 0.50"
+    ),
+}
+
+BIN50_FAIR_FORECAST = {
+    "hypothesis": (
+        f"公平性主指标改成：{BIN_W} 拍宽的窗内对 10 个核的写带宽算 Jain，"
+        "再对竞争窗口内的所有箱取平均。"
+        "S0 总写带宽 ≈ 2.25 flit/cycle，摊到 10 个核上每核每箱只有约 "
+        "0.225 × 50 ≈ 11 个 flit，因此这个指标会被计数噪声主导："
+        "等概率多项分布的零模型本身就只有 "
+        "1/(1 + var/mean²) ≈ 1/(1 + 10.2/128) ≈ 0.926。"
+        "上一轮 128 拍分箱已看到实测 max/min 低于零模型（亚泊松），"
+        "所以实测均值应落在零模型之上、1.0 之下。"
+        "结论不应改变：仍是采样粒度而非核间不公平。"
+    ),
+    "predicted": {
+        "jain_bin_mean": [0.93, 0.97],
+        "gt_null_jain": True,
+        "flits_per_core_per_bin": [9.0, 13.0],
+        "n_bins_min": 2000,
+    },
+    "confidence": 0.75,
+    "falsify": (
+        f"jain_bin_mean 低于同窗零模型的 null_jain，"
+        f"或落到 0.90 以下 —— 那说明 {BIN_W} 拍尺度上存在真实的核间不公平，"
+        "而不是抽样波动"
+    ),
+}
+
+
+TRACK128_FORECAST = {
+    "hypothesis": (
+        "ha_track 32 → 128，跨过 tracker 扫描找到的拐点。"
+        "上一轮 32 tracker 下 S0 = 2.385 flit/cycle、retry/txn = 0.63，"
+        "而短探测里 128 给出 4.424、retry/txn = 0.003，"
+        "无限 tracker 平台是 4.498。"
+        "所以预期：吞吐接近翻倍并贴上无缓存环平台，重试基本归零，"
+        "makespan 从 16.8 万降到 9 万附近，"
+        "而 s0_unbounded 参照与 S0 的差距收到几个百分点以内 —— "
+        "瓶颈从 completer 表项换成上环饥饿。"
+        "公平性主指标应仍达标但数值上移：吞吐翻倍使每箱 flit 数从 11.9 涨到约 22，"
+        "零模型地板随之从 0.929 抬到约 0.961，实测约 0.98，ratio 仍在 1.02 附近。"
+        "整份报告的主线会因此改变：第 9、10 节讨论的重试浪费不再是主要损失。"
+    ),
+    "predicted": {
+        "s0_thr": [4.2, 4.7],
+        "retry_per_txn_max": 0.05,
+        "makespan": [85000, 95000],
+        "unbounded_gap_pct_max": 3.0,
+        "jain_bin_mean": [0.972, 0.988],
+        "jain_bin_null": [0.955, 0.966],
+        "jain_bin_ratio": [1.010, 1.030],
+    },
+    "confidence": 0.8,
+    "falsify": (
+        "S0 吞吐仍 ≤ 3.0（128 表项仍不够，或别的东西在绑定），"
+        "或 retry/txn > 0.05，"
+        "或 ratio < 1.0（放开 tracker 反而制造出真实的核间不公平）"
+    ),
+}
+
+
+TRACK256_FORECAST = {
+    "hypothesis": (
+        "ha_track 128 → 256。上一轮的预测栽在引用了 K=4000 的短探测，"
+        "这次改用官方 K 上的直接测量：同一 fabric 的 ∞ tracker 参照"
+        "峰值只用到 195 个表项，而 128 装不下（实测占用死死顶在 128）。"
+        "256 > 195，所以配额应当永远不会触发 —— "
+        "一旦不触发，轨迹就与 ∞ 参照逐拍一致（不动点论证："
+        "cap 不生效则动力学与无 cap 相同，而无 cap 下峰值 195 < 256，自洽）。"
+        "因此预测不是「接近 ∞」而是「等于 ∞」：makespan 88090、"
+        "吞吐 4.5408、retry 恰好 0、峰值占用 195。"
+        "剩下与 hop 理想 R* = 5.714 的差距全部归无缓存环的上环饥饿，"
+        "端口那一层（每节点上/下环 1 flit/cycle/VC → 8 flit/cycle）从来不绑定。"
+        "公平性：每箱 flit 数从 15.2 升到约 22.8，"
+        "零模型地板随之抬到约 0.962，实测约 0.982，ratio 约 1.021（仍达标但比 128 时低）。"
+    ),
+    "predicted": {
+        "s0_thr": 4.5408,
+        "makespan": 88090,
+        "retry_per_txn": 0.0,
+        "max_ha_used": 195,
+        "jain_bin_mean": 0.98183,
+        "jain_bin_null": 0.96197,
+        "jain_bin_ratio": 1.02064,
+    },
+    "confidence": 0.85,
+    "falsify": (
+        "出现任何重试（retry > 0），或 makespan 偏离 88090 超过 1% —— "
+        "那说明占用峰值本身跟 cap 有关，不动点论证不成立，"
+        "或者仿真存在我没考虑到的路径依赖"
+    ),
+}
+
+
+UPQ_12_8_FORECAST = {
+    "hypothesis": (
+        "每 VC 的上环源队列从「8 深双向共享 FIFO + 每向 1 深 inject Q」"
+        "改成「12 深共享 FIFO + 每向 8 深 inject Q」；端口、链路、下环、"
+        "tracker 和路由不变。预测总写带宽仍约 4.54 flit/cycle，变化在 ±1% 内。"
+        "原因是上一轮 tracker 已不绑定，端口最忙也只有 56.8%，而在 ∞ tracker "
+        "历史消融里 inj_depth 8→32 完全不动、dir_inj_depth 1→4 也只动约 1%。"
+        "更深的源队列能保存更多等待 flit，却不能让被 transit flit 占用的"
+        "出链路产生新空槽；因此无缓存环的上环时序冲突应继续绑定。"
+    ),
+    "predicted": {
+        "s0_thr": [4.495, 4.586],
+        "s0_thr_delta_pct": [-1.0, 1.0],
+        "retry_per_txn": 0.0,
+        "bound": 70000,
+        "rstar": 5.714,
+    },
+    "confidence": 0.8,
+    "falsify": (
+        "S0 吞吐相对 4.5408 提升超过 3%（> 4.677），"
+        "或热 DAT hop 利用率明显越过上一轮约 79.7%；"
+        "那说明 depth-1 方向 Q 的短时阻塞确实是欠载的重要来源"
+    ),
 }
 
 
@@ -427,11 +626,69 @@ def run_scheme(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     return r
 
 
+def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
+                t_fair: int) -> dict[str, Any]:
+    """Mean over `bin_w`-cycle bins of Jain across the cores in that bin.
+
+    This is the headline fairness number. A whole-run figure cannot show
+    anything: in a closed batch every core injects the same `K*W` flits, so
+    end-of-run counts are equal by construction and Jain is 1 by arithmetic.
+    Averaging the per-bin index keeps the instantaneous view instead.
+
+    Only bins wholly inside the contention window count. Past `t_fair` the
+    first core has run out of work, and a zero there is an empty queue, not
+    an unfair arbiter.
+
+    A bin this short holds few flits per core, so the index also carries
+    counting noise, and 1.0 is not reachable. `jain_bin_null` is where a
+    perfectly fair arbiter would land when observed through the same window:
+    split each bin's total multinomially over the cores at equal probability
+    and the per-core count has mean N/n and variance N(1/n)(1-1/n), so
+
+        E[J] ~ 1/(1 + CV^2) = N / (N + n - 1)
+
+    per bin. `jain_bin_ratio = mean / null` is then the number to judge:
+    >= 1.0 means the fabric is at least as even as perfectly fair
+    arbitration. An absolute threshold on `jain_bin_mean` would be
+    meaningless, because the floor moves with the flit count per bin and a
+    scheme that costs throughput lowers its own floor.
+
+    The closed form is first order (1/(1+E[CV^2]) rather than E[1/(1+CV^2)]),
+    so it runs ~1e-3 below an actual equal-probability draw -- the acceptance
+    line is lenient by about that much. `verify_ring2_20` pins the gap.
+    """
+    cs = sorted(inject_times)
+    nbin = int(t_fair) // bin_w if bin_w > 0 else 0
+    if not cs or nbin <= 0:
+        return {}
+    n = len(cs)
+    cnt = [[0] * nbin for _ in cs]
+    for i, c in enumerate(cs):
+        for t in inject_times[c]:
+            b = int(t) // bin_w
+            if 0 <= b < nbin:
+                cnt[i][b] += 1
+    tot = [sum(cnt[i][b] for i in range(n)) for b in range(nbin)]
+    vals = sorted(jain([cnt[i][b] for i in range(n)]) for b in range(nbin))
+    per_bin = sum(vals) / nbin
+    null = sum(N / (N + n - 1) if N else 0.0 for N in tot) / nbin
+    return {
+        "bin_w": bin_w, "n_bins": nbin, "n_cores": n,
+        "jain_bin_mean": round(per_bin, 5),
+        "jain_bin_null": round(null, 5),
+        "jain_bin_ratio": round(per_bin / null, 5) if null else None,
+        "jain_bin_p05": round(vals[int(0.05 * nbin)], 5),
+        "jain_bin_min": round(vals[0], 5),
+        "flits_per_core_per_bin": round(sum(tot) / n / nbin, 2),
+    }
+
+
 def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
            ) -> dict[str, Any]:
     """Trim a raw run down to what the report needs."""
     inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
     fair = fairness_stats(inj, r.get("makespan") or 1, flits_per_core)
+    fair["jain_bin"] = binned_jain(inj, bin_w, fair.get("t_fair") or 0)
     t_max = r.get("makespan") or 1
     binned = {}
     for c, ts in sorted(inj.items()):
@@ -689,8 +946,9 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
                 keep_trace: bool = False) -> dict[str, Any]:
     """One grid point: what the cap bought, and what the retries cost."""
     r = run_scheme(scheme, topo, txns, seed=seed, cfg=cfg, quiet=True)
-    f = fairness_stats(r.get("wr_inject_by_core") or {}, r["makespan"] or 1,
-                       k * W)
+    inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+    f = fairness_stats(inj, r["makespan"] or 1, k * W)
+    jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
     q = r.get("retry") or {}
     fc = r.get("fc") or {}
     row = {"trace": fc.get("trace")} if keep_trace else {}
@@ -702,6 +960,9 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "inorder_retire": bool(cfg.get("inorder_retire")),
         "makespan": r.get("makespan"), "completed": r.get("completed"),
         "throughput": f.get("throughput", 0.0), "jain": f.get("jain", 0.0),
+        "jain_bin": jb.get("jain_bin_mean"),
+        "jain_bin_null": jb.get("jain_bin_null"),
+        "jain_bin_ratio": jb.get("jain_bin_ratio"),
         "max_min": f.get("max_min", 0.0), "bw_min": f.get("bw_min", 0.0),
         "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
         "n_retry": q.get("n_retry", 0),
@@ -865,8 +1126,9 @@ REPRO_FORECAST = {
 }
 
 
-def _directed_hops(src: int, dst: int, n: int = N_NODES) -> list[tuple[int, int]]:
-    d = shortest_dir(src, dst, n)
+def _directed_hops(src: int, dst: int, n: int = N_NODES,
+                   topo: Ring2Topology | None = None) -> list[tuple[int, int]]:
+    d = topo.choose_dir(src, dst) if topo is not None else shortest_dir(src, dst, n)
     hops, i = [], src
     for _ in range(hop_count(src, dst, d, n)):
         nxt = (i + d) % n
@@ -955,6 +1217,7 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
     all_wr = [t for ts in inj.values() for t in ts]
     f = fairness_stats(inj, r["makespan"] or 1, k * W)
+    jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
     tr = _ost_series(q)
     row = {
         "scheme": scheme,
@@ -966,6 +1229,9 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "throughput": f.get("throughput", 0.0),
         "retry_per_txn": q.get("retry_per_txn", 0.0),
         "ooo_frac": q.get("ooo_frac", 0.0),
+        "jain_bin": jb.get("jain_bin_mean"),
+        "jain_bin_null": jb.get("jain_bin_null"),
+        "jain_bin_ratio": jb.get("jain_bin_ratio"),
         "max_min": f.get("max_min", 0.0),
         "outst_eff": q.get("outst_eff_mean", 0.0),
         "outst_used": q.get("outst_used_mean", 0.0),
@@ -1035,10 +1301,10 @@ def congestion_repro(topo: Ring2Topology, *, k: int, W: int, seed: int
             "block_ha": REPRO_BLOCK_HA,
             "victim": REPRO_VICTIM, "victim_ha": REPRO_VICTIM_HA,
             "control": REPRO_CONTROL, "control_ha": REPRO_CONTROL_HA,
-            "victim_hops": _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA),
-            "control_hops": _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA),
+            "victim_hops": _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA, topo=topo),
+            "control_hops": _directed_hops(REPRO_CONTROL, REPRO_CONTROL_HA, topo=topo),
             "blocker_hops": {
-                str(c): _directed_hops(c, REPRO_BLOCK_HA)
+                str(c): _directed_hops(c, REPRO_BLOCK_HA, topo=topo)
                 for c in REPRO_BLOCKERS
             },
             "forecast": REPRO_FORECAST,
@@ -1046,7 +1312,8 @@ def congestion_repro(topo: Ring2Topology, *, k: int, W: int, seed: int
         "ost": [],
         "blocker": [],
     }
-    shared = {REPRO_VICTIM_HA: _directed_hops(REPRO_VICTIM, REPRO_VICTIM_HA)[:1]}
+    shared = {REPRO_VICTIM_HA: _directed_hops(
+        REPRO_VICTIM, REPRO_VICTIM_HA, topo=topo)[:1]}
     out["meta"]["shared_hop"] = shared[REPRO_VICTIM_HA]
     # Geometry pin: every blocker must ride the victim's first hop; control
     # must not. If this ever fails the experiment is measuring the wrong thing.
@@ -1133,10 +1400,15 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
         thr0 = None
         for scheme in schemes:
             r = run_scheme(scheme, topo, txns, seed=sd, quiet=True)
-            f = fairness_stats(r["wr_inject_by_core"], r["makespan"], k * W)
+            inj = {int(c): v for c, v in r["wr_inject_by_core"].items()}
+            f = fairness_stats(inj, r["makespan"], k * W)
+            jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
             thr0 = f["throughput"] if scheme == "S0" else thr0
             row[scheme] = {
                 "jain": f["jain"], "max_min": f["max_min"],
+                "jain_bin": jb.get("jain_bin_mean"),
+                "jain_bin_null": jb.get("jain_bin_null"),
+                "jain_bin_ratio": jb.get("jain_bin_ratio"),
                 "throughput": f["throughput"],
                 "thr_delta_pct": (
                     round(100.0 * (f["throughput"] - thr0) / thr0, 2)
@@ -1144,7 +1416,8 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             }
         rows.append(row)
         print(f"    seed {sd}: " + "  ".join(
-            f"{s} jain={row[s]['jain']} mm={row[s]['max_min']} "
+            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_null']} "
+            f"mm={row[s]['max_min']} "
             f"({row[s]['thr_delta_pct']:+.2f}%)" for s in schemes), flush=True)
     return rows
 
@@ -1278,13 +1551,15 @@ def run_pattern(pattern: str, topo: Ring2Topology, *, k: int, W: int,
 
 def _report(pat: dict[str, Any]) -> None:
     print(f"\n[{pat['pattern']}]  bound={pat['bounds']['bound']}")
-    print(f"{'scheme':6} {'mk':>8} {'ok':>3} {'jain':>8} {'max/min':>8} "
-          f"{'cov':>8} {'bwmin':>8} {'bwmax':>8} {'thr':>7} {'fail':>9}")
+    print(f"{'scheme':6} {'mk':>8} {'ok':>3} {'Jbin':>8} {'null':>8} "
+          f"{'ratio':>7} {'max/min':>8} {'bwmin':>8} {'thr':>7} {'fail':>9}")
     for name, d in pat["schemes"].items():
         f = d["fairness"]
+        jb = f.get("jain_bin") or {}
         print(f"{name:6} {d['makespan']:>8} {int(bool(d['completed'])):>3} "
-              f"{f['jain']:>8} {f['max_min']:>8} {f['cov']:>8} "
-              f"{f['bw_min']:>8} {f['bw_max']:>8} {f['throughput']:>7} "
+              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_null', 0):>8} "
+              f"{jb.get('jain_bin_ratio', 0):>7} {f['max_min']:>8} "
+              f"{f['bw_min']:>8} {f['throughput']:>7} "
               f"{d['n_board_fail']:>9}")
     rc = pat.get("root_cause")
     if rc:
@@ -1323,7 +1598,8 @@ def main() -> None:
     schemes = [s for s in args.schemes.split(",") if s]
     patterns = [s for s in args.patterns.split(",") if s]
 
-    topo = Ring2Topology(vcs=CHI_VCS_WRITE, n_planes=args.n_planes)
+    topo = Ring2Topology(vcs=CHI_VCS_WRITE, n_planes=args.n_planes,
+                         route="latency")
     t0 = time.perf_counter()
     if args.merge:
         out = Path(args.out)
@@ -1390,6 +1666,7 @@ def main() -> None:
             "K": k, "W": args.W, "seed": args.seed, "bin_w": bin_w,
             "patterns": patterns, "schemes": schemes,
             "plane_sel": bp.plane_sel, "routing": "shortest_path",
+            "route": topo.route,
             "mem_nodes": list(MEM_NODES), "core_nodes": list(CORE_NODES),
             "non_terminal": list(NON_TERMINAL),
             "n_planes": topo.n_planes, "sigma": topo.sigma,
@@ -1400,15 +1677,25 @@ def main() -> None:
             "hop_bw_cap": topo.hop_bw_cap,
             "link_lats": list(topo.link_lats),
             "inj_depth": bp.inj_depth, "eject_depth": bp.eject_depth,
+            "dir_inj_depth": bp.dir_inj_depth,
+            "shared_inj": bp.shared_inj, "two_write_leave": bp.two_write_leave,
             "t_inj": bp.t_inj, "per_vc_srcq": bp.per_vc_srcq,
             "core_outstanding": bp.core_outstanding,
             "ha_track": bp.ha_track, "s16_overcommit": S16_OVERCOMMIT,
             "ha_rsp_jit_lo": bp.ha_rsp_jit_lo,
             "ha_rsp_jit": bp.ha_rsp_jit,
+            "t_ha_service": bp.t_ha_service,
+            "ha_rsp_zero_forecast": HA_RSP_ZERO_FORECAST,
+            "bin50_fair_forecast": BIN50_FAIR_FORECAST,
+            "track128_forecast": TRACK128_FORECAST,
+            "track256_forecast": TRACK256_FORECAST,
+            "upq_12_8_forecast": UPQ_12_8_FORECAST,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
             "vc_indep_forecast": VC_INDEP_FORECAST,
+            "shared_buf_forecast": SHARED_BUF_FORECAST,
+            "per_vc_port_forecast": PER_VC_PORT_FORECAST,
             "flit_b": FLIT_BYTES, "burst_b": BURST_BYTES,
             "stride_b": STRIDE_BYTES, "tile_b": TILE_BYTES,
             "stimulus_forecast": STIMULUS_FORECAST,
@@ -1435,7 +1722,7 @@ def main() -> None:
     same_fabric = all(
         old_meta.get(k) == payload["meta"].get(k)
         for k in ("n_planes", "K", "W", "ha_rsp_jit", "ha_rsp_jit_lo",
-                  "per_vc_ports"))
+                  "per_vc_ports", "route", "shared_inj", "two_write_leave"))
     if retry_out is None and same_fabric and old_payload:
         if old_payload.get("retry_study") is not None:
             payload["retry_study"] = old_payload["retry_study"]
