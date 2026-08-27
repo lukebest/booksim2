@@ -1,6 +1,6 @@
 {
-  "n_total": 63,
-  "n_ok": 63,
+  "n_total": 71,
+  "n_ok": 71,
   "all_ok": true,
   "rows": [
     {
@@ -13,6 +13,26 @@
     },
     {
       "name": "shared_inj_depth_board_rate",
+      "ok": true
+    },
+    {
+      "name": "shared_fifo_hol_to_dir_q",
+      "ok": true
+    },
+    {
+      "name": "free_slot_arbiter_picks_open_dir",
+      "ok": true
+    },
+    {
+      "name": "itag_scope_segment_only_crossers",
+      "ok": true
+    },
+    {
+      "name": "itag_hold_expires",
+      "ok": true
+    },
+    {
+      "name": "buffer_occupancy_per_plane",
       "ok": true
     },
     {
@@ -240,6 +260,18 @@
       "ok": true
     },
     {
+      "name": "s22_yield_downhill_and_scoped",
+      "ok": true
+    },
+    {
+      "name": "s22_dodge_keeps_dst_order",
+      "ok": true
+    },
+    {
+      "name": "s22_deficit_via_bus",
+      "ok": true
+    },
+    {
       "name": "rate_pinned_equals_s0",
       "ok": true
     },
@@ -256,5 +288,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T10:40:29Z"
+  "generated_at": "2026-08-26T14:51:36Z"
 }

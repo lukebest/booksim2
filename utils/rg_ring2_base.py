@@ -92,6 +92,28 @@ class Ring2BaseParams:
     resv_ej: int = 1              # extra eject slots only an E-tagged flit uses
     t_inj: int = 64               # inject starve cycles -> I-tag
     t_xfer: int = 4               # failed leaves -> E-tag
+    # How the inject arbiter picks which direction gets the port this cycle.
+    # "rr": round-robin over the two dir Qs, committed before the outgoing
+    # hop is known -- if that hop turns out to be taken by a transit flit the
+    # port idles even when the other direction was free. "free_slot": prefer
+    # a direction whose outgoing hop is actually free this cycle. The ring
+    # latch already exposes that signal locally, so this is an arbiter
+    # change, not extra buffering or a new bus.
+    inj_sel: str = "rr"
+    # How far an I-tag reaches. "plane": a starved node locks out every other
+    # injector on its (plane, dir, VC), which is blunt -- it also stops nodes
+    # whose flits never touch the hop it is starving on. "segment": it only
+    # locks out injectors whose flit actually crosses its outgoing hop, which
+    # a boarding node can test locally from the tag's node id and its own
+    # (dir, hop count). Same broadcast width, much less collateral.
+    itag_scope: str = "plane"
+    # Cycles a raised I-tag keeps blocking before it clears itself. A tag
+    # does not stop transit, so a node starved by transit holds its tag for
+    # a long time and idles upstream injectors for nothing. Bounding the
+    # hold turns the tag into a duty cycle -- starve `t_inj`, block
+    # `itag_hold` -- which is a far finer dial than `t_inj` alone.
+    # 0 = never expire (the original behaviour).
+    itag_hold: int = 0
     eject_bw: int = 1             # PE drain per (node, plane) per cycle
     t_ha_service: int = 0         # cycles HA waits before emitting responses
     # Inclusive bounds of a per-RSP uniform delay at the completer.
@@ -139,6 +161,11 @@ class Ring2BaseParams:
     inorder_retire: bool = False
     # Sample the outstanding / parked / head-of-line occupancy every N
     # cycles. 0 = off, which is what keeps a plain run untouched.
+    # Sample every fabric FIFO's occupancy this often (cycles; 0 = off).
+    # Sampling rather than per-write accounting: the point is the fraction of
+    # time a queue sits at capacity, which an unbiased periodic sample gives
+    # without putting a dict update on every enqueue.
+    buf_sample: int = 0
     outst_sample: int = 0
     # Keep the per-sample series, not just the time integrals. Off by
     # default: a closed-batch run at sample=16 is thousands of rows.
@@ -202,6 +229,7 @@ class Ring2BaseSim:
         self.retryq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)       # (p, dir, vc)
+        self.itag_t: dict[Any, int] = {}     # (p, dir, vc, node) -> raise time
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.resv_used: dict[Any, int] = defaultdict(int)
         self.eject_rr: dict[Any, int] = defaultdict(int)         # (node, plane)
@@ -247,6 +275,11 @@ class Ring2BaseSim:
         # taken. On a bufferless ring this is the latch depth a scheme costs;
         # S0 never holds anything, so it stays 0.
         self.inring_hold: dict[Any, int] = defaultdict(int)
+        # Fabric FIFO occupancy, sampled every `buf_sample` cycles.
+        self._buf_area: dict[Any, int] = defaultdict(int)
+        self._buf_full: dict[Any, int] = defaultdict(int)
+        self._buf_max: dict[Any, int] = defaultdict(int)
+        self._n_buf_samples = 0
         self._pid = 0
         self._n_txn_target = 0
         self._resp_stash: dict[tuple, Flit] = {}
@@ -625,8 +658,26 @@ class Ring2BaseSim:
         return True
 
     def _itag_blocks(self, f: Flit, boarding_node: int) -> bool:
-        holders = self.i_tag[(f.plane, f.dir, f.vc)]
-        return bool(holders) and boarding_node not in holders
+        rk = (f.plane, f.dir, f.vc)
+        holders = self.i_tag[rk]
+        if holders and self.p.itag_hold:
+            for h in [h for h in holders
+                      if self.t - self.itag_t.get(rk + (h,), self.t)
+                      >= self.p.itag_hold]:
+                holders.discard(h)
+                self.itag_t.pop(rk + (h,), None)
+        if not holders or boarding_node in holders:
+            return False
+        if self.p.itag_scope != "segment":
+            return True
+        # Only yield to a starved node this flit would ride past: the hop it
+        # is starving on is the one this flit would take away from it.
+        return any(((h - f.idx) * f.dir) % self.n < f.target for h in holders)
+
+    def _itag_clear(self, node: int, f: Flit) -> None:
+        rk = (f.plane, f.dir, f.vc)
+        self.i_tag[rk].discard(node)
+        self.itag_t.pop(rk + (node,), None)
 
     def _should_raise_itag(self, node: int, f: Flit) -> bool:
         return True
@@ -675,6 +726,7 @@ class Ring2BaseSim:
                 rk = (f.plane, f.dir, f.vc)
                 if node not in self.i_tag[rk]:
                     self.i_tag[rk].add(node)
+                    self.itag_t[rk + (node,)] = t
                     self.st["n_itag_raised"] += 1
             return
         q = self._q(qk)
@@ -694,7 +746,7 @@ class Ring2BaseSim:
             if self._src_idle_all(qkeys):
                 self.active_src.discard(key)
         self.vc_rr[key] += 1
-        self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
+        self._itag_clear(node, f)
         self.inj_starve[starve_key] = 0
         f.t_inject = t
         self.st["n_injected"] += 1
@@ -706,6 +758,25 @@ class Ring2BaseSim:
         """Which boarding-queue flit tries the inject port. Default: FIFO head."""
         return q[0] if q else None
 
+    def _free_slot_order(self, group: Sequence[Any]) -> list[Any]:
+        """Put dir Qs whose head can actually board this cycle first.
+
+        Round-robin order alone wastes the port: it can hand the cycle to a
+        direction whose outgoing hop is busy while the other direction's hop
+        is free. Reordering keeps the port's 1 flit/cycle rate and keeps
+        transit flits absolutely ahead of injection; it only stops the
+        arbiter from choosing a candidate it can already see will fail.
+        """
+        ready, blocked = [], []
+        for cand in group:
+            q = self._q(cand)
+            f = self._select_inject_flit(cand[0], cand[1], q) if q else None
+            ok = (f is not None
+                  and not self._itag_blocks(f, cand[0])
+                  and self._can_board(f.plane, f.dir, f.idx, f.vc))
+            (ready if ok else blocked).append(cand)
+        return ready + blocked
+
     def _board_one(self, node: int, plane: PlaneId, key: Any,
                    group: Sequence[Any], t: int) -> None:
         """Board at most one flit on one port, drawing from `group` in order.
@@ -716,6 +787,8 @@ class Ring2BaseSim:
         dir Q blocking the WriteData that would free the outstanding slot.
         """
         qk, f, denied = None, None, None
+        if self.p.inj_sel == "free_slot" and len(group) > 1:
+            group = self._free_slot_order(group)
         for cand in group:
             q = self._q(cand)
             if not q:
@@ -750,7 +823,7 @@ class Ring2BaseSim:
             # (plane, dir) while the source is not even trying to board — the
             # ring goes empty. Drop it and reset starve.
             self._note_deny(node, f)
-            self.i_tag[(f.plane, f.dir, f.vc)].discard(node)
+            self._itag_clear(node, f)
             self.inj_starve[(node, plane, f.vc)
                             if self.p.per_vc_ports else key] = 0
             return
@@ -955,7 +1028,47 @@ class Ring2BaseSim:
         self._ctrl_issue()
         if self.p.outst_sample and (t % self.p.outst_sample) == 0:
             self._sample_outstanding()
+        if self.p.buf_sample and (t % self.p.buf_sample) == 0:
+            self._sample_buffers()
         self.t += 1
+
+    def _sample_buffers(self) -> None:
+        """Occupancy of every capped fabric FIFO, plus the PE-side backlogs.
+
+        Three capped classes: the shared up-ring FIFO per (node, plane, VC),
+        the per-direction inject Q behind it, and the down-ring leave buffer.
+        `pending` / `req_pend` are the PE side and have no depth, so they are
+        sampled for context only -- a deep backlog there with the fabric FIFO
+        never full says the injector is the constraint, not the buffer.
+        """
+        self._n_buf_samples += 1
+        shared_cap = self.p.inj_depth
+        dir_cap = self.p.dir_inj_depth
+        ej_cap = self.p.eject_depth
+
+        def _note(key: Any, n: int, cap: int | None) -> None:
+            self._buf_area[key] += n
+            if n > self._buf_max[key]:
+                self._buf_max[key] = n
+            if cap is not None and n >= cap:
+                self._buf_full[key] += 1
+
+        for k, q in self.srcq.items():
+            if not isinstance(k, tuple):
+                continue
+            if len(k) == 3:
+                _note(("shared", k[0], k[1], k[2], ""), len(q), shared_cap)
+            elif len(k) == 4:
+                _note(("dirq", k[0], k[1], k[2], k[3]), len(q), dir_cap)
+        for k, q in self.ejectq.items():
+            vc = k[2] if len(k) > 2 else "all"
+            _note(("leave", k[0], k[1], vc, ""), len(q), ej_cap)
+        for name, tbl in (("pe_pend", self.pending),
+                          ("pe_reqpend", self.req_pend)):
+            for k, q in tbl.items():
+                if q:
+                    vc = k[2] if isinstance(k, tuple) and len(k) > 2 else "all"
+                    _note((name, k[0], k[1], vc, ""), len(q), None)
 
     def _sample_outstanding(self) -> None:
         """Split each core's outstanding slots into working and wasted.
@@ -1226,6 +1339,8 @@ class Ring2BaseSim:
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
             out["retry"] = self.retry_summary()
+            if self._n_buf_samples:
+                out["buffers"] = self.buffer_summary()
             if self.n_eject_defl_by_dst:
                 out["n_eject_defl_by_dst"] = {
                     str(k): v for k, v in
@@ -1305,6 +1420,71 @@ class Ring2BaseSim:
         if self.p.outst_trace and self.ost_trace["t"]:
             out["ost_trace"] = self.ost_trace
         return out
+
+    def buffer_summary(self) -> dict[str, Any]:
+        """Per-FIFO occupancy and how often each one sat at capacity.
+
+        `occ_max` is the largest occupancy *seen at a sample point*, so it can
+        undershoot the true peak; `max_srcq` / `max_ejectq` in the top-level
+        summary are the exact peaks. `full_pct` is the share of samples at or
+        above the nominal depth, which is the number that says whether a
+        buffer is the constraint.
+        """
+        ns = self._n_buf_samples
+        if not ns:
+            return {}
+        caps = {"shared": self.p.inj_depth, "dirq": self.p.dir_inj_depth,
+                "leave": self.p.eject_depth, "pe_pend": None,
+                "pe_reqpend": None}
+        rows = []
+        for key, area in self._buf_area.items():
+            cls, node, plane, vc, d = key
+            rows.append({
+                "class": cls, "node": int(node), "plane": plane, "vc": vc,
+                "dir": ("CW" if d == 1 else "CCW") if d != "" else "",
+                "depth": caps.get(cls),
+                "occ_mean": round(area / ns, 3),
+                "occ_max": self._buf_max[key],
+                "full_pct": (round(100.0 * self._buf_full[key] / ns, 2)
+                             if caps.get(cls) is not None else None),
+            })
+        by_class: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            ck = r["class"] if r["vc"] == "all" else f"{r['class']}:{r['vc']}"
+            g = by_class.setdefault(ck, {
+                "class": r["class"], "vc": r["vc"], "depth": r["depth"],
+                "n": 0, "occ_sum": 0.0, "occ_max": 0, "full_sum": 0.0,
+                "n_ever_full": 0})
+            g["n"] += 1
+            g["occ_sum"] += r["occ_mean"]
+            g["occ_max"] = max(g["occ_max"], r["occ_max"])
+            if r["full_pct"] is not None:
+                g["full_sum"] += r["full_pct"]
+                g["n_ever_full"] += 1 if r["full_pct"] > 0 else 0
+        agg = []
+        for ck, g in sorted(by_class.items()):
+            n = max(1, g["n"])
+            agg.append({
+                "buffer": ck, "depth": g["depth"], "n_instances": g["n"],
+                "occ_mean": round(g["occ_sum"] / n, 3),
+                "occ_mean_pct": (round(100.0 * g["occ_sum"] / n / g["depth"], 2)
+                                 if g["depth"] else None),
+                "occ_max": g["occ_max"],
+                "full_pct_mean": (round(g["full_sum"] / n, 2)
+                                  if g["depth"] else None),
+                "n_ever_full": g["n_ever_full"] if g["depth"] else None,
+            })
+        capped = [r for r in rows if r["full_pct"] is not None]
+        worst = sorted(capped, key=lambda r: (-r["full_pct"], -r["occ_mean"]))
+        return {
+            "n_samples": ns, "sample_every": self.p.buf_sample,
+            "by_class": agg,
+            "rows": sorted(capped, key=lambda r: (r["class"], r["vc"],
+                                                  r["node"], str(r["dir"]))),
+            "worst": worst[:16],
+            "n_full_instances": sum(1 for r in capped if r["full_pct"] > 0),
+            "n_capped_instances": len(capped),
+        }
 
     # -- write-path introspection -------------------------------------------
 

@@ -7,6 +7,7 @@ are neither core nor memory -- they forward, but never source or sink a write.
 
 from __future__ import annotations
 
+import html
 import json
 import math
 import random
@@ -21,9 +22,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from dse_ring2_write_fair import (
+    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, S1_CFG, S1_DIRBAL,
+    S22_CFG, S22_CONFIRM, S22_REJECTED,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "results" / "ring2_write_fair.json"
 DIRBAL = ROOT / "results" / "ring2_s1_dirbal.json"
+S22COST = ROOT / "results" / "ring2_s22_cost.json"
 OUT = ROOT / "results" / "report_ring2_write_fairness.html"
 IMG = ROOT / "results"
 
@@ -35,14 +42,19 @@ SEC31 = ("S0", "S1", "S16", "S17", "S18")
 FC_CMP = ("S0", "S15", "S16", "S17", "S18", "S19", "S20")
 COLOR = {"S0": "#dc2626", "S1": "#f59e0b", "S15": "#2563eb",
          "S16": "#16a34a", "S17": "#0ea5e9", "S18": "#a855f7",
-         "S19": "#ea580c", "S20": "#db2777"}
+         "S19": "#ea580c", "S20": "#db2777",
+         "S1T": "#b45309", "S22": "#0f766e"}
 LABEL = {"S0": "S0 基线（无流控）", "S1": "S1 拥塞等级 AIMD",
          "S15": "S15 公平份额 + 槽预约",
          "S16": "S16 接收端授权（Homa 式）",
          "S17": "S17 TIMELY（RTT 梯度）",
          "S18": "S18 DCQCN（tracker ECN）",
          "S19": "S19 Swift（时延窗口）",
-         "S20": "S20 DCTCP（ECN 窗口）"}
+         "S20": "S20 DCTCP（ECN 窗口）",
+         "S1T": "S1 调优（每向预算）",
+         "S22": "S22 赤字触发限域让路"}
+# Phase 2 / 3: the schemes the acceptance lines are judged on.
+SEC_FAIR = ("S0", "S1", "S1T", "S22")
 
 
 def _use_cjk_font() -> None:
@@ -54,6 +66,16 @@ def _use_cjk_font() -> None:
             plt.rcParams["font.sans-serif"] = [f.name, "DejaVu Sans"]
             plt.rcParams["axes.unicode_minus"] = False
             return
+
+
+def _prose(s: Any) -> str:
+    """Forecast text is plain prose, not markup.
+
+    Several forecasts write comparisons as `< 5%` or `> 20%`; unescaped, a
+    browser reads from the `<` to the next `>` as a tag and silently drops
+    the words in between.
+    """
+    return html.escape(str(s or ""), quote=False)
 
 
 def _table(headers: list[str], rows: list[list], *, hl: list[bool] | None = None
@@ -1149,8 +1171,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         bus_note = (
             f"<br><b>总线时延 {meta.get('bus_lat', '—')} 拍的预测</b>"
             f"（置信度 {bus_fc.get('confidence', '—')}）："
-            f"{bus_fc.get('hypothesis', '')} "
-            f"证伪：{bus_fc.get('falsify', '')}"
+            f"{_prose(bus_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(bus_fc.get('falsify', ''))}"
             f"<br>对照：S1 总线实测 {bu.get('s1_bus_lat', '—')} 拍。"
         )
     vc_fc = meta.get("vc_indep_forecast") or {}
@@ -1160,8 +1182,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         vc_note = (
             f"<br><b>三通道链路独立的预测</b>"
             f"（置信度 {vc_fc.get('confidence', '—')}）："
-            f"{vc_fc.get('hypothesis', '')} "
-            f"证伪：{vc_fc.get('falsify', '')}"
+            f"{_prose(vc_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(vc_fc.get('falsify', ''))}"
             f"<br>对照：per_vc_ports={meta.get('per_vc_ports')}，"
             f"bound={b.get('bound')}（link {b.get('link_lb')} / "
             f"port {b.get('port_lb')}），"
@@ -1173,8 +1195,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         hz_note = (
             f"<br><b>HA RSP 时延 = 0 的预测</b>"
             f"（置信度 {hz_fc.get('confidence', '—')}）："
-            f"{hz_fc.get('hypothesis', '')} "
-            f"证伪：{hz_fc.get('falsify', '')}"
+            f"{_prose(hz_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(hz_fc.get('falsify', ''))}"
             f"<br>对照：HA RSP {_jit_label(meta)}，"
             f"S0 吞吐 {f0.get('throughput')}，"
             f"retry/txn {(s0.get('retry') or {}).get('retry_per_txn')}。"
@@ -1186,8 +1208,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         tk_note = (
             f"<br><b>ha_track = 128 的预测（上一轮，已被推翻）</b>"
             f"（置信度 {tk_fc.get('confidence', '—')}）："
-            f"{tk_fc.get('hypothesis', '')} "
-            f"证伪：{tk_fc.get('falsify', '')}"
+            f"{_prose(tk_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(tk_fc.get('falsify', ''))}"
             f"<br><b>对照：预测被推翻。</b>预测 S0 吞吐落在 "
             f"{tk_fc.get('predicted', {}).get('s0_thr')}，"
             f"实测只有 <b>{r['thr']}</b>；"
@@ -1212,8 +1234,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         t2_note = (
             f"<br><b>ha_track = 256 的预测（上一轮，已成立）</b>"
             f"（置信度 {t2_fc.get('confidence', '—')}）："
-            f"{t2_fc.get('hypothesis', '')} "
-            f"证伪：{t2_fc.get('falsify', '')}"
+            f"{_prose(t2_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(t2_fc.get('falsify', ''))}"
             f"<br><b>对照：预测成立。</b>"
             f"预测「等于 ∞ 参照」：makespan {pr.get('makespan')} / 吞吐 "
             f"{pr.get('s0_thr')} / retry {pr.get('retry_per_txn')} / "
@@ -1236,15 +1258,55 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         lo, hi = pr.get("s0_thr", [None, None])
         hit = lo is not None and hi is not None and lo <= got <= hi
         uq_note = (
-            f"<br><b>上环源队列 12+8 的预测（本轮）</b>"
+            f"<br><b>上环源队列 12+8 的预测（上一轮，已成立）</b>"
             f"（置信度 {uq_fc.get('confidence', '—')}）："
-            f"{uq_fc.get('hypothesis', '')} "
-            f"证伪：{uq_fc.get('falsify', '')}"
+            f"{_prose(uq_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(uq_fc.get('falsify', ''))}"
             f"<br><b>对照：{'预测成立' if hit else '预测被推翻'}。</b>"
-            f"旧 8+1 基线吞吐 {old}，本轮 12+8 实测 "
-            f"<b>{got}</b>（<b>{delta:+.2f}%</b>）；"
-            f"makespan {s0.get('makespan')}，retry/txn "
-            f"{q0.get('retry_per_txn')}，max_ha_used {q0.get('max_ha_used')}。"
+            f"旧 8+1 基线吞吐 {old}，12+8 实测 "
+            f"<b>{UPQ12_8_ROUND['thr']}</b>"
+            f"（<b>{100.0 * (UPQ12_8_ROUND['thr'] - old) / old:+.2f}%</b>）。"
+        )
+    ej_fc = meta.get("eject12_bufocc_forecast") or {}
+    ej_note = ""
+    if ej_fc:
+        pr = ej_fc.get("predicted", {})
+        buf = s0.get("buffers") or {}
+        by = {r["buffer"]: r for r in (buf.get("by_class") or [])}
+        lv = by.get("leave:dat") or {}
+        dq = [r for k, r in by.items() if k.startswith("dirq:")]
+        dq_max = max((r.get("full_pct_mean") or 0 for r in dq), default=0)
+        got = float(f0.get("throughput") or 0)
+        old = UPQ12_8_ROUND["thr"]
+        lo, hi = pr.get("s0_thr", [None, None])
+        thr_ok = lo is not None and lo <= got <= hi
+        lv_ok = (lv.get("full_pct_mean") or 0) <= pr.get(
+            "leave_full_pct_max", 1.0)
+        dlo, dhi = pr.get("dirq_full_pct_mean", [0, 100])
+        dq_ok = dlo <= dq_max <= dhi
+        ej_note = (
+            f"<br><b>下环 buffer 12 深 + 逐 FIFO 占用的预测（本轮）</b>"
+            f"（置信度 {ej_fc.get('confidence', '—')}）："
+            f"{_prose(ej_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(ej_fc.get('falsify', ''))}"
+            f"<br><b>对照：吞吐与下环占用两条成立，"
+            f"「压力在 dat 方向 Q」这条被推翻。</b>"
+            f"吞吐预测 {lo}–{hi}，实测 <b>{got}</b>"
+            f"（{100.0 * (got - old) / old:+.2f}%，{'落区间内' if thr_ok else '出区间'}）；"
+            f"下环 dat buffer 满的比例预测 &lt; "
+            f"{pr.get('leave_full_pct_max')}%，实测 "
+            f"<b>{lv.get('full_pct_mean')}%</b>、平均占用 "
+            f"{lv.get('occ_mean')}/{lv.get('depth')}"
+            f"（{'成立' if lv_ok else '不成立'}）。"
+            f"<b>错在哪：</b>预测说最有压力的是每向 8 深的 <code>dat</code> "
+            f"inject Q（20–70% 满），实测各方向 Q 满的比例最高只有 "
+            f"{dq_max}%（{'落区间内' if dq_ok else '低于区间'}），"
+            f"而且 <code>dat</code> 那一档只有 "
+            f"{(by.get('dirq:dat') or {}).get('full_pct_mean')}%。"
+            f"真正打满的是 <code>rsp</code> 侧：mem 节点的 RSP 共享 FIFO "
+            f"最高 99.8% 时间是满的。"
+            f"<b>更新后的认识：</b>吃紧的不是核发 WriteData，"
+            f"而是 HA 把 RSP 送上环 —— 详见 3.1.3。"
         )
     bj_fc = meta.get("bin50_fair_forecast") or {}
     bj_note = ""
@@ -1253,8 +1315,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
         bj_note = (
             f"<br><b>{jb.get('bin_w')} 拍窗 Jain 主指标的预测</b>"
             f"（置信度 {bj_fc.get('confidence', '—')}）："
-            f"{bj_fc.get('hypothesis', '')} "
-            f"证伪：{bj_fc.get('falsify', '')}"
+            f"{_prose(bj_fc.get('hypothesis', ''))} "
+            f"证伪：{_prose(bj_fc.get('falsify', ''))}"
             f"<br>对照：jain_bin_mean = {jb.get('jain_bin_mean')}，"
             f"零模型 {jb.get('jain_bin_null')}，"
             f"ratio {jb.get('jain_bin_ratio')}；"
@@ -1264,8 +1326,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
     return f"""
 <div class="def">
 <b>跑数前的预测</b>（置信度 {fc.get('confidence', '—')}）：
-{fc.get('hypothesis', '')}
-证伪：{fc.get('falsify', '')}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}{t2_note}{uq_note}<br>
+{_prose(fc.get('hypothesis', ''))}
+证伪：{_prose(fc.get('falsify', ''))}{bus_note}{vc_note}{hz_note}{bj_note}{tk_note}{t2_note}{uq_note}{ej_note}<br>
 <b>对照。</b>
 {len(xs)} 个 mem 收到的 WriteData
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
@@ -1971,11 +2033,11 @@ retry 扫描里 ost=16 零重试、有效=已分配；ost=128 有效钉在 ~23�
 
 <p class="note"><b>事先预测（跑数前写进源码，不回改）：</b>
 例 1 置信度 {f1.get('confidence')} —
-{f1.get('hypothesis')}
-证伪条件：{f1.get('falsify')}。
+{_prose(f1.get('hypothesis'))}
+证伪条件：{_prose(f1.get('falsify'))}。
 例 2 置信度 {f2.get('confidence')} —
-{f2.get('hypothesis')}
-证伪条件：{f2.get('falsify')}。</p>
+{_prose(f2.get('hypothesis'))}
+证伪条件：{_prose(f2.get('falsify'))}。</p>
 
 <h3>9.7 例子 1 复现：ost=16 用满不抖，ost=128 有效 ost 带着带宽塌</h3>
 <img src="{imgs.get('ost_repro', '')}" alt="ost time series">
@@ -2645,7 +2707,7 @@ CEILING_PROBE = {
 
 # Frozen results from the two previous official rounds, both at ha_track = 32
 # on this same per-VC-port fabric. Kept as constants because the baseline
-# tracker has since moved to 128: the HA-think-time ablation in 3.1.4 is a
+# tracker has since moved to 128: the HA-think-time ablation in 3.1.5 is a
 # track-32 measurement on both sides, and neither column describes the
 # current baseline. Keeping them here stops that section from silently
 # re-labelling old numbers as this round's.
@@ -2681,6 +2743,17 @@ TRACK256_ROUND = {
     "n_per_bin": 22.79, "plateau": 4.5408,
 }
 
+# Frozen: the round right before this one -- same tracker (256) and the new
+# 12-deep shared FIFO + depth-8 per-direction inject Q, but the leave buffer
+# still 4 deep. This round only deepens the leave buffer to 12 and adds
+# per-FIFO occupancy sampling, so this is the one-knob baseline for it.
+UPQ12_8_ROUND = {
+    "thr": 4.577, "makespan": 87393, "jain_bin": 0.96945,
+    "jain_bin_null": 0.96226, "jain_bin_ratio": 1.00747,
+    "jain_bin_min": 0.66818, "hot_util": 80.1,
+    "board_fail_per_core_cycle": 0.846, "eject_depth": 4,
+}
+
 
 def _jb_of(pat: dict, scheme: str) -> float:
     f = ((pat.get("schemes") or {}).get(scheme) or {}).get("fairness") or {}
@@ -2692,6 +2765,121 @@ def _thr_delta(pat: dict, scheme: str) -> float:
     a = ((sch.get("S0") or {}).get("fairness") or {}).get("throughput") or 0.0
     b = ((sch.get(scheme) or {}).get("fairness") or {}).get("throughput") or 0.0
     return 100.0 * (b - a) / a if a else 0.0
+
+
+_BUF_LABEL = {
+    "shared": "上环共享 FIFO（两方向共用）",
+    "dirq": "上环方向 inject Q",
+    "leave": "下环两写一读 buffer",
+}
+
+
+def _buffer_occ_section(pat: dict, meta: dict, sec: str) -> str:
+    """Which FIFOs actually fill up, and which never do.
+
+    The point of the table is to separate "this queue is the constraint"
+    from "this queue is only holding what something else refuses to drain".
+    A FIFO that never reaches its depth cannot be made useful by deepening
+    it, which is the whole reason this round's leave-buffer change was inert.
+    """
+    s0 = pat["schemes"]["S0"]
+    buf = s0.get("buffers") or {}
+    if not buf.get("by_class"):
+        return ""
+    mk = int(s0["makespan"] or 1)
+    b = pat.get("bounds") or {}
+    tails = (b.get("hot_tails_by_vc") or {})
+    hops = (b.get("hot_hops_by_vc") or {})
+
+    capped, pe_rows = [], []
+    for r in buf["by_class"]:
+        cls = r["buffer"].split(":")[0]
+        vc = r["buffer"].split(":")[1] if ":" in r["buffer"] else ""
+        name = f"{_BUF_LABEL.get(cls, cls)} · {vc}"
+        if r["depth"] is None:
+            pe_rows.append([name, r["n_instances"], r["occ_mean"],
+                            r["occ_max"]])
+            continue
+        pct = r["full_pct_mean"] or 0.0
+        capped.append((pct, [
+            name, r["depth"], r["n_instances"],
+            f"{r['occ_mean']} ({r['occ_mean_pct']}%)", r["occ_max"],
+            f"<b>{pct}%</b>" if pct > 20 else f"{pct}%",
+            f"{r['n_ever_full']} / {r['n_instances']}"]))
+    capped.sort(key=lambda x: -x[0])
+    cap_rows = [row for _pct, row in capped]
+
+    hot = [r for r in buf["rows"] if (r["full_pct"] or 0) >= 50.0]
+    hot.sort(key=lambda r: -r["full_pct"])
+    hot_rows = [[f"{_BUF_LABEL.get(r['class'], r['class'])}",
+                 r["node"], r["vc"], r["dir"] or "—", r["depth"],
+                 r["occ_mean"], f"<b>{r['full_pct']}%</b>"] for r in hot]
+    hot_nodes = sorted({r["node"] for r in hot})
+    leave = next((r for r in buf["by_class"]
+                  if r["buffer"] == "leave:dat"), None)
+
+    # Injection win rate at those nodes, straight from the board counters.
+    fail = s0.get("board_fail_by_src") or {}
+    win_rows = []
+    for nd in hot_nodes:
+        row = fail.get(f"{nd}:rsp")
+        if not row:
+            continue
+        ok = int(row.get("ok") or 0)
+        bad = sum(v for k, v in row.items() if k != "ok")
+        att = ok + bad
+        win_rows.append([nd, ok, bad, f"{100.0 * ok / max(1, att):.1f}%",
+                         f"{100.0 * att / mk:.1f}%"])
+
+    rsp_tail = tails.get("rsp") or []
+    match = bool(hot_nodes) and set(hot_nodes) == set(rsp_tail)
+    return f"""
+<h4>{sec} 逐 FIFO 占用：只有 HA 的 RSP 上环队列真的满</h4>
+<p>每 {buf['sample_every']} 拍采一次全部 fabric FIFO 的占用（共
+{buf['n_samples']} 个采样点）。<code>满的比例</code>是占用达到深度的采样点
+占比，这才是判断「这一级是不是瓶颈」的量；平均占用只说明它平时存了多少。
+{buf['n_capped_instances']} 个有深度的 FIFO 里，
+<b>{buf['n_full_instances']} 个曾经满过</b>。</p>
+{_table(["FIFO", "深度", "实例数", "平均占用", "采样峰值", "满的比例",
+         "曾满过的实例"], cap_rows)}
+<div class="def {'good' if leave and (leave['full_pct_mean'] or 0) == 0 else ''}">
+<b>下环 buffer 一次都没满。</b>{meta.get('eject_depth')} 深的 dat 下环
+buffer 平均只占 {leave['occ_mean'] if leave else '—'} 个 flit
+（{leave['occ_mean_pct'] if leave else '—'}%），采样峰值
+{leave['occ_max'] if leave else '—'}，满的比例
+<b>{leave['full_pct_mean'] if leave else '—'}%</b>。
+到站 dat 平均 {int(b.get('n_txn') or 0) * int(meta.get('W') or 0) /
+max(1, len(pat.get('mem') or [1])) / mk:.3f} flit/cycle/mem，PE 每拍读 1，
+所以它天生排不起队 —— 这就是本轮 4 → {meta.get('eject_depth')} 只动了
+零点几个百分点的直接原因。<b>下环容量不是瓶颈，也不可能成为瓶颈</b>，
+除非 PE 排空速率降下来。</div>
+{('<p>真正会满的是另一头 —— <b>' + '、'.join(str(x) for x in hot_nodes)
+  + ' 这几个 mem 节点的 RSP 上环队列</b>：') if hot_rows else ''}
+{_table(["FIFO", "节点", "VC", "方向", "深度", "平均占用", "满的比例"],
+        hot_rows) if hot_rows else ''}
+{f'''<p>这几个节点的 RSP 上环口几乎<b>每一拍都在尝试上环</b>，但赢不下来：</p>
+{_table(["mem 节点", "成功上环", "失败", "上环成功率", "尝试拍数占 makespan"],
+        win_rows)}
+<div class="def {'good' if match else ''}">
+为什么正好是这几个节点：各 VC 最忙的那条链路是
+{'；'.join(f"{vc} 的 {'、'.join(hops.get(vc) or [])}" for vc in ("rsp", "dat")
+           if hops.get(vc))}。
+RSP 热段的<b>起点</b>是 {'、'.join(str(x) for x in rsp_tail)}，
+{'恰好就是队列满的那几个节点' if match else '与队列满的节点不完全重合'}。<br>
+理论上限要求这条热段 100% 忙；而坐在热段起点的那个 HA，
+上环时抢的正是这同一段 hop。无缓存环上在环 flit 优先，
+于是它只能拿到剩下的空隙 ——
+<b>队列满不是因为队列太浅，而是因为出口被它自己要用的那段 hop 占住了。</b><br>
+注意 <code>link_by_vc</code> 里 rsp 与 dat <b>同为 {b.get('link_lb')} 拍</b>
+（见 3.1 的 R* 推导）：两条 VC 的热链路一样紧，所以两边都没有余量吸收
+这种仲裁损失。</div>''' if win_rows else ''}
+<p class="note">PE 侧的 backlog 没有深度限制，只作对照：
+{_table(["PE 侧队列", "实例数", "平均深度", "采样峰值"], pe_rows)}
+<code>req</code> 那一行深达上万，是闭环 workload 的正常现象
+（每核 {meta.get('K')} 笔写全部一次性排在核里，由 outstanding 上限
+{meta.get('core_outstanding')} 逐步放行），不是 fabric 压力。
+但 <code>rsp</code> 那一行值得看：HA 生成响应的速度明显快过它上环的速度，
+所以响应在 PE 侧又堆了一层。</p>"""
 
 
 def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
@@ -2720,15 +2908,16 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
                      ib["total_min"], ib["total_max"]])
     got = rows[0][1] if rows else 0.0
     thr0 = float((s0.get("fairness") or {}).get("throughput") or got)
-    old_q_thr = TRACK256_ROUND["thr"]
-    q_delta = 100.0 * (thr0 - old_q_thr) / old_q_thr
-    q_material = abs(q_delta) > 3.0
+    ej_ref = UPQ12_8_ROUND["thr"]
+    ej_delta = 100.0 * (thr0 - ej_ref) / ej_ref
+    hot_util = 100.0 * thr0 / r_bind
+    board_fail_pc = float(s0.get("n_board_fail") or 0) / (n_c * mk)
     eff = float((s0.get("retry") or {}).get("outst_eff_mean") or 0)
     t_hold = round(eff * n_c / max(n_txn / mk, 1e-9), 1) if n_txn else None
     hz_ablate = ""
     if int(meta.get("ha_rsp_jit") or 0) <= 0:
         hz_ablate = f"""
-<h4>3.1.4 存档：HA RSP 时延改成 0 并不改吞吐</h4>
+<h4>3.1.5 存档：HA RSP 时延改成 0 并不改吞吐</h4>
 <p class="note">这一小节是<b>历史消融，两列都在 ha_track = 32 上测的</b>，
 和本轮的 {meta.get('ha_track')} 个表项不是同一个工作点 ——
 留在这里是因为它的结论仍然成立，而它的绝对数字不再描述本轮基线。
@@ -2754,7 +2943,7 @@ outst_eff 从 {TRACK32_ROUND['jit_eff']} 降到 {TRACK32_ROUND['outst_eff']}，
 HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
 飞行 / 排队决定，DBID / Comp 的 0 拍只是剪掉流水线里的空等待，
 <b>释放速率不变</b>。真正解开这一层的是把表项本身加到
-{meta.get('ha_track')}（见 3.1.3）。</div>
+{meta.get('ha_track')}（见 3.1.4）。</div>
 """
 
     # Per-VC port occupancy, straight from the stored counts.
@@ -2829,15 +3018,19 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
         rows)}
 <p>实测均值 {got}，只有 R* 的 <b>{100.0 * got / r_bind:.1f}%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
-<div class="def {'good' if q_material else ''}">
-<b>本轮直接考察上环源队列：每 VC 8+1 → 12+8。</b><br>
-旧配置（8 深共享 FIFO + 每向 1 深 inject Q）S0 =
-{old_q_thr} flit/cycle；本轮（{meta.get('inj_depth')} 深共享 FIFO +
-每向 {meta.get('dir_inj_depth')} 深 inject Q）S0 =
-<b>{thr0}</b>，变化 <b>{q_delta:+.2f}%</b>。<br>
-{'提升超过预设的 3% 证伪线，说明方向 Q 深度确实是欠载的重要来源，下面重新定位新的绑定项。'
- if q_material else
- '没有跨过 3% 证伪线：队列能保存更多待发 flit，但不能制造新的环上空槽；总写带宽欠载仍不是源队列容量造成的。'}
+<div class="def">
+<b>本轮改的是下环两写一读 buffer：每 VC {UPQ12_8_ROUND['eject_depth']} 深 →
+{meta.get('eject_depth')} 深</b>，上环队列沿用上一轮的
+{meta.get('inj_depth')} 深共享 FIFO + 每向 {meta.get('dir_inj_depth')} 深
+inject Q，其余（端口、链路、路由、tracker）全部不变。<br>
+上一轮 S0 = {ej_ref} flit/cycle，本轮 S0 = <b>{thr0}</b>，变化
+<b>{ej_delta:+.2f}%</b>。<br>
+<b>但这个差不能记在下环 buffer 上</b>：两轮之间上环仲裁器也换了
+（rr → free_slot）。3.1.6 的因子实验把三者分开之后，
+下环 4 → 12 深在本轮仲裁器上只值
+<b>{DEPTH_FACTORIAL['effects'][2][1]:+.2f}%</b>、
+在旧仲裁器上是 {DEPTH_FACTORIAL['effects'][2][2]:+.2f}%。
+3.1.3 的逐 FIFO 占用给出了原因：这个 buffer 从来没满过。
 </div>
 <h4>3.1.1 上 / 下环各 1 flit/cycle/node 算进来之后，上限还是 {r_bind:.3f}</h4>
 <p>每节点<b>每 VC</b> 上环 1 flit/cycle、下环 1 flit/cycle
@@ -2873,8 +3066,12 @@ hop，那一段每拍也只有 1 flit/cycle。节点数多不解决单段拥塞�
 {_table(["端口", "占用率", "承载"], port_rows)}
 <div class="def">最忙的一个也只有
 {max(100 * u for _k, u, _n in ports):.1f}%，<b>没有任何端口接近饱和</b>。
-所以缺掉的带宽不在端口上。</div>
-<h4>3.1.3 扫 tracker：本轮 {meta.get('ha_track')} 个表项已经完全不绑定</h4>
+所以缺掉的带宽不在端口的<b>速率</b>上。<br>
+但「占用率不到 60%」不等于「这个口不吃紧」：一个每拍都想发、
+却只有 {max(100 * u for _k, u, _n in ports):.1f}% 的拍数能挤上去的口，
+同样是零余量。3.1.3 的逐 FIFO 占用就是用来区分这两种情况的。</div>
+{_buffer_occ_section(pat, meta, "3.1.3")}
+<h4>3.1.4 扫 tracker：本轮 {meta.get('ha_track')} 个表项已经完全不绑定</h4>
 <p>短探测（不是官方 JSON；uniform 写、K={CEILING_PROBE['k']}、seed 0、1 plane，
 其余同官方 FABRIC，只扫 ha_track）：</p>
 {_table(["ha_track", "总写带宽", "在飞事务平均驻留（拍）", "retry/txn"],
@@ -2920,38 +3117,44 @@ retry/txn = <b>{(s0.get('retry') or {}).get('retry_per_txn')}</b>，
 判断「够不够」的正确依据不是扫描曲线的拐点，而是
 <b>∞ 参照在官方 K 上的峰值占用</b>（这里是 {qref_ha}）——
 配额只要高过它，动力学就和无限一样。</p>
-<p>{(
-    f'本轮 12+8 比旧 8+1 提升 {q_delta:+.2f}%，已经跨过 3% 证伪线；'
-    '因此不能再说源队列容量已排除，需要把它列为新的重要因素。'
-    if q_material else
-    f'剩下那个 {plateau} 的平台不是源队列不够。本轮官方 K 已直接把'
-    f'每 VC 上环源队列从 8+1 同时加到 12+8，吞吐只动 {q_delta:+.2f}%。'
-)}
+<p>剩下那个 {plateau} 的平台里，两级 buffer 只占一小部分：3.1.6 的因子实验
+把仲裁器分离出去之后，上环队列 8+1 → 12+8 值
+{DEPTH_FACTORIAL['effects'][1][1]:+.2f}%、下环 4 → 12 深值
+{DEPTH_FACTORIAL['effects'][2][1]:+.2f}%，
+而仲裁器一项就是 {DEPTH_FACTORIAL['effects'][0][1]:+.2f}%。
 下面是此前在旧 8+1 配置、∞ tracker、K={CEILING_PROBE['k']} 下的单旋钮
 历史消融；单独把任一级加深也都只在 ±1% 内动：</p>
 {_table(["历史改动（旧 8+1，ha_track = ∞）", "总写带宽"],
         CEILING_PROBE["knobs"])}
-<p>平台的成因是<b>无缓存环的上环饥饿</b>：在环 flit 优先，核只能挤进空隙。
-此时最忙的 dat 段占用 {CEILING_PROBE['hot_seg_util']}%，
+<p>平台的成因是<b>无缓存环的上环仲裁</b>：在环 flit 优先，要上环的节点
+只能挤进空隙。本轮最忙的 dat 段等效占用 {hot_util:.1f}%（上一轮
+{UPQ12_8_ROUND['hot_util']}%、旧 8+1 为
+{CEILING_PROBE['hot_seg_util']}%），
 已经离 R* 假设的 100% 不远，但核每拍仍有约
-{CEILING_PROBE['board_fail_per_core_cycle']} 次上环失败 ——
+{board_fail_pc:.3f} 次上环失败（上一轮
+{UPQ12_8_ROUND['board_fail_per_core_cycle']}、旧 8+1 为
+{CEILING_PROBE['board_fail_per_core_cycle']}）——
 决定上环延迟的是空档的分布，而不是空档的总量。</p>
+<p class="note"><b>本轮 3.1.3 把这句话的位置钉住了。</b>此前几轮默认吃紧的是
+「核把 WriteData 送上环」，但逐 FIFO 占用显示核的 dat 队列几乎是空的，
+真正打满的是<b>热 RSP 段起点那几个 mem 节点的 RSP 上环队列</b>
+（共享 FIFO 满的比例 ≈ 99.8%）。链路界里 rsp 与 dat 同为
+{b.get('link_lb')} 拍，两条 VC 一样紧；而 RSP 侧多了一条 dat 侧没有的
+不利条件：HA 一有响应就想发（本轮 HA RSP 时延为 0），到达不受下游节流，
+于是它的队列先被打满。</p>
 <div class="def">于是本轮的分解<b>只剩两层</b>：<br>
-<b>{r_bind:.3f}</b>（热 hop 的 dat 链路界，假设完美打包）
-→ <b>{thr0}</b>（无缓存环上环饥饿，削掉
+<b>{r_bind:.3f}</b>（热 hop 的链路界，rsp 与 dat 并列最紧，假设完美打包）
+→ <b>{thr0}</b>（无缓存环上环仲裁，削掉
 {100 - 100.0 * thr0 / r_bind:.0f}%）。<br>
 第三层（completer 表项）在本轮<b>等于零</b>：实测就等于 ∞ 参照 {plateau}。
 上一轮 128 个表项时它还要再削 {100 - 100.0 * TRACK128_ROUND['thr'] / TRACK128_ROUND['plateau']:.0f}%，
 两轮前 32 个时削 {100 - 100.0 * TRACK32_ROUND['thr'] / TRACK32_ROUND['plateau']:.0f}%。<br>
-{(
-    '<b>源队列加深已经带来实质提升，但仍未到 R*；剩余缺口需要在'
-    '源队列容量和无缓存环仲裁之间重新拆分。</b>'
-    if q_material else
-    '<b>所以「S0 为什么达不到 R*」仍只有一个已识别的答案：'
-    '无缓存环的上环仲裁。</b>端口速率（'
-    f'{n_m}.0 flit/cycle，见 3.1.1）、源/方向 buffer 深度、'
-    'completer 表项都已经逐一排除。'
-)}</div>
+<b>所以「S0 为什么达不到 R*」的答案仍然是无缓存环的上环仲裁 ——
+而且现在知道它绑在 HA 的 RSP 口上，也知道它有
+{DEPTH_FACTORIAL['effects'][0][1]:.0f}% 是<u>可修的</u>（3.1.6）。</b>
+端口速率（{n_m}.0 flit/cycle，见 3.1.1）、
+buffer 深度（见 3.1.6 因子实验与 3.1.3，只有 RSP 上环队列会满）、
+completer 表项都已经逐一排除。</div>
 <p class="note">再往前一版<b>三 VC 共享端口</b>的 fabric（R* = 5.333、端口绑定、
 平台 3.466、实测 2.541）说明的是另一件事：端口拆开抬高了 R* 与平台，
 但在 32 tracker 下实测反而下降，因为 REQ 有专用端口后到达 HA 更快、
@@ -2959,6 +3162,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 两件都做了之后，实测才从 2.541 / {TRACK32_ROUND['thr']} /
 {TRACK128_ROUND['thr']} 一路走到 {thr0}。</p>
 {hz_ablate}
+{_ceiling_knob_section(meta, pat)}
 
 <h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
@@ -3019,6 +3223,408 @@ max/min {sw.get(bw_, {}).get('obs_mm')} vs
 <p class="note">这条判定只针对<b>核间</b>瞬时均衡。同一个核两个方向之间的
 失败次数仍然是偏的（见 4.3.1 / 4.3.2），那是几何造成的，
 与这里的时间粒度无关。</p>
+{_jitter_section(meta, pat)}
+"""
+
+
+def _max_fl_of(schemes: dict, scheme: str) -> float | None:
+    """Worst core's CW/CCW board-failure ratio, or None if a side is zero."""
+    d = (schemes.get(scheme) or {}).get("board_dir") or {}
+    xs = []
+    for r in d.values():
+        a, b = int(r.get("fail_cw", 0)), int(r.get("fail_ccw", 0))
+        if min(a, b):
+            xs.append(max(a, b) / min(a, b))
+    return max(xs) if xs else None
+
+
+def _headline_phases(meta: dict, pat: dict) -> str:
+    """The three phases of this round's brief, as headline conclusions."""
+    schemes = pat.get("schemes") or {}
+    s0 = schemes["S0"]["fairness"]
+    p = INJ_SEL_PROBE
+    gain = 100.0 * (p["rows"][1][1] - p["rows"][0][1]) / p["rows"][0][1]
+    out = [f"""
+<li><b>阶段一：推高 S0 总带宽的那个旋钮不在任务书列出的三类里。</b>
+buffer 深度、E-tag 门限 <code>t_xfer</code>、预留下环槽全部惰性；
+<code>t_inj</code> 有效但是一条单调的「用带宽换公平」曲线。
+真正抬高平台的是<b>上环仲裁的时机</b>：
+让仲裁器先看出链路这拍是否空闲再许诺端口
+（<code>inj_sel=free_slot</code>），
+短探测 {p['rows'][0][1]} → {p['rows'][1][1]} flit/cycle（{gain:+.0f}%，
+占 R* 从 {p['rows'][0][2]}% 到 {p['rows'][1][2]}%），
+官方 K 上 S0 = <b>{s0['throughput']}</b>，
+占 R* <b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.1f}%</b>。
+不加缓存、不加总线。见 3.1.6。</li>"""]
+    jd = JITTER_DECOMP["rows"][1]
+    out.append(f"""
+<li><b>阶段一（续）：打满之后的分箱不公平里 {100 * jd[4]:.0f}% 是时间抖动，
+不是速率差。</b>按各核长期速率匀速注入的话 Jain 会到 {jd[5]}，
+所以「Jain &gt; 0.99」与「带宽不掉 1%」在物理上相容 ——
+需要的是摊匀<b>时机</b>，不是重新分配<b>份额</b>。这条决定了阶段三的机制选择。
+见 3.2.1。</li>""")
+    s1t = schemes.get("S1T")
+    if s1t:
+        f = s1t["fairness"]
+        dt = 100.0 * (f["throughput"] - s0["throughput"]) / s0["throughput"]
+        jbt = (f.get("jain_bin") or {}).get("jain_bin_mean")
+        jb0 = (s0.get("jain_bin") or {}).get("jain_bin_mean")
+        r1, rt = _max_fl_of(schemes, "S1"), _max_fl_of(schemes, "S1T")
+        r0 = _max_fl_of(schemes, "S0")
+        out.append(f"""
+<li><b>阶段二：<code>dir_split</code>（按方向分别记预算）把 S1 的方向失败比从
+{None if r1 is None else round(r1, 2)} 收到
+{None if rt is None else round(rt, 2)}、吞吐从 −18.8% 拉回 {dt:+.2f}%，
+但这只是<u>退回 S0 自己的 {None if r0 is None else round(r0, 2)}</u>，
+而且各核瞬时带宽<u>一点没变匀</u>。</b>
+S1T 分箱 Jain {jbt} vs S0 {jb0}（差 {abs((jbt or 0) - (jb0 or 0)):.5f}，
+在噪声以内）。<b>「方向失败次数均匀」与「核间瞬时带宽均匀」是两件事</b>：
+前者是一个核内部的对称性，后者是核之间的同步性。
+默认 S1 之所以掉 18.8%、max/min 坏到 2.53，是因为它的乘性减由
+<b>节点自己的失败次数</b>触发，而无缓存环上这些失败是别人的 transit 造成的 ——
+<b>受害者反过来给领先者让路</b>。见 5.3。</li>""")
+    s22 = schemes.get("S22")
+    if s22:
+        f = s22["fairness"]
+        jb = (f.get("jain_bin") or {}).get("jain_bin_mean") or 0.0
+        d = 100.0 * (f["throughput"] - s0["throughput"]) / s0["throughput"]
+        ok = jb > 0.99 and abs(d) < 1.0
+        out.append(f"""
+<li><b>阶段三：S22「赤字触发的限域让路」两条验收线同时达标{
+'' if ok else '（未达标）'}。</b>
+50 拍分箱平均 Jain <b>{jb}</b>（&gt; 0.99），
+总写带宽 {f['throughput']} vs S0 {s0['throughput']}
+（<b>{d:+.2f}%</b>，|差| &lt; 1%），
+整窗 max/min {s0['max_min']} → <b>{f['max_min']}</b>。<br>
+机制：复用 S1 那条 6 bit 广播总线，但播的是<b>本窗上环进度</b>而不是拥塞等级；
+落后的节点举请求，<b>不落后的</b>节点只对「会骑过请求者出向 hop」的 flit 让路。
+<b>从不扣住空槽</b> —— 让出来的槽直接落到落后的节点手上，
+这是它与 I-tag（−5.8%）和定速漏桶 S21（−17%）的分界。
+硬件上它用加法树换掉 S1 的乘法器和令牌桶，代价是总线要 1 拍送到、
+inject Q 每向加深到 32。见第 6 节。</li>""")
+    return "".join(out)
+
+
+def _ceiling_knob_section(meta: dict, pat: dict) -> str:
+    """Phase 1: sweeping the knobs the brief names, and what actually moved.
+
+    The brief asks for buffer depths, `t_inj` and `t_xfer`. All three turned
+    out to be the wrong place to look -- the ceiling was set by *when* the
+    inject arbiter committed the port, not by how much it had queued or how
+    aggressively it throttled. This section is where that gets shown, because
+    the arbiter fix is what every number after it rests on.
+    """
+    p = INJ_SEL_PROBE
+    rr, fs = p["rows"][0], p["rows"][1]
+    gain = 100.0 * (fs[1] - rr[1]) / rr[1]
+    thr0 = (pat["schemes"]["S0"]["fairness"] or {}).get("throughput")
+    return f"""
+<h4>3.1.6 沿着任务书扫旋钮：buffer 深度、t_inj、t_xfer 都不是绑定项，
+上环仲裁的<b>时机</b>才是</h4>
+<p>任务书要求先调 buffer(FIFO) 大小、I-tag 门限 <code>t_inj</code>
+和 E-tag 门限 <code>t_xfer</code>，把 S0 的总写带宽推向理论上限。
+下面是短探测（K={p['k']}、seed 0、1 plane、R* = {p['r_star']}，
+其余同官方 FABRIC）逐个旋钮的结果。</p>
+<h5>先看结论：唯一动得了平台的不是这三类旋钮</h5>
+{_table(["上环仲裁器", "总写带宽", "占 R*", f"Jain@50拍", "ratio"],
+        [[r[0], r[1], f"{r[2]}%", r[3], r[4]] for r in p["rows"]],
+        hl=[False, True])}
+<div class="def good"><b>原来的 round-robin 仲裁器在知道出链路是否空闲<u>之前</u>
+就把端口许诺给了某一个方向。</b>如果那一拍这个方向的 hop 正好被 transit flit
+占住，端口就空转一拍 —— 即使另一个方向的 hop 是空的。
+<code>inj_sel=free_slot</code> 让仲裁器先读出链路这拍的空闲信号
+（环上锁存器本来就有这个本地信号），再决定端口给谁。<br>
+<b>{rr[1]} → {fs[1]} flit/cycle，{gain:+.1f}%，占 R* 从 {rr[2]}% 到
+{fs[2]}%。</b>这不是加缓存、不是加总线，只是把一个组合逻辑的判断顺序倒过来。
+本报告后面所有数字（官方 K 上 S0 = {thr0}）都在这个修好的仲裁器上测的。</div>
+<h5>把仲裁器和 buffer 深度分开：2×2×2 因子实验</h5>
+<p>此前几轮是拿「本轮 vs 上一轮」的差来给 buffer 深度记功的，
+但中间仲裁器也换了，那不是受控对比。三个因子各取两档全跑一遍
+（K={DEPTH_FACTORIAL['k']}）：</p>
+{_table(["上环仲裁器", "上环队列（共享+每向）", "下环 buffer 深", "总写带宽"],
+        DEPTH_FACTORIAL["rows"],
+        hl=[r[0] == "free_slot" and r[1] == "12+8" and r[2] == 12
+            for r in DEPTH_FACTORIAL["rows"]])}
+{_table(["改动", "在本轮配置上", "在旧配置上", "两列分别对应的其余因子"],
+        [[r[0], f"{r[1]:+.2f}%", f"{r[2]:+.2f}%", r[3]]
+         for r in DEPTH_FACTORIAL["effects"]])}
+<div class="def"><b>从最旧到本轮累计 {DEPTH_FACTORIAL['total_pct']:+.1f}%，
+其中仲裁器一项就占 {DEPTH_FACTORIAL['effects'][0][1]:+.1f}%，
+两级 buffer 一起只有 {DEPTH_FACTORIAL['buf_pct']:+.1f}%。</b>
+（后者是直接测两端得到的，不是把两个主效应相加 ——
+它们有交互，相加正是这张表要纠正的那个错误。）
+<br>交互项本身也值得记下：上环队列 8+1 → 12+8 在 free_slot 上值
+{DEPTH_FACTORIAL['effects'][1][1]:+.2f}%，在旧 rr 仲裁器上只值
+{DEPTH_FACTORIAL['effects'][1][2]:+.2f}%；下环加深在 rr 上是
+{DEPTH_FACTORIAL['effects'][2][2]:+.2f}%（等于没有）。
+<b>两者不是相加的</b>：仲裁器只有在「每个方向手里都有待发 flit」时
+才有得挑，所以每向 inject Q 的深度是<u>仲裁器修好之后</u>才变成
+一个有意义的旋钮的。这也解释了为什么单独扫 buffer 深度（下一张表）
+看起来全是惰性 —— 那些扫描是从已经够深的 12+8 再往上加。</div>
+<h5>在本轮工作点上继续加深，就再没有收益了</h5>
+{_table(["改动（均在 free_slot 仲裁器、12+8 队列上）", "总写带宽"],
+        p["inert"])}
+<div class="def"><b>再往上加深、E-tag 门限、预留下环槽全部是惰性的。</b>
+<code>t_xfer</code> 从 4 调到 1 或 ∞ 一位不差 ——
+E-tag 管的是在环被挡的 flit，而 3.1.3 已经显示下环那一级从来不满，
+所以这条路径上根本没有可管的东西。buffer 加深只是存更多待发 flit，
+不改变「hop 什么时候空出来」这个时序问题。</div>
+<h5>I-tag 门限 t_inj：它有效，但它买公平的方式是砍带宽</h5>
+{_table(["t_inj", "总写带宽", "占 R*", "Jain@50拍", "ratio"],
+        [[r[0], r[1], f"{r[2]}%", r[3], r[4]] for r in p["t_inj"]])}
+<div class="def warn"><b>这是一条单调的交换曲线，不是一个可以两头都要的工作点。</b>
+<code>t_inj</code> 越小，饥饿节点越早举旗封停上游，分箱 Jain 越高
+（2 拍时到 {p['t_inj'][0][3]}），但带宽同步掉到 {p['t_inj'][0][1]}
+（只有 R* 的 {p['t_inj'][0][2]}%，比基线低
+{abs(100.0 * (p['t_inj'][0][1] - fs[1]) / fs[1]):.0f}%）。<br>
+原因是 <b>I-tag 只能"扣住"，而且扣的是整段</b>：举旗的节点自己未必能用上
+那个被让出来的槽（它可能是被 transit 饿死的，而 I-tag 停不了 transit），
+于是上游注入口白空转。<b>要同时拿到 Jain &gt; 0.99 和带宽不掉 1%，
+必须换一个「让出来的槽一定落到落后的节点手上」的机制 —— 这就是第 6 节。</b></div>
+"""
+
+
+def _jitter_section(meta: dict, pat: dict) -> str:
+    """Phase 1 close-out: decompose per-bin unfairness before designing for it.
+
+    This is the measurement that makes phase 3 tractable. If the gap to 1.0
+    were persistent rate differences, closing it would mean moving bandwidth
+    between cores and someone has to lose. It is not: it is timing jitter
+    around near-equal rates, so it can be closed by regularising *when* each
+    core gets its slots, at no cost to the total.
+    """
+    j = JITTER_DECOMP
+    rr, fs = j["rows"][0], j["rows"][1]
+    return f"""
+<h4>3.2.1 把这段差拆开：是长期速率不同，还是时间抖动？</h4>
+<p>分箱 Jain 距离 1.0 的这段差有两个来源，而它们要用完全不同的机制去治：</p>
+<ul>
+<li><b>核间持续速率差</b>（between-core）：某些核长期就是比别人快。
+治它必须把带宽从快的核挪给慢的核，<b>总带宽多半要付代价</b>。</li>
+<li><b>同一个核自己的时间抖动</b>（within-core）：长期速率一样，
+但每个核的 flit 在时间上是成串到来的。治它只需要把注入<b>时机</b>摊匀，
+<b>不需要动任何人的份额</b>。</li>
+</ul>
+<p>把每核每箱的注入数做方差分解（K={j['k']}、{j['bin_w']} 拍箱）：</p>
+{_table(["仲裁器", "每核每箱均值", "核间方差", "核内方差", "核内占比",
+         "若时机完全规整的 Jain", "整窗 max/min"],
+        [[r[0], r[1], r[2], r[3], f"{100 * r[4]:.1f}%", r[5], r[6]]
+         for r in j["rows"]], hl=[False, True])}
+<div class="def good"><b>{100 * fs[4]:.1f}% 的分箱不公平是时间抖动，
+不是速率差。</b>把同一批核的长期速率代进公式（即假设每个核都以自己的平均速率
+匀速注入），Jain 会到 <b>{fs[5]}</b> —— 远在 0.99 之上。
+也就是说 <b>Jain &gt; 0.99 与总带宽不掉 1% 这两条线在物理上是相容的</b>，
+剩下的问题纯粹是「怎么在不扣槽的前提下把时机摊匀」。<br>
+顺带解释了一个反直觉现象：修好仲裁器（rr → free_slot）之后
+每核每箱的注入数从 {rr[1]} 涨到 {fs[1]}，但分箱 Jain 反而略降
+（核间方差 {rr[2]} → {fs[2]}，涨了
+{fs[2] / max(1e-9, rr[2]):.0f} 倍）—— 让「有空槽的人先走」本身就与位置相关：
+邻 mem 更多的核有更多机会碰上空槽。
+<b>阶段一交出的是一个更快但略不齐的基线，这正是阶段三要接手的东西。</b></div>
+"""
+
+
+def _s22_cost_payload() -> dict | None:
+    if not S22COST.exists():
+        return None
+    try:
+        return json.loads(S22COST.read_text())
+    except Exception:
+        return None
+
+
+def _s22_section(meta: dict, pat: dict, imgs: dict) -> str:
+    """Phase 3: the mechanism, the two acceptance lines, and what it costs."""
+    schemes = pat.get("schemes") or {}
+    s22 = schemes.get("S22")
+    if not s22:
+        return ""
+    s0 = schemes["S0"]["fairness"]
+    f22 = s22["fairness"]
+    fc = s22.get("fc") or {}
+    jb22 = (f22.get("jain_bin") or {}).get("jain_bin_mean") or 0.0
+    jb0 = (s0.get("jain_bin") or {}).get("jain_bin_mean") or 0.0
+    d22 = 100.0 * (f22["throughput"] - s0["throughput"]) / s0["throughput"]
+    ok_fair = jb22 > 0.99
+    ok_thr = abs(d22) < 1.0
+    cost = _s22_cost_payload()
+    n_c = len(meta.get("core_nodes") or [])
+
+    conf = f"""
+{_table(["候选（官方 K = " + str(S22_CONFIRM['k']) + "）", "Jain@50拍",
+         "总写带宽", "vs S0", "占 R*", "max/min", "最坏方向失败比", "验收"],
+        [[r[0], r[1], r[2], f"{r[3]:+.2f}%", f"{r[4]}%", r[5], r[6],
+          "<b>双线达标</b>" if r[7] else "—"] for r in S22_CONFIRM["rows"]],
+        hl=[r[7] for r in S22_CONFIRM["rows"]])}"""
+
+    rej = _table(["试过但放弃的机制", "Jain@50拍", "带宽 vs S0", "结构性原因"],
+                 [[r[0], r[1], f"{r[2]:+.1f}%", r[3]]
+                  for r in S22_REJECTED["rows"]])
+
+    hw = _table(["硬件项", "S1", "S22（本节）", "说明"], HW_COST["rows"])
+
+    sens = ""
+    if cost:
+        bl = _table(["流控总线时延（拍）", "Jain@50拍", "总写带宽", "vs S0",
+                     "让路判定（活动量）", "前瞻改发（活动量）"],
+                    [[r["cfg"].get("dfc_bus_lat"), r["jain_bin"],
+                      r["throughput"], f"{r['thr_delta_pct']:+.2f}%",
+                      r["n_dfc_yield"], r["n_dfc_dodge"]]
+                     for r in cost["bus_lat"]],
+                    hl=[r["cfg"].get("dfc_bus_lat") == 1
+                        for r in cost["bus_lat"]])
+        dq = _table(["每向 inject Q 深度", "Jain@50拍", "总写带宽", "vs S0",
+                     "让路判定（活动量）", "前瞻改发（活动量）"],
+                    [[r["cfg"].get("dir_inj_depth"), r["jain_bin"],
+                      r["throughput"], f"{r['thr_delta_pct']:+.2f}%",
+                      r["n_dfc_yield"], r["n_dfc_dodge"]]
+                     for r in cost["dir_q"]],
+                    hl=[r["cfg"].get("dir_inj_depth") == 32
+                        for r in cost["dir_q"]])
+        b = cost.get("belief_update") or {}
+        worst = cost["bus_lat"][-1]
+        sens = f"""
+<h3>6.5 这两笔开销分别值多少：逐项实测</h3>
+<p>6.4 那张表里 S22 只有两处比 S1 更贵：总线要 1 拍送到，
+inject Q 要每向 32 深。两条都是硬件承诺，所以都单独测
+（K={cost['k']}、seed 0，S0 = {cost['s0']['throughput']} flit/cycle）。</p>
+<h4>6.5.1 流控总线时延：1 拍是硬需求，不是调优选择</h4>
+{bl}
+<div class="def warn">{b.get('wrong', '')}<br>
+<b>原因：</b>{b.get('why', '')}</div>
+<div class="def"><b>所以 S22 唯一真正苛刻的硬件要求是这条：
+赤字表必须是当前值。</b>把总线放到 S1 用的 {worst['cfg']['dfc_bus_lat']} 拍，
+Jain 掉到 {worst['jain_bin']}（比 S0 的 {cost['s0']['jain_bin']} <b>还差</b>），
+带宽掉 {worst['thr_delta_pct']:+.2f}%，两条线一起崩。
+反过来说，2 拍还能保住 Jain {cost['bus_lat'][1]['jain_bin']}，
+所以要求是「同一个控制窗口内送到」，不是「零延迟」。</div>
+<h4>6.5.2 inject Q 深度：前瞻要有候选可选</h4>
+{dq}
+<div class="def">深度 8 时 Jain 几乎不变（{cost['dir_q'][0]['jain_bin']}），
+但带宽掉 {cost['dir_q'][0]['thr_delta_pct']:+.2f}% —— 正好越过 1% 验收线。
+差别全在前瞻改发次数（{cost['dir_q'][0]['n_dfc_dodge']} vs
+{cost['dir_q'][-1]['n_dfc_dodge']}）：队列里没有非穿越候选时，
+让路就退化成空转一个 hop，而热 hop 本来已经 91% 满。
+<b>这是 S22 为「不扣槽」付的钱，也是它与 I-tag / S21 的分界线。</b></div>"""
+
+    verdict_cls = "good" if (ok_fair and ok_thr) else "warn"
+    return f"""
+<h2>6. S22：赤字触发的限域让路 —— 两条验收线同时达标</h2>
+<p>阶段一已经把问题定死了：分箱不公平里 {100 * JITTER_DECOMP['rows'][1][4]:.0f}%
+是时间抖动（3.2.1），而 I-tag（3.1.6）和 S1（第 5 节）都只会「扣住」。
+S22 换掉的正是这一点。</p>
+
+<div class="def"><b>一句话：从来不扣住任何一个空槽，只改「两个节点抢同一个 hop
+时谁赢」，而赢家由<u>谁更落后</u>决定。</b></div>
+
+<h3>6.1 机制（三条，全部复用 S1 那条 6 bit 广播总线）</h3>
+<ol>
+<li><b>播进度，不播拥塞等级。</b>每个节点数自己本窗成功上环的 flit 数，
+每 <code>dfc_window = {fc.get('window')}</code> 拍把这个数（饱和到 6 bit）
+放上总线。位宽与 S1 完全相同，只是线上换了内容。</li>
+<li><b>赤字 = 全环均值 − 自己，两边都从总线上读。</b>每个节点把看到的计数
+累加成一张 {n_c} 项表，赤字取「表的均值减自己那一项」。
+<b>自己的进度也从总线上读、而不是用本地精确计数器</b>：两边都过同一个 6 bit
+量化器、同一段总线延迟，任何开局瞬态对所有节点等量作用，不会留下永久偏置。
+（第一版就是拿本地计数器比总线均值，结果每个赤字都被夹在上限、
+谁都不再发请求 —— 回归 <code>test_s22_deficit_via_bus</code> 钉住这一点。）</li>
+<li><b>落后的节点举请求，不落后的节点给它让路 —— 但只让"会挡到它"的那一步。</b>
+赤字超过 <code>dfc_thresh = {fc.get('thresh')}</code> 就置起请求。
+一个<u>自己不落后</u>的节点，遇到「这个 flit 会从请求者的出向 hop 上骑过去」
+才让路（<code>dfc_scope = {fc.get('scope')}</code>），
+所以一个请求只挡真正在抢它槽位的那些注入口，不是整个 plane。</li>
+</ol>
+<div class="def"><b>为什么让路不等于丢带宽。</b>让出来的槽<b>直接落到一个落后的
+节点手上</b>，而且只在有人落后时才发生 —— 这跟 I-tag「封停整段、举旗者自己
+未必用得上」是两件事。再加两个补丁把剩下的浪费也堵住：
+<ul>
+<li><b>前瞻改发</b>（<code>dfc_dodge = {fc.get('dodge')}</code>）：
+要让路时，往 inject Q 里再看最多 {fc.get('dodge')} 项，
+找一个<b>在请求者之前就下环</b>的 flit 发出去。让路者自己的 hop 照样忙着，
+请求者饿的那个 hop 照样被让出来。
+只允许<b>跨目的地</b>超越，所以同一笔 WriteData burst 内部永不换序
+（回归 <code>test_s22_dodge_keeps_dst_order</code>）。</li>
+<li><b>让路余量</b>（<code>dfc_margin = {fc.get('margin')}</code>）：
+只让给比自己落后 {fc.get('margin')} 个 flit 以上的节点。
+跟自己差不多的节点换一次槽，指标几乎不动，却实打实花掉一个 hop ——
+这一项就是把带宽差从 −1.17% 拉回 −0.07% 的那一项（见 6.3 表）。</li>
+</ul></div>
+<p class="note"><b>让路是单向的：落后的节点永不让路</b>
+（回归 <code>test_s22_yield_downhill_and_scoped</code>），
+否则让出来的槽可能落到一个更不需要它的节点手上。
+<code>dfc_hold = {fc.get('hold')}</code> 拍给请求加了上限：
+请求停不住 transit，所以一个被 transit 饿死的节点不能无限期地拖住上游。</p>
+
+<h3>6.2 官方 K 上的结果</h3>
+{_summary_table(pat, track=meta.get("ha_track"), schemes=SEC_FAIR)}
+<div class="def {verdict_cls}"><b>两条验收线：</b><br>
+① 各核瞬时写带宽均匀 —— <b>50 拍分箱平均 Jain = {jb22}</b>
+（S0 {jb0}），{'<b>&gt; 0.99 达标</b>' if ok_fair else '未达 0.99'}；<br>
+② 总写带宽与 S0 一致 —— <b>{f22['throughput']} vs {s0['throughput']}
+flit/cycle，差 {d22:+.2f}%</b>，{'<b>|差| &lt; 1% 达标</b>' if ok_thr
+                                 else '超出 1%'}。<br>
+附带：整窗 max/min {s0['max_min']} → <b>{f22['max_min']}</b>，
+最低核带宽 {s0['bw_min']} → {f22['bw_min']}。</div>
+<p class="note">机制活动量：让路判定 {fc.get('n_dfc_yield')} 次、
+前瞻改发 {fc.get('n_dfc_dodge')} 次。
+<b>这两个数是「判定求值次数」而不是「拍数」</b> ——
+free_slot 仲裁器为了排序会先试算一遍候选，同一次上环尝试因此会被计到多次，
+两者的口径也不同（前瞻成功的那一次就不会再走到让路判定）。
+所以它们只能用来<b>横向比较不同配置的机制活跃程度</b>（6.5 就是这么用的），
+不能当事件数读。</p>
+<p class="note">注意这里的 ratio 列：S22 是本报告里<b>第一个把 ratio 推到
+1.0 以上明显幅度</b>的方案（{(f22.get('jain_bin') or {}).get('jain_bin_ratio')}
+vs S0 {(s0.get('jain_bin') or {}).get('jain_bin_ratio')}）。
+ratio &gt; 1 的含义是<b>比完全公平的随机仲裁还要齐</b> ——
+让路把注入时机整理成了亚泊松，这正是 3.2.1 说「治时间抖动」的意思。</p>
+<img src="{imgs.get('s22_instbal', '')}" alt="S22 binned Jain over time">
+<p class="note">左图是验收指标本身随时间的走势：S22 那条线<b>整段</b>抬到零模型
+之上（不是靠某几段拉平均），S0 / S1T 贴着零模型走，
+默认 S1 则整段掉在下面。右图是不均衡随观察窗口的衰减 ——
+S22 在<b>每一个</b>窗口宽度上都低于零模型，说明它不是靠"把窗口拉宽平均掉"
+拿到指标的，而是真的把 50 拍尺度上的时序理齐了。</p>
+<img src="{imgs.get('s22_bars', '')}" alt="per-core BW S0/S1/S1T/S22">
+<p class="note">各核整窗写带宽：S22 把 10 个核收进
+{f22['bw_min']} ~ {f22['bw_max']}（S0 是 {s0['bw_min']} ~ {s0['bw_max']}）——
+<b>两端一起向均值收</b>，最低核 {s0['bw_min']} → {f22['bw_min']}、
+最高核 {s0['bw_max']} → {f22['bw_max']}，而总和不变（6.2 的吞吐差
+{d22:+.2f}%）。<b>关键在于总和不变</b>：S15 / S16 那类方案也是削峰，
+但它们削掉的带宽没有还回去。<br>
+这张图也把默认 S1 的失效画得最清楚：C0 与 C8
+（两个邻 mem = 1 的核）被压到 {schemes['S1']['fairness']['bw_min']}，
+其余核反而涨到 {schemes['S1']['fairness']['bw_max']} ——
+<b>正好是受害者被自己的 AIMD 罚下去、领先者接手</b>（5.3）。
+S1T 修掉了这个失效，但也仅仅是回到 S0 那条略有起伏的线。</p>
+
+<h3>6.3 参数选择：为什么是 window={S22_CFG['dfc_window']} 、
+margin={S22_CFG['dfc_margin']}</h3>
+{conf}
+<div class="def">两个关键读法：<br>
+<b>① margin 是带宽那条线的关键。</b>margin=0（让给任何一个落后的节点）
+Jain 一样漂亮（0.99145）但带宽掉 1.17%，越线；
+加上 margin=2 之后 Jain 还是 0.992 而带宽回到 −0.07%。
+差别就是那些"差不多齐"的换槽 —— 它们花掉一个 hop、几乎不改善指标。<br>
+<b>② 控制窗口必须短。</b>{S22_CFG['dfc_window']} 拍配 1 拍总线，
+赤字才是"当前"的进度差；窗口一长就退化成长期均值，
+而长期均值在闭环批量里天生就齐（整窗 Jain 本来就 ≈ 1），
+50 拍的箱看不到任何修正。<br>
+<b>③ 第二行是对照组</b>：只把 inject Q 加深到 32、不加控制器，
+Jain 一位不动（0.96479），带宽也不动。<b>所以公平性是控制器买来的，
+不是缓存买来的</b>；而最后一行说明控制器也确实需要那个缓存。</div>
+
+<h3>6.4 硬件开销：与 S1 逐项对比</h3>
+{hw}
+<div class="def good"><b>{HW_COST['verdict']}</b></div>
+<h4>6.4.1 先试过、被放弃的两条路（以及为什么）</h4>
+{rej}
+<div class="def">这三行是 S22 的设计依据，不是失败记录：<br>
+<b>I-tag 精细化</b>说明「扣住 + 整段封停」这条路的天花板 ——
+即使加上限域（只挡真会骑过去的 flit）和占空比（举旗一段时间就自动落下），
+拿到 0.99 仍要付 5.8%。<b>让出来的槽必须有人接手</b>，这是 S22 的第一条。<br>
+<b>S21 定速漏桶</b>说明信用闸门在这条 fabric 上的结构性问题：
+环上空槽是不规则出现的，闸门一扣就错过，而放大桶深让突发漏回来 ——
+这笔交易不闭合。<b>所以 S22 不设闸门</b>，这是它与所有 rate-based 方案的分界。</div>
+{sens}
 """
 
 
@@ -3298,9 +3904,9 @@ def _s1_dirbal_section(pat: dict, imgs: dict) -> str:
 前者不改。</p>
 <div class="def">
 <b>节点级预测</b>（置信度 {fc.get('confidence', '—')}）：
-{fc.get('hypothesis', '')} 证伪：{fc.get('falsify', '')}<br>
+{_prose(fc.get('hypothesis', ''))} 证伪：{_prose(fc.get('falsify', ''))}<br>
 <b>按方向拆预算的预测</b>（置信度 {ds_fc.get('confidence', '—')}）：
-{ds_fc.get('hypothesis', '')} 证伪：{ds_fc.get('falsify', '')}
+{_prose(ds_fc.get('hypothesis', ''))} 证伪：{_prose(ds_fc.get('falsify', ''))}
 </div>
 <p><b>对照。</b>官方规模上<b>没有</b>一组参数让所有核失败比都 &lt; 2。
 cap_scale=0.25 / 0.15 几乎不限住（吞吐仍 ≈ 1.92–1.94），失败比仍 ≥ 2。
@@ -3325,6 +3931,98 @@ max/min 两边都 ≈ 1.001：均匀写下各核写带宽本来就是一条平�
 <p class="note">结论：节点总预算限不住方向比；限狠了更偏。
 按方向拆 AIMD 只能从 2.24 收到 2.07，到不了 &lt; 2。
 几何（邻 mem=1 + 热 hop + 在环优先）比 S1 的旋钮硬。</p>
+{_s1_dirbal_now_section(pat)}
+"""
+
+
+def _s1_dirbal_now_section(pat: dict) -> str:
+    """Phase 2 redone on the fixed arbiter: what dir_split buys, and its limit.
+
+    5.2 above is the archived ha_track=32 study and its conclusion no longer
+    describes this fabric: on the free-slot arbiter `dir_split` both evens the
+    directions *and* stops the AIMD from costing throughput. The ratio still
+    does not reach 2, so the qualitative verdict survives -- but the numbers
+    and the reason both moved, which is why this is a separate subsection
+    rather than an edit to the archive.
+    """
+    db = S1_DIRBAL
+    schemes = pat.get("schemes") or {}
+    s1t = schemes.get("S1T")
+    s0f = schemes["S0"]["fairness"]
+
+    off = ""
+    if s1t:
+        f = s1t["fairness"]
+        dt = 100.0 * (f["throughput"] - s0f["throughput"]) / s0f["throughput"]
+        r0 = _max_fl_of(schemes, "S0")
+        r1 = _max_fl_of(schemes, "S1")
+        rt = _max_fl_of(schemes, "S1T")
+        jbt = (f.get("jain_bin") or {}).get("jain_bin_mean")
+        jb0 = (s0f.get("jain_bin") or {}).get("jain_bin_mean")
+        off = f"""
+<h4>5.3.1 官方 K 上确认（S1T = S1 + 每向预算）</h4>
+{_table(["方案", "最坏核的方向失败比", "总写带宽", "vs S0", "Jain@50拍",
+         "max/min"],
+        [["S0 基线", None if r0 is None else round(r0, 3),
+          s0f["throughput"], "—", jb0, s0f["max_min"]],
+         ["S1 默认（band=spec, cap=1）", None if r1 is None else round(r1, 3),
+          schemes["S1"]["fairness"]["throughput"],
+          f"{100.0 * (schemes['S1']['fairness']['throughput'] - s0f['throughput']) / s0f['throughput']:+.2f}%",
+          (schemes["S1"]["fairness"].get("jain_bin") or {}).get(
+              "jain_bin_mean"),
+          schemes["S1"]["fairness"]["max_min"]],
+         [f"<b>S1T</b>（dir_split, cap={S1_CFG['cap_scale']}, "
+          f"w={S1_CFG['window']}, burst={S1_CFG['pace_burst']}）",
+          None if rt is None else round(rt, 3), f["throughput"],
+          f"{dt:+.2f}%", jbt, f["max_min"]]],
+        hl=[False, False, True])}
+<div class="def good"><b>阶段二要求的那件事做到了：S1 的方向失败比从默认的
+{None if r1 is None else round(r1, 2)} 收到
+<b>{None if rt is None else round(rt, 2)}</b>，同时吞吐 {dt:+.2f}%
+（默认 S1 是 −18.8%）。</b><br>
+但要看清它做到的<b>是什么</b>：{None if rt is None else round(rt, 2)}
+基本就是 S0 自己的 {None if r0 is None else round(r0, 2)}。
+所以 <code>dir_split</code> 的作用是<b>把默认 S1 造成的额外方向偏斜消掉、
+退回基线水平</b>，而不是比基线更均匀 ——
+剩下那部分偏斜是几何（邻 mem = 1 + 热 hop + 在环优先）给的，
+源端限速碰不到它。</div>
+<div class="def warn"><b>但第二个考察项的答案是否定的：
+方向失败比变匀，并不带来各核瞬时带宽变匀。</b>
+S1T 的分箱 Jain 是 <b>{jbt}</b>，和 S0 的 {jb0} 差
+{abs((jbt or 0) - (jb0 or 0)):.5f} —— 在噪声以内，<b>一点没改善</b>；
+max/min 甚至从 {s0f['max_min']} 微升到 {f['max_min']}。<br>
+这是一条重要的负结果：<b>「两个方向的失败次数一样多」和
+「两个核在同一个 50 拍窗口里发出一样多的 flit」是两件不同的事。</b>
+前者是同一个核内部的对称性，后者是核之间的同步性。
+S1 的旋钮只能碰前者，所以阶段三必须换机制，不是继续调 S1 的参数。</div>"""
+
+    return f"""
+<h3>5.3 阶段二重做：修好仲裁器之后，按方向拆预算才真正起作用</h3>
+<p class="note">5.2 是 <b>ha_track = 32 + 旧 round-robin 仲裁器</b>的存档。
+换到本轮 fabric（free_slot 仲裁器、tracker 不绑定）之后，
+同一个 <code>dir_split</code> 旋钮的效果变了 —— 数值和原因都变了，
+所以单独记一节，不去改上面那份存档。</p>
+<p>任务书这一阶段要的是：<b>让 S1 上环失败的 CW / CCW 两个方向的失败次数
+尽量均匀</b>，然后考察这种情况下各核写带宽是否均衡、带宽是否打满。
+先在 K={db['k']} 上筛选（S0 = {db['s0_thr']} flit/cycle，
+最坏核方向失败比 {db['s0_failmax']}）：</p>
+{_table(["配置", "最坏核的方向失败比", "失败比≥2 的核数", "总写带宽",
+         "vs S0", "Jain@50拍", "max/min"],
+        [[r[0], r[1], r[2], r[3], f"{r[4]:+.1f}%", r[5], r[6]]
+         for r in db["rows"]], hl=[r[0].endswith("（选定）")
+                                   for r in db["rows"]])}
+<div class="def"><b>为什么默认 S1 会掉 18.8% 带宽、max/min 坏到 2.53。</b>
+S1 的乘性减是由<b>节点自己的上环失败次数</b>触发的，而在无缓存环上
+这些失败大多是<b>别人的 transit 流量</b>造成的 ——
+于是受害的核（C0 / C8）把自己限速，把槽位让给了本来就领先的核：
+各核带宽从 {db['note_default_bw']['min']} 到
+{db['note_default_bw']['max']}，差 2.5 倍。<b>这是阶段三选机制时的关键教训：
+以「自己失败了」为触发条件，在无缓存环上会惩罚受害者。</b></div>
+<p><b><code>dir_split</code>（把预算按方向分别记）是唯一同时改善两头的旋钮</b>：
+失败比 {db['s0_failmax']} → 4.82，而带宽回到 S0 的水平（+0.3%）。
+把窗口拉到 128 能把失败比再压到 3.61，但带宽要付 24.6% ——
+超出验收线一个数量级，所以不取。</p>
+{off}
 """
 
 
@@ -3347,6 +4045,7 @@ img { max-width: 100%; border: 1px solid #e5e7eb; }
 .def { background: #f8fafc; border-left: 3px solid #94a3b8;
         padding: 0.5rem 0.9rem; margin: 0.7rem 0; font-size: 0.93rem; }
 .bad { border-left-color: #dc2626; background: #fef2f2; }
+.warn { border-left-color: #d97706; background: #fffbeb; }
 tr.imbal td { background: #fef3c7; }
 tr.imbal td:first-child { font-weight: 650; }
 .good { border-left-color: #16a34a; background: #f0fdf4; }
@@ -3373,9 +4072,6 @@ def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
     jbr0 = (s0.get("jain_bin") or {}).get("jain_bin_ratio")
     jb1 = (s1.get("jain_bin") or {}).get("jain_bin_mean")
     t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / max(1e-9, s0["throughput"])
-    q_depth_delta = 100.0 * (
-        s0["throughput"] - TRACK256_ROUND["thr"]) / TRACK256_ROUND["thr"]
-    q_depth_material = abs(q_depth_delta) > 3.0
     t_ref = 100.0 * (s0["throughput"] - sref["throughput"]) / max(
         1e-9, sref["throughput"])
     b = pat["bounds"]
@@ -3464,38 +4160,49 @@ vs {(pat.get('s0_unbounded') or {}).get('makespan')}，吞吐同为
 本轮保持 256、只把队列改成 12+8 → {s0['throughput']}。
 定尺寸的正确依据是 <b>∞ 参照在官方 K 上的峰值占用
 {qref.get('max_ha_used', '—')}</b>，而不是短跑扫描曲线的拐点 ——
-K=4000 的探测说 128 就够，官方 K 上并不够（见 3.1.3）。</li>
-<li><b>每 VC 上环源队列 8+1 → 12+8：</b>
-S0 {TRACK256_ROUND['thr']} → <b>{s0['throughput']}</b> flit/cycle
-（{q_depth_delta:+.2f}%）。
-{(
-    '提升跨过 3% 证伪线，源队列深度应重新列为总带宽的重要因素。'
-    if q_depth_material else
-    '没有跨过 3% 证伪线；更深队列只保存更多待发 flit，'
-    '没有解决 transit flit 抢占出链路造成的空槽时序。'
-)}</li>
+K=4000 的探测说 128 就够，官方 K 上并不够（见 3.1.4）。</li>
+<li><b>从旧配置到本轮累计 {DEPTH_FACTORIAL['total_pct']:+.1f}%，
+但其中绝大部分是仲裁器，不是 buffer 深度。</b>
+此前几轮把「本轮 vs 上一轮」的差直接记在下环 buffer 加深上，
+那不是受控对比 —— 中间仲裁器也换了。2×2×2 因子实验拆开后：
+仲裁器一项 <b>{DEPTH_FACTORIAL['effects'][0][1]:+.1f}%</b>，
+两级 buffer 一起 <b>{DEPTH_FACTORIAL['buf_pct']:+.1f}%</b>
+（上环队列 {DEPTH_FACTORIAL['effects'][1][1]:+.1f}%、
+下环 buffer {DEPTH_FACTORIAL['effects'][2][1]:+.1f}%）。<br>
+而且后两项<b>依赖前一项才有效</b>：同一个队列加深在旧 rr 仲裁器上只值
+{DEPTH_FACTORIAL['effects'][1][2]:+.1f}%，下环加深在 rr 上是
+{DEPTH_FACTORIAL['effects'][2][2]:+.1f}%（无效）。
+仲裁器能挑方向之后，「每个方向手里有待发 flit」才变成一件有用的事。
+见 3.1.6。</li>
+<li><b>逐 FIFO 占用把绑定项定位到 HA 的 RSP 上环口。</b>
+本轮首次每 {meta.get('buf_sample')} 拍采样全部 fabric FIFO：
+{meta.get('eject_depth')} 深的下环 buffer <b>一次都没满</b>
+（dat 平均占用 0.29，满的比例 0%），核的 dat 上环队列也几乎是空的；
+真正打满的是热 RSP 段起点那几个 mem 节点的 RSP 共享 FIFO
+（<b>99.8% 的时间是满的</b>，且几乎每拍都在尝试上环、只有约 57% 能挤上去）。
+这修正了此前「吃紧在核发 WriteData」的默认假设。见 3.1.3。</li>
 <li><b>S1 相对 S0 吞吐 {t1:+.1f}%</b>，max/min
 {s0['max_min']} → {s1['max_min']}。
 本轮已无 RetryAck 可减，源端限速对 hop 理想毫无帮助。</li>
-<li><b>{(
-    'S0 达不到 R* 的剩余缺口需要重新拆分。'
-    if q_depth_material else
-    'S0 达不到 R* 仍只剩一个已识别的原因：无缓存环的上环仲裁。'
-)}</b>
+<li><b>S0 达不到 R* 的原因仍然是无缓存环的上环仲裁 ——
+只不过现在知道它有一部分是<u>可修的</u>。</b>
 S0 吞吐是 hop 理想 R* 的
 <b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.0f}%</b>。
 其余候选的状态：端口速率已排除（每节点每 VC 上/下环各 1 flit/cycle
 折算成 {len(meta.get('mem_nodes') or [])}.0 flit/cycle，比 R* 还松，见 3.1.1）；
-源/方向 buffer 深度（本轮 8+1 → 12+8 实测 {q_depth_delta:+.2f}%）、
-completer 表项已排除（本轮 retry = 0）。
-剩下的机制是在环 flit 绝对优先，核只能挤进空隙 ——
-决定上环延迟的是空档的<b>分布</b>而不是总量。见 3.1 与 4.5。</li>
+两级 buffer 深度一起只值 {DEPTH_FACTORIAL['buf_pct']:+.1f}%
+（在旧仲裁器上更只有 {DEPTH_FACTORIAL['buf_pct_rr']:+.1f}%），
+且 3.1.3 显示下环那一级从未满过；completer 表项已排除（本轮 retry = 0）。
+剩下的机制是在环 flit 绝对优先，要上环的节点只能挤进空隙 ——
+决定上环延迟的是空档的<b>分布</b>而不是总量，
+而受害最重的是坐在热 RSP 段起点的那几个 HA。见 3.1、3.1.3 与 4.5。</li>
 <li><b>上环失败比大 ≠ 访存不均衡。</b>失败比是同一核 CW/CCW 失败次数比，
 不是失败率。8 个 HA 收包相等；本轮核间写带宽也齐。
 它是邻 mem = 1 的核在热 hop 上打不进去的症状。见 4.3.2。</li>
 <li><b>官方 K 上没有一组 S1 参数让所有核失败比都 &lt; 2。</b>
 最接近是 dir_split + harsh（2.07，仍有 C0/C8）。
 各核写带宽仍是一条平线，只比默认 S1 低约 4%。见 5.2。</li>
+{_headline_phases(meta, pat)}
 </ol>
 </div>
 
@@ -3587,11 +4294,14 @@ ha_track = {meta.get('ha_track')}，配额从未触发，
 {_sweep_table(pat) if pat.get('sweep') else ''}
 <img src="{imgs.get('s1trace', '')}" alt="S1 control trace">
 {_s1_tune_section(pat, imgs)}
+{_s22_section(meta, pat, imgs)}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
 （K={meta['K']}、W={meta['W']}、n_planes={meta.get('n_planes')}、
-seed={meta['seed']}，生成于 {meta['generated_at']}）。</p>
+seed={meta['seed']}，生成于 {meta['generated_at']}）；
+S22 硬件开销灵敏度 <code>results/ring2_s22_cost.json</code>。
+回归：<code>utils/verify_ring2_20.py</code>。</p>
 </body></html>
 """
     OUT.write_text(html, encoding="utf-8")
@@ -3669,6 +4379,18 @@ def main() -> None:
     p = IMG / "ring2_wfair_instbal.png"
     plot_inst_balance(pat, meta, p)
     imgs["instbal"] = p.name
+    # Phase 3: the acceptance metric is a per-bin time series, so S22 needs
+    # the same two views S0/S1 get rather than a table row on its own.
+    if "S22" in (pat.get("schemes") or {}):
+        fair = tuple(s for s in SEC_FAIR if s in pat["schemes"])
+        p = IMG / "ring2_wfair_s22_instbal.png"
+        plot_inst_balance(pat, meta, p, schemes=fair)
+        imgs["s22_instbal"] = p.name
+        p = IMG / "ring2_wfair_s22_bars.png"
+        plot_bw_bars(pat, p, schemes=fair, extra_ref=False,
+                     title="阶段二 / 三对照 · 每 core 写带宽"
+                           f"（tracker = {trk}），虚线 = 该方案均值，纵轴已截断")
+        imgs["s22_bars"] = p.name
     p = IMG / "ring2_wfair_hopbw.png"
     plot_hop_bw(pat, cap, p)
     imgs["hopbw"] = p.name

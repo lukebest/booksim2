@@ -795,6 +795,18 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
     hot_hops_dat = sorted(
         f"{u}→{v}" for (u, v), s in pairs_on_hop.items()
         if len(s) == n_hot_dat and n_hot_dat)
+    # Busiest segment of every VC, and the node each one leaves from. An
+    # injector at that tail has to share the very hop the bound wants full.
+    hot_hops_by_vc: dict[str, list[str]] = {}
+    hot_tails_by_vc: dict[str, list[int]] = {}
+    for vc, paths in vc_paths.items():
+        load = _collapse_links(topo.link_load(paths, mult[vc]))
+        if not load:
+            continue
+        top = max(load.values())
+        hot = sorted(e for e, val in load.items() if val == top)
+        hot_hops_by_vc[vc] = [f"{u}→{v}" for u, v in hot]
+        hot_tails_by_vc[vc] = sorted({u for u, _v in hot})
     return {
         "link_by_vc": link_by_vc, "cut_by_vc": cut_by_vc,
         "link_lb": link_lb, "port_lb": port_lb, "cut_lb": cut_lb,
@@ -804,6 +816,7 @@ def write_bounds(topo: Ring2Topology, vc_paths: dict[str, list[Ring2Path]], *,
         "n_vc": topo.n_vc, "hop_bw_cap": topo.hop_bw_cap,
         "m_req": m_req, "m_rsp": m_rsp, "m_wdata": m_wdata,
         "n_hot_dat": n_hot_dat, "hot_hops_dat": hot_hops_dat,
+        "hot_hops_by_vc": hot_hops_by_vc, "hot_tails_by_vc": hot_tails_by_vc,
         "route": topo.route,
     }
 
