@@ -676,6 +676,10 @@ def main():
                 xs = [r[k] for r in g if r[k] is not None]
                 return None if not xs else max(xs)
 
+            def mn(k):
+                xs = [r[k] for r in g if r[k] is not None]
+                return None if not xs else min(xs)
+
             out.append({
                 "lam": lam, "n": len(g),
                 "mean_lat_med": med("mean_lat"),
@@ -683,14 +687,13 @@ def main():
                 "max_lat_med": med("max_lat"),
                 "max_lat_worst": mx("max_lat"),
                 "bw_eff_med": med("bw_eff_flits_per_cy"),
-                "bw_eff_worst": (min(r["bw_eff_flits_per_cy"] for r in g)
-                                 if g else None),
+                "bw_eff_worst": mn("bw_eff_flits_per_cy"),
                 "accepted_med": med("accepted_per_node"),
                 "n_stable": sum(1 for r in g if r["stable"]),
                 "max_over_t0_med": med("max_lat_over_t0"),
                 "max_over_t0_worst": mx("max_lat_over_t0"),
                 "hotspot_util_med": med("hotspot_util"),
-                "hotspot_util_worst": mx("hotspot_util"),
+                "hotspot_util_worst": mn("hotspot_util"),
                 "bisect_ss_med": med("bisect_ss"),
             })
         return out

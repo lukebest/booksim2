@@ -202,7 +202,7 @@ def lambda_section_html(data: dict | None = None) -> str:
                    "<th>有效带宽 中位<div class='sub'>全网 flit/cy</div></th>"
                    "<th>有效带宽 最差<div class='sub'>全网 flit/cy</div></th>"
                    "<th>热点利用率 中位<div class='sub'>稳态对分/理论 %</div></th>"
-                   "<th>热点利用率 最差<div class='sub'>稳态对分/理论 %</div></th>"
+                   "<th>热点利用率 最差<div class='sub'>14 场景最小 %</div></th>"
                    "<th>accepted 中位<div class='sub'>flit/节点/cy</div></th>"
                    "<th>稳定<div class='sub'>场景数</div></th>")
         else:

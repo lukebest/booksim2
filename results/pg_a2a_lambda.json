@@ -897,7 +897,7 @@
    "max_over_t0_med": 1.0102,
    "max_over_t0_worst": 1.0612,
    "hotspot_util_med": 20.2,
-   "hotspot_util_worst": 21.0,
+   "hotspot_util_worst": 19.4,
    "bisect_ss_med": 1.213
   },
   {
@@ -914,7 +914,7 @@
    "max_over_t0_med": 1.0408,
    "max_over_t0_worst": 1.0918,
    "hotspot_util_med": 30.4,
-   "hotspot_util_worst": 30.8,
+   "hotspot_util_worst": 28.7,
    "bisect_ss_med": 1.8215
   },
   {
@@ -931,7 +931,7 @@
    "max_over_t0_med": 1.0714,
    "max_over_t0_worst": 1.5918,
    "hotspot_util_med": 40.3,
-   "hotspot_util_worst": 41.5,
+   "hotspot_util_worst": 38.7,
    "bisect_ss_med": 2.4167
   },
   {
@@ -948,7 +948,7 @@
    "max_over_t0_med": 1.9388,
    "max_over_t0_worst": 32.8469,
    "hotspot_util_med": 49.9,
-   "hotspot_util_worst": 52.0,
+   "hotspot_util_worst": 43.3,
    "bisect_ss_med": 2.994
   },
   {
@@ -965,7 +965,7 @@
    "max_over_t0_med": 59.1633,
    "max_over_t0_worst": 78.3061,
    "hotspot_util_med": 47.3,
-   "hotspot_util_worst": 61.8,
+   "hotspot_util_worst": 38.9,
    "bisect_ss_med": 2.8385
   },
   {
@@ -982,7 +982,7 @@
    "max_over_t0_med": 64.1429,
    "max_over_t0_worst": 78.6429,
    "hotspot_util_med": 45.1,
-   "hotspot_util_worst": 63.6,
+   "hotspot_util_worst": 37.8,
    "bisect_ss_med": 2.705
   },
   {
@@ -999,7 +999,7 @@
    "max_over_t0_med": 68.0714,
    "max_over_t0_worst": 79.4898,
    "hotspot_util_med": 48.0,
-   "hotspot_util_worst": 63.9,
+   "hotspot_util_worst": 37.0,
    "bisect_ss_med": 2.8815
   },
   {
@@ -1016,7 +1016,7 @@
    "max_over_t0_med": 73.0306,
    "max_over_t0_worst": 80.2755,
    "hotspot_util_med": 44.7,
-   "hotspot_util_worst": 66.4,
+   "hotspot_util_worst": 37.2,
    "bisect_ss_med": 2.6822
   },
   {
@@ -1033,7 +1033,7 @@
    "max_over_t0_med": 76.1531,
    "max_over_t0_worst": 81.5204,
    "hotspot_util_med": 46.2,
-   "hotspot_util_worst": 68.7,
+   "hotspot_util_worst": 33.9,
    "bisect_ss_med": 2.7717
   },
   {
@@ -1050,7 +1050,7 @@
    "max_over_t0_med": 76.898,
    "max_over_t0_worst": 81.4592,
    "hotspot_util_med": 46.1,
-   "hotspot_util_worst": 59.6,
+   "hotspot_util_worst": 34.9,
    "bisect_ss_med": 2.7665
   },
   {
@@ -1067,7 +1067,7 @@
    "max_over_t0_med": 79.102,
    "max_over_t0_worst": 81.398,
    "hotspot_util_med": 45.0,
-   "hotspot_util_worst": 61.9,
+   "hotspot_util_worst": 36.1,
    "bisect_ss_med": 2.7005
   },
   {
@@ -1084,7 +1084,7 @@
    "max_over_t0_med": 79.0918,
    "max_over_t0_worst": 81.3878,
    "hotspot_util_med": 44.4,
-   "hotspot_util_worst": 61.3,
+   "hotspot_util_worst": 33.8,
    "bisect_ss_med": 2.664
   },
   {
@@ -1101,7 +1101,7 @@
    "max_over_t0_med": 79.6939,
    "max_over_t0_worst": 81.4694,
    "hotspot_util_med": 43.7,
-   "hotspot_util_worst": 61.9,
+   "hotspot_util_worst": 34.7,
    "bisect_ss_med": 2.6223
   },
   {
@@ -1118,7 +1118,7 @@
    "max_over_t0_med": 80.949,
    "max_over_t0_worst": 81.5612,
    "hotspot_util_med": 43.5,
-   "hotspot_util_worst": 61.9,
+   "hotspot_util_worst": 34.0,
    "bisect_ss_med": 2.6082
   },
   {
@@ -1135,7 +1135,7 @@
    "max_over_t0_med": 80.2551,
    "max_over_t0_worst": 81.4592,
    "hotspot_util_med": 45.8,
-   "hotspot_util_worst": 57.5,
+   "hotspot_util_worst": 30.2,
    "bisect_ss_med": 2.745
   }
  ],
