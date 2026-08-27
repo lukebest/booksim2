@@ -87,6 +87,10 @@ measure={m.get('measure')} cy，测量结束后排空（不再注入），
 <tr><td class="l">有效带宽</td><td class="l"><b>全网</b>交付 flit 数 / measure 周期，
 单位 <b>flit/cy</b>（整个 8×6，不是每节点）。
 旁列 bit/cy = ×512。accepted 才是每节点 flit/cy（m=1）。</td></tr>
+<tr><td class="l">热点 / 对分</td><td class="l">理论对分 = 健康 8×6 中线 X 割
+（x=3|4）单向 <b>6 flit/cy</b>。
+稳态对分 = 测量窗内实际穿过该割的单向吞吐（取 L→R / R→L 较忙一侧）。
+<b>热点带宽利用率 = 稳态对分 / 理论对分 × 100%</b>，上限 100%。</td></tr>
 <tr><td class="l">稳定</td><td class="l">该 (场景, λ) 是否仍处于开环稳态：
 accepted/λ ≥ 0.95（几乎吃下全部注入）且源队列斜率 &lt; 0.002
 且未 backlog 熔断。表里 <b>k/14</b> = 14 个故障场景中有 k 个仍稳定，
@@ -151,6 +155,7 @@ def lambda_section_html(data: dict | None = None) -> str:
                 f"{f' (T<sub>0</sub>={t0})' if t0 else ''}</th>"
                 "<th>有效带宽<div class='sub'>全网 flit/cy</div></th>"
                 "<th>有效带宽<div class='sub'>全网 bit/cy</div></th>"
+                "<th>热点利用率<div class='sub'>稳态对分/理论 %</div></th>"
                 "<th>accepted<div class='sub'>flit/节点/cy</div></th>"
                 "<th>稳定</th><th>样本包数</th>"
                 "</tr></thead><tbody>"
@@ -166,6 +171,7 @@ def lambda_section_html(data: dict | None = None) -> str:
                     f"<td>{_fmt(r.get('max_lat_over_t0'), 3)}</td>"
                     f"<td>{_fmt(r.get('bw_eff_flits_per_cy'), 4)}</td>"
                     f"<td>{_fmt(r.get('bw_eff_bits_per_cy'), 1)}</td>"
+                    f"<td>{_fmt(r.get('hotspot_util'), 1)}%</td>"
                     f"<td>{_fmt(r.get('accepted_per_node'), 5)}</td>"
                     f"<td>{stab}</td>"
                     f"<td>{r.get('n_samples')}</td></tr>"
@@ -183,12 +189,15 @@ def lambda_section_html(data: dict | None = None) -> str:
                    "<th>最长/T<sub>0</sub> 中位</th><th>最长/T<sub>0</sub> 最差</th>"
                    "<th>有效带宽 中位<div class='sub'>全网 flit/cy</div></th>"
                    "<th>有效带宽 最差<div class='sub'>全网 flit/cy</div></th>"
+                   "<th>热点利用率 中位<div class='sub'>稳态对分/理论 %</div></th>"
+                   "<th>热点利用率 最差<div class='sub'>稳态对分/理论 %</div></th>"
                    "<th>accepted 中位<div class='sub'>flit/节点/cy</div></th>"
                    "<th>稳定<div class='sub'>场景数</div></th>")
         else:
             hdr = ("<th>λ</th><th>平均时延</th><th>最长时延</th>"
                    "<th>最长/T<sub>0</sub></th>"
-                   "<th>有效带宽 (flit/cy)</th><th>accepted</th><th>稳定</th>")
+                   "<th>有效带宽 (flit/cy)</th>"
+                   "<th>热点利用率 %</th><th>accepted</th><th>稳定</th>")
         body = []
         for s in rows_s:
             if has_worst:
@@ -202,6 +211,8 @@ def lambda_section_html(data: dict | None = None) -> str:
                     f"<td>{_fmt(s.get('max_over_t0_worst'), 3)}</td>"
                     f"<td>{_fmt(s.get('bw_eff_med'), 4)}</td>"
                     f"<td>{_fmt(s.get('bw_eff_worst'), 4)}</td>"
+                    f"<td>{_fmt(s.get('hotspot_util_med'), 1)}%</td>"
+                    f"<td>{_fmt(s.get('hotspot_util_worst'), 1)}%</td>"
                     f"<td>{_fmt(s.get('accepted_med'), 5)}</td>"
                     f"<td>{s.get('n_stable')}/{s.get('n')}</td></tr>"
                 )
@@ -212,6 +223,7 @@ def lambda_section_html(data: dict | None = None) -> str:
                     f"<td>{_fmt(s.get('max_lat_med'), 0)}</td>"
                     f"<td>{_fmt(s.get('max_over_t0_med'), 3)}</td>"
                     f"<td>{_fmt(s.get('bw_eff_med'), 4)}</td>"
+                    f"<td>{_fmt(s.get('hotspot_util_med'), 1)}%</td>"
                     f"<td>{_fmt(s.get('accepted_med'), 5)}</td>"
                     f"<td>{s.get('n_stable')}</td></tr>"
                 )

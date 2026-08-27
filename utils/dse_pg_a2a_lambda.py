@@ -57,12 +57,64 @@ WARM, MEAS = 1500, 4000
 # Zero-load latency of the longest Manhattan pair on the full 8×6
 # (any shortest path): (MX−1)·H + (MY−1)·V + 2·RAMP + (m−1).
 MAX_ZERO_LATENCY = (F.MX - 1) * R.H + (F.MY - 1) * R.V + 2 * R.RAMP
+# Theoretical one-way bisection (healthy X mid-cut). Same as Topology.bisection_bw.
+THEORY_BISECT_BW = 6
+
+
+def theory_cut_dirs() -> tuple[set[tuple[int, int]], set[tuple[int, int]]]:
+    """Directed edges of the healthy X mid-cut (x=3 → 4 and 4 → 3)."""
+    mid_x = F.MX // 2
+    lr, rl = set(), set()
+    for y in range(F.MY):
+        a, b = F.nid(mid_x - 1, y), F.nid(mid_x, y)
+        lr.add((a, b))
+        rl.add((b, a))
+    return lr, rl
+
+
+_CUT_LR, _CUT_RL = theory_cut_dirs()
+
+
+def geometric_bisection_bw(adj: dict) -> dict[str, int]:
+    """One-way flit/cy of the tighter geometric mid-cut (same as Topology.bisection_bw).
+
+    X cut: undirected links between x=3 and x=4 (healthy 6).
+    Y cut: undirected links between y=2 and y=3 (healthy 8).
+    Bisection = min of the two; each undirected link is 1 flit/cy per direction.
+    """
+    mid_x, mid_y = F.MX // 2, F.MY // 2
+    x_u, y_u = set(), set()
+    for u, nbs in adj.items():
+        ux, uy = F.coord(int(u))
+        for v in nbs:
+            vx, vy = F.coord(int(v))
+            e = frozenset((int(u), int(v)))
+            if uy == vy and sorted((ux, vx)) == [mid_x - 1, mid_x]:
+                x_u.add(e)
+            if ux == vx and sorted((uy, vy)) == [mid_y - 1, mid_y]:
+                y_u.add(e)
+    x_bw, y_bw = len(x_u), len(y_u)
+    cands = [b for b in (x_bw, y_bw) if b > 0]
+    return {
+        "bisect_x": x_bw, "bisect_y": y_bw,
+        "bisect_bw": (min(cands) if cands else 0),
+    }
 
 
 def annotate_lat_ratio(rec: dict, t0: int = MAX_ZERO_LATENCY) -> dict:
     rec["max_zero_latency"] = t0
     mx = rec.get("max_lat")
     rec["max_lat_over_t0"] = (round(mx / t0, 4) if mx is not None and t0 else None)
+    return rec
+
+
+def annotate_hotspot(rec: dict, theory: int = THEORY_BISECT_BW) -> dict:
+    """util = 100% × (steady one-way cut throughput) / (theoretical bisection)."""
+    rec["hotspot"] = "bisection"
+    rec["bisect_theory"] = theory
+    ss = rec.get("bisect_ss")
+    rec["hotspot_util"] = (round(100.0 * ss / theory, 1)
+                           if ss is not None and theory else None)
     return rec
 
 
@@ -211,6 +263,8 @@ class PathMeshSteady:
         self.pkt_done: list[tuple[int, int, int, int, int]] = []
         self._pid = 0
         self.n_credit_stall = 0
+        self.cut_lr = 0
+        self.cut_rl = 0
 
     def offer(self, src: int, dst: int) -> None:
         path = self.paths[(src, dst)]
@@ -290,6 +344,11 @@ class PathMeshSteady:
                 self.credit[(node, out, vc)] -= 1
                 self.out_free[(node, out)] = self.t + 1
                 f.hop += 1
+                if self.warmup <= self.t < self.warmup + self.measure:
+                    if (node, out) in _CUT_LR:
+                        self.cut_lr += 1
+                    elif (node, out) in _CUT_RL:
+                        self.cut_rl += 1
                 lat = R.link_lat(node, out)
                 self.arrive[self.t + lat].append((out, node, f))
 
@@ -398,6 +457,8 @@ def run_one(paths, compute, adj, lam, *, num_vc=1, vc_of=None,
     acc = n_del / (a * measure) if a and measure else 0.0
     ratio = acc / lam if lam > 0 else 0.0
     flits = n_del  # m = 1
+    lr = sim.cut_lr / measure if measure else 0.0
+    rl = sim.cut_rl / measure if measure else 0.0
     return {
         "lam": lam, "A": a, "warmup": warmup, "measure": measure,
         "n_offered": n_off, "n_delivered": n_del,
@@ -415,6 +476,10 @@ def run_one(paths, compute, adj, lam, *, num_vc=1, vc_of=None,
         "backlog_end": sim.backlog(),
         "bail_at": bail or None,
         "n_credit_stall": sim.n_credit_stall,
+        "bisect_ss_lr": round(lr, 4),
+        "bisect_ss_rl": round(rl, 4),
+        "bisect_ss": round(max(lr, rl), 4),
+        "bisect_theory": THEORY_BISECT_BW,
     }
 
 
@@ -460,7 +525,8 @@ def _job(args):
     rec["A"] = len(compute)
     rec["n_sacrificed"] = sol_pack.get("n_sac", 0)
     rec["turn_mode"] = sol_pack.get("turn_mode")
-    return annotate_lat_ratio(rec)
+    annotate_lat_ratio(rec)
+    return annotate_hotspot(rec)
 
 
 def pack_sol(sol: dict) -> dict:
@@ -478,6 +544,7 @@ def pack_sol(sol: dict) -> dict:
         "which": which,
         "n_sac": int(sol.get("n_sacrificed", 0)),
         "turn_mode": sol.get("turn_mode"),
+        **geometric_bisection_bw(sol["route_adj"]),
     }
 
 
@@ -544,8 +611,8 @@ def main():
         want = {(round(lam, 2), warm, meas) for lam in lams}
         for r in prev.get("rows") or []:
             key = (round(r["lam"], 2), r.get("warmup"), r.get("measure"))
-            if key in want:
-                kept.append(annotate_lat_ratio(r, t0))
+            if key in want and r.get("bisect_ss") is not None:
+                kept.append(annotate_hotspot(annotate_lat_ratio(r, t0)))
         have = {(r["tag"], r["scenario"], round(r["lam"], 2)) for r in kept}
         jobs = [j for j in jobs
                 if (j[0], j[1], round(j[3], 2)) not in have]
@@ -568,6 +635,9 @@ def main():
                              rec.get("max_lat_over_t0"),
                              rec["bw_eff_flits_per_cy"], rec["stable"],
                              rec["secs"]), flush=True)
+
+    # Persist raw rows before summarising so a later KeyError cannot lose the sweep.
+    args.o.write_text(json.dumps({"rows": rows}, indent=1))
 
     def summarize(tag, scheme):
         sel = [r for r in rows if r["tag"] == tag and r["scheme"] == scheme]
@@ -601,6 +671,9 @@ def main():
                 "n_stable": sum(1 for r in g if r["stable"]),
                 "max_over_t0_med": med("max_lat_over_t0"),
                 "max_over_t0_worst": mx("max_lat_over_t0"),
+                "hotspot_util_med": med("hotspot_util"),
+                "hotspot_util_worst": mx("hotspot_util"),
+                "bisect_ss_med": med("bisect_ss"),
             })
         return out
 
@@ -633,6 +706,11 @@ def main():
             "inject": "Bernoulli(λ) each cycle per live node; dest uniform "
                       "over other live nodes; m=1 flit",
             "des": "PathMeshSteady residual-graph credit mesh; locked VC",
+            "hotspot": "bisection",
+            "bisect_bw_healthy": THEORY_BISECT_BW,
+            "hotspot_util": "100 * bisect_ss / bisect_theory  (%)",
+            "bisect_note": "bisect_ss = max(L→R, R→L) flits/cy on healthy "
+                           "X mid-cut during measure; theory = 6 flit/cy",
         },
         "hw_all_good": hw_xy,
         "hw_super_turn_healthy": hw_st_h,
@@ -668,10 +746,12 @@ def main():
     print("wrote", args.o, "rows", len(rows))
     print("=== all-good XY ===")
     for s in doc["summary_all_good"]:
-        print("  λ=%.2f  mean=%s  max=%s  max/T0=%s  bw=%.2f  acc=%.3f  stable=%s"
+        print("  λ=%.2f  mean=%s  max=%s  max/T0=%s  bw=%.2f  acc=%.3f  "
+              "hotspot=%.1f%%  stable=%s"
               % (s["lam"], s["mean_lat_med"], s["max_lat_med"],
                  s.get("max_over_t0_med"),
-                 s["bw_eff_med"] or 0, s["accepted_med"] or 0, s["n_stable"]))
+                 s["bw_eff_med"] or 0, s["accepted_med"] or 0,
+                 s.get("hotspot_util_med") or 0, s["n_stable"]))
     print("=== partial Super-turn (med / worst mean_lat) ===")
     for s in doc["summary_partial"]:
         print("  λ=%.2f  mean %s/%s  max %s/%s  bw %s  stable %d/%d"
