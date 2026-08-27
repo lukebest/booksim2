@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,7 +53,10 @@ def setup_html(data: dict) -> str:
     wire = m.get("max_manhattan_wire", 94)
     hops = m.get("max_manhattan_hops", 12)
     lams = m.get("lams") or []
-    lam_s = ", ".join(f"{x:.2f}" for x in lams)
+    lams_ag = m.get("lams_all_good") or lams
+    lams_pg = m.get("lams_partial") or lams
+    lam_ag_s = ", ".join(f"{x:.2f}" for x in lams_ag)
+    lam_pg_s = ", ".join(f"{x:.2f}" for x in lams_pg)
     return f"""
 <h2>仿真 Setup（请先核对这些假设）</h2>
 <table>
@@ -69,8 +73,12 @@ RAMP_BW={m.get('ramp_bw', 2)} flit/cy</td></tr>
 credit 初值 = Q，每输出每周期 1 flit</td></tr>
 <tr><td class="l">流量</td><td class="l">每个存活计算节点每周期以概率 λ 产生 1 个包；
 目的在其余存活节点上均匀（各源 λ 相同）</td></tr>
-<tr><td class="l">λ 网格</td><td class="l">0.10–0.35 步进 0.05，之后 0.36–0.50 步进 0.01：
-<code>{lam_s}</code>（共 {len(lams)} 点）</td></tr>
+<tr><td class="l">λ 网格</td><td class="l">all-good XY：0.10–0.35 步进 0.05，
+之后 0.36–0.50 步进 0.01：<code>{lam_ag_s}</code>
+（共 {len(lams_ag)} 点）。<br/>
+partial Super-turn：0.10–0.25 步进 0.05，
+膝点 0.30–0.40 步进 0.01：<code>{lam_pg_s}</code>
+（共 {len(lams_pg)} 点）。</td></tr>
 <tr><td class="l">时间窗</td><td class="l">warmup={m.get('warmup')} cy，
 measure={m.get('measure')} cy，测量结束后排空（不再注入），
 只统计 warmup ≤ t_gen &lt; warmup+measure 的包</td></tr>
@@ -125,9 +133,13 @@ def lambda_section_html(data: dict | None = None) -> str:
     ag = data.get("summary_all_good") or []
     pg = data.get("summary_partial") or []
     rows = data.get("rows") or []
+    lams_ag = set(round(x, 2) for x in (meta.get("lams_all_good") or meta.get("lams") or []))
+    lams_pg = set(round(x, 2) for x in (meta.get("lams_partial") or meta.get("lams") or []))
 
     def rows_table(tag: str, title: str) -> str:
-        sel = [r for r in rows if r["tag"] == tag]
+        allow = lams_ag if tag == "all_good" else lams_pg
+        sel = [r for r in rows if r["tag"] == tag
+               and (not allow or round(r["lam"], 2) in allow)]
         if not sel:
             return f"<p class='note'>{_esc(title)}：无行</p>"
         # group by scenario
@@ -252,6 +264,16 @@ def lambda_section_html(data: dict | None = None) -> str:
     st_used = hw_st_h.get("num_vc_used", hw_st_h.get("num_vc"))
     st_vc_s = (f"{st_billed}" if st_used in (None, st_billed)
                else f"{st_billed}（用{st_used}）")
+    xy_src = hw_xy.get("table_src_aware_bits_max") or 0
+    st_src = hw_st_h.get("table_src_aware_bits_max") or 0
+    xy_ent = xy_src // 2 if xy_src else "—"
+    st_ent = st_src // 3 if st_src else "—"
+    n_pairs = (hw_xy.get("n_live") or 48) * ((hw_xy.get("n_live") or 48) - 1)
+    hmax_xy = hw_xy.get("sr_hmax")
+    if isinstance(hmax_xy, int) and hmax_xy > 0:
+        len_bits = max(1, math.ceil(math.log2(hmax_xy + 1)))
+    else:
+        len_bits = 4
 
     def vc_cell(h):
         b = h.get("num_vc_billed", h.get("num_vc"))
@@ -279,7 +301,8 @@ def lambda_section_html(data: dict | None = None) -> str:
 <h2>10. 均匀注入率 all-to-all（健康 XY / ≤2R+≤4L Super-turn）</h2>
 <p class="note">每个存活计算节点以相同伯努利注入率 λ 发单 flit 包，
 目的均匀落在其余存活节点（与 <code>rg_steady_des.Injector</code> 同口径）。
-λ ∈ {{{', '.join(f'{x:.2f}' for x in meta['lams'])}}}。
+all-good λ ∈ {{{', '.join(f'{x:.2f}' for x in (meta.get('lams_all_good') or meta.get('lams') or []))}}}；
+partial λ ∈ {{{', '.join(f'{x:.2f}' for x in (meta.get('lams_partial') or meta.get('lams') or []))}}}。
 warmup={meta['warmup']} cy，measure={meta['measure']} cy，Q={meta['Q']}，
 flit={meta['flit_bits']} bit。
 时延 = <code>t_eject − t_gen</code>（仅统计 measure 窗内产生的包，测量结束后排空）。
@@ -321,6 +344,20 @@ H<sub>max</sub> = 路径最大跳数。512-bit flit 上均不额外占 flit。</
 <td>{hw_st_h.get('sr_hmax', '—')}</td>
 <td>{st_vc_s}</td></tr>
 </tbody></table>
+<p class="note">健康 Super-turn（对照）相对健康 XY：源感知表
+{xy_src} → {st_src} bit，
+源路由头 {hw_xy.get('sr_header_bits')} → {hw_st_h.get('sr_header_bits')} bit。
+<strong>不是绕路。</strong>健康 8×6 上两套路径完全相同
+（H<sub>max</sub> 都是 {hmax_xy}，{n_pairs} 对都是曼哈顿最短路，
+最忙路由器过路 (src,dst) 条数相同）。
+差出来的 bit 只来自 Super-turn 的硅上 VC 预算：M0s 硬顶 2 VC
+（本图实际只用 1 层 <code>{hw_st_h.get('turn_mode') or 'east_first'}</code>）。
+源感知表每条 = 2 bit 下一跳 + [VC 选择 1 bit]，
+所以 {xy_src} = {xy_ent}×2，
+{st_src} = {st_ent}×3。
+源路由头 = ⌈log<sub>2</sub>(H<sub>max</sub>+1)⌉ + 2·H<sub>max</sub> + [VC 1 bit]
+= {len_bits}+{2 * (hmax_xy or 0)}+0 = {hw_xy.get('sr_header_bits')}
+对 {len_bits}+{2 * (hmax_xy or 0)}+1 = {hw_st_h.get('sr_header_bits')}。</p>
 <p class="note">partial Super-turn 汇总：缓冲中位
 {buf_pg_med} / 最大 {buf_pg_max} flit/router；
 目的表中位 {hw_sum.get('table_bits_med')} / 最大

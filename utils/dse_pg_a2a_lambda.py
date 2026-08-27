@@ -41,14 +41,23 @@ import ppa_analytic_model as PPA
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "pg_a2a_lambda.json"
 
-def default_lams() -> list[float]:
+def default_lams_all_good() -> list[float]:
     """0.10–0.35 step 0.05, then 0.36–0.50 step 0.01."""
     coarse = [round(0.10 + 0.05 * i, 2) for i in range(6)]  # 0.10 .. 0.35
     fine = [round(0.36 + 0.01 * i, 2) for i in range(15)]   # 0.36 .. 0.50
     return coarse + fine
 
 
-LAMS = default_lams()
+def default_lams_partial() -> list[float]:
+    """0.10–0.25 step 0.05, then 0.30–0.40 step 0.01 (Super-turn knee)."""
+    coarse = [round(0.10 + 0.05 * i, 2) for i in range(4)]  # 0.10 .. 0.25
+    fine = [round(0.30 + 0.01 * i, 2) for i in range(11)]   # 0.30 .. 0.40
+    return coarse + fine
+
+
+LAMS = default_lams_all_good()
+LAMS_AG = default_lams_all_good()
+LAMS_PG = default_lams_partial()
 Q = D.DEFAULT_Q
 FLIT_BITS = PPA.FLIT_BITS
 A_FLIT = PPA.ARCH_A3_BUFFERS / PPA.ARCH_A3_INTERIOR_FLITS
@@ -560,7 +569,10 @@ def main():
     ap.add_argument("-o", type=Path, default=OUT)
     args = ap.parse_args()
 
-    lams = [0.10, 0.35, 0.50] if args.quick else LAMS
+    if args.quick:
+        lams_ag = lams_pg = [0.10, 0.35, 0.50]
+    else:
+        lams_ag, lams_pg = list(LAMS_AG), list(LAMS_PG)
     warm, meas = (800, 2000) if args.quick else (WARM, MEAS)
     t0 = MAX_ZERO_LATENCY
 
@@ -570,6 +582,8 @@ def main():
     st = solve(healthy, "super_turn")  # cost reference on healthy
     hw_xy = hw_cost("xy", 1, xy["paths"], 48)
     hw_st_h = hw_cost("super_turn", st["num_vc"], st["paths"], 48) if st else None
+    if hw_st_h is not None:
+        hw_st_h["turn_mode"] = st.get("turn_mode")
 
     cat = catalog_2r4l(n_per_cell=1, seed=0)
     pg_sols = []
@@ -597,21 +611,25 @@ def main():
 
     jobs = []
     pack_xy = pack_sol(xy)
-    for lam in lams:
+    for lam in lams_ag:
         jobs.append(("all_good", "healthy", "xy", lam, 0, warm, meas, pack_xy))
     for s, sol, _hw in pg_sols:
         pack = pack_sol(sol)
-        for lam in lams:
+        for lam in lams_pg:
             jobs.append(("partial_good", s["name"], "super_turn",
                          lam, 0, warm, meas, pack))
 
+    want_by_tag = {
+        "all_good": {(round(lam, 2), warm, meas) for lam in lams_ag},
+        "partial_good": {(round(lam, 2), warm, meas) for lam in lams_pg},
+    }
     kept: list[dict] = []
     if args.reuse and not args.fresh and args.o.exists():
         prev = json.loads(args.o.read_text())
-        want = {(round(lam, 2), warm, meas) for lam in lams}
         for r in prev.get("rows") or []:
             key = (round(r["lam"], 2), r.get("warmup"), r.get("measure"))
-            if key in want and r.get("bisect_ss") is not None:
+            if (key in want_by_tag.get(r.get("tag"), ())
+                    and r.get("bisect_ss") is not None):
                 kept.append(annotate_hotspot(annotate_lat_ratio(r, t0)))
         have = {(r["tag"], r["scenario"], round(r["lam"], 2)) for r in kept}
         jobs = [j for j in jobs
@@ -639,13 +657,13 @@ def main():
     # Persist raw rows before summarising so a later KeyError cannot lose the sweep.
     args.o.write_text(json.dumps({"rows": rows}, indent=1))
 
-    def summarize(tag, scheme):
+    def summarize(tag, scheme, grid):
         sel = [r for r in rows if r["tag"] == tag and r["scheme"] == scheme]
         by = defaultdict(list)
         for r in sel:
             by[r["lam"]].append(r)
         out = []
-        for lam in lams:
+        for lam in grid:
             g = by.get(lam, [])
             if not g:
                 continue
@@ -680,7 +698,10 @@ def main():
     hw_pg = [h for _s, _sol, h in pg_sols]
     doc = {
         "meta": {
-            "lams": lams, "warmup": warm, "measure": meas, "Q": Q,
+            "lams": lams_ag,
+            "lams_all_good": lams_ag,
+            "lams_partial": lams_pg,
+            "warmup": warm, "measure": meas, "Q": Q,
             "flit_bits": FLIT_BITS, "m": 1,
             "traffic": "Bernoulli(λ) per live node, dest uniform over others",
             "latency": "t_eject − t_gen for packets generated after warmup",
@@ -738,10 +759,16 @@ def main():
             "num_vc_max": max((h["num_vc"] for h in hw_pg), default=None),
             "n_dest_only_ok": sum(1 for h in hw_pg if h["table_dest_only_ok"]),
         },
-        "summary_all_good": summarize("all_good", "xy"),
-        "summary_partial": summarize("partial_good", "super_turn"),
+        "summary_all_good": summarize("all_good", "xy", lams_ag),
+        "summary_partial": summarize("partial_good", "super_turn", lams_pg),
         "rows": sorted(rows, key=lambda r: (r["tag"], r["scenario"], r["lam"])),
     }
+    # keep only the λ grids we claim in meta (drop leftover PG 0.41–0.50 etc.)
+    ag_set, pg_set = set(lams_ag), set(lams_pg)
+    rows = [r for r in rows
+            if (r["tag"] == "all_good" and round(r["lam"], 2) in ag_set)
+            or (r["tag"] == "partial_good" and round(r["lam"], 2) in pg_set)]
+    doc["rows"] = sorted(rows, key=lambda r: (r["tag"], r["scenario"], r["lam"]))
     args.o.write_text(json.dumps(doc, indent=1))
     print("wrote", args.o, "rows", len(rows))
     print("=== all-good XY ===")
