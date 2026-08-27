@@ -1542,11 +1542,15 @@ def test_s16_needs_to_grant_below_the_tracker() -> None:
 def test_rate_pinned_reproduces_baseline() -> None:
     """S17 / S18 must be exactly S0 when the controller cannot throttle.
 
-    `pace_max` is two REQ per cycle, one per plane, which is a core's
-    physical ceiling; pinning the rate there proves the pacing hook is the
-    only thing either scheme changes.
+    Pinning the rate at a core's physical REQ ceiling proves the pacing hook is
+    the only thing either scheme changes. That ceiling is one REQ per cycle per
+    inject port, so it is derived from the fabric rather than written down: with
+    the up-ring port split by direction each plane offers two ports, not one.
     """
-    pin = {"pace_min": 2.0, "pace_init": 2.0, "outst_sample": 16}
+    from dse_ring2_write_fair import FABRIC
+    ceiling = float(_write_topo().n_planes
+                    * (2 if FABRIC.get("per_dir_ports") else 1))
+    pin = {"pace_min": ceiling, "pace_init": ceiling, "outst_sample": 16}
     for track in (0, 32):
         _, _, base = _run_retry("S0", k=200, cfg={
             "ha_track": track, "outst_sample": 16})

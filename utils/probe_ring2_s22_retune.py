@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""Re-tune S22 on the corrected fabric, where the baseline is already fairer.
+"""Re-tune S22 for per-direction up-ring ports, where the baseline is *less* fair.
 
-Implementing I-tag as specified moved the baseline: per-bin Jain went from
-0.957 to 0.968 and whole-window max/min from 1.12 to 1.03. S22 was tuned
-against the old, less fair baseline, so at its old operating point it now
-intervenes harder than it needs to and costs 1.88% -- over the acceptance line.
+Giving each direction its own port group (the real full-ring structure: six
+inject ports per node, REQ / RSP / DAT per direction) moves the baseline the
+opposite way from the previous two re-tunes. Throughput goes up, but so does
+the spread: a node can now board on both directions in the same cycle, which
+compounds the position advantage of cores sitting next to a memory node. The
+short probe put S0's per-bin Jain near 0.89 against 0.955 on the shared port,
+with whole-window max/min near 1.94 against 1.36.
 
-Every knob here makes the controller *gentler*, which is the direction the new
-baseline calls for: a longer control window averages the deficit over more
-cycles, a higher threshold ignores smaller gaps, and a higher margin refuses
-more near-level swaps. The question is whether any combination clears
-Jain > 0.99 while staying inside 1% of S0.
+So the tuning direction reverses. The last two rounds wanted the controller
+*gentler* (margin 2 -> 4) because the baseline had become fair enough that most
+deficits were noise. Here the deficits are real and large, so the controller
+needs to intervene *harder*: the grid is extended down to margin 0 and 1, which
+previous rounds had ruled out as too aggressive.
+
+The two acceptance lines are unchanged -- per-bin Jain > 0.99 and total write
+bandwidth within 1% of S0 -- but they are now a much longer reach, because the
+gap to close is ~0.10 of Jain rather than ~0.02.
 
 Usage:
     PYTHONHASHSEED=0 python3 probe_ring2_s22_retune.py [K]
@@ -38,26 +45,29 @@ DEEP = {"dfc_dodge": 32, "dir_inj_depth": 32, "inj_depth": 32}
 # Written before the runs. Do not edit after seeing results.
 FORECAST = {
     "hypothesis": (
-        "S22 的代价来自「让路」，而让路次数由「有多少节点被判定落后」驱动。"
-        "修正 I-tag 之后基线本身已经把 max/min 从 1.12 压到 1.03，"
-        "落后判定应当大幅减少，所以同一组参数下让路次数会下降、"
-        "但旧工作点 (w=2, thresh=0.5, margin=2) 仍然过于激进 —— "
-        "它是针对更不公平的基线调的。放宽任一项（更长窗口 / 更高门限 / "
-        "更大余量）应该都能把带宽损失拉回 1% 以内，"
-        "而 Jbin 因为起点更高（0.968 而非 0.957）不需要那么多干预就能过 0.99。"
+        "按方向拆端口之后基线反而更不齐（Jbin ≈ 0.89、max/min ≈ 1.94），"
+        "因为一个节点现在能在同一拍向两个方向各上环一个 flit，"
+        "邻 mem 多的核的位置优势被放大。S22 的机制本身与不齐的<b>来源</b>无关 —— "
+        "它只看总线上播的进度差 —— 所以它应该仍然能收敛，"
+        "但需要比上一轮<b>更激进</b>的工作点（margin 0~2 而不是 4），"
+        "且带宽代价会更高，因为要让的路更多。"
+        "关键不确定性在于：这次要补的 Jain 缺口是 0.10 而不是 0.02，"
+        "让路次数可能大到把带宽拖出 1% 以外。"
     ),
     "predicted": {
         "exists_point_passing_both": True,
-        "best_thr_delta_pct": [-1.0, 0.2],
-        "best_jbin": [0.990, 0.996],
-        # Gentler settings should trade monotonically: less yield, less cost.
-        "yield_falls_with_margin": True,
+        "best_margin_le": 2.0,
+        "best_thr_delta_pct": [-1.0, 0.0],
+        "best_jbin": [0.990, 0.995],
+        # More aggression should now cost more, not less.
+        "yield_rises_vs_prev_fabric": True,
     },
-    "confidence": 0.65,
+    "confidence": 0.45,
     "falsify": (
-        "所有 48 个点都过不了双线（要么 Jbin<0.99，要么带宽差>1%）——"
-        "那说明在更公平的基线上 S22 的边际收益已经不足以抵消它的边际代价，"
-        "必须换机制而不是换参数"
+        "所有点都过不了双线 —— 那说明在按方向拆端口的 fabric 上，"
+        "「不扣槽、只换仲裁赢家」这条路的收敛能力不足以补 0.10 的 Jain 缺口，"
+        "必须回到扣槽类机制（并接受带宽损失），或者承认这条 fabric 上"
+        "两条线不可同时满足"
     ),
 }
 
@@ -85,7 +95,7 @@ def main() -> None:
 
     rows = []
     t0 = time.perf_counter()
-    grid = list(product((2, 3, 4, 6), (0.5, 1.0, 2.0), (2.0, 3.0, 4.0, 6.0)))
+    grid = list(product((2, 3, 4), (0.5, 1.0, 2.0), (0.0, 1.0, 2.0, 4.0)))
     for w, thresh, margin in grid:
         cfg = {"dfc_window": w, "dfc_bus_lat": 1, "dfc_thresh": thresh,
                "dfc_hold": 16, "dfc_margin": margin, **DEEP}

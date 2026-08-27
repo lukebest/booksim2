@@ -82,12 +82,19 @@ HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
 # Request tracker entries per completer, and the baseline for every scheme:
-# a completer that runs out of entries must RetryAck. 256 is above the peak
-# occupancy the unlimited-tracker reference actually reaches at the official K
-# (195 entries), so the tracker should stop binding altogether and what remains
-# is the bufferless ring's own injection limit. 128 was not enough: the
-# reference needs more than that, so occupancy pegged at the cap.
-RETRY_TRACK = 256
+# a completer that runs out of entries must RetryAck. The size has to sit above
+# the peak occupancy the workload actually reaches, or the tracker -- not the
+# ring -- becomes the binding resource and the study measures the wrong thing.
+#
+# Per-direction up-ring ports moved that peak. On the shared port the peak was
+# 243 entries and 256 was just enough (zero RetryAck). With each direction on
+# its own port the inject side is faster, the peak rises to 422, and 256 pegs
+# at saturation: 20278 RetryAcks, 60834 extra REQ / RSP flits on the ring, and
+# total write bandwidth falls from 95.69% to 76.13% of R*. 512 covers the 422
+# peak and takes retries back to zero; 512 / 1024 / 4096 all measure
+# identically, which is the witness that the tracker has stopped binding.
+# See `PERDIR_PROBE`.
+RETRY_TRACK = 512
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
 # to S0 exactly (pinned by verify_ring2_20.py). Being under the tracker is
@@ -347,10 +354,22 @@ S1_CFG = dict(dir_split=True, band="spec", cap_scale=0.5, window=64,
 ITAG_MODE = "reserve"
 T_INJ = 4                # consecutive failed boards before a node raises I-tag
 T_XFER = 1               # failed ejects before E-tag: the specified value is 1
+# The up-ring port structure. This is a full ring, so each node's inject side
+# is *two* port groups -- one per direction -- and each group carries REQ / RSP
+# / DAT. Six inject ports per node, each 1 flit/cycle. The down-ring side is
+# unchanged: one two-write-one-read buffer per node per VC, draining 1
+# flit/cycle, so `per_dir_ports` deliberately does not touch the leave side.
+#
+# Consequence worth flagging: `inj_sel` only reorders a port group holding more
+# than one queue (`_board_one`). With the directions on separate ports every
+# group is a singleton, so `inj_sel="free_slot"` is now a **no-op** -- verified
+# bit-identical to `rr` in `PERDIR_PROBE`. It is kept in the dict only so the
+# shared-port comparison rows in that probe stay reproducible.
+PER_DIR_PORTS = True
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
               per_vc_ports=True, shared_inj=True, two_write_leave=True,
               inj_depth=12, dir_inj_depth=8, eject_depth=12,
-              inj_sel="free_slot",
+              inj_sel="free_slot", per_dir_ports=PER_DIR_PORTS,
               itag_mode=ITAG_MODE, t_inj=T_INJ, t_xfer=T_XFER,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE, buf_sample=BUF_SAMPLE,
@@ -735,6 +754,67 @@ DEPTH_FACTORIAL = {
     # table exists to correct. free_slot, 8+1/4 (4.9558) -> 12+8/12 (5.1872).
     "buf_pct": 4.67,
     "buf_pct_rr": 1.33,      # the same pair on rr: 4.5286 -> 4.5889
+}
+
+# Frozen: the up-ring port structure correction. This is a full ring, so each
+# node's inject side is two port groups -- one per direction -- each carrying
+# REQ / RSP / DAT: six inject ports per node, 1 flit/cycle each. The down-ring
+# side is unchanged (one two-write-one-read buffer per node per VC, 1 flit/cycle
+# drain), so the change is deliberately asymmetric.
+#
+# Everything here is at the official K, one plane, seed 0.
+# `probe_ring2_perdir.py` and `probe_ring2_perdir_why.py` produce it.
+PERDIR_PROBE = {
+    "k": 20000, "r_star": 5.7143,
+    # R* does not move. Splitting the board port by direction halves its floor,
+    # so the busiest *link* still binds -- the ceiling was never a port-capacity
+    # question. Floors in cycles, at the official K.
+    "bounds": {
+        "link_lb": 70000,
+        "board_lb_shared": 50000, "board_lb_shared_at": "node 1, rsp",
+        "board_lb_per_dir": 25000, "board_lb_per_dir_at": "node 1, rsp, ccw",
+        "leave_lb": 50000, "leave_lb_at": "node 1, dat",
+        "binding": "link_lb", "r_star_before": 5.7143, "r_star_after": 5.7143,
+    },
+    # The tracker sweep. `ha_track` had to grow with the port change: a faster
+    # inject side raises peak tracker occupancy, and once it pegs, RetryAck puts
+    # whole extra transactions back on the ring.
+    "track_rows": [
+        # per_dir, ha_track, thr, % R*, Jbin, max/min, retries, peak tracker,
+        # deflections, flits delivered vs the 1000000 the workload implies
+        [False, 256, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [False, 512, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [False, 4096, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [True, 256, 4.3500, 76.13, 0.93993, 1.0964, 20278, 256, 882, 1060834],
+        [True, 512, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+        [True, 1024, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+        [True, 4096, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+    ],
+    "chosen_track": 512,
+    # `inj_sel` only reorders a port group holding more than one queue. With the
+    # directions separated every group is a singleton, so the arbiter is inert.
+    "free_slot_is_noop": True,
+    "free_slot_equals_rr": {"thr": 4.3500, "jain_bin": 0.93993,
+                            "note": "bit-identical at ha_track=256"},
+    # Two causes that were tested and eliminated before landing on the tracker.
+    "eliminated": [
+        ["下环 buffer / E-tag 绕环",
+         "（K=6000）eject 12 → 32 → 64 把偏转从 981 压到 103，"
+         "吞吐一动不动（84.83% → 84.46%）；eject_bw=2 把偏转清成 0，"
+         "吞吐反而更差（82.59%）。把嫌疑机制彻底消掉而指标更坏，说明它不是病因。"
+         "官方 K 上还有一条反向证据：tracker 从 256 加到 512 之后偏转"
+         "从 882 <b>涨到</b> 2306，而吞吐同时从 76.13% 升到 95.69% —— "
+         "偏转更多却更快，它显然不是限制项。"],
+        ["路由改变", "choose_dir 只看链路时延、完全确定，"
+         "且两种端口结构下 REQ 的 hop 穿越数逐位相同（74976）。"],
+    ],
+    "verdict": (
+        "按方向拆上环端口在<b>两个方向上都改变了结论</b>：总带宽从 91.30% 抬到 "
+        "<b>95.69% R*</b>（前提是 tracker 跟上，见下），"
+        "而瞬时均衡度从 Jain <b>0.96765 掉到 0.87865</b>、"
+        "整窗 max/min 从 1.0288 坏到 1.6931 —— "
+        "一个节点现在能在同一拍向两个方向各上环一个 flit，"
+        "邻 mem 多的核的位置优势被放大。"),
 }
 
 # Frozen: the variance decomposition that sets the phase-3 target. Per-bin
@@ -2237,6 +2317,8 @@ def main() -> None:
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
+            "per_dir_ports": bp.per_dir_ports,
+            "perdir_probe": PERDIR_PROBE,
             "vc_indep_forecast": VC_INDEP_FORECAST,
             "shared_buf_forecast": SHARED_BUF_FORECAST,
             "per_vc_port_forecast": PER_VC_PORT_FORECAST,

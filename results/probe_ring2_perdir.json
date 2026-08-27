@@ -1,0 +1,284 @@
+{
+  "k": 20000,
+  "bin_w": 50,
+  "flits": 400000,
+  "bounds": {
+    "link_by_vc": {
+      "req": 35000,
+      "rsp": 70000,
+      "dat": 70000
+    },
+    "cut_by_vc": {
+      "req": 25000,
+      "rsp": 50000,
+      "dat": 50000
+    },
+    "link_lb": 70000,
+    "port_lb": 50000,
+    "cut_lb": 50000,
+    "txn_lb": 89,
+    "bound": 70000,
+    "merge_port_vcs": false,
+    "n_txn": 200000,
+    "n_vc": 3,
+    "hop_bw_cap": 120,
+    "m_req": 1,
+    "m_rsp": 2,
+    "m_wdata": 2,
+    "n_hot_dat": 14,
+    "hot_hops_dat": [
+      "0\u21921",
+      "10\u219211",
+      "18\u219217",
+      "8\u21927"
+    ],
+    "hot_hops_by_vc": {
+      "req": [
+        "0\u21921",
+        "8\u21927",
+        "10\u219211",
+        "18\u219217"
+      ],
+      "rsp": [
+        "1\u21920",
+        "7\u21928",
+        "11\u219210",
+        "17\u219218"
+      ],
+      "dat": [
+        "0\u21921",
+        "8\u21927",
+        "10\u219211",
+        "18\u219217"
+      ]
+    },
+    "hot_tails_by_vc": {
+      "req": [
+        0,
+        8,
+        10,
+        18
+      ],
+      "rsp": [
+        1,
+        7,
+        11,
+        17
+      ],
+      "dat": [
+        0,
+        8,
+        10,
+        18
+      ]
+    },
+    "route": "latency"
+  },
+  "split_port_bounds": {
+    "board_per_dir_lb": 25000,
+    "board_per_dir_at": {
+      "node": 1,
+      "vc": "rsp",
+      "dir": -1
+    },
+    "board_shared_lb": 50000,
+    "board_shared_at": {
+      "node": 1,
+      "vc": "rsp"
+    },
+    "leave_lb": 50000,
+    "leave_at": {
+      "node": 1,
+      "vc": "dat"
+    }
+  },
+  "binding_floor": 70000,
+  "r_star": 5.7143,
+  "r_star_prev": 5.7143,
+  "rows": [
+    {
+      "label": "shared port, free_slot\uff08\u65e7 fabric\uff09",
+      "over": {},
+      "thr": 5.2174,
+      "pct_r_star": 91.3,
+      "jain_bin": 0.96765,
+      "jain_bin_null": 0.96684,
+      "jain_bin_ratio": 1.00084,
+      "max_min": 1.0288,
+      "bw_min": 0.51659,
+      "bw_max": 0.53145,
+      "failmax": 3.864,
+      "makespan": 76667,
+      "n_board_fail": 533745,
+      "n_itag_raised": 32884,
+      "n_itag_yield": 16401,
+      "n_etag_raised": 0,
+      "n_deflections": 0,
+      "max_ejectq": 12,
+      "starve_max": 32,
+      "hot_hops": [
+        {
+          "vc": "dat",
+          "hop": "8:-1:dat",
+          "flits": 70000,
+          "util": 0.91304,
+          "defl": 0
+        },
+        {
+          "vc": "req",
+          "hop": "8:-1:req",
+          "flits": 35000,
+          "util": 0.45652,
+          "defl": 0
+        },
+        {
+          "vc": "rsp",
+          "hop": "1:-1:rsp",
+          "flits": 70000,
+          "util": 0.91304,
+          "defl": 0
+        }
+      ]
+    },
+    {
+      "label": "shared port, rr",
+      "over": {
+        "inj_sel": "rr"
+      },
+      "thr": 4.573,
+      "pct_r_star": 80.03,
+      "jain_bin": 0.97164,
+      "jain_bin_null": 0.96222,
+      "jain_bin_ratio": 1.00979,
+      "max_min": 1.0143,
+      "bw_min": 0.455,
+      "bw_max": 0.46152,
+      "failmax": 2.291,
+      "makespan": 87470,
+      "n_board_fail": 747633,
+      "n_itag_raised": 44703,
+      "n_itag_yield": 25355,
+      "n_etag_raised": 2,
+      "n_deflections": 2,
+      "max_ejectq": 12,
+      "starve_max": 22,
+      "hot_hops": [
+        {
+          "vc": "dat",
+          "hop": "8:-1:dat",
+          "flits": 70001,
+          "util": 0.80029,
+          "defl": 1
+        },
+        {
+          "vc": "req",
+          "hop": "8:-1:req",
+          "flits": 35000,
+          "util": 0.40014,
+          "defl": 0
+        },
+        {
+          "vc": "rsp",
+          "hop": "1:-1:rsp",
+          "flits": 70000,
+          "util": 0.80027,
+          "defl": 0
+        }
+      ]
+    },
+    {
+      "label": "per-dir ports, free_slot",
+      "over": {
+        "per_dir_ports": true
+      },
+      "thr": 4.35,
+      "pct_r_star": 76.13,
+      "jain_bin": 0.93993,
+      "jain_bin_null": 0.96005,
+      "jain_bin_ratio": 0.97905,
+      "max_min": 1.0964,
+      "bw_min": 0.41786,
+      "bw_max": 0.45815,
+      "failmax": 2.303,
+      "makespan": 91953,
+      "n_board_fail": 952483,
+      "n_itag_raised": 87453,
+      "n_itag_yield": 52666,
+      "n_etag_raised": 882,
+      "n_deflections": 882,
+      "max_ejectq": 12,
+      "starve_max": 89,
+      "hot_hops": [
+        {
+          "vc": "dat",
+          "hop": "8:-1:dat",
+          "flits": 70156,
+          "util": 0.76295,
+          "defl": 156
+        },
+        {
+          "vc": "req",
+          "hop": "18:-1:req",
+          "flits": 45134,
+          "util": 0.49084,
+          "defl": 0
+        },
+        {
+          "vc": "rsp",
+          "hop": "17:1:rsp",
+          "flits": 90543,
+          "util": 0.98467,
+          "defl": 275
+        }
+      ]
+    },
+    {
+      "label": "per-dir ports, rr",
+      "over": {
+        "per_dir_ports": true,
+        "inj_sel": "rr"
+      },
+      "thr": 4.35,
+      "pct_r_star": 76.13,
+      "jain_bin": 0.93993,
+      "jain_bin_null": 0.96005,
+      "jain_bin_ratio": 0.97905,
+      "max_min": 1.0964,
+      "bw_min": 0.41786,
+      "bw_max": 0.45815,
+      "failmax": 2.303,
+      "makespan": 91953,
+      "n_board_fail": 952483,
+      "n_itag_raised": 87453,
+      "n_itag_yield": 52666,
+      "n_etag_raised": 882,
+      "n_deflections": 882,
+      "max_ejectq": 12,
+      "starve_max": 89,
+      "hot_hops": [
+        {
+          "vc": "dat",
+          "hop": "8:-1:dat",
+          "flits": 70156,
+          "util": 0.76295,
+          "defl": 156
+        },
+        {
+          "vc": "req",
+          "hop": "18:-1:req",
+          "flits": 45134,
+          "util": 0.49084,
+          "defl": 0
+        },
+        {
+          "vc": "rsp",
+          "hop": "17:1:rsp",
+          "flits": 90543,
+          "util": 0.98467,
+          "defl": 275
+        }
+      ]
+    }
+  ],
+  "free_slot_equals_rr": true
+}

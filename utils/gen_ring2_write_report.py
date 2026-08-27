@@ -23,8 +23,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from dse_ring2_write_fair import (
-    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, S1_CFG, S1_DIRBAL,
-    S22_CFG, S22_CONFIRM, S22_REJECTED, S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
+    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, PERDIR_PROBE,
+    S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM, S22_REJECTED, S22_ROBUST,
+    TAG_AUDIT, TAG_BELIEF,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -991,11 +992,22 @@ def _setup_table(meta: dict) -> str:
          ("REQ / RSP / DAT 各有独立上下环口，互不占槽"
           if meta.get("per_vc_ports")
           else "三条 VC 共享同一个上下环端口")],
+        ["上环端口分组",
+         ("每方向一组 × 3 VC = 每 node 6 个上环口"
+          if meta.get("per_dir_ports") else "两方向共用一个上环口 / VC"),
+         ("full ring：CW / CCW 各自一组端口，每组含 REQ / RSP / DAT，"
+          "每口 1 flit/cycle。<b>下环侧不拆</b>，仍是每 (node, VC) "
+          "一个两写一读 buffer、每拍读 1 flit"
+          if meta.get("per_dir_ports")
+          else "该 VC 的两个环方向争用同一个上环口")],
         ["上环队列",
          (f"{meta['inj_depth']} 深共享 FIFO + 每向 "
           f"{meta.get('dir_inj_depth', 1)} 深 inject Q"
           if meta.get("shared_inj") else str(meta["inj_depth"])),
          ("每 (node, plane, VC) 一套：两个环方向共用那个 FIFO，"
+          "其后每方向各一个 inject Q 并各自接一个上环口"
+          if meta.get("shared_inj") and meta.get("per_dir_ports")
+          else "每 (node, plane, VC) 一套：两个环方向共用那个 FIFO，"
           "其后每方向各一个 inject Q，该 VC 每拍上环 1 flit"
           if meta.get("shared_inj") and meta.get("per_vc_ports")
           else "每 (node, plane, VC)")],
@@ -3164,6 +3176,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 {hz_ablate}
 {_ceiling_knob_section(meta, pat)}
 {_tag_audit_section(meta, pat)}
+{_perdir_section(meta, pat)}
 
 <h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
@@ -3245,18 +3258,39 @@ def _headline_phases(meta: dict, pat: dict) -> str:
     s0 = schemes["S0"]["fairness"]
     p = INJ_SEL_PROBE
     gain = 100.0 * (p["rows"][1][1] - p["rows"][0][1]) / p["rows"][0][1]
+    pp = PERDIR_PROBE
+    pp_shared, pp_ok = pp["track_rows"][0], next(
+        r for r in pp["track_rows"] if r[0] and r[1] == pp["chosen_track"])
+    pp_sat = next(r for r in pp["track_rows"] if r[0] and r[1] == 256)
     out = [f"""
-<li><b>阶段一：推高 S0 总带宽的那个旋钮不在任务书列出的三类里。</b>
-buffer 深度、E-tag 门限 <code>t_xfer</code>、预留下环槽全部惰性；
-<code>t_inj</code> 有效但是一条单调的「用带宽换公平」曲线。
-真正抬高平台的是<b>上环仲裁的时机</b>：
-让仲裁器先看出链路这拍是否空闲再许诺端口
-（<code>inj_sel=free_slot</code>），
-短探测 {p['rows'][0][1]} → {p['rows'][1][1]} flit/cycle（{gain:+.0f}%，
-占 R* 从 {p['rows'][0][2]}% 到 {p['rows'][1][2]}%），
-官方 K 上 S0 = <b>{s0['throughput']}</b>，
-占 R* <b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.1f}%</b>。
-不加缓存、不加总线。见 3.1.6。</li>"""]
+<li><b>阶段一：上环端口按方向拆成两组之后，两个指标朝<u>相反方向</u>动。</b>
+这个环是 full ring，上环端口本来就是每方向一组、每组各有 REQ / RSP / DAT
+（每节点 6 个上环口）。改对之后总写带宽
+{pp_shared[2]} → <b>{pp_ok[2]}</b> flit/cycle，占 R* 从
+{pp_shared[3]}% 到 <b>{pp_ok[3]}%</b>；
+但 50 拍分箱 Jain 从 {pp_shared[4]} <b>掉到 {pp_ok[4]}</b>、
+整窗 max/min 从 {pp_shared[5]} 坏到 {pp_ok[5]} ——
+一个节点能在同一拍向两个方向各上环一个 flit，位置优势被放大。
+<b>R* 本身不动</b>（{pp['bounds']['r_star_after']}）：绑定项是最忙的链路，
+拆端口只把 board 端口界砍半，而它本来就不绑定。见 3.1.8。</li>"""]
+    out.append(f"""
+<li><b>阶段一（连带的硬件定档）：上环变快之后 completer 的 tracker 成了新瓶颈，
+必须从 256 加到 {pp['chosen_track']}。</b>
+峰值占用从 {pp_shared[7]} 涨到 {pp_ok[7]} 个表项；停在 256 会饱和，
+{pp_sat[6]:,} 次 RetryAck 把 {pp_sat[9] - 1000000:,} 个额外 flit
+（每次重试 1 REQ + 2 RSP）压回环上，总带宽反而掉到 {pp_sat[3]}% R*。
+取 {pp['chosen_track']} 后重试归零，且 512 / 1024 / 4096 三档<u>逐位相同</u> ——
+这是「tracker 不再绑定」的判据。
+<b>另有两个错误病因被排除</b>：下环 buffer / E-tag 绕环
+（把 <code>eject_bw</code> 设成 2 让偏转彻底归零，吞吐<u>反而更差</u>）
+与路由改变（REQ 的 hop 穿越数两种端口结构下逐位相同）。见 3.1.8。</li>""")
+    out.append(f"""
+<li><b>阶段一（作废）：原先记在「上环仲裁时机」上的
+{gain:+.0f}% 收益不成立。</b>
+<code>inj_sel</code> 只在一个端口组里有多于一个队列时才重排候选；
+端口按方向拆开后每组只剩一个队列，<code>free_slot</code> 与 rr
+<b>逐位相同</b>。它修的是「一个端口伺候两个方向」这个耦合，
+而真实硬件里该耦合不存在。见 3.1.6（已作废）与 3.1.8。</li>""")
     a = TAG_AUDIT
     d, ch, pd = a["dormant"], a["chosen"], a["per_dir_ports"]
     port_none = sum(r[6] for r in a["waste"])
@@ -3271,22 +3305,17 @@ E-tag 只拿到几个额外 buffer 表项而<b>没有</b>规定要求的「挤�
 E-tag 首次下环失败即打标 + 下环仲裁最高优先），
 并有三条回归钉住。见 3.1.7。</li>""")
     out.append(f"""
-<li><b>阶段一（重推上限）：补全之后 S0 的总带宽<u>没有</u>抬起来，
+<li><b>阶段一（重推上限）：补全 I-tag / E-tag 之后 S0 的总带宽<u>没有</u>抬起来，
 因为缺口的成因与这两个机制无关。</b>
 直接量绑定链路：它驮过的 flit 数与路由表压给它的完全相等，占用率
-{100 * a['hot'][1][2]:.2f}% —— <b>整个缺口就是这条链路上的空槽</b>。
-逐拍分类这些空槽，「端口空闲」一列合计 {port_none}（实质为零）：
-<b>没有一个是仲裁失误或误封造成的</b>，全部是本节点那一个上环端口
-在同一拍被<u>另一个方向</u>占用，或本节点没货。
-把端口按方向拆开（故意违反 1 flit/cycle/node）能把占比从
-{a['base_pct']}% 抬到 {pd['pct']}%，任何 I-tag 设置都做不到。
-<b>结论：R* 作为链路计数界成立但不可达 —— 一个节点两条出向 hop 只有它自己和
-transit 能填，而它每 VC 只有一个端口，要同时填满两条 hop 需要两条 hop 上的气泡
-在时间上恰好互补，那是全局调度问题。</b>
-I-tag 的正确定位是公平性旋钮（规定语义下 t_inj={ch['t_inj']} 时
+{100 * a['hot'][1][2]:.2f}% —— <b>整个缺口就是这条链路上的空槽</b>，
+而逐拍分类这些空槽，「端口空闲」一列合计 {port_none}（实质为零）：
+<b>没有一个是仲裁失误或误封造成的</b>。
+I-tag 的正确定位因此是公平性旋钮（规定语义下 t_inj={ch['t_inj']} 时
 带宽 {ch['thr_delta_pct']:+.2f}%、Jain {ch['jbin_delta']:+.5f}，两头都略好，
 而原 broadcast 语义同一门限要掉 9.13%），E-tag 的正确定位是把绕环限制在一圈。
-见 3.1.7。</li>""")
+<b>但把这些空槽归因为「一个端口伺候两个方向」的那一步已作废</b> ——
+那是共享端口模型的产物，真实的按方向拆分端口见 3.1.8。见 3.1.7。</li>""")
     jd = JITTER_DECOMP["rows"][1]
     out.append(f"""
 <li><b>阶段一（续）：打满之后的分箱不公平里 {100 * jd[4]:.0f}% 是时间抖动，
@@ -3306,7 +3335,18 @@ I-tag 的正确定位是公平性旋钮（规定语义下 t_inj={ch['t_inj']} �
                        - s0["throughput"]) / s0["throughput"])
         db = S1_DIRBAL
         out.append(f"""
-<li><b>阶段二：这条旋钮已经被规范 I-tag 转到底了，AIMD 没有剩余空间。</b>
+<li><b>阶段二、三待在新 fabric 上重调，下面两条的工作点是从共享端口 fabric
+继承来的。</b>
+按方向拆上环端口把 S0 的分箱 Jain 从 {pp_shared[4]} 拉到 {pp_ok[4]}，
+阶段三要补的缺口从 0.02 变成 <b>{0.99 - pp_ok[4]:.2f}</b>，
+方向失败比的基线也随之改变。因此 S1 的 AIMD 参数与 S22 的
+<code>dfc_margin</code> 都需要重新扫（S22 大概要往<b>更激进</b>的方向走，
+margin 从 4 降到 0~2），本轮先只交阶段一的结论。
+下面两条<b>数值仍是本次官方 K 的实测</b>，但它们是<u>未重调</u>的工作点，
+不应读作最终结论。</li>""")
+        out.append(f"""
+<li><b>阶段二<span style="opacity:.6">［工作点未重调］</span>：
+这条旋钮已经被规范 I-tag 转到底了，AIMD 没有剩余空间。</b>
 <code>itag_mode=reserve</code> 让 S0 <u>不加任何流控</u>就把最坏方向失败比从
 broadcast 实现下的 {db['s0_failmax_broadcast']} 降到
 {None if r0 is None else round(r0, 2)} —— 因为 <b>I-tag 的旗子本来就是按方向挂的</b>
@@ -3321,34 +3361,42 @@ broadcast 实现下的 {db['s0_failmax_broadcast']} 降到
 S1T 分箱 Jain {jbt} vs S0 {jb0}（差 {abs((jbt or 0) - (jb0 or 0)):.5f}，
 在噪声以内），max/min 还从 {s0['max_min']} 微升到 {f['max_min']}。
 前者是一个核内部的对称性，后者是核之间的同步性。
-默认 S1 之所以掉 {abs(d1):.1f}%、max/min 坏到 {schemes['S1']['fairness']['max_min']}，
-是因为它的乘性减由<b>节点自己的失败次数</b>触发，
+默认 S1 掉 {abs(d1):.1f}% 带宽（max/min
+{schemes['S1']['fairness']['max_min']}，靠<u>普遍限速</u>换来的 ——
+把所有人一起压慢当然会让极差变小），
+根因是它的乘性减由<b>节点自己的失败次数</b>触发，
 而无缓存环上这些失败是别人的 transit 造成的 —— <b>受害者反过来给领先者让路</b>。
 见 5.3。</li>""")
     s22 = schemes.get("S22")
     if s22:
         f = s22["fairness"]
         jb = (f.get("jain_bin") or {}).get("jain_bin_mean") or 0.0
+        jb0 = (s0.get("jain_bin") or {}).get("jain_bin_mean")
         d = 100.0 * (f["throughput"] - s0["throughput"]) / s0["throughput"]
         ok = jb > 0.99 and abs(d) < 1.0
         out.append(f"""
-<li><b>阶段三：S22「赤字触发的限域让路」两条验收线同时达标{
-'' if ok else '（未达标）'}。</b>
-50 拍分箱平均 Jain <b>{jb}</b>（&gt; 0.99），
+<li><b>阶段三<span style="opacity:.6">［工作点未重调］</span>：
+S22「赤字触发的限域让路」两条验收线{
+'同时达标' if ok else '在新 fabric 上暂未达标'}。</b>
+50 拍分箱平均 Jain <b>{jb}</b>
+（验收线 0.99，{'达标' if jb > 0.99 else f'差 {0.99 - jb:.5f}'}），
 总写带宽 {f['throughput']} vs S0 {s0['throughput']}
-（<b>{d:+.2f}%</b>，|差| &lt; 1%），
-整窗 max/min {s0['max_min']} → <b>{f['max_min']}</b>。<br>
+（<b>{d:+.2f}%</b>，验收线 1%，{'达标' if abs(d) < 1.0 else '超出'}），
+整窗 max/min {s0['max_min']} → <b>{f['max_min']}</b>。
+<b>两条线都只差一点</b>，而这正是「工作点是从更公平的基线上继承来的」
+所预期的：基线 Jain 从 0.96765 掉到 {jb0}，同一组保守参数补不满这段更大的缺口。<br>
 机制：复用 S1 那条 6 bit 广播总线，但播的是<b>本窗上环进度</b>而不是拥塞等级；
 落后的节点举请求，<b>不落后的</b>节点只对「会骑过请求者出向 hop」的 flit 让路。
 <b>从不扣住空槽</b> —— 让出来的槽直接落到落后的节点手上，
 这是它与 I-tag（−5.8%）和定速漏桶 S21（−17%）的分界。
 硬件上它用加法树换掉 S1 的乘法器和令牌桶，代价是总线要 1 拍送到、
 inject Q 每向加深到 32。<br>
-<b>范围说明：</b>这两条线是在<b>环受限</b>区间成立的（uniform，K 翻倍复现，
-Jain 稳定在 {jb} 五位不动）。换到 hot（全部写打进一个两节点 mem 簇）时瓶颈
-移到 completer、总带宽只有 0.94 flit/cycle，任何环侧控制器都拿不到 0.99
-（S0 自己只有 0.577）；S22 在那里也没有变坏 —— Jain 0.577 → 0.716、
-带宽 +5.9%。见第 6 节、6.3.1。</li>""")
+<b>范围说明：</b>K 翻倍复现与 hot pattern 的稳健性检查（6.3.1）测于<u>共享端口</u>
+fabric，需随工作点一起重做。其中一条与端口结构无关、仍然成立：hot
+（全部写打进一个两节点 mem 簇）时瓶颈在 completer 而不在环，
+总带宽只有 0.94 flit/cycle，任何环侧控制器都拿不到 0.99
+（S0 自己只有 0.577），所以那条 pattern 不是环侧公平性结论的有效检验轴。
+见第 6 节、6.3.1。</li>""")
     return "".join(out)
 
 
@@ -3366,8 +3414,22 @@ def _ceiling_knob_section(meta: dict, pat: dict) -> str:
     gain = 100.0 * (fs[1] - rr[1]) / rr[1]
     thr0 = (pat["schemes"]["S0"]["fairness"] or {}).get("throughput")
     return f"""
-<h4>3.1.6 沿着任务书扫旋钮：buffer 深度、t_inj、t_xfer 都不是绑定项，
-上环仲裁的<b>时机</b>才是</h4>
+<h4>3.1.6 <span style="opacity:.6">［已作废］</span>沿着任务书扫旋钮：
+上环仲裁的<b>时机</b>曾被认为是绑定项</h4>
+<div class="def bad"><b>本节的核心结论在按方向拆上环端口之后不成立，整节作废，
+仅作为过程记录保留。</b>
+<code>inj_sel</code> 只在<u>一个端口组里有多于一个队列</u>时才会重排候选
+（<code>_board_one</code>）。full ring 的上环端口本来就按方向分成两组，
+每组各有 REQ / RSP / DAT，于是每个端口组只剩一个队列 ——
+<b><code>free_slot</code> 仲裁器退化成空操作</b>，与 rr 逐位相同
+（已验证：thr 与 Jbin 五位小数全同）。
+下面那个 {gain:+.1f}% 的收益，是<u>共享端口</u>这个错误前提下的产物：
+它修的是「一个端口要伺候两个方向、许诺错了就空转一拍」，
+而真实硬件里这个耦合根本不存在。<br>
+同理，本节 2×2×2 因子实验里「仲裁器」那一维、
+以及「每向 inject Q 深度只有在仲裁器修好后才有意义」那段交互解释，
+都随之失效。buffer 深度与 <code>t_inj</code> / <code>t_xfer</code>
+不是绑定项这一条仍然成立。<b>新的带宽结论见 3.1.8。</b></div>
 <p>任务书要求先调 buffer(FIFO) 大小、I-tag 门限 <code>t_inj</code>
 和 E-tag 门限 <code>t_xfer</code>，把 S0 的总写带宽推向理论上限。
 下面是短探测（K={p['k']}、seed 0、1 plane、R* = {p['r_star']}，
@@ -3580,15 +3642,105 @@ buffer 只剩一个位置时带 E-tag 的先下、普通 flit 被送去绕环）
 只是这条工作负载不触发它。<b>拥塞更重的方案才会用到</b> ——
 默认 S1 同一个 run 里就有 {(pat['schemes'].get('S1') or {}).get('n_etag_raised', 0)}
 次 E-tag。<br>
-<b>这条同时是一条独立证据</b>：下环侧一次都没成为约束，
-所以 3.1.7 里那 {100 - a['base_pct']:.1f}% 的带宽缺口<u>全部</u>在上环端口，
-与 E-tag 无关。</div>
+<b>这条同时是一条独立证据</b>：在<u>共享端口</u>的 fabric 上下环侧一次都没成为约束，
+所以那 {100 - a['base_pct']:.1f}% 的带宽缺口与 E-tag 无关。</div>
+<div class="def bad"><b>本节把缺口归给「上环端口耦合」的那一段已作废。</b>
+「一个端口要伺候两个方向、许诺错了就空转一拍」这个浪费，
+是<u>共享端口</u>这个错误模型的产物；full ring 的上环端口本来按方向分成两组，
+该耦合不存在。<b>本节关于 I-tag / E-tag 语义的审计与修正全部仍然有效</b>
+（那是机制正确性，与端口结构无关），失效的只是缺口归因那一段。
+新的带宽与均衡度结论见 <b>3.1.8</b>。</div>
 <div class="def good"><b>本轮 fabric 的最终取值：
 <code>itag_mode=reserve</code>、<code>t_inj={ch['t_inj']}</code>、
 <code>t_xfer={ch['t_xfer']}</code>（规定值）。</b>
 相对休眠基线 <b>带宽 {ch['thr_delta_pct']:+.2f}%、分箱 Jain
 {ch['jbin_delta']:+.5f}</b> —— 两个方向同时略好，所以没有取舍问题。
+（这两个差值测于共享端口 fabric，机制结论不受端口结构影响。）
 官方 K 上 S0 = <b>{thr0}</b> flit/cycle，占 R* <b>{pct0:.1f}%</b>。</div>
+"""
+
+
+def _perdir_section(meta: dict, pat: dict) -> str:
+    """The up-ring port structure correction, and what it does to both metrics.
+
+    Every earlier bandwidth number in 3.1 assumed one inject port per (node,
+    VC) shared by the two ring directions. On a full ring the port is natively
+    split by direction, each side carrying REQ / RSP / DAT. That is not a
+    tuning knob: it voids 3.1.6's arbiter finding outright (the arbiter has
+    nothing left to arbitrate) and it moves both headline metrics, in opposite
+    directions -- more bandwidth, worse instantaneous fairness.
+    """
+    p = PERDIR_PROBE
+    b = p["bounds"]
+    rows = p["track_rows"]
+    shared = rows[0]
+    sat = next(r for r in rows if r[0] and r[1] == 256)
+    ok = next(r for r in rows if r[0] and r[1] == p["chosen_track"])
+    d_thr = 100.0 * (ok[2] - shared[2]) / shared[2]
+    return f"""
+<h4>3.1.8 按方向拆上环端口：带宽升到 {ok[3]}% R*，
+但瞬时均衡度<b>反而变差</b></h4>
+<p>前面 3.1 各节都建在一个错的端口模型上：每 (node, VC) 一个上环口，
+两个环方向争用它。这个环是 <b>full ring</b>，上环端口本来就按方向分成两组，
+<b>每组各有 REQ / RSP / DAT 通道</b> —— 每节点 6 个上环口，每口 1 flit/cycle。
+下环侧不变，仍是每 (node, VC) 一个两写一读 buffer、每拍读出 1 flit，
+所以这个改动是<b>刻意不对称</b>的。</p>
+<h5>先看理论上限：R* 不动</h5>
+<p>按方向拆端口把 board 端口的下界<b>砍掉一半</b>
+（{b['board_lb_shared']} → {b['board_lb_per_dir']} cycle，
+分别在 {b['board_lb_shared_at']} / {b['board_lb_per_dir_at']}），
+但绑定项本来就不是端口，而是最忙的<b>链路</b>
+（{b['link_lb']} cycle）。下环端口界 {b['leave_lb']} 也在链路界之下。</p>
+<div class="def"><b>R* = {b['r_star_after']} flit/cycle，与拆端口前逐位相同。</b>
+天花板从来不是端口容量问题，所以这次改动只影响<u>能不能够到</u>，不影响<u>上限在哪</u>。</div>
+<h5>但 tracker 必须跟着放大，否则带宽反而掉 20 点</h5>
+<p>上环快了之后，completer 的请求 tracker 峰值占用从
+{shared[7]} 涨到 {ok[7]} 个表项。原来的 256 就此不够用：</p>
+{_table(["上环端口", "tracker", "总写带宽", "占 R*", "Jain@50拍", "max/min",
+         "RetryAck", "tracker 峰值", "偏转", "实发 flit"],
+        [["每向一组" if r[0] else "两向共享", r[1], r[2], f"{r[3]}%", r[4],
+          r[5], f"{r[6]:,}", f"{r[7]}{'（饱和）' if r[7] == r[1] else ''}",
+          f"{r[8]:,}", f"{r[9]:,}"] for r in rows],
+        hl=[bool(r[0]) and r[1] == p["chosen_track"] for r in rows])}
+<div class="def bad"><b>tracker 卡在 256 时总带宽掉到 {sat[3]}% R*
+（{sat[2]} flit/cycle），比共享端口还差 15 点。</b>
+链条是闭合的：峰值需求 {ok[7]} &gt; 256 → tracker 饱和 →
+{sat[6]:,} 次 RetryAck → 多发了 {sat[9] - 1000000:,} 个 flit
+（每次重试 = 1 个 REQ + 2 个 RSP）→ 这些额外报文占满 RSP 链路。
+<b>这是「completer 成了新瓶颈」，不是环的问题。</b></div>
+<div class="def good"><b>tracker 取 {p['chosen_track']} 之后重试归零，
+总写带宽 = {ok[2]} flit/cycle，占 R* {ok[3]}%
+（相对共享端口 {d_thr:+.2f}%）。</b>
+512 / 1024 / 4096 三档测出来<u>逐位相同</u> ——
+这就是「tracker 已经不再绑定」的判据，此后瓶颈重新回到环本身。</div>
+<h5>代价在均衡度上：Jain 从 {shared[4]} 掉到 {ok[4]}</h5>
+<div class="def bad"><b>50 拍分箱 Jain {shared[4]} → {ok[4]}，
+整窗 max/min {shared[5]} → {ok[5]}。</b>
+原因和带宽收益是同一件事：一个节点现在能在<u>同一拍</u>向两个方向各上环一个 flit，
+于是「紧邻几个 mem」这个位置优势被放大了一倍 ——
+邻 mem 多的核在任意 50 拍窗口里都能拉开更大的身位。</div>
+<h5>顺带作废的两条旧结论</h5>
+<ul>
+<li><b>3.1.6 的仲裁器收益作废。</b><code>inj_sel</code> 只在一个端口组里
+有多于一个队列时才重排；端口按方向拆开后每组只剩一个队列，
+<code>free_slot</code> 与 rr <b>逐位相同</b>
+（thr {p['free_slot_equals_rr']['thr']}、
+Jbin {p['free_slot_equals_rr']['jain_bin']}，
+{p['free_slot_equals_rr']['note']}）。它修的那个「一个端口伺候两个方向」
+的耦合在真实硬件里不存在。</li>
+<li><b>3.1.7 把缺口全部归给「上环端口耦合」的那段作废。</b>
+那 9.6% 的浪费是共享端口模型的产物。</li>
+</ul>
+<h5>排除过的两个错误病因</h5>
+<p>这两条记下来，因为它们各自都有一个「看起来成立」的证据：</p>
+{_table(["排除的病因", "怎么排除的"], p["eliminated"])}
+<div class="def"><b>其中第一条值得单独警惕</b>：拆端口后偏转从 0 跳到 {ok[8]:,} 次，
+指向下环 buffer 非常自然，而且 E-tag 正是为这件事设计的。
+但把 <code>eject_bw</code> 设成 2 让偏转<b>彻底归零</b>时吞吐<u>反而更差</u>；
+反过来，tracker 从 256 加到 {p['chosen_track']} 让偏转从 {sat[8]:,}
+<b>涨到</b> {ok[8]:,}，吞吐却同时从 {sat[3]}% 升到 {ok[3]}%。
+<b>偏转更多却更快，说明它不是限制项</b> ——
+偏转和带宽损失是同一个 retry 风暴的两个症状，E-tag 一直在正常工作。</div>
 """
 
 
@@ -3752,9 +3904,17 @@ Jain 掉到 {worst['jain_bin']}（比 S0 的 {cost['s0']['jain_bin']} <b>还差<
 
     verdict_cls = "good" if (ok_fair and ok_thr) else "warn"
     return f"""
-<h2>6. S22：赤字触发的限域让路 —— 两条验收线同时达标</h2>
+<h2>6. S22：赤字触发的限域让路</h2>
+<div class="def warn"><b>工作点未在新 fabric 上重调。</b>
+本节的 <code>dfc_margin</code> 等参数是在<u>共享上环端口</u>的 fabric 上扫出来的，
+那时 S0 的分箱 Jain 是 0.96765、要补的缺口约 0.02。
+按方向拆端口后 S0 的 Jain 降到 {PERDIR_PROBE['track_rows'][4][4]}，
+缺口变成约 {0.99 - PERDIR_PROBE['track_rows'][4][4]:.2f}（见 3.1.8），
+所以这组参数偏保守，预期要往<b>更激进</b>方向重扫（margin 4 → 0~2）。
+<b>下面所有数值都是本次官方 K 的真实实测</b>，
+但请读作「未重调工作点的表现」，而不是阶段三的最终结论。</div>
 <p>阶段一已经把问题定死了：分箱不公平里 {100 * JITTER_DECOMP['rows'][1][4]:.0f}%
-是时间抖动（3.2.1），而 I-tag（3.1.6）和 S1（第 5 节）都只会「扣住」。
+是时间抖动（3.2.1），而 I-tag 和 S1（第 5 节）都只会「扣住」。
 S22 换掉的正是这一点。</p>
 
 <div class="def"><b>一句话：从来不扣住任何一个空槽，只改「两个节点抢同一个 hop
@@ -4247,11 +4407,14 @@ max/min 甚至从 {s0f['max_min']} 微升到 {f['max_min']}。<br>
 S1 的旋钮只能碰前者，所以阶段三必须换机制，不是继续调 S1 的参数。</div>"""
 
     return f"""
-<h3>5.3 阶段二重做：修好仲裁器之后，按方向拆预算才真正起作用</h3>
-<p class="note">5.2 是 <b>ha_track = 32 + 旧 round-robin 仲裁器</b>的存档。
-换到本轮 fabric（free_slot 仲裁器、tracker 不绑定）之后，
-同一个 <code>dir_split</code> 旋钮的效果变了 —— 数值和原因都变了，
-所以单独记一节，不去改上面那份存档。</p>
+<h3>5.3 阶段二：I-tag 已经把方向失败比转到底，AIMD 没有剩余空间</h3>
+<div class="def warn"><b>本节的扫参测于<u>共享上环端口</u>的 fabric，未在新 fabric 上重做。</b>
+按方向拆端口改变了方向失败比的基线（S0 自己的 failmax 会变），
+所以下表的 {db['n_settings']} 组扫描结论需要重扫才能定案。
+保留它的理由是：被否掉的原因是<b>结构性</b>的 ——
+「I-tag 的旗子本来就按方向挂」与「AIMD 的乘性减由受害者自己的失败触发」
+这两件事都与端口结构无关。</div>
+<p class="note">5.2 是 <b>ha_track = 32</b> 时的存档，单独保留，不去改动。</p>
 <p>任务书这一阶段要的是：<b>让 S1 上环失败的 CW / CCW 两个方向的失败次数
 尽量均匀</b>，然后考察这种情况下各核写带宽是否均衡、带宽是否打满。
 先在 K={db['k']} 上筛选（S0 = {db['s0_thr']} flit/cycle，
