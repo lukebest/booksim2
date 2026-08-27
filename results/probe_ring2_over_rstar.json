@@ -1,0 +1,39 @@
+{
+  "r_star": 5.7143,
+  "makespan": 73152,
+  "t_fair": 55708,
+  "whole_run": 5.4681,
+  "conservation": {
+    "binned": 400000,
+    "workload": 400000
+  },
+  "window": {
+    "bins": 1114,
+    "span": 55700,
+    "flits": 335353,
+    "rate": 6.0207,
+    "pct_r_star": 105.36
+  },
+  "tail": {
+    "span": 17452,
+    "flits": 64647,
+    "rate": 3.7043
+  },
+  "hot_dat_hop": {
+    "edge": "0->1",
+    "crossings": 70000,
+    "share_of_write_flits": 0.175,
+    "sustained_ceiling": 5.7143,
+    "riders": [
+      0,
+      12,
+      14,
+      16,
+      18
+    ],
+    "rider_share_whole": 50.0,
+    "rider_share_window": 50.07,
+    "hot_util_window": 1.0551
+  },
+  "verdict": "(c) \u6bd4\u8f83\u53e3\u5f84\u9519\uff1a\u7a97\u5185\u5747\u503c vs \u5168\u7a0b makespan \u754c"
+}

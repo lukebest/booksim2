@@ -284,9 +284,47 @@ Jain 到不了 1.0，而且这个地板随吞吐移动，所以绝对阈值没�
 8.0 flit/cycle）——
 这正是三 VC 不共享端口带来的变化，推导见 3.1.1。</div>
 <img src="ring2_wfair_totalbw.png" alt="total write bandwidth over time">
-<table><thead><tr><th>方案</th><th>总带宽均值</th><th>占 R*</th><th>p05</th><th>p50</th><th>p95</th><th>最低箱</th><th>最高箱</th></tr></thead><tbody><tr><td>S0</td><td>6.0207</td><td>105.4%</td><td>5.66</td><td>6.04</td><td>6.38</td><td>5.26</td><td>6.66</td></tr><tr><td>S1</td><td>4.9118</td><td>86.0%</td><td>4.28</td><td>4.96</td><td>5.38</td><td>2.36</td><td>5.86</td></tr></tbody></table>
-<p>实测均值 6.0207，只有 R* 的 <b>105.4%</b>。
+<table><thead><tr><th>方案</th><th>窗内总带宽均值</th><th>全程总带宽</th><th>全程占 R*</th><th>p05</th><th>p50</th><th>p95</th><th>最低箱</th><th>最高箱</th></tr></thead><tbody><tr><td>S0</td><td>6.0207</td><td>5.4681</td><td>95.7%</td><td>5.66</td><td>6.04</td><td>6.38</td><td>5.26</td><td>6.66</td></tr><tr><td>S1</td><td>4.9118</td><td>4.6874</td><td>82.0%</td><td>4.28</td><td>4.96</td><td>5.38</td><td>2.36</td><td>5.86</td></tr></tbody></table>
+<p>该和 R* 比的是<b>全程</b>总带宽：S0 = 5.4681 flit/cycle，
+占 R* <b>95.7%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
+
+<div class="def"><b>为什么窗内均值 6.0207 会<u>高过</u> R* = 5.7143
+—— 上限没错，仿真也没错，是两个口径不能直接比。</b><br>
+<b>R* 是「全程」界。</b>它由一条链路给出：路由把 70,000
+次 DAT 穿越压在 hop 0->1 上，每拍 1 flit，故 makespan ≥
+70,000 拍，400,000 ÷
+70,000 = 5.7143。
+实测 makespan 73,152 拍，全程 5.4681 =
+<b>95.69% R*，从未越界</b>。<br>
+<b>6.0207 是「窗内」均值。</b>分箱只统计完整落在竞争窗
+[0, t_fair] 内的箱（过了 t_fair 有核已跑完配额，那里的 0 不是被饿死），
+这个窗是 55,700 / 73,152 拍
+（76.1%），也正是全程<u>最忙</u>的那一段 ——
+它的均值当然高于把收尾段一起算进去的全程均值
+（收尾 17,452 拍只有 3.7043 flit/cycle）。<br>
+<b>两条独立的证伪检查都通过了：</b>
+① flit 守恒 —— 实发 400,000
+= 应发 400,000，没有凭空多出写数据；
+② 绑定 hop 从未超过 1 flit/cycle —— 最忙的一个 50 拍箱正好
+50 次穿越，利用率 1.0000，
+没有任何一箱超过。<br>
+<b>窗内之所以能超，是因为窗内的流量组合偏离了绑定 hop，这是可测的：</b>
+55,700 拍里要送 335,353 个写 flit，
+绑定 hop 最多只能吃其中 55,700/335,353 =
+<b>16.61%</b>，而名义份额是 17.5%。
+实测窗内份额 <b>16.2%</b>（&lt; 16.61%
+的可行上限），窗内 hop 利用率 0.9755；
+欠下的穿越在收尾段以 0.9035 的利用率补完。
+<b>换句话说「窗内超 R*」与「各核不均衡」是同一件事的两面</b>：
+骑在绑定 hop 上的那批流在竞争段被压着，之后才补上。<br>
+<b>一处顺带的精度说明：</b>实测该 hop 的穿越数是
+70,104 而不是路由表的
+70,000（多出的
+104 次是偏转 flit 多绕了一圈），
+所以真实可达的天花板是 5.7058 而不是 5.7143 ——
+R* 这个界是<b>偏松</b>的，不是被突破的。</div>
+
 <div class="def">
 <b>本轮改的是下环两写一读 buffer：每 VC 4 深 →
 12 深</b>，上环队列沿用上一轮的
@@ -350,7 +388,11 @@ buffer 平均只占 0.765 个 flit
 <p>真正会满的是另一头 —— <b>0、1、7、8、10、17、18 这几个 mem 节点的 RSP 上环队列</b>：
 <table><thead><tr><th>FIFO</th><th>节点</th><th>VC</th><th>方向</th><th>深度</th><th>平均占用</th><th>满的比例</th></tr></thead><tbody><tr><td>上环共享 FIFO（两方向共用）</td><td>17</td><td>rsp</td><td>—</td><td>12</td><td>11.207</td><td><b>92.78%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>10</td><td>dat</td><td>—</td><td>12</td><td>10.722</td><td><b>87.51%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>7</td><td>rsp</td><td>—</td><td>12</td><td>10.599</td><td><b>86.4%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>18</td><td>dat</td><td>—</td><td>12</td><td>10.607</td><td><b>86.31%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>8</td><td>dat</td><td>—</td><td>12</td><td>10.659</td><td><b>86.13%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>0</td><td>dat</td><td>—</td><td>12</td><td>10.544</td><td><b>85.39%</b></td></tr><tr><td>上环方向 inject Q</td><td>17</td><td>rsp</td><td>CW</td><td>8</td><td>7.244</td><td><b>82.74%</b></td></tr><tr><td>上环方向 inject Q</td><td>10</td><td>dat</td><td>CW</td><td>8</td><td>6.972</td><td><b>78.89%</b></td></tr><tr><td>上环方向 inject Q</td><td>8</td><td>dat</td><td>CCW</td><td>8</td><td>6.963</td><td><b>78.52%</b></td></tr><tr><td>上环方向 inject Q</td><td>0</td><td>dat</td><td>CW</td><td>8</td><td>6.943</td><td><b>78.48%</b></td></tr><tr><td>上环方向 inject Q</td><td>18</td><td>dat</td><td>CCW</td><td>8</td><td>6.83</td><td><b>77.12%</b></td></tr><tr><td>上环方向 inject Q</td><td>7</td><td>rsp</td><td>CW</td><td>8</td><td>6.998</td><td><b>75.26%</b></td></tr><tr><td>上环方向 inject Q</td><td>1</td><td>rsp</td><td>CCW</td><td>8</td><td>6.418</td><td><b>62.4%</b></td></tr><tr><td>上环共享 FIFO（两方向共用）</td><td>1</td><td>rsp</td><td>—</td><td>12</td><td>7.248</td><td><b>52.25%</b></td></tr></tbody></table>
 <p>这几个节点的 RSP 上环口几乎<b>每一拍都在尝试上环</b>，但赢不下来：</p>
-<table><thead><tr><th>mem 节点</th><th>成功上环</th><th>失败</th><th>上环成功率</th><th>尝试拍数占 makespan</th></tr></thead><tbody><tr><td>1</td><td>50000</td><td>73218</td><td>40.6%</td><td>168.4%</td></tr><tr><td>7</td><td>50000</td><td>74934</td><td>40.0%</td><td>170.8%</td></tr><tr><td>17</td><td>50000</td><td>73495</td><td>40.5%</td><td>168.8%</td></tr></tbody></table>
+<table><thead><tr><th>mem 节点</th><th>成功上环</th><th>失败</th><th>上环成功率</th><th>每拍平均尝试次数</th></tr></thead><tbody><tr><td>1</td><td>50000</td><td>73218</td><td>40.6%</td><td>1.68</td></tr><tr><td>7</td><td>50000</td><td>74934</td><td>40.0%</td><td>1.71</td></tr><tr><td>17</td><td>50000</td><td>73495</td><td>40.5%</td><td>1.69</td></tr></tbody></table>
+<p class="note">最后一列是<b>尝试次数 ÷ makespan</b>，不是「忙的拍数占比」，
+所以它可以大于 1：上环端口按方向分成两组，同一拍两个方向各可以尝试一次，
+该列的物理上限是 2.00。</p>
+
 <div class="def ">
 为什么正好是这几个节点：各 VC 最忙的那条链路是
 rsp 的 1→0、7→8、11→10、17→18；dat 的 0→1、8→7、10→11、18→17。

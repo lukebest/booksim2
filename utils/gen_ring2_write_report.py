@@ -23,9 +23,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from dse_ring2_write_fair import (
-    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, PERDIR_PROBE,
-    S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM, S22_REJECTED, S22_ROBUST,
-    TAG_AUDIT, TAG_BELIEF,
+    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, OVER_RSTAR,
+    PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM, S22_REJECTED,
+    S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2841,7 +2841,7 @@ def _buffer_occ_section(pat: dict, meta: dict, sec: str) -> str:
         bad = sum(v for k, v in row.items() if k != "ok")
         att = ok + bad
         win_rows.append([nd, ok, bad, f"{100.0 * ok / max(1, att):.1f}%",
-                         f"{100.0 * att / mk:.1f}%"])
+                         f"{att / max(1, mk):.2f}"])
 
     rsp_tail = tails.get("rsp") or []
     match = bool(hot_nodes) and set(hot_nodes) == set(rsp_tail)
@@ -2870,8 +2870,12 @@ max(1, len(pat.get('mem') or [1])) / mk:.3f} flit/cycle/mem，PE 每拍读 1，
 {_table(["FIFO", "节点", "VC", "方向", "深度", "平均占用", "满的比例"],
         hot_rows) if hot_rows else ''}
 {f'''<p>这几个节点的 RSP 上环口几乎<b>每一拍都在尝试上环</b>，但赢不下来：</p>
-{_table(["mem 节点", "成功上环", "失败", "上环成功率", "尝试拍数占 makespan"],
+{_table(["mem 节点", "成功上环", "失败", "上环成功率", "每拍平均尝试次数"],
         win_rows)}
+<p class="note">最后一列是<b>尝试次数 ÷ makespan</b>，不是「忙的拍数占比」，
+所以它可以大于 1：上环端口按方向分成两组，同一拍两个方向各可以尝试一次，
+该列的物理上限是 2.00。</p>''' if win_rows else ''}
+{f'''
 <div class="def {'good' if match else ''}">
 为什么正好是这几个节点：各 VC 最忙的那条链路是
 {'；'.join(f"{vc} 的 {'、'.join(hops.get(vc) or [])}" for vc in ("rsp", "dat")
@@ -2914,8 +2918,10 @@ def _total_bw_section(meta: dict, pat: dict, imgs: dict) -> str:
         ib = _inst_balance(pat, meta, s)
         if not ib:
             continue
-        rows.append([s, ib["total_mean"],
-                     f"{100.0 * ib['total_mean'] / r_bind:.1f}%",
+        fs_ = (pat["schemes"][s].get("fairness") or {})
+        thr_ = float(fs_.get("throughput") or 0)
+        rows.append([s, ib["total_mean"], thr_,
+                     f"{100.0 * thr_ / r_bind:.1f}%",
                      ib["total_p05"], ib["total_p50"], ib["total_p95"],
                      ib["total_min"], ib["total_max"]])
     got = rows[0][1] if rows else 0.0
@@ -3026,10 +3032,12 @@ HA think time 不在关键路径上：tracker 占用由 WriteData 在环上的
 {flits / max(1, b.get('port_lb') or 1):.1f} flit/cycle）——
 这正是三 VC 不共享端口带来的变化，推导见 3.1.1。</div>
 <img src="{imgs.get('totalbw', '')}" alt="total write bandwidth over time">
-{_table(["方案", "总带宽均值", "占 R*", "p05", "p50", "p95", "最低箱", "最高箱"],
-        rows)}
-<p>实测均值 {got}，只有 R* 的 <b>{100.0 * got / r_bind:.1f}%</b>。
+{_table(["方案", "窗内总带宽均值", "全程总带宽", "全程占 R*",
+         "p05", "p50", "p95", "最低箱", "最高箱"], rows)}
+<p>该和 R* 比的是<b>全程</b>总带宽：S0 = {thr0} flit/cycle，
+占 R* <b>{100.0 * thr0 / r_bind:.1f}%</b>。
 下面先排除 fabric，再定位真正的瓶颈。</p>
+{_over_rstar_note(r_bind)}
 <div class="def">
 <b>本轮改的是下环两写一读 buffer：每 VC {UPQ12_8_ROUND['eject_depth']} 深 →
 {meta.get('eject_depth')} 深</b>，上环队列沿用上一轮的
@@ -3657,6 +3665,56 @@ buffer 只剩一个位置时带 E-tag 的先下、普通 flit 被送去绕环）
 {ch['jbin_delta']:+.5f}</b> —— 两个方向同时略好，所以没有取舍问题。
 （这两个差值测于共享端口 fabric，机制结论不受端口结构影响。）
 官方 K 上 S0 = <b>{thr0}</b> flit/cycle，占 R* <b>{pct0:.1f}%</b>。</div>
+"""
+
+
+def _over_rstar_note(r_bind: float) -> str:
+    """Head off the obvious objection: the window mean sits above R*.
+
+    The table above shows a per-bin mean of 6.0207 against R* = 5.7143, which
+    looks like the simulator beating its own bound. It is neither a broken bound
+    nor a broken simulator -- it is two different quantities -- and since that
+    reads as a contradiction the reasoning belongs next to the table rather than
+    in a probe nobody opens.
+    """
+    o = OVER_RSTAR
+    w, tl = o["window"], o["tail"]
+    return f"""
+<div class="def"><b>为什么窗内均值 {w['rate']} 会<u>高过</u> R* = {o['r_star']}
+—— 上限没错，仿真也没错，是两个口径不能直接比。</b><br>
+<b>R* 是「全程」界。</b>它由一条链路给出：路由把 {o['hot_crossings_nominal']:,}
+次 DAT 穿越压在 hop {o['hot_hop']} 上，每拍 1 flit，故 makespan ≥
+{o['hot_crossings_nominal']:,} 拍，{o['conservation']['asked']:,} ÷
+{o['hot_crossings_nominal']:,} = {o['r_star']}。
+实测 makespan {o['makespan']:,} 拍，全程 {o['whole_run']} =
+<b>{o['whole_run_pct']}% R*，从未越界</b>。<br>
+<b>{w['rate']} 是「窗内」均值。</b>分箱只统计完整落在竞争窗
+[0, t_fair] 内的箱（过了 t_fair 有核已跑完配额，那里的 0 不是被饿死），
+这个窗是 {w['span']:,} / {o['makespan']:,} 拍
+（{w['pct_of_makespan']}%），也正是全程<u>最忙</u>的那一段 ——
+它的均值当然高于把收尾段一起算进去的全程均值
+（收尾 {tl['span']:,} 拍只有 {tl['rate']} flit/cycle）。<br>
+<b>两条独立的证伪检查都通过了：</b>
+① flit 守恒 —— 实发 {o['conservation']['delivered']:,}
+= 应发 {o['conservation']['asked']:,}，没有凭空多出写数据；
+② 绑定 hop 从未超过 1 flit/cycle —— 最忙的一个 {o['bin_w']} 拍箱正好
+{o['peak_bin_crossings']} 次穿越，利用率 {o['peak_bin_util']:.4f}，
+没有任何一箱超过。<br>
+<b>窗内之所以能超，是因为窗内的流量组合偏离了绑定 hop，这是可测的：</b>
+{w['span']:,} 拍里要送 {w['write_flits']:,} 个写 flit，
+绑定 hop 最多只能吃其中 {w['span']:,}/{w['write_flits']:,} =
+<b>{w['share_ceiling_pct']}%</b>，而名义份额是 {w['nominal_share_pct']}%。
+实测窗内份额 <b>{w['hot_share_pct']}%</b>（&lt; {w['share_ceiling_pct']}%
+的可行上限），窗内 hop 利用率 {w['hot_util']}；
+欠下的穿越在收尾段以 {tl['hot_util']} 的利用率补完。
+<b>换句话说「窗内超 R*」与「各核不均衡」是同一件事的两面</b>：
+骑在绑定 hop 上的那批流在竞争段被压着，之后才补上。<br>
+<b>一处顺带的精度说明：</b>实测该 hop 的穿越数是
+{o['hot_crossings_measured']:,} 而不是路由表的
+{o['hot_crossings_nominal']:,}（多出的
+{o['hot_crossings_measured'] - o['hot_crossings_nominal']} 次是偏转 flit 多绕了一圈），
+所以真实可达的天花板是 {o['achievable_ceiling']} 而不是 {o['r_star']} ——
+R* 这个界是<b>偏松</b>的，不是被突破的。</div>
 """
 
 

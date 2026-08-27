@@ -817,6 +817,58 @@ PERDIR_PROBE = {
         "邻 mem 多的核的位置优势被放大。"),
 }
 
+# Frozen: why the per-bin mean write bandwidth reads *above* R*, and which of
+# the two numbers is at fault. Neither the bound nor the simulator is:
+#
+#   * R* = 5.7143 is a bound on the **whole-run** average. It comes from one
+#     link -- the routing puts 70000 DAT crossings on hop 0->1, at 1 flit/cycle
+#     that needs 70000 cycles, so makespan >= 70000 and 400000/70000 = 5.7143.
+#     The measured makespan is 73152, i.e. 95.69% of the bound. No violation.
+#   * The simulator conserves flits exactly (400000 delivered for 400000 asked)
+#     and the binding hop never carries more than 1 flit/cycle: its busiest
+#     50-cycle bin holds exactly 50 crossings, utilisation 1.0000 and never
+#     above.
+#
+# What was wrong is the **comparison**. The per-bin table averages only bins
+# wholly inside the contention window [0, t_fair], because past t_fair a core
+# has run out of quota and its zeros are not unfairness. That window is 55700 of
+# 73152 cycles and it is the *busy* part of the run, so its mean (6.0207)
+# necessarily exceeds the whole-run average (5.4681). Dividing a window mean by
+# a whole-run bound is not a meaningful ratio.
+#
+# A window may exceed R* only by running a mix skewed *away* from the binding
+# hop, and that is measurable rather than a hand-wave: carrying 335353 write
+# flits in 55700 cycles requires the hop's share of them to be at most
+# 55700/335353 = 16.61%, against a 17.50% nominal share. Measured in-window
+# share is 16.20% and in-window hop utilisation 0.9755, with the deferred
+# crossings cleared in the tail at 0.9035. `probe_ring2_hotslot_time.py`.
+OVER_RSTAR = {
+    "k": 20000, "r_star": 5.7143, "makespan": 73152,
+    "whole_run": 5.4681, "whole_run_pct": 95.69,
+    "conservation": {"delivered": 400000, "asked": 400000},
+    "hot_hop": "0->1",
+    # Measured crossings exceed the routing's 70000 because deflected DAT flits
+    # ride an extra lap. The bound is therefore *conservative*, not violated:
+    # the achievable ceiling given real deflections is 400000/70104 = 5.7058.
+    "hot_crossings_measured": 70104, "hot_crossings_nominal": 70000,
+    "achievable_ceiling": 5.7058,
+    "peak_bin_crossings": 50, "bin_w": 50, "peak_bin_util": 1.0,
+    "window": {"bins": 1114, "span": 55700, "pct_of_makespan": 76.1,
+               "write_flits": 335353, "rate": 6.0207, "pct_r_star": 105.4,
+               "hot_util": 0.9755, "hot_share_pct": 16.20,
+               "nominal_share_pct": 17.50, "share_ceiling_pct": 16.61},
+    "tail": {"span": 17452, "write_flits": 64647, "rate": 3.7043,
+             "hot_util": 0.9035},
+    "verdict": (
+        "理论上限没错，仿真也没错，<b>错的是把两个不同口径的数放在一起比</b>："
+        "6.0207 是<u>竞争窗内</u>的均值（1114 个箱、55700 拍，占 makespan 的 "
+        "76.1%），R* 是<u>全程</u> makespan 界。全程实测 5.4681 = 95.69% R*，"
+        "从未越界；绑定 hop 最忙的一个 50 拍箱正好 50 次穿越、利用率 1.0000，"
+        "一次都没超过 1 flit/cycle。窗内能跑到 105.4% 是因为窗内的流量组合"
+        "<b>偏离了绑定 hop</b>：它只吃到 16.20% 的窗内写 flit（名义 17.50%，"
+        "可行上限 16.61%），欠下的穿越在收尾段以 0.9035 的利用率补完。"),
+}
+
 # Frozen: the variance decomposition that sets the phase-3 target. Per-bin
 # unfairness is almost entirely timing jitter around near-equal long-run
 # rates, so regularising injection timing can reach Jain > 0.99 without
