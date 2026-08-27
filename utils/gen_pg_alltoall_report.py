@@ -1299,7 +1299,8 @@ SWAP 在运行时解环，可做到 <b>零牺牲、1 VC、面积 +0.6%–15%</b>
 机制排序恒为 SB ≪ SPIN &lt; SWAP，SWAP 破坏保序。</li>
 </ol>
 <p class="sub">细节与数据见 §2（方案/可达性）、§3–4（预算故障 makespan）、
-§6（端到端 Pareto，死锁<b>避免</b>类）、§7（死锁<b>恢复</b>类，独立 Pareto）。</p>
+§6（端到端 Pareto，死锁<b>避免</b>类）、§7（死锁<b>恢复</b>类，独立 Pareto）、
+§10（均匀注入率 λ=0.10…0.70：健康 XY 与 ≤2R+≤4L Super-turn 的时延 / 有效带宽 / 开销）。</p>
 </div>
 """
 
@@ -2921,6 +2922,8 @@ def main():
     e2e_html = e2e_section_html()
     single_html = single_router_section_html()
     recovery_html = recovery_section_html()
+    from gen_pg_a2a_lambda_report import lambda_section_html
+    lambda_html = lambda_section_html()
 
     # Index primary rows (not q_sensitivity)
     primary = [r for r in rows if not r.get("q_sensitivity")]
@@ -4228,6 +4231,8 @@ VC 只要 2 条（vs 4）。去掉绕路回环后端到端<b>严格快于 M5 且
 {single_html}
 
 {recovery_html}
+
+{lambda_html}
 
 <h2>8. 指标定义</h2>
 <ul>
