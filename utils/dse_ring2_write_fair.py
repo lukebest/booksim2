@@ -335,9 +335,14 @@ FC_BUS_LAT = 30
 # The deeper inject Q is not free and is priced separately in the report: it
 # is what gives `dfc_dodge` candidates to overtake with, and on the stock
 # depth-8 Q the same controller costs -2.18%.
+# `itag_hold=2` was added in the per-direction re-tune. It is not a trade: it
+# beats the same controller without it on *both* axes at the official K
+# (Jain 0.98878 vs 0.98852, bandwidth -0.78% vs -1.24%), because a held I-tag
+# recovers slots that in-ring priority was wasting instead of throttling anyone.
+# See `S22_RETUNE2`.
 S22_CFG = dict(dfc_window=2, dfc_bus_lat=1, dfc_thresh=0.5, dfc_hold=16,
                dfc_margin=4.0, dfc_dodge=32,
-               inj_depth=32, dir_inj_depth=32)
+               inj_depth=32, dir_inj_depth=32, itag_hold=2)
 # S1's phase-2 operating point: per-direction budgets are what make the
 # CW/CCW board-failure counts even, and they also stop the AIMD from costing
 # throughput (see `S1_DIRBAL`).
@@ -873,6 +878,171 @@ OVER_RSTAR = {
         "一次都没超过 1 flit/cycle。窗内能跑到 105.4% 是因为窗内的流量组合"
         "<b>偏离了绑定 hop</b>：它只吃到 16.20% 的窗内写 flit（名义 17.50%，"
         "可行上限 16.61%），欠下的穿越在收尾段以 0.9035 的利用率补完。"),
+}
+
+# Frozen: phase 2 re-run on the per-direction fabric -- 62 AIMD configs, and the
+# reason none of them evens out the CW/CCW board-failure counts.
+# `probe_ring2_s1_dirbal.py`, K=3000.
+S1_RETUNE = {
+    "k": 3000, "n_cfg": 62,
+    "s0": {"thr": 5.3996, "failmax": 2.547, "jbin": 0.87879, "maxmin": 1.7663},
+    # The grid's own pick is bit-for-bit the incumbent S1_CFG, and it lands at
+    # S0's own failure ratio -- i.e. no improvement at all on the phase-2 metric.
+    "best": {"cfg": "dir_split=True, band=spec, cap_scale=0.5, "
+                    "window=64, pace_burst=1, scope=core_only",
+             "failmax": 2.549, "thr": 5.3452, "delta_pct": -1.0,
+             "jbin": 0.87801, "is_incumbent": True},
+    # The only settings that push the ratio below ~2.2 do it by collapsing
+    # throughput, which is not a fairness fix, it is a shutdown.
+    "cheapest_below_22": [
+        ["dir_split=False, harsh, cap 0.5", 2.195, 3.3843, -37.3],
+        ["dir_split=True, spec, cap 0.25, window 128, burst 0", 2.156, 3.4350,
+         -36.4],
+    ],
+    "verdict": (
+        "<b>阶段二的目标在新 fabric 上用 AIMD 参数是够不到的，62 组全试过。</b>"
+        "网格自己选出来的最优点<u>就是现有的 S1_CFG</u>"
+        "（failmax 2.549），而 S0 自己的 failmax 是 2.547 —— "
+        "<b>S1 对方向失败比毫无改善</b>。能把比值压到 2.2 以下的配置只有两组，"
+        "代价都是掉 36–37% 的带宽，那是关机不是调平。<br>"
+        "原因是机制层面的，不是参数没调到：<b>AIMD 调的是两个方向的"
+        "「尝试速率」，两边同比缩放，比值不变</b>；而这个比值是由 hop 拥塞决定的 —— "
+        "0/8/10/18 四个核坐在无 HA 节点的出口上，被迫挤最忙的 hop，"
+        "于是<u>只在一个方向</u>失败 54k 对 22k（其余六核均衡的 33k/33k）。"
+        "要改比值就得改<b>流量的方向配比</b>，那是路由决策，不是速率决策。<br>"
+        "还有一层口径要说清楚：<b>方向「成功」数本来就已经完全均衡</b> —— "
+        "路由把每核每方向钉死在 30000 笔，逐位相同。"
+        "不均衡只出现在<u>失败尝试</u>上，而失败尝试是<b>拥塞信号</b>，"
+        "它不对称恰恰是在忠实报告「一个方向的 hop 更挤」。"
+        "所以把它抹平并不是一个值得追求的目标。"),
+}
+
+# Frozen: phase 3 re-run on the per-direction fabric. Two grids: S22's own
+# parameters (36 configs, `probe_ring2_s22_retune.py`) and S22 crossed with
+# I-tag's threshold and hold (24 configs, `probe_ring2_s22_itag.py`), then the
+# survivors re-measured at the official K (`probe_ring2_s22_confirm2.py`).
+S22_RETUNE2 = {
+    "k_grid": 3000, "k_confirm": 20000,
+    "s0_grid": {"thr": 5.3996, "jbin": 0.87879},
+    "s0_confirm": {"thr": 5.4681, "jbin": 0.87865},
+    "alone": {"n": 36, "n_pass": 0,
+              "best_jain": [0.99063, -3.78], "best_bw": [0.98494, -0.23]},
+    "cross": {"n": 24, "n_pass": 2,
+              "pass_rows": [["margin 3 + hold 2", 0.99109, -0.94],
+                            ["margin 3 + hold 4", 0.99035, -0.94]]},
+    # Official K. The K=3000 passes do not survive: Jain holds, bandwidth cost
+    # roughly doubles. This is the second time this round that a short-K
+    # conclusion reversed, so it is now the default expectation, not a surprise.
+    "confirm": [
+        # case, Jbin, thr, delta%, passes Jain, passes bandwidth
+        ["margin 2 + hold 4", 0.99083, 5.3304, -2.52, True, False],
+        ["margin 3 + hold 2", 0.99014, 5.3842, -1.53, True, False],
+        ["margin 3 + hold 4", 0.98985, 5.3825, -1.57, False, False],
+        ["margin 4 + hold 2（选定）", 0.98878, 5.4255, -0.78, False, True],
+        ["margin 4（上一轮出厂）", 0.98852, 5.4001, -1.24, False, False],
+    ],
+    "chosen": "dfc_margin=4.0, itag_hold=2",
+    # The one unambiguous win: adding `itag_hold=2` to the incumbent improves
+    # both axes at once, so it is shipped regardless of where the line lands.
+    "free_win": {"jbin": [0.98852, 0.98878], "delta_pct": [-1.24, -0.78]},
+    "frontier_price": 1.45,
+    "verdict": (
+        "<b>在修正后的 fabric 上，阶段三的两条线不能同时达到。</b>"
+        "官方 K 上的前沿是单调的：Jain 0.99083 要付 −2.52%，"
+        "0.99014 要付 −1.53%，而把带宽损失压到 1% 以内（−0.78%）时 "
+        "Jain 只有 0.98878。前沿穿过 Jain = 0.99 的位置大约在 "
+        "<b>−1.45%</b>，也就是说「Jain>0.99 且带宽 &lt;1%」在这个 fabric 上"
+        "差了约 0.45 个百分点，<u>不是调参能补的</u>。<br>"
+        "这与 3.1.9 的结论是一致的、可以互相校验：出厂点距可达上限只剩 "
+        "0.8 个点的余量，而这里的不公平是<b>持续速率差</b>而不是抖动"
+        "（六快四慢的固定分组），要抹平就必须把快核的份额让出去，"
+        "总带宽必然要掉。上一轮认为「不公平主要是抖动、可以零代价抹平」"
+        "的判断只在共享端口的 fabric 上成立。<br>"
+        "<b>唯一无条件的收获是 <code>itag_hold=2</code></b>："
+        "它在两个轴上同时赢过不带它的同一控制器"
+        "（Jain 0.98852 → 0.98878，带宽 −1.24% → −0.78%），"
+        "因为它把在环优先原本浪费掉的槽收回来，而不是去限谁的速 —— "
+        "已并入出厂配置。"),
+}
+
+# Frozen: why every per-core injection-rate curve turns *up* in the late phase.
+# Read off the shipped run (`results/ring2_write_fair.json`), no new simulation.
+#
+# It is the closed-batch drain tail, and the step shape is the interesting part:
+# the ten cores do not finish together, they finish in two clean groups, so the
+# capacity of the six that finish early is handed to the four that remain all at
+# once. Those four are structurally determined, which ties this curve to the
+# fairness problem -- they are the same four cores that make Jain 0.879.
+UPTICK = {
+    "bin_w": 50,
+    "s0": {"t_fair": 55708, "makespan": 73152, "thr": 5.4681,
+           "contend_mean_per_core": 0.60, "ratio": 1.693},
+    "s1": {"t_fair": 71531, "makespan": 85336, "thr": 4.6874,
+           "contend_mean_per_core": 0.50, "ratio": 1.416},
+    # Active-core count against mean rate of the still-active cores, S0.
+    "timeline": [
+        # t, active cores, mean rate per active core, total rate
+        [0, 10, 0.5580, 5.5800],
+        [26000, 10, 0.6080, 6.0800],
+        [52000, 10, 0.5960, 5.9600],
+        [57200, 5, 0.8240, 4.1200],
+        [62400, 4, 0.9100, 3.6400],
+        [67600, 4, 0.9350, 3.7400],
+        [72800, 3, 0.8133, 2.4400],
+    ],
+    # The two finish groups, S0. The gap between them is 14000 cycles.
+    "groups": {
+        "early": [["14", 55708], ["12", 56652], ["2", 56683], ["6", 56882],
+                  ["4", 57014], ["16", 57857]],
+        "late": [["0", 71852], ["10", 72945], ["8", 73048], ["18", 73122]],
+    },
+    # Per core, S0: rate while all ten compete, and the peak 50-cycle rate it
+    # reaches once the other six are gone. Per-direction ports allow 2.0.
+    "per_core": [
+        # core, bw over [0,t_fair], peak tail bin rate, fail_cw, fail_ccw, late?
+        ["0", 0.45527, 1.76, 54044, 21688, True],
+        ["2", 0.71521, 0.74, 37037, 31466, False],
+        ["4", 0.71150, 0.98, 35526, 34868, False],
+        ["6", 0.71297, 0.96, 32384, 36387, False],
+        ["8", 0.42409, 1.62, 21886, 54449, True],
+        ["10", 0.44250, 1.70, 54729, 21251, True],
+        ["12", 0.71544, 0.40, 37099, 32010, False],
+        ["14", 0.71803, 0.00, 32984, 33181, False],
+        ["16", 0.68936, 1.24, 32776, 38727, False],
+        ["18", 0.43642, 1.68, 22294, 54006, True],
+    ],
+    # Falsified on the way: it is not a distance effect. Every core has its
+    # nearest HA one hop away and a mean distance of exactly 5.00 hops.
+    "not_distance": {"nearest_ha": 1, "mean_hops": 5.00},
+    "non_terminal": [9, 19],
+    "hot_dat_hops": ["0→1", "10→11", "8→7", "18→17"],
+    "starve_late": "59-89", "starve_early": "21-31",
+    # Every core lands exactly 30000 flits in each direction: the routing's
+    # 50/50 split is enforced, so a core cannot route around its bad direction.
+    "ok_per_dir": 30000,
+    "verdict": (
+        "翘尾不是控制器的产物，是<b>闭合批次的排空尾</b>：每个核的工作量都是固定的 "
+        "K×W，谁先做完，它的份额就让给还没做完的核。"
+        "之所以是<u>一个台阶</u>而不是缓慢上翘，是因为十个核不是陆续做完的，"
+        "而是<b>分成两组</b>：六个核在 55708–57857 拍之间做完，"
+        "剩下四个要拖到 71852–73122 拍，中间空了 14000 拍。"
+        "台阶跳变就发生在第一组排空的那一刻 —— 窗内每核 ~0.60 flit/cycle，"
+        "尾段剩四个核时每核冲到 1.62–1.76（按方向拆端口后单核上限是 2.0）。"
+        "<b>那四个核是被结构决定的</b>：0/8/10/18 正好坐在两个无 HA 节点"
+        "（9 和 19）的出口上，必须把 flit 压进环上最忙的两条 hop，"
+        "而在环流量有绝对优先权，于是它们<u>只在一个方向上</u>被饿死 —— "
+        "上环失败 54k 对 22k，其余六个核是均衡的 33k/33k。"
+        "而路由把每核每方向的成功数钉死在 30000，"
+        "<b>它们没法绕开自己那个坏方向</b>，只能整体拖后。"
+        "所以「翘尾」和「Jain 只有 0.879」是同一件事的两种表现："
+        "竞争期的位置性不公平，排空期的两段式收尾。"
+        "顺便排除了一个看起来最自然的解释：<b>不是距离问题</b> —— "
+        "十个核到最近 HA 都是 1 跳、到所有 HA 的平均跳数都是 5.00，逐位相同。"
+        "S1 的曲线形状完全一样、落后的还是同四个核，"
+        "AIMD 只是把竞争期整体压低（每核 0.50 对 0.60），"
+        "把 max/min 从 1.693 收到 1.416，并没有消掉位置不对称。"
+        "最后一点口径提醒：Jain@50 是在 [0, t_fair] 上统计的，"
+        "<b>尾段本来就不进验收指标</b>，只是画图时画了全程才看得见。"),
 }
 
 # Frozen: has S0 reached the *reachable* ceiling, and what holds the last 4.31%?

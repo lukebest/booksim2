@@ -25,7 +25,8 @@ import matplotlib.pyplot as plt
 from dse_ring2_write_fair import (
     CEILING_GAP, DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP,
     OVER_RSTAR, PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM,
-    S22_REJECTED, S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
+    S1_RETUNE, S22_REJECTED, S22_RETUNE2, S22_ROBUST, TAG_AUDIT,
+    TAG_BELIEF, UPTICK,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -3211,6 +3212,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 均匀写下是一条平线（max/min {s0['fairness']['max_min']}），
 所以主指标要看分箱而不是整窗（下面接着说明）。</p>
 {tail_note}
+{_uptick_section()}
 <p>为什么要按箱平均而不是直接看整段：闭环批量下每个核最终都要注入同样的
 K×W 个 flit，把十几万拍平均掉之后 Jain = {s0['fairness']['jain']}、
 max/min = {s0['fairness']['max_min']}，接近 1 有一半是配额相同这个算术事实
@@ -3820,6 +3822,147 @@ tracker=256 时 completer 绑定一切，环侧任何旋钮都被淹没，
 """
 
 
+def _s1_retune_section() -> str:
+    """Phase 2 re-run on the corrected fabric: 62 configs, and why none work.
+
+    The useful content is the mechanism, not the sweep: AIMD scales both
+    directions' attempt rates together, so it cannot move a *ratio*, and the
+    ratio is what the phase-2 objective is written against.
+    """
+    r = S1_RETUNE
+    s0, b = r["s0"], r["best"]
+    return f"""
+<div class="def bad"><b>本节已在新 fabric 上重扫（{r['n_cfg']} 组），
+结论是这个目标用 AIMD 参数够不到。</b>
+网格自己选出来的最优点<u>就是现有的 S1_CFG</u>
+（{b['cfg']}），最坏核方向失败比 <b>{b['failmax']}</b>、
+带宽 {b['thr']}（{b['delta_pct']:+.1f}%）、Jain {b['jbin']}；
+而 <b>S0 自己的失败比是 {s0['failmax']}</b> ——
+也就是说 <b>S1 对方向失败比毫无改善</b>。</div>
+{_table(["能把失败比压到 2.2 以下的配置", "方向失败比", "总带宽", "vs S0"],
+        [[c[0], c[1], c[2], f"{c[3]:+.1f}%"] for c in r["cheapest_below_22"]])}
+<div class="def"><b>代价都是掉 36–37% 带宽，那是关机不是调平。</b>
+原因在机制层面：<b>AIMD 调的是两个方向的「尝试速率」，
+两边同比缩放，比值不变</b>。而这个比值由 hop 拥塞决定 ——
+核 0/8/10/18 坐在无 HA 节点的出口上，被迫挤环上最忙的 hop，
+于是<u>只在一个方向</u>失败 54k 对 22k，其余六核是均衡的 33k/33k（见 3.2.0）。
+<b>要改比值就得改流量的方向配比，那是路由决策，不是速率决策。</b></div>
+<div class="def"><b>还有一层口径要说清楚：方向「成功」数本来就已经完全均衡。</b>
+路由把每核每方向的成功上环数钉死在 {UPTICK['ok_per_dir']:,} 笔，逐位相同。
+不均衡只出现在<u>失败尝试</u>上，而失败尝试是<b>拥塞信号</b> ——
+它不对称恰恰是在忠实报告「一个方向的 hop 更挤」。
+所以「把失败次数抹平」本身未必是个值得追求的目标，
+真正该看的是它下游的那两个指标（带宽与分箱 Jain）。</div>"""
+
+
+def _s22_retune_section() -> str:
+    """Phase 3 re-tuned on the corrected fabric: the frontier, and the verdict.
+
+    Placed at the head of section 6 because it changes how everything below it
+    should be read: the two acceptance lines are not simultaneously reachable
+    here, so the numbers that follow are a chosen point on a frontier rather
+    than a pass.
+    """
+    r = S22_RETUNE2
+    a, c = r["alone"], r["cross"]
+    return f"""
+<div class="def bad"><b>阶段三在新 fabric 上重调过了，结论是：两条线不能同时达到。</b>
+先单扫 S22 自己的参数（{a['n']} 组）：<b>{a['n_pass']}/{a['n']} 过线</b>，
+前沿从 Jain {a['best_jain'][0]}（{a['best_jain'][1]}%）
+到 Jain {a['best_bw'][0]}（{a['best_bw'][1]}%）。
+再把 S22 与 I-tag 的门限 / hold 交叉（{c['n']} 组），K=3000 上有
+{c['n_pass']} 组过线；但拿到<b>官方 K</b> 上复测，两组都掉线 ——
+Jain 守住了，带宽代价翻倍。</div>
+{_table(["配置", "Jain@50拍", "总带宽", "相对 S0", "Jain 线", "带宽线"],
+        [[row[0], row[1], row[2], f"{row[3]}%",
+          "✓" if row[4] else "✗", "✓" if row[5] else "✗"]
+         for row in r["confirm"]],
+        hl=[row[0].endswith("（选定）") for row in r["confirm"]])}
+<div class="def"><b>前沿穿过 Jain = 0.99 的位置大约在 −{r['frontier_price']}%</b>，
+也就是说「Jain &gt; 0.99 且带宽差 &lt; 1%」在这个 fabric 上差了约 0.45 个百分点。
+这与 3.1.9 可以互相校验：出厂点距<u>可达</u>上限只剩 0.8 个点的余量，
+而这里要抹平的是<b>持续速率差</b>（六快四慢的固定分组，见 3.2.0）
+而不是抖动 —— 抹平就必须把快核的份额让出去，总带宽必然要掉。
+<b>上一轮「不公平主要是抖动、可以近零代价抹平」的判断，
+只在共享上环端口的 fabric 上成立</b>（3.2.1 的分解需要在新 fabric 上重做）。</div>
+<div class="def good"><b>唯一无条件的收获：<code>itag_hold=2</code>，已并入出厂配置。</b>
+它在两个轴上<u>同时</u>赢过不带它的同一控制器 ——
+Jain {r['free_win']['jbin'][0]} → {r['free_win']['jbin'][1]}，
+带宽 {r['free_win']['delta_pct'][0]}% → {r['free_win']['delta_pct'][1]}%。
+原因是它<b>把在环优先原本浪费掉的槽收回来</b>，而不是去限谁的速：
+它不产生「让路即空转」的那笔开销。
+选定工作点 <code>{r['chosen']}</code> 因此过了带宽线（−0.78%），
+Jain 差 0.0012 未过。</div>"""
+
+
+def _uptick_section() -> str:
+    """Why the per-core curves turn up at the end, for both S0 and S1.
+
+    Worth its own subsection because the shape is easy to misread as the
+    controller losing grip late in the run, and because the four cores that
+    cause it are the same four that set the fairness number -- so explaining the
+    curve also explains the metric.
+    """
+    u = UPTICK
+    s0, s1 = u["s0"], u["s1"]
+    late = {c for c, *_ in u["groups"]["late"]}
+    return f"""
+<h4>3.2.0 为什么曲线到后期<b>反而翘起来</b>（S0 与 S1 都有）</h4>
+<p>这是<b>闭合批次的排空尾</b>，不是控制器后期失控。每个核的工作量都钉死在
+K×W 个 flit，谁先做完，它占的链路份额就整份让给还没做完的核。</p>
+<p>值得注意的是它是<u>一个台阶</u>而不是缓慢上翘 ——
+因为十个核不是陆续做完的，而是<b>干净地分成两组</b>：</p>
+{_table(["组", "核", "做完的拍数"],
+        [["先做完（6 个）",
+          ", ".join(c for c, _ in u["groups"]["early"]),
+          f"{u['groups']['early'][0][1]:,} – {u['groups']['early'][-1][1]:,}"],
+         ["拖到最后（4 个）",
+          ", ".join(c for c, _ in u["groups"]["late"]),
+          f"{u['groups']['late'][0][1]:,} – {u['groups']['late'][-1][1]:,}"]],
+        hl=[False, True])}
+<p>中间空了 {u['groups']['late'][0][1] - u['groups']['early'][-1][1]:,} 拍。
+台阶就跳在第一组排空的那一刻：</p>
+{_table(["拍", "还在发的核数", "每个活跃核的速率", "总速率"],
+        [[f"{t:,}", n, f"{m:.4f}", f"{tot:.4f}"]
+         for t, n, m, tot in u["timeline"]])}
+<div class="def">窗内十核竞争时每核约 {s0['contend_mean_per_core']:.2f}
+flit/cycle；尾段只剩四个核时，它们每核冲到
+<b>{max(r[2] for r in u['per_core']):.2f}</b> flit/cycle ——
+按方向拆端口后单核物理上限是 2.0，所以这不是异常，
+只是「没人跟它抢了」。</div>
+<h5>那四个拖后的核不是随机的，是结构决定的</h5>
+<p>这是这一小节真正的价值：<b>翘尾和「Jain 只有
+{CEILING_GAP['rows'][0][7]}」是同一件事的两种表现</b> ——
+竞争期的位置性不公平，排空期的两段式收尾。</p>
+{_table(["核", "窗内带宽", "尾段峰值速率", "上环失败 CW", "上环失败 CCW"],
+        [[c + ("（拖后）" if c in late else ""), bw, f"{pk:.2f}",
+          f"{fcw:,}", f"{fccw:,}"]
+         for c, bw, pk, fcw, fccw, _ in u["per_core"]],
+        hl=[c in late for c, *_ in u["per_core"]])}
+<div class="def bad"><b>四个拖后的核是 {', '.join(sorted(late, key=int))}，
+它们正好坐在两个没有 HA 的节点（{', '.join(str(x) for x in u['non_terminal'])}）
+的出口上</b>，必须把自己的 flit 压进环上最忙的两条 dat hop
+（{', '.join(u['hot_dat_hops'])}）。而<b>在环流量有绝对优先权</b>，
+所以它们<u>只在一个方向上</u>被饿死：上环失败 54k 对 22k，
+其余六个核是均衡的 33k/33k；连续失败拍数也是
+{u['starve_late']} 对 {u['starve_early']}。<br>
+关键是<b>它们没法绕开</b>：路由把每核每个方向的成功上环数钉死在
+{u['ok_per_dir']:,}，所以一个核的完成时间由它<u>最差的那个方向</u>决定。</div>
+<div class="def"><b>排除了一个看起来最自然的解释：不是距离问题。</b>
+十个核到最近 HA 都是 {u['not_distance']['nearest_ha']} 跳、
+到所有 HA 的平均跳数都是 {u['not_distance']['mean_hops']:.2f} 跳，<u>逐位相同</u>。
+差别不在路多长，而在<b>它必须挤进去的那条 hop 有多忙</b>。</div>
+<h5>S1 的曲线形状一样，落后的还是同四个核</h5>
+<div class="def">S1：t_fair {s1['t_fair']:,}、makespan {s1['makespan']:,}，
+竞争期每核 {s1['contend_mean_per_core']:.2f}（S0 是
+{s0['contend_mean_per_core']:.2f}），max/min 从 {s0['ratio']} 收到
+{s1['ratio']}。<b>AIMD 把所有核整体压低，把差距收窄了一些，
+但没有消掉位置不对称</b> —— 最后四个做完的仍然是同一批核，台阶照旧。</div>
+<p class="note">口径提醒：Jain@50 是在 [0, t_fair] 上统计的，
+<b>尾段本来就不进验收指标</b>；只是曲线画的是全程，所以看得见。</p>
+"""
+
+
 def _ceiling_gap_section(meta: dict, pat: dict) -> str:
     """Phase 1's closing question: is 95.69% the reachable ceiling, or a defect?
 
@@ -4074,14 +4217,7 @@ Jain 掉到 {worst['jain_bin']}（比 S0 的 {cost['s0']['jain_bin']} <b>还差<
     verdict_cls = "good" if (ok_fair and ok_thr) else "warn"
     return f"""
 <h2>6. S22：赤字触发的限域让路</h2>
-<div class="def warn"><b>工作点未在新 fabric 上重调。</b>
-本节的 <code>dfc_margin</code> 等参数是在<u>共享上环端口</u>的 fabric 上扫出来的，
-那时 S0 的分箱 Jain 是 0.96765、要补的缺口约 0.02。
-按方向拆端口后 S0 的 Jain 降到 {PERDIR_PROBE['track_rows'][4][4]}，
-缺口变成约 {0.99 - PERDIR_PROBE['track_rows'][4][4]:.2f}（见 3.1.8），
-所以这组参数偏保守，预期要往<b>更激进</b>方向重扫（margin 4 → 0~2）。
-<b>下面所有数值都是本次官方 K 的真实实测</b>，
-但请读作「未重调工作点的表现」，而不是阶段三的最终结论。</div>
+{_s22_retune_section()}
 <p>阶段一已经把问题定死了：分箱不公平里 {100 * JITTER_DECOMP['rows'][1][4]:.0f}%
 是时间抖动（3.2.1），而 I-tag 和 S1（第 5 节）都只会「扣住」。
 S22 换掉的正是这一点。</p>
@@ -4577,12 +4713,7 @@ S1 的旋钮只能碰前者，所以阶段三必须换机制，不是继续调 S
 
     return f"""
 <h3>5.3 阶段二：I-tag 已经把方向失败比转到底，AIMD 没有剩余空间</h3>
-<div class="def warn"><b>本节的扫参测于<u>共享上环端口</u>的 fabric，未在新 fabric 上重做。</b>
-按方向拆端口改变了方向失败比的基线（S0 自己的 failmax 会变），
-所以下表的 {db['n_settings']} 组扫描结论需要重扫才能定案。
-保留它的理由是：被否掉的原因是<b>结构性</b>的 ——
-「I-tag 的旗子本来就按方向挂」与「AIMD 的乘性减由受害者自己的失败触发」
-这两件事都与端口结构无关。</div>
+{_s1_retune_section()}
 <p class="note">5.2 是 <b>ha_track = 32</b> 时的存档，单独保留，不去改动。</p>
 <p>任务书这一阶段要的是：<b>让 S1 上环失败的 CW / CCW 两个方向的失败次数
 尽量均匀</b>，然后考察这种情况下各核写带宽是否均衡、带宽是否打满。

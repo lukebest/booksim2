@@ -1,0 +1,91 @@
+{
+  "k": 20000,
+  "s0_thr": 5.4681,
+  "s0_jbin": 0.87865,
+  "rows": [
+    {
+      "case": "margin 3 + hold 2\uff08K=3000 \u8fc7\u7ebf\uff09",
+      "over": {
+        "dfc_margin": 3.0,
+        "itag_hold": 2
+      },
+      "thr": 5.3842,
+      "delta_pct": -1.53,
+      "jain_bin": 0.99014,
+      "maxmin": 1.0004,
+      "bw_min": 0.53877,
+      "bw_max": 0.53899,
+      "defl": 5,
+      "n_itag_yield": 189595,
+      "makespan": 74291,
+      "pass": false
+    },
+    {
+      "case": "margin 3 + hold 4\uff08K=3000 \u8fc7\u7ebf\uff09",
+      "over": {
+        "dfc_margin": 3.0,
+        "itag_hold": 4
+      },
+      "thr": 5.3825,
+      "delta_pct": -1.57,
+      "jain_bin": 0.98985,
+      "maxmin": 1.0002,
+      "bw_min": 0.53861,
+      "bw_max": 0.53869,
+      "defl": 16,
+      "n_itag_yield": 155182,
+      "makespan": 74315,
+      "pass": false
+    },
+    {
+      "case": "margin 4 + hold 2\uff08\u5e26\u5bbd\u4f59\u91cf\u6700\u5927\uff09",
+      "over": {
+        "dfc_margin": 4.0,
+        "itag_hold": 2
+      },
+      "thr": 5.4255,
+      "delta_pct": -0.78,
+      "jain_bin": 0.98878,
+      "maxmin": 1.0002,
+      "bw_min": 0.5429,
+      "bw_max": 0.54298,
+      "defl": 13,
+      "n_itag_yield": 189136,
+      "makespan": 73726,
+      "pass": false
+    },
+    {
+      "case": "margin 2 + hold 4",
+      "over": {
+        "dfc_margin": 2.0,
+        "itag_hold": 4
+      },
+      "thr": 5.3304,
+      "delta_pct": -2.52,
+      "jain_bin": 0.99083,
+      "maxmin": 1.0002,
+      "bw_min": 0.53337,
+      "bw_max": 0.53346,
+      "defl": 12,
+      "n_itag_yield": 156595,
+      "makespan": 75041,
+      "pass": false
+    },
+    {
+      "case": "margin 4\uff08\u51fa\u5382\uff0c\u65e0 hold\uff09",
+      "over": {
+        "dfc_margin": 4.0
+      },
+      "thr": 5.4001,
+      "delta_pct": -1.24,
+      "jain_bin": 0.98852,
+      "maxmin": 1.0002,
+      "bw_min": 0.54036,
+      "bw_max": 0.54045,
+      "defl": 29,
+      "n_itag_yield": 129542,
+      "makespan": 74073,
+      "pass": false
+    }
+  ]
+}
