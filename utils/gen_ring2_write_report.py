@@ -23,9 +23,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from dse_ring2_write_fair import (
-    DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, OVER_RSTAR,
-    PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM, S22_REJECTED,
-    S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
+    CEILING_GAP, DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP,
+    OVER_RSTAR, PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM,
+    S22_REJECTED, S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -3185,6 +3185,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 {_ceiling_knob_section(meta, pat)}
 {_tag_audit_section(meta, pat)}
 {_perdir_section(meta, pat)}
+{_ceiling_gap_section(meta, pat)}
 
 <h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
@@ -3289,9 +3290,26 @@ def _headline_phases(meta: dict, pat: dict) -> str:
 （每次重试 1 REQ + 2 RSP）压回环上，总带宽反而掉到 {pp_sat[3]}% R*。
 取 {pp['chosen_track']} 后重试归零，且 512 / 1024 / 4096 三档<u>逐位相同</u> ——
 这是「tracker 不再绑定」的判据。
-<b>另有两个错误病因被排除</b>：下环 buffer / E-tag 绕环
-（把 <code>eject_bw</code> 设成 2 让偏转彻底归零，吞吐<u>反而更差</u>）
-与路由改变（REQ 的 hop 穿越数两种端口结构下逐位相同）。见 3.1.8。</li>""")
+<b>路由改变被排除</b>（REQ 的 hop 穿越数两种端口结构下逐位相同）；
+<b>「下环不是病因」这条本轮撤回</b> —— 那组排除实验是在 tracker=256 的
+retry 风暴里做的，换到出厂 tracker 上结论反号。见 3.1.8 与 3.1.9。</li>""")
+    cg = CEILING_GAP
+    out.append(f"""
+<li><b>阶段一（收口）：S0 没有达到可达上限，停在 {cg['pct']}% R*，
+缺口 {100 - cg['pct']:.2f}% 已被拆到逐拍闭合。</b>
+绑定项是 <b>RSP</b> 链路（不是此前一直盯的 DAT），
+makespan = {cg['floor']:,} 名义载荷 + {cg['binding']['surcharge']:,} 绕环加价
++ {cg['binding']['idle']:,} 空转，三项相加<u>逐拍等于</u>实测 {cg['makespan']:,}。
+根因只有一条是结构性的：<b>下环「两写一读」的读侧速率</b> ——
+<code>eject_bw</code>=2 让加价精确归零、吞吐升到 {cg['rows'][6][2]}%，
+而 buffer 从 12 加深到 64 只压到 782（加深到 32 反而更差）：
+<b>加容量治不了，加速率才治得了</b>。
+另外两条候选被否掉：<b>I-tag 的空转不是浪费</b>（休眠它省 973 拍空转、
+却多付 1566 拍加价，吞吐反降到 {cg['rows'][1][2]}%）、
+<b>也不是供给不足</b>（<code>core_outstanding</code> 加到 256 使吞吐崩到
+{cg['rows'][5][2]}%）。
+<b>含义：出厂规格下可达上限约 96.5%，留给拥塞控制去争的总带宽只有 0.8 个点</b>，
+阶段三的带宽线应靠「不弄丢」而非「抬上去」来过。见 3.1.9。</li>""")
     out.append(f"""
 <li><b>阶段一（作废）：原先记在「上环仲裁时机」上的
 {gain:+.0f}% 收益不成立。</b>
@@ -3789,16 +3807,109 @@ Jbin {p['free_slot_equals_rr']['jain_bin']}，
 <li><b>3.1.7 把缺口全部归给「上环端口耦合」的那段作废。</b>
 那 9.6% 的浪费是共享端口模型的产物。</li>
 </ul>
-<h5>排除过的两个错误病因</h5>
-<p>这两条记下来，因为它们各自都有一个「看起来成立」的证据：</p>
+<h5>排除过的错误病因</h5>
 {_table(["排除的病因", "怎么排除的"], p["eliminated"])}
-<div class="def"><b>其中第一条值得单独警惕</b>：拆端口后偏转从 0 跳到 {ok[8]:,} 次，
-指向下环 buffer 非常自然，而且 E-tag 正是为这件事设计的。
-但把 <code>eject_bw</code> 设成 2 让偏转<b>彻底归零</b>时吞吐<u>反而更差</u>；
-反过来，tracker 从 256 加到 {p['chosen_track']} 让偏转从 {sat[8]:,}
-<b>涨到</b> {ok[8]:,}，吞吐却同时从 {sat[3]}% 升到 {ok[3]}%。
-<b>偏转更多却更快，说明它不是限制项</b> ——
-偏转和带宽损失是同一个 retry 风暴的两个症状，E-tag 一直在正常工作。</div>
+<h5>撤回一条：曾经被错误排除的「下环」</h5>
+{_table(["撤回的结论", "为什么撤回"], p["eliminated_retracted"])}
+<div class="def bad"><b>这条是本轮自己踩的坑，值得留着：在 retry 风暴里做的
+排除实验，结论只在那个风暴里成立。</b>
+tracker=256 时 completer 绑定一切，环侧任何旋钮都被淹没，
+于是「把偏转清零而吞吐更差」看起来像是「偏转不是病因」的铁证 ——
+实际上它只说明「那时候瓶颈不在环上」。换到出厂 tracker 上，同一个实验反号。
+<b>教训：排除性实验必须在「嫌疑机制确实可能绑定」的工作点上做。</b></div>
+"""
+
+
+def _ceiling_gap_section(meta: dict, pat: dict) -> str:
+    """Phase 1's closing question: is 95.69% the reachable ceiling, or a defect?
+
+    The section is organised around one identity that held exactly in all eight
+    configurations measured -- makespan = the routing's load on the binding hop,
+    plus extra crossings of it, plus its idle cycles. Because it is an identity
+    and not a model, each intervention's effect lands in one of two columns, so
+    the causes can be priced additively instead of argued about.
+    """
+    g = CEILING_GAP
+    b, dr = g["binding"], g["dat_ref"]
+    mk = g["makespan"]
+    sur_pct = 100.0 * b["surcharge"] / mk
+    idle_pct = 100.0 * b["idle"] / mk
+    return f"""
+<h4>3.1.9 S0 到底还差多少，差在哪：把缺口拆成两列并逐项定价</h4>
+<p>上一节把 S0 定在 {g['pct']}% R*。这一节回答两个问题：
+<b>这 {100 - g['pct']:.2f}% 是物理上够不到，还是实现上漏掉了</b>；如果是后者，漏在哪。</p>
+<h5>先换一个记账口径：一条恒等式</h5>
+<p>绑定项是<b>最忙的那条链路</b>，它每拍最多过 1 flit，所以整个 makespan
+只能花在三件事上，没有第四种可能：</p>
+<div class="def"><b>makespan = {g['floor']:,}（路由压在绑定 hop 上的载荷）
++ 绕环加价（同一条 hop 被多跑一圈的 flit <u>重复</u>穿越的次数）
++ 空转（这条 hop 空着的拍数）</b><br>
+出厂点：{g['floor']:,} + {b['surcharge']:,} + {b['idle']:,} = <b>{mk:,}</b>，
+与实测 makespan <u>逐拍相等</u>。下面 8 组配置<b>每一组都精确闭合</b> ——
+所以它是恒等式，不是模型，两列的增减可以直接当成代价来读。</div>
+<h5>顺带修正一个搞错了的对象：绑定的是 RSP，不是 DAT</h5>
+<p>3.1 前面各节一直盯着 DAT，那是<u>共享端口</u>时代的绑定项。按方向拆端口之后
+它变了：</p>
+{_table(["VC", "最忙的 hop", "实际穿越", "利用率", "绕环加价", "空转拍数"],
+        [["<b>RSP</b>", b["hops"], f"{b['crossings']:,}", b["util"],
+          f"+{b['surcharge']:,}", f"{b['idle']:,}"],
+         ["DAT", dr["hops"], f"{dr['crossings']:,}", dr["util"],
+          f"+{dr['surcharge']:,}", f"{dr['idle']:,}"]],
+        hl=[True, False])}
+<div class="def"><b>RSP hop 的利用率 {b['util']} 高于 DAT 的 {dr['util']}</b>，
+它才是把 makespan 顶住的那条。两条 VC 的名义载荷都是 {g['floor']:,}，
+差别全在绕环加价：RSP 被多穿越了 {b['surcharge']:,} 次，DAT 只有
+{dr['surcharge']:,} 次 —— 下环失败的绝大多数是 RSP。<br>
+按实际发生的绕环量算，<b>真正可达的上限是 {g['reachable']} flit/cycle</b>
+（{g['reachable_pct_r_star']}% R*），出厂点占它 {g['pct_of_reachable']}% ——
+这个数正好等于绑定 hop 的利用率，自洽。</div>
+<h5>空转拍数的完整归因（{g['attrib_total']:,} 拍，无残项）</h5>
+<p>一条 hop 的空槽只能由「上游节点自己上环」或「在环 flit 过境」填。
+既然空着，就是本地没上环。用仿真器<u>自己记的</u> board 失败原因归类，
+不是我另写一套判据：</p>
+{_table(["空转原因", "拍数", "占比", "含义"],
+        [[r[0], f"{r[1]:,}", f"{r[2]}%", r[3]] for r in g["attrib"]],
+        hl=[True, False, False, False, False])}
+<div class="def"><b>「其它」= 0，归因是完备的</b> ——
+这一点很重要，否则下面的定价可以被任何一个没数清的桶推翻。</div>
+<h5>逐项定价：一个候选根因一个干预</h5>
+<p>关键是看<b>两列各自怎么动</b>，而不是只看吞吐：</p>
+{_table(["干预", "总带宽", "占 R*", "绕环加价", "空转", "makespan",
+         "偏转次数", "Jain@50拍"],
+        [[r[0], r[1], f"{r[2]}%", f"+{r[3]:,}", f"{r[4]:,}", f"{r[5]:,}",
+          f"{r[6]:,}", r[7]] for r in g["rows"]],
+        hl=[i == 0 for i in range(len(g["rows"]))])}
+<h5>三条结论</h5>
+<ul>
+<li><b>①下环「两写一读」的<u>读侧速率</u>是唯一的结构性根因。</b>
+<code>eject_bw</code> 改成 2 让加价<b>精确归零</b>（{b['surcharge']:,} → 0）、
+偏转归零，吞吐到 96.49%。而把 buffer 从 12 加深到 64 只把加价压到 782，
+加深到 32 甚至<u>更差</u>（1146，非单调）。
+<b>加容量治不了、加速率才治得了，说明短的是速率不是容量</b> ——
+这本来就是规格自带的：拆端口后一个节点一拍最多收 2 个 flit（两个方向各 1），
+而它每拍只读出 1 个。</li>
+<li><b>②I-tag 的空转不是浪费，它在买东西。</b>
+I-tag 占了空转的 53.97%（{g['attrib'][0][1]:,} 拍），看着像该省掉的开销；
+但休眠它之后<u>空转只省下 973 拍，绕环加价却涨了 1566 拍</u>，
+净亏 593 拍 —— 吞吐 95.69% → 94.92%，Jain 0.87865 → 0.81565，两头都更差。
+<b>I-tag 是在用空槽换绕环，汇率划算。</b></li>
+<li><b>③不是供给不足。</b>
+<code>core_outstanding</code> 128 → 256 把加价推到 <b>{g['rows'][5][3]:,}</b>、
+吞吐崩到 {g['rows'][5][2]}%。多灌载荷不会填上那 30.98% 的 dry 槽，
+只会喂出更多下环失败。dry 反映的是四段握手的<b>串行依赖</b>
+（HA 得先等 REQ 落地才有 DBIDResp 可发），不是配额不够。</li>
+</ul>
+<div class="def"><b>两条根因是耦合的，顺序不能反。</b>
+只有先把读侧速率补上，I-tag 才变成纯开销：<code>eject_bw</code>=2 时休眠 I-tag
+能到 <b>{g['rows'][7][2]}%</b>（空转降到 {g['rows'][7][4]:,} 拍），
+而在读侧速率不足时休眠 I-tag 是亏的。
+换句话说 <b>I-tag 的全部价值都是下环速率不足的衍生品</b>。</div>
+<div class="def bad">{g['verdict']}</div>
+<div class="def"><b>对后续阶段的含义</b>：出厂规格（上/下环各 1 flit/cycle/node、
+两写一读 12 深）下可达上限约 <b>96.5%</b> R*，出厂点 {g['pct']}%，
+<b>拥塞控制方案能争的总带宽只剩 0.8 个点</b>。
+所以阶段三的「总带宽与 S0 一致（&lt;1%）」这条线不该靠抬带宽去过，
+而应该靠<u>不把带宽弄丢</u>去过；真正要动的指标是 Jain。</div>
 """
 
 

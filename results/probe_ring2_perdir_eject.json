@@ -34,21 +34,21 @@
     {
       "label": "per-dir, eject 12\uff08\u73b0\u72b6\uff09",
       "over": {},
-      "thr": 4.8477,
-      "pct_r_star": 84.83,
-      "jain_bin": 0.85045,
-      "max_min": 1.3703,
-      "makespan": 24754,
-      "n_deflections": 981,
-      "n_eject_full_deflect": 981,
-      "n_etag_raised": 981,
+      "thr": 5.3638,
+      "pct_r_star": 93.87,
+      "jain_bin": 0.87446,
+      "max_min": 1.8124,
+      "makespan": 22372,
+      "n_deflections": 1447,
+      "n_eject_full_deflect": 1447,
+      "n_etag_raised": 1447,
       "extra_crossings": {
-        "dat": 7320,
-        "req": 13845,
-        "rsp": 39990
+        "dat": 2200,
+        "req": 0,
+        "rsp": 26740
       },
-      "extra_total": 61155,
-      "extra_per_defl": 62.34,
+      "extra_total": 28940,
+      "extra_per_defl": 20.0,
       "max_ejectq": 12,
       "eject_buffers": {}
     },
@@ -57,21 +57,21 @@
       "over": {
         "eject_depth": 32
       },
-      "thr": 4.8263,
-      "pct_r_star": 84.46,
-      "jain_bin": 0.84883,
-      "max_min": 1.3061,
-      "makespan": 24864,
-      "n_deflections": 319,
-      "n_eject_full_deflect": 319,
-      "n_etag_raised": 319,
+      "thr": 5.4385,
+      "pct_r_star": 95.17,
+      "jain_bin": 0.87346,
+      "max_min": 1.7224,
+      "makespan": 22065,
+      "n_deflections": 793,
+      "n_eject_full_deflect": 793,
+      "n_etag_raised": 793,
       "extra_crossings": {
-        "dat": 5060,
-        "req": 15554,
-        "rsp": 32428
+        "dat": 1220,
+        "req": 0,
+        "rsp": 14640
       },
-      "extra_total": 53042,
-      "extra_per_defl": 166.28,
+      "extra_total": 15860,
+      "extra_per_defl": 20.0,
       "max_ejectq": 32,
       "eject_buffers": {}
     },
@@ -80,21 +80,21 @@
       "over": {
         "eject_depth": 64
       },
-      "thr": 4.8264,
-      "pct_r_star": 84.46,
-      "jain_bin": 0.84883,
-      "max_min": 1.3061,
-      "makespan": 24863,
-      "n_deflections": 103,
-      "n_eject_full_deflect": 103,
-      "n_etag_raised": 103,
+      "thr": 5.4459,
+      "pct_r_star": 95.3,
+      "jain_bin": 0.87346,
+      "max_min": 1.7224,
+      "makespan": 22035,
+      "n_deflections": 438,
+      "n_eject_full_deflect": 438,
+      "n_etag_raised": 438,
       "extra_crossings": {
-        "dat": 1800,
-        "req": 15554,
-        "rsp": 31368
+        "dat": 0,
+        "req": 0,
+        "rsp": 8760
       },
-      "extra_total": 48722,
-      "extra_per_defl": 473.03,
+      "extra_total": 8760,
+      "extra_per_defl": 20.0,
       "max_ejectq": 64,
       "eject_buffers": {}
     },
@@ -103,21 +103,21 @@
       "over": {
         "resv_ej": 4
       },
-      "thr": 4.8477,
-      "pct_r_star": 84.83,
-      "jain_bin": 0.85045,
-      "max_min": 1.3703,
-      "makespan": 24754,
-      "n_deflections": 981,
-      "n_eject_full_deflect": 981,
-      "n_etag_raised": 981,
+      "thr": 5.3638,
+      "pct_r_star": 93.87,
+      "jain_bin": 0.87446,
+      "max_min": 1.8124,
+      "makespan": 22372,
+      "n_deflections": 1447,
+      "n_eject_full_deflect": 1447,
+      "n_etag_raised": 1447,
       "extra_crossings": {
-        "dat": 7320,
-        "req": 13845,
-        "rsp": 39990
+        "dat": 2200,
+        "req": 0,
+        "rsp": 26740
       },
-      "extra_total": 61155,
-      "extra_per_defl": 62.34,
+      "extra_total": 28940,
+      "extra_per_defl": 20.0,
       "max_ejectq": 12,
       "eject_buffers": {}
     },
@@ -126,24 +126,24 @@
       "over": {
         "eject_bw": 2
       },
-      "thr": 4.7196,
-      "pct_r_star": 82.59,
-      "jain_bin": 0.85737,
-      "max_min": 1.2727,
-      "makespan": 25426,
+      "thr": 5.4925,
+      "pct_r_star": 96.12,
+      "jain_bin": 0.8709,
+      "max_min": 1.9185,
+      "makespan": 21848,
       "n_deflections": 0,
       "n_eject_full_deflect": 0,
       "n_etag_raised": 0,
       "extra_crossings": {
         "dat": 0,
-        "req": 18963,
-        "rsp": 37926
+        "req": 0,
+        "rsp": 0
       },
-      "extra_total": 56889,
-      "extra_per_defl": 56889.0,
+      "extra_total": 0,
+      "extra_per_defl": 0.0,
       "max_ejectq": 2,
       "eject_buffers": {}
     }
   ],
-  "wall_secs": 124.0
+  "wall_secs": 116.4
 }

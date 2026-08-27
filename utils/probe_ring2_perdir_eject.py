@@ -38,21 +38,33 @@ almost entirely and land at or above 94% of R*. If depth alone does fix it, the
 overload is bursty rather than sustained and the honest fix is a deeper eject
 buffer.
 
-Result, added after running -- the second half of the forecast is falsified, and
-the falsification is the useful part. Depth behaves as predicted (deflections
-981 -> 319 -> 103 for eject 12 / 32 / 64) but throughput does not move at all
-(84.83% -> 84.46% -> 84.46%). `eject_bw = 2` then removes deflections
-*completely* (defl = 0) and throughput gets **worse**, 82.59%. A change that
-eliminates the suspected mechanism entirely while making the metric worse means
-the mechanism was not the cause.
+First result, at ha_track = 256 -- and **retracted**, see below. Depth behaved as
+predicted (deflections 981 -> 319 -> 103 for eject 12 / 32 / 64) but throughput
+did not move (84.83% -> 84.46% -> 84.46%), and `eject_bw = 2` removed
+deflections completely while throughput got *worse*, 82.59%. That reads like a
+clean falsification: eliminate the suspected mechanism, metric degrades,
+therefore not the cause. The tell was in `extra_crossings`, where REQ kept ~19k
+excess crossings even in the zero-deflection row -- and REQ cannot deflect on its
+way to a completer, so those were extra *transactions*, traced in
+`probe_ring2_perdir_why` to RetryAck once the 256-entry tracker saturates.
 
-The tell is in the `extra_crossings` column: REQ and RSP keep ~19k and ~38k
-excess crossings in every row, including the one with zero deflections, and REQ
-cannot deflect on its way to a completer. Those are extra *transactions*, not
-extra laps -- traced in `probe_ring2_perdir_why` to RetryAck once the 256-entry
-HA tracker saturates. So the down-ring side is a **symptom** here: the same
-retry traffic that costs the bandwidth also bursts the eject buffer. E-tag is
-doing its job, and this probe's own premise was wrong.
+Retraction, after re-running at the shipped ha_track = 512. The whole first
+result was taken **inside the retry storm**, where the completer bound
+everything and no ring-side knob could show through; "throughput got worse" only
+meant "the bottleneck was not on the ring at that operating point". With the
+tracker no longer binding, the same experiment reverses sign:
+
+    eject 12 (shipped)  93.87% R*   defl 1447
+    eject 32            95.17% R*   defl  793
+    eject 64            95.30% R*   defl  438
+    eject_bw 2          96.12% R*   defl    0
+
+So the down-ring drain rate *is* a real limiter, and the original forecast in
+this file was right for the right reason. `probe_ring2_ceiling_gap.py` and
+`probe_ring2_ceiling_fix.py` price it exactly at the official K.
+
+The general lesson, worth more than the number: an elimination experiment is
+only valid at an operating point where the suspected mechanism *could* bind.
 
 Usage:
     PYTHONHASHSEED=0 python3 probe_ring2_perdir_eject.py [K]

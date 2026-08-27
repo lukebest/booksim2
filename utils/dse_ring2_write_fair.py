@@ -798,15 +798,21 @@ PERDIR_PROBE = {
                             "note": "bit-identical at ha_track=256"},
     # Two causes that were tested and eliminated before landing on the tracker.
     "eliminated": [
-        ["下环 buffer / E-tag 绕环",
-         "（K=6000）eject 12 → 32 → 64 把偏转从 981 压到 103，"
-         "吞吐一动不动（84.83% → 84.46%）；eject_bw=2 把偏转清成 0，"
-         "吞吐反而更差（82.59%）。把嫌疑机制彻底消掉而指标更坏，说明它不是病因。"
-         "官方 K 上还有一条反向证据：tracker 从 256 加到 512 之后偏转"
-         "从 882 <b>涨到</b> 2306，而吞吐同时从 76.13% 升到 95.69% —— "
-         "偏转更多却更快，它显然不是限制项。"],
         ["路由改变", "choose_dir 只看链路时延、完全确定，"
          "且两种端口结构下 REQ 的 hop 穿越数逐位相同（74976）。"],
+    ],
+    # Retracted. The eject-side evidence that put this in `eliminated` was taken
+    # at ha_track=256, i.e. inside the retry storm, where the completer bound
+    # everything and no ring-side knob could show through. Re-measured on the
+    # shipped tracker it reverses sign: eject_bw=2 now *helps*. See CEILING_GAP.
+    "eliminated_retracted": [
+        ["下环 buffer / E-tag 绕环",
+         "曾以「eject_bw=2 把偏转清零、吞吐反而更差（82.59%）」排除它，"
+         "但那组数是在 <b>ha_track=256</b> 下测的 —— 那时 completer 的 retry "
+         "风暴绑定一切，环侧任何旋钮都显不出来。"
+         "在出厂 tracker=512 上重测，结论<b>反转</b>："
+         "eject_bw=2 吞吐从 95.69% 升到 <b>96.49%</b>、绕环加价精确归零。"
+         "下环读侧速率是真实限制项，见 3.1.9。"],
     ],
     "verdict": (
         "按方向拆上环端口在<b>两个方向上都改变了结论</b>：总带宽从 91.30% 抬到 "
@@ -867,6 +873,84 @@ OVER_RSTAR = {
         "一次都没超过 1 flit/cycle。窗内能跑到 105.4% 是因为窗内的流量组合"
         "<b>偏离了绑定 hop</b>：它只吃到 16.20% 的窗内写 flit（名义 17.50%，"
         "可行上限 16.61%），欠下的穿越在收尾段以 0.9035 的利用率补完。"),
+}
+
+# Frozen: has S0 reached the *reachable* ceiling, and what holds the last 4.31%?
+# Produced by `probe_ring2_ceiling_gap.py` (decomposition + idle attribution)
+# and `probe_ring2_ceiling_fix.py` (one intervention per candidate cause), both
+# at the official K on the shipped fabric.
+#
+# The whole section rests on one identity that held exactly in all eight
+# configurations measured, which is what makes the causes additively priceable:
+#
+#     makespan = 70000 (the routing's load on the binding hop)
+#              + surcharge (extra crossings of it by flits riding another lap)
+#              + idle (cycles it sat empty)
+CEILING_GAP = {
+    "k": 20000, "r_star": 5.7143, "floor": 70000,
+    "thr": 5.4681, "pct": 95.69, "makespan": 73152,
+    # The binding VC is RSP, not DAT. Earlier rounds looked at DAT because that
+    # was binding on the shared port; per-direction ports moved it.
+    "binding": {"vc": "rsp", "hops": "1→0, 11→10, 7→8, 17→18",
+                "crossings": 71056, "util": 0.97135, "surcharge": 1056,
+                "idle": 2096},
+    "dat_ref": {"hops": "0→1, 10→11, 8→7, 18→17", "crossings": 70104,
+                "util": 0.95833, "surcharge": 104, "idle": 3048},
+    # Given the deflections that actually happen, the reachable ceiling is
+    # 400000/71056; the shipped run sits at 97.13% of it, which is exactly the
+    # binding hop's utilisation. Consistent by construction.
+    "reachable": 5.6294, "reachable_pct_r_star": 98.51, "pct_of_reachable": 97.13,
+    # Every idle cycle on the four binding RSP hops, attributed by the
+    # simulator's own board-failure causes. `other` is 0: nothing unexplained.
+    "attrib": [
+        # cause, cycles, share, what it means
+        ["I-tag 让位", 4529, 53.97,
+         "I-tag 预留refused了本地上环（<code>_itag_blocks</code>）"],
+        ["dry（无货）", 2600, 30.98,
+         "该方向队列是空的 —— 四段握手是串行的，HA 手里还没有 RSP 可发"],
+        ["raced（同拍被抢）", 1029, 12.26,
+         "试的时候 segment 已被在环 flit 拿走（在环优先，同拍内）"],
+        ["hol（共享 FIFO 队头阻塞）", 234, 2.79,
+         "flit 在两向共享的 12 深 FIFO 里，没能挪进本方向 inject Q"],
+        ["其它", 0, 0.0, "无 —— 归因是完备的"],
+    ],
+    "attrib_total": 8392,
+    # One intervention per candidate cause. `surcharge` + `idle` + 70000 equals
+    # `makespan` on every row, so each row's cost is decomposable.
+    "rows": [
+        # case, thr, pct R*, surcharge, idle, makespan, deflections, Jbin
+        ["现状（shipped）", 5.4681, 95.69, 1056, 2096, 73152, 2306, 0.87865],
+        ["I-tag 休眠 t_inj=1e9", 5.4241, 94.92, 2622, 1123, 73745, 5643,
+         0.81565],
+        ["下环 eject 32", 5.4619, 95.58, 1146, 2089, 73235, 2291, 0.87642],
+        ["下环 eject 64", 5.4787, 95.88, 782, 2228, 73010, 1535, 0.87642],
+        ["下环 eject 64 + I-tag 休眠", 5.2206, 91.36, 3413, 3206, 76619, 6816,
+         0.80562],
+        ["core_outstanding 256", 4.5854, 80.24, 15010, 2224, 87234, 2550,
+         0.85736],
+        ["eject_bw 2（破规则，仅作上界）", 5.5134, 96.49, 0, 2550, 72550, 0,
+         0.87767],
+        ["eject_bw 2 + I-tag 休眠（破规则，仅作上界）", 5.6375, 98.66, 0, 954,
+         70954, 0, 0.81597],
+    ],
+    "verdict": (
+        "<b>没有达到，S0 停在 95.69% R*，缺口 4.31%。</b>"
+        "缺口能<u>逐拍对齐地</u>拆成两块：1.44% 是绕环加价"
+        "（1056 次多余穿越绑定 hop），2.87% 是绑定 hop 的空转（2096 拍）。"
+        "根因排序是被实验定出来的，不是猜的：<b>①下环「两写一读」的读侧速率"
+        "是唯一的结构性根因</b> —— 把 <code>eject_bw</code> 改成 2 让加价"
+        "<u>精确归零</u>、偏转归零；而把 buffer 从 12 加深到 64 只把加价压到 "
+        "782（32 档甚至更差，1146）。<b>加容量治不了，加速率才治得了</b>，"
+        "说明短的是<u>速率</u>不是<u>容量</u>。"
+        "<b>②I-tag 的空转不是浪费，是在买东西</b>：它占了空转的 53.97%，"
+        "但休眠它之后空转只省下 973 拍、加价却涨了 1566 拍，净亏 —— "
+        "吞吐从 95.69% 掉到 94.92%，Jain 从 0.87865 掉到 0.81565。"
+        "I-tag 是在用空槽换绕环，汇率是划算的。"
+        "<b>③不是供给不足</b>：core_outstanding 从 128 加到 256 使加价爆到 "
+        "15010、吞吐崩到 80.24%，多灌载荷只会喂出更多绕环。"
+        "两条根因是<b>耦合</b>的：只有先把读侧速率补上，I-tag 才变成纯开销"
+        "（eject_bw=2 下休眠 I-tag 能到 98.66%）—— 也就是说 I-tag 的价值"
+        "完全是下环速率不足的衍生品。"),
 }
 
 # Frozen: the variance decomposition that sets the phase-3 target. Per-bin
