@@ -1,6 +1,6 @@
 {
-  "n_total": 71,
-  "n_ok": 71,
+  "n_total": 74,
+  "n_ok": 74,
   "all_ok": true,
   "rows": [
     {
@@ -260,6 +260,18 @@
       "ok": true
     },
     {
+      "name": "etag_preempts_normal_leave",
+      "ok": true
+    },
+    {
+      "name": "itag_reserve_one_slot",
+      "ok": true
+    },
+    {
+      "name": "itag_reserve_cheaper_than_broadcast",
+      "ok": true
+    },
+    {
       "name": "s22_yield_downhill_and_scoped",
       "ok": true
     },
@@ -288,5 +300,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T14:51:36Z"
+  "generated_at": "2026-08-27T04:55:43Z"
 }

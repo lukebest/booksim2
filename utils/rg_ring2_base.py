@@ -106,6 +106,20 @@ class Ring2BaseParams:
     # locks out injectors whose flit actually crosses its outgoing hop, which
     # a boarding node can test locally from the tag's node id and its own
     # (dir, hop count). Same broadcast width, much less collateral.
+    # What a raised I-tag actually does.
+    #
+    # "broadcast": every other injector on the tag's (plane, dir, VC) is held
+    # off until the starved node boards. Simple, but it withholds slots from
+    # nodes that were never competing for the hop in question, and it withholds
+    # them for as long as the starvation lasts rather than for one slot.
+    #
+    # "reserve": the specified behaviour. The tag walks upstream to the nearest
+    # node that is about to put a flit onto the hop the starved node is waiting
+    # on; that node yields exactly one slot. The resulting bubble is reserved
+    # for the requester, so only the nodes it still has to pass are held off,
+    # and only until it gets there. The requester boards into it and releases
+    # the tag. One tag therefore costs one slot, not a whole starvation period.
+    itag_mode: str = "broadcast"
     itag_scope: str = "plane"
     # Cycles a raised I-tag keeps blocking before it clears itself. A tag
     # does not stop transit, so a node starved by transit holds its tag for
@@ -114,6 +128,13 @@ class Ring2BaseParams:
     # `itag_hold` -- which is a far finer dial than `t_inj` alone.
     # 0 = never expire (the original behaviour).
     itag_hold: int = 0
+    # Diagnostic only, and it deliberately breaks the 1 flit/cycle/node
+    # up-ring rate: give each *direction* its own board port instead of
+    # time-sharing one port between them. A node's two outgoing hops can only
+    # ever be filled by that node or by transit, so when both are free and both
+    # have a flit waiting, one slot dies. This switch is how that loss is
+    # attributed -- it is never a shipping configuration.
+    per_dir_ports: bool = False
     eject_bw: int = 1             # PE drain per (node, plane) per cycle
     t_ha_service: int = 0         # cycles HA waits before emitting responses
     # Inclusive bounds of a per-RSP uniform delay at the completer.
@@ -230,6 +251,13 @@ class Ring2BaseSim:
         self.inj_starve: dict[Any, int] = defaultdict(int)
         self.i_tag: dict[Any, set[int]] = defaultdict(set)       # (p, dir, vc)
         self.itag_t: dict[Any, int] = {}     # (p, dir, vc, node) -> raise time
+        # `itag_mode="reserve"` only: (p, dir, vc, requester) -> (donor node,
+        # cycle the yielded bubble reaches the requester). One entry means one
+        # slot is in flight for that requester, which is what makes a tag cost
+        # one slot instead of a whole starvation period.
+        self.itag_resv: dict[Any, tuple[int, int]] = {}
+        self.itag_donor: dict[Any, int] = {}
+        self._itag_culprit: int | None = None
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.resv_used: dict[Any, int] = defaultdict(int)
         self.eject_rr: dict[Any, int] = defaultdict(int)         # (node, plane)
@@ -261,7 +289,7 @@ class Ring2BaseSim:
             "n_injected": 0, "n_delivered_flits": 0,
             "n_delivered_req": 0, "n_delivered_resp": 0,
             "n_txn_done": 0, "n_deflections": 0,
-            "n_etag_raised": 0, "n_itag_raised": 0,
+            "n_etag_raised": 0, "n_itag_raised": 0, "n_itag_yield": 0,
             "n_inring_blocked": 0, "n_eject_full_deflect": 0,
             "n_board_fail": 0, "max_inj_starve": 0,
             "max_deflections": 0, "max_ejectq": 0,
@@ -306,6 +334,17 @@ class Ring2BaseSim:
         # so inject success can be read against the hop's own latency λ.
         self.inj_ok_by_hop: dict[Any, int] = defaultdict(int)
         self.inj_fail_by_hop: dict[Any, int] = defaultdict(int)
+        # (plane, dir, idx, vc) -> cycles that directed hop carried a flit, and
+        # how many of those carried a flit that had already failed to eject.
+        # The theoretical write bandwidth is a link-capacity bound on the
+        # busiest DAT hop, so it can only be checked against a *measured*
+        # occupancy of that hop -- deriving it back out of the throughput would
+        # assume the very thing under test.
+        self.hop_use: dict[Any, int] = defaultdict(int)
+        self.hop_use_defl: dict[Any, int] = defaultdict(int)
+        # Longest run of consecutive failed boards per starve key: the quantity
+        # an I-tag threshold is actually compared against.
+        self.max_starve: dict[Any, int] = defaultdict(int)
         self._fail_cause: str = "hop_busy"
         self._deny_cause: str = "outstanding"
 
@@ -463,6 +502,8 @@ class Ring2BaseSim:
                       for v in self._shared_vcs()]
         else:
             groups = [[k] for k in self._src_keys(node, plane)]
+        if self.p.per_dir_ports:
+            return [[k] for g in groups for k in g]
         if self.p.per_vc_ports:
             return groups
         return [[k for g in groups for k in g]]
@@ -610,6 +651,9 @@ class Ring2BaseSim:
             f.held = False
             self.inring_hold[seg] -= 1
         self.seg_free[seg] = self.t + self.sigma
+        self.hop_use[seg] += 1
+        if f.deflections:
+            self.hop_use_defl[seg] += 1
         self.hop_starts.append(self.t)
         nxt = (f.idx + f.dir) % self.n
         lat = self.topo.hop_lat_from(f.idx, f.dir)
@@ -657,8 +701,8 @@ class Ring2BaseSim:
         self.st["max_ejectq"] = max(self.st["max_ejectq"], len(q))
         return True
 
-    def _itag_blocks(self, f: Flit, boarding_node: int) -> bool:
-        rk = (f.plane, f.dir, f.vc)
+    def _itag_expire(self, rk: Any) -> set[int]:
+        """Drop tags that have outlived `itag_hold`, and return the live ones."""
         holders = self.i_tag[rk]
         if holders and self.p.itag_hold:
             for h in [h for h in holders
@@ -666,30 +710,145 @@ class Ring2BaseSim:
                       >= self.p.itag_hold]:
                 holders.discard(h)
                 self.itag_t.pop(rk + (h,), None)
+                self.itag_resv.pop(rk + (h,), None)
+        return holders
+
+    @staticmethod
+    def _crosses_hop(f: Flit, node: int, n: int) -> bool:
+        """Would `f` ride over `node`'s outgoing hop in its own direction?
+
+        That hop is the one a node starving at `node` is waiting for, so this is
+        exactly the test for "this flit would take the slot away from it". A
+        boarding node can evaluate it locally from the tag's node id and its own
+        direction and remaining hop count.
+        """
+        return ((node - f.idx) * f.dir) % n < f.target
+
+    def _itag_head(self, u: int, plane: PlaneId, vc: str, d: Dir) -> Flit | None:
+        """The flit node `u` would put onto its outgoing hop in direction `d`."""
+        if self.p.shared_inj:
+            q = self.srcq.get((u, plane, vc if self.p.per_vc_srcq else None, d))
+            return q[0] if q else None
+        q = self.srcq.get(self._sk(u, plane, vc))
+        for f in (q or ()):
+            if f.dir == d:
+                return f
+        return None
+
+    def _itag_donor(self, rk: Any, r: int) -> int | None:
+        """Nearest node upstream of `r` that can yield `r` a slot right now.
+
+        The tag walks upstream until it reaches a node about to put a flit onto
+        the hop `r` is starving on -- that node is the one whose flit would have
+        taken the slot, so it is the one asked to hold back. Starting at `r` and
+        walking backwards keeps the bubble's trip, and hence the collateral on
+        the nodes it passes, as short as it can be.
+        """
+        plane, d, vc = rk
+        for k in range(1, self.n):
+            u = (r - k * d) % self.n
+            f = self._itag_head(u, plane, vc, d)
+            if f is not None and self._crosses_hop(f, r, self.n):
+                return u
+        return None
+
+    def _itag_pre(self) -> None:
+        """Pick this cycle's donor for every tag that has no bubble yet.
+
+        Done as one pass before the inject loop so the choice does not depend on
+        the order the inject loop happens to visit nodes in.
+        """
+        if self.p.itag_mode != "reserve":
+            return
+        self.itag_donor = {}
+        for rk in [k for k, v in self.i_tag.items() if v]:
+            for r in self._itag_expire(rk):
+                key = rk + (r,)
+                st = self.itag_resv.get(key)
+                if st is not None and self.t < st[1]:
+                    continue          # a bubble is already on its way
+                self.itag_resv.pop(key, None)
+                u = self._itag_donor(rk, r)
+                if u is not None:
+                    self.itag_donor[key] = u
+
+    def _itag_blocks(self, f: Flit, boarding_node: int) -> bool:
+        """May `boarding_node` put `f` on the ring, given the live I-tags?
+
+        Pure predicate: the inject arbiter calls it once to order candidates and
+        again on the one it commits to, so it must not change any state. The
+        yield is recorded by `_finish_board` from `_itag_culprit`.
+        """
+        rk = (f.plane, f.dir, f.vc)
+        holders = self._itag_expire(rk)
         if not holders or boarding_node in holders:
+            return False
+        n = self.n
+        if self.p.itag_mode == "reserve":
+            for r in holders:
+                if r == boarding_node or not self._crosses_hop(f, r, n):
+                    continue
+                key = rk + (r,)
+                st = self.itag_resv.get(key)
+                if st is None:
+                    # No bubble yet: only the node the tag walked up to yields.
+                    if self.itag_donor.get(key) == boarding_node:
+                        self._itag_culprit = r
+                        return True
+                    continue
+                donor, eta = st
+                # The bubble is in flight. Hold off only the nodes it has still
+                # to pass, and only until it arrives.
+                if self.t < eta and 0 < ((boarding_node - donor) * f.dir) % n \
+                        < ((r - donor) * f.dir) % n:
+                    self._itag_culprit = r
+                    return True
             return False
         if self.p.itag_scope != "segment":
             return True
         # Only yield to a starved node this flit would ride past: the hop it
         # is starving on is the one this flit would take away from it.
-        return any(((h - f.idx) * f.dir) % self.n < f.target for h in holders)
+        return any(self._crosses_hop(f, h, n) for h in holders)
+
+    def _itag_yielded(self, node: int, f: Flit) -> None:
+        """Book the slot `node` just gave up against the tag that asked for it."""
+        r = self._itag_culprit
+        if self.p.itag_mode != "reserve" or r is None:
+            return
+        key = (f.plane, f.dir, f.vc, r)
+        if key not in self.itag_resv:
+            self.itag_resv[key] = (node, self.t
+                                   + self.topo.path_lat(node, r, f.dir))
+            self.st["n_itag_yield"] += 1
+        self._itag_culprit = None
 
     def _itag_clear(self, node: int, f: Flit) -> None:
         rk = (f.plane, f.dir, f.vc)
         self.i_tag[rk].discard(node)
         self.itag_t.pop(rk + (node,), None)
+        self.itag_resv.pop(rk + (node,), None)
 
     def _should_raise_itag(self, node: int, f: Flit) -> bool:
         return True
 
     def _leave_order(self, node: int, plane: PlaneId, reqs: list[Flit]
                      ) -> list[Flit]:
-        """Who tries the shared leave port first. Default: RR on direction."""
+        """Who tries the leave port first: E-tagged flits, then RR on direction.
+
+        An E-tagged flit is only E-tagged because this leave buffer was full
+        when it last arrived, so it has already paid a full extra revolution.
+        Giving it the port ahead of any normal flit -- taking that normal flit's
+        turn -- is what bounds circulation to one lap; ordering by direction
+        alone lets the same flit lose the port again and go round indefinitely.
+        Among E-tagged flits the one that has circled most goes first, so the
+        bound holds even when several are contending.
+        """
         if len(reqs) <= 1:
             return reqs
         key = (node, plane)
         pref = self.eject_rr[key] % 2
-        reqs.sort(key=lambda f: 0 if ((f.dir > 0) == (pref == 0)) else 1)
+        reqs.sort(key=lambda f: (0 if f.e_tag else 1, -f.deflections,
+                                 0 if ((f.dir > 0) == (pref == 0)) else 1))
         self.eject_rr[key] += 1
         return reqs
 
@@ -717,10 +876,14 @@ class Ring2BaseSim:
         else:
             self._fail_cause = ""
         if self._fail_cause:
+            if self._fail_cause == "itag":
+                self._itag_yielded(node, f)
             self._on_board_fail(node, f)
             self.inj_starve[starve_key] += 1
             self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
                                             self.inj_starve[starve_key])
+            self.max_starve[starve_key] = max(self.max_starve[starve_key],
+                                              self.inj_starve[starve_key])
             if self.inj_starve[starve_key] >= self.p.t_inj and \
                     self._should_raise_itag(node, f):
                 rk = (f.plane, f.dir, f.vc)
@@ -977,6 +1140,7 @@ class Ring2BaseSim:
 
         # local injection: one flit per board port. `per_vc_ports` gives
         # REQ / RSP / DAT a port each, so up to one flit per VC per cycle.
+        self._itag_pre()
         self._pre_inject()
         for key in self._inject_keys():
             node, plane = key
@@ -1338,6 +1502,8 @@ class Ring2BaseSim:
             out["wr_recv_by_ha"] = self.wr_recv_by_ha()
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
+            out["hop_use"] = self.hop_use_table()
+            out["starve"] = self.starve_table()
             out["retry"] = self.retry_summary()
             if self._n_buf_samples:
                 out["buffers"] = self.buffer_summary()
@@ -1517,6 +1683,35 @@ class Ring2BaseSim:
                 "lat": self.topo.hop_lat_from(node, d),
             }
         return out
+
+    def hop_use_table(self) -> dict[str, dict[str, Any]]:
+        """'idx:dir:vc' -> cycles that directed hop carried a flit.
+
+        `util` is against the makespan, so it is the fraction of the run in
+        which the link was busy. On a bufferless ring with in-ring priority the
+        busiest DAT hop is the write-bandwidth bound, and `defl` says how much
+        of that occupancy went to flits riding an extra lap rather than to
+        forward progress.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        span = max(1, self.t)
+        for (plane, d, idx, vc), n in sorted(self.hop_use.items()):
+            out[f"{idx}:{d}:{vc}"] = {
+                "plane": plane, "n": n, "util": round(n / span, 5),
+                "defl": self.hop_use_defl.get((plane, d, idx, vc), 0),
+                "lat": self.topo.hop_lat_from(idx, d),
+            }
+        return out
+
+    def starve_table(self) -> dict[str, int]:
+        """'node:vc' -> longest run of consecutive failed board attempts.
+
+        This is what an I-tag threshold is compared against. A node can fail
+        hundreds of thousands of boards in total and still never reach a
+        threshold of 64, because any single success resets the run -- which is
+        exactly why the shipped `t_inj` never fired.
+        """
+        return {f"{k[0]}:{k[-1]}": v for k, v in sorted(self.max_starve.items())}
 
     def recv_by_core(self) -> dict[int, list[int]]:
         """Cycle of every response flit drained at a core (receive events)."""

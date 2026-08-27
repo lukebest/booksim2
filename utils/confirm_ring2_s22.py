@@ -34,8 +34,9 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dse_ring2_write_fair import (BIN_W, FABRIC, K_PER_CORE, M_REQ, M_RSP,
-                                  W_FLITS, binned_jain, board_dir_from_inj,
-                                  build_pattern, fairness_stats, run_scheme)
+                                  S1_CFG, W_FLITS, binned_jain,
+                                  board_dir_from_inj, build_pattern,
+                                  fairness_stats, run_scheme)
 from rg_ring2_topo import (CHI_VCS_WRITE, Ring2Topology, write_bounds,
                            write_paths_for_txns)
 
@@ -46,33 +47,36 @@ OUT = (Path(__file__).resolve().parents[1] / "results"
 # per-direction inject Q than the S0 fabric. Priced as part of the scheme.
 DEEP = {"dfc_dodge": 32, "dir_inj_depth": 32, "inj_depth": 32}
 
+def _s22(w: int, thresh: float, margin: float, **over) -> dict[str, Any]:
+    return {"dfc_window": w, "dfc_bus_lat": 1, "dfc_thresh": thresh,
+            "dfc_hold": 16, "dfc_margin": margin, **DEEP, **over}
+
+
+# Implementing I-tag as specified moved the baseline (per-bin Jain 0.957 ->
+# 0.968, whole-window max/min 1.12 -> 1.03), so the operating point tuned
+# against the old baseline now over-corrects: `m=2` costs 1.93% at the official
+# K, outside the acceptance line. `dfc_margin` is the knob that matters --
+# a fairer baseline means most deficit gaps are small, and refusing those
+# near-level swaps is what stops the controller spending hops for no index
+# movement. These are the survivors of the 48-point re-tune sweep.
 CANDIDATES: list[tuple[str, str, dict[str, Any]]] = [
     ("S0", "S0", {}),
     ("S0 dirq=32", "S0", {"dir_inj_depth": 32, "inj_depth": 32}),
-    ("S1 tuned", "S1", {"dir_split": True, "band": "spec", "cap_scale": 0.5,
-                        "window": 64, "pace_burst": 1}),
+    ("S1 tuned", "S1", dict(S1_CFG)),
     # margin=0 yields to anyone behind at all; those near-level swaps cost a
-    # hop and move the index almost not at all, which is what put the first
-    # round of candidates 0.3-0.4% over the bandwidth budget.
-    ("S22 w=3 m=0", "S22", {"dfc_window": 3, "dfc_bus_lat": 1,
-                            "dfc_thresh": 0.5, "dfc_hold": 16,
-                            "dfc_margin": 0.0, **DEEP}),
-    ("S22 w=2 m=2", "S22", {"dfc_window": 2, "dfc_bus_lat": 1,
-                            "dfc_thresh": 0.5, "dfc_hold": 16,
-                            "dfc_margin": 2.0, **DEEP}),
-    ("S22 w=3 m=2", "S22", {"dfc_window": 3, "dfc_bus_lat": 1,
-                            "dfc_thresh": 0.5, "dfc_hold": 16,
-                            "dfc_margin": 2.0, **DEEP}),
-    ("S22 w=4 m=2", "S22", {"dfc_window": 4, "dfc_bus_lat": 1,
-                            "dfc_thresh": 0.5, "dfc_hold": 16,
-                            "dfc_margin": 2.0, **DEEP}),
-    ("S22 w=3 m=3", "S22", {"dfc_window": 3, "dfc_bus_lat": 1,
-                            "dfc_thresh": 0.5, "dfc_hold": 16,
-                            "dfc_margin": 3.0, **DEEP}),
+    # hop and move the index almost not at all.
+    ("S22 w=3 m=0", "S22", _s22(3, 0.5, 0.0)),
+    ("S22 w=2 m=2", "S22", _s22(2, 0.5, 2.0)),
+    ("S22 w=3 m=2", "S22", _s22(3, 0.5, 2.0)),
+    ("S22 w=3 m=3", "S22", _s22(3, 0.5, 3.0)),
+    ("S22 w=2 m=3", "S22", _s22(2, 0.5, 3.0)),
+    ("S22 w=2 m=4", "S22", _s22(2, 0.5, 4.0)),
+    ("S22 w=3 m=4 th=1", "S22", _s22(3, 1.0, 4.0)),
+    ("S22 w=2 m=4 th=1", "S22", _s22(2, 1.0, 4.0)),
     # Same scheme on the stock 8-deep dir Q, to price the buffer separately.
-    ("S22 dirq=8 m=2", "S22", {"dfc_window": 3, "dfc_bus_lat": 1,
+    ("S22 dirq=8 m=3", "S22", {"dfc_window": 3, "dfc_bus_lat": 1,
                                "dfc_thresh": 0.5, "dfc_hold": 16,
-                               "dfc_margin": 2.0, "dfc_dodge": 8}),
+                               "dfc_margin": 3.0, "dfc_dodge": 8}),
 ]
 
 

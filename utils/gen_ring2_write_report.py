@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 from dse_ring2_write_fair import (
     DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP, S1_CFG, S1_DIRBAL,
-    S22_CFG, S22_CONFIRM, S22_REJECTED,
+    S22_CFG, S22_CONFIRM, S22_REJECTED, S22_ROBUST, TAG_AUDIT, TAG_BELIEF,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -3163,6 +3163,7 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 {TRACK128_ROUND['thr']} 一路走到 {thr0}。</p>
 {hz_ablate}
 {_ceiling_knob_section(meta, pat)}
+{_tag_audit_section(meta, pat)}
 
 <h3>3.2 各核瞬时带宽均衡度（主指标）</h3>
 <div class="def"><b>指标定义</b>：把竞争窗口 [0, t_fair] 切成宽度
@@ -3256,6 +3257,36 @@ buffer 深度、E-tag 门限 <code>t_xfer</code>、预留下环槽全部惰性�
 官方 K 上 S0 = <b>{s0['throughput']}</b>，
 占 R* <b>{100.0 * s0['throughput'] / max(1e-9, _ideal_cc(meta)['tot']):.1f}%</b>。
 不加缓存、不加总线。见 3.1.6。</li>"""]
+    a = TAG_AUDIT
+    d, ch, pd = a["dormant"], a["chosen"], a["per_dir_ports"]
+    port_none = sum(r[6] for r in a["waste"])
+    out.append(f"""
+<li><b>阶段一（I-tag / E-tag 审计）：两个机制出厂时<u>一次都没触发过</u>，
+而且 E-tag 最关键的一条<u>根本没实现</u>。</b>
+I-tag 门限 {d['t_inj_shipped']} 拍高于该 fabric 能产生的最长连续饥饿
+（{d['starve_max']} 拍），结构上够不到；下环仲裁则完全不看 <code>e_tag</code>，
+E-tag 只拿到几个额外 buffer 表项而<b>没有</b>规定要求的「挤占普通 flit 下环权」
+的优先级 —— 而那条正是「确保不在环上无限循环」的依据。
+两者都已按规定语义补全（I-tag 定向上游 + 单槽预约 + 上环即释放；
+E-tag 首次下环失败即打标 + 下环仲裁最高优先），
+并有三条回归钉住。见 3.1.7。</li>""")
+    out.append(f"""
+<li><b>阶段一（重推上限）：补全之后 S0 的总带宽<u>没有</u>抬起来，
+因为缺口的成因与这两个机制无关。</b>
+直接量绑定链路：它驮过的 flit 数与路由表压给它的完全相等，占用率
+{100 * a['hot'][1][2]:.2f}% —— <b>整个缺口就是这条链路上的空槽</b>。
+逐拍分类这些空槽，「端口空闲」一列合计 {port_none}（实质为零）：
+<b>没有一个是仲裁失误或误封造成的</b>，全部是本节点那一个上环端口
+在同一拍被<u>另一个方向</u>占用，或本节点没货。
+把端口按方向拆开（故意违反 1 flit/cycle/node）能把占比从
+{a['base_pct']}% 抬到 {pd['pct']}%，任何 I-tag 设置都做不到。
+<b>结论：R* 作为链路计数界成立但不可达 —— 一个节点两条出向 hop 只有它自己和
+transit 能填，而它每 VC 只有一个端口，要同时填满两条 hop 需要两条 hop 上的气泡
+在时间上恰好互补，那是全局调度问题。</b>
+I-tag 的正确定位是公平性旋钮（规定语义下 t_inj={ch['t_inj']} 时
+带宽 {ch['thr_delta_pct']:+.2f}%、Jain {ch['jbin_delta']:+.5f}，两头都略好，
+而原 broadcast 语义同一门限要掉 9.13%），E-tag 的正确定位是把绕环限制在一圈。
+见 3.1.7。</li>""")
     jd = JITTER_DECOMP["rows"][1]
     out.append(f"""
 <li><b>阶段一（续）：打满之后的分箱不公平里 {100 * jd[4]:.0f}% 是时间抖动，
@@ -3271,18 +3302,29 @@ buffer 深度、E-tag 门限 <code>t_xfer</code>、预留下环槽全部惰性�
         jb0 = (s0.get("jain_bin") or {}).get("jain_bin_mean")
         r1, rt = _max_fl_of(schemes, "S1"), _max_fl_of(schemes, "S1T")
         r0 = _max_fl_of(schemes, "S0")
+        d1 = (100.0 * (schemes["S1"]["fairness"]["throughput"]
+                       - s0["throughput"]) / s0["throughput"])
+        db = S1_DIRBAL
         out.append(f"""
-<li><b>阶段二：<code>dir_split</code>（按方向分别记预算）把 S1 的方向失败比从
-{None if r1 is None else round(r1, 2)} 收到
-{None if rt is None else round(rt, 2)}、吞吐从 −18.8% 拉回 {dt:+.2f}%，
-但这只是<u>退回 S0 自己的 {None if r0 is None else round(r0, 2)}</u>，
-而且各核瞬时带宽<u>一点没变匀</u>。</b>
+<li><b>阶段二：这条旋钮已经被规范 I-tag 转到底了，AIMD 没有剩余空间。</b>
+<code>itag_mode=reserve</code> 让 S0 <u>不加任何流控</u>就把最坏方向失败比从
+broadcast 实现下的 {db['s0_failmax_broadcast']} 降到
+{None if r0 is None else round(r0, 2)} —— 因为 <b>I-tag 的旗子本来就是按方向挂的</b>
+（键是 plane / <b>方向</b> / VC），一个核在 CW 上被饿住，让出的气泡就出现在 CW 上，
+补偿正好落在缺的那个方向，而这恰是 <code>dir_split</code> 想用源端限速去做的事。<br>
+扫 {db['n_settings']} 组 AIMD 参数：只有 {db['n_better_failmax']} 组真的低于 S0
+自己的失败比，其中唯一不砍带宽的那组只压了 0.4% 却付 0.57% 带宽，
+压得动的几组要付 17%~23%；另有 {db['n_identical_to_s0']} 组三项指标与 S0
+<b>逐位相同</b>（AIMD 从未生效，等于 S0）。
+调优后的 S1T 在官方 K 上是 {None if rt is None else round(rt, 2)} / {dt:+.2f}%。<br>
+<b>第二个考察项的答案是否定的：方向失败比变匀不带来瞬时带宽变匀。</b>
 S1T 分箱 Jain {jbt} vs S0 {jb0}（差 {abs((jbt or 0) - (jb0 or 0)):.5f}，
-在噪声以内）。<b>「方向失败次数均匀」与「核间瞬时带宽均匀」是两件事</b>：
+在噪声以内），max/min 还从 {s0['max_min']} 微升到 {f['max_min']}。
 前者是一个核内部的对称性，后者是核之间的同步性。
-默认 S1 之所以掉 18.8%、max/min 坏到 2.53，是因为它的乘性减由
-<b>节点自己的失败次数</b>触发，而无缓存环上这些失败是别人的 transit 造成的 ——
-<b>受害者反过来给领先者让路</b>。见 5.3。</li>""")
+默认 S1 之所以掉 {abs(d1):.1f}%、max/min 坏到 {schemes['S1']['fairness']['max_min']}，
+是因为它的乘性减由<b>节点自己的失败次数</b>触发，
+而无缓存环上这些失败是别人的 transit 造成的 —— <b>受害者反过来给领先者让路</b>。
+见 5.3。</li>""")
     s22 = schemes.get("S22")
     if s22:
         f = s22["fairness"]
@@ -3301,7 +3343,12 @@ S1T 分箱 Jain {jbt} vs S0 {jb0}（差 {abs((jbt or 0) - (jb0 or 0)):.5f}，
 <b>从不扣住空槽</b> —— 让出来的槽直接落到落后的节点手上，
 这是它与 I-tag（−5.8%）和定速漏桶 S21（−17%）的分界。
 硬件上它用加法树换掉 S1 的乘法器和令牌桶，代价是总线要 1 拍送到、
-inject Q 每向加深到 32。见第 6 节。</li>""")
+inject Q 每向加深到 32。<br>
+<b>范围说明：</b>这两条线是在<b>环受限</b>区间成立的（uniform，K 翻倍复现，
+Jain 稳定在 {jb} 五位不动）。换到 hot（全部写打进一个两节点 mem 簇）时瓶颈
+移到 completer、总带宽只有 0.94 flit/cycle，任何环侧控制器都拿不到 0.99
+（S0 自己只有 0.577）；S22 在那里也没有变坏 —— Jain 0.577 → 0.716、
+带宽 +5.9%。见第 6 节、6.3.1。</li>""")
     return "".join(out)
 
 
@@ -3364,11 +3411,11 @@ def _ceiling_knob_section(meta: dict, pat: dict) -> str:
 <h5>在本轮工作点上继续加深，就再没有收益了</h5>
 {_table(["改动（均在 free_slot 仲裁器、12+8 队列上）", "总写带宽"],
         p["inert"])}
-<div class="def"><b>再往上加深、E-tag 门限、预留下环槽全部是惰性的。</b>
-<code>t_xfer</code> 从 4 调到 1 或 ∞ 一位不差 ——
-E-tag 管的是在环被挡的 flit，而 3.1.3 已经显示下环那一级从来不满，
-所以这条路径上根本没有可管的东西。buffer 加深只是存更多待发 flit，
-不改变「hop 什么时候空出来」这个时序问题。</div>
+<div class="def"><b>再往上加深、预留下环槽全部是惰性的。</b>buffer 加深只是存更多
+待发 flit，不改变「hop 什么时候空出来」这个时序问题。
+（<code>t_xfer</code> 这一行当时也测成一位不差，但那个结论后来被推翻了一半：
+门限确实动不了带宽，可 <b>E-tag 的下环优先级当时根本没有实现</b> ——
+见 3.1.7。）</div>
 <h5>I-tag 门限 t_inj：它有效，但它买公平的方式是砍带宽</h5>
 {_table(["t_inj", "总写带宽", "占 R*", "Jain@50拍", "ratio"],
         [[r[0], r[1], f"{r[2]}%", r[3], r[4]] for r in p["t_inj"]])}
@@ -3377,10 +3424,171 @@ E-tag 管的是在环被挡的 flit，而 3.1.3 已经显示下环那一级从�
 （2 拍时到 {p['t_inj'][0][3]}），但带宽同步掉到 {p['t_inj'][0][1]}
 （只有 R* 的 {p['t_inj'][0][2]}%，比基线低
 {abs(100.0 * (p['t_inj'][0][1] - fs[1]) / fs[1]):.0f}%）。<br>
-原因是 <b>I-tag 只能"扣住"，而且扣的是整段</b>：举旗的节点自己未必能用上
-那个被让出来的槽（它可能是被 transit 饿死的，而 I-tag 停不了 transit），
-于是上游注入口白空转。<b>要同时拿到 Jain &gt; 0.99 和带宽不掉 1%，
-必须换一个「让出来的槽一定落到落后的节点手上」的机制 —— 这就是第 6 节。</b></div>
+原因是 <b>这一版 I-tag 只能"扣住"，而且扣的是整段</b>：举旗的节点自己未必
+能用上那个被让出来的槽（它可能是被 transit 饿死的，而 I-tag 停不了 transit），
+于是上游注入口白空转。</div>
+<div class="def warn"><b>但这张表本身也是一个未完整实现的机制测出来的。</b>
+上面这条交换曲线是「举旗即封停整个方向」的语义，而规定的 I-tag
+是<u>定向上游、只让出一个 slot、并把该 slot 预约给发起者</u>。
+按规定重写之后同一条曲线消失了：同一个门限上带宽代价从 −9.13% 变成 +0.23%。
+<b>3.1.7 重做这一节。</b></div>
+"""
+
+
+def _tag_audit_section(meta: dict, pat: dict) -> str:
+    """Re-derive the ceiling with I-tag / E-tag properly implemented.
+
+    The brief asks two things this answers. First, recompute S0's theoretical
+    write bandwidth for a bufferless ring with in-ring priority *and* the two
+    tagging mechanisms. Second, if the measurement still falls short, check
+    whether the mechanisms are implemented as specified. Both had real gaps --
+    E-tag had no eject priority at all -- and both are now fixed, which makes
+    this the section every later number rests on. The answer to "does fixing
+    them close the gap" is no, and the measurement that says why is here too.
+    """
+    a = TAG_AUDIT
+    s0 = pat["schemes"]["S0"]["fairness"]
+    thr0 = s0.get("throughput")
+    r_star = _ideal_cc(meta)["tot"]
+    pct0 = 100.0 * (thr0 or 0) / max(1e-9, r_star)
+    ch = a["chosen"]
+    pd = a["per_dir_ports"]
+    d = a["dormant"]
+    eo = a["etag_official"]
+    span = a["span"]
+    # The binding hop's own waste, split the way the ring makes it: a slot out
+    # of node i is fillable only by i or by transit, so "nothing queued" and
+    # "the port went the other way" are the only two possibilities.
+    hot_rsp = a["waste"][0]
+    hot_dat = a["waste"][3]
+    port_none = sum(r[6] for r in a["waste"])
+    return f"""
+<h4>3.1.7 重推理论上限：把 I-tag / E-tag 按规定语义补全之后，缺口在哪</h4>
+<p>任务书要求在「<b>无缓存环 + 在环绝对优先 + I-tag/E-tag</b>」这个前提下重新
+推算 S0 的理论总写带宽，再拿实测去比；若仍达不到，就要查这两个机制是不是没有
+完整实现。<b>两件事都查出了问题</b>，先给结论：</p>
+<div class="def bad"><b>① 出厂配置下这两个机制<u>一次都没有触发过</u>。</b>
+S0 全程 <code>n_itag_raised = 0</code>、<code>n_etag_raised = 0</code>。
+原因是可量化的：I-tag 门限是 <b>{d['t_inj_shipped']}</b> 拍连续上环失败，
+而整个 run 里最长的连续失败只有 <b>{d['starve_max']}</b> 拍 ——
+<b>门限结构性地高于该 fabric 能产生的最大饥饿长度</b>，永远够不到；
+E-tag 要累计 <code>t_xfer = {d['t_xfer_shipped']}</code> 次下环失败，
+而下环失败总数是 {d['n_defl']} 次。
+<b>所以此前 91% R* 这个数字，是在两个机制全程休眠的情况下拿到的。</b></div>
+<div class="def bad"><b>② 更要紧的是，E-tag 的核心那一条根本没写。</b>
+规定要求带 E-tag 的 flit「再次到达目的节点时拥有最高下环优先级，
+目的节点在仲裁下环端口时优先满足带 E-tag 的 flit、<u>挤占普通 flit 的下环权</u>」。
+原实现的下环仲裁 <code>_leave_order</code> <b>只按方向轮转，完全不看
+<code>e_tag</code></b>；E-tag 拿到的只是几个额外 buffer 表项
+（<code>resv_ej</code>）—— 那是「保留容量」，不是「优先级」。
+两者的差别不是风格问题：只要仲裁不让它先走，同一个 flit 可以<b>反复</b>丢掉
+下环权，而「确保不会在环上无限循环」正是这条规则存在的理由。</div>
+<h5>逐条对齐</h5>
+{_table(["机制条款", "规定语义", "原实现", "现在"], a["gaps"])}
+<h5>重推上限：R* 是一个<u>计数</u>上限，而它不可达 —— 原因与两个 tag 无关</h5>
+<p>R* = {r_star:.4f} flit/cycle 是<b>链路容量界</b>：最忙的有向 hop 要驮完
+路由表压给它的全部 flit，所需拍数就是 makespan 的下界
+（本轮 K={a['k']} 的短探测上 link 界 {a['link_lb']} 拍，
+port 界只有 {a['port_lb']} 拍，所以<b>绑定的是链路</b>）。
+要检验这个界就必须<u>直接量</u>那条链路的占用，而不是从吞吐反推 ——
+反推会把待证的结论当前提。逐 hop 实测：</p>
+{_table(["VC", "最忙有向 hop", "实测占用率", "实际驮过的 flit", "路由表压给它的"],
+        [[r[0], r[1], r[2], r[3], r[4]] for r in a["hot"]],
+        hl=[r[0] != "req" for r in a["hot"]])}
+<div class="def"><b>绑定 hop 驮过的 flit 数与路由表压给它的<u>完全相等</u>
+（{a['hot'][1][3]} = {a['hot'][1][4]}），而占用率只有
+{100 * a['hot'][1][2]:.2f}%。</b>两件事合起来说明：
+没有一个 flit 走了冤枉路（否则实际会大于路由值），
+<b>整个缺口就是这条瓶颈链路上的空槽</b>，一拍都不在别处。
+注意 rsp 与 dat 的界同为 {a['link_lb']} 拍、实测占用也同为
+{100 * a['hot'][1][2]:.2f}% —— 两条 VC 由写握手串成一个闭环
+（REQ → DBIDResp → WriteData），谁的气泡都会传给对方。</div>
+<h5>那些空槽是怎么丢的：只有两种可能，逐拍分类</h5>
+<p>节点 i 出向 hop 上的一个槽，<b>只能</b>由 i 自己注入、或由一个此刻到达 i 的
+transit flit 填上。所以一个被浪费的槽只有两种成因：<code>dry</code>（i 手里
+没有发往这个方向的 flit）和 <code>port</code>（i 有，但槽还是空了）。
+后者再拆一次：那一拍 i 的上环端口是<b>去了反方向</b>，还是<b>闲着</b>？
+——「闲着」才是仲裁或打标签的失误。全 run 逐拍统计（{span} 拍）：</p>
+{_table(["绑定 hop", "节点角色", "浪费槽数", "dry（没货）",
+         "port（有货没上去）", "└ 端口去了反方向", "└ 端口空闲"],
+        [[r[0], r[1], r[2], r[3], r[4], r[5], r[6]] for r in a["waste"]],
+        hl=[r[6] == 0 for r in a["waste"]])}
+<div class="def good"><b>「端口空闲」这一列合计 {port_none} —— 实质为零。</b>
+也就是说<b>没有任何一个空槽是仲裁失误、也没有任何一个是 I-tag 误封造成的</b>：
+每一个都是本节点那一个上环端口在同一拍<u>被另一个方向占用</u>，
+或是本节点根本没货。热 RSP hop 上端口冲突占
+{100.0 * hot_rsp[5] / (hot_rsp[2] or 1):.0f}%（mem 节点几乎从不缺货），
+热 DAT hop 上占 {100.0 * hot_dat[5] / (hot_dat[2] or 1):.0f}%，
+其余是 dry —— 而 core 的 dry 又是 RSP 侧同一个冲突晚一拍的结果
+（DBIDResp 没到，核就没有 WriteData 可发）。</div>
+<h5>把这条耦合定价：故意违反 1 flit/cycle/node</h5>
+<p>如果上面的归因对，那么<b>把上环端口按方向拆成两个</b>（每 VC 每向各
+1 flit/cycle，<u>违反</u>任务书设定的每节点 1 flit/cycle，仅作诊断）
+应该能收回这部分：</p>
+{_table(["上环端口", "总写带宽", "占 R*", "热 RSP hop 占用", "热 DAT hop 占用",
+         "Jain@50拍"],
+        [["规定：每 VC 每节点 1 个（两方向共享）", a["base_thr"],
+          f"{a['base_pct']}%", a["hot"][0][2], a["hot"][1][2], a["base_jbin"]],
+         ["诊断：每 VC <b>每方向</b>各 1 个", pd["thr"], f"{pd['pct']}%",
+          pd["hot_rsp_util"], pd["hot_dat_util"], pd["jbin"]]],
+        hl=[False, True])}
+<div class="def"><b>占 R* 从 {a['base_pct']}% 抬到 {pd['pct']}%
+（+{pd['pct'] - a['base_pct']:.2f} 个百分点，约为整个缺口的一半），
+而任何 I-tag / E-tag 设置都做不到这一点。</b>
+剩下那约一半是 <code>dry</code>：握手闭环的时延，加深 buffer 也变不出货来。
+顺带注意拆开端口把分箱 Jain 从 {a['base_jbin']} 打到 {pd['jbin']}、
+并且开始出现偏转（rsp {pd['defl_rsp']} 次、dat {pd['defl_dat']} 次）——
+<b>它是拿公平换带宽</b>，不是免费的。</div>
+<div class="def good"><b>所以重推后的结论是：R* = {r_star:.4f}
+作为链路计数界是对的，但它<u>在无缓存环上不可达</u>，
+而不可达的原因与 I-tag / E-tag 完全无关。</b>
+一个节点的两条出向 hop 只有它自己和 transit 能填，而它每 VC 只有一个上环端口；
+要同时填满两条 hop，两条 hop 上的<b>气泡必须在时间上恰好互补</b> ——
+那是一个全局调度问题，本地贪心仲裁做不到。
+I-tag 制造气泡，而这里气泡本来就有余，缺的是端口；
+E-tag 只管下环失败造成的绕环。<b>两者都不是带宽机制。</b></div>
+<h5>补全之后实测：确认它们不是带宽机制</h5>
+{_table(["I-tag 语义", "t_inj", "总写带宽", "vs 休眠基线", "Jain@50拍",
+         "举旗次数", "实际让出的 slot 数"],
+        [[r[0], r[1], r[2], f"{r[3]:+.2f}%", r[4], r[5], r[6]]
+         for r in a["modes"]],
+        hl=[r[0].endswith("（选定）") for r in a["modes"]])}
+<div class="def"><b>没有任何一档把带宽抬过休眠基线 1% 以上</b>
+（最好 +0.27%）—— 这正面否证了「S0 达不到 R* 是因为 I-tag/E-tag 没实现」。<br>
+但两种语义的<b>代价</b>差得极远：同一个门限 t_inj=4 上，
+原来的 broadcast 语义 <b>−9.13%</b>，按规定实现的 reserve 语义
+<b>+0.23%</b>，差 9.4 个百分点。原因就是规定里那两句：
+<u>只找会占掉该 hop 的那个上游节点</u>（不是封停整个方向），
+<u>只让出一个 slot 并预约给发起者</u>（不是封到饥饿解除）。
+一个标记的代价因此是<b>一个槽</b>，而不是<b>一整段饥饿时长</b>。
+（<code>segment</code> 那两行是中间状态：作用范围收窄了，但仍然没有单槽预约。）</div>
+{_table(["E-tag 规定门限", "总写带宽", "vs 休眠基线", "E-tag 次数"],
+        [[r[0], r[1], f"{r[2]:+.1f}%", r[3]] for r in a["etag"]])}
+<div class="def"><b>E-tag 在本工作负载上仍然惰性，但原因变了，而且是个好原因</b>：
+不是门限够不到，是<b>下环真的从来不失败</b>。
+官方 K 上 S0 的计数是
+<code>n_eject_full_deflect = {eo['n_eject_full_deflect']}</code>、
+<code>n_deflections = {eo['n_deflections']}</code>、
+<code>n_etag_raised = {eo['n_etag_raised']}</code>。<br>
+<b>注意不要读成「buffer 没满」</b>：占用峰值
+<code>max_ejectq = {eo['max_ejectq']}</code> 正好等于深度
+{eo['eject_depth']}，也就是它<u>确实打到过天花板</u> ——
+只是两写一读端口每拍排掉 1 flit、预留槽吸收了瞬时堆积，
+所以<b>没有任何一个到达的 flit 被拒收</b>。<br>
+机制现在是对的、并有回归钉住（<code>etag_preempts_normal_leave</code>：
+buffer 只剩一个位置时带 E-tag 的先下、普通 flit 被送去绕环），
+只是这条工作负载不触发它。<b>拥塞更重的方案才会用到</b> ——
+默认 S1 同一个 run 里就有 {(pat['schemes'].get('S1') or {}).get('n_etag_raised', 0)}
+次 E-tag。<br>
+<b>这条同时是一条独立证据</b>：下环侧一次都没成为约束，
+所以 3.1.7 里那 {100 - a['base_pct']:.1f}% 的带宽缺口<u>全部</u>在上环端口，
+与 E-tag 无关。</div>
+<div class="def good"><b>本轮 fabric 的最终取值：
+<code>itag_mode=reserve</code>、<code>t_inj={ch['t_inj']}</code>、
+<code>t_xfer={ch['t_xfer']}</code>（规定值）。</b>
+相对休眠基线 <b>带宽 {ch['thr_delta_pct']:+.2f}%、分箱 Jain
+{ch['jbin_delta']:+.5f}</b> —— 两个方向同时略好，所以没有取舍问题。
+官方 K 上 S0 = <b>{thr0}</b> flit/cycle，占 R* <b>{pct0:.1f}%</b>。</div>
 """
 
 
@@ -3431,6 +3639,41 @@ def _s22_cost_payload() -> dict | None:
         return json.loads(S22COST.read_text())
     except Exception:
         return None
+
+
+def _s22_robust_section() -> str:
+    """Why margin=4 ships over margin=3, and how far the claim extends.
+
+    Two candidates cleared both lines at the official K with opposite thin
+    margins, so the tie had to be broken on something. A seed sweep cannot do
+    it -- the uniform pattern has no stochastic component -- so the axes are
+    run length and traffic pattern. The pattern axis is also what bounds the
+    phase-3 claim, and that bound belongs in the report rather than in a
+    footnote.
+    """
+    rb = S22_ROBUST
+    rows = [[r[0], r[1], r[2], r[3], f"{r[4]:+.2f}%", r[5], r[6],
+             "—" if r[7] is None else ("<b>双线达标</b>" if r[7] else "未达标")]
+            for r in rb["rows"]]
+    return f"""
+<h4>6.3.1 margin=4 还是 margin=3：先说清这里<b>没有</b>随机性</h4>
+<p>两个候选在官方 K 上都过线，但各自的余量薄在<b>不同的那条线</b>上：
+margin=3 的 Jain 余量 +0.00147、带宽 −0.55%；
+margin=4 的 Jain 余量只有 +0.00062、但带宽 −0.04%。
+要在两者间选，得先知道这些小数位有多可信。</p>
+<div class="def"><b>换 seed 是没用的：本研究在 uniform 上根本没有随机成分。</b>
+<code>build_pattern("uniform")</code> 是确定性的 tiled channel hash，
+<code>HA_RSP_JIT = 0</code>（HA 无思考时间抖动），
+所以 seed 1 与 seed 0 <b>逐位相同</b>（实测确认）。
+这既意味着单次结果就是结果、不需要对 seed 求平均，
+也意味着<b>能动答案的只有真正改变负载的两个轴</b>：
+运行长度 K，和流量模式。</div>
+{_table(["模式", "K", "方案", "总写带宽", "vs S0", "Jain@50拍", "max/min",
+         "验收"], rows,
+        hl=[r[2] == "S22 m=4" and r[0] == "uniform" for r in rb["rows"]])}
+<div class="def good"><b>选 margin=4。</b>{rb['choice']}</div>
+<div class="def warn"><b>验收范围：这两条线只在<u>环受限</u>区间成立。</b>
+{rb['scope']}</div>"""
 
 
 def _s22_section(meta: dict, pat: dict, imgs: dict) -> str:
@@ -3547,7 +3790,7 @@ S22 换掉的正是这一点。</p>
 <li><b>让路余量</b>（<code>dfc_margin = {fc.get('margin')}</code>）：
 只让给比自己落后 {fc.get('margin')} 个 flit 以上的节点。
 跟自己差不多的节点换一次槽，指标几乎不动，却实打实花掉一个 hop ——
-这一项就是把带宽差从 −1.17% 拉回 −0.07% 的那一项（见 6.3 表）。</li>
+这一项就是把带宽差从 −4.27%（margin=0）拉回 −0.04% 的那一项（见 6.3 表）。</li>
 </ul></div>
 <p class="note"><b>让路是单向的：落后的节点永不让路</b>
 （回归 <code>test_s22_yield_downhill_and_scoped</code>），
@@ -3599,18 +3842,24 @@ S1T 修掉了这个失效，但也仅仅是回到 S0 那条略有起伏的线。
 <h3>6.3 参数选择：为什么是 window={S22_CFG['dfc_window']} 、
 margin={S22_CFG['dfc_margin']}</h3>
 {conf}
-<div class="def">两个关键读法：<br>
-<b>① margin 是带宽那条线的关键。</b>margin=0（让给任何一个落后的节点）
-Jain 一样漂亮（0.99145）但带宽掉 1.17%，越线；
-加上 margin=2 之后 Jain 还是 0.992 而带宽回到 −0.07%。
-差别就是那些"差不多齐"的换槽 —— 它们花掉一个 hop、几乎不改善指标。<br>
+<div class="def">三个关键读法：<br>
+<b>① margin 是带宽那条线的关键，而它的取值被 I-tag 的修正推着走。</b>
+margin=0（让给任何一个落后的节点）Jain 一样漂亮（0.99093）但带宽掉
+<b>4.27%</b>；margin=2 —— 也就是在<b>旧 broadcast 基线</b>上调出来的那个点 ——
+现在要付 1.93%，同样越线。原因很直接：规范 I-tag 把基线本身变齐了
+（分箱 Jain 0.957 → 0.968，整窗 max/min 1.12 → 1.03），
+于是大部分赤字差都很小，而<b>对这些"差不多齐"的节点让路，
+花掉一个 hop 却几乎不改善指标</b>。margin={S22_CFG['dfc_margin']}
+把这些换槽全部拒掉，落到 −0.04%。<br>
 <b>② 控制窗口必须短。</b>{S22_CFG['dfc_window']} 拍配 1 拍总线，
 赤字才是"当前"的进度差；窗口一长就退化成长期均值，
 而长期均值在闭环批量里天生就齐（整窗 Jain 本来就 ≈ 1），
 50 拍的箱看不到任何修正。<br>
 <b>③ 第二行是对照组</b>：只把 inject Q 加深到 32、不加控制器，
-Jain 一位不动（0.96479），带宽也不动。<b>所以公平性是控制器买来的，
-不是缓存买来的</b>；而最后一行说明控制器也确实需要那个缓存。</div>
+Jain 一位不动（0.96831，比 S0 还高 0.0007），带宽也不动（−0.10%）。
+<b>所以公平性是控制器买来的，不是缓存买来的</b>；
+而最后一行（dirq=8，−2.18%）说明控制器也确实需要那个缓存。</div>
+{_s22_robust_section()}
 
 <h3>6.4 硬件开销：与 S1 逐项对比</h3>
 {hw}
@@ -3624,6 +3873,7 @@ Jain 一位不动（0.96479），带宽也不动。<b>所以公平性是控制�
 <b>S21 定速漏桶</b>说明信用闸门在这条 fabric 上的结构性问题：
 环上空槽是不规则出现的，闸门一扣就错过，而放大桶深让突发漏回来 ——
 这笔交易不闭合。<b>所以 S22 不设闸门</b>，这是它与所有 rate-based 方案的分界。</div>
+<p class="note">{S22_REJECTED['note_fabric']}</p>
 {sens}
 """
 
@@ -4008,20 +4258,44 @@ S1 的旋钮只能碰前者，所以阶段三必须换机制，不是继续调 S
 最坏核方向失败比 {db['s0_failmax']}）：</p>
 {_table(["配置", "最坏核的方向失败比", "失败比≥2 的核数", "总写带宽",
          "vs S0", "Jain@50拍", "max/min"],
-        [[r[0], r[1], r[2], r[3], f"{r[4]:+.1f}%", r[5], r[6]]
-         for r in db["rows"]], hl=[r[0].endswith("（选定）")
+        [[r[0], r[1], r[2], r[3], f"{r[4]:+.2f}%", r[5], r[6]]
+         for r in db["rows"]], hl=[r[0].startswith("S0")
                                    for r in db["rows"]])}
-<div class="def"><b>为什么默认 S1 会掉 18.8% 带宽、max/min 坏到 2.53。</b>
+<div class="def good"><b>先说这一节最重要的变化：规定语义的 I-tag 把这件事
+提前做完了。</b>
+在原 broadcast 实现上，S0 自己的最坏方向失败比是
+<b>{db['s0_failmax_broadcast']}</b>；换成规定的
+<code>itag_mode=reserve</code> 之后，S0 不加任何流控就降到
+<b>{db['s0_failmax']}</b>。<br>
+原因是结构性的：<b>I-tag 的旗子本身就是按方向挂的</b> ——
+标记键是 (plane, <b>方向</b>, VC)，所以一个核在 CW 上被饿住，
+让出来的气泡就出现在 <b>CW</b> 上，补偿正好落在缺的那个方向。
+这恰好是 <code>dir_split</code> 想用源端限速去做的事，
+而 I-tag 在环上直接做了，且不花带宽。</div>
+<div class="def"><b>为什么默认 S1 依然掉 {abs(db['rows'][1][4]):.1f}% 带宽、
+max/min 坏到 {db['rows'][1][6]}。</b>
 S1 的乘性减是由<b>节点自己的上环失败次数</b>触发的，而在无缓存环上
 这些失败大多是<b>别人的 transit 流量</b>造成的 ——
-于是受害的核（C0 / C8）把自己限速，把槽位让给了本来就领先的核：
+于是受害的核把自己限速，把槽位让给了本来就领先的核：
 各核带宽从 {db['note_default_bw']['min']} 到
 {db['note_default_bw']['max']}，差 2.5 倍。<b>这是阶段三选机制时的关键教训：
 以「自己失败了」为触发条件，在无缓存环上会惩罚受害者。</b></div>
-<p><b><code>dir_split</code>（把预算按方向分别记）是唯一同时改善两头的旋钮</b>：
-失败比 {db['s0_failmax']} → 4.82，而带宽回到 S0 的水平（+0.3%）。
-把窗口拉到 128 能把失败比再压到 3.61，但带宽要付 24.6% ——
-超出验收线一个数量级，所以不取。</p>
+<div class="def warn"><b>扫完 {db['n_settings']} 组 AIMD 参数的结论：
+没有剩余可调空间。</b>
+其中只有 <b>{db['n_better_failmax']}</b> 组的失败比真的低于 S0 自己的
+{db['s0_failmax']}：
+<ul>
+<li>唯一<b>不砍带宽</b>的那组（<code>dir_split w=64 burst=0</code>）
+把失败比只压了 0.4%（{db['s0_failmax']} → 3.829），却付掉 0.57% 带宽 ——
+花的比拿的多。</li>
+<li>真正压得动的几组（3.47 ~ 3.50）一律要付 <b>17% ~ 23%</b> 带宽，
+比验收线超一个数量级。</li>
+<li>另有 <b>{db['n_identical_to_s0']}</b> 组的吞吐 / Jain / max&nbsp;min
+三项与 S0 <b>逐位相同</b> —— 那不是「调好了」，
+那是 AIMD 的速率上限从没被碰到、根本没生效，等于 S0。</li>
+</ul>
+所以阶段二的答案是：<b>方向失败比这条旋钮已经被 I-tag 转到底了，
+AIMD 在它之上只能变坏或变贵。</b></div>
 {off}
 """
 

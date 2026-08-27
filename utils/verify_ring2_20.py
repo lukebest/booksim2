@@ -1743,6 +1743,143 @@ def test_s22_deficit_reads_own_progress_off_the_bus() -> None:
     assert members[0] in s.req, (s.deficit, s.req)
 
 
+def test_etag_takes_the_leave_port_from_a_normal_flit() -> None:
+    """E-tag has to be a *priority*, not just a reserved buffer entry.
+
+    A flit is E-tagged because the leave buffer was full when it last arrived,
+    so it has already paid a full extra revolution. The specified behaviour is
+    that it then wins the leave port ahead of any normal flit, taking that
+    flit's turn -- which is what bounds circulation to one lap. Ordering the
+    port by direction alone (what this used to do) lets the same flit lose again
+    and again, so the bound does not hold no matter how deep the buffer is.
+    """
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+    p = Ring2BaseParams(shared_inj=True, per_vc_srcq=True, per_vc_ports=True,
+                        two_write_leave=True, eject_depth=1, resv_ej=0,
+                        t_xfer=1)
+    s = Ring2BaseSim(topo, p, seed=0)
+
+    def f(direction: int, etag: bool, defl: int = 0) -> Flit:
+        g = Flit(pid=0, txn_id=0, seq=0, nflit=1, src=0, dst=4, kind="wdata",
+                 t_gen=0, plane=0, dir=direction, idx=4, target=0, vc="dat")
+        g.e_tag, g.deflections = etag, defl
+        return g
+
+    # Both phases of the direction round-robin: the E-tagged flit goes first
+    # either way, so the priority does not depend on which turn it is.
+    for _ in range(2):
+        order = s._leave_order(4, 0, [f(1, False), f(-1, True)])
+        assert order[0].e_tag is True, [g.e_tag for g in order]
+    # Among E-tagged flits the one that has circled most goes first, so several
+    # contending E-tags still cannot starve each other indefinitely.
+    order = s._leave_order(4, 0, [f(1, True, 1), f(-1, True, 3)])
+    assert order[0].deflections == 3
+
+    # Through the leave stage: with room for exactly one and no reserved entry,
+    # the E-tagged flit takes it and the normal flit is the one sent round --
+    # it loses its turn, which is the "挤占普通 flit 的下环权" part of the rule.
+    p2 = Ring2BaseParams(shared_inj=True, per_vc_srcq=True, per_vc_ports=True,
+                         two_write_leave=True, eject_depth=1, resv_ej=0,
+                         t_xfer=1, eject_bw=0)
+    s2 = Ring2BaseSim(topo, p2, seed=0)
+    s2.arrivals[0] = [f(1, False), f(-1, True)]
+    s2.arr_set[(0, 1, 4, "dat")].add(0)
+    s2.arr_set[(0, -1, 4, "dat")].add(0)
+    s2.step()
+    assert s2.st["n_eject_full_deflect"] == 1, s2.st["n_eject_full_deflect"]
+    got = list(s2.ejectq[(4, 0, "dat")])
+    assert len(got) == 1 and got[0].e_tag is True, got
+
+
+def test_itag_reserve_yields_one_slot_and_releases() -> None:
+    """The specified I-tag: walk upstream, yield one slot, reserve it, release.
+
+    Three things have to hold, and the shipped broadcast tag met none of them.
+    The tag must reach the node whose flit would actually have taken the hop the
+    requester is starving on -- not every injector on the ring. That node must
+    give up exactly one slot, and only the nodes the resulting bubble still has
+    to pass may be held off, only until it arrives. And boarding must clear the
+    tag, so one tag costs one slot rather than a whole starvation period.
+    """
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+
+    def sim(mode: str) -> Ring2BaseSim:
+        p = Ring2BaseParams(shared_inj=True, per_vc_srcq=True,
+                            per_vc_ports=True, itag_mode=mode)
+        return Ring2BaseSim(topo, p, seed=0)
+
+    def dat(src: int, dst: int) -> Flit:
+        g = Flit(pid=0, txn_id=0, seq=0, nflit=1, src=src, dst=dst,
+                 kind="wdata", t_gen=0, plane=0, dir=1, idx=src, target=0,
+                 vc="dat")
+        g.target = hop_count(src, dst, 1, topo.n)
+        return g
+
+    s = sim("reserve")
+    r = 10                                  # requester, starving CW
+    s.i_tag[(0, 1, "dat")].add(r)
+    s.itag_t[(0, 1, "dat", r)] = 0
+    # Nodes 8 and 6 both hold a flit that would ride over node 10's outgoing
+    # hop. 8 is nearer, so the tag stops there.
+    for u in (6, 8):
+        s.srcq[(u, 0, "dat", 1)].append(dat(u, 14))
+    s._itag_pre()
+    assert s.itag_donor.get((0, 1, "dat", r)) == 8, s.itag_donor
+    assert s._itag_blocks(dat(8, 14), 8) is True
+    assert s._itag_blocks(dat(6, 14), 6) is False   # not the donor: unaffected
+    # A flit that leaves the ring before the requester never took its slot.
+    assert s._itag_blocks(dat(8, 9), 8) is False
+
+    # 8 yields: the bubble is now reserved and in flight towards 10.
+    s._itag_culprit = r
+    s._itag_yielded(8, dat(8, 14))
+    assert s.st["n_itag_yield"] == 1
+    donor, eta = s.itag_resv[(0, 1, "dat", r)]
+    assert donor == 8 and eta == topo.path_lat(8, 10, 1)
+    # Only node 9, which the bubble still has to pass, is held off now -- and
+    # the donor itself is free to inject again behind it.
+    assert s._itag_blocks(dat(9, 14), 9) is True
+    assert s._itag_blocks(dat(8, 14), 8) is False
+    s.t = eta
+    assert s._itag_blocks(dat(9, 14), 9) is False   # bubble has arrived
+    # Boarding releases the tag and the reservation together.
+    s.t = 0
+    s._itag_clear(r, dat(r, 14))
+    assert r not in s.i_tag[(0, 1, "dat")]
+    assert (0, 1, "dat", r) not in s.itag_resv
+
+    # The broadcast tag, for contrast, stops a node whose flit never touches
+    # the starved hop at all -- that is the collateral the specified tag drops.
+    b = sim("broadcast")
+    b.i_tag[(0, 1, "dat")].add(r)
+    assert b._itag_blocks(dat(8, 9), 8) is True
+
+
+def test_itag_reserve_costs_far_less_bandwidth_than_broadcast() -> None:
+    """The point of the rework: same threshold, a fraction of the bandwidth.
+
+    Both modes raise a tag on the same starvation condition, so the difference
+    is purely what a raised tag withholds. Broadcast withholds every injector on
+    the ring direction until the starvation clears; the specified tag withholds
+    one slot from one node. At a threshold low enough to fire often that has to
+    show up as a large throughput gap, otherwise "one tag, one slot" is not
+    what the implementation is doing.
+    """
+    def thr(mode: str) -> tuple[float, int, int]:
+        _, _, sim = _run_write(k=150, W=2, pattern="study",
+                               cfg={"t_inj": 4, "itag_mode": mode})
+        r = sim.summary()
+        assert r["completed"], mode
+        return (r["n_delivered_flits"] / r["makespan"], r["n_itag_raised"],
+                r.get("n_itag_yield", 0))
+
+    b_thr, b_tags, b_yield = thr("broadcast")
+    r_thr, r_tags, r_yield = thr("reserve")
+    assert b_tags > 0 and r_tags > 0, (b_tags, r_tags)
+    assert b_yield == 0 and r_yield > 0, (b_yield, r_yield)
+    assert r_thr > b_thr * 1.02, (r_thr, b_thr)
+
+
 def test_s16_is_bufferless_and_fair() -> None:
     """The payoff: fairer than S0 and still bufferless, at a small throughput
     cost.
@@ -1848,6 +1985,11 @@ def main() -> None:
     c.add("outst_trace_when_asked", test_outst_trace_records_when_asked)
     c.add("blocker_paths_share_hop", test_blocker_paths_share_victim_hop)
     c.add("s16_grants_below_tracker", test_s16_needs_to_grant_below_the_tracker)
+    c.add("etag_preempts_normal_leave",
+          test_etag_takes_the_leave_port_from_a_normal_flit)
+    c.add("itag_reserve_one_slot", test_itag_reserve_yields_one_slot_and_releases)
+    c.add("itag_reserve_cheaper_than_broadcast",
+          test_itag_reserve_costs_far_less_bandwidth_than_broadcast)
     c.add("s22_yield_downhill_and_scoped",
           test_s22_yields_only_downhill_and_only_to_crossers)
     c.add("s22_dodge_keeps_dst_order",
