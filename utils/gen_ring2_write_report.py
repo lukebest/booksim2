@@ -3109,6 +3109,187 @@ burst 1 时 Jain 0.9903 过了公平线，带宽却是 −23.55%。
 是分离出执行器本身代价的最干净办法，见下一节。</p>"""
 
 
+def _hotbw_section() -> str:
+    """Bandwidth on a fixed non-uniform load: the cap does it, not the controllers."""
+    f = ROOT / "results" / "probe_ring2_hotbw.json"
+    if not f.exists():
+        return ""
+    d = json.loads(f.read_text())
+    a = {r["name"]: r for r in d["passes"]["128"]}
+    b = {r["name"]: r for r in d["passes"]["32"]}
+    idl = d["ideal"]
+    s0a, s0b = a["S0 baseline"], b["S0 baseline"]
+    free = s0b["bw_vs_ideal"] - s0a["bw_vs_ideal"]
+    s16 = b["S16 grant withhold"]
+    s20a, s19a = a["S20 DCTCP"], a["S19 Swift"]
+
+    def _fr(rows: list[dict]) -> list[dict]:
+        best, out = -1e9, []
+        for r in sorted((x for x in rows if x.get("bus_rule_ok", True)),
+                        key=lambda x: x["hw_cost"]):
+            if r["bw_vs_ideal"] > best:
+                out.append(r)
+                best = r["bw_vs_ideal"]
+        return out
+
+    front = _fr(list(b.values()))
+    rows_tbl = _table(
+        ["方案", "触发", "带宽 / R*", "相对免费基线", "分箱 Jain", "E-tag 绕环",
+         "硬件 FF-eq"],
+        [[r["name"], r["trigger"], f"{r['bw_vs_ideal']:.4f}",
+          f"{r['bw_vs_ideal'] - s0b['bw_vs_ideal']:+.4f}",
+          f"{r['jain_bin']:.4f}", f"{r['n_etag']:,}", f"{r['hw_cost']:,}"]
+         for r in sorted(b.values(), key=lambda x: -x["bw_vs_ideal"])])
+
+    mid = ROOT / "results" / "probe_ring2_midskew.json"
+    skew_html = ""
+    if mid.exists():
+        m = json.loads(mid.read_text())
+        fs = sorted(float(x) for x in m["sweeps"]["cap"])
+        caps = m["sweeps"]["cap"]
+        sch = m["sweeps"]["schemes"]
+        base = sch["S0 (free baseline)"]
+        skew_html = f"""
+<h3>这是不是"全塌缩"这个极端造成的假象？扫一遍倾斜度</h3>
+<p><code>hot</code> 是最极端的一点。把倾斜度 <i>f</i> 连续调起来
+（每个核有 <i>f</i> 比例的写重定向到 HA 11/13，<i>f</i> = 0 就是 uniform、
+<i>f</i> = 1 就是 <code>hot</code>），每个 <i>f</i> 的 R* 都用它自己的混合重解：</p>
+<img src="hotbw_skew.png" alt="bandwidth vs skew">
+{_table(["倾斜度 f", "该 f 的 R*"]
+        + [f"上限 {c}" for c in (128, 64, 32, 16)],
+        [[f"{fv:.2f}", f"{caps[f'{fv}']['r_star']:.4f}"]
+         + [f"{caps[f'{fv}']['by_cap'][str(c)]:.4f}"
+            + ("（最优）" if caps[f"{fv}"]["by_cap"][str(c)]
+               == max(caps[f"{fv}"]["by_cap"].values()) else "")
+            for c in (128, 64, 32, 16)] for fv in fs])}
+<p><b>上限 32 在五个倾斜度上四个最优、剩下一个（f = 0.25）差 1.2%，
+而原默认的 128 在<u>每一个</u> f 上都最差。</b>
+所以 32 不是又一个流量先验 —— 它是在整个倾斜范围上都成立的选择，
+这正是撤下 S24/S25 时要求的那种性质。</p>
+{_table(["方案（均在上限 32 上）"] + [f"f = {fv:.2f}" for fv in fs],
+        [[nm] + [f"{row[f'{fv}']['bw_vs_ideal']:.4f}"
+                 + f"<span class=\"note\">({row[f'{fv}']['jain_bin']:.2f})</span>"
+                 for fv in fs] for nm, row in sch.items()])}
+<div class="def good"><b>S16 是唯一在<u>每一个</u>倾斜度下都不低于免费基线的方案</b>：
+增量依次为
+{'、'.join(f"{sch['S16 grant withhold'][f'{fv}']['bw_vs_ideal'] - base[f'{fv}']['bw_vs_ideal']:+.4f}" for fv in fs)}。
+它的公平度也全面更好（Jain
+{base['0.5']['jain_bin']:.2f} → {sch['S16 grant withhold']['0.5']['jain_bin']:.2f}
+在 f = 0.5 处）。<br>
+另外两点值得记下来：<b>最难的区间是中等倾斜 f ≈ 0.25 而不是全塌缩</b>
+（免费基线只到 {base['0.25']['bw_vs_ideal']:.4f}），因为全塌缩时 R* 本身被下环口
+压到 2.0、反而容易接近；而在 f = 0.25 处领先的是
+S23（{sch['S23 fair-share pacer']['0.25']['bw_vs_ideal']:.4f}）和
+S22（{sch['S22 STOCK bus30 w64']['0.25']['bw_vs_ideal']:.4f}），
+即<b>源端公平型方案在中等倾斜下确实能换来带宽</b>，
+只是要付 8~15 倍的硬件。</div>"""
+
+    return f"""
+<h2>固定非均匀流量下的总写带宽（以及一个免费的修正）</h2>
+<div class="def">前面所有结论都是在 <code>uniform</code> 上得到的，
+那里绑定资源是环上 hop、S0 已经拿到理想的 94%，只剩 ~4.3% 可争，
+所以公平性是全部故事。<b>这一节换成固定的非均匀流量，专问带宽。</b><br>
+流量固定为 <code>hot</code>：十个核全部写入 HA 11/13 这个两节点存储簇，
+完全确定、无采样。它的理想上限用<b>它自己的目的地分布</b>重解 LP，
+得 <b>R* = {idl['r_fair']:.4f} flit/cycle</b>，绑定资源是
+<code>{idl['binding']}</code> —— 不再是环上 hop，而是热簇的<b>下环口</b>。<br>
+<b>一个结构性的好处：等速率上限与最大吞吐上限在这里完全相等</b>
+（{idl['r_fair']:.4f} = {idl['r_max']:.4f}），因为总容量就是两个下环口的
+2 flit/cycle，怎么分配都不改变总量。所以这个 pattern 上
+<b>公平不要钱、带宽与公平没有交换</b>，任何低于 R* 的部分都是纯浪费 ——
+做纯带宽对比最干净的场景。<br>
+<b>所有方案的旋钮一律冻结在 uniform 上调好的值，不重新调参。</b>
+这不是省事：一个方案要算"不需要强流量先验"，就必须靠<b>同一套固定配置</b>
+在流量变化后继续工作；按 pattern 重新调参等于把先验从速率常数搬到参数文件里。</div>
+
+<h3>第一轮（默认在飞上限 128）看起来像是拥塞控制大获全胜</h3>
+<p>S0 只有 {s0a['bw_vs_ideal']:.4f} 的 R*，浪费掉
+{100 * (1 - s0a['bw_vs_ideal']):.1f}%；而 S19 Swift 与 S20 DCTCP 都跳到
+{s20a['bw_vs_ideal']:.4f}（比 S0 高 {s20a['delta_vs_s0_pct']:+.1f}%）。
+按这个读法，结论会是"非均匀流量下拥塞控制价值巨大"。<b>这个读法是错的。</b></p>
+<div class="def bad"><b>破绽：S19 和 S20 的结果<u>逐位相同</u></b>
+（{s19a['thr']:.4f} / {s19a['jain_bin']:.5f} 对
+{s20a['thr']:.4f} / {s20a['jain_bin']:.5f}）。
+一个是时延触发的窗口控制、一个是 ECN 触发的窗口控制，机制完全不同，
+不可能巧合到小数点后五位。查计数器：
+<b><code>n_win_down = 0</code>、<code>n_mark = 0</code></b> ——
+两个控制器<b>在整个仿真里一次都没有触发</b>，只是带着初始窗口
+<code>win_init = 16</code> 跑到底。<br>
+原因是打标阈值定在 <code>k_min × ha_track</code> = 0.8 × 512 = 410 个在飞项，
+而窗口 16/核 × 10 核 = 160 项已经把在飞量压在阈值以下。
+<b>打标点在 HA tracker 上，而 <code>hot</code> 上真正满的资源是下环口</b> ——
+信号接在了没拥塞的地方，所以永远不响。</div>
+
+<h3>对照实验：那 +33% 完全来自静态在飞上限，与拥塞控制无关</h3>
+<p>如果增益来自"窗口恰好是个紧的在飞上限"而不是来自控制回路，那么
+把 S0 的 <code>core_outstanding</code> 直接调到同一量级就应该复现它。结果是
+<b>S0 + 上限 32 = {s0b['bw_vs_ideal']:.4f}</b>，与 S19/S20 的
+{s20a['bw_vs_ideal']:.4f} 实质相同，而<b>硬件开销为 0</b>。
+E-tag 绕环次数从 {s0a['n_etag']:,} 降到 {s0b['n_etag']:,}（不设上限时是 22,211）——
+这就是机制：下环口满 → flit 下不去 → 打 E-tag 绕环 → 每一圈都在吃 hop 带宽，
+而在飞上限从源头掐掉了本来就注定失败的注入。</p>
+
+<h3>把基线修正之后的 Pareto：前沿只剩两个点</h3>
+<img src="pareto_ring2_hotbw.png" alt="bandwidth vs hardware on hot">
+<p>横轴是新增硬件状态（FF 等效，与前面同一个成本模型），
+纵轴是总写带宽 / R*。基线取<b>免费修正后</b>的
+{s0b['bw_vs_ideal']:.4f}，因为拿 128 那条线作基线就是把免费的收益记在控制器账上。</p>
+{rows_tbl}
+<div class="def good"><b>可实现的带宽 Pareto 前沿：
+{' → '.join(f"{r['name'].split(' (')[0]}（{r['hw_cost']:,} FF-eq，{r['bw_vs_ideal']:.4f}）" for r in front)}。</b>
+只有两个点，而且 <b>S16 授权保留以 {s16['hw_cost']:,} FF-eq
+（全研究最便宜的方案）拿到 R* 的 {100 * s16['bw_vs_ideal']:.2f}%</b>，
+离理想上限只差 {100 * (1 - s16['bw_vs_ideal']):.2f}%。
+<b>所有更贵的方案都更差</b> —— 21,220 FF-eq 的 S1、13,920 的 S22-stock、
+1,198,560 的 S22 深队列，全部落在免费基线之下或与之持平。</div>
+<img src="hotbw_decomp.png" alt="free vs paid bandwidth">
+<p>分解图把这一点画死：绿色是免费那一段（对每个方案都是
+{free:+.4f}），蓝色是控制器在正确基线之上再挣到的。
+<b>蓝色只有 S16 一个为正</b>（{s16['bw_vs_ideal'] - s0b['bw_vs_ideal']:+.4f}），
+其余从 0 一路负到 S21 的 −0.28。</p>
+
+<h3>为什么偏偏是 S16</h3>
+<div class="def"><b>因为它是唯一把控制点放在拥塞发生地的方案。</b>
+<code>hot</code> 上的拥塞在<b>目的地</b>（HA 11/13 的下环口），
+而 S16 是 receiver-driven：HA 自己扣下一部分授权不发，
+源端拿不到授权就不会注入本来也下不了环的 flit。
+其余方案要么是 sender-driven 的速率/窗口控制（信号要绕一圈回来，
+且阈值挂在错误的资源上），要么是<b>源端之间</b>的公平化
+（S22 / S23 / S15 / S21+eq）—— 而这里的失衡<b>不在源端</b>：
+十个核的权利完全相同，均衡它们对下环口的拥塞毫无帮助，
+反而因为让位/门控白扔槽位而亏带宽。
+这解释了为什么 S15 在 <code>hot</code> 上亏 21.8%、S21 亏 28.6%。</div>
+{skew_html}
+
+<div class="def"><b>可执行的两条结论</b>：
+<ol><li><b>把 <code>core_outstanding</code> 的默认值从 128 改成 32。</b>
+零硬件、无流量先验，uniform 上带宽 +1.1%（顺带分箱 Jain
+0.876 → 0.910），非均匀流量上带宽 +{100 * free / s0a['bw_vs_ideal']:.0f}%。
+本研究此前一直用 128，所以<b>前面所有章节的 S0 基线都是偏低的</b>。
+那些章节内部的比较仍然自洽（都在同一个上限 128 上），
+但<b>不能假定排序在上限 32 上完全不变</b>：上面 f = 0 那一列就显示
+S16 在 uniform 上的带宽优势从 +0.31% 收敛到与 S0 持平
+（0.9337 对 0.9337）—— 免费的修正把它原本挣到的那部分先拿走了。
+方案之间的大小关系基本保留，但<b>凡是靠"减少无效重试"取胜的方案，
+其收益都会被这个修正吃掉一部分</b>，重跑前面章节才能给出准确数字。</li>
+<li><b>若要在此之上再要带宽，选 S16（{s16['hw_cost']:,} FF-eq）。</b>
+它是唯一在任何倾斜度下都不亏带宽的方案，且公平度同时改善。</li></ol>
+<b>但公平性在这个 pattern 上没有解决</b>：免费基线的分箱 Jain 只有
+{s0b['jain_bin']:.4f}，S16 也只到 {s16['jain_bin']:.4f}。
+由于这里 R*<sub>equal</sub> = R<sub>max</sub>，
+<b>这种不公平不是为带宽付的必要代价，而是纯缺陷</b> ——
+理想控制器可以同时拿到 2.0 flit/cycle 和 Jain ≈ 1。
+带宽这条线已经基本关闭（差 {100 * (1 - s16['bw_vs_ideal']):.2f}%），
+非均匀流量下<b>剩下的问题全部在公平性一侧</b>。</div>
+<p class="note">数据：<code>results/probe_ring2_hotbw.json</code>（两轮上限 × 16 方案）、
+<code>results/probe_ring2_midskew.json</code>（倾斜度扫描），
+脚本 <code>utils/probe_ring2_hotbw.py</code>、
+<code>utils/probe_ring2_midskew.py</code>、
+<code>utils/pareto_ring2_hotbw.py</code>，
+回归 <code>test_window_controllers_inert_on_hot</code>。</p>
+"""
+
+
 def _pareto_section(imgs: dict) -> str:
     """The scheme zoo, the frontier, and what the frontier points actually are."""
     f = ROOT / "results" / "pareto_ring2_cc.json"
@@ -5665,6 +5846,7 @@ ha_track = {meta.get('ha_track')}，配额从未触发，
 {_ideal_lp_section()}
 {_tradeoff_section()}
 {_pareto_section(imgs)}
+{_hotbw_section()}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>

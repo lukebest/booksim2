@@ -1172,6 +1172,57 @@ def test_fair_share_is_pattern_dependent() -> None:
     assert bind_h.startswith("down:"), bind_h
 
 
+def test_window_controllers_inert_on_hot() -> None:
+    """On the non-uniform load the window schemes' bandwidth is the cap, not control.
+
+    The first pass on `hot` looked like a rout in favour of congestion control: S19
+    and S20 both jumped 33.6% over S0. The report reverses that reading on two
+    findings, and both are load-bearing enough to pin, because if either quietly
+    stopped holding, the recommendation would flip back to "buy a window
+    controller" and 5,840 FF-equivalents would be spent for nothing.
+
+      * The controllers never fire. Their marking threshold is a fraction of
+        `ha_track`, but the initial window already holds outstanding below it, so
+        `n_mark` stays 0 and the window never moves. Two structurally different
+        algorithms therefore produce byte-identical runs -- which is the tell.
+      * The gain is the outstanding cap. Plain S0 held at the same cap reproduces
+        it with no controller at all, while S0 at the study's default cap of 128
+        does not come close.
+
+    `k` has to be large enough to reach steady state for the second half: the
+    damage a loose cap does is E-tag circulation building up on a congested ring,
+    so a short run understates it badly (the gap is 4% at k=300 and 21% by k=1000).
+    """
+    from dse_ring2_write_fair import (FABRIC, W_FLITS, build_pattern,
+                                      fairness_stats, run_scheme)
+
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
+    k = 1000
+    tx = build_pattern("hot", k=k, W=W_FLITS, seed=0)
+    fpc = k * W_FLITS
+
+    def thr(scheme: str, **over) -> float:
+        cfg = dict(FABRIC)
+        cfg.update(over)
+        r = run_scheme(scheme, topo, tx, cfg=cfg, quiet=True)
+        inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+        return fairness_stats(inj, r["makespan"] or 1, fpc)["throughput"], r
+
+    t19, r19 = thr("S19")
+    t20, r20 = thr("S20")
+    assert r20.get("n_mark") == 0, r20.get("n_mark")
+    assert r20.get("n_win_down") == 0, r20.get("n_win_down")
+    # Inert controllers reduce to the same fixed window, so the runs coincide.
+    assert r19["makespan"] == r20["makespan"], (r19["makespan"], r20["makespan"])
+    assert abs(t19 - t20) < 1e-9, (t19, t20)
+
+    # A bare outstanding cap, no controller, gets there; the default cap does not.
+    t_cap, _ = thr("S0", core_outstanding=32)
+    t_def, _ = thr("S0", core_outstanding=128)
+    assert t_cap > 0.98 * t20, (t_cap, t20)
+    assert t_def < 0.85 * t_cap, (t_def, t_cap)
+
+
 def test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter() -> None:
     """Two-sided check on the new reference: reachable, and a real ceiling.
 
@@ -2204,6 +2255,8 @@ def main() -> None:
           test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter)
     c.add("ideal_cc_lp_matches_fabric", test_ideal_cc_lp_matches_fabric)
     c.add("fair_share_is_pattern_dependent", test_fair_share_is_pattern_dependent)
+    c.add("window_controllers_inert_on_hot",
+          test_window_controllers_inert_on_hot)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
     c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)

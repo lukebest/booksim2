@@ -1912,6 +1912,134 @@ S22 原工作点把注入队列从 12/8 加深到 32/32，这一项就占它
 找一个<b>零延迟、纯本地、但不含流量先验</b>的公平信号。</div>
 
 
+<h2>固定非均匀流量下的总写带宽（以及一个免费的修正）</h2>
+<div class="def">前面所有结论都是在 <code>uniform</code> 上得到的，
+那里绑定资源是环上 hop、S0 已经拿到理想的 94%，只剩 ~4.3% 可争，
+所以公平性是全部故事。<b>这一节换成固定的非均匀流量，专问带宽。</b><br>
+流量固定为 <code>hot</code>：十个核全部写入 HA 11/13 这个两节点存储簇，
+完全确定、无采样。它的理想上限用<b>它自己的目的地分布</b>重解 LP，
+得 <b>R* = 2.0000 flit/cycle</b>，绑定资源是
+<code>down:11:dat</code> —— 不再是环上 hop，而是热簇的<b>下环口</b>。<br>
+<b>一个结构性的好处：等速率上限与最大吞吐上限在这里完全相等</b>
+（2.0000 = 2.0000），因为总容量就是两个下环口的
+2 flit/cycle，怎么分配都不改变总量。所以这个 pattern 上
+<b>公平不要钱、带宽与公平没有交换</b>，任何低于 R* 的部分都是纯浪费 ——
+做纯带宽对比最干净的场景。<br>
+<b>所有方案的旋钮一律冻结在 uniform 上调好的值，不重新调参。</b>
+这不是省事：一个方案要算"不需要强流量先验"，就必须靠<b>同一套固定配置</b>
+在流量变化后继续工作；按 pattern 重新调参等于把先验从速率常数搬到参数文件里。</div>
+
+<h3>第一轮（默认在飞上限 128）看起来像是拥塞控制大获全胜</h3>
+<p>S0 只有 0.7401 的 R*，浪费掉
+26.0%；而 S19 Swift 与 S20 DCTCP 都跳到
+0.9889（比 S0 高 +33.6%）。
+按这个读法，结论会是"非均匀流量下拥塞控制价值巨大"。<b>这个读法是错的。</b></p>
+<div class="def bad"><b>破绽：S19 和 S20 的结果<u>逐位相同</u></b>
+（1.9778 / 0.35195 对
+1.9778 / 0.35195）。
+一个是时延触发的窗口控制、一个是 ECN 触发的窗口控制，机制完全不同，
+不可能巧合到小数点后五位。查计数器：
+<b><code>n_win_down = 0</code>、<code>n_mark = 0</code></b> ——
+两个控制器<b>在整个仿真里一次都没有触发</b>，只是带着初始窗口
+<code>win_init = 16</code> 跑到底。<br>
+原因是打标阈值定在 <code>k_min × ha_track</code> = 0.8 × 512 = 410 个在飞项，
+而窗口 16/核 × 10 核 = 160 项已经把在飞量压在阈值以下。
+<b>打标点在 HA tracker 上，而 <code>hot</code> 上真正满的资源是下环口</b> ——
+信号接在了没拥塞的地方，所以永远不响。</div>
+
+<h3>对照实验：那 +33% 完全来自静态在飞上限，与拥塞控制无关</h3>
+<p>如果增益来自"窗口恰好是个紧的在飞上限"而不是来自控制回路，那么
+把 S0 的 <code>core_outstanding</code> 直接调到同一量级就应该复现它。结果是
+<b>S0 + 上限 32 = 0.9876</b>，与 S19/S20 的
+0.9889 实质相同，而<b>硬件开销为 0</b>。
+E-tag 绕环次数从 6,627 降到 4,384（不设上限时是 22,211）——
+这就是机制：下环口满 → flit 下不去 → 打 E-tag 绕环 → 每一圈都在吃 hop 带宽，
+而在飞上限从源头掐掉了本来就注定失败的注入。</p>
+
+<h3>把基线修正之后的 Pareto：前沿只剩两个点</h3>
+<img src="pareto_ring2_hotbw.png" alt="bandwidth vs hardware on hot">
+<p>横轴是新增硬件状态（FF 等效，与前面同一个成本模型），
+纵轴是总写带宽 / R*。基线取<b>免费修正后</b>的
+0.9876，因为拿 128 那条线作基线就是把免费的收益记在控制器账上。</p>
+<table><thead><tr><th>方案</th><th>触发</th><th>带宽 / R*</th><th>相对免费基线</th><th>分箱 Jain</th><th>E-tag 绕环</th><th>硬件 FF-eq</th></tr></thead><tbody><tr><td>S16 grant withhold</td><td>local</td><td>0.9985</td><td>+0.0110</td><td>0.8542</td><td>4,034</td><td>900</td></tr><tr><td>S19 Swift</td><td>delay</td><td>0.9908</td><td>+0.0032</td><td>0.3847</td><td>4,257</td><td>5,840</td></tr><tr><td>S20 DCTCP</td><td>ecn</td><td>0.9908</td><td>+0.0032</td><td>0.3847</td><td>4,257</td><td>5,840</td></tr><tr><td>S17 Timely</td><td>delay</td><td>0.9890</td><td>+0.0015</td><td>0.3762</td><td>4,374</td><td>9,320</td></tr><tr><td>S0 baseline</td><td>none</td><td>0.9876</td><td>+0.0000</td><td>0.3684</td><td>4,384</td><td>0</td></tr><tr><td>S18 DCQCN</td><td>ecn</td><td>0.9876</td><td>+0.0000</td><td>0.3684</td><td>4,384</td><td>9,320</td></tr><tr><td>S22 deficit-yield STOCK depth bus30 w64</td><td>bus</td><td>0.9875</td><td>-0.0000</td><td>0.4012</td><td>4,450</td><td>13,920</td></tr><tr><td>I-tag t_inj2 hold2</td><td>local</td><td>0.9868</td><td>-0.0008</td><td>0.3837</td><td>4,469</td><td>3,120</td></tr><tr><td>S1 AIMD</td><td>bus</td><td>0.9835</td><td>-0.0040</td><td>0.4456</td><td>4,018</td><td>21,220</td></tr><tr><td>S1T AIMD dir-split</td><td>bus</td><td>0.9768</td><td>-0.0108</td><td>0.3656</td><td>4,184</td><td>21,220</td></tr><tr><td>S22 deficit-yield bus1 w2</td><td>bus</td><td>0.9728</td><td>-0.0147</td><td>0.5362</td><td>5,017</td><td>1,198,560</td></tr><tr><td>S22 deficit-yield bus30 w32</td><td>bus</td><td>0.9712</td><td>-0.0163</td><td>0.4114</td><td>5,003</td><td>1,198,560</td></tr><tr><td>S23 fair-share pacer (bus win64 tol0.05 step0.05)</td><td>bus</td><td>0.9525</td><td>-0.0351</td><td>0.9111</td><td>4,297</td><td>6,960</td></tr><tr><td>S21+eq bus30</td><td>bus</td><td>0.8218</td><td>-0.1657</td><td>0.5947</td><td>1,527</td><td>6,880</td></tr><tr><td>S15 fair-share+resv</td><td>bus</td><td>0.7721</td><td>-0.2155</td><td>0.7379</td><td>533</td><td>22,420</td></tr><tr><td>S21 pacer hr1.5</td><td>local</td><td>0.7053</td><td>-0.2823</td><td>0.5551</td><td>3,592</td><td>4,960</td></tr></tbody></table>
+<div class="def good"><b>可实现的带宽 Pareto 前沿：
+S0 baseline（0 FF-eq，0.9876） → S16 grant withhold（900 FF-eq，0.9985）。</b>
+只有两个点，而且 <b>S16 授权保留以 900 FF-eq
+（全研究最便宜的方案）拿到 R* 的 99.85%</b>，
+离理想上限只差 0.15%。
+<b>所有更贵的方案都更差</b> —— 21,220 FF-eq 的 S1、13,920 的 S22-stock、
+1,198,560 的 S22 深队列，全部落在免费基线之下或与之持平。</div>
+<img src="hotbw_decomp.png" alt="free vs paid bandwidth">
+<p>分解图把这一点画死：绿色是免费那一段（对每个方案都是
++0.2474），蓝色是控制器在正确基线之上再挣到的。
+<b>蓝色只有 S16 一个为正</b>（+0.0110），
+其余从 0 一路负到 S21 的 −0.28。</p>
+
+<h3>为什么偏偏是 S16</h3>
+<div class="def"><b>因为它是唯一把控制点放在拥塞发生地的方案。</b>
+<code>hot</code> 上的拥塞在<b>目的地</b>（HA 11/13 的下环口），
+而 S16 是 receiver-driven：HA 自己扣下一部分授权不发，
+源端拿不到授权就不会注入本来也下不了环的 flit。
+其余方案要么是 sender-driven 的速率/窗口控制（信号要绕一圈回来，
+且阈值挂在错误的资源上），要么是<b>源端之间</b>的公平化
+（S22 / S23 / S15 / S21+eq）—— 而这里的失衡<b>不在源端</b>：
+十个核的权利完全相同，均衡它们对下环口的拥塞毫无帮助，
+反而因为让位/门控白扔槽位而亏带宽。
+这解释了为什么 S15 在 <code>hot</code> 上亏 21.8%、S21 亏 28.6%。</div>
+
+<h3>这是不是"全塌缩"这个极端造成的假象？扫一遍倾斜度</h3>
+<p><code>hot</code> 是最极端的一点。把倾斜度 <i>f</i> 连续调起来
+（每个核有 <i>f</i> 比例的写重定向到 HA 11/13，<i>f</i> = 0 就是 uniform、
+<i>f</i> = 1 就是 <code>hot</code>），每个 <i>f</i> 的 R* 都用它自己的混合重解：</p>
+<img src="hotbw_skew.png" alt="bandwidth vs skew">
+<table><thead><tr><th>倾斜度 f</th><th>该 f 的 R*</th><th>上限 128</th><th>上限 64</th><th>上限 32</th><th>上限 16</th></tr></thead><tbody><tr><td>0.00</td><td>5.7143</td><td>0.9182</td><td>0.9317</td><td>0.9337（最优）</td><td>0.8678</td></tr><tr><td>0.25</td><td>3.5950</td><td>0.7825</td><td>0.8179</td><td>0.8239</td><td>0.8340（最优）</td></tr><tr><td>0.50</td><td>2.9091</td><td>0.7746</td><td>0.8323</td><td>0.8689（最优）</td><td>0.8489</td></tr><tr><td>0.75</td><td>2.3706</td><td>0.7401</td><td>0.9027</td><td>0.9374（最优）</td><td>0.9188</td></tr><tr><td>1.00</td><td>2.0000</td><td>0.7570</td><td>0.9871</td><td>0.9885（最优）</td><td>0.9859</td></tr></tbody></table>
+<p><b>上限 32 在五个倾斜度上四个最优、剩下一个（f = 0.25）差 1.2%，
+而原默认的 128 在<u>每一个</u> f 上都最差。</b>
+所以 32 不是又一个流量先验 —— 它是在整个倾斜范围上都成立的选择，
+这正是撤下 S24/S25 时要求的那种性质。</p>
+<table><thead><tr><th>方案（均在上限 32 上）</th><th>f = 0.00</th><th>f = 0.25</th><th>f = 0.50</th><th>f = 0.75</th><th>f = 1.00</th></tr></thead><tbody><tr><td>S0 (free baseline)</td><td>0.9337<span class="note">(0.91)</span></td><td>0.8239<span class="note">(0.54)</span></td><td>0.8689<span class="note">(0.42)</span></td><td>0.9374<span class="note">(0.38)</span></td><td>0.9885<span class="note">(0.37)</span></td></tr><tr><td>S16 grant withhold</td><td>0.9337<span class="note">(0.91)</span></td><td>0.8519<span class="note">(0.77)</span></td><td>0.8927<span class="note">(0.79)</span></td><td>0.9558<span class="note">(0.83)</span></td><td>0.9971<span class="note">(0.85)</span></td></tr><tr><td>S20 DCTCP</td><td>0.9423<span class="note">(0.91)</span></td><td>0.8373<span class="note">(0.56)</span></td><td>0.8715<span class="note">(0.45)</span></td><td>0.9348<span class="note">(0.40)</span></td><td>0.9896<span class="note">(0.40)</span></td></tr><tr><td>S22 STOCK bus30 w64</td><td>0.9114<span class="note">(0.93)</span></td><td>0.8583<span class="note">(0.62)</span></td><td>0.8722<span class="note">(0.48)</span></td><td>0.9376<span class="note">(0.43)</span></td><td>0.9867<span class="note">(0.40)</span></td></tr><tr><td>S23 fair-share pacer</td><td>0.9003<span class="note">(0.92)</span></td><td>0.8598<span class="note">(0.78)</span></td><td>0.8613<span class="note">(0.84)</span></td><td>0.9123<span class="note">(0.85)</span></td><td>0.9538<span class="note">(0.87)</span></td></tr><tr><td>S15 fair-share+resv</td><td>0.8917<span class="note">(0.93)</span></td><td>0.6324<span class="note">(0.87)</span></td><td>0.6897<span class="note">(0.80)</span></td><td>0.7678<span class="note">(0.73)</span></td><td>0.7832<span class="note">(0.74)</span></td></tr></tbody></table>
+<div class="def good"><b>S16 是唯一在<u>每一个</u>倾斜度下都不低于免费基线的方案</b>：
+增量依次为
++0.0000、+0.0280、+0.0238、+0.0184、+0.0086。
+它的公平度也全面更好（Jain
+0.42 → 0.79
+在 f = 0.5 处）。<br>
+另外两点值得记下来：<b>最难的区间是中等倾斜 f ≈ 0.25 而不是全塌缩</b>
+（免费基线只到 0.8239），因为全塌缩时 R* 本身被下环口
+压到 2.0、反而容易接近；而在 f = 0.25 处领先的是
+S23（0.8598）和
+S22（0.8583），
+即<b>源端公平型方案在中等倾斜下确实能换来带宽</b>，
+只是要付 8~15 倍的硬件。</div>
+
+<div class="def"><b>可执行的两条结论</b>：
+<ol><li><b>把 <code>core_outstanding</code> 的默认值从 128 改成 32。</b>
+零硬件、无流量先验，uniform 上带宽 +1.1%（顺带分箱 Jain
+0.876 → 0.910），非均匀流量上带宽 +33%。
+本研究此前一直用 128，所以<b>前面所有章节的 S0 基线都是偏低的</b>。
+那些章节内部的比较仍然自洽（都在同一个上限 128 上），
+但<b>不能假定排序在上限 32 上完全不变</b>：上面 f = 0 那一列就显示
+S16 在 uniform 上的带宽优势从 +0.31% 收敛到与 S0 持平
+（0.9337 对 0.9337）—— 免费的修正把它原本挣到的那部分先拿走了。
+方案之间的大小关系基本保留，但<b>凡是靠"减少无效重试"取胜的方案，
+其收益都会被这个修正吃掉一部分</b>，重跑前面章节才能给出准确数字。</li>
+<li><b>若要在此之上再要带宽，选 S16（900 FF-eq）。</b>
+它是唯一在任何倾斜度下都不亏带宽的方案，且公平度同时改善。</li></ol>
+<b>但公平性在这个 pattern 上没有解决</b>：免费基线的分箱 Jain 只有
+0.3684，S16 也只到 0.8542。
+由于这里 R*<sub>equal</sub> = R<sub>max</sub>，
+<b>这种不公平不是为带宽付的必要代价，而是纯缺陷</b> ——
+理想控制器可以同时拿到 2.0 flit/cycle 和 Jain ≈ 1。
+带宽这条线已经基本关闭（差 0.15%），
+非均匀流量下<b>剩下的问题全部在公平性一侧</b>。</div>
+<p class="note">数据：<code>results/probe_ring2_hotbw.json</code>（两轮上限 × 16 方案）、
+<code>results/probe_ring2_midskew.json</code>（倾斜度扫描），
+脚本 <code>utils/probe_ring2_hotbw.py</code>、
+<code>utils/probe_ring2_midskew.py</code>、
+<code>utils/pareto_ring2_hotbw.py</code>，
+回归 <code>test_window_controllers_inert_on_hot</code>。</p>
+
+
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
 （K=20000、W=2、n_planes=1、

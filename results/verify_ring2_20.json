@@ -1,6 +1,6 @@
 {
-  "n_total": 78,
-  "n_ok": 78,
+  "n_total": 79,
+  "n_ok": 79,
   "all_ok": true,
   "rows": [
     {
@@ -200,6 +200,10 @@
       "ok": true
     },
     {
+      "name": "window_controllers_inert_on_hot",
+      "ok": true
+    },
+    {
       "name": "s15_beats_s0_fairness",
       "ok": true
     },
@@ -316,5 +320,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-28T04:06:01Z"
+  "generated_at": "2026-08-28T06:00:51Z"
 }
