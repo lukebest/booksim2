@@ -1,0 +1,108 @@
+{
+  "k": 2000,
+  "s0_thr": 5.3937,
+  "s0_jbin": 0.87632,
+  "ideal_bw": 5.714285714285715,
+  "u_ideal": 5.712609561057374,
+  "rows": [
+    {
+      "pin": 0.24,
+      "thr": 3.573,
+      "jain_bin": 0.99112,
+      "jain_vs_ideal": 0.99159,
+      "bw_vs_ideal": 0.62527,
+      "delta_vs_s0_pct": -33.76,
+      "eta": 0.6199,
+      "maxmin": 1.0344,
+      "pass": false
+    },
+    {
+      "pin": 0.255,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.265,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.2734,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.28,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.2857,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.295,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.31,
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "jain_vs_ideal": 0.99061,
+      "bw_vs_ideal": 0.72165,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "maxmin": 1.0428,
+      "pass": false
+    },
+    {
+      "pin": 0.34,
+      "thr": 4.7784,
+      "jain_bin": 0.98264,
+      "jain_vs_ideal": 0.98291,
+      "bw_vs_ideal": 0.83622,
+      "delta_vs_s0_pct": -11.41,
+      "eta": 0.82194,
+      "maxmin": 1.0417,
+      "pass": false
+    }
+  ]
+}

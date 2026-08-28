@@ -24,9 +24,10 @@ import matplotlib.pyplot as plt
 
 from dse_ring2_write_fair import (
     CEILING_GAP, DEPTH_FACTORIAL, HW_COST, INJ_SEL_PROBE, JITTER_DECOMP,
-    OVER_RSTAR, PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG, S22_CONFIRM,
+    JITTER2, OVER_RSTAR, PERDIR_PROBE, S1_CFG, S1_DIRBAL, S22_CFG,
+    S22_CONFIRM,
     S1_RETUNE, S22_REJECTED, S22_RETUNE2, S22_ROBUST, TAG_AUDIT,
-    TAG_BELIEF, UPTICK,
+    TAG_BELIEF, UPTICK, jain_ideal_bin,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -328,11 +329,12 @@ def _inst_balance(pat: dict, meta: dict, scheme: str,
                   groups: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64)) -> dict:
     """Per-bin total write bandwidth and how even the ten cores are in it.
 
-    A bin holds only `bin_w * rate` flits per core, so part of any per-bin
-    spread is counting noise rather than unfairness. The null model is the
-    same per-bin total split multinomially over the cores at equal
-    probability, i.e. perfectly fair arbitration observed through the same
-    window. Comparing against it is what separates the two.
+    A bin holds only `bin_w * rate` flits per core, so exact equality inside one
+    bin is limited by integer arithmetic. The reference is what an *ideal*
+    congestion controller would have scored in the same bin having delivered the
+    same total: being deterministic, it splits N over n cores as evenly as
+    integers allow, so `r = N mod n` cores take one extra flit. Comparing against
+    that separates real unfairness from unavoidable integrality.
     """
     rec = pat["schemes"].get(scheme)
     if not rec or not rec.get("wr_binned"):
@@ -351,6 +353,14 @@ def _inst_balance(pat: dict, meta: dict, scheme: str,
     n_c = len(cs)
 
     def _stats(g: int, rng: random.Random) -> dict:
+        """Observed per-bin evenness against the ideal controller's, same bins.
+
+        The reference used to be a multinomial draw -- a fair but *memoryless*
+        arbiter. That answered the wrong question, because a controller is allowed
+        to be regular rather than merely unbiased. The reference here is the
+        deterministic even split of the same bin total, which is what an ideal
+        controller would have produced, so `rng` is no longer consulted.
+        """
         nb = len(idx) // g
         oj, om, nj, nm, tot = [], [], [], [], []
         for b in range(nb):
@@ -359,20 +369,19 @@ def _inst_balance(pat: dict, meta: dict, scheme: str,
             tot.append(n)
             oj.append(jain(v))
             om.append(max(v) / min(v) if min(v) else float("inf"))
-            u = [0] * n_c
-            for _ in range(n):
-                u[rng.randrange(n_c)] += 1
-            nj.append(jain(u))
-            nm.append(max(u) / min(u) if min(u) else float("inf"))
+            nj.append(jain_ideal_bin(n, n_c))
+            lo, r = divmod(n, n_c)
+            nm.append((lo + 1) / lo if lo and r else
+                      (1.0 if lo else float("inf")))
         fo = [x for x in om if x != float("inf")]
         fn = [x for x in nm if x != float("inf")]
         return {
             "bin_w": g * bin_w, "n_bins": nb,
             "count_per_core": round(sum(tot) / max(1, nb) / n_c, 1),
             "obs_jain": round(sum(oj) / len(oj), 5) if oj else None,
-            "null_jain": round(sum(nj) / len(nj), 5) if nj else None,
+            "ideal_jain": round(sum(nj) / len(nj), 5) if nj else None,
             "obs_mm": round(sum(fo) / len(fo), 3) if fo else None,
-            "null_mm": round(sum(fn) / len(fn), 3) if fn else None,
+            "ideal_mm": round(sum(fn) / len(fn), 3) if fn else None,
         }
 
     per_bin_j, per_bin_m, total = [], [], []
@@ -460,11 +469,11 @@ def plot_inst_balance(pat: dict, meta: dict, path: Path,
         ax.plot(ib["t"], ib["jain"], lw=0.7, color=COLOR[s], alpha=0.45)
         ax.axhline(ib["jain_mean"], color=COLOR[s], ls=":", lw=1.2,
                    label=f"{s} 均值 {ib['jain_mean']:.4f}")
-    nj = [r["null_jain"] for ib in ibs.values() for r in ib["sweep"]
+    nj = [r["ideal_jain"] for ib in ibs.values() for r in ib["sweep"]
           if r["bin_w"] == ib["bin_w"]]
     if nj:
         ax.axhline(sum(nj) / len(nj), color="#111827", ls="--", lw=1.8,
-                   label=f"完全公平的零模型 {sum(nj) / len(nj):.4f}")
+                   label=f"完全公平的理想控制器 {sum(nj) / len(nj):.4f}")
     ax.set_xlabel("cycle")
     ax.set_ylabel(f"该箱内 {len(meta['core_nodes'])} 核写带宽的 Jain 指数")
     # 起步 / 收尾的少数离群箱截掉，见表中 jain_min。
@@ -480,14 +489,14 @@ def plot_inst_balance(pat: dict, meta: dict, path: Path,
         xs = [r["bin_w"] for r in ib["sweep"]]
         ax.plot(xs, [r["obs_mm"] for r in ib["sweep"]], "o-", lw=1.8,
                 color=COLOR[s], label=f"{s} 实测")
-        ax.plot(xs, [r["null_mm"] for r in ib["sweep"]], "s--", lw=1.4,
+        ax.plot(xs, [r["ideal_mm"] for r in ib["sweep"]], "s--", lw=1.4,
                 color=COLOR[s], alpha=0.55, mfc="none",
-                label=f"{s} 完全公平的零模型")
+                label=f"{s} 完全公平的理想控制器")
     ax.set_xscale("log", base=2)
     ax.axhline(1.0, color="#94a3b8", lw=0.9)
     ax.set_xlabel("分箱宽度（拍）")
     ax.set_ylabel("该箱内 max/min")
-    ax.set_title("不均衡随观察窗口衰减：实测始终低于零模型", fontsize=10)
+    ax.set_title("不均衡随观察窗口衰减：实测始终低于理想控制器", fontsize=10)
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -511,7 +520,7 @@ def plot_fc_compare(pats: dict[str, dict], path: Path,
             if not rec:
                 continue
             f = rec["fairness"]
-            mm.append((f.get("jain_bin") or {}).get("jain_bin_ratio") or 0.0)
+            mm.append((f.get("jain_bin") or {}).get("jain_vs_ideal") or 0.0)
             thr.append(f["throughput"])
             cols.append(COLOR[s])
             labs.append(s)
@@ -520,8 +529,8 @@ def plot_fc_compare(pats: dict[str, dict], path: Path,
         ax0.bar(x, mm, color=cols, edgecolor="white")
         ax0.axhline(1.0, color="#94a3b8", ls="--", lw=0.9)
         ax0.set_ylim(min([*mm, 1.0]) * 0.98, max([*mm, 1.0]) * 1.02)
-        ax0.set_ylabel("分箱 Jain ÷ 零模型")
-        ax0.set_title(f"{name} · 分箱 Jain ÷ 零模型（虚线 = 验收 1.0）")
+        ax0.set_ylabel("分箱 Jain ÷ 理想控制器")
+        ax0.set_title(f"{name} · 分箱 Jain ÷ 理想控制器（虚线 = 验收 1.0）")
         ax0.set_xticks(list(x))
         ax0.set_xticklabels(labs)
         ax0.grid(axis="y", alpha=0.3)
@@ -1090,8 +1099,8 @@ def _summary_table(pat: dict, *, pattern: str = "", track: int | None = None,
             lab = f"S0 基线（tracker = {track}）" if track else "S0 基线"
         jb = f.get("jain_bin") or {}
         row = [lab, sch["makespan"],
-               jb.get("jain_bin_mean", "—"), jb.get("jain_bin_null", "—"),
-               jb.get("jain_bin_ratio", "—"), f["max_min"],
+               jb.get("jain_bin_mean", "—"), jb.get("jain_bin_ideal", "—"),
+               jb.get("jain_vs_ideal", "—"), f["max_min"],
                f["bw_min"], f["bw_max"], f["throughput"],
                f"{d:+.1f}%", q.get("retry_per_txn", "—"),
                sch["n_deflections"], sch["n_board_fail"]]
@@ -1099,7 +1108,7 @@ def _summary_table(pat: dict, *, pattern: str = "", track: int | None = None,
             row.insert(0, pattern)
         rows.append(row)
     bw_ = ((thr_ref.get("jain_bin") or {}).get("bin_w")) or "?"
-    heads = ["方案", "makespan", f"Jain@{bw_}拍", "零模型", "ratio（验收）",
+    heads = ["方案", "makespan", f"Jain@{bw_}拍", "理想控制器", "ratio（验收）",
              "max/min", "最低 BW", "最高 BW", "吞吐 flit/cycle", "吞吐差",
              "重试/事务", "偏转", "上环失败"]
     if pattern:
@@ -1256,9 +1265,9 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"实测 makespan <b>{r['makespan']}</b> / 吞吐 "
             f"<b>{r['thr']}</b> / retry <b>{r['retry_per_txn']}</b> / "
             f"峰值占用 <b>{r['max_ha_used']}</b>。"
-            f"公平性：jain_bin {r['jain_bin']} / 零模型 "
-            f"{r['jain_bin_null']} / ratio {r['jain_bin_ratio']}"
-            f"（预测 {pr.get('jain_bin_ratio')}）。"
+            f"公平性：jain_bin {r['jain_bin']} / 理想控制器 "
+            f"{r['jain_bin_ideal']} / ratio {r['jain_vs_ideal']}"
+            f"（预测 {pr.get('jain_vs_ideal')}）。"
         )
     uq_fc = meta.get("upq_12_8_forecast") or {}
     uq_note = ""
@@ -1331,8 +1340,8 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
             f"{_prose(bj_fc.get('hypothesis', ''))} "
             f"证伪：{_prose(bj_fc.get('falsify', ''))}"
             f"<br>对照：jain_bin_mean = {jb.get('jain_bin_mean')}，"
-            f"零模型 {jb.get('jain_bin_null')}，"
-            f"ratio {jb.get('jain_bin_ratio')}；"
+            f"理想控制器 {jb.get('jain_bin_ideal')}，"
+            f"ratio {jb.get('jain_vs_ideal')}；"
             f"每核每箱 {jb.get('flits_per_core_per_bin')} flit，"
             f"{jb.get('n_bins')} 个箱（详见公平性主指标一节）。"
         )
@@ -1346,9 +1355,9 @@ def _stimulus_note(meta: dict, pat: dict, fc: dict | None) -> str:
 {'完全一样（' + str(xs[0]) + ' / HA）' if xs and spread == 0
  else f'极差 {spread}'}。
 S0 延迟 p50 = {s0.get('lat_p50')}，主指标 Jain@{(f0.get('jain_bin') or {}).get('bin_w')}拍
-= {(f0.get('jain_bin') or {}).get('jain_bin_mean')} ÷ 零模型
-{(f0.get('jain_bin') or {}).get('jain_bin_null')} = <b>ratio
-{(f0.get('jain_bin') or {}).get('jain_bin_ratio')}</b>；
+= {(f0.get('jain_bin') or {}).get('jain_bin_mean')} ÷ 理想控制器
+{(f0.get('jain_bin') or {}).get('jain_bin_ideal')} = <b>ratio
+{(f0.get('jain_bin') or {}).get('jain_vs_ideal')}</b>；
 诊断项 max/min = {f0.get('max_min')}。
 {thr_note}
 S0 上环方向高亮 {n0}/{len(rows0)} 个核
@@ -1482,11 +1491,11 @@ def _seed_table(pat: dict) -> str:
         a = r.get("S0")
         if not a:
             continue
-        row = [r["seed"], a.get("jain_bin_ratio", "—"), a["max_min"],
+        row = [r["seed"], a.get("jain_vs_ideal", "—"), a["max_min"],
                a["throughput"]]
         for s in ("S15", "S16"):
             b = r.get(s)
-            row += ([b.get("jain_bin_ratio", "—"), b["max_min"],
+            row += ([b.get("jain_vs_ideal", "—"), b["max_min"],
                      f"{b['thr_delta_pct']:+.2f}%"] if b else ["—", "—", "—"])
         rows.append(row)
     if not rows:
@@ -2394,7 +2403,7 @@ def _taxonomy_section(uni: dict, hot: dict | None, imgs: dict, meta: dict
         jb = f.get("jain_bin") or {}
         return {
             "mm": f["max_min"], "thr": f["throughput"],
-            "jb": jb.get("jain_bin_mean"), "ratio": jb.get("jain_bin_ratio"),
+            "jb": jb.get("jain_bin_mean"), "ratio": jb.get("jain_vs_ideal"),
             "d": 100.0 * (f["throughput"] - t0) / t0,
             "r": q.get("retry_per_txn"),
         }
@@ -2727,7 +2736,7 @@ CEILING_PROBE = {
 TRACK32_ROUND = {
     "thr": 2.3848, "makespan": 167732, "retry_per_txn": 0.602,
     "outst_eff": 17.65, "t_hold": 148.0, "plateau": 4.5408,
-    "jain_bin": 0.95426, "jain_bin_null": 0.92877, "jain_bin_ratio": 1.02745,
+    "jain_bin": 0.95426, "jain_bin_ideal": 0.92877, "jain_vs_ideal": 1.02745,
     "n_per_bin": 11.95,
     # The round before it, same fabric and tracker, HA RSP = U{4..64}.
     "jit_thr": 2.410, "jit_retry": 0.5689, "jit_eff": 22.98,
@@ -2742,7 +2751,7 @@ TRACK32_ROUND = {
 TRACK128_ROUND = {
     "thr": 3.04, "makespan": 131580, "retry_per_txn": 0.1078,
     "max_ha_used": 128, "outst_eff": 31.14,
-    "jain_bin": 0.97618, "jain_bin_null": 0.94041, "jain_bin_ratio": 1.03803,
+    "jain_bin": 0.97618, "jain_bin_ideal": 0.94041, "jain_vs_ideal": 1.03803,
     "n_per_bin": 15.23, "plateau": 4.5408, "plateau_peak_track": 195,
 }
 
@@ -2752,7 +2761,7 @@ TRACK128_ROUND = {
 TRACK256_ROUND = {
     "thr": 4.5408, "makespan": 88090, "retry_per_txn": 0.0,
     "max_ha_used": 195, "jain_bin": 0.98183,
-    "jain_bin_null": 0.96197, "jain_bin_ratio": 1.02064,
+    "jain_bin_ideal": 0.96197, "jain_vs_ideal": 1.02064,
     "n_per_bin": 22.79, "plateau": 4.5408,
 }
 
@@ -2762,10 +2771,289 @@ TRACK256_ROUND = {
 # per-FIFO occupancy sampling, so this is the one-knob baseline for it.
 UPQ12_8_ROUND = {
     "thr": 4.577, "makespan": 87393, "jain_bin": 0.96945,
-    "jain_bin_null": 0.96226, "jain_bin_ratio": 1.00747,
+    "jain_bin_ideal": 0.96226, "jain_vs_ideal": 1.00747,
     "jain_bin_min": 0.66818, "hot_util": 80.1,
     "board_fail_per_core_cycle": 0.846, "eject_depth": 4,
 }
+
+
+def _ideal_lp_section() -> str:
+    """The formal ceiling: the LP, both of its bounds, and what they forbid."""
+    f = ROOT / "results" / "ideal_ring2_cc.json"
+    if not f.exists():
+        return ""
+    d = json.loads(f.read_text())
+    bind_f = ", ".join(f"<code>{n}</code>" for n, _ in d["binding_fair"][:4])
+    starved = [c for c, x in zip(d["cores"], d["lambda_max"]) if x < 1e-9]
+    fr = d["frontier"]
+    return f"""
+<h2>理想拥塞控制器的上限：形式化推导</h2>
+<div class="def">全部相对指标都除以这一节的数，所以先把它钉死。
+<b>问的是：在这颗 fabric 上，一个<u>无限聪明、无限快</u>的拥塞控制器最多能做到什么。</b>
+它不受任何实现约束 —— 不需要信令、不需要总线、可以逐拍全局调度 ——
+只受<b>资源守恒</b>约束。因此它同时是带宽的上限和公平性的上限，
+任何真实方案落在它之下的部分，才是"控制算法的损失"。</div>
+
+<h3>1. 变量与约束（LP）</h3>
+<p>决策变量是每个 core <i>c</i> 的<b>事务注入率</b>
+λ<sub><i>c</i></sub>（txn/cycle）。目的地分布不是假设的，是从真实事务表
+<code>build_tiled_write</code> 数出来的经验分布
+<i>p</i><sub><i>c</i>,<i>h</i></sub>（core <i>c</i> 发往 HA <i>h</i> 的比例）。
+一个事务在 fabric 上占用的资源由 CHI WriteNoSnp 四段握手和<b>固定的时延最短路由</b>
+唯一确定，所以每条资源的占用量是 λ 的<b>线性</b>函数：</p>
+<ul>
+<li><b>REQ</b>：1 flit，core→HA，走时延最短方向；</li>
+<li><b>DBIDResp / Comp</b>：各 1 flit，HA→core，反方向；</li>
+<li><b>WriteData</b>：<i>W</i> = {d['w_flits']} flit，core→HA，与 REQ 同向。</li>
+</ul>
+<p>资源集合是<b>每 (hop, 方向, VC) 一条</b>，容量都是 1 flit/cycle
+（上/下环端口同样按 (方向, VC) 拆开，各 1 flit/cycle）。记
+<i>a</i><sub><i>r</i>,<i>c</i></sub> 为 core <i>c</i> 每单位 λ 在资源 <i>r</i> 上的占用，</p>
+<p style="text-align:center">
+Σ<sub><i>c</i></sub> <i>a</i><sub><i>r</i>,<i>c</i></sub> λ<sub><i>c</i></sub>
+≤ 1&nbsp;&nbsp;∀<i>r</i>,&nbsp;&nbsp;λ<sub><i>c</i></sub> ≥ 0</p>
+<p class="note">这个模型<b>不含</b>缓冲、不含在环优先、不含 I-tag/E-tag。
+那是有意的：这些都是<b>实现机制</b>，理想控制器不需要它们（它可以直接安排出
+一个无冲突的调度）。所以本节的上限比"给定这套无缓冲仲裁机制下的上限"更宽松，
+这正是我们想要的参照 —— 它把"机制造成的损失"也算进待解释的差距里。</p>
+
+<h3>2. 两个界</h3>
+<p><b>(a) 最大总吞吐</b>：max Σ λ<sub><i>c</i></sub>。解得
+<b>R<sub>max</sub> = {d['r_max']:.4f} flit/cycle</b>（写 flit 计）。
+但这个解<b>把 {len(starved)} 个核完全饿死</b>（λ = 0，核
+{', '.join(str(c) for c in starved)}），速率 Jain 只有
+{d['jain_rates_at_max']:.4f}。<b>闭环批量下这不是可行工作点</b> ——
+每个核都欠同样多的活，饿死一个核只会把 makespan 拖长。
+所以它是"带宽的绝对上限"，不是"理想控制器会选的点"。</p>
+<p><b>(b) 等速率（公平）界</b>：max <i>t</i> s.t. λ<sub><i>c</i></sub> = <i>t</i> ∀<i>c</i>。
+解得 <b>λ* = 2/7 = {d['lambda_fair']:.6f} txn/cycle/core</b>，
+总写带宽 <b>R* = 40/7 = {d['r_fair']:.4f} flit/cycle</b>。
+瓶颈资源是<b>环上的 hop</b>（{bind_f}），不是注入或下环端口 ——
+这一点很重要：它意味着上限由<b>环的横截面</b>决定，
+加深队列或加宽端口都不会抬高它。</p>
+<div class="def"><b>公平的代价</b>：R* / R<sub>max</sub> − 1 =
+<b>−{d['fairness_price_pct']:.2f}%</b>。也就是说，
+<b>要求所有核等速率，本身就要放弃 {d['fairness_price_pct']:.1f}% 的峰值带宽</b>。
+这是 fabric 的几何性质（HA 缺口在 9/19，核 0/8/10/18 结构性吃亏），
+不是任何算法的缺陷。<br>
+本报告的验收线是「带宽对齐 S0」而不是「对齐 R<sub>max</sub>」，
+而 S0 = {d['s0_thr_ref']:.4f} = R* 的 {100 * d['s0_util_of_rfair']:.2f}%，
+所以两条线之间还有余量 —— 见第 4 点。</div>
+
+<h3>3. 分箱 Jain 的理想上限（整数粒度，不是抽样噪声）</h3>
+<p>{d['bin_w']} 拍的箱里全环只有 {d['flits_per_bin']:.1f} 个写 flit，
+每核约 {d['flits_per_bin'] / d['n_cores']:.1f} 个。理想控制器是确定性的，
+把箱内总数 N 按整数尽可能均分，于是</p>
+<p style="text-align:center">J<sub>ideal</sub>(N) = N<sup>2</sup> /
+(n·[r·⌈N/n⌉<sup>2</sup> + (n−r)·⌊N/n⌋<sup>2</sup>]),&nbsp;&nbsp;r = N mod n</p>
+<p>在 R* 处得 <b>J<sub>ideal</sub> = {d['jain_bin_ideal']:.4f}</b>。
+若进一步要求一个 WriteData 突发（{d['w_flits']} flit）不可拆开，
+粒度变粗，上限降到 {d['jain_bin_ideal_burst']:.6f}。
+<b>两者都远高于 0.99，所以验收线 Jain &gt; 0.99 不是被整数粒度挡住的。</b></p>
+
+<h3>4. 两条验收线在 fabric 层面并不互斥</h3>
+<p>把等速率约束放松成"最慢的核不低于均值的 θ 倍"，扫 θ 得到
+带宽–公平前沿：</p>
+{_table(["θ（最慢核 / 均值）", "总写带宽 flit/cycle", "速率 Jain",
+         "占 R<sub>max</sub>"],
+        [[f"{r['theta']:.2f}", f"{r['bw']:.4f}", f"{r['jain_rate']:.4f}",
+          f"{r['pct_of_max']:.1f}%"] for r in fr])}
+<div class="def good"><b>关键锚点</b>：在 <b>S0 自己的带宽</b>
+{d['s0_thr_ref']:.4f} 上，理想控制器的分箱 Jain 仍然是
+<b>{d['jain_bin_ideal_at_s0_bw']:.4f}</b>（突发不可拆时
+{d['jain_bin_ideal_at_s0_bw_burst']:.6f}）。
+换句话说 S0 的带宽只用掉 R* 的 {100 * d['s0_util_of_rfair']:.2f}%，
+<b>还剩 {100 * (1 - d['s0_util_of_rfair']):.2f}% 的余量</b>，
+理想控制器完全可以在不动带宽的前提下把 Jain 做到 ~1.0。<br>
+<b>所以「Jain &gt; 0.99 且带宽零代价」这两条线在 fabric 层面不互斥。</b>
+这条结论作废了早期基于 S22 调参前沿得出的"两条线互斥"的说法 ——
+那只说明<b>那一族机制</b>做不到，不是 fabric 做不到。
+真实方案做不到的原因要到机制层面去找，见下一节的执行器分析。</div>
+<p class="note">数据：<code>results/ideal_ring2_cc.json</code>，
+推导脚本 <code>utils/ideal_ring2_cc.py</code>，
+回归 <code>test_ideal_cc_lp_matches_fabric</code> 钉住 λ* = 2/7、R* = 40/7、
+瓶颈必须是 hop、以及最大吞吐解必须饿死结构性劣势核。</p>
+"""
+
+
+def _pareto_section(imgs: dict) -> str:
+    """The scheme zoo, the frontier, and what the frontier points actually are."""
+    f = ROOT / "results" / "pareto_ring2_cc.json"
+    if not f.exists():
+        return ""
+    reg = json.loads(f.read_text())
+    rows = sorted(reg["schemes"], key=lambda r: -r.get("eta", 0))
+    ideal = reg.get("ideal") or {}
+
+    def _mark(r):
+        if not r.get("bus_rule_ok", True):
+            return "总线需 &lt;30 拍，<b>不可实现</b>"
+        if r.get("pass_jain") and r.get("pass_bw"):
+            return "<b>两条线都过</b>"
+        return ("Jain 过" if r.get("pass_jain")
+                else ("带宽过" if r.get("pass_bw") else "—"))
+
+    tbl = _table(
+        ["方案", "驱动", "控制", "触发", "η（相对理想）", "带宽 / 理想 R*",
+         "分箱 Jain", "Jain / 理想", "vs S0", "硬件 FF-eq", "判定"],
+        [[r["name"], r.get("driver", "—"), r.get("control", "—"),
+          r.get("trigger", "—"), f"{r.get('eta', 0):.4f}",
+          f"{r.get('bw_vs_ideal', 0):.4f}", f"{r['jain_bin']:.5f}",
+          f"{r.get('jain_vs_ideal', 0):.4f}",
+          f"{r.get('delta_s0_pct', 0):+.2f}%", f"{r['hw_cost']:,}", _mark(r)]
+         for r in rows])
+    front = [r["name"] for r in _frontier_names()]
+    # The plot lives beside the report in results/, so it is a bare filename.
+    png = "pareto_ring2_cc.png"
+    return f"""
+<h2>方案空间、Pareto 前沿与硬件开销</h2>
+<div class="def"><b>标量收益指标 η</b>：把公平性和带宽合成一个数，
+两者都相对理想控制器归一：
+<p style="text-align:center">η = (吞吐 × 分箱 Jain) /
+(R* × J<sub>ideal</sub>(R*)) = (吞吐 × 分箱 Jain) / {ideal.get('u', 1):.4f}</p>
+乘积而不是加权和，因为两个因子都是"效率"性质的（各自 ≤ 1），
+乘起来正好是"实际搬走的、且是公平地搬走的"带宽占理想的比例。
+η = 1 就是理想控制器；S0 = {next((r['eta'] for r in rows if r['name'].startswith('S0')), 0):.4f}。<br>
+表中两个轴都单独给出相对理想的值：<b>带宽 / 理想 R*</b> 除以
+R* = {ideal.get('bw', 0):.4f}，<b>Jain / 理想</b> 除以理想控制器在
+<b>该方案自己交付的 flit 数</b>上的分箱 Jain。后者这样定义才能把两个轴解耦 ——
+方案无法靠压低吞吐把自己的公平分抬上去，压吞吐的代价只会记在带宽那一列。<br>
+<b>硬件横轴</b>：新增状态的 FF 等效数（总线线宽 × 节点数 + 表项 + 计数器 +
+算术单元折算 + 队列加深折算的 SRAM），模型见 <code>utils/pareto_ring2_cc.py</code>。
+队列加深按 flit 宽度折算，所以把注入队列从 8/12 加到 32/32 会占据整个开销。</div>
+
+<img src="{imgs.get('pareto', png)}" alt="Pareto: benefit vs hardware">
+
+{tbl}
+
+<h3>Pareto 前沿上的方案（详述）</h3>
+<p class="note">前沿只连<b>可实现</b>的点：用了专有流控总线的方案一律按
+30 拍延迟计入，需要更快总线的点（灰 ✕）被排除。当前前沿：
+{'、'.join(f'<b>{n}</b>' for n in front)}。</p>
+
+<h4>1. S0（η {next((r['eta'] for r in rows if r['name'].startswith('S0')), 0):.4f}，0 FF-eq）——
+前沿的原点</h4>
+<p><b>机制</b>：没有拥塞控制。注入仲裁只有"在环绝对优先 + 本地
+round-robin"，加上 I-tag（饥饿门限 t_inj）与 E-tag（下环失败强制绕环、
+再到达时最高优先级下环）。<b>为什么在前沿上</b>：零硬件成本下
+η {next((r['eta'] for r in rows if r['name'].startswith('S0')), 0):.4f}
+已经不低 —— 环上 RR + I-tag 的到达比无记忆仲裁还规整（亚泊松）。
+它的问题不是抖动而是<b>持续的速率分层</b>：核 0/8/10/18 因 HA 缺口
+结构性吃亏，这个偏差不随时间平均掉。</p>
+
+<h4>2. S16 授权保留（η {next((r['eta'] for r in rows if r['name'].startswith('S16')), 0):.4f}，
+{next((r['hw_cost'] for r in rows if r['name'].startswith('S16')), 0):,} FF-eq）——
+最便宜的正收益</h4>
+<p><b>分类</b>：receiver-driven，window-based，本地触发（无总线）。
+<b>机制</b>：HA 侧按 Homa 式授权，但<b>扣下一部分授权额度</b>不发，
+使得任一时刻在飞的写请求数低于 HA 的处理能力，从而把排队推回到发送端、
+让下环端口不成为二次瓶颈。<b>硬件</b>：每 HA 一个 10 bit 在飞计数器 +
+一个比较器 + 一个加法器，没有总线、没有表。
+<b>为什么在前沿上</b>：它是唯一在<b>不到 1k FF-eq</b> 的代价下
+带宽还能<b>正向</b>（+0.31%）的方案 —— 扣授权减少了无效重试。
+<b>局限</b>：它管的是"在飞总量"，不区分是谁的，所以分箱 Jain
+只有 {next((r['jain_bin'] for r in rows if r['name'].startswith('S16')), 0):.5f}，
+离 0.99 还远。</p>
+
+<h4>3. S24 定速率钉死（η {next((r['eta'] for r in rows if r['name'].startswith('S24 rate-pinned eta')), 0):.4f}，
+{next((r['hw_cost'] for r in rows if r['name'].startswith('S24 rate-pinned eta')), 0):,} FF-eq）——
+前沿顶点，且<b>完全不需要信令</b></h4>
+<p><b>分类</b>：sender-driven，rate-based，<b>无触发</b>（开环）。
+<b>机制</b>：直接把每个核钉在 LP 解出来的公平份额
+λ* = 2/7 txn/cycle（每方向 2/7 写 flit/cycle）。这是本研究的一个核心观察：
+<b>公平份额是拓扑常数，不需要靠互相比较去发现</b>，
+所以既不用总线也不用测量，从而完全绕开了"任何总线使用花 30 拍"这条约束。
+实现是每 (core, VC, 方向) 一个信用计数器：每拍加 λ*，上环一个 flit 减 1。
+<b>唯一参数是信用桶深 <code>burst</code></b>，它决定"没用上的额度是丢掉还是存起来"：</p>
+{_table(["burst（桶深）", "分箱 Jain", "带宽 / R*", "vs S0", "η"],
+        [[b, f"{r['jain_bin']:.5f}", f"{r.get('bw_vs_ideal', 0):.4f}",
+          f"{r.get('delta_s0_pct', 0):+.2f}%", f"{r.get('eta', 0):.4f}"]
+         for b, r in sorted(
+             ((r["name"].split("burst ")[-1].rstrip(")"), r) for r in rows
+              if r["name"].startswith("S24 rate-pinned")),
+             key=lambda x: float(x[0]))])}
+<p><b>这条一参数曲线就是"门控型执行器"的完整能力边界</b>：
+burst = 1 时每拍用不掉的额度立刻作废，注入变成严格的定间隔过程，
+分箱 Jain 达到 0.9903 —— <b>过了 0.99 这条线</b> ——
+但代价是 23.55% 的带宽。桶越深，作废越少、带宽越回来，
+而注入越成串、Jain 越低；burst = 16 时带宽只差 S0 0.84%（过带宽线），
+Jain 掉到 0.952。<b>两条线在这条曲线上无法同时满足。</b>
+η 在 burst = 8 处取到最大 0.8945，是全部<b>可实现</b>方案里最高的。</p>
+
+<h3>为什么门控型执行器一定要付这个带宽代价</h3>
+<div class="def">这是本轮最有解释力的发现，也解释了前沿为什么停在 η ≈ 0.89。
+<b>门控（gate）</b>的动作是"没额度就不上环"。在<b>无缓冲</b>环上，
+被放弃的那个 slot 并不会被记账保留：它顺着环往下走，
+沿途任何一个节点都可以吃掉它，走到目的地就消失。
+而热点 hop 的利用率已经约 91%，所以"让出去的槽位"绝大部分是<b>纯损失</b>。<br>
+更要紧的是<b>几何</b>：让出的气泡只能被<b>下游</b>节点用到。
+结构性吃亏的核 0/8/10/18 需要的是它们各自入环 hop 上的气泡，
+一个上游无关核的谦让对它们毫无帮助。<b>因此"把速率从快核转移给慢核"这件事
+在这颗 fabric 上本身是有损的，而且转移得越多、损失越大</b> ——
+LP 上限看不到这项损失，因为 LP 假设有一个全局调度器直接安排无冲突的时隙。</div>
+<p><b>用让位型（yield）执行器可以把这个代价压小，但压不掉。</b>
+S22 与 S25 的动作不是"不上环"，而是"<b>为某个指名的、更落后的邻居</b>让开，
+同时通过 <code>dodge</code> 改发一个在请求者之前就下环的 flit，
+让自己的 hop 不空转"。在<b>同等公平度</b>（分箱 Jain ≈ 0.98）下实测：</p>
+{_table(["执行器", "方案与工作点", "分箱 Jain", "带宽 vs S0"],
+        [["门控 gate", "S24 burst 2", "0.98759", "−10.38%"],
+         ["让位 yield", "S25 target 4/7, thresh 0.5", "0.98127", "<b>−4.12%</b>"]])}
+<p>让位比门控省下约 <b>2.5 倍</b>的带宽代价，这证实了执行器选择而不是
+信号质量才是主导因素。但它仍然要付 4%，而且把 <code>thresh</code>、
+<code>hold</code>、<code>margin</code>、<code>backoff</code> 扫遍之后
+代价<b>停在 −4% ~ −5% 的平台上不动</b>（见
+<code>results/probe_ring2_s25b.json</code>）——
+对请求整形的所有旋钮都不敏感，正是"损失来自气泡传递的几何、
+不是来自调参"的旁证。</p>
+
+<h3>两个把开销砍掉的发现</h3>
+<p><b>(a) S22 的深队列在 30 拍总线下不再必要。</b>
+S22 原工作点把注入队列从 12/8 加深到 32/32，这一项就占它
+1,198,560 FF-eq 中的 1,190,000 以上。那个深度是在
+<code>dfc_bus_lat = 1</code> 下定的 —— 逐拍转向需要足够多的候选 flit 可挑。
+改到规定的 30 拍后控制窗口必须放宽到 32~64 拍，信号本身已经很平滑，
+<b>深度就不再买到东西</b>：</p>
+{_table(["配置", "分箱 Jain", "带宽 / R*", "vs S0", "η", "硬件 FF-eq"],
+        [[r["name"], f"{r['jain_bin']:.5f}", f"{r.get('bw_vs_ideal', 0):.4f}",
+          f"{r.get('delta_s0_pct', 0):+.2f}%", f"{r.get('eta', 0):.4f}",
+          f"{r['hw_cost']:,}"]
+         for r in rows if r["name"].startswith("S22")])}
+<p>stock 深度（12/8）+ dodge 8 + 窗口 64 拿到 η 0.8678、带宽只差 S0
+0.15%，而开销从 1,198,560 降到 13,920（<b>86 倍</b>）。
+深队列换来的 η 只有 +0.014。在 S25 的扫描里 <code>dfc_dodge</code> = 8 与 32
+给出<b>逐位相同</b>的结果，进一步说明这个前瞻窗口在 30 拍工作点上已经失效。</p>
+<p><b>(b) S25：让位执行器 + 本地恒定目标 = 完全不用总线。</b>
+既然公平份额是拓扑常数（S24 的观察），S22 的赤字就不必从流控总线上的
+均值算出来 —— 每拍加 λ*、上环减 1 即可，赤字变成<b>纯本地、零延迟、精确</b>
+的计数器。于是 6 bit 广播总线、10 表项镜像表、加法树全部消失，
+只剩一个计数器加相邻节点之间的 1 bit 请求线（本地线，不受 30 拍规则约束）：
+<b>{next((r['hw_cost'] for r in rows if r['name'].startswith('S25')), 0):,} FF-eq，
+比 S1 便宜一个数量级以上</b>，η {next((r['eta'] for r in rows if r['name'].startswith('S25 local-target yield eta')), 0):.4f}、
+分箱 Jain {next((r['jain_bin'] for r in rows if r['name'].startswith('S25 local-target yield eta')), 0):.5f}。
+它是全部方案里<b>公平度最高且带宽仍在 −4% 以内</b>的那一个，
+但仍未同时过两条线。</p>
+
+<div class="def"><b>当前状态（诚实结论）</b>：
+没有任何方案同时满足「分箱 Jain &gt; 0.99」与「带宽差 S0 &lt; 1%」。
+唯一同时接近的是 S22 在 <code>bus_lat = 1</code> 下的点
+（Jain 0.98914、−0.56%、η 0.9287），
+<b>但它违反"任何总线使用花 30 拍"这条硬约束，不可实现</b>，
+在图上以灰 ✕ 标出、且不参与前沿。<br>
+第 4 点已经证明这不是 fabric 的容量问题（S0 带宽处理想仍有 ~4.3% 余量）。
+按上面的执行器分析，剩下的差距来自<b>分布式注入侧控制无法实现 LP 假设的
+全局无冲突调度</b>：速率转移必须通过气泡，而气泡只能向下游传递且沿途会被吃掉。
+要真正闭合，需要的是<b>在环内</b>动作的执行器（例如让在环 flit 为入环 flit
+让位，即打破"在环绝对优先"），那已经超出"硬件开销与 S1 同级"的范围。</div>
+"""
+
+
+def _frontier_names() -> list[dict]:
+    """Pareto-frontier rows, buildable ones only, cheapest first."""
+    f = ROOT / "results" / "pareto_ring2_cc.json"
+    if not f.exists():
+        return []
+    from pareto_ring2_cc import frontier
+    return frontier(json.loads(f.read_text())["schemes"])
 
 
 def _jb_of(pat: dict, scheme: str) -> float:
@@ -3194,9 +3482,11 @@ tracker 被打得更凶。<b>加宽 fabric 必须和放开 tracker 一起做</b>
 （= 该箱内各核 WriteData flit 数）算一次 Jain 指数，再对<b>所有箱取平均</b>。<br>
 只统计完整落在竞争窗口内的箱：过了 t_fair 就有核已经跑完自己的配额，
 那里的 0 是没活干，不是被饿死。<br>
-<b>判定</b>：对照同窗零模型的比值 ratio ≥ 1.0（见 2.1）。</div>
+<b>判定</b>：绝对线 <code>jain_bin_mean &gt; 0.99</code>。这条线之所以可判定，
+是因为同窗理想控制器本身能到 {jb.get('jain_bin_ideal')}（见 2.1），
+整数粒度并不构成障碍；<code>jain_vs_ideal = 实测 / 理想</code> 用来说明还差多远。</div>
 <p><b>S0 基线：Jain@{jb.get('bin_w')}拍 = {jb.get('jain_bin_mean')}</b>，
-零模型 {jb.get('jain_bin_null')}，<b>ratio = {jb.get('jain_bin_ratio')}</b>
+理想上限 {jb.get('jain_bin_ideal')}，<b>相对理想 = {jb.get('jain_vs_ideal')}</b>
 （{jb.get('n_bins')} 个箱，每核每箱平均
 {jb.get('flits_per_core_per_bin')} 个 flit；p05 {jb.get('jain_bin_p05')}、
 最差箱 {jb.get('jain_bin_min')}）。</p>
@@ -3219,32 +3509,41 @@ max/min = {s0['fairness']['max_min']}，接近 1 有一半是配额相同这个�
 造成的，看不出瞬时行为。缩到 {bw_} 拍后箱内 max/min 平均
 {ib0.get('mm_mean')}、p95 {ib0.get('mm_p95')}、最坏 {ib0.get('mm_max')}。</p>
 <div class="def">但 {jb.get('jain_bin_mean')} 距离 1.0 的这段差，
-<b>有多少是真不公平，有多少只是计数噪声</b>，必须先分开 ——
-每核每箱只有约 {jb.get('flits_per_core_per_bin')} 个 flit，
-纯抽样波动就足以把 Jain 拉低。零模型：把该箱的总 flit 数按等概率多项分布
-撒到 {n_c} 个核上，即<b>完全公平的仲裁透过同一个 {bw_} 拍窗口去看</b>
-会长什么样。<b>该跟零模型比，不该跟 1.0 比。</b></div>
-{_table(["分箱宽度", "每核 flit 数", "箱数", "实测 Jain", "零模型 Jain",
-         "实测 max/min", "零模型 max/min", "判定"],
+<b>有多少是真不公平，有多少只是箱内整数不可分</b>，必须先分开 ——
+每核每箱只有约 {jb.get('flits_per_core_per_bin')} 个 flit。参照物是
+<b>理想拥塞控制器在同一个箱、交付同样多 flit 时会得到的分数</b>：它是确定性的，
+把该箱总数 N 按整数尽可能均分到 {n_c} 个核上（<code>r = N mod n</code> 个核多拿
+一个），于是 <code>J_ideal = N² / (n·[r·⌈N/n⌉² + (n−r)·⌊N/n⌋²]) = 1 − O(1/N²)</code>。
+本轮 {bw_} 拍下这个上限是 {jb.get('jain_bin_ideal')} —— 也就是说
+<b>整数粒度几乎不吃掉任何东西，1.0 基本是可达的</b>。
+<p class="note">这里换掉了早期用的「多项分布零模型」<code>N/(N+n−1)</code>≈0.970，
+那是<b>公平但无记忆</b>的仲裁器透过同窗看到的分数。它问错了问题：控制器允许
+把注入排得<b>规整</b>，不只是<b>无偏</b>，所以那个参照低估了可达性，还顺带把
+S0 的 0.95 判成了「达标」。改成理想参照后这个判定翻转，见下。</p></div>
+{_table(["分箱宽度", "每核 flit 数", "箱数", "实测 Jain", "理想控制器 Jain",
+         "实测 max/min", "理想控制器 max/min", "判定"],
         [[r["bin_w"], r["count_per_core"], r["n_bins"],
-          f"{r['obs_jain']:.5f}", f"{r['null_jain']:.5f}",
-          f"{r['obs_mm']:.3f}", f"{r['null_mm']:.3f}",
-          "低于零模型" if r["obs_mm"] < r["null_mm"] else "高于零模型"]
+          f"{r['obs_jain']:.5f}", f"{r['ideal_jain']:.5f}",
+          f"{r['obs_mm']:.3f}", f"{r['ideal_mm']:.3f}",
+          "低于理想控制器" if r["obs_mm"] < r["ideal_mm"] else "高于理想控制器"]
          for r in (ib0.get("sweep") or [])])}
 <img src="{imgs.get('instbal', '')}" alt="instantaneous balance vs null model">
-<div class="def good">结论：<b>主指标达标 —— {jb.get('jain_bin_mean')} 高于同一窗口下
-完全公平的零模型（闭式 {jb.get('jain_bin_null')}、蒙特卡洛
-{sw.get(bw_, {}).get('null_jain')}，两者一致），ratio
-{jb.get('jain_bin_ratio')} ≥ 1.0</b>，
-而且实测的瞬时不均衡在每一个尺度上都比零模型更小
-（{bw_} 拍：Jain {sw.get(bw_, {}).get('obs_jain')} vs
-零模型 {sw.get(bw_, {}).get('null_jain')}；
-max/min {sw.get(bw_, {}).get('obs_mm')} vs
-{sw.get(bw_, {}).get('null_mm')}），
-并且随窗口变宽按 1/√N 衰减（{wide} 拍时已收到
-{sw.get(wide, {}).get('obs_mm')}）。
-所以主指标没能到 1.0 <b>完全来自 {bw_} 拍的采样粒度，不是不公平</b>；
-环上的 RR + I-tag 仲裁比独立随机到达还要规整（亚泊松）。</div>
+<div class="def bad">结论（<b>相对早期版本已翻转</b>）：<b>主指标未达标 ——
+{jb.get('jain_bin_mean')} 对理想参照 {jb.get('jain_bin_ideal')} 的比值只有
+{jb.get('jain_vs_ideal')}</b>。{bw_} 拍下理想上限本身已经是
+{sw.get(bw_, {}).get('ideal_jain')}（整数不可分只值 ~10<sup>−4</sup>），
+所以 S0 缺掉的那一段<b>是真的核间不均衡，不是采样粒度</b>：
+实测 max/min {sw.get(bw_, {}).get('obs_mm')} 对理想的
+{sw.get(bw_, {}).get('ideal_mm')}，差的是量级而不是小数点后几位。
+随窗口变宽它按 1/√N 衰减（{wide} 拍时 max/min 收到
+{sw.get(wide, {}).get('obs_mm')}），这说明<b>失衡集中在短时间尺度上</b> ——
+正是 {bw_} 拍验收线要管的那个尺度。
+<p class="note">早期版本在这里写的是「达标」。那个判定用的是多项分布零模型
+（≈0.970）作参照，S0 的 0.95 超过它，于是被读成「比完全公平的仲裁还齐」。
+成立的部分只是：环上 RR + I-tag 的到达确实比独立随机更规整（亚泊松，见抖动分解
+一节）。不成立的部分是把「比无记忆仲裁齐」当成了「已经公平」。
+换成理想控制器参照后，剩下 {round(100 * (1 - (jb.get('jain_vs_ideal') or 1)), 1)}%
+的缺口就是后续所有方案要去挣的东西。</p></div>
 <p class="note">这条判定只针对<b>核间</b>瞬时均衡。同一个核两个方向之间的
 失败次数仍然是偏的（见 4.3.1 / 4.3.2），那是几何造成的，
 与这里的时间粒度无关。</p>
@@ -4095,18 +4394,60 @@ def _jitter_section(meta: dict, pat: dict) -> str:
          "若时机完全规整的 Jain", "整窗 max/min"],
         [[r[0], r[1], r[2], r[3], f"{100 * r[4]:.1f}%", r[5], r[6]]
          for r in j["rows"]], hl=[False, True])}
-<div class="def good"><b>{100 * fs[4]:.1f}% 的分箱不公平是时间抖动，
-不是速率差。</b>把同一批核的长期速率代进公式（即假设每个核都以自己的平均速率
-匀速注入），Jain 会到 <b>{fs[5]}</b> —— 远在 0.99 之上。
-也就是说 <b>Jain &gt; 0.99 与总带宽不掉 1% 这两条线在物理上是相容的</b>，
-剩下的问题纯粹是「怎么在不扣槽的前提下把时机摊匀」。<br>
-顺带解释了一个反直觉现象：修好仲裁器（rr → free_slot）之后
-每核每箱的注入数从 {rr[1]} 涨到 {fs[1]}，但分箱 Jain 反而略降
-（核间方差 {rr[2]} → {fs[2]}，涨了
-{fs[2] / max(1e-9, rr[2]):.0f} 倍）—— 让「有空槽的人先走」本身就与位置相关：
-邻 mem 更多的核有更多机会碰上空槽。
-<b>阶段一交出的是一个更快但略不齐的基线，这正是阶段三要接手的东西。</b></div>
+<div class="def bad"><b>本节（共享上环端口时代）的结论已被 3.2.2 推翻，此处仅作存档。</b>
+当时的读数是「{100 * fs[4]:.1f}% 的分箱不公平是时间抖动」、
+时机摊匀后 Jain 可达 {fs[5]}，因此判断两条验收线物理相容。
+按方向拆端口后这个判断不再成立 —— 见下一小节。
+表里的 <code>rr / free_slot</code> 两行也一并作废：
+端口按方向拆开后 <code>inj_sel</code> 是 no-op（3.1.6）。</div>
+{_jitter2_section()}
 """
+
+
+def _jitter2_section() -> str:
+    """The same decomposition on the corrected fabric, and the statistical trap.
+
+    The headline reverses, but the more useful content is *why* the old reading
+    was wrong: the variance share still says "mostly jitter" here too, and it is
+    simply not the statistic that answers the question.
+    """
+    j = JITTER2
+    s0, s22 = j["rows"][0], j["rows"][1]
+    return f"""
+<h4>3.2.2 在新 fabric 上重做这个分解：Jain &gt; 0.99 到底还够不够得到</h4>
+<p>决定性的数不是方差占比，而是<b>把抖动完全抹平之后的 Jain</b> ——
+给每个核每箱都填上它自己的均值（只留长期速率差），再算分箱 Jain。
+<b>这就是任何「只规整时机、不搬动速率」的机制的天花板。</b></p>
+{_table(["方案", "每核每箱", "核间速率区间", "速率比", "核间方差",
+         "核内方差", "核内占比", "抖动抹平后的 Jain 上限", "实测 Jain@50拍"],
+        [[r[0], r[1], f"{r[2]}–{r[3]}", r[4], r[5], r[6],
+          f"{100 * r[7]:.1f}%", f"<b>{r[8]}</b>", r[9]] for r in j["rows"]],
+        hl=[True, False])}
+<div class="def bad"><b>S0 的天花板只有 {s0[8]}，够不到 0.99。</b>
+核间长期速率是 {s0[2]} 对 {s0[3]}（比 {s0[4]}），
+六快四慢是<u>固定分组</u>而不是抖动（3.2.0）。
+所以在这个 fabric 上，<b>要把 Jain 抬到 0.99 就必须把速率从快核搬给慢核</b>，
+而慢核被一条已经 97% 满的 hop 卡住 —— 总带宽必然要掉。
+这正是 S22 前沿上那 −{S22_RETUNE2['frontier_price']}% 的来源，
+它是<b>下限而不是调参没到位</b>。</div>
+<div class="def"><b>顺便记下一个统计陷阱，因为上一轮就是栽在这里。</b>
+即使在新 fabric 上，核内抖动<u>仍然</u>占总方差的 {100 * s0[7]:.1f}%，
+核间只占 {100 * (1 - s0[7]):.1f}% —— 按上一轮的读法又会得出「主要是抖动」。
+但真正封顶的恰恰是那 {100 * (1 - s0[7]):.1f}%。
+原因是 50 拍窗内每核只有约 {s0[1]} 个 flit，
+<b>泊松式计数噪声天然主导任何方差指标</b>，
+所以<u>方差占比根本不是回答这个问题的正确统计量</u>。</div>
+<div class="def good"><b>反过来看 S22：它已经把核间速率差完全消掉了。</b>
+{s22[2]} 对 {s22[3]}（比 {s22[4]}），核间方差 <b>{s22[5]}</b>，
+抹平抖动后的上限 <b>{s22[8]}</b>。
+也就是说 S22 剩下的 {s22[9]} 到 1.0 那段差<b>全部是计数噪声，不是不公平</b>。</div>
+<div class="def"><b>那么 0.99 这条线本身画在哪？</b>
+一个<u>完美公平</u>的仲裁器透过同样的 50 拍窗口去看，也只有
+<b>{j['null']}</b>（理想控制器，见 3.2）。S22 的 {s22[9]} 是它的
+<b>{j['s22_over_null']}</b> 倍 —— 已经比理想随机<u>更规整</u>。
+<b>所以 S22 差的那 0.0012 不是结构缺陷，是这个窗宽下的噪声底。</b>
+如果要让这条线可判定，应当把它写成「相对理想控制器的比值」
+（S22 达到 1.0216）而不是绝对的 0.99。</div>"""
 
 
 def _s22_cost_payload() -> dict | None:
@@ -4231,9 +4572,10 @@ Jain 掉到 {worst['jain_bin']}（比 S0 的 {cost['s0']['jain_bin']} <b>还差<
     return f"""
 <h2>6. S22：赤字触发的限域让路</h2>
 {_s22_retune_section()}
-<p>阶段一已经把问题定死了：分箱不公平里 {100 * JITTER_DECOMP['rows'][1][4]:.0f}%
-是时间抖动（3.2.1），而 I-tag 和 S1（第 5 节）都只会「扣住」。
-S22 换掉的正是这一点。</p>
+<p>阶段一把问题定死了，但结论与上一轮相反：新 fabric 上分箱不公平里
+有一块是<b>持续速率差</b>，只规整时机的天花板是 Jain
+{JITTER2['rows'][0][8]}（3.2.2）。所以 S22 必须真的<b>搬动速率</b>，
+而不只是摊匀时机 —— 这也是它必然要付带宽的原因。</p>
 
 <div class="def"><b>一句话：从来不扣住任何一个空槽，只改「两个节点抢同一个 hop
 时谁赢」，而赢家由<u>谁更落后</u>决定。</b></div>
@@ -4294,15 +4636,15 @@ free_slot 仲裁器为了排序会先试算一遍候选，同一次上环尝试�
 所以它们只能用来<b>横向比较不同配置的机制活跃程度</b>（6.5 就是这么用的），
 不能当事件数读。</p>
 <p class="note">注意这里的 ratio 列：S22 是本报告里<b>第一个把 ratio 推到
-1.0 以上明显幅度</b>的方案（{(f22.get('jain_bin') or {}).get('jain_bin_ratio')}
-vs S0 {(s0.get('jain_bin') or {}).get('jain_bin_ratio')}）。
+1.0 以上明显幅度</b>的方案（{(f22.get('jain_bin') or {}).get('jain_vs_ideal')}
+vs S0 {(s0.get('jain_bin') or {}).get('jain_vs_ideal')}）。
 ratio &gt; 1 的含义是<b>比完全公平的随机仲裁还要齐</b> ——
 让路把注入时机整理成了亚泊松，这正是 3.2.1 说「治时间抖动」的意思。</p>
 <img src="{imgs.get('s22_instbal', '')}" alt="S22 binned Jain over time">
-<p class="note">左图是验收指标本身随时间的走势：S22 那条线<b>整段</b>抬到零模型
-之上（不是靠某几段拉平均），S0 / S1T 贴着零模型走，
+<p class="note">左图是验收指标本身随时间的走势：S22 那条线<b>整段</b>抬到理想控制器
+之上（不是靠某几段拉平均），S0 / S1T 贴着理想控制器走，
 默认 S1 则整段掉在下面。右图是不均衡随观察窗口的衰减 ——
-S22 在<b>每一个</b>窗口宽度上都低于零模型，说明它不是靠"把窗口拉宽平均掉"
+S22 在<b>每一个</b>窗口宽度上都低于理想控制器，说明它不是靠"把窗口拉宽平均掉"
 拿到指标的，而是真的把 50 拍尺度上的时序理齐了。</p>
 <img src="{imgs.get('s22_bars', '')}" alt="per-core BW S0/S1/S1T/S22">
 <p class="note">各核整窗写带宽：S22 把 10 个核收进
@@ -4818,8 +5160,8 @@ def _write_s0_s1_report(d: dict, meta: dict, pat: dict, imgs: dict) -> None:
     qref = ref.get("retry") or {}
     jbw = (s0.get("jain_bin") or {}).get("bin_w")
     jb0 = (s0.get("jain_bin") or {}).get("jain_bin_mean")
-    jbn0 = (s0.get("jain_bin") or {}).get("jain_bin_null")
-    jbr0 = (s0.get("jain_bin") or {}).get("jain_bin_ratio")
+    jbn0 = (s0.get("jain_bin") or {}).get("jain_bin_ideal")
+    jbr0 = (s0.get("jain_bin") or {}).get("jain_vs_ideal")
     jb1 = (s1.get("jain_bin") or {}).get("jain_bin_mean")
     t1 = 100.0 * (s1["throughput"] - s0["throughput"]) / max(1e-9, s0["throughput"])
     t_ref = 100.0 * (s0["throughput"] - sref["throughput"]) / max(
@@ -4979,19 +5321,24 @@ completer 侧每条 RSP（DBIDResp / RetryAck / Comp）独立抽
 <li><b>分箱 Jain（公平性主指标，进验收线）</b>：把争用窗口切成
 <b>{jbw} 拍</b>宽的箱，每箱内对 {len(meta['core_nodes'])} 个 core 那一箱的
 写带宽算一次 Jain，再对所有箱取平均。它回答「<b>任一时刻</b>各核是否均衡」。</li>
-<li><b>零模型与判定</b>：{jbw} 拍内每核只有十来个 flit，纯计数噪声就让
-Jain 到不了 1.0，而且这个地板随吞吐移动，所以绝对阈值没有意义。
-把每箱总数 N 等概率撒到 n 个核上有 E[J] ≈ N/(N+n−1)，逐箱平均即
-<code>jain_bin_null</code>；判定用比值
-<code>ratio = 实测/零模型 ≥ 1.0</code>，含义是<b>至少和完全公平的仲裁一样齐</b>。
-本轮 S0 = {jb0} / 零模型 {jbn0} = <b>ratio {jbr0}</b>。</li>
+<li><b>理想参照与判定</b>：{jbw} 拍内每核只有十来个 flit，所以要先确认
+1.0 是否可达。理想拥塞控制器是<b>确定性</b>的，把每箱总数 N 按整数尽可能均分，
+<code>J_ideal = N²/(n·[r·⌈N/n⌉²+(n−r)·⌊N/n⌋²])</code>，逐箱平均即
+<code>jain_bin_ideal</code> = {jbn0} —— 几乎就是 1.0，
+<b>所以绝对线 jain_bin_mean &gt; 0.99 是可判定的</b>，
+<code>jain_vs_ideal = 实测/理想</code> 只用来读差距。
+本轮 S0 = {jb0}，相对理想 {jbr0}。
+<span class="note">早期版本这里用的是多项分布零模型 N/(N+n−1)≈0.970（<b>公平但无记忆</b>
+的仲裁器），并把「≥ 零模型」当验收线。那条线太松：它只要求不偏，不要求规整，
+而控制器是允许规整的。已作废。</span></li>
 <li><b>max/min</b>（整窗）：降为诊断项，不进验收线。它仍然有用，
 因为分箱 Jain 是二次指标、看不见个别核被饿死，而 max/min 直接读最坏的核。
 均匀写下各方案的分箱 Jain 差异小于噪声（S0 {jb0} vs S1 {jb1}），
 这是均匀写本来就公平的正确反映；流量不均时它分得很开。</li>
 <li><b>吞吐</b>：公平性可以靠把所有人一起压慢买到，所以必须一起报。</li>
 </ul>
-<p>验收线：<b>分箱 Jain ≥ 同窗零模型</b>且吞吐相对基线不下降超过 1%。</p>
+<p>验收线：<b>分箱 Jain &gt; 0.99</b>（理想上限 {jbn0}，故可达）
+且吞吐相对基线不下降超过 1%。</p>
 
 <h2>3. 下界与失衡现象</h2>
 {_bounds_table(pat['bounds'])}
@@ -5045,6 +5392,8 @@ ha_track = {meta.get('ha_track')}，配额从未触发，
 <img src="{imgs.get('s1trace', '')}" alt="S1 control trace">
 {_s1_tune_section(pat, imgs)}
 {_s22_section(meta, pat, imgs)}
+{_ideal_lp_section()}
+{_pareto_section(imgs)}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>
@@ -5333,13 +5682,13 @@ M{'/M'.join(str(x) for x in hot_has)} 之后，
         window", which is comparable across schemes.
         """
         sw = [r for r in pat.get("seed_sweep", []) if r.get(scheme)]
-        fb = (fall.get("jain_bin") or {}).get("jain_bin_ratio")
-        rs = [r[scheme]["jain_bin_ratio"] for r in sw
-              if r[scheme].get("jain_bin_ratio")] or [fb or 0.0]
+        fb = (fall.get("jain_bin") or {}).get("jain_vs_ideal")
+        rs = [r[scheme]["jain_vs_ideal"] for r in sw
+              if r[scheme].get("jain_vs_ideal")] or [fb or 0.0]
         ms = [r[scheme]["max_min"] for r in sw] or [fall["max_min"]]
         ts = [r[scheme]["thr_delta_pct"] for r in sw] or [tfall]
         hit = (min(rs) >= 1.0, min(ts) >= -1.0)
-        names = ("分箱 Jain ≥ 零模型", "吞吐差 ≤ 1%")
+        names = ("分箱 Jain > 0.99", "吞吐差 ≤ 1%")
         good = [n for n, v in zip(names, hit) if v]
         bad = [n for n, v in zip(names, hit) if not v]
         return {
@@ -5464,10 +5813,10 @@ max/min {s0['max_min']} → <b>{s1['max_min']}</b>，
 S0 本身已经接近均衡（跨 {n_seed or 1} 个种子 max/min
 {s0_seed_rng}），
 留给公平性方案的空间很小：
-S16 的分箱 Jain / 零模型比值落在 {v16['rng_r']}（max/min {v16['rng_m']}），
+S16 的分箱 Jain / 理想控制器比值落在 {v16['rng_r']}（max/min {v16['rng_m']}），
 S15 是 {v15['rng_r']}（max/min {rng_m}，<b>并不稳定，个别种子上还不如 S0</b>），
 而两者的吞吐代价都是 {rng_t} / {v16['rng_t']}。
-<b>按验收线（分箱 Jain ≥ 同窗零模型 且 吞吐差 ≤ 1%）判定：
+<b>按验收线（分箱 Jain > 0.99 且 吞吐差 ≤ 1%）判定：
 S15 {verdict}；S16 {v16['verdict']}。</b>
 在无限 tracker 的参照上这两个方案都明显更值
 （那里有 max/min = {sref['max_min']} 的不公平可供消除），
@@ -5578,8 +5927,8 @@ tracker。每 core 的 outstanding 上限是
 J = (Σ<i>x<sub>i</sub></i>)<sup>2</sup> /
 (<i>n</i>·Σ<i>x<sub>i</sub></i><sup>2</sup>)，再对所有箱取<b>平均</b>。
 它回答的是「<b>任一时刻</b>各核是否均衡」，也是本研究关心的问题。
-读它必须对照同窗口的完全公平零模型（见 3.3），因为 {jb_w} 拍内
-每核只有十来个 flit，计数噪声本身就会把 J 压到 1.0 以下。</li>
+读它必须先确认 1.0 在 {jb_w} 拍这个窗口上是否可达（见 2.1），
+因为每核只有十来个 flit，整数不可分会拿掉一小部分。</li>
 <li><b>max/min</b> = max <i>x<sub>i</sub></i> / min <i>x<sub>i</sub></i>，
 在整个争用窗口上算。<b>方案之间的比较和验收沿用它</b>，
 因为它直接读最坏的那个 core：1.0 是完全均等，
@@ -5588,23 +5937,29 @@ J = (Σ<i>x<sub>i</sub></i>)<sup>2</sup> /
 效率看这一个。公平性可以靠“把所有人一起压慢”买到，
 所以任何公平性改善都必须和吞吐一起报。</li>
 </ul>
-<div class="def">验收线两条：<b>分箱 Jain ≥ 同窗零模型</b>
-（即 ratio ≥ 1.0）且<b>吞吐相对基线不下降超过 1%</b>。
+<div class="def">验收线两条：<b>分箱 Jain &gt; 0.99</b>
+且<b>吞吐相对基线不下降超过 1%</b>。
 两条都按最坏随机种子判定，不看单一种子。</div>
 
-<h3>2.1 为什么阈值是「≥ 零模型」而不是一个绝对数</h3>
-<p>分箱 Jain 达不到 1.0，而且它的上限<b>不是常数</b>：
-{jb_w} 拍内每核只有十来个 flit，纯计数噪声就把 Jain 压下去。
-把每箱的总 flit 数 N 按等概率多项分布撒到 n 个核上，
-每核计数的均值是 N/n、方差是 N·(1/n)(1−1/n)，于是</p>
-<p style="text-align:center">E[J] ≈ 1/(1 + CV<sup>2</sup>) = N / (N + n − 1)</p>
-<p>这就是<b>完全公平的仲裁透过同一个窗口去看</b>会落到的位置，
-逐箱算完再平均即 <code>jain_bin_null</code>（与蒙特卡洛零模型差约 5×10<sup>−4</sup>）。</p>
-<div class="def">关键是这个地板<b>随吞吐移动</b>：一个方案如果压低了吞吐，
-每箱 flit 变少，它自己的零模型也跟着下降。
-所以只有<b>比值</b> <code>jain_bin_ratio = 实测 / 零模型</code>
-在方案之间可比 —— 绝对阈值会系统性地偏袒低吞吐的方案。
-ratio ≥ 1.0 的含义是：<b>这颗环至少和完全公平的仲裁一样齐</b>。</div>
+<h3>2.1 阈值 0.99 为什么是可判定的：理想控制器参照</h3>
+<p>先要确认 1.0 在 {jb_w} 拍这个窗口上到底差多少。参照物取
+<b>理想拥塞控制器在同一个箱、交付同样多 flit 时会得到的分数</b>。
+它是<b>确定性</b>的（控制器允许把注入排得规整，不只是无偏），
+所以把该箱总数 N 按整数尽可能均分：<code>r = N mod n</code> 个核拿
+⌈N/n⌉，其余拿 ⌊N/n⌋，于是</p>
+<p style="text-align:center">J<sub>ideal</sub>(N) = N<sup>2</sup> /
+(n·[r·⌈N/n⌉<sup>2</sup> + (n−r)·⌊N/n⌋<sup>2</sup>]) = 1 − O(1/N<sup>2</sup>)</p>
+<p>逐箱算完再平均即 <code>jain_bin_ideal</code>。本设置下它约 0.9997，
+<b>整数粒度只值 ~10<sup>−4</sup>，所以 0.99 这条绝对线是能达到的</b>。</p>
+<div class="def">这条参照还有一个性质让它能干净地隔离公平性：它在
+<b>方案自己交付的 flit 数</b>上取值，所以<b>方案无法靠压低吞吐来抬高自己的
+公平分</b>。吞吐要不要付代价，单独对理想的带宽上限 R* 去比
+（见「理想拥塞控制器的上限」一节），两个轴不混。
+<p class="note">早期版本这里用的是多项分布零模型
+E[J] ≈ N/(N+n−1) ≈ 0.970 —— <b>公平但无记忆</b>的仲裁器透过同窗看到的分数 ——
+并把验收线写成「实测 ≥ 零模型」。那条线问错了问题：它只要求不偏，
+而控制器可以规整，因此零模型低估了可达性（把 S0 的 0.95 判成达标），
+而且它完全没有给出带宽参照。已作废，全部改为理想参照。</p></div>
 <p class="note">这个指标在均匀写下分辨不出方案（各方案差
 <b>{jb_spread:.2f}%</b>，{min(_jbs):.5f} ~ {max(_jbs):.5f}），
 但那是正确答案而不是缺陷 —— 均匀写下各方案本来都接近公平，
@@ -5902,7 +6257,7 @@ max/min <b>{s0['max_min']} → {s16['max_min']}</b>
 （{len(meta['core_nodes'])} 个 core 收敛到
 {s16['bw_min']} ~ {s16['bw_max']} flit/cycle），
 吞吐 <b>{t16:+.1f}%</b>，事务延迟 p99 <b>{lat0} → {lat16}</b>。
-跨 {v16['n']} 个种子：分箱 Jain / 零模型 {v16['rng_r']}、
+跨 {v16['n']} 个种子：分箱 Jain / 理想控制器 {v16['rng_r']}、
 max/min {v16['rng_m']}、吞吐差 {v16['rng_t']}。
 <b>按最坏种子判定：{v16['verdict']}。</b></div>
 

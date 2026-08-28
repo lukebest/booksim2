@@ -81,8 +81,8 @@ def run_one(topo, txns, over: dict[str, Any], *, k: int, scheme: str = "S21"
         "completed": r["completed"], "thr": f.get("throughput"),
         "max_min": f.get("max_min"), "bw_min": f.get("bw_min"),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "jain_bin_p05": jb.get("jain_bin_p05"),
         "jain_bin_min": jb.get("jain_bin_min"),
         "fail_ratio_max": round(max(fr), 3),
@@ -100,7 +100,7 @@ def main() -> None:
     base = run_one(topo, txns, {}, k=k, scheme="S0")
     thr0 = base["thr"]
     print(f"K={k}\n  S0: thr={thr0} Jbin={base['jain_bin']} "
-          f"null={base['jain_bin_null']} maxmin={base['max_min']}\n"
+          f"ideal={base['jain_bin_ideal']} maxmin={base['max_min']}\n"
           f"  target: Jbin > 0.99 and thr >= {thr0 * 0.99:.4f}", flush=True)
     out: dict[str, Any] = {"k": k, "s0": base, "grids": {}}
     for name, cases in _grids().items():

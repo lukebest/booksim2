@@ -84,8 +84,8 @@ def run_one(topo: Ring2Topology, txns, over: dict[str, Any], *, k: int,
         "makespan": r["makespan"], "completed": r["completed"],
         "thr": f.get("throughput"),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "jain_bin_min": jb.get("jain_bin_min"),
         "max_min": f.get("max_min"),
         "n_board_fail": r.get("n_board_fail"),
@@ -125,7 +125,7 @@ def main() -> None:
             rows.append(row)
             print(f"  {str(over) or '(baseline)':<52} "
                   f"thr={row['thr']:<8} {row['pct_r_star']:>5}% R*  "
-                  f"Jbin={row['jain_bin']} ratio={row['jain_bin_ratio']}  "
+                  f"Jbin={row['jain_bin']} ratio={row['jain_vs_ideal']}  "
                   f"itag={row['n_itag']}  {row['wall']}s", flush=True)
         out["groups"][name] = rows
     out["wall_secs"] = round(time.perf_counter() - t0, 1)

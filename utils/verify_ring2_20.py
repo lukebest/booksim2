@@ -36,7 +36,7 @@ from rg_ring2_topo import (
     build_uniform_write, hop_count, interleave_ha, is_core, is_ha,
     paths_for_txns, shortest_dir, vc_of, write_bounds, write_paths_for_txns,
 )
-from dse_ring2_write_fair import binned_jain, fairness_stats
+from dse_ring2_write_fair import binned_jain, fairness_stats, jain_ideal_bin
 from rg_sched_cost import distributed_cost, sched_cost
 
 OUT = Path(__file__).resolve().parents[1] / "results" / "verify_ring2_20.json"
@@ -1071,32 +1071,100 @@ def test_binned_jain_averages_per_bin_over_the_fair_window() -> None:
     r = binned_jain(late, 50, 500)
     assert r["n_bins"] == 10 and r["jain_bin_mean"] == 1.0, r
 
-    # The null is the acceptance floor, so pin it too: N/(N+n-1) per bin with
-    # N = 50 flits over n = 10 cores.
+    # The ideal controller is the reference, so pin it: with N = 50 flits over
+    # n = 10 cores the split is exact, so the ideal is 1.0 and this trace --
+    # which is itself perfectly even -- sits exactly on it.
     r = binned_jain(even, 50, 1000)
-    assert r["jain_bin_null"] == round(50 / 59, 5), r
-    assert abs(r["jain_bin_ratio"] - 59 / 50) < 1e-5, r
+    assert r["jain_bin_ideal"] == 1.0, r
+    assert r["jain_vs_ideal"] == 1.0, r
+
+    # And the closed form where N does not divide n: r = N mod n cores take
+    # ceil(N/n). N = 51, n = 10 -> one core 6, nine cores 5.
+    assert abs(jain_ideal_bin(51, 10) - 2601 / 2610) < 1e-12
+    assert jain_ideal_bin(50, 10) == 1.0
+    assert jain_ideal_bin(0, 10) == 1.0
 
 
-def test_binned_jain_null_matches_a_fair_arbiter() -> None:
-    """The closed-form null must match what a fair arbiter actually produces.
+def test_ideal_cc_lp_matches_fabric() -> None:
+    """The ideal-CC ceiling is now the reference, so pin its LP to the fabric.
 
-    `jain_bin_null` is what the acceptance line is measured against, so the
-    N/(N+n-1) shortcut is checked against an actual equal-probability draw
-    rather than trusted. It is a first-order expansion and lands ~1e-3 low,
-    which is the direction that makes the acceptance line lenient, not
-    strict; the bound below is what keeps that bias from growing.
+    Every relative number in the report divides by this bound, so a silent drift
+    in the flow model -- a wrong VC multiplicity, the wrong direction for RSP, a
+    changed destination hash -- would rescale the whole study without failing
+    anything else. The check that catches it is that the equal-rate solve must
+    land exactly on the independently derived R* = 40/7 (lambda* = 2/7).
     """
-    rng = random.Random(12345)
-    n, nbin, per_bin = 10, 4000, 12
-    inject: dict[int, list[int]] = {c: [] for c in range(n)}
+    from fractions import Fraction
+
+    from ideal_ring2_cc import (coefficients, dest_mix, solve_max_total,
+                                solve_theta)
+    from rg_ring2_topo import CHI_VCS_WRITE, Ring2Topology
+
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
+    cores, names, a = coefficients(topo, dest_mix(k=1600))
+    assert len(cores) == 10, cores
+
+    lam_fair = solve_theta(a, 1.0)
+    assert Fraction(lam_fair[0]).limit_denominator(64) == Fraction(2, 7), (
+        lam_fair[0])
+    r_fair = 2 * float(lam_fair.sum())          # W = 2 DAT flits per txn
+    assert abs(r_fair - 40 / 7) < 1e-6, r_fair
+    # Equal-rate means equal: no core is quietly carrying the others.
+    assert max(lam_fair) - min(lam_fair) < 1e-9, lam_fair
+
+    # The unconstrained optimum is higher, but only by starving whole cores --
+    # which a closed batch can never do, since every core owes the same work.
+    lam_max = solve_max_total(a)
+    assert 2 * float(lam_max.sum()) > r_fair, lam_max
+    starved = [c for c, x in zip(cores, lam_max) if x < 1e-9]
+    assert starved, lam_max
+    # Those cores are the structurally disadvantaged ones at the HA-less gaps.
+    assert set(starved) <= {0, 8, 10, 18}, starved
+
+    # A ring hop binds, not an injection or ejection port. If a port ever binds,
+    # the report's "the hop is the ceiling" reasoning would need revisiting.
+    load = a.T @ lam_fair
+    top = names[int(load.argmax())]
+    assert top.startswith("hop:"), top
+
+
+def test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter() -> None:
+    """Two-sided check on the new reference: reachable, and a real ceiling.
+
+    `jain_bin_ideal` replaced the multinomial null model, so it has to be
+    validated in both directions rather than trusted:
+
+      * **reachable** -- a deterministic schedule that spreads each bin's total
+        as evenly as integers allow must score *exactly* the ideal. Here N = 51
+        over 10 cores, so one core takes 6 and the rest take 5, rotating which
+        one. Anything less than an exact match means the closed form is not the
+        deterministic optimum.
+      * **a ceiling** -- a *fair but memoryless* arbiter drawing the same totals
+        at equal probability must land strictly below it. That is the old null
+        model, and it is now correctly positioned as something a controller can
+        beat, not as the bar.
+    """
+    n, nbin, per_bin = 10, 400, 51
+    det: dict[int, list[int]] = {c: [] for c in range(n)}
     for b in range(nbin):
-        for _ in range(n * per_bin):
-            inject[rng.randrange(n)].append(b * 50 + 1)
-    r = binned_jain(inject, 50, nbin * 50)
-    assert r["flits_per_core_per_bin"] == float(per_bin), r
-    assert 0.0 <= r["jain_bin_mean"] - r["jain_bin_null"] < 2e-3, r
-    assert abs(r["jain_bin_ratio"] - 1.0) < 2e-3, r
+        for i in range(per_bin):
+            # 51 = 5 each plus one extra, and the extra rotates by bin.
+            det[(b + i) % n].append(b * 50 + 1)
+    d = binned_jain(det, 50, nbin * 50)
+    assert abs(d["jain_bin_mean"] - jain_ideal_bin(per_bin, n)) < 1e-5, d
+    assert abs(d["jain_vs_ideal"] - 1.0) < 1e-5, d
+
+    rng = random.Random(12345)
+    rnd: dict[int, list[int]] = {c: [] for c in range(n)}
+    for b in range(nbin):
+        for _ in range(per_bin):
+            rnd[rng.randrange(n)].append(b * 50 + 1)
+    q = binned_jain(rnd, 50, nbin * 50)
+    assert q["jain_vs_ideal"] < 1.0, q
+    # The memoryless arbiter's own expectation is N/(N+n-1); it should land
+    # near that and therefore well under the deterministic ideal.
+    assert abs(q["jain_bin_mean"] - per_bin / (per_bin + n - 1)) < 0.02, q
+    assert q["jain_bin_mean"] < d["jain_bin_mean"], (q, d)
 
 
 def test_s15_beats_s0_fairness() -> None:
@@ -1708,6 +1776,61 @@ def test_s22_dodge_keeps_order_per_destination() -> None:
     assert leg(4) == 4      # different destination, clears node 6: overtake
 
 
+def test_s25_local_target_uses_no_bus() -> None:
+    """S25's claim to cost no bus has to be structural, not just configured.
+
+    The report puts S25 on the plot at 1,660 FF-equivalents on the grounds that a
+    constant target makes the deficit purely local: the flow-control bus, its
+    mirror table and its adder tree all disappear, and with them the mandated
+    30-cycle delay. That claim is only true if `dfc_target` actually stops the bus
+    being driven -- if any post still went out, the scheme would owe the 30 cycles
+    and both its cost and its feasibility marking would be wrong.
+
+    So: zero posts over a full run, and the deficit still has to behave -- accrue
+    at the target, be spent by boarding, and raise a request when a node falls
+    behind. A silent bus with a dead controller would pass the first half alone.
+    """
+    from rg_ring2_dfc import Ring2DfcParams, Ring2DfcSim
+
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+    tgt = 4 / 7
+    p = Ring2DfcParams(shared_inj=True, per_vc_srcq=True, per_vc_ports=True,
+                       dfc_target=tgt, dfc_thresh=1.0, dfc_cap=8.0,
+                       dfc_bus_lat=30)
+    s = Ring2DfcSim(topo, p, seed=0)
+    members = s._members()
+    assert members and all(is_core(n) for n in members)
+
+    # Accrual is the target, exactly, and nothing is posted to the bus.
+    for c in range(1, 4):
+        s.t = c
+        s._ctrl_deliver()
+        assert all(abs(s.deficit[n] - c * tgt) < 1e-9 for n in members), (
+            c, dict(s.deficit))
+    assert s.bus_posts == 0 and not s._pipe, s.bus_posts
+    # Past the threshold a node requests; boarding spends the deficit back down.
+    assert set(s.req) == set(members), (s.req, members)
+    s.deficit[members[0]] -= 3.0
+    s._stand_down(members[0])
+    assert members[0] not in s.req
+    # The clamp holds, so a node starved for a long stretch cannot run away.
+    for c in range(4, 200):
+        s.t = c
+        s._ctrl_deliver()
+    assert all(s.deficit[n] <= p.dfc_cap + 1e-9 for n in members), dict(s.deficit)
+
+    # And end to end: a real run must never touch the bus.
+    txns = build_tiled_write(k=6, m_wdata=2, mem=[1, 3, 5, 7],
+                            core_set=[0, 2, 4, 6])
+    sim = Ring2DfcSim(topo, p, seed=0)
+    sim.offer_batch(txns)
+    while sim.t < 40_000 and not sim.done():
+        sim.step()
+    assert sim.done()
+    assert sim.bus_posts == 0, sim.bus_posts
+    assert (sim.fc_summary() or {}).get("bus_bits") == 0
+
+
 def test_s22_deficit_reads_own_progress_off_the_bus() -> None:
     """Both sides of the comparison have to cross the same quantiser.
 
@@ -1968,8 +2091,9 @@ def main() -> None:
     c.add("write_fairness_metrics_sane", test_write_fairness_metrics_sane)
     c.add("binned_jain_per_bin_average",
           test_binned_jain_averages_per_bin_over_the_fair_window)
-    c.add("binned_jain_null_matches_fair",
-          test_binned_jain_null_matches_a_fair_arbiter)
+    c.add("jain_bin_ideal_achievable_and_bounds_fair",
+          test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter)
+    c.add("ideal_cc_lp_matches_fabric", test_ideal_cc_lp_matches_fabric)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
     c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)
@@ -1999,6 +2123,7 @@ def main() -> None:
     c.add("s22_dodge_keeps_dst_order",
           test_s22_dodge_keeps_order_per_destination)
     c.add("s22_deficit_via_bus", test_s22_deficit_reads_own_progress_off_the_bus)
+    c.add("s25_local_target_uses_no_bus", test_s25_local_target_uses_no_bus)
     c.add("rate_pinned_equals_s0", test_rate_pinned_reproduces_baseline)
     c.add("rate_control_cuts_retries", test_rate_control_cuts_retries)
     c.add("window_pinned_equals_s0", test_window_pinned_reproduces_baseline)

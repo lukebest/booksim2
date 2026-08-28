@@ -93,7 +93,7 @@ def point(scheme: str, topo, txns, *, k: int, cfg: dict) -> dict:
             "completed": r["completed"],
             "throughput": f["throughput"], "max_min": f["max_min"],
             "jain_bin": jb.get("jain_bin_mean"),
-            "jain_bin_null": jb.get("jain_bin_null"),
+            "jain_bin_ideal": jb.get("jain_bin_ideal"),
             "n_dfc_yield": (r.get("fc") or {}).get("n_dfc_yield"),
             "n_dfc_dodge": (r.get("fc") or {}).get("n_dfc_dodge")}
 

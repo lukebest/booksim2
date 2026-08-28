@@ -1,0 +1,235 @@
+{
+  "k": 2000,
+  "s0_thr": 5.3937,
+  "ideal_bw": 5.714285714285715,
+  "u_ideal": 5.712609561057374,
+  "rows": [
+    {
+      "case": "S22 deep 32/32 dodge32 w32 (reference)",
+      "group": "s22",
+      "over": {
+        "dfc_window": 32,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 32,
+        "inj_depth": 32,
+        "dir_inj_depth": 32,
+        "itag_hold": 2
+      },
+      "thr": 5.3512,
+      "jain_bin": 0.94175,
+      "bw_vs_ideal": 0.93646,
+      "jain_vs_ideal": 0.94196,
+      "delta_vs_s0_pct": -0.79,
+      "eta": 0.88217,
+      "pass": false
+    },
+    {
+      "case": "S22 STOCK 12/8 dodge0 w32",
+      "group": "s22",
+      "over": {
+        "dfc_window": 32,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 0,
+        "inj_depth": 12,
+        "dir_inj_depth": 8,
+        "itag_hold": 2
+      },
+      "thr": 5.2267,
+      "jain_bin": 0.93392,
+      "bw_vs_ideal": 0.91467,
+      "jain_vs_ideal": 0.93415,
+      "delta_vs_s0_pct": -3.1,
+      "eta": 0.85448,
+      "pass": false
+    },
+    {
+      "case": "S22 STOCK 12/8 dodge0 w64",
+      "group": "s22",
+      "over": {
+        "dfc_window": 64,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 0,
+        "inj_depth": 12,
+        "dir_inj_depth": 8,
+        "itag_hold": 2
+      },
+      "thr": 5.3677,
+      "jain_bin": 0.91129,
+      "bw_vs_ideal": 0.93935,
+      "jain_vs_ideal": 0.91148,
+      "delta_vs_s0_pct": -0.48,
+      "eta": 0.85627,
+      "pass": false
+    },
+    {
+      "case": "S22 STOCK 12/8 dodge8 w32",
+      "group": "s22",
+      "over": {
+        "dfc_window": 32,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 8,
+        "inj_depth": 12,
+        "dir_inj_depth": 8,
+        "itag_hold": 2
+      },
+      "thr": 5.2966,
+      "jain_bin": 0.93201,
+      "bw_vs_ideal": 0.9269,
+      "jain_vs_ideal": 0.93222,
+      "delta_vs_s0_pct": -1.8,
+      "eta": 0.86414,
+      "pass": false
+    },
+    {
+      "case": "S22 STOCK 12/8 dodge8 w64",
+      "group": "s22",
+      "over": {
+        "dfc_window": 64,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 8,
+        "inj_depth": 12,
+        "dir_inj_depth": 8,
+        "itag_hold": 2
+      },
+      "thr": 5.3858,
+      "jain_bin": 0.92046,
+      "bw_vs_ideal": 0.94251,
+      "jain_vs_ideal": 0.92065,
+      "delta_vs_s0_pct": -0.15,
+      "eta": 0.8678,
+      "pass": false
+    },
+    {
+      "case": "S22 deep 32/32 dodge0 w32",
+      "group": "s22",
+      "over": {
+        "dfc_window": 32,
+        "dfc_bus_lat": 30,
+        "dfc_thresh": 0.5,
+        "dfc_hold": 16,
+        "dfc_margin": 3.0,
+        "dfc_dodge": 0,
+        "inj_depth": 32,
+        "dir_inj_depth": 32,
+        "itag_hold": 2
+      },
+      "thr": 5.3064,
+      "jain_bin": 0.94026,
+      "bw_vs_ideal": 0.92862,
+      "jain_vs_ideal": 0.94047,
+      "delta_vs_s0_pct": -1.62,
+      "eta": 0.8734,
+      "pass": false
+    },
+    {
+      "case": "S24 rate-pinned burst1.0",
+      "group": "s24",
+      "over": {
+        "fair_init": 0.2857,
+        "fair_floor": 0.2857,
+        "fair_step": 0.0,
+        "fair_burst": 1.0,
+        "fair_signal": "inband",
+        "fair_window": 1000000000
+      },
+      "thr": 4.1237,
+      "jain_bin": 0.99026,
+      "bw_vs_ideal": 0.72165,
+      "jain_vs_ideal": 0.99061,
+      "delta_vs_s0_pct": -23.55,
+      "eta": 0.71483,
+      "pass": false
+    },
+    {
+      "case": "S24 rate-pinned burst2.0",
+      "group": "s24",
+      "over": {
+        "fair_init": 0.2857,
+        "fair_floor": 0.2857,
+        "fair_step": 0.0,
+        "fair_burst": 2.0,
+        "fair_signal": "inband",
+        "fair_window": 1000000000
+      },
+      "thr": 4.8338,
+      "jain_bin": 0.98759,
+      "bw_vs_ideal": 0.84591,
+      "jain_vs_ideal": 0.98786,
+      "delta_vs_s0_pct": -10.38,
+      "eta": 0.83566,
+      "pass": false
+    },
+    {
+      "case": "S24 rate-pinned burst4.0",
+      "group": "s24",
+      "over": {
+        "fair_init": 0.2857,
+        "fair_floor": 0.2857,
+        "fair_step": 0.0,
+        "fair_burst": 4.0,
+        "fair_signal": "inband",
+        "fair_window": 1000000000
+      },
+      "thr": 5.1374,
+      "jain_bin": 0.98625,
+      "bw_vs_ideal": 0.89904,
+      "jain_vs_ideal": 0.98649,
+      "delta_vs_s0_pct": -4.75,
+      "eta": 0.88694,
+      "pass": false
+    },
+    {
+      "case": "S24 rate-pinned burst8.0",
+      "group": "s24",
+      "over": {
+        "fair_init": 0.2857,
+        "fair_floor": 0.2857,
+        "fair_step": 0.0,
+        "fair_burst": 8.0,
+        "fair_signal": "inband",
+        "fair_window": 1000000000
+      },
+      "thr": 5.2473,
+      "jain_bin": 0.97385,
+      "bw_vs_ideal": 0.91828,
+      "jain_vs_ideal": 0.97406,
+      "delta_vs_s0_pct": -2.71,
+      "eta": 0.89453,
+      "pass": false
+    },
+    {
+      "case": "S24 rate-pinned burst16.0",
+      "group": "s24",
+      "over": {
+        "fair_init": 0.2857,
+        "fair_floor": 0.2857,
+        "fair_step": 0.0,
+        "fair_burst": 16.0,
+        "fair_signal": "inband",
+        "fair_window": 1000000000
+      },
+      "thr": 5.3483,
+      "jain_bin": 0.95243,
+      "bw_vs_ideal": 0.93595,
+      "jain_vs_ideal": 0.95263,
+      "delta_vs_s0_pct": -0.84,
+      "eta": 0.89169,
+      "pass": false
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
-  "n_total": 74,
-  "n_ok": 74,
+  "n_total": 76,
+  "n_ok": 76,
   "all_ok": true,
   "rows": [
     {
@@ -188,7 +188,11 @@
       "ok": true
     },
     {
-      "name": "binned_jain_null_matches_fair",
+      "name": "jain_bin_ideal_achievable_and_bounds_fair",
+      "ok": true
+    },
+    {
+      "name": "ideal_cc_lp_matches_fabric",
       "ok": true
     },
     {
@@ -284,6 +288,10 @@
       "ok": true
     },
     {
+      "name": "s25_local_target_uses_no_bus",
+      "ok": true
+    },
+    {
       "name": "rate_pinned_equals_s0",
       "ok": true
     },
@@ -300,5 +308,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-27T10:33:07Z"
+  "generated_at": "2026-08-28T02:36:40Z"
 }

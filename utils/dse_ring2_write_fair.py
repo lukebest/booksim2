@@ -560,8 +560,8 @@ TRACK128_FORECAST = {
         "makespan": [85000, 95000],
         "unbounded_gap_pct_max": 3.0,
         "jain_bin_mean": [0.972, 0.988],
-        "jain_bin_null": [0.955, 0.966],
-        "jain_bin_ratio": [1.010, 1.030],
+        "jain_bin_ideal": [0.955, 0.966],
+        "jain_vs_ideal": [1.010, 1.030],
     },
     "confidence": 0.8,
     "falsify": (
@@ -593,8 +593,8 @@ TRACK256_FORECAST = {
         "retry_per_txn": 0.0,
         "max_ha_used": 195,
         "jain_bin_mean": 0.98183,
-        "jain_bin_null": 0.96197,
-        "jain_bin_ratio": 1.02064,
+        "jain_bin_ideal": 0.96197,
+        "jain_vs_ideal": 1.02064,
     },
     "confidence": 0.85,
     "falsify": (
@@ -683,7 +683,7 @@ INJ_SEL_FORECAST = {
         "retry_per_txn": 0.0,
         # The fix lets whoever has a free slot go, which correlates with
         # position, so instantaneous evenness should get slightly worse.
-        "jain_bin_ratio": [0.97, 1.00],
+        "jain_vs_ideal": [0.97, 1.00],
     },
     "confidence": 0.8,
     "falsify": (
@@ -878,6 +878,56 @@ OVER_RSTAR = {
         "一次都没超过 1 flit/cycle。窗内能跑到 105.4% 是因为窗内的流量组合"
         "<b>偏离了绑定 hop</b>：它只吃到 16.20% 的窗内写 flit（名义 17.50%，"
         "可行上限 16.61%），欠下的穿越在收尾段以 0.9035 的利用率补完。"),
+}
+
+# Frozen: the variance decomposition redone on the per-direction fabric.
+# `probe_ring2_jitter2.py`, official K, 50-cycle bins.
+#
+# This is the measurement that decides whether phase 3's Jain line is reachable
+# at all, and it reverses the old answer. The statistic that matters is
+# `jain_regular`: give every core its own per-bin mean in every bin, i.e. remove
+# all timing jitter and keep only the long-run rate differences, then re-measure
+# binned Jain. That is the ceiling for *any* mechanism that only regularises
+# timing and never moves rate between cores.
+JITTER2 = {
+    "k": 20000, "bin_w": 50,
+    "rows": [
+        # scheme, per-core-per-bin flits, rate min, rate max, rate ratio,
+        # var_between, var_within, within share, jain_regular, Jbin actual
+        ["S0", 30.10, 21.201, 35.901, 1.6934, 44.283, 83.668, 0.654, 0.95341,
+         0.87865],
+        ["S22", 27.15, 27.147, 27.151, 1.0001, 0.0, 10.346, 1.000, 1.0,
+         0.98878],
+    ],
+    # A perfectly fair arbiter, viewed through the same 50-cycle window, does not
+    # score 1.0 -- it scores this. It is the honest reference for the 0.99 line.
+    "null": 0.96783,
+    "s22_over_null": 1.02164,
+    "verdict": (
+        "<b>上一轮「分箱不公平 99.9% 是时间抖动、可以近零代价抹平」的结论，"
+        "在新 fabric 上作废。</b>"
+        "决定性的数是 <code>jain_regular</code>：把每个核每箱的计数换成"
+        "它自己的均值（<u>抖动完全抹平、只留长期速率差</u>）再算分箱 Jain —— "
+        "S0 只有 <b>0.95341</b>。也就是说<b>任何只规整「时机」、"
+        "不搬动「速率」的机制，天花板都是 0.953，够不到 0.99</b>。"
+        "根源就是 3.2.0 那件事：核间长期速率是 21.2 对 35.9（比 1.6934），"
+        "六快四慢是固定分组，不是抖动。<br>"
+        "这里有个统计陷阱值得单独记下来：<b>方差占比会骗人</b>。"
+        "即使在新 fabric 上，within-core（抖动）仍占总方差的 65.4%，"
+        "between-core 只占 34.6% —— 按上一轮的读法又会得出「主要是抖动」。"
+        "但真正封顶的是那 34.6%。"
+        "<b>50 拍窗内每核只有约 30 个 flit，泊松式计数噪声天然主导方差，"
+        "所以方差占比根本不是回答这个问题的正确统计量</b>，"
+        "<code>jain_regular</code> 才是。<br>"
+        "反过来看 S22：它把核间速率差<b>完全消掉了</b>"
+        "（27.147 对 27.151，比 1.0001，var_between = 0，"
+        "<code>jain_regular</code> = 1.0），"
+        "所以它剩下的那 0.98878 到 1.0 的差<b>全部是计数噪声</b>，不是不公平。"
+        "作为参照：一个<u>完美公平</u>的仲裁器透过同样的 50 拍窗口去看也只有 "
+        "<b>0.96783</b>，而 S22 是它的 1.0216 倍。"
+        "<b>所以「Jain@50 > 0.99」这条线本身就画在「比理想随机还要更规整」"
+        "的位置上</b>，S22 差的那 0.0012 不是结构缺陷，"
+        "而是这个窗宽下的噪声底。"),
 }
 
 # Frozen: phase 2 re-run on the per-direction fabric -- 62 AIMD configs, and the
@@ -1274,6 +1324,10 @@ TAG_BELIEF = {
     ),
 }
 
+# Superseded on the per-direction fabric by `JITTER2`. Kept because the method
+# is unchanged and the contrast is the finding: here the between-core term was
+# negligible, there it is what binds. The labels also name `inj_sel` variants
+# that are a no-op once the ports are split by direction.
 JITTER_DECOMP = {
     "k": 2500, "bin_w": 50,
     "rows": [
@@ -1496,6 +1550,9 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
     if scheme == "S21":
         from rg_ring2_pace import Ring2PaceParams, Ring2PaceSim
         return Ring2PaceSim(topo, Ring2PaceParams(**kw), seed=seed)
+    if scheme == "S23":
+        from rg_ring2_fair import Ring2FairParams, Ring2FairSim
+        return Ring2FairSim(topo, Ring2FairParams(**kw), seed=seed)
     if scheme in ("S17", "S18", "S19", "S20"):
         from rg_ring2_rate import (Ring2DcqcnSim, Ring2DctcpSim,
                                    Ring2RateParams, Ring2SwiftSim,
@@ -1542,6 +1599,20 @@ def run_scheme(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     return r
 
 
+def jain_ideal_bin(n_flits: int, n_cores: int) -> float:
+    """Jain an ideal (deterministic) controller would score on `n_flits`.
+
+    It splits the bin's total as evenly as integers allow, so `r = N mod n`
+    cores take one more flit than the rest. Exact, not an approximation: the
+    per-bin totals it is fed are real counts.
+    """
+    if n_flits <= 0 or n_cores <= 0:
+        return 1.0
+    lo, r = divmod(int(n_flits), int(n_cores))
+    sq = r * (lo + 1) ** 2 + (n_cores - r) * lo * lo
+    return (n_flits * n_flits) / (n_cores * sq) if sq > 0 else 1.0
+
+
 def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
                 t_fair: int) -> dict[str, Any]:
     """Mean over `bin_w`-cycle bins of Jain across the cores in that bin.
@@ -1555,23 +1626,26 @@ def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
     first core has run out of work, and a zero there is an empty queue, not
     an unfair arbiter.
 
-    A bin this short holds few flits per core, so the index also carries
-    counting noise, and 1.0 is not reachable. `jain_bin_null` is where a
-    perfectly fair arbiter would land when observed through the same window:
-    split each bin's total multinomially over the cores at equal probability
-    and the per-core count has mean N/n and variance N(1/n)(1-1/n), so
+    A bin this short holds few flits per core, so exact equality is limited by
+    integer arithmetic and 1.0 is not always reachable. `jain_bin_ideal` is the
+    reference: **what an ideal congestion controller would have scored in this
+    same bin, having delivered the same N flits.** Being deterministic rather
+    than randomised, it splits N over n cores as evenly as integers allow --
+    `r = N mod n` cores get `ceil(N/n)`, the rest `floor(N/n)` -- so
 
-        E[J] ~ 1/(1 + CV^2) = N / (N + n - 1)
+        J_ideal(N) = N^2 / ( n * [ r*ceil(N/n)^2 + (n-r)*floor(N/n)^2 ] )
 
-    per bin. `jain_bin_ratio = mean / null` is then the number to judge:
-    >= 1.0 means the fabric is at least as even as perfectly fair
-    arbitration. An absolute threshold on `jain_bin_mean` would be
-    meaningless, because the floor moves with the flit count per bin and a
-    scheme that costs throughput lowers its own floor.
+    which is 1 - O(1/N^2). `jain_vs_ideal = mean / ideal` is then the number to
+    judge, and it isolates fairness cleanly: the ideal is evaluated at the
+    scheme's *own* delivered flit count, so a scheme cannot flatter itself on
+    this axis by throttling. Bandwidth is compared against the ideal separately
+    (`ideal_ring2_cc`), which is where losing throughput is supposed to show up.
 
-    The closed form is first order (1/(1+E[CV^2]) rather than E[1/(1+CV^2)]),
-    so it runs ~1e-3 below an actual equal-probability draw -- the acceptance
-    line is lenient by about that much. `verify_ring2_20` pins the gap.
+    This replaces an earlier reference, the multinomial "null model"
+    N/(N+n-1) -- the score a *fair but memoryless* arbiter earns through the
+    same window, about 0.970 here. That answered the wrong question: a
+    controller is allowed to be regular, not merely unbiased, so the null
+    understates what is achievable and gave no bandwidth reference at all.
     """
     cs = sorted(inject_times)
     nbin = int(t_fair) // bin_w if bin_w > 0 else 0
@@ -1587,12 +1661,12 @@ def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
     tot = [sum(cnt[i][b] for i in range(n)) for b in range(nbin)]
     vals = sorted(jain([cnt[i][b] for i in range(n)]) for b in range(nbin))
     per_bin = sum(vals) / nbin
-    null = sum(N / (N + n - 1) if N else 0.0 for N in tot) / nbin
+    ideal = sum(jain_ideal_bin(N, n) for N in tot) / nbin
     return {
         "bin_w": bin_w, "n_bins": nbin, "n_cores": n,
         "jain_bin_mean": round(per_bin, 5),
-        "jain_bin_null": round(null, 5),
-        "jain_bin_ratio": round(per_bin / null, 5) if null else None,
+        "jain_bin_ideal": round(ideal, 5),
+        "jain_vs_ideal": round(per_bin / ideal, 5) if ideal else None,
         "jain_bin_p05": round(vals[int(0.05 * nbin)], 5),
         "jain_bin_min": round(vals[0], 5),
         "flits_per_core_per_bin": round(sum(tot) / n / nbin, 2),
@@ -1884,8 +1958,8 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "makespan": r.get("makespan"), "completed": r.get("completed"),
         "throughput": f.get("throughput", 0.0), "jain": f.get("jain", 0.0),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "max_min": f.get("max_min", 0.0), "bw_min": f.get("bw_min", 0.0),
         "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
         "n_retry": q.get("n_retry", 0),
@@ -2153,8 +2227,8 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "retry_per_txn": q.get("retry_per_txn", 0.0),
         "ooo_frac": q.get("ooo_frac", 0.0),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "max_min": f.get("max_min", 0.0),
         "outst_eff": q.get("outst_eff_mean", 0.0),
         "outst_used": q.get("outst_used_mean", 0.0),
@@ -2330,8 +2404,8 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             row[scheme] = {
                 "jain": f["jain"], "max_min": f["max_min"],
                 "jain_bin": jb.get("jain_bin_mean"),
-                "jain_bin_null": jb.get("jain_bin_null"),
-                "jain_bin_ratio": jb.get("jain_bin_ratio"),
+                "jain_bin_ideal": jb.get("jain_bin_ideal"),
+                "jain_vs_ideal": jb.get("jain_vs_ideal"),
                 "throughput": f["throughput"],
                 "thr_delta_pct": (
                     round(100.0 * (f["throughput"] - thr0) / thr0, 2)
@@ -2339,7 +2413,7 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             }
         rows.append(row)
         print(f"    seed {sd}: " + "  ".join(
-            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_null']} "
+            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_ideal']} "
             f"mm={row[s]['max_min']} "
             f"({row[s]['thr_delta_pct']:+.2f}%)" for s in schemes), flush=True)
     return rows
@@ -2480,8 +2554,8 @@ def _report(pat: dict[str, Any]) -> None:
         f = d["fairness"]
         jb = f.get("jain_bin") or {}
         print(f"{name:6} {d['makespan']:>8} {int(bool(d['completed'])):>3} "
-              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_null', 0):>8} "
-              f"{jb.get('jain_bin_ratio', 0):>7} {f['max_min']:>8} "
+              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_ideal', 0):>8} "
+              f"{jb.get('jain_vs_ideal', 0):>7} {f['max_min']:>8} "
               f"{f['bw_min']:>8} {f['throughput']:>7} "
               f"{d['n_board_fail']:>9}")
     rc = pat.get("root_cause")

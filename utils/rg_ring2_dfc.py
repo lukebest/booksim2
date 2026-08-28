@@ -86,6 +86,17 @@ class Ring2DfcParams(Ring2BaseParams):
     # fairness and still risks a wasted hop, and the yielder already holds
     # the whole bus table, so it can compare the two deficits for free.
     dfc_margin: float = 0.0
+    # Per-cycle entitlement, in flits, for a *bus-free* variant. The equal-rate
+    # share on this fabric is a topology constant (lambda* = 2/7 txn/cycle/core,
+    # so 4/7 DAT flits split over two directions), not something that has to be
+    # discovered by comparing notes with the other cores. Set it and each node
+    # accrues `dfc_target` of deficit per cycle and spends 1.0 per boarded flit,
+    # so the deficit is a purely local counter: no bus posts, no 30-cycle delay,
+    # and the signal is exact rather than a 30-cycle-stale mean. 0 keeps the
+    # bus-derived mean. Note this changes only how the deficit is *measured* --
+    # the actuator is still the yield, so a node that has no entitlement stands
+    # aside for a needier one rather than idling its own hop.
+    dfc_target: float = 0.0
 
 
 @dataclass
@@ -207,11 +218,14 @@ class Ring2DfcSim(Ring2BaseSim):
     # -- control ------------------------------------------------------------
 
     def _ctrl_deliver(self) -> None:
-        due = self._pipe.pop(self.t, None)
-        if due:
-            for n, c in due.items():
-                self.cum_bus[n] += c
-            self._reprice()
+        if self.p.dfc_target > 0:
+            self._accrue()
+        else:
+            due = self._pipe.pop(self.t, None)
+            if due:
+                for n, c in due.items():
+                    self.cum_bus[n] += c
+                self._reprice()
         if not self.p.dfc_hold:
             return
         # A request cannot stop transit, so a requester starved by transit
@@ -219,6 +233,25 @@ class Ring2DfcSim(Ring2BaseSim):
         for h in [h for h in self.req
                   if self.t - self.req_t.get(h, self.t) >= self.p.dfc_hold]:
             self._stand_down(h)
+
+    def _accrue(self) -> None:
+        """Bus-free deficit: entitlement accrues at `dfc_target` every cycle.
+
+        The board path already spends the deficit (`-= 1.0` per flit), so all this
+        adds is the credit side. `dfc_cap` still bounds it in both directions,
+        which is what stops a node that has been starved for a long stretch from
+        holding a standing request forever.
+        """
+        p = self.p
+        for n in self._members():
+            self.deficit[n] = min(p.dfc_cap, self.deficit[n] + p.dfc_target)
+            if (self.deficit[n] >= p.dfc_thresh and n not in self.req
+                    and self.t >= self.quiet_until.get(n, 0)):
+                self.req.add(n)
+                self.req_t[n] = self.t
+                self.st["n_dfc_req"] += 1
+            elif self.deficit[n] <= p.dfc_clear and n in self.req:
+                self._stand_down(n)
 
     def _reprice(self) -> None:
         """Recompute every node's deficit from the freshly delivered table."""
@@ -245,9 +278,10 @@ class Ring2DfcSim(Ring2BaseSim):
         members = self._members()
         rec_d, rec_ok = [], []
         for n in members:
-            self._pipe[self.t + p.dfc_bus_lat][n] = min(BUS_MAX,
-                                                        self.ok_win[n])
-            self.bus_posts += 1
+            if p.dfc_target <= 0:      # bus-free variant posts nothing
+                self._pipe[self.t + p.dfc_bus_lat][n] = min(BUS_MAX,
+                                                            self.ok_win[n])
+                self.bus_posts += 1
             rec_d.append(round(self.deficit[n], 2))
             rec_ok.append(self.ok_win[n])
         self.ok_win.clear()

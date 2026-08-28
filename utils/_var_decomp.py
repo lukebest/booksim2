@@ -39,7 +39,7 @@ for lab, over in (("S0 rr", {}), ("S0 free_slot", {"inj_sel": "free_slot"})):
     var_within = st.mean([st.pvariance(cnt[c]) for c in cores])
     jb = binned_jain(inj, BIN_W, tf)
     print(f"{lab:14s} thr={f['throughput']:<8} maxmin={f['max_min']:<7} "
-          f"Jbin={jb['jain_bin_mean']} null={jb['jain_bin_null']}")
+          f"Jbin={jb['jain_bin_mean']} ideal={jb['jain_bin_ideal']}")
     print(f"   per-core per-bin mean={st.mean(mean_c.values()):.2f}  "
           f"var_between={var_between:.3f}  var_within={var_within:.3f}  "
           f"within share={var_within / (var_within + var_between):.3f}")
