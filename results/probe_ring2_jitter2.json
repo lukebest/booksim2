@@ -1,0 +1,38 @@
+{
+  "k": 20000,
+  "bin_w": 50,
+  "rows": [
+    {
+      "n_bins": 1114,
+      "per_core_per_bin": 30.1,
+      "var_between": 44.283,
+      "var_within": 83.668,
+      "within_share": 0.6539,
+      "between_share": 0.3461,
+      "jain_regular": 0.95341,
+      "jain_bin_mean": 0.87865,
+      "rate_min": 21.201,
+      "rate_max": 35.901,
+      "rate_ratio": 1.6934,
+      "scheme": "S0",
+      "thr": 5.4681,
+      "jain_bin_report": 0.87865
+    },
+    {
+      "n_bins": 1473,
+      "per_core_per_bin": 27.15,
+      "var_between": 0.0,
+      "var_within": 10.346,
+      "within_share": 1.0,
+      "between_share": 0.0,
+      "jain_regular": 1.0,
+      "jain_bin_mean": 0.98878,
+      "rate_min": 27.147,
+      "rate_max": 27.151,
+      "rate_ratio": 1.0001,
+      "scheme": "S22",
+      "thr": 5.4255,
+      "jain_bin_report": 0.98878
+    }
+  ]
+}
