@@ -2876,6 +2876,146 @@ def _ideal_lp_section() -> str:
 """
 
 
+def _tradeoff_section() -> str:
+    """The fairness/bandwidth exchange rate, derived as a curve."""
+    f = ROOT / "results" / "tradeoff_ring2_cc.json"
+    if not f.exists():
+        return ""
+    d = json.loads(f.read_text())
+    s0 = d.get("s0_bw")
+    inv = d["inverse"]
+    i99 = next((r for r in inv if abs(r["jain_target"] - 0.99) < 1e-9), None)
+    refs = d["reference_points"]
+    mm = next((r for r in refs if "max-min" in r["criterion"]), None)
+    pf = next((r for r in refs if "proportional" in r["criterion"]), None)
+
+    def _vs0(b):
+        return f"{100 * (b / s0 - 1):+.2f}%" if s0 else "—"
+
+    return f"""
+<h2>公平性与总带宽的 trade-off：形式化推导与曲线</h2>
+<div class="def">上一节给了两个点（R<sub>max</sub> 与 R*）。这一节给<b>整条交换曲线</b>：
+要多一点公平，需要付多少带宽。结论先说：
+<b>在 Jain = 0.99 处理想控制器能跑 {i99['bw']:.4f} flit/cycle，比 S0 高
+{_vs0(i99['bw'])}</b> —— 也就是说<b>更公平和更快并不冲突</b>，
+S0 根本不在前沿上。</div>
+
+<h3>1. 两种参数化，以及为什么第二种才是精确的</h3>
+<p><b>(a) θ 参数化（分段 LP）。</b>令
+θ = min<sub>c</sub>λ<sub>c</sub> / mean<sub>c</sub>λ<sub>c</sub> ∈ [0,1]，
+θ = 1 即严格等速率。带宽是参数化 LP</p>
+<p style="text-align:center">R(θ) = W · max {{ 1′λ : A′λ ≤ 1,
+λ ≥ (θ/n)·1′λ, λ ≥ 0 }}</p>
+<p>用归一化 λ = s·μ（1′μ = 1，s 为总事务率）可以把 θ 约束变成
+μ<sub>c</sub> ≥ θ/n（<b>与 s 无关</b>），容量约束变成
+s ≤ 1 / max<sub>r</sub> a<sub>r</sub>′μ，于是</p>
+<p style="text-align:center">R(θ)/W = 1 / g(θ)，&nbsp;&nbsp;
+g(θ) = min {{ max<sub>r</sub> a<sub>r</sub>′μ : μ ∈ 单纯形, μ ≥ (θ/n)·1 }}</p>
+<div class="def"><b>可以证明的三件事：</b>
+<ol>
+<li><b>g(θ) 凸、非减、分段线性。</b>取 θ₁、θ₂ 处的最优 μ₁、μ₂，其凸组合
+μ<sub>t</sub> 仍在混合 θ 的可行集内（求和为 1、且 ≥ 混合 θ/n），
+而 max<sub>r</sub> a<sub>r</sub>′μ 对 μ 是凸的，于是
+g(tθ₁+(1−t)θ₂) ≤ t·g(θ₁)+(1−t)·g(θ₂)。</li>
+<li><b>因此 1/R 对 θ 凸</b>（1/R = g/W 恒等）。
+注意 <b>R 本身并不全局凸</b>：在每个线性段上
+(1/g)″ = 2g′²/g³ &gt; 0 所以是凸的，但在 g 的折点处 g′ 向上跳、
+(1/g)′ 向下跳，<b>R 出现凹折点</b>。
+最明显的一个就在 θ₀ = {d['theta_0']:.3f}：θ &lt; θ₀ 时公平约束不起作用、
+R ≡ R<sub>max</sub>，过了 θ₀ 才开始下降，斜率从 0 跳到约 −1.7。
+<span class="note">本文早前的草稿断言 R 全局凸，被数值检验推翻
+（R 的 min Δslope = {d['convexity_min_slope_delta_bw']:+.2f}，
+而 1/R 的 min Δslope = {d['convexity_min_slope_delta_inv_bw']:+.1e}，
+到机器精度为凸）。已按上面改正，并写进回归
+<code>fairness_bandwidth_tradeoff</code>。</span></li>
+<li><b>公平端有闭式。</b>θ = 1 时 μ ≥ 1/n 与 1′μ = 1 迫使 μ 恰为均匀，故
+g(1) = max<sub>r</sub> ā<sub>r</sub>（ā<sub>r</sub> = 各核在资源 r 上的<b>平均</b>负载），
+<p style="text-align:center">λ* = 1 / (n·max<sub>r</sub> ā<sub>r</sub>)，&nbsp;&nbsp;
+<b>R* = W / max<sub>r</sub> ā<sub>r</sub> = {d['r_fair_closed_form']:.4f}</b></p>
+这里<b>没有优化，只有一个对资源取 max</b>，绑定资源是
+<code>{d['binding_resource_fair']}</code>。这正是 R* 会得出 40/7 这种精确有理数的原因。</li>
+</ol></div>
+
+<h3>2. 精确前沿：Jain ≥ J 其实是凸约束</h3>
+<p>θ（min/mean）和 Jain 是<b>不同</b>的公平度量，所以按 θ 扫出来的曲线只是
+R(J) 的<b>内界</b>。好在 Jain 约束本身是凸的：</p>
+<p style="text-align:center">J(λ) = (1′λ)² / (n‖λ‖₂²) ≥ J
+&nbsp;⟺&nbsp; ‖λ‖₂ ≤ (1′λ) / √(J·n)</p>
+<p>这是一个<b>二阶锥</b>约束（L2 范数被线性函数控住），于是
+「在容量约束下最大化总速率，且 Jain ≥ J」是凸问题，
+R(J) 可以<b>精确</b>求出而不是估：</p>
+<p style="text-align:center">R(J)/W = 1 / min {{ max<sub>r</sub> a<sub>r</sub>′μ :
+μ ∈ 单纯形, ‖μ‖₂ ≤ 1/√(J·n) }}</p>
+<p class="note">自洽检验：J = 1 时球半径 1/√n 恰好是单纯形上 ‖μ‖₂ 的最小值、
+且只在均匀点取到，所以 R(1) 必须还原闭式 (C) —— 实测
+{next(r['bw'] for r in inv if abs(r['jain_target'] - 1.0) < 1e-9):.4f}
+对 {d['r_fair_closed_form']:.4f}，一致。</p>
+
+{_table(["要求的 Jain", "理想可达带宽 flit/cycle", "占 R<sub>max</sub>",
+         "相对 R*", "相对 S0"],
+        [[f"{r['jain_target']:.3f}", f"<b>{r['bw']:.4f}</b>",
+          f"{100 * r['bw'] / d['r_max']:.1f}%",
+          f"{100 * (r['bw'] / d['r_fair'] - 1):+.2f}%", _vs0(r["bw"])]
+         for r in inv])}
+
+<img src="tradeoff_ring2_cc.png" alt="fairness-bandwidth tradeoff">
+
+<h3>3. 教科书公平判据落在哪</h3>
+<p>把 θ 换成标准的 α-公平目标
+max Σ λ<sub>c</sub><sup>1−α</sup>/(1−α)（α = 0 为最大吞吐、α = 1 为比例公平、
+α → ∞ 为 max-min 公平），再用逐步填充法精确解 max-min 公平：</p>
+{_table(["公平判据", "带宽", "占 R<sub>max</sub>", "速率 Jain",
+         "分箱 Jain", "min/mean"],
+        [[r["criterion"], f"{r['bw']:.4f}", f"{r['pct_of_max']:.2f}%",
+          f"{r['jain_rate']:.5f}", f"{r['jain_bin']:.5f}",
+          f"{r['min_over_mean']:.4f}"] for r in refs])}
+<div class="def"><b>两个值得记住的落点：</b>
+<ul>
+<li><b>比例公平（α = 1）恰好停在 θ₀ = {d['theta_0']:.3f}</b>，
+带宽 {pf['bw'] if pf else 0:.4f} = R<sub>max</sub>。
+也就是说<b>把 min/mean 从 0 提到 0.625 是完全免费的</b> ——
+最大吞吐面本身就足够宽，这一段公平不要钱。
+真正开始付费是从 θ₀ 往后。</li>
+<li><b>max-min 公平恰好落在等速率点</b>（Jain = 1.000、
+带宽 {mm['bw'] if mm else 0:.4f} = R*）。
+这一条原本预期会更高（max-min 允许占优核在饿核被钉住后继续往上走），
+实测<b>没有</b>：说明那几个结构性劣势核与其它每个核都共享了饱和资源，
+一旦它们被钉死，谁都抬不动了。
+<b>这让 R* 从"我们选的一个点"升格为"标准公平判据自己选出的点"。</b></li>
+</ul></div>
+
+<h3>4. 边际价格：最后一点公平最贵</h3>
+<p>右图是 −dR/dJ。它单调上升，且在 J → 1 附近陡然拉起。
+要做对比必须比<b>单位 Jain 的价格</b>而不是比总量：</p>
+{_table(["区间", "ΔJain", "带宽代价", "单位 Jain 的价格"],
+        [["0.9143（最大吞吐）→ 0.99", f"{0.99 - 0.91429:.4f}",
+          f"{100 * (1 - i99['bw'] / d['r_max']):.2f}%",
+          f"{(1 - i99['bw'] / d['r_max']) / (0.99 - 0.91429):.2f}"],
+         ["0.99 → 1.000（严格等速率）", "0.0100",
+          f"{100 * (1 - d['r_fair'] / i99['bw']):.2f}%",
+          f"<b>{(1 - d['r_fair'] / i99['bw']) / 0.01:.2f}</b>"]])}
+<p>最后那 0.01 的 Jain，单价是前面那一大段的
+<b>{((1 - d['r_fair'] / i99['bw']) / 0.01) / ((1 - i99['bw'] / d['r_max']) / (0.99 - 0.91429)):.1f} 倍</b>。
+所以<b>验收线定在 0.99 而不是 1.0，是个便宜得多的要求</b> ——
+这正是下一段结论成立的原因。</p>
+
+<div class="def good"><b>对本研究两条验收线的直接结论</b>：
+验收要求 Jain &gt; 0.99 且带宽 ≥ 99%·S0 = {0.99 * s0 if s0 else 0:.4f}。
+前沿在 Jain = 0.99 处给出 {i99['bw']:.4f}，
+<b>比这条带宽下限高 {100 * (i99['bw'] / (0.99 * s0) - 1):.1f}%</b>
+（图一右上角绿色验收区间内，前沿明显穿过它）。
+所以<b>两条线不但不互斥，而且离 fabric 极限还有很大余量</b> ——
+理想控制器可以在 Jain = 0.99 的同时比 S0 快 {_vs0(i99['bw'])}。
+实测方案全都落在前沿下方很远处（图一蓝点），
+差距因此完全是<b>机制层面</b>的，与容量无关。</div>
+<p class="note">数据 <code>results/tradeoff_ring2_cc.json</code>，
+推导 <code>utils/tradeoff_ring2_cc.py</code>，
+回归 <code>fairness_bandwidth_tradeoff</code> 钉住闭式 (C)、1/R 的凸性、
+R 在 θ₀ 的凹折点、SOCP 在 J=1 处还原 R*、以及 max-min = 等速率。
+实测点取自 K={next((m for m in [2000]), 2000)} 的筛选轮，与前沿同图仅作定位之用。</p>
+"""
+
+
 def _pareto_section(imgs: dict) -> str:
     """The scheme zoo, the frontier, and what the frontier points actually are."""
     f = ROOT / "results" / "pareto_ring2_cc.json"
@@ -5393,6 +5533,7 @@ ha_track = {meta.get('ha_track')}，配额从未触发，
 {_s1_tune_section(pat, imgs)}
 {_s22_section(meta, pat, imgs)}
 {_ideal_lp_section()}
+{_tradeoff_section()}
 {_pareto_section(imgs)}
 
 <p class="note" style="margin-top:2rem">

@@ -1776,6 +1776,69 @@ def test_s22_dodge_keeps_order_per_destination() -> None:
     assert leg(4) == 4      # different destination, clears node 6: overtake
 
 
+def test_fairness_bandwidth_tradeoff_structure() -> None:
+    """The trade-off curve's derivation, pinned at its three provable claims.
+
+    The report now quotes an exchange rate between fairness and total bandwidth
+    (e.g. "the ideal controller reaches Jain 0.99 at 5.92 flit/cycle, 9.8% above
+    S0"). Those numbers come out of two different programs -- a parametric LP in
+    theta and a second-order-cone program in Jain -- and a silent error in either
+    would rescale the claim without breaking anything else. So check the parts
+    that theory fixes exactly:
+
+      1. Closed form (C): R* = W / max_r abar_r, no optimisation involved.
+      2. Fact 2: 1/R(theta) is convex. R itself is *not* -- it has a concave kink
+         at theta_0 -- and an earlier draft got this backwards, so both halves are
+         asserted to keep the distinction from silently flipping back.
+      3. The SOCP frontier must dominate the theta parametrisation (theta is a
+         cruder fairness measure than Jain) and must coincide with R* at J = 1,
+         where the norm ball touches the simplex only at the uniform point.
+      4. Max-min fairness lands exactly on the equal-rate point here, which is
+         what makes R* the canonical fair operating point rather than a choice.
+    """
+    import numpy as np
+
+    from ideal_ring2_cc import coefficients, dest_mix, jain, solve_theta
+    from tradeoff_ring2_cc import max_min_fair, solve_jain, tighten
+
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
+    cores, names, a = coefficients(topo, dest_mix(k=1600))
+    n, w = len(cores), 2
+
+    # 1. closed form at the fair end
+    abar = a.mean(axis=0)
+    r_closed = w / float(abar.max())
+    r_fair = w * float(solve_theta(a, 1.0).sum())
+    assert abs(r_closed - r_fair) < 1e-6, (r_closed, r_fair)
+    assert abs(r_fair - 40 / 7) < 1e-6, r_fair
+    assert names[int(abar.argmax())].startswith("hop:"), names[int(abar.argmax())]
+
+    # 2. 1/R convex in theta; R itself has a concave kink
+    th = np.linspace(0.0, 1.0, 81)
+    bw = np.array([w * float(solve_theta(a, float(t)).sum()) for t in th])
+    assert np.all(np.diff(bw) <= 1e-9), "R must be non-increasing"
+    inv_d2 = np.diff(np.diff(1.0 / bw) / np.diff(th))
+    assert inv_d2.min() > -1e-8, f"1/R not convex: {inv_d2.min():+.2e}"
+    bw_d2 = np.diff(np.diff(bw) / np.diff(th))
+    assert bw_d2.min() < -0.5, f"expected a concave kink in R, got {bw_d2.min()}"
+
+    # 3. the SOCP frontier: exact at J=1, and never below the theta curve
+    lam1 = solve_jain(a, 1.0)
+    assert abs(w * float(lam1.sum()) - r_fair) < 1e-4, lam1.sum()
+    assert abs(jain(lam1) - 1.0) < 1e-6, jain(lam1)
+    for jt in (0.95, 0.99):
+        lam = solve_jain(a, jt)
+        assert (a.T @ lam).max() <= 1 + 1e-9, jt
+        assert jain(lam) >= jt - 1e-4, (jt, jain(lam))
+        # Dominates equal-rate, since Jain >= 0.99 is weaker than exact equality.
+        assert w * float(lam.sum()) > r_fair - 1e-6, (jt, lam.sum())
+
+    # 4. max-min fair == equal rate on this fabric
+    lam_mm = tighten(a, max_min_fair(a))
+    assert abs(jain(lam_mm) - 1.0) < 1e-6, jain(lam_mm)
+    assert abs(w * float(lam_mm.sum()) - r_fair) < 1e-6, lam_mm.sum()
+
+
 def test_s25_local_target_uses_no_bus() -> None:
     """S25's claim to cost no bus has to be structural, not just configured.
 
@@ -2124,6 +2187,7 @@ def main() -> None:
           test_s22_dodge_keeps_order_per_destination)
     c.add("s22_deficit_via_bus", test_s22_deficit_reads_own_progress_off_the_bus)
     c.add("s25_local_target_uses_no_bus", test_s25_local_target_uses_no_bus)
+    c.add("fairness_bandwidth_tradeoff", test_fairness_bandwidth_tradeoff_structure)
     c.add("rate_pinned_equals_s0", test_rate_pinned_reproduces_baseline)
     c.add("rate_control_cuts_retries", test_rate_control_cuts_retries)
     c.add("window_pinned_equals_s0", test_window_pinned_reproduces_baseline)

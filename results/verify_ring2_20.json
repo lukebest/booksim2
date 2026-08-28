@@ -1,6 +1,6 @@
 {
-  "n_total": 76,
-  "n_ok": 76,
+  "n_total": 77,
+  "n_ok": 77,
   "all_ok": true,
   "rows": [
     {
@@ -292,6 +292,10 @@
       "ok": true
     },
     {
+      "name": "fairness_bandwidth_tradeoff",
+      "ok": true
+    },
+    {
       "name": "rate_pinned_equals_s0",
       "ok": true
     },
@@ -308,5 +312,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-28T02:36:40Z"
+  "generated_at": "2026-08-28T03:20:09Z"
 }
