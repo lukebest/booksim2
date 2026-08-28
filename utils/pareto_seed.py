@@ -65,19 +65,21 @@ HW: dict[str, dict] = {
     "s23": {"bus_bits": 6, "table_entries": 10, "table_bits": 8,
             "counter_bits": 24, "counter_scope": 10,
             "arith": {"addtree10": 1, "add": 2, "cmp": 3}, "arith_scope": 10},
-    # The fair share is a topology constant, so there is nothing to signal:
-    # one rate register and one credit counter per (core, VC, direction).
-    "s24": {"counter_bits": 32, "counter_scope": 10,
-            "arith": {"cmp": 2, "add": 2}, "arith_scope": 10},
-    # S25 keeps S22's yield actuator but takes its deficit from the same constant
-    # target S24 uses, so the flow-control bus, its 10-entry mirror table and its
-    # adder tree all disappear. What remains is S24's counter plus a 1-bit
-    # request line between ring neighbours -- a local wire, not the dedicated bus,
-    # so it is not subject to the 30-cycle rule. `dfc_dodge` is measured inert
-    # here, so there is no look-ahead comparator bank and no queue growth.
-    "s25": {"bus_bits": 1, "counter_bits": 24, "counter_scope": 10,
-            "arith": {"add": 2, "cmp": 3}, "arith_scope": 10},
 }
+
+# Withdrawn: S24 (rate-pinned pacer) and S25 (local-target yield). Both were
+# cheap only because they hard-coded the equal-rate share lambda* = 2/7 instead of
+# measuring it, and lambda* is a constant of the fabric *and the traffic pattern*
+# together. `probe_ring2_unbalanced` measures the two ways that premise breaks:
+# under destination skew (`hot`) the LP's answer moves to 0.100, so a pin at 2/7
+# is 2.9x over-provisioned and stops regulating (S24's Jain falls 0.974 -> 0.736);
+# under demand skew (`skew`) lambda* barely moves, yet the pin still costs 22.4% of
+# throughput because it cannot hand a drained core's share to a core still
+# working. The second failure is the one that also rules out the obvious rescue --
+# shipping the constant with a safety margin -- since the error there is not in
+# the value of lambda* but in the very act of fixing it ahead of time. Their rows
+# are kept out of the registry so the frontier reflects only deployable schemes;
+# the retired numbers live in the report's withdrawal section.
 
 # Which hardware spec and taxonomy each family-sweep row belongs to.
 FAMILY_HW = {
@@ -121,40 +123,15 @@ def main() -> None:
                  b23["jain_bin"], HW["s23"], True, "sender", "rate", "bus",
                  s23["k"]))
 
-    # S22 at stock queue depth, and the S24 burst family: both from the probe that
-    # asked which expensive parts are still load-bearing at a 30-cycle bus.
+    # S22 at stock queue depth, from the probe that asked which expensive parts are
+    # still load-bearing at a 30-cycle bus. The same probe's S24 burst family is
+    # withdrawn -- see the note above HW.
     cheap = json.loads((RES / "probe_ring2_cheap.json").read_text())
     c22 = max((r for r in cheap["rows"] if r["group"] == "s22"
                and r["over"].get("dir_inj_depth") == 8), key=lambda x: x["eta"])
     rows.append(("S22 deficit-yield STOCK depth bus30 w64", c22["thr"],
                  c22["jain_bin"], HW["s22stock"], True, "recv", "arb", "bus",
                  cheap["k"]))
-
-    # S24 is a gate with no signalling at all, so its burst depth traces a clean
-    # one-parameter frontier: burst 1 discards every unused credit (most regular,
-    # least bandwidth), a deep bank discards none (S0-like). Carry all three
-    # characteristic points -- the two endpoints bound what an injection-gating
-    # actuator can do, and the middle is where its eta peaks.
-    s24 = {r["over"]["fair_burst"]: r for r in cheap["rows"]
-           if r["group"] == "s24"}
-    for burst, label in ((1.0, "Jain-max"), (8.0, "eta-max"),
-                         (16.0, "bw-parity")):
-        b = s24[burst]
-        rows.append((f"S24 rate-pinned {label} (burst {burst:g})", b["thr"],
-                     b["jain_bin"], HW["s24"], True, "sender", "rate", "none",
-                     cheap["k"]))
-
-    # S25: the cross of the two above -- S22's yield actuator on S24's constant
-    # local target. Both sweeps are pooled; the eta-max and the bandwidth-max
-    # points bracket what the yield actuator does once the bus is gone.
-    s25 = (json.loads((RES / "probe_ring2_s25.json").read_text())["rows"]
-           + json.loads((RES / "probe_ring2_s25b.json").read_text())["rows"])
-    for pick, label in ((lambda x: x["eta"], "eta-max"),
-                        (lambda x: x["thr"], "bw-max")):
-        b = max(s25, key=pick)
-        rows.append((f"S25 local-target yield {label}", b["thr"],
-                     b["jain_bin"], HW["s25"], True, "recv", "arb", "local",
-                     2000))
 
     REG.unlink(missing_ok=True)
     for name, thr, jain, hw, bus_ok, drv, ctl, trg, kk in rows:

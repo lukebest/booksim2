@@ -2869,10 +2869,19 @@ def _ideal_lp_section() -> str:
 这条结论作废了早期基于 S22 调参前沿得出的"两条线互斥"的说法 ——
 那只说明<b>那一族机制</b>做不到，不是 fabric 做不到。
 真实方案做不到的原因要到机制层面去找，见下一节的执行器分析。</div>
+<div class="def"><b>适用范围：λ* = 2/7 是「fabric + 流量 pattern」的解，不是 fabric 常数。</b>
+LP 的约束矩阵 A 是用 workload 的<b>目的地分布</b>算出来的，所以换一个 pattern
+就要重解。换成 <code>hot</code>（写全部挤进 HA 11/13）后绑定资源从入环 hop
+变成热簇的下环口，λ* 掉到 0.100（−65%），R* 从 5.7143 掉到 2.0000。<br>
+这不影响本报告把 2/7 当参照 —— 主 workload 就是 <code>uniform</code>，
+每个 workload 都可以用自己的 A 重解一次。但它<b>决定了什么样的方案是可部署的</b>：
+任何把 λ* 写进硬件的设计只对它被推导时的那个 pattern 正确。
+这正是 S24 / S25 被撤下的原因，见方案空间一节。</div>
 <p class="note">数据：<code>results/ideal_ring2_cc.json</code>，
 推导脚本 <code>utils/ideal_ring2_cc.py</code>，
 回归 <code>test_ideal_cc_lp_matches_fabric</code> 钉住 λ* = 2/7、R* = 40/7、
-瓶颈必须是 hop、以及最大吞吐解必须饿死结构性劣势核。</p>
+瓶颈必须是 hop、以及最大吞吐解必须饿死结构性劣势核；
+<code>test_fair_share_is_pattern_dependent</code> 钉住换 pattern 后 λ* 必须搬家。</p>
 """
 
 
@@ -3016,6 +3025,90 @@ R 在 θ₀ 的凹折点、SOCP 在 J=1 处还原 R*、以及 max-min = 等速�
 """
 
 
+def _unbal_section() -> str:
+    """Why the two rate-pinned schemes were withdrawn, measured not asserted."""
+    f = ROOT / "results" / "probe_ring2_unbalanced.json"
+    if not f.exists():
+        return ""
+    d = json.loads(f.read_text())
+    w = d["workloads"]
+    names = [r["name"] for r in w["uniform"]["rows"]]
+    lam_u = d["lam_uniform"]
+
+    def cell(wl: str, name: str) -> str:
+        r = next((x for x in w[wl]["rows"] if x["name"] == name), None)
+        if r is None:
+            return "—"
+        return f"{r['jain_bin']:.4f} / {r['delta_vs_s0_pct']:+.2f}%"
+
+    hdr = ["方案", "类型"] + [f"{k}：Jain / 带宽 vs 该流量下的 S0"
+                              for k in ("uniform", "hot", "skew")]
+    body = [[n.split(" (先")[0], next(x["kind"] for x in w["uniform"]["rows"]
+                                     if x["name"] == n)]
+            + [cell(k, n) for k in ("uniform", "hot", "skew")]
+            for n in names]
+    lam_tbl = _table(["流量", "λ* (txn/cycle/core)", "vs uniform", "R* (flit/cycle)",
+                      "绑定资源"],
+                     [[k, f"{w[k]['ideal']['lam_star']:.6f}",
+                       f"{100 * (w[k]['ideal']['lam_star'] / lam_u - 1):+.1f}%",
+                       f"{w[k]['ideal']['r_fair']:.4f}",
+                       f"<code>{w[k]['ideal']['binding']}</code>"]
+                      for k in ("uniform", "hot", "skew")])
+    hot = w["hot"]["ideal"]
+    s24h = next((r for r in w["hot"]["rows"] if r["name"].startswith("S24")), {})
+    s24u = next((r for r in w["uniform"]["rows"]
+                 if r["name"].startswith("S24")), {})
+    s24s = next((r for r in w["skew"]["rows"] if r["name"].startswith("S24")), {})
+    s25s = next((r for r in w["skew"]["rows"] if r["name"].startswith("S25")), {})
+    return f"""
+<div class="def bad"><b>S24（定速率钉死）与 S25（本地恒定目标让位）已从方案集中撤下。</b>
+两者<b>唯一</b>的便宜之处在于它们把公平份额 λ* = 2/7 直接<b>写死</b>而不是测出来，
+而 λ* 是<b>把 fabric 和流量 pattern 一起</b>解出来的 LP 解，不是 fabric 的常数。
+只要 workload 不保证一直均衡，这个前提就不成立。</div>
+<p>这一点是<b>实测</b>的，不是论证的。同一套代码在三个 workload 上跑，
+每个 workload 的理想上限都用<b>它自己的目的地分布</b>重解一次 LP：</p>
+{lam_tbl}
+<p><b>先验失效有两种独立的方式，而且都是致命的：</b></p>
+<ol>
+<li><b>目的地倾斜（<code>hot</code>）：λ* 本身搬家了。</b>
+所有写挤进 HA 11/13 两个节点后，绑定资源从入环 hop
+<code>{w['uniform']['ideal']['binding']}</code> 换成了热簇的下环口
+<code>{hot['binding']}</code>，λ* 掉到 {hot['lam_star']:.4f}，
+比 uniform 低 <b>{abs(100 * (hot['lam_star'] / lam_u - 1)):.0f}%</b>，R* 从
+{w['uniform']['ideal']['r_fair']:.4f} 掉到 {hot['r_fair']:.4f}。
+钉在 2/7 就是<b>超配 {lam_u / hot['lam_star']:.1f} 倍</b> ——
+额度永远用不完，控制器<b>直接停止工作</b>：S24 的分箱 Jain 从
+{s24u.get('jain_bin', 0):.4f} 掉到 {s24h.get('jain_bin', 0):.4f}，
+公平性优势基本蒸发，带宽却还是亏
+{abs(s24h.get('delta_vs_s0_pct', 0)):.2f}%。</li>
+<li><b>需求倾斜（<code>skew</code>）：λ* 没搬家，钉速照样错。</b>
+一半的核只有 1/3 的写量，λ* 只动了
+{100 * (w['skew']['ideal']['lam_star'] / lam_u - 1):+.1f}% ——
+可是 S24 亏 <b>{abs(s24s.get('delta_vs_s0_pct', 0)):.2f}%</b>、S25 亏
+<b>{abs(s25s.get('delta_vs_s0_pct', 0)):.2f}%</b> 带宽，
+自适应方案全在 ±4% 内。原因是钉死的额度<b>无法把提前排空的核的份额交给还在跑的核</b>：
+S0 在这个 workload 上能跑到 {next(r['thr'] for r in w['skew']['rows'] if r['name'].startswith('S0')):.4f}
+flit/cycle（超过等速率 R*，因为轻载核退出后重载核吃下了余量），
+而钉速方案被自己的常数压在 {s24s.get('thr', 0):.4f}。</li>
+</ol>
+<div class="def"><b>第 2 条同时否掉了唯一的补救办法。</b>
+如果只有第 1 条，那么"把常数配一个安全余量、或按 workload 换一组配置"还能算方案。
+但第 2 条里 λ* 是<b>对的</b>，错的是"提前把速率固定下来"这个动作本身 ——
+公平分配随着谁还有活干而变化，只有<b>测量</b>才能跟上。
+所以这不是参数问题，是这一类方案的结构性缺陷。</div>
+<p class="note">撤下的代价要说清楚：S24 曾是全部可实现方案里 η 最高的
+（burst 8 时 η 0.8945），S25 是公平度最高且带宽仍在 −4% 内的
+（Jain 0.9795、η 0.8897）。撤下后<b>可实现前沿的顶点从 η 0.8945 降到
+{next((r['eta'] for r in json.loads((ROOT / 'results' / 'pareto_ring2_cc.json').read_text())['schemes'] if 'STOCK' in r['name']), 0):.4f}</b>。
+但两条验收线的判定<b>没有变化</b> —— S24 从来也没同时过线：
+burst 1 时 Jain 0.9903 过了公平线，带宽却是 −23.55%。
+数据见 <code>results/probe_ring2_unbalanced.json</code>。</p>
+<p class="note">它们的实现（<code>fair_init</code> 钉死、<code>dfc_target</code>
+本地目标）保留在代码里，但只作为<b>受控实验</b>使用：把"门控 vs 让位"
+这个执行器对比里除执行器之外的一切都变成同一个常数目标，
+是分离出执行器本身代价的最干净办法，见下一节。</p>"""
+
+
 def _pareto_section(imgs: dict) -> str:
     """The scheme zoo, the frontier, and what the frontier points actually are."""
     f = ROOT / "results" / "pareto_ring2_cc.json"
@@ -3095,30 +3188,53 @@ round-robin"，加上 I-tag（饥饿门限 t_inj）与 E-tag（下环失败强�
 只有 {next((r['jain_bin'] for r in rows if r['name'].startswith('S16')), 0):.5f}，
 离 0.99 还远。</p>
 
-<h4>3. S24 定速率钉死（η {next((r['eta'] for r in rows if r['name'].startswith('S24 rate-pinned eta')), 0):.4f}，
-{next((r['hw_cost'] for r in rows if r['name'].startswith('S24 rate-pinned eta')), 0):,} FF-eq）——
-前沿顶点，且<b>完全不需要信令</b></h4>
-<p><b>分类</b>：sender-driven，rate-based，<b>无触发</b>（开环）。
-<b>机制</b>：直接把每个核钉在 LP 解出来的公平份额
-λ* = 2/7 txn/cycle（每方向 2/7 写 flit/cycle）。这是本研究的一个核心观察：
-<b>公平份额是拓扑常数，不需要靠互相比较去发现</b>，
-所以既不用总线也不用测量，从而完全绕开了"任何总线使用花 30 拍"这条约束。
-实现是每 (core, VC, 方向) 一个信用计数器：每拍加 λ*，上环一个 flit 减 1。
-<b>唯一参数是信用桶深 <code>burst</code></b>，它决定"没用上的额度是丢掉还是存起来"：</p>
-{_table(["burst（桶深）", "分箱 Jain", "带宽 / R*", "vs S0", "η"],
-        [[b, f"{r['jain_bin']:.5f}", f"{r.get('bw_vs_ideal', 0):.4f}",
-          f"{r.get('delta_s0_pct', 0):+.2f}%", f"{r.get('eta', 0):.4f}"]
-         for b, r in sorted(
-             ((r["name"].split("burst ")[-1].rstrip(")"), r) for r in rows
-              if r["name"].startswith("S24 rate-pinned")),
-             key=lambda x: float(x[0]))])}
-<p><b>这条一参数曲线就是"门控型执行器"的完整能力边界</b>：
-burst = 1 时每拍用不掉的额度立刻作废，注入变成严格的定间隔过程，
-分箱 Jain 达到 0.9903 —— <b>过了 0.99 这条线</b> ——
-但代价是 23.55% 的带宽。桶越深，作废越少、带宽越回来，
-而注入越成串、Jain 越低；burst = 16 时带宽只差 S0 0.84%（过带宽线），
-Jain 掉到 0.952。<b>两条线在这条曲线上无法同时满足。</b>
-η 在 burst = 8 处取到最大 0.8945，是全部<b>可实现</b>方案里最高的。</p>
+<h4>3. S20 DCTCP（η {next((r['eta'] for r in rows if r['name'].startswith('S20')), 0):.4f}，
+{next((r['hw_cost'] for r in rows if r['name'].startswith('S20')), 0):,} FF-eq）——
+唯一带宽为正的中价位点</h4>
+<p><b>分类</b>：sender-driven，window-based，ECN 触发（在带标记，不用专有总线）。
+<b>机制</b>：下环 buffer 占用越过 K<sub>min</sub> 就在经过的 flit 上打标记，
+源端按标记比例的 EWMA 做窗口乘性缩减、无标记时加性恢复。
+<b>为什么在前沿上</b>：它是本轮唯一<b>带宽比 S0 还高</b>
+（{next((r.get('delta_s0_pct', 0) for r in rows if r['name'].startswith('S20')), 0):+.2f}%）
+而 Jain 也有改善的点 —— 标记发生在真正拥塞的那个下环口上，
+所以它削掉的正是会导致 E-tag 绕环重试的那部分注入。
+<b>局限</b>：ECN 是<b>拥塞</b>信号而不是<b>公平</b>信号，
+分箱 Jain 只到 {next((r['jain_bin'] for r in rows if r['name'].startswith('S20')), 0):.5f}；
+而且它在不均衡流量下会明显偏向吞吐（见下面的 <code>hot</code> 一列，
+带宽 +33.6% 但 Jain 掉到 0.352）。</p>
+
+<h4>4. S22 赤字让位 · stock 深度（η
+{next((r['eta'] for r in rows if 'STOCK' in r['name']), 0):.4f}，
+{next((r['hw_cost'] for r in rows if 'STOCK' in r['name']), 0):,} FF-eq）——
+<b>当前性价比最好的可实现点</b></h4>
+<p><b>分类</b>：receiver-driven（被落后者驱动），仲裁型执行器，总线触发（30 拍）。
+<b>机制</b>：每个核把自己已上环的累计数广播到流控总线上，
+节点算出"总线均值 − 自己"作为<b>赤字</b>；赤字越线的节点在相邻段内举起请求，
+上游节点看到请求就<b>为它让开一个 slot</b>，同时用 <code>dodge</code>
+改发一个会在请求者之前下环的 flit，使自己的 hop 不空转。
+<b>硬件</b>：6 bit 广播 × 20 节点 + 10 表项镜像表 + 10 bit 计数器 + 加法树
++ 8 路前瞻比较器 = {next((r['hw_cost'] for r in rows if 'STOCK' in r['name']), 0):,} FF-eq。
+<b>为什么在前沿上</b>：带宽只差 S0
+{abs(next((r.get('delta_s0_pct', 0) for r in rows if 'STOCK' in r['name']), 0)):.2f}%
+而 Jain 从 {next((r['jain_bin'] for r in rows if r['name'].startswith('S0')), 0):.5f}
+抬到 {next((r['jain_bin'] for r in rows if 'STOCK' in r['name']), 0):.5f}，
+是所有 &lt; 20k FF-eq 的方案里 η 最高的。目标值全部来自<b>测量</b>
+（总线上的实际达成量），没有任何流量先验，所以在
+<code>hot</code> / <code>skew</code> 两个不均衡流量下相对 S0 的表现基本不变
+（−0.77% / −2.64%）。<b>局限</b>：30 拍总线迫使控制窗口放宽到 64 拍，
+比 50 拍的验收窗还宽，所以它<b>无法在验收的那个时间尺度上闭环</b> ——
+这是它停在 Jain 0.92 的直接原因。</p>
+
+<h4>5. S22 赤字让位 · 深队列（η
+{next((r['eta'] for r in rows if r['name'].startswith('S22 deficit-yield bus30')), 0):.4f}，
+1,198,560 FF-eq）——前沿末端，性价比极差</h4>
+<p>同一个控制器，把注入队列从 12/8 加深到 32/32。η 只多
++{next((r['eta'] for r in rows if r['name'].startswith('S22 deficit-yield bus30')), 0) - next((r['eta'] for r in rows if 'STOCK' in r['name']), 0):.4f}，
+硬件贵 86 倍。它留在前沿上只是因为前沿的定义只看"更贵是否更好"，
+<b>不是推荐工作点</b>；详见下面的发现 (a)。</p>
+
+<h3>被撤下的方案：静态钉速依赖流量先验</h3>
+{_unbal_section()}
 
 <h3>为什么门控型执行器一定要付这个带宽代价</h3>
 <div class="def">这是本轮最有解释力的发现，也解释了前沿为什么停在 η ≈ 0.89。
@@ -3132,22 +3248,34 @@ Jain 掉到 0.952。<b>两条线在这条曲线上无法同时满足。</b>
 在这颗 fabric 上本身是有损的，而且转移得越多、损失越大</b> ——
 LP 上限看不到这项损失，因为 LP 假设有一个全局调度器直接安排无冲突的时隙。</div>
 <p><b>用让位型（yield）执行器可以把这个代价压小，但压不掉。</b>
-S22 与 S25 的动作不是"不上环"，而是"<b>为某个指名的、更落后的邻居</b>让开，
+S22 的动作不是"不上环"，而是"<b>为某个指名的、更落后的邻居</b>让开，
 同时通过 <code>dodge</code> 改发一个在请求者之前就下环的 flit，
-让自己的 hop 不空转"。在<b>同等公平度</b>（分箱 Jain ≈ 0.98）下实测：</p>
-{_table(["执行器", "方案与工作点", "分箱 Jain", "带宽 vs S0"],
+让自己的 hop 不空转"。要把执行器的代价单独量出来，需要让两侧除执行器之外
+<b>完全相同</b>：同一个目标值、同一种信号、同样零延迟。撤下的 S24 / S25
+正好是这样一对受控配置（两者都用恒定目标 λ*，差别只在门控 vs 让位），
+所以它们作为<b>实验</b>仍然有效 —— 无法部署不影响它们测出的物理量。
+在<b>同等公平度</b>（分箱 Jain ≈ 0.98）下：</p>
+{_table(["执行器", "受控配置（均已撤下，仅作对照）", "分箱 Jain", "带宽 vs S0"],
         [["门控 gate", "S24 burst 2", "0.98759", "−10.38%"],
          ["让位 yield", "S25 target 4/7, thresh 0.5", "0.98127", "<b>−4.12%</b>"]])}
 <p>让位比门控省下约 <b>2.5 倍</b>的带宽代价，这证实了执行器选择而不是
-信号质量才是主导因素。但它仍然要付 4%，而且把 <code>thresh</code>、
-<code>hold</code>、<code>margin</code>、<code>backoff</code> 扫遍之后
-代价<b>停在 −4% ~ −5% 的平台上不动</b>（见
+信号质量才是主导因素 —— 这个结论<b>不依赖那个常数目标</b>，
+在可部署的方案里同样成立：S23（门控 + 自适应目标）分箱 Jain
+{next((r['jain_bin'] for r in rows if r['name'].startswith('S23')), 0):.4f}
+要付 {abs(next((r.get('delta_s0_pct', 0) for r in rows if r['name'].startswith('S23')), 0)):.2f}% 带宽，
+而 S22-stock（让位 + 自适应目标）拿到<b>几乎相同</b>的 Jain
+{next((r['jain_bin'] for r in rows if 'STOCK' in r['name']), 0):.4f}
+只付 {abs(next((r.get('delta_s0_pct', 0) for r in rows if 'STOCK' in r['name']), 0)):.2f}% ——
+<b>同等公平度下门控贵 10 倍</b>。
+但让位仍然要付代价，而且把 <code>thresh</code>、<code>hold</code>、
+<code>margin</code>、<code>backoff</code> 扫遍之后
+它<b>停在 −4% ~ −5% 的平台上不动</b>（见
 <code>results/probe_ring2_s25b.json</code>）——
 对请求整形的所有旋钮都不敏感，正是"损失来自气泡传递的几何、
 不是来自调参"的旁证。</p>
 
-<h3>两个把开销砍掉的发现</h3>
-<p><b>(a) S22 的深队列在 30 拍总线下不再必要。</b>
+<h3>把开销砍掉的发现</h3>
+<p><b>S22 的深队列在 30 拍总线下不再必要。</b>
 S22 原工作点把注入队列从 12/8 加深到 32/32，这一项就占它
 1,198,560 FF-eq 中的 1,190,000 以上。那个深度是在
 <code>dfc_bus_lat = 1</code> 下定的 —— 逐拍转向需要足够多的候选 flit 可挑。
@@ -3162,28 +3290,30 @@ S22 原工作点把注入队列从 12/8 加深到 32/32，这一项就占它
 0.15%，而开销从 1,198,560 降到 13,920（<b>86 倍</b>）。
 深队列换来的 η 只有 +0.014。在 S25 的扫描里 <code>dfc_dodge</code> = 8 与 32
 给出<b>逐位相同</b>的结果，进一步说明这个前瞻窗口在 30 拍工作点上已经失效。</p>
-<p><b>(b) S25：让位执行器 + 本地恒定目标 = 完全不用总线。</b>
-既然公平份额是拓扑常数（S24 的观察），S22 的赤字就不必从流控总线上的
-均值算出来 —— 每拍加 λ*、上环减 1 即可，赤字变成<b>纯本地、零延迟、精确</b>
-的计数器。于是 6 bit 广播总线、10 表项镜像表、加法树全部消失，
-只剩一个计数器加相邻节点之间的 1 bit 请求线（本地线，不受 30 拍规则约束）：
-<b>{next((r['hw_cost'] for r in rows if r['name'].startswith('S25')), 0):,} FF-eq，
-比 S1 便宜一个数量级以上</b>，η {next((r['eta'] for r in rows if r['name'].startswith('S25 local-target yield eta')), 0):.4f}、
-分箱 Jain {next((r['jain_bin'] for r in rows if r['name'].startswith('S25 local-target yield eta')), 0):.5f}。
-它是全部方案里<b>公平度最高且带宽仍在 −4% 以内</b>的那一个，
-但仍未同时过两条线。</p>
+<p class="note">早期版本这里还有一条发现 (b)：「让位执行器 + 本地恒定目标 =
+完全不用总线」，把开销砍到 1,660 FF-eq。<b>该发现随 S25 一并作废</b> ——
+它省掉总线的办法就是把公平份额写死，而那个前提在不均衡流量下不成立。
+去掉总线这个方向本身没有被证否，但它<b>必须换一个不需要流量先验的本地信号</b>
+才能重新成立，目前没有找到。</p>
 
 <div class="def"><b>当前状态（诚实结论）</b>：
 没有任何方案同时满足「分箱 Jain &gt; 0.99」与「带宽差 S0 &lt; 1%」。
 唯一同时接近的是 S22 在 <code>bus_lat = 1</code> 下的点
 （Jain 0.98914、−0.56%、η 0.9287），
 <b>但它违反"任何总线使用花 30 拍"这条硬约束，不可实现</b>，
-在图上以灰 ✕ 标出、且不参与前沿。<br>
+在图上以灰 ✕ 标出、且不参与前沿。
+可实现的最好点是 stock 深度的 S22：Jain 0.92046、−0.15%、η 0.8678。<br>
 第 4 点已经证明这不是 fabric 的容量问题（S0 带宽处理想仍有 ~4.3% 余量）。
 按上面的执行器分析，剩下的差距来自<b>分布式注入侧控制无法实现 LP 假设的
 全局无冲突调度</b>：速率转移必须通过气泡，而气泡只能向下游传递且沿途会被吃掉。
 要真正闭合，需要的是<b>在环内</b>动作的执行器（例如让在环 flit 为入环 flit
-让位，即打破"在环绝对优先"），那已经超出"硬件开销与 S1 同级"的范围。</div>
+让位，即打破"在环绝对优先"），那已经超出"硬件开销与 S1 同级"的范围。<br>
+<b>撤下静态钉速之后新增的一条约束</b>：可用的信号只能来自<b>测量</b>，
+而在这颗 fabric 上测量必须走 30 拍的流控总线（或在带标记）。
+30 拍 &gt; 50 拍验收窗的一半，所以<b>控制环路的时间常数注定比验收窗宽</b> ——
+这已经不是执行器问题，而是<b>信号时延与验收时间尺度不匹配</b>。
+这是 Jain 停在 0.92 的直接原因，也是后续唯一还值得攻的方向：
+找一个<b>零延迟、纯本地、但不含流量先验</b>的公平信号。</div>
 """
 
 

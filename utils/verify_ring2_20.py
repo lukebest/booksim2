@@ -1128,6 +1128,50 @@ def test_ideal_cc_lp_matches_fabric() -> None:
     assert top.startswith("hop:"), top
 
 
+def test_fair_share_is_pattern_dependent() -> None:
+    """lambda* belongs to the fabric *and* the traffic, which disqualified S24/S25.
+
+    Two schemes were withdrawn for hard-coding lambda* = 2/7 instead of measuring
+    it, on the grounds that the LP's constraint matrix is built from the workload's
+    destination mix and so moves when the mix does. That reasoning is load-bearing
+    -- it is the only thing keeping a cheap, bus-free design out of the frontier --
+    so pin it: re-solving on the `hot` mix must move lambda* by a wide margin and
+    must move the binding resource off the injection hop onto the hot cluster's
+    ejection port. If a future change to the topology or the hash made the share
+    pattern-invariant after all, the withdrawal would need revisiting and this test
+    is where that shows up.
+    """
+    from collections import defaultdict
+
+    from dse_ring2_write_fair import W_FLITS, build_pattern
+    from ideal_ring2_cc import coefficients, dest_mix, solve_theta
+    from rg_ring2_topo import CHI_VCS_WRITE, Ring2Topology
+
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
+
+    def solve(mix) -> tuple[float, str]:
+        cores, names, a = coefficients(topo, mix)
+        lam = solve_theta(a, 1.0)
+        return float(lam.mean()), names[int((a.T @ lam).argmax())]
+
+    lam_u, bind_u = solve(dest_mix(k=400))
+    assert abs(lam_u - 2 / 7) < 1e-6, lam_u
+    assert bind_u.startswith("hop:"), bind_u
+
+    cnt: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    for t in build_pattern("hot", k=400, W=W_FLITS, seed=0):
+        cnt[t.core][t.ha] += 1
+    hot_mix = {c: {h: v / sum(row.values()) for h, v in row.items()}
+               for c, row in cnt.items()}
+    lam_h, bind_h = solve(hot_mix)
+
+    # Well past any margin a shipped constant could carry.
+    assert lam_h < 0.5 * lam_u, (lam_u, lam_h)
+    # And it is a different *kind* of resource that binds, so no rescaling of the
+    # constant would track it either.
+    assert bind_h.startswith("down:"), bind_h
+
+
 def test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter() -> None:
     """Two-sided check on the new reference: reachable, and a real ceiling.
 
@@ -1840,14 +1884,16 @@ def test_fairness_bandwidth_tradeoff_structure() -> None:
 
 
 def test_s25_local_target_uses_no_bus() -> None:
-    """S25's claim to cost no bus has to be structural, not just configured.
+    """The bus-free deficit path has to be structural, not just configured.
 
-    The report puts S25 on the plot at 1,660 FF-equivalents on the grounds that a
-    constant target makes the deficit purely local: the flow-control bus, its
-    mirror table and its adder tree all disappear, and with them the mandated
-    30-cycle delay. That claim is only true if `dfc_target` actually stops the bus
-    being driven -- if any post still went out, the scheme would owe the 30 cycles
-    and both its cost and its feasibility marking would be wrong.
+    S25 has since been **withdrawn as a candidate** -- a constant target is only
+    correct for the traffic pattern it was derived from, see
+    `test_fair_share_is_pattern_dependent`. The code path stays, because it is the
+    controlled half of the gate-versus-yield actuator comparison that the report's
+    bandwidth-cost argument rests on: same constant target on both sides, so the
+    only difference measured is the actuator. That comparison is only meaningful if
+    `dfc_target` really does take the bus out of the loop -- otherwise the yield
+    side is quietly paying 30 cycles the gate side does not.
 
     So: zero posts over a full run, and the deficit still has to behave -- accrue
     at the target, be spent by boarding, and raise a request when a node falls
@@ -2157,6 +2203,7 @@ def main() -> None:
     c.add("jain_bin_ideal_achievable_and_bounds_fair",
           test_jain_bin_ideal_is_achievable_and_bounds_a_fair_arbiter)
     c.add("ideal_cc_lp_matches_fabric", test_ideal_cc_lp_matches_fabric)
+    c.add("fair_share_is_pattern_dependent", test_fair_share_is_pattern_dependent)
     c.add("s15_beats_s0_fairness", test_s15_beats_s0_fairness)
     c.add("tiled_interleave_balanced", test_tiled_interleave_is_balanced)
     c.add("ha_rsp_jit_bounded", test_ha_rsp_jit_is_per_txn_and_bounded)

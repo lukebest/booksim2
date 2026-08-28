@@ -1,6 +1,6 @@
 {
-  "n_total": 77,
-  "n_ok": 77,
+  "n_total": 78,
+  "n_ok": 78,
   "all_ok": true,
   "rows": [
     {
@@ -196,6 +196,10 @@
       "ok": true
     },
     {
+      "name": "fair_share_is_pattern_dependent",
+      "ok": true
+    },
+    {
       "name": "s15_beats_s0_fairness",
       "ok": true
     },
@@ -312,5 +316,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-28T03:20:09Z"
+  "generated_at": "2026-08-28T04:06:01Z"
 }
