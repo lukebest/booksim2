@@ -1,6 +1,6 @@
 {
-  "n_total": 79,
-  "n_ok": 79,
+  "n_total": 81,
+  "n_ok": 81,
   "all_ok": true,
   "rows": [
     {
@@ -236,6 +236,14 @@
       "ok": true
     },
     {
+      "name": "s16_read_unbounded_equals_s0",
+      "ok": true
+    },
+    {
+      "name": "s16_read_is_local_and_paces",
+      "ok": true
+    },
+    {
       "name": "s16_respects_grant_budget",
       "ok": true
     },
@@ -320,5 +328,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-28T06:00:51Z"
+  "generated_at": "2026-08-28T06:52:09Z"
 }
