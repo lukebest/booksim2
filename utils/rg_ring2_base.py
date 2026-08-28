@@ -323,6 +323,7 @@ class Ring2BaseSim:
         # the per-core write-bandwidth series the fairness study measures.
         self.wr_inject_times: dict[int, list[int]] = defaultdict(list)
         self.wr_recv_times: dict[int, list[int]] = defaultdict(list)
+        self.rd_inject_times: dict[int, list[int]] = defaultdict(list)
         # (node, vc) -> cause -> count, where cause is one of
         # hop_busy / itag / fc_budget / outstanding. `hop_busy` is the only
         # cause that means "in-ring traffic took the slot" — the congestion
@@ -1044,6 +1045,11 @@ class Ring2BaseSim:
         self.inj_ok_by_hop[(f.src, f.dir)] += 1
         if f.kind == "wdata":
             self.wr_inject_times[f.src].append(self.t)
+        # CompData boarded at the HA, keyed by the core it is going to. That is
+        # the read-side analogue of wr_inject_times: the scarce port is the HA
+        # inject, and fairness is who that port is serving.
+        if f.kind == "resp":
+            self.rd_inject_times[f.dst].append(self.t)
         if f.kind != "req" or not is_core(f.src):
             return
         if f.txn_id not in self.req_inject_t:
@@ -1297,6 +1303,18 @@ class Ring2BaseSim:
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
                          self.t + self._ha_delay(txn, "dbid"))
 
+    def _on_read_req_at_completer(self, txn: Txn, fail_board: int,
+                                 fail_eject: int) -> None:
+        """Completer decides when to emit CompData.
+
+        ReadNoSnp has no DBIDResp. The bulky traffic is CompData the HA itself
+        sends, so the baseline just releases the whole burst after `t_ha_service`.
+        A receiver-shaped scheme overrides this to pace *which* core's burst
+        leaves the HA next -- still a local decision, no new message.
+        """
+        self._enqueue_resps(txn, fail_board, fail_eject,
+                            self.t + self.p.t_ha_service)
+
     # -- request tracker: accept, or send the requester away ----------------
 
     def _req_arrives(self, txn: Txn, *, retried: bool = False) -> None:
@@ -1444,8 +1462,7 @@ class Ring2BaseSim:
             self.st["n_delivered_req"] += 1
             txn = self.txn_by_id[f.txn_id]
             self._ensure_stash()
-            self._enqueue_resps(txn, f.fail_board, f.fail_eject,
-                                self.t + self.p.t_ha_service)
+            self._on_read_req_at_completer(txn, f.fail_board, f.fail_eject)
         else:
             self.st["n_delivered_resp"] += 1
             self.recv_times[f.dst].append(self.t)
@@ -1497,9 +1514,12 @@ class Ring2BaseSim:
         out["board_by_core"] = self.board_by_core()
         out["core_outstanding"] = self.p.core_outstanding
         out["core_outst"] = dict(self.core_outst)
-        if self.wr_inject_times or self.wr_recv_times:
-            out["wr_inject_by_core"] = self.wr_inject_by_core()
-            out["wr_recv_by_ha"] = self.wr_recv_by_ha()
+        if self.wr_inject_times or self.wr_recv_times or self.rd_inject_times:
+            if self.wr_inject_times or self.wr_recv_times:
+                out["wr_inject_by_core"] = self.wr_inject_by_core()
+                out["wr_recv_by_ha"] = self.wr_recv_by_ha()
+            if self.rd_inject_times:
+                out["rd_inject_by_core"] = self.rd_inject_by_core()
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
             out["hop_use"] = self.hop_use_table()
@@ -1657,6 +1677,10 @@ class Ring2BaseSim:
     def wr_inject_by_core(self) -> dict[int, list[int]]:
         """Cycle of every WriteData flit that boarded, per source core."""
         return {c: list(ts) for c, ts in sorted(self.wr_inject_times.items())}
+
+    def rd_inject_by_core(self) -> dict[int, list[int]]:
+        """Cycle of every CompData flit boarded at an HA, per destination core."""
+        return {c: list(ts) for c, ts in sorted(self.rd_inject_times.items())}
 
     def wr_recv_by_ha(self) -> dict[int, list[int]]:
         """Cycle of every WriteData flit drained by an HA PE."""

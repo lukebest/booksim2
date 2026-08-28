@@ -1,0 +1,615 @@
+{
+  "k": 2000,
+  "r_flits": 2,
+  "hot_has": [
+    11,
+    13
+  ],
+  "r_star_hot": 2.0,
+  "loads": {
+    "hot": {
+      "rows": [
+        {
+          "name": "S0 cap128",
+          "scheme": "S0",
+          "cap": 128,
+          "over": {},
+          "thr": 2.1901,
+          "bw_vs_ideal": 0.98555,
+          "delta_vs_s0_pct": 0.0,
+          "jain_bin": 0.83797,
+          "jain_vs_ideal": 0.83908,
+          "makespan": 18264,
+          "n_etag": 942,
+          "n_grant_eager": null,
+          "n_grant_paced": null,
+          "n_grant_queued": null,
+          "peak_grants": null,
+          "bus_posts": 0,
+          "grant_delay_mean": null
+        },
+        {
+          "name": "S16 oc=8 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 8
+          },
+          "thr": 2.1573,
+          "bw_vs_ideal": 0.97079,
+          "delta_vs_s0_pct": -1.5,
+          "jain_bin": 0.95866,
+          "jain_vs_ideal": 0.96003,
+          "makespan": 18542,
+          "n_etag": 227,
+          "n_grant_eager": 26,
+          "n_grant_paced": 19974,
+          "n_grant_queued": 19974,
+          "peak_grants": 8,
+          "bus_posts": 0,
+          "grant_delay_mean": 1084.85
+        },
+        {
+          "name": "S16 oc=16 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 16
+          },
+          "thr": 2.2087,
+          "bw_vs_ideal": 0.99391,
+          "delta_vs_s0_pct": 0.85,
+          "jain_bin": 0.94907,
+          "jain_vs_ideal": 0.95044,
+          "makespan": 18110,
+          "n_etag": 309,
+          "n_grant_eager": 66,
+          "n_grant_paced": 19934,
+          "n_grant_queued": 19934,
+          "peak_grants": 16,
+          "bus_posts": 0,
+          "grant_delay_mean": 1042.15
+        },
+        {
+          "name": "S16 oc=32 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 32
+          },
+          "thr": 2.2104,
+          "bw_vs_ideal": 0.99468,
+          "delta_vs_s0_pct": 0.93,
+          "jain_bin": 0.94242,
+          "jain_vs_ideal": 0.94386,
+          "makespan": 18096,
+          "n_etag": 433,
+          "n_grant_eager": 147,
+          "n_grant_paced": 19853,
+          "n_grant_queued": 19853,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 1014.91
+        },
+        {
+          "name": "S16 oc=64 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 64
+          },
+          "thr": 2.2075,
+          "bw_vs_ideal": 0.99338,
+          "delta_vs_s0_pct": 0.79,
+          "jain_bin": 0.93407,
+          "jain_vs_ideal": 0.93548,
+          "makespan": 18120,
+          "n_etag": 496,
+          "n_grant_eager": 261,
+          "n_grant_paced": 19739,
+          "n_grant_queued": 19739,
+          "peak_grants": 64,
+          "bus_posts": 0,
+          "grant_delay_mean": 964.64
+        },
+        {
+          "name": "S16 oc=inf cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 1000000000
+          },
+          "thr": 2.1901,
+          "bw_vs_ideal": 0.98555,
+          "delta_vs_s0_pct": 0.0,
+          "jain_bin": 0.83797,
+          "jain_vs_ideal": 0.83908,
+          "makespan": 18264,
+          "n_etag": 942,
+          "n_grant_eager": 20000,
+          "n_grant_paced": 0,
+          "n_grant_queued": 0,
+          "peak_grants": 739,
+          "bus_posts": 0,
+          "grant_delay_mean": 0.0
+        },
+        {
+          "name": "S16 oc=32 bus30 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 32,
+            "grant_lat": 30
+          },
+          "thr": 2.2041,
+          "bw_vs_ideal": 0.99184,
+          "delta_vs_s0_pct": 0.64,
+          "jain_bin": 0.94714,
+          "jain_vs_ideal": 0.94853,
+          "makespan": 18148,
+          "n_etag": 293,
+          "n_grant_eager": 66,
+          "n_grant_paced": 19934,
+          "n_grant_queued": 19934,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 1017.42
+        },
+        {
+          "name": "S0 cap32",
+          "scheme": "S0",
+          "cap": 32,
+          "over": {},
+          "thr": 2.1985,
+          "bw_vs_ideal": 0.98933,
+          "delta_vs_s0_pct": 0.38,
+          "jain_bin": 0.91385,
+          "jain_vs_ideal": 0.91503,
+          "makespan": 18194,
+          "n_etag": 146,
+          "n_grant_eager": null,
+          "n_grant_paced": null,
+          "n_grant_queued": null,
+          "peak_grants": null,
+          "bus_posts": 0,
+          "grant_delay_mean": null
+        },
+        {
+          "name": "S16 oc=8 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 8
+          },
+          "thr": 2.1691,
+          "bw_vs_ideal": 0.97609,
+          "delta_vs_s0_pct": -0.96,
+          "jain_bin": 0.98769,
+          "jain_vs_ideal": 0.98914,
+          "makespan": 18441,
+          "n_etag": 37,
+          "n_grant_eager": 26,
+          "n_grant_paced": 19974,
+          "n_grant_queued": 19974,
+          "peak_grants": 8,
+          "bus_posts": 0,
+          "grant_delay_mean": 264.63
+        },
+        {
+          "name": "S16 oc=16 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 16
+          },
+          "thr": 2.2195,
+          "bw_vs_ideal": 0.99877,
+          "delta_vs_s0_pct": 1.34,
+          "jain_bin": 0.98574,
+          "jain_vs_ideal": 0.98723,
+          "makespan": 18022,
+          "n_etag": 60,
+          "n_grant_eager": 66,
+          "n_grant_paced": 19934,
+          "n_grant_queued": 19934,
+          "peak_grants": 16,
+          "bus_posts": 0,
+          "grant_delay_mean": 243.91
+        },
+        {
+          "name": "S16 oc=32 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 32
+          },
+          "thr": 2.2191,
+          "bw_vs_ideal": 0.9986,
+          "delta_vs_s0_pct": 1.32,
+          "jain_bin": 0.97645,
+          "jain_vs_ideal": 0.97785,
+          "makespan": 18025,
+          "n_etag": 80,
+          "n_grant_eager": 184,
+          "n_grant_paced": 19816,
+          "n_grant_queued": 19816,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 216.43
+        },
+        {
+          "name": "S16 oc=64 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 64
+          },
+          "thr": 2.2188,
+          "bw_vs_ideal": 0.99846,
+          "delta_vs_s0_pct": 1.31,
+          "jain_bin": 0.96909,
+          "jain_vs_ideal": 0.97055,
+          "makespan": 18028,
+          "n_etag": 124,
+          "n_grant_eager": 380,
+          "n_grant_paced": 19620,
+          "n_grant_queued": 19620,
+          "peak_grants": 64,
+          "bus_posts": 0,
+          "grant_delay_mean": 160.17
+        },
+        {
+          "name": "S16 oc=inf cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 1000000000
+          },
+          "thr": 2.1985,
+          "bw_vs_ideal": 0.98933,
+          "delta_vs_s0_pct": 0.38,
+          "jain_bin": 0.91385,
+          "jain_vs_ideal": 0.91503,
+          "makespan": 18194,
+          "n_etag": 146,
+          "n_grant_eager": 20000,
+          "n_grant_paced": 0,
+          "n_grant_queued": 0,
+          "peak_grants": 308,
+          "bus_posts": 0,
+          "grant_delay_mean": 0.0
+        },
+        {
+          "name": "S16 oc=32 bus30 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 32,
+            "grant_lat": 30
+          },
+          "thr": 2.2166,
+          "bw_vs_ideal": 0.99747,
+          "delta_vs_s0_pct": 1.21,
+          "jain_bin": 0.9858,
+          "jain_vs_ideal": 0.98722,
+          "makespan": 18046,
+          "n_etag": 44,
+          "n_grant_eager": 66,
+          "n_grant_paced": 19934,
+          "n_grant_queued": 19934,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 215.95
+        }
+      ],
+      "ideal": {
+        "r_fair": 2.2222222222222223,
+        "r_max": 3.0,
+        "lam_star": 0.11111111111111112,
+        "binding": "hop:11:10:dat"
+      }
+    },
+    "uniform": {
+      "rows": [
+        {
+          "name": "S0 cap128",
+          "scheme": "S0",
+          "cap": 128,
+          "over": {},
+          "thr": 5.9453,
+          "bw_vs_ideal": 0.93103,
+          "delta_vs_s0_pct": 0.0,
+          "jain_bin": 0.96075,
+          "jain_vs_ideal": 0.96094,
+          "makespan": 6728,
+          "n_etag": 2,
+          "n_grant_eager": null,
+          "n_grant_paced": null,
+          "n_grant_queued": null,
+          "peak_grants": null,
+          "bus_posts": 0,
+          "grant_delay_mean": null
+        },
+        {
+          "name": "S16 oc=8 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 8
+          },
+          "thr": 5.9675,
+          "bw_vs_ideal": 0.93451,
+          "delta_vs_s0_pct": 0.37,
+          "jain_bin": 0.98326,
+          "jain_vs_ideal": 0.98344,
+          "makespan": 6703,
+          "n_etag": 0,
+          "n_grant_eager": 248,
+          "n_grant_paced": 19752,
+          "n_grant_queued": 19752,
+          "peak_grants": 8,
+          "bus_posts": 0,
+          "grant_delay_mean": 356.46
+        },
+        {
+          "name": "S16 oc=16 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 16
+          },
+          "thr": 6.0551,
+          "bw_vs_ideal": 0.94823,
+          "delta_vs_s0_pct": 1.85,
+          "jain_bin": 0.98358,
+          "jain_vs_ideal": 0.98375,
+          "makespan": 6606,
+          "n_etag": 0,
+          "n_grant_eager": 553,
+          "n_grant_paced": 19447,
+          "n_grant_queued": 19447,
+          "peak_grants": 16,
+          "bus_posts": 0,
+          "grant_delay_mean": 331.53
+        },
+        {
+          "name": "S16 oc=32 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 32
+          },
+          "thr": 6.0178,
+          "bw_vs_ideal": 0.94239,
+          "delta_vs_s0_pct": 1.22,
+          "jain_bin": 0.98045,
+          "jain_vs_ideal": 0.98064,
+          "makespan": 6647,
+          "n_etag": 0,
+          "n_grant_eager": 1216,
+          "n_grant_paced": 18784,
+          "n_grant_queued": 18784,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 294.56
+        },
+        {
+          "name": "S16 oc=64 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 64
+          },
+          "thr": 6.0069,
+          "bw_vs_ideal": 0.94068,
+          "delta_vs_s0_pct": 1.04,
+          "jain_bin": 0.97186,
+          "jain_vs_ideal": 0.97204,
+          "makespan": 6659,
+          "n_etag": 2,
+          "n_grant_eager": 2073,
+          "n_grant_paced": 17927,
+          "n_grant_queued": 17927,
+          "peak_grants": 64,
+          "bus_posts": 0,
+          "grant_delay_mean": 202.84
+        },
+        {
+          "name": "S16 oc=inf cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 1000000000
+          },
+          "thr": 5.9453,
+          "bw_vs_ideal": 0.93103,
+          "delta_vs_s0_pct": 0.0,
+          "jain_bin": 0.96075,
+          "jain_vs_ideal": 0.96094,
+          "makespan": 6728,
+          "n_etag": 2,
+          "n_grant_eager": 20000,
+          "n_grant_paced": 0,
+          "n_grant_queued": 0,
+          "peak_grants": 216,
+          "bus_posts": 0,
+          "grant_delay_mean": 0.0
+        },
+        {
+          "name": "S16 oc=32 bus30 cap128",
+          "scheme": "S16",
+          "cap": 128,
+          "over": {
+            "overcommit": 32,
+            "grant_lat": 30
+          },
+          "thr": 6.0542,
+          "bw_vs_ideal": 0.94809,
+          "delta_vs_s0_pct": 1.83,
+          "jain_bin": 0.98022,
+          "jain_vs_ideal": 0.98039,
+          "makespan": 6607,
+          "n_etag": 0,
+          "n_grant_eager": 1130,
+          "n_grant_paced": 18870,
+          "n_grant_queued": 18870,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 293.27
+        },
+        {
+          "name": "S0 cap32",
+          "scheme": "S0",
+          "cap": 32,
+          "over": {},
+          "thr": 5.9719,
+          "bw_vs_ideal": 0.9352,
+          "delta_vs_s0_pct": 0.45,
+          "jain_bin": 0.96142,
+          "jain_vs_ideal": 0.9616,
+          "makespan": 6698,
+          "n_etag": 0,
+          "n_grant_eager": null,
+          "n_grant_paced": null,
+          "n_grant_queued": null,
+          "peak_grants": null,
+          "bus_posts": 0,
+          "grant_delay_mean": null
+        },
+        {
+          "name": "S16 oc=8 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 8
+          },
+          "thr": 5.8548,
+          "bw_vs_ideal": 0.91686,
+          "delta_vs_s0_pct": -1.52,
+          "jain_bin": 0.95357,
+          "jain_vs_ideal": 0.95376,
+          "makespan": 6832,
+          "n_etag": 1,
+          "n_grant_eager": 2272,
+          "n_grant_paced": 17728,
+          "n_grant_queued": 17728,
+          "peak_grants": 8,
+          "bus_posts": 0,
+          "grant_delay_mean": 76.94
+        },
+        {
+          "name": "S16 oc=16 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 16
+          },
+          "thr": 5.9737,
+          "bw_vs_ideal": 0.93548,
+          "delta_vs_s0_pct": 0.48,
+          "jain_bin": 0.95911,
+          "jain_vs_ideal": 0.9593,
+          "makespan": 6696,
+          "n_etag": 0,
+          "n_grant_eager": 5449,
+          "n_grant_paced": 14551,
+          "n_grant_queued": 14551,
+          "peak_grants": 16,
+          "bus_posts": 0,
+          "grant_delay_mean": 62.66
+        },
+        {
+          "name": "S16 oc=32 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 32
+          },
+          "thr": 5.9952,
+          "bw_vs_ideal": 0.93885,
+          "delta_vs_s0_pct": 0.84,
+          "jain_bin": 0.9609,
+          "jain_vs_ideal": 0.96107,
+          "makespan": 6672,
+          "n_etag": 7,
+          "n_grant_eager": 12773,
+          "n_grant_paced": 7227,
+          "n_grant_queued": 7227,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 53.16
+        },
+        {
+          "name": "S16 oc=64 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 64
+          },
+          "thr": 5.9746,
+          "bw_vs_ideal": 0.93562,
+          "delta_vs_s0_pct": 0.49,
+          "jain_bin": 0.96691,
+          "jain_vs_ideal": 0.96709,
+          "makespan": 6695,
+          "n_etag": 0,
+          "n_grant_eager": 18245,
+          "n_grant_paced": 1755,
+          "n_grant_queued": 1755,
+          "peak_grants": 64,
+          "bus_posts": 0,
+          "grant_delay_mean": 27.65
+        },
+        {
+          "name": "S16 oc=inf cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 1000000000
+          },
+          "thr": 5.9719,
+          "bw_vs_ideal": 0.9352,
+          "delta_vs_s0_pct": 0.45,
+          "jain_bin": 0.96142,
+          "jain_vs_ideal": 0.9616,
+          "makespan": 6698,
+          "n_etag": 0,
+          "n_grant_eager": 20000,
+          "n_grant_paced": 0,
+          "n_grant_queued": 0,
+          "peak_grants": 90,
+          "bus_posts": 0,
+          "grant_delay_mean": 0.0
+        },
+        {
+          "name": "S16 oc=32 bus30 cap32",
+          "scheme": "S16",
+          "cap": 32,
+          "over": {
+            "overcommit": 32,
+            "grant_lat": 30
+          },
+          "thr": 5.9347,
+          "bw_vs_ideal": 0.92937,
+          "delta_vs_s0_pct": -0.18,
+          "jain_bin": 0.96382,
+          "jain_vs_ideal": 0.96401,
+          "makespan": 6740,
+          "n_etag": 0,
+          "n_grant_eager": 13640,
+          "n_grant_paced": 6360,
+          "n_grant_queued": 6360,
+          "peak_grants": 32,
+          "bus_posts": 0,
+          "grant_delay_mean": 43.68
+        }
+      ],
+      "ideal": {
+        "r_fair": 6.385696040868455,
+        "r_max": 6.558645550615113,
+        "lam_star": 0.31928480204342274,
+        "binding": "hop:19:18:dat"
+      }
+    }
+  }
+}

@@ -635,6 +635,25 @@ def build_hot_write(*, k: int = 100, m_wdata: int = 4,
     return out
 
 
+def build_hot_read(*, k: int = 100, m_resp: int = 2,
+                   hot_has: Sequence[int] = (11, 13), n: int = N_NODES
+                   ) -> list[Txn]:
+    """Every core reads from a clustered memory region (`hot_has`).
+
+    Same geometry as `build_hot_write`, inverted: the bulky traffic is now
+    CompData leaving the two HAs rather than WriteData entering them. The
+    binding resource moves from the cluster's down-ring ports onto its
+    up-ring ports, but the fan-in (ten cores, two HAs) is the same.
+    """
+    out: list[Txn] = []
+    tid = 0
+    for c in cores(n):
+        for i in range(k):
+            out.append(Txn(tid, c, hot_has[i % len(hot_has)], 1, m_resp))
+            tid += 1
+    return out
+
+
 # Write stimulus used by the fairness report: 128B bursts, 4KB stride,
 # 64KB tiles. One CHI WriteData flit is one 64B beat, so a burst is 2 flits.
 FLIT_BYTES = 64

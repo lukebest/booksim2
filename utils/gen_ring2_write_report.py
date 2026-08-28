@@ -3290,6 +3290,84 @@ S16 在 uniform 上的带宽优势从 +0.31% 收敛到与 S0 持平
 """
 
 
+def _s16_read_section() -> str:
+    """HA-local S16 on ReadNoSnp: no DBID, no bus."""
+    f = ROOT / "results" / "probe_ring2_s16_read.json"
+    if not f.exists():
+        return ""
+    d = json.loads(f.read_text())
+    hot, uni = d["loads"]["hot"], d["loads"]["uniform"]
+    ih, iu = hot["ideal"], uni["ideal"]
+
+    def row(load: dict, name: str) -> dict:
+        return next(r for r in load["rows"] if r["name"] == name)
+
+    s0h = row(hot, "S0 cap128")
+    s16h = row(hot, "S16 oc=16 cap32")
+    bush = row(hot, "S16 oc=32 bus30 cap32")
+    s0u = row(uni, "S0 cap128")
+    s16u = row(uni, "S16 oc=16 cap128")
+    busu = row(uni, "S16 oc=32 bus30 cap128")
+
+    def lines(load: dict, names: list[str]) -> list[list]:
+        return [[n, f"{r['thr']:.4f}", f"{r['bw_vs_ideal']:.4f}",
+                 f"{r['delta_vs_s0_pct']:+.2f}%", f"{r['jain_bin']:.4f}",
+                 f"{r['n_etag']:,}"]
+                for n in names
+                for r in [row(load, n)]]
+
+    return f"""
+<h2>S16 在读上：没有 DBID，也不需要总线</h2>
+<div class="def">写侧 S16 扣的是 <code>DBIDResp</code>。ReadNoSnp 没有这张票，
+大数据是 HA 自己发出的 CompData，所以同一套政策（overcommit + least-served）
+只能坐在 <b>HA 的 CompData 出口</b>上。这是 completer 的本地决策：
+不改报文、不用流控总线。<br>
+对照是同一套 fabric、同一套冻结旋钮，流量换成
+<code>hot</code> 读（十核全部读 HA 11/13）和 <code>uniform</code> 读。
+读的理想上限用<b>反向</b>的 LP 重解（DAT 是 HA→core）：
+<b>hot R* = {ih['r_fair']:.4f}</b>（绑定 <code>{ih['binding']}</code>），
+max-total = {ih['r_max']:.4f}，所以读的热簇上公平<b>有</b>带宽代价
+（写的热簇上 R*<sub>eq</sub> = R<sub>max</sub> = 2，这里不是）。
+uniform R* = {iu['r_fair']:.4f}。</div>
+
+<h3>hot 读：政策能同时抬带宽和公平，总线帮不上忙</h3>
+{_table(["方案", "吞吐", "带宽 / R*", "vs S0", "分箱 Jain", "E-tag"],
+        lines(hot, ["S0 cap128", "S0 cap32",
+                    "S16 oc=16 cap32", "S16 oc=32 cap32",
+                    "S16 oc=32 bus30 cap32", "S16 oc=inf cap128"]))}
+<p>S16 oc=inf 与 S0 <b>逐位相同</b>（吞吐 {s0h['thr']:.4f}、Jain {s0h['jain_bin']:.4f}、
+E-tag {s0h['n_etag']}）——钩子在不扣授权时不扰动数据通路。<br>
+工作点 <b>S16 oc=16 + 上限 32</b>：带宽 {s16h['bw_vs_ideal']:.4f}（R* 的
+{100 * s16h['bw_vs_ideal']:.2f}%，比 S0 +{s16h['delta_vs_s0_pct']:.2f}%），
+分箱 Jain {s0h['jain_bin']:.4f} → <b>{s16h['jain_bin']:.4f}</b>，
+E-tag {s0h['n_etag']:,} → {s16h['n_etag']}。
+增益来自少绕环：核的下环口被 CompData 灌满时 S0 会 E-tag，
+HA 出口限流之后少灌那些注定绕圈的 flit。<br>
+<code>grant_lat=30</code>（同一政策、决策走 30 拍总线）带宽
+{bush['bw_vs_ideal']:.4f}、Jain {bush['jain_bin']:.4f}，
+<b>比本地决策略差、没有任何一项更好</b>。HA 已经握着要调度的信息，
+总线只是多付 30 拍。</p>
+
+<h3>uniform 读：不伤均衡流量</h3>
+{_table(["方案", "吞吐", "带宽 / R*", "vs S0", "分箱 Jain", "E-tag"],
+        lines(uni, ["S0 cap128", "S16 oc=16 cap128",
+                    "S16 oc=32 bus30 cap128"]))}
+<p>S16 oc=16 带宽 {s16u['bw_vs_ideal']:.4f}（+{s16u['delta_vs_s0_pct']:.2f}%），
+Jain {s0u['jain_bin']:.4f} → {s16u['jain_bin']:.4f}。
+总线变体 +{busu['delta_vs_s0_pct']:.2f}%，同样没有超出本地决策。</p>
+
+<div class="def good"><b>结论</b>：读侧可以实现 S16 形状的接收端调度，
+控制点是 HA 本地的 CompData 发放，<b>不需要 DBID，也不需要带外总线</b>。
+总线能搬同一比特，但 30 拍是纯税。
+和写侧一样，前提是控制点落在拥塞发生地 —— 热读绑在
+<code>{ih['binding']}</code>（HA 出向 hop），正是 HA 出口能看见的资源。</div>
+<p class="note">数据：<code>results/probe_ring2_s16_read.json</code>，
+脚本 <code>utils/probe_ring2_s16_read.py</code>，
+回归 <code>test_s16_read_unbounded_equals_s0</code>、
+<code>test_s16_read_is_local_and_paces</code>。</p>
+"""
+
+
 def _pareto_section(imgs: dict) -> str:
     """The scheme zoo, the frontier, and what the frontier points actually are."""
     f = ROOT / "results" / "pareto_ring2_cc.json"
@@ -5847,6 +5925,7 @@ ha_track = {meta.get('ha_track')}，配额从未触发，
 {_tradeoff_section()}
 {_pareto_section(imgs)}
 {_hotbw_section()}
+{_s16_read_section()}
 
 <p class="note" style="margin-top:2rem">
 数据：<code>results/ring2_write_fair.json</code>

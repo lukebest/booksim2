@@ -1454,6 +1454,63 @@ def _run_s16(*, k: int = 600, cfg: dict | None = None):
     return topo, txns, sim
 
 
+def _run_read(scheme: str = "S0", *, k: int = 80, cfg: dict | None = None):
+    """Closed-batch hot read, same fabric as the write study."""
+    from dse_ring2_write_fair import make_sim
+    from rg_ring2_topo import build_hot_read
+
+    topo = _write_topo()
+    txns = build_hot_read(k=k, m_resp=2, hot_has=(11, 13))
+    sim = make_sim(scheme, topo, seed=0, cfg=cfg or {})
+    sim.offer_batch(txns)
+    while sim.t < 400_000 and not sim.done():
+        sim.step()
+    return topo, txns, sim
+
+
+def test_s16_read_unbounded_equals_s0() -> None:
+    """The read hook must not change the datapath when it is not withholding.
+
+    Read S16 is the same policy as write S16, sitting on CompData emit instead
+    of DBIDResp. With an unbounded budget it has to grant every REQ on arrival
+    and reproduce S0 bit for bit -- otherwise the hook itself is a confound.
+    """
+    _, _, a = _run_read("S0", k=120)
+    _, _, b = _run_read("S16", k=120, cfg={"overcommit": 10 ** 9})
+    sa, sb = a.summary(), b.summary()
+    for key in ("makespan", "n_delivered_flits", "n_board_fail",
+                "n_deflections", "n_txn_done"):
+        assert sa[key] == sb[key], f"{key}: S0 {sa[key]} vs S16-inf {sb[key]}"
+    assert sa["rd_inject_by_core"] == sb["rd_inject_by_core"]
+
+
+def test_s16_read_is_local_and_paces() -> None:
+    """Read S16 uses no bus, and a tight budget must both bite and drain.
+
+    Two things the write-side tests do not cover: CompData (not DBID) is what
+    gets withheld, and the scheme must stay bus-free -- that is the whole
+    reason it is deployable on reads, where CHI has no grant message.
+    """
+    _, txns, sim = _run_read("S16", k=150, cfg={"overcommit": 4})
+    s = sim.summary()
+    fc = sim.fc_summary()
+    assert s["completed"], s["n_txn_done"]
+    assert fc["bus_posts"] == 0 and fc["bus_bits"] == 0
+    assert sim.peak_outstanding <= 4, sim.peak_outstanding
+    assert fc["n_grant_queued"] > 0, "tight budget never queued a read"
+    assert all(v == 0 for v in sim.outstanding.values())
+    assert sum(sim.n_queued.values()) == 0
+    # Same work, every core, so the HA that paced still delivered everything.
+    assert s["n_txn_done"] == len(txns)
+    # The read-side LP (DAT reversed) must land on 20/9 for this geometry:
+    # hop:11:10:dat binds, not an inject port. If it moves, the probe's R*
+    # and the "HA exit can see the bottleneck" claim both need revisiting.
+    from probe_ring2_s16_read import read_ideal
+    idl = read_ideal(_write_topo(), txns)
+    assert abs(idl["r_fair"] - 20 / 9) < 1e-6, idl
+    assert idl["binding"].startswith("hop:"), idl["binding"]
+
+
 def test_s16_unbounded_equals_baseline() -> None:
     """Granting on arrival is the baseline policy, bit for bit.
 
@@ -2266,6 +2323,8 @@ def main() -> None:
           test_baseline_tracker_is_sized_above_the_unbounded_peak)
     c.add("s15_fixes_study_workload", test_s15_fixes_study_workload)
     c.add("s16_unbounded_equals_s0", test_s16_unbounded_equals_baseline)
+    c.add("s16_read_unbounded_equals_s0", test_s16_read_unbounded_equals_s0)
+    c.add("s16_read_is_local_and_paces", test_s16_read_is_local_and_paces)
     c.add("s16_respects_grant_budget", test_s16_respects_grant_budget)
     c.add("s16_bufferless_and_fair", test_s16_is_bufferless_and_fair)
     c.add("retry_off_equals_baseline", test_retry_off_reproduces_baseline)
