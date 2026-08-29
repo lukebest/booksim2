@@ -566,18 +566,18 @@ def fig_s16_diagram() -> None:
         "公平性的决策点本来就在 HA 手里，只是从来没被用过。")
 
     _s16_row(
-        bx, "读（ReadNoSnp）：没有授权可用，就管 CompData 的发出顺序",
-        "同一套状态 · 同一个决策点",
+        bx, "读（ReadNoSnp）：同一套机制可以照搬 —— 但实测不需要做",
+        "机制可迁移 · 但没有待解决的问题",
         "memory HA（数据源）\n\n"
         "① 到达的 REQ 按目的 core 排队\n"
         "② 每核累计已收 CompData 计数器\n"
         f"③ 同时在飞的 CompData burst ≤ {oc}",
         "选「迄今收得最少」\n的那个核\n→ 发 CompData×2",
         "最后一个 CompData 落地时释放一个名额",
-        "读的大流量是 HA 自己发出去的 CompData，拥塞点就在 HA 的出向 hop —— "
-        "决策所需的信息全是本地的。\n"
-        "反过来，把控制放在请求端（S1 那样限 REQ）是管错了对象："
-        "读侧实测掉 20.5% 带宽，公平度还更低。")
+        "读的大流量是 HA 自己发出去的，注入点分散在 8 个 HA 上，"
+        "十个核不争同一个入环口 ——\n"
+        "所以 S0 什么都不做，十个核的读带宽也只差 0.36%。"
+        "S16 读侧只多 0.47% 带宽，不建议为此动事务层。")
 
     save(fig, "22-s16-diagram.png")
 
@@ -622,7 +622,7 @@ def fig_s16_compare() -> None:
              [w["S0"]["jain_bin"]["jain_bin_mean"],
               w["S1"]["jain_bin"]["jain_bin_mean"],
               w["S16"]["jain_bin"]["jain_bin_mean"]], cols,
-             f"{bw} 拍分箱平均 Jain", "写 · 瞬时均衡度", fmt="{:.4f}")
+             f"每 {bw} 拍算一次 Jain，再取平均", "写 · 瞬时均衡度", fmt="{:.4f}")
     _bars_vs(axes[2], ["S0", "S1-R", "S16-R"],
              [r["S0"]["throughput"], r["S1-R"]["throughput"],
               r["S16-R"]["throughput"]], cols,
@@ -632,9 +632,9 @@ def fig_s16_compare() -> None:
              [r["S0"]["jain_bin"]["jain_bin_mean"],
               r["S1-R"]["jain_bin"]["jain_bin_mean"],
               r["S16-R"]["jain_bin"]["jain_bin_mean"]], cols,
-             f"{bw} 拍分箱平均 Jain", "读 · 瞬时均衡度", fmt="{:.4f}")
-    fig.suptitle("S16 与 S0 / S1 的直接对比：写侧两条都赢，读侧本来就齐、"
-                 "S16 仍然两条都不亏", fontsize=13, fontweight="bold")
+             f"每 {bw} 拍算一次 Jain，再取平均", "读 · 瞬时均衡度", fmt="{:.4f}")
+    fig.suptitle("写侧 S16 两条都赢；读侧 S0 本来就齐，S16 只多 0.47% 带宽 —— "
+                 "读不建议做", fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "23-s16-compare.png")
 
@@ -711,9 +711,11 @@ def fig_s22_compare() -> None:
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
     _bars_vs(axes[1], names,
              [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
-             f"{bw} 拍分箱平均 Jain", "瞬时均衡度", fmt="{:.4f}")
+             f"每 {bw} 拍算一次 Jain，再取平均",
+             "瞬时均衡度：任意 100 拍内十个核齐不齐", fmt="{:.4f}")
     _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
-             "整窗 MAX / MIN（1.0 = 完全齐）", "长期速率差", fmt="{:.4f}")
+             "整窗 最快核带宽 / 最慢核带宽",
+             "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
     fig.suptitle("S22 确实改善了均衡度，但要付带宽，而且比 S16 贵 15 倍",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
