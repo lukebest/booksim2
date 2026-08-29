@@ -123,7 +123,7 @@ def fig_saturation() -> None:
     floor, sur, idle = g["floor"], g["surcharge"], g["idle"]
     segs = [(floor, BLUE, f"真的在搬数据：{floor:,} 拍"),
             (sur, AMBER, f"绕环重发多占的：{sur:,} 拍"),
-            (idle, GREY, f"空转（没等到可发的 flit）：{idle:,} 拍")]
+            (idle, GREY, f"空转：{idle:,} 拍")]
     left = 0
     for v, c, lab in segs:
         if v <= 0:

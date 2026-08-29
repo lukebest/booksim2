@@ -30,6 +30,13 @@ close to nothing, because 128 outstanding per core against a 20-node ring is
 already far more than the pipeline needs -- if it *does* pay, `dry` is a
 provisioning artifact rather than a dependency limit.
 
+Re-measured at `core_outstanding` 32, the numbers above no longer describe the
+run: the surcharge collapses from 1056 to 5 and deflections from 2306 to 16, so
+the down-ring drain is no longer a cause at all and the eject interventions buy
+nothing. The gap is 3.03%, entirely idle, split `itag` 49.1% / `dry` 42.0% /
+`raced` 8.6% / `hol` 0.2%. I-tag dormancy, which used to lose on both axes, is
+now a plain bandwidth-for-fairness trade.
+
 Usage:
     PYTHONHASHSEED=0 python3 probe_ring2_ceiling_fix.py [K]
 """
@@ -41,9 +48,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dse_ring2_write_fair import (FABRIC, K_PER_CORE, M_REQ, M_RSP, W_FLITS,
-                                  binned_jain, build_pattern, fairness_stats,
-                                  make_sim)
+from dse_ring2_write_fair import (BIN_W, FABRIC, K_PER_CORE, M_REQ, M_RSP,
+                                  W_FLITS, binned_jain, build_pattern,
+                                  fairness_stats, make_sim)
 from rg_ring2_topo import (CHI_VCS_WRITE, Ring2Topology, write_bounds,
                            write_paths_for_txns)
 
@@ -53,9 +60,13 @@ OUT = (Path(__file__).resolve().parents[1] / "results"
 CASES = [
     ("现状（shipped）", {}),
     ("I-tag 休眠 t_inj=1e9", {"t_inj": 10 ** 9}),
+    ("I-tag 更弱 t_inj=2", {"t_inj": 2}),
+    ("I-tag 更强 t_inj=8", {"t_inj": 8}),
     ("下环 eject 32", {"eject_depth": 32}),
     ("下环 eject 64", {"eject_depth": 64}),
     ("下环 eject 64 + I-tag 休眠", {"eject_depth": 64, "t_inj": 10 ** 9}),
+    ("core_outstanding 48", {"core_outstanding": 48}),
+    ("core_outstanding 64", {"core_outstanding": 64}),
     ("core_outstanding 256", {"core_outstanding": 256}),
     ("eject_bw 2（破规则，上界）", {"eject_bw": 2}),
     ("eject_bw 2 + I-tag 休眠（破规则，上界）",
@@ -88,7 +99,7 @@ def main() -> None:
         thr = total / mk
         inj = {int(c): v for c, v in (s.get("wr_inject_by_core") or {}).items()}
         fs = fairness_stats(inj, mk or 1, k * W_FLITS)
-        jb = binned_jain(inj, 50, fs.get("t_fair") or 0)
+        jb = binned_jain(inj, BIN_W, fs.get("t_fair") or 0)
         hot = {}
         for (_pl, _d, _n, vc), n in sim.hop_use.items():
             if n > hot.get(vc, (0, ""))[0]:
