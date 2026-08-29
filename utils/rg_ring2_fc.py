@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rg_ring2_base import Flit, Ring2BaseParams, Ring2BaseSim
-from rg_ring2_topo import Dir, PlaneId, Ring2Topology, is_core
+from rg_ring2_topo import Dir, PlaneId, Ring2Topology, is_core, is_ha
 
 # level -> multiplicative shrink; keyed by the *final* congestion level.
 ALPHA_BANDS: dict[str, dict[str, float]] = {
@@ -70,7 +70,7 @@ class Ring2FcParams(Ring2BaseParams):
     bus_lat: int = 1              # broadcast bus delivery delay
     budget_min: int = 1           # never throttle a node to silence
     band: str = "spec"            # alpha / beta band mapping
-    scope: str = "core_only"      # who is rate-controlled
+    scope: str = "core_only"      # "core_only" | "ha_only" | "both"
     trace: bool = True            # keep per-window traces for the report
     # -- S15 only -------------------------------------------------------
     reserve_gap: int = 16         # how far below the ring-wide mean a node
@@ -236,6 +236,8 @@ class Ring2FcSim(Ring2BaseSim):
     def _controlled(self, node: int) -> bool:
         if self.p.scope == "both":
             return True
+        if self.p.scope == "ha_only":
+            return is_ha(node)
         return is_core(node)
 
     def _bkey(self, node: int, vc: str, d: Dir | None = None) -> Any:

@@ -133,7 +133,9 @@ def dest_mix(k: int) -> dict[int, dict[int, float]]:
     return dict(sorted(out.items()))
 
 
-def coefficients(topo: Ring2Topology, mix: dict[int, dict[int, float]]
+def coefficients(topo: Ring2Topology, mix: dict[int, dict[int, float]], *,
+                 mult: dict[str, int | float] | None = None,
+                 reverse: set[str] | None = None
                  ) -> tuple[list[int], list[str], np.ndarray]:
     """a[c][r]: load on resource r per unit transaction rate of core c.
 
@@ -143,6 +145,8 @@ def coefficients(topo: Ring2Topology, mix: dict[int, dict[int, float]]
       ("down", node, vc)   down-ring (ejection) port, the read side of the
                            two-write-one-read buffer
     """
+    flow_mult = MULT if mult is None else mult
+    reverse_vcs = REVERSE if reverse is None else reverse
     cores = sorted(mix)
     res: dict[tuple, int] = {}
 
@@ -154,8 +158,10 @@ def coefficients(topo: Ring2Topology, mix: dict[int, dict[int, float]]
     rows: list[dict[int, float]] = [defaultdict(float) for _ in cores]
     for ci, c in enumerate(cores):
         for h, f in mix[c].items():
-            for vc, m in MULT.items():
-                src, dst = (h, c) if vc in REVERSE else (c, h)
+            for vc, m in flow_mult.items():
+                if m <= 0:
+                    continue
+                src, dst = (h, c) if vc in reverse_vcs else (c, h)
                 # The simulator's own direction choice, so the model cannot
                 # drift from the fabric it is meant to bound.
                 path = topo.make_path(src, dst, 0)
@@ -283,7 +289,7 @@ def main() -> None:
     # down to the bandwidth S0 actually achieves: by linearity it stays
     # feasible, now with real slack on every hop, and it is still perfectly
     # equal-rate. So this point needs no scheduling miracle.
-    s0_thr = 5.4681
+    s0_thr = 5.5412         # official K=20000 run at core_outstanding = 32
     util = s0_thr / r_fair
     jb_s0 = jain_ideal_bin(s0_thr, n, BIN_W)
     jb_s0_burst = jain_ideal_bin(s0_thr, n, BIN_W, gran=W_FLITS)

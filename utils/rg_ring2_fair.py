@@ -81,7 +81,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rg_ring2_base import Flit, Ring2BaseParams, Ring2BaseSim
-from rg_ring2_topo import PlaneId, Ring2Topology, is_core
+from rg_ring2_topo import PlaneId, Ring2Topology, is_core, is_ha
 
 
 @dataclass
@@ -96,6 +96,8 @@ class Ring2FairParams(Ring2BaseParams):
     fair_vcs: tuple[str, ...] = ("dat",)
     fair_signal: str = "inband"      # "inband" | "bus"
     fair_bus_lat: int = 30           # the mandated bus delay, when used
+    fair_scope_nodes: str = "core_only"  # "core_only" | "ha_only"
+    fair_identity: str = "src"       # "src" for writes, "dst" for reads
 
 
 class Ring2FairSim(Ring2BaseSim):
@@ -126,14 +128,29 @@ class Ring2FairSim(Ring2BaseSim):
     # -- helpers ------------------------------------------------------------
 
     def _paced(self, node: int, vc: str) -> bool:
-        return vc in self.p.fair_vcs and is_core(node)
+        if vc not in self.p.fair_vcs:
+            return False
+        if self.p.fair_scope_nodes == "ha_only":
+            return is_ha(node)
+        return is_core(node)
 
-    def _pkey(self, node: int, vc: str, d: int) -> Any:
-        return (node, vc, d)
+    def _pkey(self, node: int, identity: int, vc: str, d: int) -> Any:
+        return (node, identity, vc, d)
 
     def _keys(self) -> list[Any]:
-        return [(n, vc, d) for n in range(self.n) for vc in self.p.fair_vcs
-                for d in (1, -1) if self._paced(n, vc)]
+        out = []
+        for n in range(self.n):
+            for vc in self.p.fair_vcs:
+                if not self._paced(n, vc):
+                    continue
+                identities = (self._cores()
+                              if self.p.fair_identity == "dst" else (n,))
+                out.extend((n, ident, vc, d) for ident in identities
+                           for d in (1, -1))
+        return out
+
+    def _identity(self, f: Flit) -> int:
+        return f.dst if self.p.fair_identity == "dst" else f.src
 
     def _rate(self, k: Any) -> float:
         return self.rate.get(k, self.p.fair_init)
@@ -150,7 +167,7 @@ class Ring2FairSim(Ring2BaseSim):
         if f is None or not self._paced(node, f.vc):
             return True
         d = getattr(f, "dir", 1) or 1
-        if self.credit[self._pkey(node, f.vc, d)] >= 1.0:
+        if self.credit[self._pkey(node, self._identity(f), f.vc, d)] >= 1.0:
             return True
         self.st["n_fair_deny"] += 1
         self._deny_cause = "fair"
@@ -160,9 +177,10 @@ class Ring2FairSim(Ring2BaseSim):
         super()._on_inject(f)
         if self._paced(f.src, f.vc):
             d = getattr(f, "dir", 1) or 1
-            self.credit[self._pkey(f.src, f.vc, d)] -= 1.0
-            self.ok_win[self._pkey(f.src, f.vc, d)] += 1
-            self.own_win[f.src] += 1
+            ident = self._identity(f)
+            self.credit[self._pkey(f.src, ident, f.vc, d)] -= 1.0
+            self.ok_win[self._pkey(f.src, ident, f.vc, d)] += 1
+            self.own_win[ident] += 1
 
     def _launch(self, f: Flit, *, inring: bool) -> bool:
         """Count crossings per source: the in-band fair-share signal.
@@ -173,7 +191,7 @@ class Ring2FairSim(Ring2BaseSim):
         node = f.idx
         ok = super()._launch(f, inring=inring)
         if ok and self.p.fair_signal == "inband" and f.vc in self.p.fair_vcs:
-            self.obs[node][f.src] += 1
+            self.obs[node][self._identity(f)] += 1
         return ok
 
     def _ctrl_deliver(self) -> None:
@@ -197,8 +215,9 @@ class Ring2FairSim(Ring2BaseSim):
         if self.p.fair_signal == "inband":
             seen = {s: c for s, c in self.obs[node].items()
                     if is_core(s) and c > 0}
-            # A node always knows its own count exactly.
-            seen[node] = self.own_win[node]
+            # In write mode the injecting core knows its own count exactly.
+            if self.p.fair_identity == "src" and is_core(node):
+                seen[node] = self.own_win[node]
             vals = [v for v in seen.values() if v > 0]
         else:
             vals = [v for v in self.view[node].values() if v > 0]
@@ -207,22 +226,20 @@ class Ring2FairSim(Ring2BaseSim):
     def _close_window(self) -> None:
         p = self.p
         rec_r, rec_ok = [], []
-        for c in self._cores():
-            share = self._share_for(c)
-            own = self.own_win[c]
-            for vc in p.fair_vcs:
-                for d in (1, -1):
-                    k = self._pkey(c, vc, d)
-                    r = self._rate(k)
-                    if share is not None and own > share * (1.0 + p.fair_tol):
-                        r -= p.fair_step
-                        self.st["n_fair_trim"] += 1
-                    else:
-                        r += p.fair_step
-                        self.st["n_fair_release"] += 1
-                    self.rate[k] = max(p.fair_floor, min(self.CEIL, r))
-                    rec_r.append(round(self.rate[k], 4))
-            rec_ok.append(own)
+        for node, ident, vc, d in self._keys():
+            share = self._share_for(node)
+            own = self.own_win[ident]
+            k = self._pkey(node, ident, vc, d)
+            r = self._rate(k)
+            if share is not None and own > share * (1.0 + p.fair_tol):
+                r -= p.fair_step
+                self.st["n_fair_trim"] += 1
+            else:
+                r += p.fair_step
+                self.st["n_fair_release"] += 1
+            self.rate[k] = max(p.fair_floor, min(self.CEIL, r))
+            rec_r.append(round(self.rate[k], 4))
+        rec_ok = [self.own_win[c] for c in self._cores()]
 
         if p.fair_signal == "bus":
             post = {c: self.own_win[c] for c in self._cores()}
@@ -243,6 +260,7 @@ class Ring2FairSim(Ring2BaseSim):
             "mode": "s23", "window": p.fair_window, "burst": p.fair_burst,
             "tol": p.fair_tol, "step": p.fair_step, "floor": p.fair_floor,
             "signal": p.fair_signal,
+            "scope": p.fair_scope_nodes, "identity": p.fair_identity,
             "bus_lat": p.fair_bus_lat if p.fair_signal == "bus" else None,
             "bus_posts": self.bus_posts,
             # 6 bits per post, the same width S1 pays. Zero when in-band.

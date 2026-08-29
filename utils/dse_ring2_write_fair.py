@@ -73,7 +73,7 @@ OUT = ROOT / "results" / "ring2_write_fair.json"
 K_PER_CORE = 20_000
 N_PLANES_STUDY = 1
 W_FLITS = BURST_FLITS   # 128B burst / 64B flit
-BIN_W = 50               # fairness window: Jain of the 10 cores per 50 cycles
+BIN_W = 100              # fairness window: Jain of the 10 cores per 100 cycles
 T_MAX = 4_000_000
 # Two adjacent memory nodes standing in for one clustered memory region. Both
 # are memory in this study (9 and 19 are not), so the roles are unchanged and
@@ -103,7 +103,14 @@ RETRY_TRACK = 512
 # ha_track = 256 (k=3000, peak occupancy ~204): 64 gives max/min 1.073 at
 # +2.4% throughput over S0, while 128 -- also "below the tracker" -- lands at
 # 1.177 and does nothing. So this stays at 64 and is not scaled with ha_track.
-S16_OVERCOMMIT = 64
+#
+# It does have to be scaled with `core_outstanding`, which is the thing that
+# actually sets how much the ring holds in flight. At the old cap of 128, 64 was
+# the tight value; at cap 32 the whole roster only offers ~40 requests per HA, so
+# 64 never withholds anything and S16 was measuring bit-identical to S0. The
+# re-sweep at cap 32 (`probe_ring2_s16_oc`) puts the optimum at 16 -- half the
+# cap, the same ratio as before -- with a broad 12..16 plateau.
+S16_OVERCOMMIT = 16
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
@@ -304,7 +311,10 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 # Run one scheme
 # ---------------------------------------------------------------------------
 
-CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
+# Sized to cover the worst-case unloaded write RTT (89 cycles) at the equal-rate
+# share of 2/7 txn/cycle, i.e. ~26 in flight; 32 is the next power of two. The
+# study used to run 128, which only added queueing on top of a saturated ring.
+CORE_OUTSTANDING_WR = 32
 
 # Every scheme rides the same fabric: one plane, latency-shortest routing
 # (link-delay sum, then hops, then CW), a depth-12 shared up-ring FIFO plus

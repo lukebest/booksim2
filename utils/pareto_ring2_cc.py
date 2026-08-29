@@ -72,7 +72,7 @@ def hw_cost(spec: dict) -> tuple[int, dict]:
     b = {}
     b["bus"] = spec.get("bus_bits", 0) * N_NODES
     b["table"] = (spec.get("table_entries", 0) * spec.get("table_bits", 0)
-                  * N_NODES)
+                  * spec.get("table_scope", N_NODES))
     b["counters"] = spec.get("counter_bits", 0) * spec.get("counter_scope",
                                                            N_NODES)
     b["arith"] = sum(ARITH[k] * n for k, n in
@@ -82,7 +82,8 @@ def hw_cost(spec: dict) -> tuple[int, dict]:
                     - STOCK_DIR_DEPTH)
     extra_sh = max(0, spec.get("inj_depth", STOCK_SHARED_DEPTH)
                    - STOCK_SHARED_DEPTH)
-    b["queue"] = ((extra_dir * N_DIR + extra_sh) * N_VC * N_NODES * FLIT_BITS)
+    b["queue"] = ((extra_dir * N_DIR + extra_sh)
+                  * spec.get("n_vc", N_VC) * N_NODES * FLIT_BITS)
     return sum(b.values()), b
 
 

@@ -268,6 +268,16 @@ class RateMixin:
             self._note_rtt(txn.core, self.t - t0)
         self._on_rtt_sample(txn)
 
+    def _on_txn_done(self, txn: Txn, last: Flit) -> None:
+        """Read feedback arrives with the last CompData, not a DBIDResp."""
+        super()._on_txn_done(txn, last)
+        if getattr(txn, "op", "read") == "write":
+            return
+        t0 = self.req_inject_t.get(txn.txn_id)
+        if t0 is not None:
+            self._note_rtt(txn.core, self.t - t0)
+        self._on_rtt_sample(txn)
+
     def _on_rtt_sample(self, txn: Txn) -> None:
         return
 
@@ -392,6 +402,14 @@ class DcqcnMixin(RateMixin):
 
     def _on_dbid_at_core(self, txn: Txn) -> None:
         super()._on_dbid_at_core(txn)
+
+    def _on_rtt_sample(self, txn: Txn) -> None:
+        """Read fallback: no DBID exists; sample the mark at CompData completion.
+
+        The current read datapath has no HA request tracker, so `used` is zero
+        and this deliberately exposes S18 as inert rather than inventing a
+        different ECN signal under the same scheme name.
+        """
         used = self.acc_used.get(txn.txn_id, 0)
         if self.rng.random() < self._mark_prob(used):
             self._on_mark(txn.core)
@@ -512,6 +530,16 @@ class WindowMixin:
         t0 = self.req_inject_t.get(txn.txn_id)  # type: ignore[attr-defined]
         if t0 is not None:
             self._note_rtt(txn.core, self.t - t0)  # type: ignore[attr-defined]
+        self._on_win_sample(txn)
+
+    def _on_txn_done(self, txn: Txn, last: Flit) -> None:
+        """Read window feedback arrives with the last CompData."""
+        super()._on_txn_done(txn, last)         # type: ignore[misc]
+        if getattr(txn, "op", "read") == "write":
+            return
+        t0 = self.req_inject_t.get(txn.txn_id)  # type: ignore[attr-defined]
+        if t0 is not None:
+            self._note_rtt(txn.core, self.t - t0)
         self._on_win_sample(txn)
 
     def _on_win_sample(self, txn: Txn) -> None:

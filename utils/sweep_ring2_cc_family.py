@@ -115,9 +115,11 @@ CASES: list[tuple] = [
     ("S22 deficit-yield bus30 w32", "S22",
      {**S22_CFG, "dfc_window": 32, "dfc_bus_lat": 30, "dfc_margin": 3.0},
      ("recv", "arb", "bus"), HW_S22, True),
-    ("S22 deficit-yield bus1 w2", "S22", {**S22_CFG},
-     ("recv", "arb", "bus"), HW_S22, False),
 ]
+# Dropped: the same controller with `dfc_bus_lat=1`. It scored well, but a
+# one-cycle broadcast is not a thing this design can build, and carrying an
+# unbuildable point through the Pareto plot only invites it to be read as an
+# option. The 30-cycle rule is a physical constraint, not a knob.
 
 
 def main() -> None:

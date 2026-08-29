@@ -1,6 +1,6 @@
 {
-  "n_total": 81,
-  "n_ok": 81,
+  "n_total": 83,
+  "n_ok": 83,
   "all_ok": true,
   "rows": [
     {
@@ -244,6 +244,14 @@
       "ok": true
     },
     {
+      "name": "read_scheme_feedback_and_scope",
+      "ok": true
+    },
+    {
+      "name": "tiled_read_reverses_only_dat",
+      "ok": true
+    },
+    {
       "name": "s16_respects_grant_budget",
       "ok": true
     },
@@ -328,5 +336,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-28T06:52:09Z"
+  "generated_at": "2026-08-28T09:11:03Z"
 }

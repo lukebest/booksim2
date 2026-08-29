@@ -1511,6 +1511,43 @@ def test_s16_read_is_local_and_paces() -> None:
     assert idl["binding"].startswith("hop:"), idl["binding"]
 
 
+def test_read_scheme_feedback_and_scope() -> None:
+    """Read mappings must act at the protocol point their labels claim."""
+    # S1-R controls the CompData sender (HA), not the requester core.
+    p = Ring2FcParams(scope="ha_only")
+    fc = Ring2FcSim(_write_topo(), p, seed=0)
+    assert fc._controlled(1) and not fc._controlled(0)
+
+    # Delay schemes sample REQ -> last CompData when there is no DBIDResp.
+    _, _, timely = _run_read(
+        "S17", k=40, cfg={"core_outstanding": 32, "pace_init": 2.0})
+    assert timely.done()
+    assert all(timely.n_sample[c] > 0 for c in timely.topo.cores)
+    assert sum(len(v) for v in timely.summary()["rd_recv_by_core"].values()) \
+        == 40 * 10 * 2
+
+    # The write ECN trigger is deliberately absent on the current read
+    # protocol. Keep this explicit so an inert S18 row cannot be misreported
+    # later as a working read controller.
+    _, _, dcqcn = _run_read(
+        "S18", k=40, cfg={"core_outstanding": 32, "pace_init": 2.0})
+    assert dcqcn.done()
+    assert dcqcn.st["n_mark"] == 0
+
+
+def test_tiled_read_reverses_only_dat() -> None:
+    """The official read stream must preserve the write address/HA mix."""
+    from dse_ring2_write_fair import CORE_NODES, MEM_NODES, W_FLITS
+    from rg_ring2_topo import build_tiled_read
+
+    wr = build_tiled_write(
+        k=256, m_wdata=W_FLITS, mem=MEM_NODES, core_set=CORE_NODES)
+    rd = build_tiled_read(
+        k=256, m_resp=W_FLITS, mem=MEM_NODES, core_set=CORE_NODES)
+    assert [(t.core, t.ha) for t in rd] == [(t.core, t.ha) for t in wr]
+    assert all(t.op == "read" and t.m_resp == W_FLITS for t in rd)
+
+
 def test_s16_unbounded_equals_baseline() -> None:
     """Granting on arrival is the baseline policy, bit for bit.
 
@@ -2325,6 +2362,8 @@ def main() -> None:
     c.add("s16_unbounded_equals_s0", test_s16_unbounded_equals_baseline)
     c.add("s16_read_unbounded_equals_s0", test_s16_read_unbounded_equals_s0)
     c.add("s16_read_is_local_and_paces", test_s16_read_is_local_and_paces)
+    c.add("read_scheme_feedback_and_scope", test_read_scheme_feedback_and_scope)
+    c.add("tiled_read_reverses_only_dat", test_tiled_read_reverses_only_dat)
     c.add("s16_respects_grant_budget", test_s16_respects_grant_budget)
     c.add("s16_bufferless_and_fair", test_s16_is_bufferless_and_fair)
     c.add("retry_off_equals_baseline", test_retry_off_reproduces_baseline)

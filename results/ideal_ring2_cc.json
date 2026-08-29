@@ -1,6 +1,6 @@
 {
   "w_flits": 2,
-  "bin_w": 50,
+  "bin_w": 100,
   "n_cores": 10,
   "cores": [
     0,
@@ -35,15 +35,15 @@
     0,
     10
   ],
-  "jain_bin_ideal": 0.9997,
-  "jain_bin_ideal_burst": 0.999001,
+  "jain_bin_ideal": 0.999963,
+  "jain_bin_ideal_burst": 0.9997,
   "bw_at_jain99": 5.814978,
   "theta_at_jain99": 0.93939,
-  "s0_thr_ref": 5.4681,
-  "s0_util_of_rfair": 0.95692,
-  "jain_bin_ideal_at_s0_bw": 0.9997,
-  "jain_bin_ideal_at_s0_bw_burst": 0.998819,
-  "flits_per_bin": 285.71,
+  "s0_thr_ref": 5.5412,
+  "s0_util_of_rfair": 0.96971,
+  "jain_bin_ideal_at_s0_bw": 0.999921,
+  "jain_bin_ideal_at_s0_bw_burst": 0.99973,
+  "flits_per_bin": 571.43,
   "binding_max": [
     [
       "hop:4:3:dat",

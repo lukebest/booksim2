@@ -654,6 +654,29 @@ def build_hot_read(*, k: int = 100, m_resp: int = 2,
     return out
 
 
+def build_tiled_read(*, k: int = 100, m_resp: int = 2,
+                     n: int = N_NODES, mem: Sequence[int] | None = None,
+                     core_set: Sequence[int] | None = None) -> list[Txn]:
+    """ReadNoSnp counterpart of `build_tiled_write`.
+
+    The address walk and HA hash are identical, so a read/write comparison
+    changes only the CHI direction of the DAT payload: CompData runs HA→core
+    while WriteData runs core→HA.
+    """
+    cs = list(core_set) if core_set is not None else cores(n)
+    hs = list(mem) if mem is not None else has(n)
+    lines = TILE_BYTES // STRIDE_BYTES
+    out: list[Txn] = []
+    tid = 0
+    for c in cs:
+        for i in range(k):
+            tile, line = divmod(i, lines)
+            addr = (c << 20) + tile * TILE_BYTES + line * STRIDE_BYTES
+            out.append(Txn(tid, c, interleave_ha(addr, hs), 1, m_resp))
+            tid += 1
+    return out
+
+
 # Write stimulus used by the fairness report: 128B bursts, 4KB stride,
 # 64KB tiles. One CHI WriteData flit is one 64B beat, so a burst is 2 flits.
 FLIT_BYTES = 64

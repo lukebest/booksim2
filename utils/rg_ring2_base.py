@@ -1520,6 +1520,7 @@ class Ring2BaseSim:
                 out["wr_recv_by_ha"] = self.wr_recv_by_ha()
             if self.rd_inject_times:
                 out["rd_inject_by_core"] = self.rd_inject_by_core()
+                out["rd_recv_by_core"] = self.recv_by_core()
             out["board_fail_by_src"] = self.fail_cause_table()
             out["inj_by_hop"] = self.inj_by_hop()
             out["hop_use"] = self.hop_use_table()

@@ -53,7 +53,7 @@ from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 from rg_ring2_base import Flit, Ring2BaseParams, Ring2BaseSim
-from rg_ring2_topo import PlaneId, Ring2Topology, Txn, is_core
+from rg_ring2_topo import PlaneId, Ring2Topology, Txn, is_core, is_ha
 
 # Window counts ride the bus at S1's width: 6 bits, saturating.
 BUS_BITS = 6
@@ -72,7 +72,7 @@ class Ring2DfcParams(Ring2BaseParams):
     dfc_scope: str = "segment"    # "segment" (crossers only) | "plane"
     dfc_vcs: tuple[str, ...] = ("dat",)    # VCs the deficit is tracked on
     dfc_cap: float = 64.0         # clamp on the accumulated deficit
-    dfc_scope_nodes: str = "core_only"     # who participates
+    dfc_scope_nodes: str = "core_only"     # "core_only" | "ha_only" | "both"
     # How many entries deep the inject arbiter may look past a flit it has
     # to yield, hunting for one that turns off the ring *before* the
     # requester. Yielding by idling wastes the slot on the yielder's own
@@ -135,8 +135,11 @@ class Ring2DfcSim(Ring2BaseSim):
     def _tracked(self, node: int, vc: str) -> bool:
         if vc not in self.p.dfc_vcs:
             return False
-        return (True if self.p.dfc_scope_nodes == "both"
-                else is_core(node))
+        if self.p.dfc_scope_nodes == "both":
+            return True
+        if self.p.dfc_scope_nodes == "ha_only":
+            return is_ha(node)
+        return is_core(node)
 
     def _members(self) -> list[int]:
         return [n for n in range(self.n)

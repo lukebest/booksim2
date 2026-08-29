@@ -3291,79 +3291,198 @@ S16 在 uniform 上的带宽优势从 +0.31% 收敛到与 S0 持平
 
 
 def _s16_read_section() -> str:
-    """HA-local S16 on ReadNoSnp: no DBID, no bus."""
-    f = ROOT / "results" / "probe_ring2_s16_read.json"
+    """ReadNoSnp theory, S0/S1/all-scheme results, and read Pareto."""
+    f = ROOT / "results" / "ring2_read_fair.json"
     if not f.exists():
         return ""
     d = json.loads(f.read_text())
     hot, uni = d["loads"]["hot"], d["loads"]["uniform"]
     ih, iu = hot["ideal"], uni["ideal"]
+    meta = d["method"]
 
     def row(load: dict, name: str) -> dict:
         return next(r for r in load["rows"] if r["name"] == name)
 
-    s0h = row(hot, "S0 cap128")
-    s16h = row(hot, "S16 oc=16 cap32")
-    bush = row(hot, "S16 oc=32 bus30 cap32")
-    s0u = row(uni, "S0 cap128")
-    s16u = row(uni, "S16 oc=16 cap128")
-    busu = row(uni, "S16 oc=32 bus30 cap128")
+    def jm(r: dict) -> float:
+        return r["jain_bin"]["jain_bin_mean"]
 
-    def lines(load: dict, names: list[str]) -> list[list]:
-        return [[n, f"{r['thr']:.4f}", f"{r['bw_vs_ideal']:.4f}",
-                 f"{r['delta_vs_s0_pct']:+.2f}%", f"{r['jain_bin']:.4f}",
-                 f"{r['n_etag']:,}"]
-                for n in names
-                for r in [row(load, n)]]
+    def jim(r: dict) -> float:
+        return r["inject_jain_bin"]["jain_bin_mean"]
+
+    def lines(load: dict) -> list[list]:
+        return [[
+            r["name"], f"{r['throughput']:.4f}",
+            f"{r['bw_vs_ideal']:.4f}", f"{r['bw_vs_s0']:.4f}",
+            f"{jm(r):.5f}", f"{r['jain_vs_ideal']:.5f}",
+            f"{r['eta']:.4f}", f"{r['hardware_ff_eq']:,}",
+            ("有效" if r["applicable"] else "<b>N/A：缺少读侧信号</b>"),
+        ] for r in sorted(load["rows"], key=lambda x: -x["eta"])]
+
+    s0u, s0h = row(uni, "S0"), row(hot, "S0")
+    s1u, s1h = row(uni, "S1-R"), row(hot, "S1-R")
+    s1tu, s1th = row(uni, "S1T-R"), row(hot, "S1T-R")
+    s1ru, s1rh = row(uni, "S1-R REQ-admit"), row(hot, "S1-R REQ-admit")
+    s1tru = row(uni, "S1T-R REQ-admit")
+    s1trh = row(hot, "S1T-R REQ-admit")
+    s16u, s16h = row(uni, "S16-R least-served"), row(hot, "S16-R least-served")
+    busu, bush = row(uni, "S16-R bus30"), row(hot, "S16-R bus30")
+    rrh = row(hot, "S16-R round-robin")
+
+    def busiest(r: dict) -> tuple[str, dict]:
+        hs = [(k, v) for k, v in r.get("hop_use", {}).items()
+              if k.endswith(":dat")]
+        return max(hs, key=lambda x: x[1].get("util", 0)) if hs else ("—", {})
+
+    bindu, useu = busiest(s0u)
+    bindh, useh = busiest(s0h)
 
     return f"""
-<h2>S16 在读上：没有 DBID，也不需要总线</h2>
-<div class="def">写侧 S16 扣的是 <code>DBIDResp</code>。ReadNoSnp 没有这张票，
-大数据是 HA 自己发出的 CompData，所以同一套政策（overcommit + least-served）
-只能坐在 <b>HA 的 CompData 出口</b>上。这是 completer 的本地决策：
-不改报文、不用流控总线。<br>
-对照是同一套 fabric、同一套冻结旋钮，流量换成
-<code>hot</code> 读（十核全部读 HA 11/13）和 <code>uniform</code> 读。
-读的理想上限用<b>反向</b>的 LP 重解（DAT 是 HA→core）：
-<b>hot R* = {ih['r_fair']:.4f}</b>（绑定 <code>{ih['binding']}</code>），
-max-total = {ih['r_max']:.4f}，所以读的热簇上公平<b>有</b>带宽代价
-（写的热簇上 R*<sub>eq</sub> = R<sub>max</sub> = 2，这里不是）。
-uniform R* = {iu['r_fair']:.4f}。</div>
+<h2>读操作：理论上限、S0/S1、公平性与硬件 Pareto</h2>
+<div class="def"><b>严格同条件读写对照</b>：同一个 20 节点 full-ring、
+同一组 10 个 core 和 8 个终结 HA、同一 tiled 地址序列、同一最短时延路由和
+同一组 buffer / I-tag / E-tag 参数。每个事务仍搬 128B = 2 flit；
+唯一改变是 CHI 协议方向：读只有 <code>REQ core→HA</code> +
+<code>CompData×2 HA→core</code>，没有 DBIDResp、WriteData、Comp。
+每核 outstanding 固定为 {meta['core_outstanding']}。正式运行每核
+K={meta['k_per_core']}。<br>
+<b>公平性口径</b>是每 50 cycles 统计各核<b>实际收到</b>的 CompData，
+对 10 核求 Jain 后跨所有仍有十核竞争的完整分箱平均。HA 上环时刻另存为诊断；
+不能用它冒充核实际看到的瞬时读带宽。</div>
 
-<h3>hot 读：政策能同时抬带宽和公平，总线帮不上忙</h3>
-{_table(["方案", "吞吐", "带宽 / R*", "vs S0", "分箱 Jain", "E-tag"],
-        lines(hot, ["S0 cap128", "S0 cap32",
-                    "S16 oc=16 cap32", "S16 oc=32 cap32",
-                    "S16 oc=32 bus30 cap32", "S16 oc=inf cap128"]))}
-<p>S16 oc=inf 与 S0 <b>逐位相同</b>（吞吐 {s0h['thr']:.4f}、Jain {s0h['jain_bin']:.4f}、
-E-tag {s0h['n_etag']}）——钩子在不扣授权时不扰动数据通路。<br>
-工作点 <b>S16 oc=16 + 上限 32</b>：带宽 {s16h['bw_vs_ideal']:.4f}（R* 的
-{100 * s16h['bw_vs_ideal']:.2f}%，比 S0 +{s16h['delta_vs_s0_pct']:.2f}%），
-分箱 Jain {s0h['jain_bin']:.4f} → <b>{s16h['jain_bin']:.4f}</b>，
-E-tag {s0h['n_etag']:,} → {s16h['n_etag']}。
-增益来自少绕环：核的下环口被 CompData 灌满时 S0 会 E-tag，
-HA 出口限流之后少灌那些注定绕圈的 flit。<br>
-<code>grant_lat=30</code>（同一政策、决策走 30 拍总线）带宽
-{bush['bw_vs_ideal']:.4f}、Jain {bush['jain_bin']:.4f}，
-<b>比本地决策略差、没有任何一项更好</b>。HA 已经握着要调度的信息，
-总线只是多付 30 拍。</p>
+<h3>理论：读的等速上限是 5.7143，不是无条件的 6.4</h3>
+<p>令 λ<sub>c</sub> 为 core c 的读事务速率，p<sub>ch</sub> 为该核访问
+HA h 的实测地址混合。每条容量为 1 flit/cycle 的上环口、下环口和定向 hop
+都形成约束：</p>
+<p style="text-align:center">Σ<sub>c,h</sub> p<sub>ch</sub> λ<sub>c</sub>
+·[REQ 路径经过资源 r] + 2p<sub>ch</sub> λ<sub>c</sub>
+·[反向 CompData 路径经过 r] ≤ 1</p>
+<p>闭批次中十核各有相同工作量，因而要解
+<code>max θ, λc ≥ θ</code>；总读带宽是 <code>2Σλc</code>。
+均匀 tiled 读得到 <b>R*<sub>eq</sub> =
+{iu['equal_rate']['read_bw']:.4f} flit/cycle</b>，
+绑定资源为 {', '.join(f"<code>{x}</code>" for x in iu['equal_rate']['binding'])}。
+如果改解 <code>max Σλc</code>，可到
+{iu['max_total']['read_bw']:.4f}，但 Jain 只有
+{iu['max_total']['jain']:.3f}，代价是把部分核速率压到 0；
+它不是“所有核都完成”的带宽上限。热读相应为
+R*<sub>eq</sub>={ih['equal_rate']['read_bw']:.4f}，
+R<sub>max</sub>={ih['max_total']['read_bw']:.4f}，
+后者 Jain={ih['max_total']['jain']:.3f}。</p>
 
-<h3>uniform 读：不伤均衡流量</h3>
-{_table(["方案", "吞吐", "带宽 / R*", "vs S0", "分箱 Jain", "E-tag"],
-        lines(uni, ["S0 cap128", "S16 oc=16 cap128",
-                    "S16 oc=32 bus30 cap128"]))}
-<p>S16 oc=16 带宽 {s16u['bw_vs_ideal']:.4f}（+{s16u['delta_vs_s0_pct']:.2f}%），
-Jain {s0u['jain_bin']:.4f} → {s16u['jain_bin']:.4f}。
-总线变体 +{busu['delta_vs_s0_pct']:.2f}%，同样没有超出本地决策。</p>
+<img src="ring2_read_s0_timeseries.png"
+alt="S0 per-core and aggregate read bandwidth in 50-cycle bins">
 
-<div class="def good"><b>结论</b>：读侧可以实现 S16 形状的接收端调度，
-控制点是 HA 本地的 CompData 发放，<b>不需要 DBID，也不需要带外总线</b>。
-总线能搬同一比特，但 30 拍是纯税。
-和写侧一样，前提是控制点落在拥塞发生地 —— 热读绑在
-<code>{ih['binding']}</code>（HA 出向 hop），正是 HA 出口能看见的资源。</div>
-<p class="note">数据：<code>results/probe_ring2_s16_read.json</code>，
-脚本 <code>utils/probe_ring2_s16_read.py</code>，
-回归 <code>test_s16_read_unbounded_equals_s0</code>、
+<h3>S0：总读带宽与瞬时公平性</h3>
+{_table(["workload", "读带宽", "带宽 / R*eq", "核接收 Jain50",
+         "HA 发出 Jain50", "max/min", "最忙 DAT hop", "利用率", "E-tag"],
+        [["uniform", f"{s0u['throughput']:.4f}", f"{s0u['bw_vs_ideal']:.4f}",
+          f"{jm(s0u):.5f}", f"{jim(s0u):.5f}", f"{s0u['fairness']['max_min']:.3f}",
+          bindu, f"{useu.get('util', 0):.4f}", f"{s0u['n_etag']:,}"],
+         ["hot", f"{s0h['throughput']:.4f}", f"{s0h['bw_vs_ideal']:.4f}",
+          f"{jm(s0h):.5f}", f"{jim(s0h):.5f}", f"{s0h['fairness']['max_min']:.3f}",
+          bindh, f"{useh.get('util', 0):.4f}", f"{s0h['n_etag']:,}"]])}
+<p>uniform S0 距离等速 LP 上限
+<b>{100 * (1 - s0u['bw_vs_ideal']):.2f}%</b>，50-cycle Jain 仅
+<b>{jm(s0u):.5f}</b>。HA 发出端 Jain={jim(s0u):.5f} 与核接收端不相同，
+差值来自路径时延、目的核下环仲裁和 E-tag 重绕，故本节以接收端为准。
+uniform 在整个共同竞争期的 Jain={s0u['fairness']['jain']:.5f}、
+max/min={s0u['fairness']['max_min']:.4f}，说明其问题主要是<b>50-cycle
+内的抖动</b>，不是长期速率分层；这与写侧 S0 的固定快/慢核分层不同。
+hot 把两项问题都放大：两个 HA 出口持续争用少数反向 DAT hop，
+位置优势不会随闭批次自动消失。uniform 的最忙 DAT hop 实际搬了
+{useu.get('n', 0):,} 个 flit / {s0u['makespan']:,} cycles，且
+deflection=0、E-tag=0；因此 {100 * (1 - s0u['bw_vs_ideal']):.2f}% 缺口是该绑定 hop 的
+{s0u['makespan'] - useu.get('n', 0):,} 个空 cycle（启动/排空和无缓冲环
+局部仲裁形成的供给气泡），不是额外绕环占掉的容量。</p>
+
+<h3>S1 在读上：REQ admission 与 HA-DAT 两种映射，均未改善 per-core 公平</h3>
+{_table(["方案", "uniform BW", "BW/R*", "uniform Jain50",
+         "hot BW", "hot Jain50", "说明"],
+        [["S0", f"{s0u['throughput']:.4f}", f"{s0u['bw_vs_ideal']:.4f}",
+          f"{jm(s0u):.5f}", f"{s0h['throughput']:.4f}", f"{jm(s0h):.5f}", "基线"],
+         ["S1-R · core REQ", f"{s1ru['throughput']:.4f}", f"{s1ru['bw_vs_ideal']:.4f}",
+          f"{jm(s1ru):.5f}", f"{s1rh['throughput']:.4f}", f"{jm(s1rh):.5f}",
+          "请求端 admission"],
+         ["S1T-R · core REQ", f"{s1tru['throughput']:.4f}", f"{s1tru['bw_vs_ideal']:.4f}",
+          f"{jm(s1tru):.5f}", f"{s1trh['throughput']:.4f}", f"{jm(s1trh):.5f}",
+          "请求端按方向 admission"],
+         ["S1-R · HA DAT", f"{s1u['throughput']:.4f}", f"{s1u['bw_vs_ideal']:.4f}",
+          f"{jm(s1u):.5f}", f"{s1h['throughput']:.4f}", f"{jm(s1h):.5f}",
+          "HA 总量 AIMD"],
+         ["S1T-R · HA DAT", f"{s1tu['throughput']:.4f}", f"{s1tu['bw_vs_ideal']:.4f}",
+          f"{jm(s1tu):.5f}", f"{s1th['throughput']:.4f}", f"{jm(s1th):.5f}",
+          "HA 按方向独立 AIMD"]])}
+<p>读侧没有唯一的机械搬法，因此两种都测。<b>协议角色保持</b>的映射仍在
+requester core 上限 REQ：它保住 S0 带宽（uniform
+{s1ru['bw_vs_s0']:.4f}×、hot {s1rh['bw_vs_s0']:.4f}×），但每事务只有
+1 个 REQ，预算很少成为真正的 DAT 瓶颈，Jain 与 S0 基本相同。
+<b>payload-source 等价</b>则把预算机搬到 HA DAT 出口；它确实直接控制
+CompData，却把状态按“HA 节点/方向”聚合。它能平衡两个 HA 方向的失败，
+不知道同一 HA 队列里哪个目的 core 已经领先；stock AIMD 还会因 HA 自己
+board fail 惩罚受害 HA，故吞吐明显下降。S1T 的方向拆分只修正方向耦合，
+两种映射都没有添加“目的 core”维度，因而都没有解决 per-core Jain。</p>
+
+<h3>全部可移植方案与读侧 Pareto</h3>
+<img src="ring2_read_pareto.png"
+alt="Read benefit versus added hardware Pareto for uniform and hot traffic">
+<p>收益仍用单调标量
+<code>η=(总读带宽×接收端 Jain50)/(R*eq×Jideal)</code>；
+η=1 是既达到等速 LP 上限又在整数约束下逐箱最均匀的理想控制器。
+灰色 N/A 点保留在表里用于证明“原写代码会退化成什么”，但不进入 Pareto 前沿。
+uniform 前沿：{', '.join(f"<b>{x}</b>" for x in uni['pareto'])}；
+hot 前沿：{', '.join(f"<b>{x}</b>" for x in hot['pareto'])}。</p>
+
+<h4>uniform tiled 读</h4>
+{_table(["方案", "读带宽", "BW/R*", "BW/S0", "Jain50", "J/ideal",
+         "η", "新增 FF-eq", "读侧有效性"], lines(uni))}
+<h4>固定 hot 读</h4>
+{_table(["方案", "读带宽", "BW/R*", "BW/S0", "Jain50", "J/ideal",
+         "η", "新增 FF-eq", "读侧有效性"], lines(hot))}
+
+<h3>方案逐项：为什么读写实现不同</h3>
+<ul>
+<li><b>S0 / I-tag / E-tag</b>：机制本身不区分读写；变化只来自 DAT 反向。
+E-tag 仍在目的核下环失败时生效。</li>
+<li><b>S1</b>：保留 requester 角色时控制 core REQ，保留 payload-source
+角色时控制 HA DAT；上表同时给出，前者近乎不动作，后者过度限流，二者都缺
+目的-core 维度。<b>S15 / S21 / S22</b> 的执行器直接依赖数据源节点，
+读侧移到 HA 后只能公平 HA 总量，不能区分一个 HA 内的多个目的 core。</li>
+<li><b>S16</b>：写侧通过暂缓现成的 DBIDResp 阻止 WriteData；
+读没有 DBID，HA 直接把已到请求按目的 core 排队，以 least-served 选择下一个
+CompData burst，最后一个 CompData 到核时释放 overcommit。该决策所需信息都在
+HA，本地版本 uniform η={s16u['eta']:.4f}、hot η={s16h['eta']:.4f}；
+30-cycle 版本分别为 {busu['eta']:.4f}/{bush['eta']:.4f}，总线没有新增信息。
+hot 上结果<b>推翻“least-served 必然更公平”</b>：
+round-robin Jain={jm(rrh):.5f}，反而高于 least-served={jm(s16h):.5f}。
+固定等长 burst 下，RR 的逐请求轮转更规则；least-served 只保证每 HA 的累计量，
+不保证 50-cycle 窗内各 HA 的相位对齐。RR 还不需要 HA×core 累计服务表，
+所以 Pareto 按更低的硬件成本单独计价。</li>
+<li><b>S17 TIMELY / S19 Swift</b>：都可复用现有协议反馈，但写 RTT 是
+REQ→DBIDResp，读 RTT 必须等最后一个 CompData，包含 HA 排队、DAT 环路和目的
+core 下环等待；因此写侧阈值不是同一物理量，本节没有用读结果反向调参。</li>
+<li><b>S18 DCQCN / S20 DCTCP</b>：写侧 ECN 附在 DBIDResp，并由 HA 写 tracker
+占用触发；当前 ReadNoSnp 模型既无 DBIDResp 也没有读 tracker。表中的运行实际是
+“永不标记”消融，不是可部署的 S18/S20-R，故明确 N/A。若要命名为读侧 DCQCN，
+必须另增 CompData ECN bit，并定义目的核 eject-buffer 或 HA read-tracker
+阈值；这是新方案和新硬件，不能偷偷算作原方案。</li>
+<li><b>S23</b>：写侧每 core/VC/方向一组 credit；读侧要在每个 HA
+按<b>目的 core</b>/VC/方向建组，状态从 O(core) 变为 O(HA×core×direction)。
+本报告已按这个较大的表计硬件，不把它当作零代价端口搬迁。</li>
+</ul>
+
+<div class="def good"><b>读侧结论</b>：理论总读带宽必须同时给出
+R*<sub>eq</sub> 与会饿核的 R<sub>max</sub>；闭批次与公平评价应使用前者。
+S1 可以实现为 core REQ admission 或 HA CompData pacing；前者不触及瓶颈，
+后者缺目的-core 维度，节点级 AIMD 都不能直接改善 per-core 份额。
+S16 的读侧等价物最自然：本地调度 CompData，不需要 DBID，
+也不需要 30-cycle 总线；least-served 的 HA×core 累计服务表与更便宜的
+round-robin 指针已分别计入 Pareto。
+</div>
+<p class="note">数据：<code>results/ring2_read_fair.json</code>；
+脚本：<code>utils/dse_ring2_read_fair.py</code>；
+图片：<code>results/ring2_read_s0_timeseries.png</code>、
+<code>results/ring2_read_pareto.png</code>；回归：
+<code>test_s16_read_unbounded_equals_s0</code>、
 <code>test_s16_read_is_local_and_paces</code>。</p>
 """
 

@@ -2,17 +2,17 @@
   "schemes": [
     {
       "k": 2000,
-      "thr": 5.3937,
-      "jain_bin": 0.87632,
+      "thr": 5.4533,
+      "jain_bin": 0.93194,
       "hw": {},
       "bus_rule_ok": true,
       "driver": "-",
       "control": "none",
       "trigger": "none",
-      "bw_vs_ideal": 0.9439,
-      "jain_vs_ideal": 0.87632,
-      "eta": 0.8274,
-      "delta_pct": -5.61,
+      "bw_vs_ideal": 0.95433,
+      "jain_vs_ideal": 0.93202,
+      "eta": 0.8894,
+      "delta_pct": -4.57,
       "delta_s0_pct": 0.0,
       "pass_jain": false,
       "pass_bw": true,
@@ -25,12 +25,12 @@
         "arith": 0,
         "queue": 0
       },
-      "u": 4.7266
+      "u": 5.0821
     },
     {
       "k": 2000,
-      "thr": 5.4105,
-      "jain_bin": 0.87945,
+      "thr": 5.4585,
+      "jain_bin": 0.98349,
       "hw": {
         "counter_bits": 10,
         "counter_scope": 10,
@@ -44,11 +44,11 @@
       "driver": "recv",
       "control": "window",
       "trigger": "local",
-      "bw_vs_ideal": 0.94684,
-      "jain_vs_ideal": 0.87956,
-      "eta": 0.83294,
-      "delta_pct": -5.32,
-      "delta_s0_pct": 0.31,
+      "bw_vs_ideal": 0.95524,
+      "jain_vs_ideal": 0.98357,
+      "eta": 0.93949,
+      "delta_pct": -4.48,
+      "delta_s0_pct": 0.1,
       "pass_jain": false,
       "pass_bw": true,
       "name": "S16 grant withhold",
@@ -60,12 +60,12 @@
         "arith": 800,
         "queue": 0
       },
-      "u": 4.7583
+      "u": 5.3684
     },
     {
       "k": 2000,
-      "thr": 5.2206,
-      "jain_bin": 0.90686,
+      "thr": 5.3916,
+      "jain_bin": 0.96694,
       "hw": {
         "counter_bits": 36,
         "arith": {
@@ -76,11 +76,11 @@
       "driver": "-",
       "control": "arb",
       "trigger": "local",
-      "bw_vs_ideal": 0.9136,
-      "jain_vs_ideal": 0.90698,
-      "eta": 0.82875,
-      "delta_pct": -8.64,
-      "delta_s0_pct": -3.21,
+      "bw_vs_ideal": 0.94353,
+      "jain_vs_ideal": 0.96697,
+      "eta": 0.91236,
+      "delta_pct": -5.65,
+      "delta_s0_pct": -1.13,
       "pass_jain": false,
       "pass_bw": false,
       "name": "I-tag t_inj2 hold2",
@@ -92,12 +92,12 @@
         "arith": 2400,
         "queue": 0
       },
-      "u": 4.7344
+      "u": 5.2134
     },
     {
       "k": 2000,
-      "thr": 4.2359,
-      "jain_bin": 0.9894,
+      "thr": 4.2252,
+      "jain_bin": 0.98459,
       "hw": {
         "counter_bits": 16,
         "counter_scope": 10,
@@ -111,11 +111,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "local",
-      "bw_vs_ideal": 0.74128,
-      "jain_vs_ideal": 0.98975,
-      "eta": 0.73364,
-      "delta_pct": -25.87,
-      "delta_s0_pct": -21.47,
+      "bw_vs_ideal": 0.73941,
+      "jain_vs_ideal": 0.98471,
+      "eta": 0.72804,
+      "delta_pct": -26.06,
+      "delta_s0_pct": -22.52,
       "pass_jain": false,
       "pass_bw": false,
       "name": "S21 pacer hr1.5",
@@ -127,12 +127,12 @@
         "arith": 4800,
         "queue": 0
       },
-      "u": 4.191
+      "u": 4.1601
     },
     {
       "k": 2000,
-      "thr": 5.3555,
-      "jain_bin": 0.90386,
+      "thr": 5.4712,
+      "jain_bin": 0.9391,
       "hw": {
         "counter_bits": 24,
         "counter_scope": 10,
@@ -147,11 +147,11 @@
       "driver": "sender",
       "control": "window",
       "trigger": "delay",
-      "bw_vs_ideal": 0.93721,
-      "jain_vs_ideal": 0.90406,
-      "eta": 0.84736,
-      "delta_pct": -6.28,
-      "delta_s0_pct": -0.71,
+      "bw_vs_ideal": 0.95746,
+      "jain_vs_ideal": 0.93917,
+      "eta": 0.89918,
+      "delta_pct": -4.25,
+      "delta_s0_pct": 0.33,
       "pass_jain": false,
       "pass_bw": true,
       "name": "S19 Swift",
@@ -163,12 +163,12 @@
         "arith": 5600,
         "queue": 0
       },
-      "u": 4.8406
+      "u": 5.138
     },
     {
       "k": 2000,
-      "thr": 5.4237,
-      "jain_bin": 0.90441,
+      "thr": 5.4712,
+      "jain_bin": 0.9391,
       "hw": {
         "counter_bits": 24,
         "counter_scope": 10,
@@ -183,11 +183,11 @@
       "driver": "sender",
       "control": "window",
       "trigger": "ecn",
-      "bw_vs_ideal": 0.94915,
-      "jain_vs_ideal": 0.90452,
-      "eta": 0.85867,
-      "delta_pct": -5.09,
-      "delta_s0_pct": 0.56,
+      "bw_vs_ideal": 0.95746,
+      "jain_vs_ideal": 0.93917,
+      "eta": 0.89918,
+      "delta_pct": -4.25,
+      "delta_s0_pct": 0.33,
       "pass_jain": false,
       "pass_bw": true,
       "name": "S20 DCTCP",
@@ -199,12 +199,12 @@
         "arith": 5600,
         "queue": 0
       },
-      "u": 4.9052
+      "u": 5.138
     },
     {
       "k": 2000,
-      "thr": 4.2413,
-      "jain_bin": 0.9906,
+      "thr": 4.2454,
+      "jain_bin": 0.99346,
       "hw": {
         "bus_bits": 6,
         "table_entries": 10,
@@ -222,11 +222,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "bus",
-      "bw_vs_ideal": 0.74223,
-      "jain_vs_ideal": 0.99095,
-      "eta": 0.73547,
-      "delta_pct": -25.78,
-      "delta_s0_pct": -21.37,
+      "bw_vs_ideal": 0.74294,
+      "jain_vs_ideal": 0.9936,
+      "eta": 0.73811,
+      "delta_pct": -25.71,
+      "delta_s0_pct": -22.15,
       "pass_jain": true,
       "pass_bw": false,
       "name": "S21+eq bus30",
@@ -238,12 +238,12 @@
         "arith": 5400,
         "queue": 0
       },
-      "u": 4.2014
+      "u": 4.2176
     },
     {
       "k": 2000,
-      "thr": 5.3128,
-      "jain_bin": 0.92205,
+      "thr": 5.3029,
+      "jain_bin": 0.96184,
       "hw": {
         "bus_bits": 6,
         "table_entries": 10,
@@ -261,14 +261,14 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "bus",
-      "bw_vs_ideal": 0.92974,
-      "jain_vs_ideal": 0.92236,
-      "eta": 0.85752,
-      "delta_pct": -7.03,
-      "delta_s0_pct": -1.5,
+      "bw_vs_ideal": 0.92801,
+      "jain_vs_ideal": 0.96184,
+      "eta": 0.89262,
+      "delta_pct": -7.2,
+      "delta_s0_pct": -2.76,
       "pass_jain": false,
       "pass_bw": false,
-      "name": "S23 fair-share pacer (bus win64 tol0.05 step0.05)",
+      "name": "S23 fair-share pacer (bus win64 tol0.02 step0.05)",
       "hw_cost": 6960,
       "hw_breakdown": {
         "bus": 120,
@@ -277,12 +277,12 @@
         "arith": 5000,
         "queue": 0
       },
-      "u": 4.8987
+      "u": 5.1005
     },
     {
       "k": 2000,
-      "thr": 2.7405,
-      "jain_bin": 0.7788,
+      "thr": 2.7805,
+      "jain_bin": 0.849,
       "hw": {
         "counter_bits": 32,
         "counter_scope": 10,
@@ -297,11 +297,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "delay",
-      "bw_vs_ideal": 0.47959,
-      "jain_vs_ideal": 0.77967,
-      "eta": 0.37361,
-      "delta_pct": -52.04,
-      "delta_s0_pct": -49.19,
+      "bw_vs_ideal": 0.48659,
+      "jain_vs_ideal": 0.84918,
+      "eta": 0.41312,
+      "delta_pct": -51.34,
+      "delta_s0_pct": -49.01,
       "pass_jain": false,
       "pass_bw": false,
       "name": "S17 Timely",
@@ -313,12 +313,12 @@
         "arith": 9000,
         "queue": 0
       },
-      "u": 2.1343
+      "u": 2.3606
     },
     {
       "k": 2000,
-      "thr": 5.3937,
-      "jain_bin": 0.87632,
+      "thr": 5.4533,
+      "jain_bin": 0.93194,
       "hw": {
         "counter_bits": 32,
         "counter_scope": 10,
@@ -333,10 +333,10 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "ecn",
-      "bw_vs_ideal": 0.9439,
-      "jain_vs_ideal": 0.87632,
-      "eta": 0.8274,
-      "delta_pct": -5.61,
+      "bw_vs_ideal": 0.95433,
+      "jain_vs_ideal": 0.93202,
+      "eta": 0.8894,
+      "delta_pct": -4.57,
       "delta_s0_pct": 0.0,
       "pass_jain": false,
       "pass_bw": true,
@@ -349,12 +349,12 @@
         "arith": 9000,
         "queue": 0
       },
-      "u": 4.7266
+      "u": 5.0821
     },
     {
       "k": 2000,
-      "thr": 5.3858,
-      "jain_bin": 0.92046,
+      "thr": 5.2812,
+      "jain_bin": 0.96112,
       "hw": {
         "bus_bits": 6,
         "table_entries": 10,
@@ -370,13 +370,13 @@
       "driver": "recv",
       "control": "arb",
       "trigger": "bus",
-      "bw_vs_ideal": 0.94251,
-      "jain_vs_ideal": 0.92057,
-      "eta": 0.8678,
-      "delta_pct": -5.75,
-      "delta_s0_pct": -0.15,
+      "bw_vs_ideal": 0.92421,
+      "jain_vs_ideal": 0.96118,
+      "eta": 0.8883,
+      "delta_pct": -7.58,
+      "delta_s0_pct": -3.16,
       "pass_jain": false,
-      "pass_bw": true,
+      "pass_bw": false,
       "name": "S22 deficit-yield STOCK depth bus30 w64",
       "hw_cost": 13920,
       "hw_breakdown": {
@@ -386,12 +386,12 @@
         "arith": 12000,
         "queue": 0
       },
-      "u": 4.9574
+      "u": 5.0759
     },
     {
       "k": 2000,
-      "thr": 4.3351,
-      "jain_bin": 0.94568,
+      "thr": 4.5491,
+      "jain_bin": 0.96131,
       "hw": {
         "bus_bits": 6,
         "table_entries": 20,
@@ -407,11 +407,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "bus",
-      "bw_vs_ideal": 0.75864,
-      "jain_vs_ideal": 0.9461,
-      "eta": 0.71764,
-      "delta_pct": -24.14,
-      "delta_s0_pct": -19.63,
+      "bw_vs_ideal": 0.79609,
+      "jain_vs_ideal": 0.96143,
+      "eta": 0.76531,
+      "delta_pct": -20.39,
+      "delta_s0_pct": -16.58,
       "pass_jain": false,
       "pass_bw": false,
       "name": "S1 AIMD",
@@ -423,12 +423,12 @@
         "arith": 18400,
         "queue": 0
       },
-      "u": 4.0996
+      "u": 4.3731
     },
     {
       "k": 2000,
-      "thr": 5.2645,
-      "jain_bin": 0.8796,
+      "thr": 5.3901,
+      "jain_bin": 0.92351,
       "hw": {
         "bus_bits": 6,
         "table_entries": 20,
@@ -444,11 +444,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "bus",
-      "bw_vs_ideal": 0.92129,
-      "jain_vs_ideal": 0.87987,
-      "eta": 0.8106,
-      "delta_pct": -7.87,
-      "delta_s0_pct": -2.4,
+      "bw_vs_ideal": 0.94327,
+      "jain_vs_ideal": 0.92354,
+      "eta": 0.87114,
+      "delta_pct": -5.67,
+      "delta_s0_pct": -1.16,
       "pass_jain": false,
       "pass_bw": false,
       "name": "S1T AIMD dir-split",
@@ -460,12 +460,12 @@
         "arith": 18400,
         "queue": 0
       },
-      "u": 4.6307
+      "u": 4.9778
     },
     {
       "k": 2000,
-      "thr": 5.1473,
-      "jain_bin": 0.92627,
+      "thr": 5.2959,
+      "jain_bin": 0.95508,
       "hw": {
         "bus_bits": 6,
         "table_entries": 20,
@@ -481,11 +481,11 @@
       "driver": "sender",
       "control": "rate",
       "trigger": "bus",
-      "bw_vs_ideal": 0.90078,
-      "jain_vs_ideal": 0.92656,
-      "eta": 0.83461,
-      "delta_pct": -9.92,
-      "delta_s0_pct": -4.57,
+      "bw_vs_ideal": 0.92678,
+      "jain_vs_ideal": 0.95508,
+      "eta": 0.88518,
+      "delta_pct": -7.32,
+      "delta_s0_pct": -2.89,
       "pass_jain": false,
       "pass_bw": false,
       "name": "S15 fair-share+resv",
@@ -497,12 +497,12 @@
         "arith": 19600,
         "queue": 0
       },
-      "u": 4.7678
+      "u": 5.058
     },
     {
       "k": 2000,
-      "thr": 5.3512,
-      "jain_bin": 0.94175,
+      "thr": 5.3662,
+      "jain_bin": 0.98072,
       "hw": {
         "bus_bits": 6,
         "table_entries": 10,
@@ -520,13 +520,13 @@
       "driver": "recv",
       "control": "arb",
       "trigger": "bus",
-      "bw_vs_ideal": 0.93646,
-      "jain_vs_ideal": 0.94196,
-      "eta": 0.88217,
-      "delta_pct": -6.35,
-      "delta_s0_pct": -0.79,
+      "bw_vs_ideal": 0.93908,
+      "jain_vs_ideal": 0.98079,
+      "eta": 0.921,
+      "delta_pct": -6.09,
+      "delta_s0_pct": -1.6,
       "pass_jain": false,
-      "pass_bw": true,
+      "pass_bw": false,
       "name": "S22 deficit-yield bus30 w32",
       "hw_cost": 1198560,
       "hw_breakdown": {
@@ -536,53 +536,14 @@
         "arith": 21600,
         "queue": 1175040
       },
-      "u": 5.0395
-    },
-    {
-      "k": 2000,
-      "thr": 5.3634,
-      "jain_bin": 0.98914,
-      "hw": {
-        "bus_bits": 6,
-        "table_entries": 10,
-        "table_bits": 8,
-        "counter_bits": 10,
-        "arith": {
-          "addtree10": 1,
-          "add": 2,
-          "cmp": 32
-        },
-        "dir_inj_depth": 32,
-        "inj_depth": 32
-      },
-      "bus_rule_ok": false,
-      "driver": "recv",
-      "control": "arb",
-      "trigger": "bus",
-      "bw_vs_ideal": 0.93859,
-      "jain_vs_ideal": 0.98936,
-      "eta": 0.92867,
-      "delta_pct": -6.14,
-      "delta_s0_pct": -0.56,
-      "pass_jain": false,
-      "pass_bw": true,
-      "name": "S22 deficit-yield bus1 w2",
-      "hw_cost": 1198560,
-      "hw_breakdown": {
-        "bus": 120,
-        "table": 1600,
-        "counters": 200,
-        "arith": 21600,
-        "queue": 1175040
-      },
-      "u": 5.3052
+      "u": 5.2627
     }
   ],
   "ideal": {
     "bw": 5.714285714285715,
-    "jain_bin": 0.9997066731850404,
-    "u": 5.712609561057374,
-    "s0_thr": 5.3937,
+    "jain_bin": 0.9999723968716454,
+    "u": 5.714127982123689,
+    "s0_thr": 5.4533,
     "k": 2000
   }
 }

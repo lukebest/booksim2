@@ -96,7 +96,6 @@ FAMILY_HW = {
     "S21 pacer hr1.5": ("s21", "sender", "rate", "local"),
     "S21+eq bus30": ("s21eq", "sender", "rate", "bus"),
     "S22 deficit-yield bus30 w32": ("s22", "recv", "arb", "bus"),
-    "S22 deficit-yield bus1 w2": ("s22", "recv", "arb", "bus"),
 }
 
 

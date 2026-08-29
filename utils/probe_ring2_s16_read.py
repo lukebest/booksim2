@@ -45,7 +45,6 @@ from collections import defaultdict
 from dse_ring2_write_fair import (BIN_W, FABRIC, W_FLITS, binned_jain,
                                   fairness_stats, run_scheme)
 from ideal_ring2_cc import coefficients, solve_max_total, solve_theta
-import ideal_ring2_cc as _ideal
 from rg_ring2_topo import (CHI_VCS_WRITE, Ring2Topology, build_hot_read,
                            build_uniform)
 
@@ -61,15 +60,10 @@ def read_ideal(topo: Ring2Topology, txns) -> dict:
         cnt[t.core][t.ha] += 1
     mix = {c: {h: v / sum(row.values()) for h, v in row.items()}
            for c, row in cnt.items()}
-    old_m, old_r = dict(_ideal.MULT), set(_ideal.REVERSE)
-    _ideal.MULT = {"req": 1, "dat": R_FLITS, "rsp": 0}
-    _ideal.REVERSE = {"dat"}
-    try:
-        _, names, a = coefficients(topo, mix)
-        lam_f = solve_theta(a, 1.0)
-        lam_m = solve_max_total(a)
-    finally:
-        _ideal.MULT, _ideal.REVERSE = old_m, old_r
+    _, names, a = coefficients(
+        topo, mix, mult={"req": 1, "dat": R_FLITS}, reverse={"dat"})
+    lam_f = solve_theta(a, 1.0)
+    lam_m = solve_max_total(a)
     load = a.T @ lam_f
     return {"r_fair": R_FLITS * float(lam_f.sum()),
             "r_max": R_FLITS * float(lam_m.sum()),

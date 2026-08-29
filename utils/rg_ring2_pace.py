@@ -51,7 +51,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from rg_ring2_base import Flit, Ring2BaseParams, Ring2BaseSim
-from rg_ring2_topo import PlaneId, Ring2Topology, Txn, is_core
+from rg_ring2_topo import PlaneId, Ring2Topology, Txn, is_core, is_ha
 
 # Achieved counts are broadcast at S1's precision: 3 bits per direction.
 LEVEL_MAX = 7
@@ -66,7 +66,7 @@ class Ring2PaceParams(Ring2BaseParams):
     pace_floor: float = 0.05      # never pace a core to silence
     pace_init: float = 1.0        # start unthrottled, converge downward
     pace_vcs: tuple[str, ...] = ("dat",)   # which VCs are paced
-    pace_scope: str = "core_only"          # "core_only" | "both"
+    pace_scope: str = "core_only"          # "core_only" | "ha_only" | "both"
     # Bus-assisted rate equalisation, reusing S1's broadcast.
     pace_equalise: bool = False
     pace_tol: float = 0.08        # relative lead over the slowest core
@@ -98,7 +98,11 @@ class Ring2PaceSim(Ring2BaseSim):
     def _paced(self, node: int, vc: str) -> bool:
         if vc not in self.p.pace_vcs:
             return False
-        return True if self.p.pace_scope == "both" else is_core(node)
+        if self.p.pace_scope == "both":
+            return True
+        if self.p.pace_scope == "ha_only":
+            return is_ha(node)
+        return is_core(node)
 
     def _keys(self) -> list[Any]:
         return [(n, vc) for n in range(self.n) for vc in self.p.pace_vcs
@@ -194,7 +198,8 @@ class Ring2PaceSim(Ring2BaseSim):
 
     def fc_summary(self) -> dict[str, Any]:
         p = self.p
-        cs = [n for n in range(self.n) if is_core(n)]
+        cs = [n for n in range(self.n)
+              if any(self._paced(n, vc) for vc in p.pace_vcs)]
         n_win = max(1, len(self.trace["t"]))
         return {
             "mode": "s21", "window": p.pace_window,
