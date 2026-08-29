@@ -64,38 +64,6 @@
     },
     {
       "k": 2000,
-      "thr": 5.3916,
-      "jain_bin": 0.96694,
-      "hw": {
-        "counter_bits": 36,
-        "arith": {
-          "cmp": 6
-        }
-      },
-      "bus_rule_ok": true,
-      "driver": "-",
-      "control": "arb",
-      "trigger": "local",
-      "bw_vs_ideal": 0.94353,
-      "jain_vs_ideal": 0.96697,
-      "eta": 0.91236,
-      "delta_pct": -5.65,
-      "delta_s0_pct": -1.13,
-      "pass_jain": false,
-      "pass_bw": false,
-      "name": "I-tag t_inj2 hold2",
-      "hw_cost": 3120,
-      "hw_breakdown": {
-        "bus": 0,
-        "table": 0,
-        "counters": 720,
-        "arith": 2400,
-        "queue": 0
-      },
-      "u": 5.2134
-    },
-    {
-      "k": 2000,
       "thr": 4.2252,
       "jain_bin": 0.98459,
       "hw": {

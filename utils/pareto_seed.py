@@ -35,7 +35,6 @@ RES = ROOT / "results"
 # --- hardware specs, in the FF-equivalent model of `pareto_ring2_cc` ---------
 HW: dict[str, dict] = {
     "none": {},
-    "itag": {"counter_bits": 36, "arith": {"cmp": 6}},
     "s1": {"bus_bits": 6, "table_entries": 20, "table_bits": 6,
            "counter_bits": 15, "arith": {"mult": 2, "add": 2, "cmp": 2}},
     "s15": {"bus_bits": 6, "table_entries": 20, "table_bits": 6,
@@ -84,7 +83,6 @@ HW: dict[str, dict] = {
 # Which hardware spec and taxonomy each family-sweep row belongs to.
 FAMILY_HW = {
     "S0 baseline": ("none", "-", "none", "none"),
-    "I-tag t_inj2 hold2": ("itag", "-", "arb", "local"),
     "S1 AIMD": ("s1", "sender", "rate", "bus"),
     "S1T AIMD dir-split": ("s1", "sender", "rate", "bus"),
     "S15 fair-share+resv": ("s15", "sender", "rate", "bus"),
@@ -111,6 +109,10 @@ def main() -> None:
 
     rows: list[tuple] = []
     for r in fam["rows"]:
+        # This is an S0 I-tag parameter retune, not a separate mechanism with
+        # incremental hardware. Keep the measurement out of the scheme Pareto.
+        if r["name"] == "I-tag t_inj2 hold2":
+            continue
         hwk, drv, ctl, trg = FAMILY_HW[r["name"]]
         rows.append((r["name"], r["thr"], r["jain_bin"], HW[hwk],
                      r["bus_rule_ok"], drv, ctl, trg, r["k"]))
