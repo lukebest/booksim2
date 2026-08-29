@@ -292,69 +292,69 @@ def fig_s1_effect() -> None:
 
 # --------------------------------------------------------------- slide 17
 def fig_tradeoff() -> None:
-    """The exact R(J) frontier, with every symbol on the slide named."""
+    """The ideal R(J) upper bound with every official deck scheme overlaid."""
     d = json.loads((RES / "tradeoff_ring2_cc.json").read_text())
     dk = deck()
-    pts = sorted((p["jain_target"], p["bw_monotone"]) for p in d["jain_curve"])
+    # Use the ideal scheduler's 100-cycle Jain on the x-axis so the curve and
+    # measured markers have exactly the same fairness definition.
+    pts = sorted((p["jain_bin"], p["bw_monotone"]) for p in d["jain_curve"])
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     r_max, r_fair = d["r_max"], d["r_fair"]
-    s0 = dk["write"]["S0"]
-    s0_bw = s0["throughput"]
-    s0_j = s0["jain_bin"]["jain_bin_mean"]
-    inv = {round(p["jain_target"], 3): p["bw_monotone"] for p in d["inverse"]}
+    w = dk["write"]
 
-    fig, ax = plt.subplots(figsize=(11.6, 5.5))
+    fig, ax = plt.subplots(figsize=(11.8, 5.65))
     ax.plot(xs, ys, "-", c=RED, lw=2.8, zorder=3,
-            label="R(J)：要求公平度至少 J 时，总带宽最多能做到多少")
-    ax.axhline(r_max, c=GREY, ls="--", lw=1.1)
-    ax.axhline(r_fair, c=GREY, ls=":", lw=1.1)
-    ax.axhline(s0_bw, c=BLUE, ls="-.", lw=1.2)
+            label="理论上限：公平度至少为 J 时，最高总带宽 R(J)")
+    ax.fill_between(xs, 4.35, ys, color=RED, alpha=0.045, zorder=0)
+    ax.axhline(r_max, c=GREY, ls="--", lw=1.0)
+    ax.annotate(f"不要求公平时的总带宽上限 R_max = {r_max:.4f}",
+                xy=(0.866, r_max), xytext=(5, 7), textcoords="offset points",
+                fontsize=9.2, color="#5b636d")
+    ax.scatter([1.0], [r_fair], s=76, facecolors="white", edgecolors=RED,
+               linewidths=1.8, zorder=5)
+    ax.annotate(f"完全等速率\nR* = {r_fair:.4f}",
+                xy=(1.0, r_fair), xytext=(-64, -3), textcoords="offset points",
+                fontsize=9.3, color=RED, ha="right", va="center",
+                arrowprops=dict(arrowstyle="->", color=RED, lw=1.0))
 
-    ax.annotate(f"R_max = {r_max:.4f}：完全不管公平时的最大总带宽"
-                f"（代价是 2 个核被饿死）",
-                xy=(0.868, r_max + 0.05), fontsize=9.5, color="#5b636d",
-                va="bottom")
-    ax.annotate(f"R* = {r_fair:.4f}：十个核严格等速率时的总带宽（曲线最右端）",
-                xy=(0.868, r_fair + 0.04), fontsize=9.5, color="#5b636d")
-    ax.annotate(f"S0 实测 {s0_bw:.4f}", xy=(0.868, s0_bw - 0.16),
-                fontsize=9.5, color=BLUE)
+    styles = {
+        "S0": ("S0", BLUE, "o", (-25, -24)),
+        "S1": ("S1", AMBER, "s", (10, -3)),
+        "S1T": ("S1T", "#8b6f47", "s", (-42, 18)),
+        "S16": ("S16", RED, "*", (10, 7)),
+        "ITAG": ("I-tag", "#5b636d", "D", (10, -17)),
+        "S19": ("S19", "#8b939e", "^", (18, -21)),
+        "S20": ("S20", INK, "v", (18, 18)),
+        "S22": ("S22", "#8f1d24", "P", (-38, 7)),
+    }
+    for key, (label, color, marker, offset) in styles.items():
+        r = w[key]
+        x = r["jain_bin"]["jain_bin_mean"]
+        y = r["throughput"]
+        size = 185 if key == "S16" else 105
+        ax.scatter([x], [y], s=size, c=color, marker=marker, zorder=6,
+                   edgecolors="white", linewidths=0.8)
+        ax.annotate(label, xy=(x, y), xytext=offset, textcoords="offset points",
+                    fontsize=9.5, color=color, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                              ec="none", alpha=0.82),
+                    arrowprops=dict(arrowstyle="-", color=color, lw=0.7))
 
-    ax.annotate("", xy=(0.999, r_fair), xytext=(0.999, r_max),
-                arrowprops=dict(arrowstyle="<->", color=GREEN, lw=1.8))
-    ax.text(0.9945, (r_fair + r_max) / 2,
-            f"公平的固有代价\n−{100 * (1 - r_fair / r_max):.2f}%",
-            fontsize=11, color=GREEN, fontweight="bold", ha="right",
-            va="center")
+    ax.text(0.868, 4.52,
+            "点到红线的竖直距离\n= 该方案在同等公平度下损失的带宽",
+            fontsize=9.5, color="#5b636d",
+            bbox=dict(boxstyle="round,pad=0.30", fc=PANEL, ec="none"))
 
-    ax.scatter([s0_j], [s0_bw], s=130, c=BLUE, zorder=5, edgecolors="k",
-               linewidths=0.5)
-    ax.annotate("S0", xy=(s0_j, s0_bw), xytext=(6, -15),
-                textcoords="offset points", fontsize=11, color=BLUE,
-                fontweight="bold")
-    reach = max(y for x, y in pts if x <= s0_j)
-    ax.annotate("S0 落在曲线下方：在它自己那个公平度上，\n"
-                f"理想控制器还能多拿 {100 * (reach / s0_bw - 1):.1f}% 带宽 —— "
-                "\n所以 S0 既不最快、也不最公平",
-                xy=(s0_j, s0_bw), xytext=(0.888, 4.66), fontsize=10,
-                color=BLUE,
-                arrowprops=dict(arrowstyle="->", color=BLUE, lw=1.1))
-
-    knee = inv[0.99]
-    ax.annotate(f"曲线在这里开始变陡：\n最后 0.01 的 Jain 单价是前面的 3.6 倍",
-                xy=(0.99, knee), xytext=(0.900, 6.22), fontsize=10,
-                color=AMBER, fontweight="bold",
-                arrowprops=dict(arrowstyle="->", color=AMBER, lw=1.2))
-
-    ax.set_xlim(0.865, 1.003)
-    ax.set_ylim(4.45, 6.62)
+    ax.set_xlim(0.865, 1.004)
+    ax.set_ylim(4.40, 6.62)
     ax.set_xlabel(f"公平度 J = {dk['meta']['bin_w']} 拍窗内十个核带宽的 Jain 指数"
                   "（1 = 完全均等）→ 越往右越公平")
     ax.set_ylabel("总写带宽 R  flit/cycle")
-    ax.set_title("要多一点公平，到底要付多少带宽",
+    ax.set_title("红线是理论上限；全部官方实测方案都放在同一坐标系",
                  fontsize=13, fontweight="bold")
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=10, loc="lower left")
+    ax.legend(fontsize=9.5, loc="upper right")
     fig.tight_layout()
     save(fig, "16-tradeoff.png")
 
