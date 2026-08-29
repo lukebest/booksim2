@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>满带宽下的多核带宽不均 · 20 节点无缓存环拥塞控制选型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ============ Huawei corporate theme (default: classic red) ============
+       Switch theme: copy one :root block from references/themes-huawei.md and
+       replace the variables in this section only. */
+    --paper:#f4f7fb;
+    --paper-rgb:244,247,251;
+    --card:#ffffff;
+    --ink:#20242c;
+    --ink-rgb:32,36,44;
+    --muted:#667080;
+    --line:#dce3ea;
+    --line-strong:#c1cad4;
+    --brand-red:#d20a2e;
+    --brand-red-rgb:210,10,46;
+    --brand-red-dark:#9c001f;
+    --brand-red-soft:#f8e5e9;
+    --brand-black:#14171c;
+    --brand-grey:#edf2f7;
+    --shadow:0 18px 46px rgba(15,23,42,.12);
+    --shadow-soft:0 10px 26px rgba(15,23,42,.10);
+
+    --sans:"Inter","Noto Sans SC","Microsoft YaHei UI",Arial,sans-serif;
+    --sans-zh:"Noto Sans SC","Microsoft YaHei UI",Arial,sans-serif;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--paper);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:geometricPrecision;
+  }
+  body.low-power *,body.low-power *::before,body.low-power *::after{
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important;
+  }
+
+  #deck{
+    display:flex;
+    width:100vw;
+    height:100vh;
+    transition:transform .72s cubic-bezier(.22,1,.36,1);
+  }
+  body.low-power #deck{transition:none!important}
+
+  .slide{
+    position:relative;
+    flex:0 0 100vw;
+    width:100vw;
+    height:100vh;
+    padding:7.2vh 7vw 7vh;
+    overflow:hidden;
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.94),rgba(247,248,250,.96)),
+      radial-gradient(circle at 78% 12%,rgba(var(--brand-red-rgb),.08),transparent 22vw),
+      radial-gradient(circle at 12% 88%,rgba(17,17,17,.045),transparent 28vw);
+  }
+  .slide::before,
+  .slide::after{
+    content:"";
+    position:absolute;
+    pointer-events:none;
+    border-radius:999px;
+    z-index:0;
+  }
+  .slide::before{
+    width:13vw;
+    height:13vw;
+    right:6vw;
+    top:10vh;
+    background:linear-gradient(145deg,#fff,rgba(223,227,232,.95));
+    box-shadow:inset -12px -12px 22px rgba(255,255,255,.9),inset 10px 10px 26px rgba(111,118,128,.14),0 14px 28px rgba(15,23,42,.08);
+    opacity:.32;
+  }
+  .slide::after{
+    width:2.6vw;
+    height:2.6vw;
+    left:6.3vw;
+    bottom:8vh;
+    background:var(--brand-red);
+    box-shadow:13vw -72vh 0 -1.4vw rgba(var(--brand-red-rgb),.9),73vw -6vh 0 -1vw rgba(var(--brand-red-rgb),.85),82vw -78vh 0 -1.1vw rgba(var(--brand-red-rgb),.9);
+    opacity:.18;
+  }
+  .slide > *{position:relative;z-index:1}
+
+  .slide.dark{
+    color:#fff;
+    background:
+      linear-gradient(135deg,var(--brand-red-dark),var(--brand-red) 54%,#e34034),
+      radial-gradient(circle at 82% 18%,rgba(255,255,255,.22),transparent 22vw);
+  }
+  .slide.dark::before{
+    background:rgba(255,255,255,.14);
+    box-shadow:inset -10px -10px 18px rgba(255,255,255,.18),inset 10px 10px 26px rgba(0,0,0,.14);
+    opacity:.55;
+  }
+  .slide.dark::after{background:#fff;box-shadow:14vw -66vh 0 -1.5vw rgba(255,255,255,.72),72vw -7vh 0 -1vw rgba(255,255,255,.58);opacity:.24}
+
+  .brand-lockup{
+    position:absolute;
+    right:6.4vw;
+    top:4.6vh;
+    display:flex;
+    align-items:center;
+    gap:.58vw;
+    color:var(--brand-black);
+    font-weight:800;
+    letter-spacing:.01em;
+    font-size:1.08vw;
+    z-index:3;
+  }
+  .dark .brand-lockup{color:#fff}
+  .brand-mark{
+    width:1.62vw;
+    height:1.62vw;
+    flex:none;
+    color:var(--brand-red);
+    background:currentColor;
+    -webkit-mask:url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMuNjcgNi4xNFMxLjgyIDcuOTEgMS43MiA5Ljc4di4zNWMuMDggMS41MSAxLjIyIDIuNCAxLjIyIDIuNCAxLjgzIDEuNzkgNi4yNiA0LjA0IDcuMyA0LjU1IDAgMCAuMDYuMDMuMS0uMDFsLjAyLS4wNHYtLjA0QzcuNTIgMTAuOCAzLjY3IDYuMTQgMy42NyA2LjE0ek05LjY1IDE4LjZjLS4wMi0uMDgtLjEtLjA4LS4xLS4wOGwtNy4zOC4yNmMuOCAxLjQzIDIuMTUgMi41MyAzLjU2IDIuMi45Ni0uMjUgMy4xNi0xLjc4IDMuODgtMi4zLjA2LS4wNS4wNC0uMDkuMDQtLjA5em0uMDgtLjc4QzYuNDkgMTUuNjMuMjEgMTIuMjguMjEgMTIuMjhjLS4xNS40Ni0uMi45LS4yMSAxLjN2LjA3YzAgMS4wNy40IDEuODIuNCAxLjgyLjggMS42OSAyLjM0IDIuMiAyLjM0IDIuMi43LjMgMS40LjMxIDEuNC4zMS4xMi4wMiA0LjQgMCA1LjU0IDAgLjA1IDAgLjA4LS4wNS4wOC0uMDV2LS4wNmMwLS4wMy0uMDMtLjA1LS4wMy0uMDV6TTkuMDYgMy4xOWEzLjQyIDMuNDIgMCAwMC0yLjU3IDMuMTV2LjQxYy4wMy42LjE2IDEuMDUuMTYgMS4wNS42NiAyLjkgMy44NiA3LjY1IDQuNTUgOC42NS4wNS4wNS4xLjAzLjEuMDNhLjEuMSAwIDAwLjA2LS4xYzEuMDYtMTAuNi0xLjExLTEzLjQyLTEuMTEtMTMuNDItLjMyLjAyLTEuMTkuMjMtMS4xOS4yM3ptOC4yOTkgMi4yN3MtLjQ5LTEuOC0yLjQ0LTIuMjhjMCAwLS41Ny0uMTQtMS4xNy0uMjIgMCAwLTIuMTggMi44MS0xLjEyIDEzLjQzLjAxLjA3LjA2LjA4LjA2LjA4LjA3LjAzLjEtLjAzLjEtLjAzLjcyLTEuMDMgMy45LTUuNzYgNC41NS04LjY0IDAgMCAuMzYtMS40LjAyLTIuMzR6bS0yLjkyIDEzLjA3cy0uMDcgMC0uMDkuMDVjMCAwLS4wMS4wNy4wMy4xLjcuNTEgMi44NSAyIDMuODggMi4zIDAgMCAuMTYuMDUuNDMuMDZoLjE0Yy42OS0uMDIgMS45LS4zNyAzLTIuMjZsLTcuNC0uMjV6bTcuODMtOC40MWMuMTQtMi4wNi0xLjk0LTMuOTctMS45NC0zLjk4IDAgMC0zLjg1IDQuNjYtNi42NyAxMC44IDAgMC0uMDMuMDguMDIuMTNsLjA0LjAxaC4wNmMxLjA2LS41MyA1LjQ2LTIuNzcgNy4yOC00LjU0IDAgMCAxLjE1LS45MyAxLjIxLTIuNDJ6bTEuNTIgMi4xNHMtNi4yOCAzLjM3LTkuNTIgNS41NWMwIDAtLjA1LjA0LS4wMy4xMSAwIDAgLjAzLjA2LjA3LjA2IDEuMTYgMCA1LjU2IDAgNS42Ny0uMDIgMCAwIC41Ny0uMDIgMS4yNy0uMjkgMCAwIDEuNTYtLjUgMi4zNy0yLjI3IDAgMCAuNzMtMS40NS4xNy0zLjE0eiIvPjwvc3ZnPg==") center/contain no-repeat;
+    mask:url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMuNjcgNi4xNFMxLjgyIDcuOTEgMS43MiA5Ljc4di4zNWMuMDggMS41MSAxLjIyIDIuNCAxLjIyIDIuNCAxLjgzIDEuNzkgNi4yNiA0LjA0IDcuMyA0LjU1IDAgMCAuMDYuMDMuMS0uMDFsLjAyLS4wNHYtLjA0QzcuNTIgMTAuOCAzLjY3IDYuMTQgMy42NyA2LjE0ek05LjY1IDE4LjZjLS4wMi0uMDgtLjEtLjA4LS4xLS4wOGwtNy4zOC4yNmMuOCAxLjQzIDIuMTUgMi41MyAzLjU2IDIuMi45Ni0uMjUgMy4xNi0xLjc4IDMuODgtMi4zLjA2LS4wNS4wNC0uMDkuMDQtLjA5em0uMDgtLjc4QzYuNDkgMTUuNjMuMjEgMTIuMjguMjEgMTIuMjhjLS4xNS40Ni0uMi45LS4yMSAxLjN2LjA3YzAgMS4wNy40IDEuODIuNCAxLjgyLjggMS42OSAyLjM0IDIuMiAyLjM0IDIuMi43LjMgMS40LjMxIDEuNC4zMS4xMi4wMiA0LjQgMCA1LjU0IDAgLjA1IDAgLjA4LS4wNS4wOC0uMDV2LS4wNmMwLS4wMy0uMDMtLjA1LS4wMy0uMDV6TTkuMDYgMy4xOWEzLjQyIDMuNDIgMCAwMC0yLjU3IDMuMTV2LjQxYy4wMy42LjE2IDEuMDUuMTYgMS4wNS42NiAyLjkgMy44NiA3LjY1IDQuNTUgOC42NS4wNS4wNS4xLjAzLjEuMDNhLjEuMSAwIDAwLjA2LS4xYzEuMDYtMTAuNi0xLjExLTEzLjQyLTEuMTEtMTMuNDItLjMyLjAyLTEuMTkuMjMtMS4xOS4yM3ptOC4yOTkgMi4yN3MtLjQ5LTEuOC0yLjQ0LTIuMjhjMCAwLS41Ny0uMTQtMS4xNy0uMjIgMCAwLTIuMTggMi44MS0xLjEyIDEzLjQzLjAxLjA3LjA2LjA4LjA2LjA4LjA3LjAzLjEtLjAzLjEtLjAzLjcyLTEuMDMgMy45LTUuNzYgNC41NS04LjY0IDAgMCAuMzYtMS40LjAyLTIuMzR6bS0yLjkyIDEzLjA3cy0uMDcgMC0uMDkuMDVjMCAwLS4wMS4wNy4wMy4xLjcuNTEgMi44NSAyIDMuODggMi4zIDAgMCAuMTYuMDUuNDMuMDZoLjE0Yy42OS0uMDIgMS45LS4zNyAzLTIuMjZsLTcuNC0uMjV6bTcuODMtOC40MWMuMTQtMi4wNi0xLjk0LTMuOTctMS45NC0zLjk4IDAgMC0zLjg1IDQuNjYtNi42NyAxMC44IDAgMC0uMDMuMDguMDIuMTNsLjA0LjAxaC4wNmMxLjA2LS41MyA1LjQ2LTIuNzcgNy4yOC00LjU0IDAgMCAxLjE1LS45MyAxLjIxLTIuNDJ6bTEuNTIgMi4xNHMtNi4yOCAzLjM3LTkuNTIgNS41NWMwIDAtLjA1LjA0LS4wMy4xMSAwIDAgLjAzLjA2LjA3LjA2IDEuMTYgMCA1LjU2IDAgNS42Ny0uMDIgMCAwIC41Ny0uMDIgMS4yNy0uMjkgMCAwIDEuNTYtLjUgMi4zNy0yLjI3IDAgMCAuNzMtMS40NS4xNy0zLjE0eiIvPjwvc3ZnPg==") center/contain no-repeat;
+  }
+  .dark .brand-mark{color:#fff}
+
+  .chrome{
+    position:absolute;
+    left:6.4vw;
+    right:6.4vw;
+    top:4.6vh;
+    min-height:3.2vh;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:1.1vh;
+    color:var(--muted);
+    font-size:.78vw;
+    letter-spacing:.02em;
+    z-index:2;
+  }
+  .dark .chrome{border-color:rgba(255,255,255,.28);color:rgba(255,255,255,.78)}
+  .chrome .l{
+    display:flex;
+    align-items:center;
+    gap:.72vw;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .dark .chrome .l{color:#fff}
+  .chrome .square{
+    width:.9vw;
+    height:.9vw;
+    background:var(--brand-red);
+    box-shadow:-.38vw -.38vw 0 0 rgba(var(--brand-red-rgb),.16);
+    flex:none;
+  }
+  .dark .chrome .square{background:#fff;box-shadow:-.38vw -.38vw 0 0 rgba(255,255,255,.22)}
+
+  .kicker{
+    font-family:var(--mono);
+    font-size:.78vw;
+    line-height:1;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--brand-red);
+    font-weight:600;
+  }
+  .dark .kicker{color:rgba(255,255,255,.82)}
+  .h-hero{
+    font-family:var(--sans-zh);
+    font-size:min(5.8vw,10.3vh);
+    line-height:1.02;
+    letter-spacing:0;
+    font-weight:900;
+  }
+  .h-xl{
+    font-family:var(--sans-zh);
+    font-size:min(4vw,7.4vh);
+    line-height:1.08;
+    font-weight:800;
+    letter-spacing:0;
+  }
+  .h-md{
+    font-family:var(--sans-zh);
+    font-size:min(2.1vw,4.1vh);
+    line-height:1.2;
+    font-weight:800;
+  }
+  .lead{
+    font-size:1.25vw;
+    line-height:1.72;
+    color:var(--muted);
+    font-weight:400;
+  }
+  .dark .lead{color:rgba(255,255,255,.84)}
+  .body-copy{
+    font-size:1vw;
+    line-height:1.82;
+    color:#444b55;
+  }
+  .dark .body-copy{color:rgba(255,255,255,.78)}
+  .meta{
+    font-family:var(--mono);
+    font-size:.76vw;
+    color:var(--muted);
+    letter-spacing:.04em;
+  }
+
+  .red-rule{height:.52vh;background:var(--brand-red);width:100%}
+  .hairline{height:1px;background:var(--line);width:100%}
+  .dark .hairline{background:rgba(255,255,255,.22)}
+
+  .red-panel{
+    background:linear-gradient(90deg,var(--brand-red),#ef4a3d);
+    color:#fff;
+    padding:4.2vh 3.4vw;
+    min-height:32vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    box-shadow:var(--shadow-soft);
+  }
+  .red-panel .en{
+    font-family:var(--mono);
+    border:1px solid rgba(255,255,255,.42);
+    color:rgba(255,255,255,.9);
+    padding:.5vh .72vw;
+    width:max-content;
+    font-size:.86vw;
+    letter-spacing:.08em;
+  }
+
+  .cover-shell{
+    height:100%;
+    display:grid;
+    grid-template-columns:1.05fr .95fr;
+    align-items:center;
+    gap:5vw;
+  }
+  .cover-badge{
+    width:10.4vw;
+    height:10.4vw;
+    border-radius:999px;
+    background:linear-gradient(145deg,#fff,#e9edf2);
+    box-shadow:inset -16px -16px 28px rgba(255,255,255,.95),inset 12px 12px 24px rgba(111,118,128,.14),0 22px 46px rgba(15,23,42,.14);
+    display:grid;
+    place-items:center;
+    margin-bottom:3.4vh;
+  }
+  .cover-badge .brand-mark{
+    width:5.8vw;
+    height:5.8vw;
+    color:var(--brand-red);
+  }
+  .cover-title-wrap{display:flex;flex-direction:column;gap:2.6vh}
+  .cover-subtitle{max-width:46ch}
+  .cover-wave{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:19vh;
+    background:
+      linear-gradient(8deg,var(--brand-red) 0 45%,transparent 46%),
+      linear-gradient(6deg,rgba(17,17,17,.14) 0 51%,transparent 52%);
+    opacity:.96;
+  }
+  .cover-meta{
+    position:absolute;
+    left:7vw;
+    bottom:5vh;
+    color:#fff;
+    display:grid;
+    gap:.86vh;
+    font-size:.88vw;
+    z-index:2;
+  }
+  .cover-visual{
+    min-height:32vh;
+    position:relative;
+  }
+  .orb{
+    position:absolute;
+    border-radius:50%;
+    background:linear-gradient(145deg,#fff,#e6eaef);
+    box-shadow:inset -10px -10px 20px rgba(255,255,255,.95),inset 8px 8px 20px rgba(111,118,128,.18),0 16px 28px rgba(15,23,42,.10);
+  }
+  .orb.red{background:linear-gradient(145deg,#f83230,var(--brand-red));box-shadow:0 12px 24px rgba(var(--brand-red-rgb),.26)}
+
+  .agenda-layout{
+    height:100%;
+    display:grid;
+    grid-template-columns:.72fr 1.28fr;
+    gap:5vw;
+    align-items:center;
+  }
+  .agenda-list{display:flex;flex-direction:column;gap:1.25vh}
+  .agenda-item{
+    display:grid;
+    grid-template-columns:3.6vw 1fr;
+    align-items:center;
+    min-height:6.2vh;
+    background:#e6e9ed;
+    color:#505965;
+  }
+  .agenda-item .idx{
+    height:100%;
+    display:grid;
+    place-items:center;
+    background:var(--brand-red);
+    color:#fff;
+    font-family:var(--mono);
+    font-weight:700;
+  }
+  .agenda-item .txt{padding:0 1.25vw;font-size:1.02vw;font-weight:700}
+
+  .section-layout{
+    height:100%;
+    display:grid;
+    grid-template-columns:.82fr 1.18fr;
+    gap:4.5vw;
+    align-items:center;
+  }
+  .section-no{
+    width:8vw;
+    height:8vw;
+    border-radius:999px;
+    background:#fff;
+    box-shadow:var(--shadow);
+    display:grid;
+    place-items:center;
+    color:var(--brand-red);
+    font-family:var(--mono);
+    font-size:2.2vw;
+    font-weight:800;
+    margin-bottom:2.6vh;
+  }
+
+  .grid-2,.grid-3,.grid-4{align-items:stretch}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:3vw}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:1.4vw}
+  .grid-12{display:grid;grid-template-columns:repeat(12,1fr);gap:1vw}
+  .span-4{grid-column:span 4}.span-5{grid-column:span 5}.span-6{grid-column:span 6}.span-7{grid-column:span 7}.span-8{grid-column:span 8}
+
+  .content-stack{display:flex;flex-direction:column;gap:2.2vh}
+  .same-size,
+  .equal-children{
+    align-items:stretch;
+  }
+  .same-size > *{
+    height:100%;
+    min-height:0;
+  }
+  .equal-children > *{
+    height:100%;
+    min-height:0;
+  }
+  .equal-children{
+    display:grid;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    box-shadow:var(--shadow-soft);
+    padding:3vh 2vw;
+  }
+  .grid-2 > .card,.grid-3 > .card,.grid-4 > .card{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  .grid-2 > .image-frame,.grid-3 > .image-frame,.grid-4 > .image-frame{height:100%}
+  .card.flat{box-shadow:none;background:#fff}
+  .mini-card{
+    min-height:0;
+    border:1px solid var(--line);
+    background:#fff;
+    padding:1.25vh 1vw;
+    display:grid;
+    grid-template-rows:auto 1fr;
+    gap:.45vh;
+  }
+  .mini-card strong{
+    color:var(--ink);
+    font-size:clamp(.84rem,.96vw,1.08rem);
+    line-height:1.22;
+    font-weight:800;
+  }
+  .mini-card .card-body{
+    font-size:clamp(.76rem,.84vw,.98rem);
+    line-height:1.34;
+  }
+  .card strong{
+    display:inline-block;
+    color:var(--ink);
+    font-weight:800;
+  }
+  .card-title{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:clamp(1.08rem,1.34vw,1.56rem);
+    line-height:1.18;
+    font-weight:800;
+    color:var(--ink);
+    margin-bottom:1.1vh;
+  }
+  .card-body{font-size:clamp(.92rem,1.02vw,1.18rem);line-height:1.58;color:var(--muted)}
+  .num-pill{
+    display:inline-grid;
+    place-items:center;
+    min-width:2.4vw;
+    height:2.4vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    font-family:var(--mono);
+    font-weight:800;
+    margin-bottom:1.4vh;
+  }
+  .icon-disc{
+    width:4.4vw;
+    height:4.4vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    margin-bottom:1.5vh;
+    box-shadow:0 14px 28px rgba(var(--brand-red-rgb),.22);
+  }
+  .icon-disc .lucide{width:2vw;height:2vw;stroke-width:1.8}
+
+  .timeline-v{display:grid;grid-template-columns:1fr 3vw 1fr;gap:2vw;align-items:start}
+  .tl-axis{position:relative;min-height:58vh}
+  .tl-axis::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-strong)}
+  .tl-dot{
+    width:2.6vw;
+    height:2.6vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    font-family:var(--mono);
+    font-weight:800;
+    margin:0 auto 6.5vh;
+    position:relative;
+    z-index:1;
+  }
+  .tl-card{min-height:10vh;border-top:3px solid var(--brand-red);padding-top:1.3vh;margin-bottom:5.4vh}
+  .tl-card .year{font-family:var(--mono);color:var(--brand-red);font-weight:800;margin-bottom:.6vh}
+
+  .bar-chart{display:flex;flex-direction:column;gap:1.35vh}
+  .bar-row{display:grid;grid-template-columns:7vw 1fr 4vw;gap:1vw;align-items:center;font-size:.9vw;color:var(--muted)}
+  .bar-track{height:2.2vh;background:#e7eaee;position:relative;overflow:hidden}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--brand-red-dark),var(--brand-red));width:var(--v,50%)}
+  .bar-row strong{font-family:var(--mono);color:var(--ink)}
+  .stat-big{font-family:var(--mono);font-size:min(5.2vw,9vh);line-height:1;color:var(--brand-red);font-weight:800}
+
+  .process{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:0;
+    align-items:stretch;
+  }
+  .process-step{
+    position:relative;
+    background:#fff;
+    border:1px solid var(--line);
+    padding:3vh 1.6vw;
+    min-height:30vh;
+  }
+  .process-step:not(:last-child)::after{
+    content:"";
+    position:absolute;
+    right:-1.2vw;
+    top:50%;
+    transform:translateY(-50%);
+    width:0;
+    height:0;
+    border-top:1.5vw solid transparent;
+    border-bottom:1.5vw solid transparent;
+    border-left:1.2vw solid var(--brand-red);
+    z-index:2;
+  }
+
+  .arrow-timeline{
+    --axis-y:50%;
+    --line-left:4%;
+    --line-right:6.4%;
+    --line-h:5.2vh;
+    --head-right:1.5%;
+    --head-w:5vw;
+    --head-h:8vh;
+    position:relative;
+    margin-top:7vh;
+    height:36vh;
+  }
+  .arrow-timeline-line{
+    position:absolute;
+    left:var(--line-left);
+    right:var(--line-right);
+    top:var(--axis-y);
+    height:var(--line-h);
+    background:var(--brand-red);
+    transform:translateY(-50%);
+  }
+  .arrow-timeline-head{
+    position:absolute;
+    right:var(--head-right);
+    top:var(--axis-y);
+    width:var(--head-w);
+    height:var(--head-h);
+    background:var(--brand-red);
+    clip-path:polygon(0 0,100% 50%,0 100%);
+    transform:translateY(-50%);
+  }
+  .arrow-timeline-node{
+    position:absolute;
+    top:var(--axis-y);
+    width:1.8vw;
+    height:1.8vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    box-shadow:0 0 0 .8vw rgba(var(--brand-red-rgb),.10);
+    transform:translate(-50%,-50%);
+    z-index:2;
+  }
+  .arrow-timeline-card{
+    position:absolute;
+    width:18vw;
+    z-index:3;
+  }
+  .arrow-timeline-card.top{top:0}
+  .arrow-timeline-card.bottom{bottom:0}
+
+  .image-frame{
+    background:#fff;
+    border:1px solid var(--line);
+    padding:.7vw;
+    box-shadow:var(--shadow-soft);
+  }
+  .image-frame img{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+  .r-16x9{aspect-ratio:16/9}
+  .r-16x10{aspect-ratio:16/10}
+  .r-4x3{aspect-ratio:4/3}
+  .fit-contain img{object-fit:contain;background:#fff}
+  .caption{
+    margin-top:1vh;
+    font-size:.76vw;
+    color:var(--muted);
+    line-height:1.5;
+  }
+
+  .quote-band{
+    background:linear-gradient(90deg,var(--brand-red),var(--brand-red-dark));
+    color:#fff;
+    padding:3.4vh 3vw;
+    font-family:var(--sans-zh);
+    font-size:2.4vw;
+    line-height:1.24;
+    font-weight:900;
+  }
+  .bullet-list{
+    display:grid;
+    gap:1.15vh;
+  }
+  .bullet-item{
+    display:grid;
+    grid-template-columns:1.1vw 1fr;
+    gap:1vw;
+    align-items:start;
+  }
+  .bullet-dot{
+    width:.72vw;
+    height:.72vw;
+    border-radius:50%;
+    background:var(--brand-red);
+    margin-top:.5vh;
+  }
+
+  [data-anim]{
+    opacity:0;
+    transform:translateY(16px);
+    transition:opacity .56s ease,transform .56s cubic-bezier(.22,1,.36,1);
+  }
+  .slide.active [data-anim]{opacity:1;transform:none}
+  .slide.active [data-anim]:nth-child(2){transition-delay:.06s}
+  .slide.active [data-anim]:nth-child(3){transition-delay:.12s}
+  .slide.active [data-anim]:nth-child(4){transition-delay:.18s}
+  body.low-power [data-anim],#overview [data-anim]{opacity:1!important;transform:none!important}
+
+  #hint{
+    position:fixed;
+    right:1.5vw;
+    bottom:1.8vh;
+    z-index:20;
+    color:rgba(34,37,43,.56);
+    font-size:.72vw;
+    font-family:var(--mono);
+    letter-spacing:.02em;
+    user-select:none;
+  }
+  body.low-power #hint{color:var(--brand-red)}
+  .page-no{
+    position:absolute;
+    left:2.2vw;
+    bottom:2.2vh;
+    z-index:4;
+    font-family:var(--mono);
+    font-size:.86vw;
+    line-height:1;
+    letter-spacing:.08em;
+    color:rgba(34,37,43,.42);
+    pointer-events:none;
+  }
+  .dark .page-no{color:rgba(255,255,255,.72)}
+  .hw-cover .page-no{color:rgba(255,255,255,.74)}
+  #nav{
+    position:fixed;
+    left:50%;
+    bottom:2.1vh;
+    transform:translateX(-50%);
+    display:flex;
+    gap:.55vw;
+    z-index:20;
+  }
+  #nav button{
+    width:.55vw;
+    height:.55vw;
+    border:0;
+    border-radius:50%;
+    background:rgba(34,37,43,.2);
+    cursor:pointer;
+    padding:0;
+  }
+  #nav button.active{background:var(--brand-red);transform:scale(1.35)}
+  #overview{
+    position:fixed;
+    inset:0;
+    background:rgba(10,10,10,.88);
+    z-index:30;
+    display:none;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:18px;
+    padding:24px;
+    overflow:auto;
+  }
+  body.overview #overview{display:grid}
+  .thumb{
+    position:relative;
+    aspect-ratio:16/9;
+    background:#fff;
+    overflow:hidden;
+    cursor:pointer;
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .thumb .slide{
+    transform:scale(.25);
+    transform-origin:top left;
+    pointer-events:none;
+  }
+
+  @media (max-width:900px){
+    .slide{padding:8vh 6vw 8vh}
+    .cover-shell,.agenda-layout,.section-layout,.grid-2{grid-template-columns:1fr;gap:3vh}
+    .grid-3,.grid-4,.process{grid-template-columns:1fr 1fr}
+    .brand-lockup{font-size:2.8vw}
+    .brand-mark{width:3.4vw;height:3.4vw}
+    .h-hero{font-size:12vw}
+    .h-xl{font-size:8.8vw}
+    .lead{font-size:3.5vw}
+    .card-title{font-size:3.6vw;white-space:normal}
+    .body-copy,.card-body{font-size:2.8vw}
+    .chrome{font-size:2.2vw}
+    .page-no{font-size:2.2vw;left:3.5vw;bottom:2.8vh}
+    #hint{font-size:2vw}
+  }
+</style>
+</head>
+<body>
+<div id="hint">← → 翻页 · B 静态 · ESC 索引</div>
+
+<div id="deck">
+<!-- ============================================================
+     SLIDES 插入区 · 在此处填充所有 <section class="slide ..."> 页面
+     页面骨架参考 references/layouts-huawei.md
+     主题色配置参考 references/themes-huawei.md
+     ============================================================ -->
+
+<!-- ==================== 01 封面 ==================== -->
+<section class="slide hw-cover" data-layout="H01" data-animate="cover">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="cover-shell">
+    <div class="cover-title-wrap">
+      <div class="cover-badge" data-anim>
+        <span class="brand-mark" aria-hidden="true"></span>
+      </div>
+      <div class="kicker" data-anim>NOC ARCHITECTURE REVIEW · 20-NODE BUFFERLESS RING</div>
+      <h1 class="h-hero" data-anim>满带宽下的<br/>多核带宽不均</h1>
+      <p class="lead cover-subtitle" data-anim>20 节点无缓存双向环上的瞬时写带宽公平性：<br/>问题定位 · 理论极限 · 拥塞控制选型</p>
+    </div>
+
+    <div class="cover-visual" aria-hidden="true">
+      <span class="orb red" style="width:6vw;height:6vw;right:10vw;top:3vh"></span>
+      <span class="orb" style="width:12vw;height:12vw;right:0;top:16vh"></span>
+      <span class="orb red" style="width:2.6vw;height:2.6vw;right:18vw;top:34vh"></span>
+      <span class="orb" style="width:5vw;height:5vw;right:26vw;top:8vh"></span>
+    </div>
+  </div>
+
+  <div class="cover-wave" aria-hidden="true"></div>
+  <div class="cover-meta">
+    <div>汇报对象：芯片架构师</div>
+    <div>数据口径：uniform tiled 写 · K = 20000 · 单 plane · 全部可复现</div>
+  </div>
+</section>
+
+<!-- ==================== 02 目录 ==================== -->
+<section class="slide" data-layout="H02" data-animate="agenda">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="agenda-layout">
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">CONTENT</div>
+      <h2 class="h-xl" style="margin-top:2vh">目录</h2>
+      <div class="en" style="margin-top:2vh">7 SECTIONS</div>
+    </div>
+
+    <div class="agenda-list">
+      <div class="agenda-item" data-anim><div class="idx">01</div><div class="txt">问题背景：拓扑、节点、路由与关键 setup</div></div>
+      <div class="agenda-item" data-anim><div class="idx">02</div><div class="txt">S0 的问题：带宽已打满，瞬时带宽不均</div></div>
+      <div class="agenda-item" data-anim><div class="idx">03</div><div class="txt">S1 方案：检测 / 传递 / 反馈 / 控制与实测代价</div></div>
+      <div class="agenda-item" data-anim><div class="idx">04</div><div class="txt">公平性与总带宽的 trade-off：形式化与曲线</div></div>
+      <div class="agenda-item" data-anim><div class="idx">05</div><div class="txt">理论最优、理想拥塞控制与各方案 Pareto</div></div>
+      <div class="agenda-item" data-anim><div class="idx">06</div><div class="txt">Pareto 前沿方案详述（免流量先验）</div></div>
+      <div class="agenda-item" data-anim><div class="idx">07</div><div class="txt">结论与建议</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 03 章节 01 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">01</div>
+      <div class="kicker">SECTION ONE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">问题背景</h2>
+      <p class="lead" style="margin-top:2vh">拓扑、节点角色、路由规则，以及决定结论的那几项关键 setup。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">KEY MESSAGE</div>
+      <h3 class="h-md" style="margin-top:2vh">10 个 AI core 对 8 个 memory HA 做 CHI WriteNoSnp。总带宽已接近理论上限，问题出在「谁在什么时候拿到 slot」。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 04 拓扑与节点 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>拓扑与节点</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh;display:grid;grid-template-columns:1.02fr .98fr;gap:2.6vw;align-items:start">
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:1/1;height:58vh;width:auto;margin:0 auto"><img src="images/04-topo.png" alt="20 节点单 plane 双向闭合 full ring 拓扑，边上标注 hop 时延"></div>
+      <div class="caption">蓝 = AI core（10）·橙 = memory HA（8）·灰 = 非终端 N9 / N19；边上数字为 hop 时延（拍）。</div>
+    </div>
+    <div class="content-stack" data-anim>
+      <div class="kicker">TOPOLOGY &amp; ROUTING</div>
+      <h2 class="h-xl" style="font-size:min(2.9vw,5.4vh)">20 节点单 plane<br/>双向闭合 full ring</h2>
+      <div class="red-rule" style="width:7vw"></div>
+      <div class="bullet-list" style="margin-top:1.2vh">
+        <div class="bullet-item"><div class="bullet-dot"></div><div><strong>节点角色</strong><p class="card-body">10 个 AI core（C0–C18 偶数）发起写；8 个 memory HA（M1–M17 奇数）为 completer；N9 / N19 只转发，不收发。</p></div></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><div><strong>路由：时延最短</strong><p class="card-body">按链路时延之和选 CW / CCW，时延平局比跳数，再平局取 CW；core→mem 与 mem→core 同一规则。</p></div></div>
+        <div class="bullet-item"><div class="bullet-dot"></div><div><strong>几何后果（本次问题的起点）</strong><p class="card-body">因为 N9 / N19 不是 mem，C0 / C8 / C10 / C18 的「邻接 mem 数」只有 1，其余六核为 2。</p></div></div>
+      </div>
+      <div class="grid-3 same-size" style="margin-top:1.4vh">
+        <div class="mini-card"><strong>20 节点</strong><p class="card-body">1 plane，双向闭合</p></div>
+        <div class="mini-card"><strong>10 + 8 + 2</strong><p class="card-body">core / HA / 非终端</p></div>
+        <div class="mini-card"><strong>R* = 5.7143</strong><p class="card-body">等速率理论上限</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 05 协议 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>协议：CHI WriteNoSnp</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">PROTOCOL</div>
+      <h2 class="h-xl">一笔写 = 四拍握手，被计量的只有第三拍</h2>
+    </div>
+
+    <div class="process" style="margin-top:6vh;--h:0">
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">01</div>
+        <div class="card-title">REQ</div>
+        <p class="card-body">core → HA，1 flit，走时延最短方向，占 REQ VC。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">02</div>
+        <div class="card-title">DBIDResp</div>
+        <p class="card-body">HA → core，1 flit，反方向，占 RSP VC。HA think time = 0。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:26vh;border-color:rgba(var(--brand-red-rgb),.45)">
+        <div class="num-pill">03</div>
+        <div class="card-title" style="color:var(--brand-red)">WriteData × 2</div>
+        <p class="card-body">core → HA，2 flit，占 DAT VC。<strong>per-core 写带宽 = 争用窗内成功上环的 WriteData flit / cycle。</strong></p>
+      </div>
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">04</div>
+        <div class="card-title">Comp</div>
+        <p class="card-body">HA → core，1 flit，占 RSP VC，释放该笔事务的 tracker 表项。</p>
+      </div>
+    </div>
+
+    <div class="quote-band" style="margin-top:5vh;font-size:1.32vw;line-height:1.45;padding:2.4vh 2.4vw">
+      公平性主指标：50 拍宽的窗内对 10 个核的写带宽算 Jain，再对所有争用窗内的箱取平均。
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 06 关键 setup ==================== -->
+<section class="slide" data-layout="H20" data-animate="icon-matrix">
+  <div class="chrome"><div class="l"><span class="square"></span><span>关键 setup</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim><div class="kicker">FABRIC CONFIG</div><h2 class="h-xl">八项决定结论的配置</h2></div>
+    <div class="grid-4 same-size" style="margin-top:4vh">
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="arrow-up-from-line"></i></div><div class="card-title">上环端口</div><p class="card-body">每方向一组 × REQ / RSP / DAT，每口 1 flit/cycle → 每节点 6 个上环口。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="arrow-down-to-line"></i></div><div class="card-title">下环端口</div><p class="card-body">每 (node, VC) 一个「两写一读」buffer：两方向可同拍各写 1 flit，PE 每拍只读 1 flit。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="layers"></i></div><div class="card-title">上环队列</div><p class="card-body">每 (node, VC) 12 深共享 FIFO + 每向 8 深 inject Q，各接一个上环口。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="inbox"></i></div><div class="card-title">下环队列</div><p class="card-body">深度 12。DAT 侧平均占用 0.765 / 12（峰值 11），满的比例 0%，从来不是瓶颈。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw;border-color:rgba(var(--brand-red-rgb),.4)"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="shield-alert"></i></div><div class="card-title">在环绝对优先</div><p class="card-body">bufferless：transit flit 永不被本地注入打断，注入只能挤空隙。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="tag"></i></div><div class="card-title">I-tag / E-tag</div><p class="card-body">t_inj = 4 定向上游预约单槽；t_xfer = 1，首次下环失败即打标，再到达时最高优先级下环。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="gauge"></i></div><div class="card-title">在飞与 tracker</div><p class="card-body">core_outstanding = 128；HA tracker = 512，峰值占用 422，重试 0 —— 已完全不绑定。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw;border-color:rgba(var(--brand-red-rgb),.4)"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="radio"></i></div><div class="card-title">专用流控总线</div><p class="card-body">广播，不占 NoC hop；<strong>任何使用固定 30 拍延迟</strong>（硬约束），控制窗 64 拍。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 07 章节 02 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">02</div>
+      <div class="kicker">SECTION TWO</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">S0 的具体问题</h2>
+      <p class="lead" style="margin-top:2vh">总带宽已经打到理论上限的 95.69%，但十个核的瞬时带宽差 1.69 倍。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">KEY MESSAGE</div>
+      <h3 class="h-md" style="margin-top:2vh">带宽这条线基本关死了，可争空间只剩 0.8 个点；真正的缺陷在公平性一侧，而且是几何决定的固定分组，不是随机抖动。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 08 带宽已打满 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S0：总带宽已打满</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7vh;display:grid;grid-template-columns:.32fr 1fr;gap:2.4vw;align-items:center">
+    <div class="content-stack" data-anim style="gap:1.1vh">
+      <div class="kicker">BANDWIDTH IS SATURATED</div>
+      <div class="stat-big" style="font-size:min(3.6vw,6.6vh)">95.69%</div>
+      <div class="meta">S0 = 5.4681 flit/cycle<br/>占等速率 R* = 5.7143</div>
+      <div class="red-rule" style="width:5vw"></div>
+    </div>
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:1508/572;height:40vh;width:auto;margin:0"><img src="images/07-totalbw.png" alt="全环 10 个 core 的总写带宽随时间曲线，S0 与 S1 对比，并标出理论上限 R*"></div>
+      <div class="caption">细线 = 50 拍分箱，粗线 = 平滑。黑虚线 = fabric 等速率上限 R* = 5.7143 flit/cycle。</div>
+    </div>
+  </div>
+  <div class="grid-3 same-size" data-anim style="margin-top:2.4vh">
+    <div class="card flat"><div class="card-title">4.31% 的缺口已逐拍闭合</div><p class="card-body">makespan 73,152 = 70,000 名义载荷 + 1,056 绕环加价 + 2,096 空转，三项相加逐拍相等。绑定项是 RSP 链路而不是 DAT。</p></div>
+    <div class="card flat"><div class="card-title">争用窗内均值 6.02 &gt; R* 不是越界</div><p class="card-body">恰恰是不公平的证据：领先核提前做完退出，尾部核独占剩下的容量，所以窗内瞬时值高于严格等速率上限。</p></div>
+    <div class="card flat" style="border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="color:var(--brand-red)">出厂规格下可达上限约 96.5%</div><p class="card-body">留给拥塞控制去争的总带宽只有 0.8 个点 —— 带宽线应当靠「不弄丢」而不是「抬上去」来过。</p></div>
+  </div>
+</section>
+
+<!-- ==================== 09 各核带宽分层 ==================== -->
+<section class="slide" data-layout="H07" data-animate="data">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S0：各核写带宽</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:6vh;min-height:80vh;display:grid;align-content:center">
+    <div class="grid-12" style="align-items:center">
+      <div class="span-5 content-stack" data-anim>
+        <div class="kicker">PER-CORE BANDWIDTH</div>
+        <h2 class="h-xl" style="font-size:min(3.1vw,5.6vh)">六快四慢，<br/>是固定分组不是抖动</h2>
+        <p class="lead" style="font-size:1.1vw">最低 C8 = 0.42409，最高 C14 = 0.71803。慢的那四个正是「邻接 mem 数 = 1」的 C0 / C8 / C10 / C18。</p>
+        <div>
+          <div class="stat-big">1.6931</div>
+          <div class="meta">整窗 MAX / MIN（S0，K = 20000）</div>
+        </div>
+      </div>
+
+      <div class="span-7 card" data-anim>
+        <div class="bar-chart" style="gap:1.9vh">
+          <div class="bar-row"><span>C0</span><div class="bar-track"><div class="bar-fill" style="--v:60.7%"></div></div><strong>0.455</strong></div>
+          <div class="bar-row"><span>C2</span><div class="bar-track"><div class="bar-fill" style="--v:95.4%"></div></div><strong>0.715</strong></div>
+          <div class="bar-row"><span>C4</span><div class="bar-track"><div class="bar-fill" style="--v:94.9%"></div></div><strong>0.712</strong></div>
+          <div class="bar-row"><span>C6</span><div class="bar-track"><div class="bar-fill" style="--v:95.1%"></div></div><strong>0.713</strong></div>
+          <div class="bar-row"><span>C8</span><div class="bar-track"><div class="bar-fill" style="--v:56.5%"></div></div><strong>0.424</strong></div>
+          <div class="bar-row"><span>C10</span><div class="bar-track"><div class="bar-fill" style="--v:59.0%"></div></div><strong>0.443</strong></div>
+          <div class="bar-row"><span>C12</span><div class="bar-track"><div class="bar-fill" style="--v:95.4%"></div></div><strong>0.715</strong></div>
+          <div class="bar-row"><span>C14</span><div class="bar-track"><div class="bar-fill" style="--v:95.7%"></div></div><strong>0.718</strong></div>
+          <div class="bar-row"><span>C16</span><div class="bar-track"><div class="bar-fill" style="--v:91.9%"></div></div><strong>0.689</strong></div>
+          <div class="bar-row"><span>C18</span><div class="bar-track"><div class="bar-fill" style="--v:58.2%"></div></div><strong>0.436</strong></div>
+        </div>
+        <div class="caption">条长按 0.75 flit/cycle 归一。8 个 HA 收到的 WriteData 完全相等（50,000 / HA），所以这不是访存不均。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 10 瞬时公平性 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S0：50 拍瞬时公平性</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7vh;display:grid;grid-template-columns:.32fr 1fr;gap:2.4vw;align-items:center">
+    <div class="content-stack" data-anim style="gap:1.1vh">
+      <div class="kicker">INSTANTANEOUS FAIRNESS</div>
+      <div class="stat-big" style="font-size:min(3.6vw,6.6vh)">0.87865</div>
+      <div class="meta">50 拍分箱平均 JAIN<br/>理想控制器 = 0.9997</div>
+      <div class="red-rule" style="width:5vw"></div>
+    </div>
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:1612/546;height:38vh;width:auto;margin:0"><img src="images/09-s0-instbal.png" alt="左：50 拍窗内 10 核写带宽 Jain 随时间；右：不均衡随观察窗口宽度衰减"></div>
+      <div class="caption">左 = 主指标随时间；右 = 同一份数据换观察窗宽度，实测始终低于理想控制器。</div>
+    </div>
+  </div>
+  <div class="grid-3 same-size" data-anim style="margin-top:2.4vh">
+    <div class="card flat"><div class="card-title">不是个别坏箱</div><p class="card-body">1,114 个箱里 p05 = 0.82121，最差箱 0.72226；右图显示只有把观察窗放宽到 2¹¹ 拍量级，max/min 才收敛。</p></div>
+    <div class="card flat" style="border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="color:var(--brand-red)">抖动抹平后的上限只有 0.95341</div><p class="card-body">给每核每箱都填上它自己的长期均值（只留速率差），Jain 上限就到顶了 —— 这是任何「只整时机、不搬份额」机制的天花板。</p></div>
+    <div class="card flat"><div class="card-title">所以要到 0.99 必须搬速率</div><p class="card-body">核间长期速率 21.201 vs 35.901（比 1.6934）。核内抖动虽占方差 65.4%，但封顶的恰恰是那 34.6% 的核间差 —— 50 拍窗内每核只有 30.1 个 flit。</p></div>
+  </div>
+</section>
+
+<!-- ==================== 11 根因 ==================== -->
+<section class="slide" data-layout="H27" data-animate="problem-overview">
+  <div class="chrome"><div class="l"><span class="square"></span><span>根因</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim><div class="kicker">ROOT CAUSE</div><h2 class="h-xl">几何 × 机制 = 固定的六快四慢</h2></div>
+    <div class="grid-3 same-size" style="margin-top:6vh">
+      <div class="card flat" data-anim style="min-height:39vh;padding:3vh 1.6vw"><div class="num-pill" style="align-self:flex-start;justify-self:start">01</div><div class="card-title">几何：邻接 mem = 1</div><p class="card-body">N9 / N19 是非终端，于是 C0 / C8 / C10 / C18 紧邻的 memory 只有一个。它们的写必须挤到环上最忙的那几条 hop 上，而其余六核可以在两侧分流。</p><p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">带宽与邻接 mem 数的相关系数 0.997。这不是路由问题：改路由也变不出第二个邻居。</p></div>
+      <div class="card flat" data-anim style="min-height:39vh;padding:3vh 1.6vw"><div class="num-pill" style="align-self:flex-start;justify-self:start">02</div><div class="card-title">机制：在环绝对优先</div><p class="card-body">无缓存环上 transit flit 永不被本地注入打断，注入只能挤空隙。决定上环延迟的是空隙的<strong>分布</strong>而不是总量 —— 坐在热段起点的节点看到的空隙最少、最不规则。</p><p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">官方 run 最忙 hop 占用 95.83%（DAT）/ 97.14%（RSP）；K=2000 短探测把绑定 hop 的空槽逐拍分类，「端口空闲」一列合计 1，实质为零 —— 没有一个空槽是仲裁失误。</p></div>
+      <div class="card flat" data-anim style="min-height:39vh;padding:3vh 1.6vw"><div class="num-pill" style="align-self:flex-start;justify-self:start">03</div><div class="card-title">症状：只偏在失败尝试上</div><p class="card-body">这四个核的 CW / CCW 上环失败比 2.42–2.58，其余六核只有 1.01–1.18。而每核每方向<strong>成功</strong>上环数被路由钉死在 30,000 笔，逐位相同。</p><p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">失败比不对称是在忠实报告「一个方向的 hop 更挤」，抹平它本身不是目标。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 12 章节 03 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">03</div>
+      <div class="kicker">SECTION THREE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">S1 方案与代价</h2>
+      <p class="lead" style="margin-top:2vh">拥塞检测、拥塞传递、拥塞反馈、流量控制，以及调参之后的两难。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">KEY MESSAGE</div>
+      <h3 class="h-md" style="margin-top:2vh">S1 的公平性来自「把所有人一起压慢」：Jain +0.068，总带宽 −14.3%；调参把带宽拿回来之后，公平性也一起还了回去。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 13 S1 四段机制 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S1 机制：检测 / 传递 / 反馈 / 控制</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">SENDER-DRIVEN · RATE-BASED · BUS-TRIGGERED</div>
+      <h2 class="h-xl">S1：拥塞等级广播 + 节点级 AIMD</h2>
+    </div>
+
+    <div class="process" style="margin-top:5.5vh">
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">01</div>
+        <div class="card-title">拥塞检测</div>
+        <p class="card-body">每节点每 64 拍窗统计<strong>上环失败</strong>与<strong>下环偏转</strong>，分 total（任何原因）与 net（仅在环占用造成）两路。</p>
+        <p class="card-body" style="margin-top:1vh">等级 = min(7, 计数 ÷ 8)，量化成 3 bit：0–7→0，8–15→1，…，≥56→7。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">02</div>
+        <div class="card-title">拥塞传递</div>
+        <p class="card-body">每方向 3 bit 的<strong>专用广播总线</strong>，从不占用 NoC hop，因此不会自我加剧拥塞。</p>
+        <p class="card-body" style="margin-top:1vh">本设计里任何总线使用固定 <strong>30 拍</strong>延迟；30 &lt; 窗口 64，所以反馈仍能赶在下一次 AIMD 之前送到。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:32vh">
+        <div class="num-pill">03</div>
+        <div class="card-title">拥塞反馈</div>
+        <p class="card-body">每节点维护一张<strong>受控节点表</strong> —— 自己的 flit 会经过的那些 path nodes（20 项 × 6 bit）。</p>
+        <p class="card-body" style="margin-top:1vh">反馈值取这些节点等级的 <strong>max</strong>：路径上最堵的那一段说了算。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:32vh;border-color:rgba(var(--brand-red-rgb),.45)">
+        <div class="num-pill">04</div>
+        <div class="card-title" style="color:var(--brand-red)">流量控制</div>
+        <p class="card-body">最终等级 = level_of(自身 total 失败 − 8 × 收到的 max net 等级)。</p>
+        <p class="card-body" style="margin-top:1vh">对每窗<strong>整型注入预算</strong>做 AIMD：乘性减 α = 0.75 / 0.5 / 0.25，加性增 β = +16 / +8 / +2，出口是令牌桶闸门。</p>
+      </div>
+    </div>
+
+    <div class="quote-band" style="margin-top:4vh;font-size:1.24vw;line-height:1.5;padding:2.2vh 2.2vw">
+      四段本身都成立，问题出在第 ① 段的信号语义：在无缓存环上，一个核的上环失败大多由<strong>别人的 transit</strong> 造成，所以这条信号分不清「我太贪」和「我被挤」。
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 14 S1 效果 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S1 效果：两个旋钮各拿一头</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7vh;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:2vh">
+    <div class="content-stack" data-anim style="gap:.6vh">
+      <div class="kicker">TUNING OUTCOME</div>
+      <h2 class="h-xl" style="font-size:min(2.7vw,5vh)">公平性和总带宽，S1 一次只能拿到一头</h2>
+    </div>
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:2278/850;height:40vh;width:auto;margin:0 auto"><img src="images/12-s1-effect.png" alt="左：S0 / S1 / S1T 每核写带宽对比；右：三者在带宽—Jain 平面上的位置与验收区"></div>
+    </div>
+    <div class="grid-3 same-size" data-anim>
+      <div class="card flat"><div class="card-title">S1 默认（band = spec）</div><p class="card-body">分箱 Jain 0.87865 → <strong>0.94689</strong>，整窗 max/min 1.6931 → 1.4161；总写带宽 5.4681 → <strong>4.6874（−14.3%）</strong>。公平性进步是真的，带宽代价也是真的。</p></div>
+      <div class="card flat" style="border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="color:var(--brand-red)">S1T 每向预算（调参后）</div><p class="card-body">62 组 AIMD 参数网格自己选出的最优点（dir_split、cap 0.5、w 64、burst 1）：带宽回到 <strong>5.4641（−0.07%）</strong>，但 Jain 掉回 <strong>0.87294</strong>，max/min 反升到 1.7879。</p></div>
+      <div class="card flat"><div class="card-title">方向失败比：没有改善</div><p class="card-body">最坏核的 CW/CCW 失败比 S0 = 2.575、S1 = 2.463、S1T = 2.551，三者实质相同。能压到 2.2 以下的配置一律要付 36–37% 带宽 —— 那是关机，不是调平。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 15 S1 为什么换不来 ==================== -->
+<section class="slide" data-layout="H42" data-animate="before-after-case">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S1 为什么换不来公平</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="height:100%;display:grid;grid-template-rows:auto 1fr auto;gap:2vh;padding-top:7vh;padding-bottom:5vh">
+    <div class="content-stack" data-anim style="gap:1vh">
+      <div class="kicker">WHY IT DOES NOT TRANSFER RATE</div>
+      <h2 class="h-xl">期望是「把份额从快核搬给慢核」，实测是「把所有人一起压慢」</h2>
+      <p class="lead">极差变小，是因为上限被砍、下限也跟着掉，而不是速率发生了转移。</p>
+    </div>
+    <div class="grid-2 same-size" style="align-items:stretch">
+      <div class="card" data-anim>
+        <div class="card-title" style="color:var(--muted)">期望的动作</div>
+        <div class="bullet-list" style="margin-top:2vh">
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--line-strong)"></div><div><strong>快核让速</strong><p class="card-body">拥塞等级高的路径上，占优核先降预算。</p></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--line-strong)"></div><div><strong>让出的槽被慢核接手</strong><p class="card-body">C0 / C8 / C10 / C18 拿到本来挤不上的 hop。</p></div></div>
+          <div class="bullet-item"><div class="bullet-dot" style="background:var(--line-strong)"></div><div><strong>总量不变</strong><p class="card-body">份额重新分配，总带宽守恒。</p></div></div>
+        </div>
+      </div>
+      <div class="card" data-anim style="border-color:rgba(var(--brand-red-rgb),.34)">
+        <div class="card-title" style="color:var(--brand-red)">实测发生的事</div>
+        <div class="bullet-list" style="margin-top:2vh">
+          <div class="bullet-item"><div class="bullet-dot"></div><div><strong>触发条件搞反了</strong><p class="card-body">乘性减由「<em>自己</em>上环失败了」触发，而无缓存环上这些失败大多是<strong>别人的 transit</strong> 造成的 —— 等于惩罚受害者。</p></div></div>
+          <div class="bullet-item"><div class="bullet-dot"></div><div><strong>所有核一起下降</strong><p class="card-body">慢核 C18 0.43642 → 0.39489（−9.5%），快核 C2 0.71521 → 0.54571（−23.7%）。max/min 变好，是上限被砍出来的。</p></div></div>
+          <div class="bullet-item"><div class="bullet-dot"></div><div><strong>闸门型执行器丢槽</strong><p class="card-body">令牌桶「没额度就不上环」，而无缓存环上让出的槽不会被记账保留：它顺着环走，沿途任何节点都能吃掉。</p></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-3 same-size">
+      <div class="card flat" data-anim style="text-align:center"><div class="stat-big" style="font-size:min(3.4vw,6vh)">−14.3%</div><p class="meta">默认 S1 的总写带宽代价</p></div>
+      <div class="card flat" data-anim style="text-align:center"><div class="stat-big" style="font-size:min(3.4vw,6vh)">62 组</div><p class="meta">AIMD 参数扫描，无一双线达标</p></div>
+      <div class="card flat" data-anim style="text-align:center"><div class="stat-big" style="font-size:min(3.4vw,6vh)">21,220</div><p class="meta">S1 硬件 FF-eq（总线 + 20 项表 + 乘法器 + 令牌桶）</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 16 章节 04 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">04</div>
+      <div class="kicker">SECTION FOUR</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">公平性 — 总带宽<br/>的 trade-off</h2>
+      <p class="lead" style="margin-top:2vh">先把「要多一点公平到底该付多少带宽」这条曲线精确算出来。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">KEY MESSAGE</div>
+      <h3 class="h-md" style="margin-top:2vh">Jain = 0.99 处的前沿是 5.9226 flit/cycle，比 S0 实测还快 9.81%。两条验收线不互斥 —— S0 根本不在前沿上。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 17 trade-off 曲线 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>公平性 — 带宽交换曲线</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh;display:grid;grid-template-columns:1.3fr .7fr;gap:2.4vw;align-items:start">
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:1972/951"><img src="images/16-tradeoff.png" alt="理想拥塞控制的精确前沿 R(J)，标出 R_max、R*、S0 实测与 Jain=0.99 的验收区"></div>
+      <div class="caption">红线 = 二阶锥规划精确解的 R(J) 前沿；绿区 = 两条验收线同时满足的区域。本图与 Pareto 图同属 K = 2000 的筛选轮，S0 = 5.3937；官方 K = 20000 的 S0 = 5.4681。</div>
+    </div>
+    <div class="content-stack" data-anim style="gap:1.5vh">
+      <div class="kicker">FORMAL DERIVATION</div>
+      <div class="card flat" style="padding:2vh 1.4vw">
+        <p class="card-body" style="line-height:1.62">
+          决策变量：每核事务注入率 λ<sub>c</sub>。每 (hop, 方向, VC) 一条容量约束<br/>
+          <strong style="color:var(--brand-red)">Σ<sub>c</sub> a<sub>r,c</sub> λ<sub>c</sub> ≤ 1</strong>，λ ≥ 0<br/><br/>
+          Jain(λ) ≥ J ⟺ ‖λ‖₂ ≤ (1′λ) / √(J·n)，是<strong>二阶锥</strong>约束 ⇒ R(J) 可<strong>精确</strong>求解，不是估计。<br/><br/>
+          等速率端有闭式：R* = W / max<sub>r</sub> ā<sub>r</sub> = <strong>40/7</strong>。
+        </p>
+      </div>
+      <div class="quote-band" style="font-size:1.12vw;line-height:1.5;padding:1.8vh 1.4vw">
+        ① 公平本身的固有代价只有 −10.71%（R* 5.7143 vs R<sub>max</sub> 6.4000）。
+      </div>
+      <div class="quote-band" style="font-size:1.12vw;line-height:1.5;padding:1.8vh 1.4vw">
+        ② Jain 0.99 处前沿 5.9226 &gt; 同一条曲线上的 S0 实测 5.3937（<strong>+9.81%</strong>）—— 更公平和更快<strong>不冲突</strong>。
+      </div>
+      <div class="quote-band" style="font-size:1.12vw;line-height:1.5;padding:1.8vh 1.4vw">
+        ③ 最后 0.01 的 Jain，单价是前面一大段的 <strong>3.6 倍</strong> ⇒ 线画在 0.99 而不是 1.0。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 18 章节 05 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">05</div>
+      <div class="kicker">SECTION FIVE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">理论最优与<br/>各方案 Pareto</h2>
+      <p class="lead" style="margin-top:2vh">先钉死「无限聪明、无限快的控制器最多能做到什么」，再把 16 个实测方案摆进同一张图。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">KEY MESSAGE</div>
+      <h3 class="h-md" style="margin-top:2vh">差距不在容量，在机制：S0 的带宽处理想仍有 4.3% 余量，卡住的是 30 拍的信号时延。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 19 理想控制器 ==================== -->
+<section class="slide" data-layout="H05" data-animate="cards">
+  <div class="chrome"><div class="l"><span class="square"></span><span>理想拥塞控制器的上限</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">THE REFERENCE EVERYTHING IS DIVIDED BY</div>
+      <h2 class="h-xl">无限聪明、无限快，只受资源守恒约束</h2>
+    </div>
+
+    <div class="grid-3 same-size" style="margin-top:4.5vh">
+      <div class="card" data-anim>
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw"><i data-lucide="function-square"></i></div>
+        <div class="card-title">LP 模型</div>
+        <p class="card-body">目的地分布不是假设，是从真实事务表数出来的经验分布 p<sub>c,h</sub>。一笔事务占用的资源由四拍握手和固定的时延最短路由唯一确定，所以每条资源的占用是 λ 的线性函数。</p>
+        <p class="card-body" style="margin-top:1.2vh">模型<strong>不含</strong>缓冲、不含在环优先、不含 I-tag / E-tag —— 这是有意的：把机制造成的损失也算进待解释的差距里。</p>
+      </div>
+      <div class="card" data-anim style="border-color:rgba(var(--brand-red-rgb),.4)">
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw"><i data-lucide="git-compare-arrows"></i></div>
+        <div class="card-title">两个界</div>
+        <p class="card-body"><strong>最大吞吐</strong> R<sub>max</sub> = 6.4000 flit/cycle，但这一点的 LP 最优解<strong>不唯一</strong>（速率 Jain 0.80–0.914）；最差的那个把 C0 / C10 完全饿死，闭环批量下不是可行工作点。</p>
+        <p class="card-body" style="margin-top:1.2vh"><strong>等速率</strong> λ* = 2/7 = 0.285714 txn/cycle/core，R* = 40/7 = <strong>5.7143</strong>。瓶颈是环上的 hop（hop:0:1:dat 一族），不是注入或下环端口 —— 加深队列、加宽端口都抬不高它。</p>
+        <p class="card-body" style="margin-top:1.2vh">max-min 公平（逐步填充）恰好落在等速率点，α-公平 α=1（比例公平）恰好落在 R<sub>max</sub>。</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw"><i data-lucide="ruler"></i></div>
+        <div class="card-title">分箱 Jain 的理想上限</div>
+        <p class="card-body">50 拍箱内全环只有 285.7 个写 flit，每核约 28.6 个。确定性控制器把箱内总数按整数尽可能均分，得 J<sub>ideal</sub> = <strong>0.9997</strong>（突发 2 flit 不可拆时 0.9990）。</p>
+        <p class="card-body" style="margin-top:1.2vh">两者都远高于 0.99，所以<strong>验收线不是被整数粒度挡住的</strong>。</p>
+      </div>
+    </div>
+
+    <div class="quote-band" style="margin-top:3vh;font-size:1.18vw;line-height:1.5;padding:2vh 2vw">
+      适用范围：λ* = 2/7 是「fabric + 流量 pattern」的联合解，不是 fabric 常数。换成 hot 之后绑定资源从入环 hop 变成热簇的下环口，λ* 掉到 0.100、R* 掉到 2.0000 —— 任何把 λ* 写进硬件的设计只对它被推导时的那个 pattern 正确。
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 20 Pareto ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>收益 — 硬件开销 Pareto</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh;display:grid;grid-template-columns:1.36fr .64fr;gap:2.2vw;align-items:start">
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:2312/1088"><img src="images/18-pareto.png" alt="16 个拥塞控制方案的收益 η 与新增硬件 FF 等效开销 Pareto 图，含可实现前沿"></div>
+      <div class="caption">η = （总带宽 × 分箱 Jain）/ 理想控制器同项 = ÷ 5.7126。理想 = 1.0，S0 = 0.8274。筛选轮 K = 2000。</div>
+    </div>
+    <div class="content-stack" data-anim style="gap:1.5vh">
+      <div class="kicker">FRONTIER</div>
+      <div class="card flat" style="padding:2vh 1.3vw">
+        <div class="card-title" style="font-size:1.12vw">可实现前沿（总线一律按 30 拍计）</div>
+        <p class="card-body" style="line-height:1.7">
+          S0（0 FF-eq，η 0.8274）→ <strong style="color:var(--brand-red)">S16</strong>（900，0.8329）→ S19（5,840，0.8474）→ <strong style="color:var(--brand-red)">S20 DCTCP</strong>（5,840，0.8587）→ <strong style="color:var(--brand-red)">S22-stock</strong>（13,920，0.8678）→ S22 深队列（1,198,560，0.8822）
+        </p>
+        <p class="card-body" style="margin-top:1vh;font-size:.86vw">注：S19 与 S20 同价 5,840 FF-eq，S19 的 η 更低，它留在前沿链上只是并列成本的排序产物 —— 该价位上应选 S20。</p>
+      </div>
+      <div class="quote-band" style="font-size:1.06vw;line-height:1.5;padding:1.8vh 1.3vw">
+        没有任何<strong>可实现</strong>方案同时满足 Jain &gt; 0.99 与带宽差 &lt; 1%。
+      </div>
+      <div class="card flat" style="padding:1.8vh 1.3vw">
+        <p class="card-body" style="line-height:1.62">最接近的是 S22 在 <strong>总线 1 拍</strong>下的点：Jain 0.98914、带宽 −0.56%、η 0.9287 —— 但它违反「任何总线使用花 30 拍」这条硬约束，图上以灰 X 标出、不参与前沿。</p>
+        <p class="card-body" style="margin-top:1.2vh;line-height:1.62;color:var(--brand-red)"><strong>卡点已定位：</strong>30 拍 &gt; 50 拍验收窗的一半，控制环的时间常数注定比验收窗宽。这是 Jain 停在 0.92 的直接原因，与容量无关。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 21 非均匀流量 ==================== -->
+<section class="slide" data-layout="H12" data-animate="media-report">
+  <div class="chrome"><div class="l"><span class="square"></span><span>固定非均匀流量下的带宽 Pareto</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:8vh;display:grid;grid-template-columns:1.2fr .8fr;gap:2.4vw;align-items:start">
+    <div data-anim>
+      <div class="image-frame fit-contain" style="aspect-ratio:1950/988;height:44vh;width:auto;margin:0"><img src="images/20-hot-pareto.png" alt="hot 流量下各方案的总写带宽与硬件开销 Pareto，基线取修正后的免费工作点"></div>
+      <div class="caption">hot：十个核全部写入 HA 11 / 13 两节点簇。R* 用它自己的目的地分布重解 = 2.0000，绑定资源变成热簇的<strong>下环口</strong>。</div>
+    </div>
+    <div class="content-stack" data-anim style="gap:1.4vh">
+      <div class="kicker">ROBUSTNESS TO TRAFFIC SHIFT</div>
+      <div class="card flat" style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.4)">
+        <div class="card-title" style="font-size:1.1vw;color:var(--brand-red)">先修一个免费的错</div>
+        <p class="card-body" style="line-height:1.6">core_outstanding 128 → 32：<strong>零硬件、无流量先验</strong>。带宽从 0.7401 R* 拉到 0.9876 R*（+33%），E-tag 绕环从 6,627 降到 4,384。倾斜度扫描显示 32 在 5 个倾斜度中 4 个最优 —— 它不是新的先验。</p>
+      </div>
+      <div class="card flat" style="padding:1.8vh 1.3vw">
+        <div class="card-title" style="font-size:1.1vw">修正基线后前沿只剩两点</div>
+        <p class="card-body" style="line-height:1.6">S0（0 FF-eq，0.9876）→ <strong style="color:var(--brand-red)">S16</strong>（900 FF-eq，<strong>0.9985</strong>，离理想只差 0.15%）。更贵的方案要么低于免费基线，要么只高出 0.3% 以内（S19 / S20 = 0.9908），全部被 S16 支配。</p>
+        <p class="card-body" style="margin-top:1vh;line-height:1.6">原因：hot 上的拥塞在<strong>目的地</strong>，而 S16 是唯一把控制点放在拥塞发生地的方案；源端之间的公平化（S22 / S23 / S15 / S21）在这里毫无帮助，还因让位 / 门控白扔槽位而亏带宽。</p>
+      </div>
+      <div class="quote-band" style="font-size:1.04vw;line-height:1.5;padding:1.6vh 1.3vw">
+        但公平性没解决：这里 R*<sub>等速率</sub> = R<sub>max</sub>，公平不要钱，而分箱 Jain 只有 0.3684（S16 0.8542）—— <strong>这不是为带宽付的代价，是纯缺陷。</strong>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 22 章节 06 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">06</div>
+      <div class="kicker">SECTION SIX</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">前沿方案详述</h2>
+      <p class="lead" style="margin-top:2vh">每方案一页，结构与 S1 对齐：检测 → 传递 → 反馈 → 执行，再加实测与硬件。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">SELECTION RULE</div>
+      <h3 class="h-md" style="margin-top:2vh">入选标准：在可实现 Pareto 前沿上，且目标值全部来自<strong>测量</strong>、不含任何流量 pattern 先验。定速钉死的 S24 / S25 因此被撤下。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 23 S16 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S16 授权保留（900 FF-eq） · receiver-driven / window / 本地触发</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">SCHEME 1 / 4 · CHEAPEST POSITIVE RETURN</div>
+      <h2 class="h-xl" style="font-size:min(3.2vw,5.8vh)">S16：把 CHI 本来就有的那张授权用起来</h2>
+    </div>
+
+    <div class="process" style="margin-top:4vh">
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">01</div><div class="card-title">检测</div><p class="card-body">completer 只数<strong>自己的在飞授权数</strong>。不需要任何拥塞信号 —— 拥塞就发生在它自己的下环口上。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">02</div><div class="card-title">传递</div><p class="card-body"><strong>零</strong>。不用总线、不用带内标记。控制信号是协议本来就要发的那条 DBIDResp，线格式完全不动。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">03</div><div class="card-title">反馈</div><p class="card-body">REQ 到达后先<strong>排队</strong>而不是立即授权；同时在飞的授权不超过 overcommit = 64（Homa 的过量承诺度）。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh;border-color:rgba(var(--brand-red-rgb),.45)"><div class="num-pill">04</div><div class="card-title" style="color:var(--brand-red)">执行</div><p class="card-body">在排队者中把授权给<strong>迄今被服务最少</strong>的那个。定长写下 Homa 的 SRPT 退化成公平排队。</p></div>
+    </div>
+
+    <div class="grid-3 same-size" style="margin-top:3vh">
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">uniform 实测</div><p class="card-body">η 0.8329，带宽 0.9468 R*（<strong>+0.31% vs S0</strong>），分箱 Jain 0.87945。它管的是「在飞总量」，不区分是谁的，所以公平性提升有限。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">非均匀流量：唯一不亏的方案</div><p class="card-body">hot 上拿到 R* 的 <strong>99.85%</strong>；倾斜度 f = 0 / 0.25 / 0.5 / 0.75 / 1.0 五档相对免费基线依次 +0.0000 / +0.0280 / +0.0238 / +0.0184 / +0.0086，<strong>没有一档为负</strong>。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">硬件 900 FF-eq</div><p class="card-body">每 HA 一个 10 bit 在飞计数器 + 2 个比较器 + 1 个加法器。关键性质：<strong>扣授权不会制造气泡</strong> —— 预留 slot 没用上就浪费掉，而扣授权只是让占优核少一点数据待发，能用这个 slot 的核照样拿走。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 24 S20 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S20 DCTCP（5,840 FF-eq） · sender-driven / window / ECN 触发</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">SCHEME 2 / 4 · THE ONLY MID-PRICE POINT WITH POSITIVE BANDWIDTH</div>
+      <h2 class="h-xl" style="font-size:min(3.2vw,5.8vh)">S20：带内标记 + 比例式缩窗</h2>
+    </div>
+
+    <div class="process" style="margin-top:4vh">
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">01</div><div class="card-title">检测</div><p class="card-body">completer tracker 占用越过 k<sub>min</sub> = 0.8 后，按 RED 概率（p<sub>max</sub> = 0.05）给经过的事务打标。RetryAck 视同必标。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">02</div><div class="card-title">传递</div><p class="card-body"><strong>带内标记</strong>，不用专有总线，因此不受 30 拍规则约束 —— 反馈随响应包一起回到源端。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">03</div><div class="card-title">反馈</div><p class="card-body">源端对标记比例做 EWMA（g = 1/16）得到 α，即「这条路径最近有多堵」的连续估计，而不是 0/1 判决。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh;border-color:rgba(var(--brand-red-rgb),.45)"><div class="num-pill">04</div><div class="card-title" style="color:var(--brand-red)">执行</div><p class="card-body">每个标记 epoch 做一次乘性缩窗 w ×= 1 − α/2，无标记时加性恢复；窗口夹在 [8, 128] 且不超过 core_outstanding。</p></div>
+    </div>
+
+    <div class="grid-3 same-size" style="margin-top:3vh">
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">uniform 实测</div><p class="card-body">η 0.8587（可实现前沿上性价比最好的中价位点），带宽 0.9492 R*（<strong>+0.56% vs S0，本轮唯一带宽为正的中价位方案</strong>），分箱 Jain 0.90441。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">为什么带宽为正</div><p class="card-body">标记打在<strong>真正拥塞的那个资源</strong>上，所以它削掉的正是会导致 E-tag 绕环重试的那部分注入 —— 少注入换来更少的无效绕环。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">局限（必须讲清）</div><p class="card-body">ECN 是<strong>拥塞</strong>信号而不是<strong>公平</strong>信号，Jain 只到 0.904。hot 上（在飞上限 32）带宽 0.9908 R*、Jain 仅 0.3847；早期看到的「+33.6%」全部来自 win_init = 16 这个静态在飞上限，控制回路整轮一次都没触发（n_mark = 0）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 25 S19 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S19 Swift（5,840 FF-eq） · sender-driven / window / 时延触发</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">SCHEME 3 / 4 · NO NEW WIRE AT ALL</div>
+      <h2 class="h-xl" style="font-size:min(3.2vw,5.8vh)">S19：用端到端时延当信号，一根新线都不加</h2>
+    </div>
+
+    <div class="process" style="margin-top:4vh">
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">01</div><div class="card-title">检测</div><p class="card-body">端到端 RTT（REQ 发出到 Comp 返回）。基线取<strong>全环最小</strong> RTT 而不是每核 min，避免把一次幸运的邻跳采样当成基准。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">02</div><div class="card-title">传递</div><p class="card-body"><strong>无需任何新线</strong>：时延本身就是带内信号，交换机也不必支持标记。这是它与 S20 唯一的结构差别。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">03</div><div class="card-title">反馈</div><p class="card-body">目标 = 8 × base RTT，base 带 20 拍下限（fabric 尺度校准，不能照搬数据中心的绝对阈值）。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh;border-color:rgba(var(--brand-red-rgb),.45)"><div class="num-pill">04</div><div class="card-title" style="color:var(--brand-red)">执行</div><p class="card-body">rtt ≤ target 时窗口加性增 +1/w；否则 w ×= 1 − 0.4·(rtt − target)/rtt，按超出比例缩，而不是固定砍半。</p></div>
+    </div>
+
+    <div class="grid-3 same-size" style="margin-top:3vh">
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">uniform 实测</div><p class="card-body">η 0.8474，带宽 0.9372 R*（−0.71% vs S0），分箱 Jain 0.90386。硬件与 S20 完全同价：每核 24 bit 计数 + 1 个 EWMA + 2 加 + 2 比较。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">同价位被 S20 支配</div><p class="card-body">两者都是 5,840 FF-eq，但 S20 的 η 高 0.0113、带宽还为正。<strong>如果只能选一个 ECN / delay 型窗口控制器，选 S20。</strong>S19 的价值在于它连交换机标记支持都不需要。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">非均匀流量</div><p class="card-body">hot（在飞上限 32）带宽 0.9908 R*、Jain 0.3847，与 S20 逐位相同 —— 因为两个控制器在那里都<strong>一次都没触发</strong>（n_win_down = 0）。时延信号在下环口拥塞上同样不灵敏。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 26 S22 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>S22 赤字触发的限域让路（13,920 FF-eq） · receiver-driven / 仲裁型 / 总线触发</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">SCHEME 4 / 4 · BEST BUILDABLE η UNDER 20K FF-EQ</div>
+      <h2 class="h-xl" style="font-size:min(3.2vw,5.8vh)">S22：复用 S1 那条 6 bit 总线，但播进度、且不设闸门</h2>
+    </div>
+
+    <div class="process" style="margin-top:4vh">
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">01</div><div class="card-title">检测</div><p class="card-body">每节点只数<strong>自己本窗成功上环的 flit 数</strong>，饱和到 6 bit。播的是进度，不是拥塞等级。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">02</div><div class="card-title">传递</div><p class="card-body">复用 S1 那条 6 bit 广播总线，<strong>位宽完全相同</strong>，只换了线上放什么。自己的进度也从总线读回：两边过同一个量化器、同一段延迟，开局瞬态不会留下永久偏置。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh"><div class="num-pill">03</div><div class="card-title">反馈</div><p class="card-body">赤字 = 总线上 10 项计数的均值 − 自己那一项；越过 thresh = 0.5 就举请求。让路是<strong>单向</strong>的：落后的节点永不让路。</p></div>
+      <div class="process-step" data-anim style="min-height:24vh;border-color:rgba(var(--brand-red-rgb),.45)"><div class="num-pill">04</div><div class="card-title" style="color:var(--brand-red)">执行：让位，不是门控</div><p class="card-body">不落后的节点只对「会从请求者出向 hop 骑过去」的 flit 让路（scope = segment）；同时<strong>前瞻改发</strong>一个会在请求者之前下环的 flit，让自己的 hop 不空转；margin = 4.0 拒掉对「差不多齐」的节点让路。</p></div>
+    </div>
+
+    <div class="grid-3 same-size" style="margin-top:3vh">
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">30 拍总线 + stock 队列（推荐点）</div><p class="card-body">η <strong>0.8678</strong>，带宽 0.9425 R*（<strong>−0.15% vs S0</strong>），分箱 Jain 0.92046 —— 所有 &lt; 20k FF-eq 的方案里 η 最高。硬件：6 bit 广播 × 20 + 10 项 8 bit 镜像表 + 10 bit 计数器 + 加法树 + 8 路前瞻比较器。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">若总线能做到 1 拍</div><p class="card-body">Jain <strong>0.98878</strong>、带宽 −0.78%、整窗 max/min 1.6931 → <strong>1.0002</strong>，核间长期速率差被抹到 1.0001（27.147 vs 27.151）。两条线几乎同时达成 —— 但这违反 30 拍硬约束，只能作为架构决策的输入。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">两条结构性结论</div><p class="card-body">① 深队列变体（12/8 → 32/32）η 只多 +0.0144，硬件贵 <strong>86 倍</strong>（1,198,560 FF-eq），<strong>不推荐</strong>。<br/>② 同等公平度下<strong>让位比门控省 10 倍带宽</strong>：S23 门控付 1.50%，S22 让位只付 0.15%。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 27 章节 07 ==================== -->
+<section class="slide" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">07</div>
+      <div class="kicker">SECTION SEVEN</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">结论与建议</h2>
+      <p class="lead" style="margin-top:2vh">哪些已经关死，哪些还开着，以及下一步该由谁拍板。</p>
+    </div>
+
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">BOTTOM LINE</div>
+      <h3 class="h-md" style="margin-top:2vh">带宽线已基本关死；公平线是真实缺陷但理论上不需要付带宽；真正的卡点是 30 拍的流控总线时延。</h3>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 28 结论 ==================== -->
+<section class="slide" data-layout="H20" data-animate="icon-matrix">
+  <div class="chrome"><div class="l"><span class="square"></span><span>结论</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim><div class="kicker">CONCLUSIONS</div><h2 class="h-xl">四条</h2></div>
+    <div class="grid-4 same-size" style="margin-top:4.5vh">
+      <div class="card" data-anim style="padding:2.4vh 1.4vw">
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw;margin-bottom:1.2vh"><i data-lucide="check-circle-2"></i></div>
+        <div class="card-title">① 带宽线已基本关死</div>
+        <p class="card-body">S0 = 95.69% R*，4.31% 的缺口已逐拍闭合（1,056 绕环加价 + 2,096 空转），出厂规格下可达上限约 96.5%。</p>
+        <p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">拥塞控制的带宽目标应是「不弄丢」，不是「抬上去」。</p>
+      </div>
+      <div class="card" data-anim style="padding:2.4vh 1.4vw">
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw;margin-bottom:1.2vh"><i data-lucide="alert-triangle"></i></div>
+        <div class="card-title">② 公平缺陷是真实的</div>
+        <p class="card-body">不是采样噪声：把抖动完全抹平后的 Jain 上限只有 0.95341，六快四慢是几何决定的固定分组（核间速率比 1.6934）。</p>
+        <p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">要到 0.99 就必须真的搬速率，只整时机不够。</p>
+      </div>
+      <div class="card" data-anim style="padding:2.4vh 1.4vw">
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw;margin-bottom:1.2vh"><i data-lucide="trending-up"></i></div>
+        <div class="card-title">③ 理论上两条线不互斥</div>
+        <p class="card-body">Jain = 0.99 处的精确前沿是 5.9226 flit/cycle，比同一轮的 S0 实测 5.3937 还高 9.81%；公平本身的固有代价只有 −10.71%。</p>
+        <p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">差距全部在机制层，不在 fabric 容量。</p>
+      </div>
+      <div class="card" data-anim style="padding:2.4vh 1.4vw;border-color:rgba(var(--brand-red-rgb),.45)">
+        <div class="icon-disc" style="width:3.6vw;height:3.6vw;margin-bottom:1.2vh"><i data-lucide="timer"></i></div>
+        <div class="card-title" style="color:var(--brand-red)">④ 卡点是信号时延</div>
+        <p class="card-body">可用信号必须来自测量，而测量要走 30 拍的总线；30 &gt; 50 拍验收窗的一半，控制环时间常数注定比验收窗宽。</p>
+        <p class="card-body" style="margin-top:1.2vh;color:var(--brand-red)">这是可实现方案的 Jain 停在 0.92 的直接原因。</p>
+      </div>
+    </div>
+
+    <div class="quote-band" style="margin-top:3vh;font-size:1.18vw;line-height:1.5;padding:2vh 2vw">
+      另一条贯穿全篇的机制结论：在无缓存环上「把速率从快核转移给慢核」本身是有损的 —— 让出的气泡只能向<strong>下游</strong>传递、沿途会被吃掉，而热点 hop 已经 90% 满。所以执行器必须选<strong>让位</strong>而不是<strong>门控</strong>。
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 29 建议 ==================== -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome"><div class="l"><span class="square"></span><span>建议</span></div><div></div></div>
+  <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">RECOMMENDATION</div>
+      <h2 class="h-xl">按成本递增的四步，前两步现在就能做</h2>
+    </div>
+
+    <div class="process" style="margin-top:4.5vh">
+      <div class="process-step" data-anim style="min-height:28vh">
+        <div class="num-pill">01</div>
+        <div class="card-title">立刻做 · 0 FF-eq</div>
+        <p class="card-body"><strong>core_outstanding 128 → 32。</strong>零硬件、无流量先验，uniform 带宽 +1.1%（顺带分箱 Jain 0.876 → 0.910），非均匀流量带宽 +33%。</p>
+        <p class="card-body" style="margin-top:1vh;color:var(--brand-red)">注意：本研究此前一直用 128，所以各章节的 S0 基线偏低，排序需在 32 上复核。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:28vh">
+        <div class="num-pill">02</div>
+        <div class="card-title">要带宽鲁棒性 · 900 FF-eq</div>
+        <p class="card-body"><strong>投 S16 授权保留。</strong>唯一在任何倾斜度下都不亏带宽的方案，hot 上拿到 R* 的 99.85%，公平度同时改善。</p>
+        <p class="card-body" style="margin-top:1vh">实现成本极低：不加总线、不加表，只改 completer 何时发 DBIDResp。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:28vh">
+        <div class="num-pill">03</div>
+        <div class="card-title">要 uniform 公平性 · 13,920 FF-eq</div>
+        <p class="card-body"><strong>投 S22-stock。</strong>复用 S1 那条 6 bit 总线，去掉乘法器和令牌桶换成加法树。Jain 0.876 → 0.920，带宽只差 0.15%。</p>
+        <p class="card-body" style="margin-top:1vh;color:var(--brand-red)">不要买深队列变体：η 只多 0.014，硬件贵 86 倍。</p>
+      </div>
+      <div class="process-step" data-anim style="min-height:28vh;border-color:rgba(var(--brand-red-rgb),.45)">
+        <div class="num-pill">04</div>
+        <div class="card-title" style="color:var(--brand-red)">要闭合到 0.99 · 需架构拍板</div>
+        <p class="card-body">二选一，都超出「与 S1 同级硬件」的范围：<br/><strong>(a)</strong> 把流控总线时延从 30 拍降到 ≤ 2 拍 —— S22 即可拿到 Jain 0.98878 / 带宽 −0.78% / max-min 1.0002。<br/><strong>(b)</strong> 允许在环 flit 为入环 flit 让位，即打破「在环绝对优先」。</p>
+      </div>
+    </div>
+
+    <div class="quote-band" style="margin-top:4vh;font-size:1.24vw;line-height:1.5;padding:2.2vh 2.2vw">
+      四步之间没有依赖：第 1 步可以单独上线，第 2、3 步可并行评估，第 4 步只决定能否从 Jain 0.92 闭合到 0.99。
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 30 结束 ==================== -->
+<section class="slide dark" data-layout="H10" data-animate="closing">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="height:100%;display:grid;align-content:center;gap:3vh;max-width:64vw">
+    <div class="cover-badge" data-anim>
+      <span class="brand-mark" aria-hidden="true"></span>
+    </div>
+    <div class="kicker" data-anim>THANK YOU</div>
+    <h2 class="h-hero" data-anim>汇报完毕<br/>请架构组决策</h2>
+    <p class="lead" data-anim>需要拍板的一件事：流控总线时延能否从 30 拍降到 ≤ 2 拍。<br/>这决定 Jain 能停在 0.92 还是 0.99。</p>
+  </div>
+</section>
+
+</div>
+
+<div id="nav"></div>
+<div id="overview"></div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+(() => {
+  const deck = document.getElementById('deck');
+  const nav = document.getElementById('nav');
+  const overview = document.getElementById('overview');
+  const slides = [...document.querySelectorAll('.slide')];
+  const lowPowerKey = 'guizang-huawei-low-power';
+  let current = 0;
+  let wheelLock = false;
+
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.__lowPowerMode = localStorage.getItem(lowPowerKey) === '1' || prefersReduced;
+  document.body.classList.toggle('low-power', window.__lowPowerMode);
+
+  function buildPageNumbers(){
+    const total = String(slides.length).padStart(2, '0');
+    slides.forEach((slide, i) => {
+      slide.querySelector('.page-no')?.remove();
+      const pageNo = document.createElement('div');
+      pageNo.className = 'page-no';
+      pageNo.textContent = `${String(i + 1).padStart(2, '0')} / ${total}`;
+      slide.appendChild(pageNo);
+    });
+  }
+
+  function buildNav(){
+    nav.innerHTML = '';
+    slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+      dot.addEventListener('click', () => go(i));
+      nav.appendChild(dot);
+    });
+  }
+
+  function buildOverview(){
+    overview.innerHTML = '';
+    slides.forEach((slide, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      const clone = slide.cloneNode(true);
+      clone.classList.add('active');
+      thumb.appendChild(clone);
+      thumb.addEventListener('click', () => {
+        document.body.classList.remove('overview');
+        go(i);
+      });
+      overview.appendChild(thumb);
+    });
+  }
+
+  function updateTheme(){
+    document.body.classList.toggle('dark-bg', slides[current]?.classList.contains('dark'));
+  }
+
+  function go(i){
+    if (!slides.length) return;
+    current = Math.max(0, Math.min(i, slides.length - 1));
+    deck.style.transform = `translateX(${-current * 100}vw)`;
+    slides.forEach((slide, idx) => slide.classList.toggle('active', idx === current));
+    [...nav.children].forEach((dot, idx) => dot.classList.toggle('active', idx === current));
+    updateTheme();
+  }
+
+  function toggleLowPower(){
+    window.__lowPowerMode = !window.__lowPowerMode;
+    localStorage.setItem(lowPowerKey, window.__lowPowerMode ? '1' : '0');
+    document.body.classList.toggle('low-power', window.__lowPowerMode);
+  }
+
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      document.body.classList.toggle('overview');
+      return;
+    }
+    if (event.key === 'b' || event.key === 'B') {
+      event.preventDefault();
+      toggleLowPower();
+      return;
+    }
+    if (document.body.classList.contains('overview')) return;
+    if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+      event.preventDefault();
+      go(current + 1);
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault();
+      go(current - 1);
+    }
+  });
+
+  addEventListener('wheel', (event) => {
+    if (document.body.classList.contains('overview') || wheelLock || Math.abs(event.deltaY) < 24) return;
+    wheelLock = true;
+    go(current + (event.deltaY > 0 ? 1 : -1));
+    setTimeout(() => { wheelLock = false; }, 620);
+  }, { passive: true });
+
+  let touchStartX = null;
+  addEventListener('touchstart', (event) => { touchStartX = event.touches[0]?.clientX ?? null; }, { passive: true });
+  addEventListener('touchend', (event) => {
+    if (touchStartX == null) return;
+    const dx = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
+    if (Math.abs(dx) > 46) go(current + (dx < 0 ? 1 : -1));
+    touchStartX = null;
+  }, { passive: true });
+
+  buildPageNumbers();
+  buildNav();
+  buildOverview();
+  go(0);
+  if (window.lucide) window.lucide.createIcons();
+})();
+</script>
+</body>
+</html>
