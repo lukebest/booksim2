@@ -722,6 +722,154 @@ def fig_s22_compare() -> None:
     save(fig, "25-s22-compare.png")
 
 
+def fig_itag_diagram() -> None:
+    """I-tag reserve mode: detect local starvation, then deliver one slot."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.0, 1.05]})
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
+                        hspace=0.23)
+
+    _panel(ax, "检测：本节点连续 2 拍有 flit、却没能上环", "t_inj = 2 · 本地触发")
+    _box(ax, 0.02, 0.55, 0.18, 0.35, "请求者 r\n本地注入队列非空",
+         fc="white", ec=RED, fs=10, bold=True)
+    _box(ax, 0.27, 0.55, 0.20, 0.35, "同方向 / 同 VC\n出向 hop 连续被占",
+         fc=PANEL, fs=10)
+    _box(ax, 0.55, 0.55, 0.18, 0.35, "饥饿计数\n达到 2 拍",
+         fc="#fdeaec", ec=RED, tc=RED, fs=10, bold=True)
+    _box(ax, 0.80, 0.55, 0.18, 0.35, "举 I-tag\n标明请求者 r",
+         fc="white", ec=RED, tc=RED, fs=10, bold=True)
+    for p, q in [((0.20, 0.72), (0.27, 0.72)),
+                 ((0.47, 0.72), (0.55, 0.72)),
+                 ((0.73, 0.72), (0.80, 0.72))]:
+        _arrow(ax, p, q, color=RED)
+    _box(ax, 0.02, 0.06, 0.96, 0.31,
+         "I-tag 不是看队列长度，也不预测全局拥塞。它只回答一个本地事实："
+         "「我的 flit 已经连续两拍抢不到自己的出向 hop」。\n"
+         "标记按 plane / 方向 / VC 隔离，不影响不会经过该瓶颈的流。",
+         fc=PANEL, ec=PANEL, fs=9.7)
+
+    _panel(bx, "执行：最近的上游 donor 只让出一个 slot", "reserve 模式 · hold = 2")
+    ring_y = 0.78
+    bx.plot([0.04, 0.96], [ring_y, ring_y], color=GREY, lw=2.6, zorder=1)
+    for x, lab, col in ((0.17, "上游 donor", RED), (0.49, "气泡沿环前进", GREY),
+                        (0.84, "请求者 r", RED)):
+        bx.scatter([x], [ring_y], s=190, c="white", edgecolors=col,
+                   linewidths=1.8, zorder=3)
+        bx.text(x, ring_y + 0.075, lab, ha="center", fontsize=10,
+                color=col, fontweight="bold")
+    _arrow(bx, (0.21, 0.70), (0.80, 0.70), color=RED, ls="--", lw=1.6)
+    _box(bx, 0.04, 0.38, 0.27, 0.20,
+         "① 找最近上游节点\n其待发 flit 会跨过 r 的 hop", fc="white",
+         ec=RED, fs=9.4)
+    _box(bx, 0.365, 0.38, 0.27, 0.20,
+         "② donor 暂停这一拍\n制造一个可追踪的空 slot", fc="white",
+         ec=RED, fs=9.4)
+    _box(bx, 0.69, 0.38, 0.27, 0.20,
+         "③ 空 slot 到达 r\nr 用它把自己的 flit 上环", fc="white",
+         ec=RED, fs=9.4)
+    _box(bx, 0.04, 0.04, 0.92, 0.24,
+         "hold = 2 把 I-tag 变成 2 拍占空比：标记两拍后自动失效，"
+         "避免上游长期停发。一次标记只预约一个 slot，"
+         "不会像整段广播门控那样持续制造气泡。",
+         fc=PANEL, ec=PANEL, fs=9.6)
+    save(fig, "26-itag-diagram.png")
+
+
+def fig_itag_compare() -> None:
+    """I-tag against the requested S0 and S1 references."""
+    d = deck()
+    w, bw = d["write"], d["meta"]["bin_w"]
+    names = ["S0", "S1", "I-tag"]
+    keys = ["S0", "S1", "ITAG"]
+    cols = [BLUE, AMBER, RED]
+    fig, axes = plt.subplots(1, 3, figsize=(14.2, 4.5))
+    _bars_vs(axes[0], names, [w[n]["throughput"] for n in keys], cols,
+             "总写带宽 flit/cycle",
+             f"带宽（uniform 写，K={d['meta']['k_write']}）",
+             ref=d["ideal"]["r_fair"],
+             ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
+    _bars_vs(axes[1], names,
+             [w[n]["jain_bin"]["jain_bin_mean"] for n in keys], cols,
+             f"每 {bw} 拍算一次 Jain，再取平均", "瞬时均衡度", fmt="{:.4f}")
+    _bars_vs(axes[2], names, [w[n]["max_min"] for n in keys], cols,
+             "整窗 最快核带宽 / 最慢核带宽",
+             "长期速率差（越接近 1 越好）", fmt="{:.4f}")
+    fig.suptitle("I-tag t_inj=2 / hold=2：用本地让位改善公平性，不依赖流量先验",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "27-itag-compare.png")
+
+
+def fig_window_diagram() -> None:
+    """Shared S19/S20 window actuator with their two feedback signals."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85))
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
+                        hspace=0.22)
+
+    _panel(ax, "共同执行器：每个 core 一扇动态 outstanding 窗口",
+           "初值 16 · 下限 8 · 硬上限 32")
+    _box(ax, 0.02, 0.54, 0.18, 0.37, "core 发起端\n待发 WriteNoSnp",
+         fc=PANEL, fs=10)
+    _box(ax, 0.27, 0.50, 0.25, 0.45,
+         "每核动态窗口 Wc\n\n在飞事务数 < Wc\n才允许发新的 REQ",
+         fc="white", ec=RED, tc=RED, fs=10, bold=True)
+    _box(ax, 0.60, 0.54, 0.16, 0.37, "环 + HA\n事务完成后\n归还一个名额",
+         fc=PANEL, fs=9.7)
+    _box(ax, 0.83, 0.54, 0.15, 0.37, "反馈样本\n回到同一个 core",
+         fc="white", ec=RED, fs=9.7)
+    _arrow(ax, (0.20, 0.72), (0.27, 0.72), color=RED)
+    _arrow(ax, (0.52, 0.72), (0.60, 0.72), color=RED)
+    _arrow(ax, (0.76, 0.72), (0.83, 0.72), color=RED)
+    _arrow(ax, (0.90, 0.53), (0.40, 0.44), color=RED, rad=-0.17)
+    _box(ax, 0.02, 0.05, 0.96, 0.29,
+         "窗口只限制新 REQ；Retry 重发不被拦。Wc 不能超过静态 core_outstanding=32。"
+         "与速率门控不同，窗口有名额时可以突发，名额耗尽才停。",
+         fc=PANEL, ec=PANEL, fs=9.7)
+
+    _panel(bx, "同一个窗口，两种反馈", "S19 看 RTT · S20 看 HA tracker ECN")
+    _box(bx, 0.02, 0.48, 0.19, 0.42, "S19 · Swift\n时延反馈",
+         fc="#fdeaec", ec=RED, tc=RED, fs=10.5, bold=True)
+    _box(bx, 0.25, 0.48, 0.30, 0.42,
+         "REQ 上环 → DBIDResp 回到 core\n直接得到 RTT（含 Retry 往返）\n\n"
+         "RTT ≤ target：W += 1/W\nRTT > target：按超额比例缩窗",
+         fc="white", ec=RED, fs=9.2)
+    _box(bx, 0.60, 0.48, 0.16, 0.42, "S20 · DCTCP\nECN 反馈",
+         fc="#fdeaec", ec=RED, tc=RED, fs=10.5, bold=True)
+    _box(bx, 0.80, 0.48, 0.18, 0.42,
+         "HA tracker 高占用\n→ DBIDResp 带 1 bit mark\nRetryAck 视为 mark\n\n"
+         "有标记：W × (1−α/2)\n无标记：W += 1/W",
+         fc="white", ec=RED, fs=8.9)
+    _box(bx, 0.02, 0.05, 0.96, 0.28,
+         "两者都不新增报文：S19 复用协议天然 RTT；S20 在既有 DBIDResp 上带 1 bit。"
+         "区别只在拥塞信号，执行器和硬件成本相同（约 5,840 FF-eq）。",
+         fc=PANEL, ec=PANEL, fs=9.7)
+    save(fig, "28-window-diagram.png")
+
+
+def fig_window_compare() -> None:
+    """S19 and S20 against the requested S0 and S1 references."""
+    d = deck()
+    w, bw = d["write"], d["meta"]["bin_w"]
+    names = ["S0", "S1", "S19", "S20"]
+    cols = [BLUE, AMBER, GREY, RED]
+    fig, axes = plt.subplots(1, 3, figsize=(14.2, 4.5))
+    _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
+             "总写带宽 flit/cycle",
+             f"带宽（uniform 写，K={d['meta']['k_write']}）",
+             ref=d["ideal"]["r_fair"],
+             ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
+    _bars_vs(axes[1], names,
+             [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
+             f"每 {bw} 拍算一次 Jain，再取平均", "瞬时均衡度", fmt="{:.4f}")
+    _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
+             "整窗 最快核带宽 / 最慢核带宽",
+             "长期速率差（越接近 1 越好）", fmt="{:.4f}")
+    fig.suptitle("S19 / S20：不同信号驱动同一动态窗口；当前工作点结果接近",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "29-window-compare.png")
+
+
 def main() -> None:
     _use_cjk_font()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -733,6 +881,10 @@ def main() -> None:
     fig_hot()
     fig_s16_diagram()
     fig_s16_compare()
+    fig_itag_diagram()
+    fig_itag_compare()
+    fig_window_diagram()
+    fig_window_compare()
     fig_s22_diagram()
     fig_s22_compare()
 

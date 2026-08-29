@@ -8,7 +8,7 @@ only the deck's own cases at the current knobs -- `CORE_OUTSTANDING_WR` and
 read, so a slide cannot quote a number no run produced.
 
 Cases:
-  write / uniform   S0, S1 (stock AIMD), S1T (direction-split, tuned)
+  write / uniform   S0, S1, S1T, S16, I-tag hold, S19, S20, S22
   read   / uniform  S0, S1-R (HA-scoped AIMD), S16-R (least-served grant)
 
 Usage:
@@ -46,6 +46,9 @@ WRITE_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S1", "S1", {}),
     ("S1T", "S1T", dict(S1_CFG)),
     ("S16", "S16", {"overcommit": S16_OVERCOMMIT}),
+    ("ITAG", "S0", {"t_inj": 2, "itag_hold": 2}),
+    ("S19", "S19", {}),
+    ("S20", "S20", {}),
     ("S22", "S22", S22_STOCK),
 ]
 # The read controller has to act where the read data is injected, which is the
