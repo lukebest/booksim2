@@ -1,0 +1,149 @@
+{
+  "k": 6000,
+  "r_star": 5.7143,
+  "assigned": {
+    "req": 300000,
+    "rsp": 600000,
+    "dat": 600000
+  },
+  "n_nodes": 20,
+  "rows": [
+    {
+      "label": "shared port\uff08\u53c2\u7167\uff09",
+      "over": {
+        "per_dir_ports": false
+      },
+      "thr": 5.2086,
+      "pct_r_star": 91.15,
+      "jain_bin": 0.96533,
+      "max_min": 1.0497,
+      "makespan": 23039,
+      "n_deflections": 3,
+      "n_eject_full_deflect": 3,
+      "n_etag_raised": 3,
+      "extra_crossings": {
+        "dat": 60,
+        "req": 0,
+        "rsp": 0
+      },
+      "extra_total": 60,
+      "extra_per_defl": 20.0,
+      "max_ejectq": 12,
+      "eject_buffers": {}
+    },
+    {
+      "label": "per-dir, eject 12\uff08\u73b0\u72b6\uff09",
+      "over": {},
+      "thr": 5.3638,
+      "pct_r_star": 93.87,
+      "jain_bin": 0.87446,
+      "max_min": 1.8124,
+      "makespan": 22372,
+      "n_deflections": 1447,
+      "n_eject_full_deflect": 1447,
+      "n_etag_raised": 1447,
+      "extra_crossings": {
+        "dat": 2200,
+        "req": 0,
+        "rsp": 26740
+      },
+      "extra_total": 28940,
+      "extra_per_defl": 20.0,
+      "max_ejectq": 12,
+      "eject_buffers": {}
+    },
+    {
+      "label": "per-dir, eject 32",
+      "over": {
+        "eject_depth": 32
+      },
+      "thr": 5.4385,
+      "pct_r_star": 95.17,
+      "jain_bin": 0.87346,
+      "max_min": 1.7224,
+      "makespan": 22065,
+      "n_deflections": 793,
+      "n_eject_full_deflect": 793,
+      "n_etag_raised": 793,
+      "extra_crossings": {
+        "dat": 1220,
+        "req": 0,
+        "rsp": 14640
+      },
+      "extra_total": 15860,
+      "extra_per_defl": 20.0,
+      "max_ejectq": 32,
+      "eject_buffers": {}
+    },
+    {
+      "label": "per-dir, eject 64",
+      "over": {
+        "eject_depth": 64
+      },
+      "thr": 5.4459,
+      "pct_r_star": 95.3,
+      "jain_bin": 0.87346,
+      "max_min": 1.7224,
+      "makespan": 22035,
+      "n_deflections": 438,
+      "n_eject_full_deflect": 438,
+      "n_etag_raised": 438,
+      "extra_crossings": {
+        "dat": 0,
+        "req": 0,
+        "rsp": 8760
+      },
+      "extra_total": 8760,
+      "extra_per_defl": 20.0,
+      "max_ejectq": 64,
+      "eject_buffers": {}
+    },
+    {
+      "label": "per-dir, eject 12 + resv_ej 4",
+      "over": {
+        "resv_ej": 4
+      },
+      "thr": 5.3638,
+      "pct_r_star": 93.87,
+      "jain_bin": 0.87446,
+      "max_min": 1.8124,
+      "makespan": 22372,
+      "n_deflections": 1447,
+      "n_eject_full_deflect": 1447,
+      "n_etag_raised": 1447,
+      "extra_crossings": {
+        "dat": 2200,
+        "req": 0,
+        "rsp": 26740
+      },
+      "extra_total": 28940,
+      "extra_per_defl": 20.0,
+      "max_ejectq": 12,
+      "eject_buffers": {}
+    },
+    {
+      "label": "per-dir, eject 12 + eject_bw 2\uff08\u7834\u89c4\u5219\uff0c\u4ec5\u4f5c\u4e0a\u754c\uff09",
+      "over": {
+        "eject_bw": 2
+      },
+      "thr": 5.4925,
+      "pct_r_star": 96.12,
+      "jain_bin": 0.8709,
+      "max_min": 1.9185,
+      "makespan": 21848,
+      "n_deflections": 0,
+      "n_eject_full_deflect": 0,
+      "n_etag_raised": 0,
+      "extra_crossings": {
+        "dat": 0,
+        "req": 0,
+        "rsp": 0
+      },
+      "extra_total": 0,
+      "extra_per_defl": 0.0,
+      "max_ejectq": 2,
+      "eject_buffers": {}
+    }
+  ],
+  "wall_secs": 116.4
+}

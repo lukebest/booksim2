@@ -1,0 +1,274 @@
+{
+  "k": 20000,
+  "r_star": 5.7143,
+  "assigned": {
+    "req": 35000,
+    "rsp": 70000,
+    "dat": 70000
+  },
+  "tracks": [
+    256,
+    512,
+    1024,
+    4096
+  ],
+  "rows": [
+    {
+      "per_dir_ports": false,
+      "ha_track": 256,
+      "thr": 5.2174,
+      "pct_r_star": 91.3,
+      "jain_bin": 0.96765,
+      "max_min": 1.0288,
+      "makespan": 76667,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 243,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 0,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 70000,
+        "util": 0.91304,
+        "defl": 0
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.45652,
+        "defl": 0
+      },
+      "rsp_excess": 0,
+      "req_excess": 0,
+      "n_board_fail": 533745
+    },
+    {
+      "per_dir_ports": false,
+      "ha_track": 512,
+      "thr": 5.2174,
+      "pct_r_star": 91.3,
+      "jain_bin": 0.96765,
+      "max_min": 1.0288,
+      "makespan": 76667,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 243,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 0,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 70000,
+        "util": 0.91304,
+        "defl": 0
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.45652,
+        "defl": 0
+      },
+      "rsp_excess": 0,
+      "req_excess": 0,
+      "n_board_fail": 533745
+    },
+    {
+      "per_dir_ports": false,
+      "ha_track": 1024,
+      "thr": 5.2174,
+      "pct_r_star": 91.3,
+      "jain_bin": 0.96765,
+      "max_min": 1.0288,
+      "makespan": 76667,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 243,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 0,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 70000,
+        "util": 0.91304,
+        "defl": 0
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.45652,
+        "defl": 0
+      },
+      "rsp_excess": 0,
+      "req_excess": 0,
+      "n_board_fail": 533745
+    },
+    {
+      "per_dir_ports": false,
+      "ha_track": 4096,
+      "thr": 5.2174,
+      "pct_r_star": 91.3,
+      "jain_bin": 0.96765,
+      "max_min": 1.0288,
+      "makespan": 76667,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 243,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 0,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 70000,
+        "util": 0.91304,
+        "defl": 0
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.45652,
+        "defl": 0
+      },
+      "rsp_excess": 0,
+      "req_excess": 0,
+      "n_board_fail": 533745
+    },
+    {
+      "per_dir_ports": true,
+      "ha_track": 256,
+      "thr": 4.35,
+      "pct_r_star": 76.13,
+      "jain_bin": 0.93993,
+      "max_min": 1.0964,
+      "makespan": 91953,
+      "n_retry": 20278,
+      "retry_per_txn": 0.1014,
+      "max_ha_used": 256,
+      "tracker_saturated": true,
+      "completed": true,
+      "n_deflections": 882,
+      "n_delivered_flits": 1060834,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "17:1:rsp",
+        "n": 90543,
+        "util": 0.98467,
+        "defl": 275
+      },
+      "hot_req": {
+        "hop": "18:-1:req",
+        "n": 45134,
+        "util": 0.49084,
+        "defl": 0
+      },
+      "rsp_excess": 20543,
+      "req_excess": 10134,
+      "n_board_fail": 952483
+    },
+    {
+      "per_dir_ports": true,
+      "ha_track": 512,
+      "thr": 5.4681,
+      "pct_r_star": 95.69,
+      "jain_bin": 0.87865,
+      "max_min": 1.6931,
+      "makespan": 73152,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 422,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 2306,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 71056,
+        "util": 0.97135,
+        "defl": 1056
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.47846,
+        "defl": 0
+      },
+      "rsp_excess": 1056,
+      "req_excess": 0,
+      "n_board_fail": 1286084
+    },
+    {
+      "per_dir_ports": true,
+      "ha_track": 1024,
+      "thr": 5.4681,
+      "pct_r_star": 95.69,
+      "jain_bin": 0.87865,
+      "max_min": 1.6931,
+      "makespan": 73152,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 422,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 2306,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 71056,
+        "util": 0.97135,
+        "defl": 1056
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.47846,
+        "defl": 0
+      },
+      "rsp_excess": 1056,
+      "req_excess": 0,
+      "n_board_fail": 1286084
+    },
+    {
+      "per_dir_ports": true,
+      "ha_track": 4096,
+      "thr": 5.4681,
+      "pct_r_star": 95.69,
+      "jain_bin": 0.87865,
+      "max_min": 1.6931,
+      "makespan": 73152,
+      "n_retry": 0,
+      "retry_per_txn": 0.0,
+      "max_ha_used": 422,
+      "tracker_saturated": false,
+      "completed": true,
+      "n_deflections": 2306,
+      "n_delivered_flits": 1000000,
+      "flits_expected": 1000000,
+      "hot_rsp": {
+        "hop": "1:-1:rsp",
+        "n": 71056,
+        "util": 0.97135,
+        "defl": 1056
+      },
+      "hot_req": {
+        "hop": "8:-1:req",
+        "n": 35000,
+        "util": 0.47846,
+        "defl": 0
+      },
+      "rsp_excess": 1056,
+      "req_excess": 0,
+      "n_board_fail": 1286084
+    }
+  ],
+  "wall_secs": 557.4
+}

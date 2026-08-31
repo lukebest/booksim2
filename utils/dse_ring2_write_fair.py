@@ -73,7 +73,7 @@ OUT = ROOT / "results" / "ring2_write_fair.json"
 K_PER_CORE = 20_000
 N_PLANES_STUDY = 1
 W_FLITS = BURST_FLITS   # 128B burst / 64B flit
-BIN_W = 50               # fairness window: Jain of the 10 cores per 50 cycles
+BIN_W = 100              # fairness window: Jain of the 10 cores per 100 cycles
 T_MAX = 4_000_000
 # Two adjacent memory nodes standing in for one clustered memory region. Both
 # are memory in this study (9 and 19 are not), so the roles are unchanged and
@@ -82,12 +82,19 @@ HOT_HAS = (11, 13)
 
 # -- the retry / outstanding study ------------------------------------------
 # Request tracker entries per completer, and the baseline for every scheme:
-# a completer that runs out of entries must RetryAck. 256 is above the peak
-# occupancy the unlimited-tracker reference actually reaches at the official K
-# (195 entries), so the tracker should stop binding altogether and what remains
-# is the bufferless ring's own injection limit. 128 was not enough: the
-# reference needs more than that, so occupancy pegged at the cap.
-RETRY_TRACK = 256
+# a completer that runs out of entries must RetryAck. The size has to sit above
+# the peak occupancy the workload actually reaches, or the tracker -- not the
+# ring -- becomes the binding resource and the study measures the wrong thing.
+#
+# Per-direction up-ring ports moved that peak. On the shared port the peak was
+# 243 entries and 256 was just enough (zero RetryAck). With each direction on
+# its own port the inject side is faster, the peak rises to 422, and 256 pegs
+# at saturation: 20278 RetryAcks, 60834 extra REQ / RSP flits on the ring, and
+# total write bandwidth falls from 95.69% to 76.13% of R*. 512 covers the 422
+# peak and takes retries back to zero; 512 / 1024 / 4096 all measure
+# identically, which is the witness that the tracker has stopped binding.
+# See `PERDIR_PROBE`.
+RETRY_TRACK = 512
 # S16 has to grant from *below* the tracker to do anything at all: at
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
 # to S0 exactly (pinned by verify_ring2_20.py). Being under the tracker is
@@ -96,12 +103,20 @@ RETRY_TRACK = 256
 # ha_track = 256 (k=3000, peak occupancy ~204): 64 gives max/min 1.073 at
 # +2.4% throughput over S0, while 128 -- also "below the tracker" -- lands at
 # 1.177 and does nothing. So this stays at 64 and is not scaled with ha_track.
-S16_OVERCOMMIT = 64
+#
+# It does have to be scaled with `core_outstanding`, which is the thing that
+# actually sets how much the ring holds in flight. At the old cap of 128, 64 was
+# the tight value; at cap 32 the whole roster only offers ~40 requests per HA, so
+# 64 never withholds anything and S16 was measuring bit-identical to S0. The
+# re-sweep at cap 32 (`probe_ring2_s16_oc`) puts the optimum at 16 -- half the
+# cap, the same ratio as before -- with a broad 12..16 plateau.
+S16_OVERCOMMIT = 16
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
 RETRY_K = 800                # shorter batch: the grid is 56 runs wide
 OUTST_SAMPLE = 16            # cycles between outstanding-occupancy samples
+BUF_SAMPLE = 16              # cycles between fabric-FIFO occupancy samples
 # Injection rates to pin, in REQ/cycle/core. Pinning the rate removes the
 # controller entirely, so the best of these is the ceiling any rate-based
 # scheme could reach if it guessed perfectly and never oscillated. The gap
@@ -296,22 +311,83 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 # Run one scheme
 # ---------------------------------------------------------------------------
 
-CORE_OUTSTANDING_WR = 128     # write study only; the read study keeps 100
+# Sized to cover the worst-case unloaded write RTT (89 cycles) at the equal-rate
+# share of 2/7 txn/cycle, i.e. ~26 in flight; 32 is the next power of two. The
+# study used to run 128, which only added queueing on top of a saturated ring.
+CORE_OUTSTANDING_WR = 32
 
 # Every scheme rides the same fabric: one plane, latency-shortest routing
 # (link-delay sum, then hops, then CW), a depth-12 shared up-ring FIFO plus
-# a depth-8 inject Q per direction, 1 flit/cycle board, a two-write / one-read
-# leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
+# a depth-8 inject Q per direction, 1 flit/cycle board, a depth-12 two-write /
+# one-read leave buffer at 1 flit/cycle PE drain, and a finite request tracker.
 # The tracker is part of the baseline, not of one scheme.
 HA_RSP_JIT_LO = 0        # inclusive; each HA RSP / Comp is U{lo..hi}
 HA_RSP_JIT = 0           # 0 = constant t_ha_service (also 0): no HA think time
 # Dedicated congestion-bus delivery delay (S1 / S15). Not a ring hop.
 FC_BUS_LAT = 30
+# S22's operating point, from the confirmation run at the study's own K.
+# `dfc_window=2` with `dfc_bus_lat=1` is what makes the deficit an
+# instantaneous measure rather than a long-run one, which is what the 50-cycle
+# index actually asks for.
+#
+# `dfc_margin` is the knob that had to move once I-tag was implemented as
+# specified: a fairer baseline means most deficit gaps are small, and yielding
+# on those near-level gaps spends a hop without moving the index. At `margin=2`
+# -- the value tuned against the old broadcast baseline -- the same controller
+# now costs 1.93% at the official K, outside the acceptance line. `margin=4`
+# refuses those swaps and lands at -0.04%.
+#
+# Chosen over `margin=3` (Jain 0.9915 at -0.55%) on robustness, not on the
+# single official-K number: `margin=4` holds Jain 0.99062 to five decimals
+# across a 2x change in run length, so its thinner Jain headroom is stable
+# rather than lucky. See `S22_ROBUST`.
+#
+# The deeper inject Q is not free and is priced separately in the report: it
+# is what gives `dfc_dodge` candidates to overtake with, and on the stock
+# depth-8 Q the same controller costs -2.18%.
+# `itag_hold=2` was added in the per-direction re-tune. It is not a trade: it
+# beats the same controller without it on *both* axes at the official K
+# (Jain 0.98878 vs 0.98852, bandwidth -0.78% vs -1.24%), because a held I-tag
+# recovers slots that in-ring priority was wasting instead of throttling anyone.
+# See `S22_RETUNE2`.
+S22_CFG = dict(dfc_window=2, dfc_bus_lat=1, dfc_thresh=0.5, dfc_hold=16,
+               dfc_margin=4.0, dfc_dodge=32,
+               inj_depth=32, dir_inj_depth=32, itag_hold=2)
+# S1's phase-2 operating point: per-direction budgets are what make the
+# CW/CCW board-failure counts even, and they also stop the AIMD from costing
+# throughput (see `S1_DIRBAL`).
+S1_CFG = dict(dir_split=True, band="spec", cap_scale=0.5, window=64,
+              pace_burst=1)
+# I-tag and E-tag at their specified semantics, and live rather than dormant.
+# Both used to be inert on this workload: `t_inj = 64` is above the longest run
+# of consecutive failed boards the fabric ever produces (41 cycles), and E-tag
+# waited for a fourth failed eject when the rule is to tag on the first. Their
+# behaviour was also not the specified one -- see `TAG_AUDIT`. At these settings
+# the pair is strictly better than dormant on both axes (+0.23% throughput,
+# +0.0088 binned Jain), because `itag_mode="reserve"` spends one slot per tag
+# instead of holding off a whole ring direction for a whole starvation period.
+ITAG_MODE = "reserve"
+T_INJ = 4                # consecutive failed boards before a node raises I-tag
+T_XFER = 1               # failed ejects before E-tag: the specified value is 1
+# The up-ring port structure. This is a full ring, so each node's inject side
+# is *two* port groups -- one per direction -- and each group carries REQ / RSP
+# / DAT. Six inject ports per node, each 1 flit/cycle. The down-ring side is
+# unchanged: one two-write-one-read buffer per node per VC, draining 1
+# flit/cycle, so `per_dir_ports` deliberately does not touch the leave side.
+#
+# Consequence worth flagging: `inj_sel` only reorders a port group holding more
+# than one queue (`_board_one`). With the directions on separate ports every
+# group is a singleton, so `inj_sel="free_slot"` is now a **no-op** -- verified
+# bit-identical to `rr` in `PERDIR_PROBE`. It is kept in the dict only so the
+# shared-port comparison rows in that probe stay reproducible.
+PER_DIR_PORTS = True
 FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
               per_vc_ports=True, shared_inj=True, two_write_leave=True,
-              inj_depth=12, dir_inj_depth=8,
+              inj_depth=12, dir_inj_depth=8, eject_depth=12,
+              inj_sel="free_slot", per_dir_ports=PER_DIR_PORTS,
+              itag_mode=ITAG_MODE, t_inj=T_INJ, t_xfer=T_XFER,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
-              outst_sample=OUTST_SAMPLE,
+              outst_sample=OUTST_SAMPLE, buf_sample=BUF_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)
 # Written before the run. Do not edit after seeing results.
 STIMULUS_FORECAST = {
@@ -494,8 +570,8 @@ TRACK128_FORECAST = {
         "makespan": [85000, 95000],
         "unbounded_gap_pct_max": 3.0,
         "jain_bin_mean": [0.972, 0.988],
-        "jain_bin_null": [0.955, 0.966],
-        "jain_bin_ratio": [1.010, 1.030],
+        "jain_bin_ideal": [0.955, 0.966],
+        "jain_vs_ideal": [1.010, 1.030],
     },
     "confidence": 0.8,
     "falsify": (
@@ -527,8 +603,8 @@ TRACK256_FORECAST = {
         "retry_per_txn": 0.0,
         "max_ha_used": 195,
         "jain_bin_mean": 0.98183,
-        "jain_bin_null": 0.96197,
-        "jain_bin_ratio": 1.02064,
+        "jain_bin_ideal": 0.96197,
+        "jain_vs_ideal": 1.02064,
     },
     "confidence": 0.85,
     "falsify": (
@@ -565,6 +641,899 @@ UPQ_12_8_FORECAST = {
 }
 
 
+EJECT12_BUFOCC_FORECAST = {
+    "hypothesis": (
+        "下环两写一读 buffer 从 4 深加到 12 深，上环队列保持 12+8，"
+        "并首次逐 FIFO 采样占用率。"
+        "预测吞吐几乎不动（4.577 ± 1%）：上一轮 eject_depth 4→16 的历史消融"
+        "只从 4.498 走到 4.503，而下环 dat 端口占用只有 56.8%，"
+        "PE 每拍仍只读 1 flit —— 加深接收缓存不改变排空速率。"
+        "占用率预测：三类 capped FIFO 都远离满。"
+        "下环 leave buffer 平均占用 < 1 flit（到站流量 0.57 flit/cycle/mem，"
+        "排空 1 flit/cycle，M/D/1 式短队列），满的比例 ≈ 0；"
+        "每向 8 深 inject Q 是最有压力的一层，因为上环失败率高达 84.6%，"
+        "flit 会在这里积压，预测平均占用 3~7、满的比例 20%~70%；"
+        "12 深共享 FIFO 被 dir Q 的背压推着，也会经常满（> 20%），"
+        "但真正的堵点在 dir Q 出口而不是 FIFO 容量。"
+        "PE 侧 req_pend 会很深（outstanding 128 远大于队列容量）。"
+    ),
+    "predicted": {
+        "s0_thr": [4.531, 4.623],
+        "leave_full_pct_max": 1.0,
+        "leave_occ_mean_max": 1.5,
+        "dirq_full_pct_mean": [20.0, 70.0],
+        "retry_per_txn": 0.0,
+    },
+    "confidence": 0.7,
+    "falsify": (
+        "下环 leave buffer 出现明显满（full_pct > 1%）—— "
+        "那说明 PE 排空真的是瓶颈之一，而不是端口占用率算出来的 56.8%；"
+        "或吞吐变化超过 1%；"
+        "或 dir Q 几乎从不满（< 5%），那说明上环失败并不会在源端积压，"
+        "flit 是在更上游（PE 侧）等，加深 dir Q 本来就不可能有用"
+    ),
+}
+
+
+INJ_SEL_FORECAST = {
+    "hypothesis": (
+        "上环仲裁器原本按 round-robin 在两个方向 Q 之间选，选定之后才发现"
+        "出链路被 transit flit 占住 —— 那一拍就浪费了，即使另一个方向的 hop "
+        "是空的。`inj_sel=free_slot` 让仲裁器先看出链路这拍是否真的空闲"
+        "（环上锁存器本来就有这个本地信号，不需要新增缓存或总线），"
+        "再决定端口给哪个方向；端口仍是 1 flit/cycle，transit 仍绝对优先。"
+        "K=2500 短探测上这一改把 S0 从 4.588 抬到 5.1986（80.3% → 91.0% R*）。"
+        "预测在官方 K=20000 上同样成立：稳态拥塞更深，'一个方向忙另一个方向空'"
+        "的拍数只会更多，所以增益不应低于短探测。"
+    ),
+    "predicted": {
+        "s0_thr": [5.10, 5.30],
+        "pct_r_star": [89.0, 93.0],
+        "makespan": [75000, 78500],
+        "retry_per_txn": 0.0,
+        # The fix lets whoever has a free slot go, which correlates with
+        # position, so instantaneous evenness should get slightly worse.
+        "jain_vs_ideal": [0.97, 1.00],
+    },
+    "confidence": 0.8,
+    "falsify": (
+        "S0 吞吐低于 4.9（增益不到 7%）—— 那说明 K=2500 的短探测像当年的"
+        "tracker 探测一样高估了效果，官方 K 的稳态里空闲 hop 槽并没有那么多；"
+        "或 retry 变成非零（仲裁器改动不应该影响 completer 表项压力）"
+    ),
+}
+
+# Frozen: the same knob sweep that found the arbiter fix. Buffer depths,
+# the E-tag threshold and the reserved eject slots were all inert, so the
+# ceiling probe is now a one-knob story.
+INJ_SEL_PROBE = {
+    "k": 2500, "r_star": 5.7117,
+    "rows": [
+        ["rr（旧仲裁器）", 4.588, 80.3, 0.96848, 1.00586],
+        ["free_slot（本轮）", 5.1986, 91.0, 0.95406, 0.98619],
+    ],
+    "inert": [
+        ["t_xfer 4 → 1 / ∞（E-tag 门限）", 5.1986],
+        ["resv_ej 1 → 0 / 12", 5.1986],
+        ["inj_depth 12 → 32", 5.1986],
+        ["eject_depth 12 → 32", 5.1986],
+        ["dir_inj_depth 8 → 32", 5.198],
+        ["eject_bw 1 → 2", 5.1648],
+    ],
+    # I-tag trades bandwidth for evenness monotonically, on the fixed arbiter.
+    "t_inj": [
+        [2, 4.0016, 70.1, 0.98996, 1.03437],
+        [3, 4.4053, 77.1, 0.98433, 1.02434],
+        [4, 4.6966, 82.2, 0.98104, 1.01815],
+        [6, 4.9471, 86.6, 0.97021, 1.00457],
+        [8, 5.0434, 88.3, 0.95929, 0.99184],
+        [12, 5.1568, 90.3, 0.95302, 0.98489],
+        [16, 5.1905, 90.9, 0.95665, 0.98887],
+        ["∞（本轮基线）", 5.1986, 91.0, 0.95406, 0.98619],
+    ],
+}
+
+# Frozen: 2x2x2 factorial separating the arbiter from the two buffer depths.
+# The report used to compare this round's number against an earlier round's
+# and credit the whole gain to the eject buffer, but the arbiter had changed in
+# between, so that was not a controlled comparison. K=3000, seed 0, one plane.
+DEPTH_FACTORIAL = {
+    "k": 3000,
+    # arbiter, up-ring queue (shared + per-dir), eject depth, thr
+    "rows": [
+        ["rr", "8+1", 4, 4.5286],
+        ["rr", "8+1", 12, 4.5045],
+        ["rr", "12+8", 4, 4.5910],
+        ["rr", "12+8", 12, 4.5889],
+        ["free_slot", "8+1", 4, 4.9558],
+        ["free_slot", "8+1", 12, 4.9875],
+        ["free_slot", "12+8", 4, 5.1383],
+        ["free_slot", "12+8", 12, 5.1872],
+    ],
+    # Each effect twice: once with the other factors at this round's setting,
+    # once at the old setting. The gap between the two columns is the
+    # interaction, and it is the point -- a deeper per-direction queue is only
+    # worth something once the arbiter can choose which direction to use.
+    "effects": [
+        # change, effect at current settings, at old settings, what varies
+        ["上环仲裁器 rr → free_slot", 13.04, 9.43,
+         "队列 12+8 / 下环 12 深 · 队列 8+1 / 下环 4 深"],
+        ["上环队列 8+1 → 12+8", 4.00, 1.87,
+         "free_slot 仲裁器 · rr 仲裁器（均 下环 12 深）"],
+        ["下环 buffer 4 → 12 深", 0.95, -0.05,
+         "free_slot 仲裁器 · rr 仲裁器（均 队列 12+8）"],
+    ],
+    "total_pct": 14.54,      # (rr, 8+1, 4) 4.5286 -> (free_slot, 12+8, 12)
+    # Both depths together, measured directly rather than by summing the two
+    # main effects -- they interact, so adding them is the very mistake this
+    # table exists to correct. free_slot, 8+1/4 (4.9558) -> 12+8/12 (5.1872).
+    "buf_pct": 4.67,
+    "buf_pct_rr": 1.33,      # the same pair on rr: 4.5286 -> 4.5889
+}
+
+# Frozen: the up-ring port structure correction. This is a full ring, so each
+# node's inject side is two port groups -- one per direction -- each carrying
+# REQ / RSP / DAT: six inject ports per node, 1 flit/cycle each. The down-ring
+# side is unchanged (one two-write-one-read buffer per node per VC, 1 flit/cycle
+# drain), so the change is deliberately asymmetric.
+#
+# Everything here is at the official K, one plane, seed 0.
+# `probe_ring2_perdir.py` and `probe_ring2_perdir_why.py` produce it.
+PERDIR_PROBE = {
+    "k": 20000, "r_star": 5.7143,
+    # R* does not move. Splitting the board port by direction halves its floor,
+    # so the busiest *link* still binds -- the ceiling was never a port-capacity
+    # question. Floors in cycles, at the official K.
+    "bounds": {
+        "link_lb": 70000,
+        "board_lb_shared": 50000, "board_lb_shared_at": "node 1, rsp",
+        "board_lb_per_dir": 25000, "board_lb_per_dir_at": "node 1, rsp, ccw",
+        "leave_lb": 50000, "leave_lb_at": "node 1, dat",
+        "binding": "link_lb", "r_star_before": 5.7143, "r_star_after": 5.7143,
+    },
+    # The tracker sweep. `ha_track` had to grow with the port change: a faster
+    # inject side raises peak tracker occupancy, and once it pegs, RetryAck puts
+    # whole extra transactions back on the ring.
+    "track_rows": [
+        # per_dir, ha_track, thr, % R*, Jbin, max/min, retries, peak tracker,
+        # deflections, flits delivered vs the 1000000 the workload implies
+        [False, 256, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [False, 512, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [False, 4096, 5.2174, 91.30, 0.96765, 1.0288, 0, 243, 0, 1000000],
+        [True, 256, 4.3500, 76.13, 0.93993, 1.0964, 20278, 256, 882, 1060834],
+        [True, 512, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+        [True, 1024, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+        [True, 4096, 5.4681, 95.69, 0.87865, 1.6931, 0, 422, 2306, 1000000],
+    ],
+    "chosen_track": 512,
+    # `inj_sel` only reorders a port group holding more than one queue. With the
+    # directions separated every group is a singleton, so the arbiter is inert.
+    "free_slot_is_noop": True,
+    "free_slot_equals_rr": {"thr": 4.3500, "jain_bin": 0.93993,
+                            "note": "bit-identical at ha_track=256"},
+    # Two causes that were tested and eliminated before landing on the tracker.
+    "eliminated": [
+        ["路由改变", "choose_dir 只看链路时延、完全确定，"
+         "且两种端口结构下 REQ 的 hop 穿越数逐位相同（74976）。"],
+    ],
+    # Retracted. The eject-side evidence that put this in `eliminated` was taken
+    # at ha_track=256, i.e. inside the retry storm, where the completer bound
+    # everything and no ring-side knob could show through. Re-measured on the
+    # shipped tracker it reverses sign: eject_bw=2 now *helps*. See CEILING_GAP.
+    "eliminated_retracted": [
+        ["下环 buffer / E-tag 绕环",
+         "曾以「eject_bw=2 把偏转清零、吞吐反而更差（82.59%）」排除它，"
+         "但那组数是在 <b>ha_track=256</b> 下测的 —— 那时 completer 的 retry "
+         "风暴绑定一切，环侧任何旋钮都显不出来。"
+         "在出厂 tracker=512 上重测，结论<b>反转</b>："
+         "eject_bw=2 吞吐从 95.69% 升到 <b>96.49%</b>、绕环加价精确归零。"
+         "下环读侧速率是真实限制项，见 3.1.9。"],
+    ],
+    "verdict": (
+        "按方向拆上环端口在<b>两个方向上都改变了结论</b>：总带宽从 91.30% 抬到 "
+        "<b>95.69% R*</b>（前提是 tracker 跟上，见下），"
+        "而瞬时均衡度从 Jain <b>0.96765 掉到 0.87865</b>、"
+        "整窗 max/min 从 1.0288 坏到 1.6931 —— "
+        "一个节点现在能在同一拍向两个方向各上环一个 flit，"
+        "邻 mem 多的核的位置优势被放大。"),
+}
+
+# Frozen: why the per-bin mean write bandwidth reads *above* R*, and which of
+# the two numbers is at fault. Neither the bound nor the simulator is:
+#
+#   * R* = 5.7143 is a bound on the **whole-run** average. It comes from one
+#     link -- the routing puts 70000 DAT crossings on hop 0->1, at 1 flit/cycle
+#     that needs 70000 cycles, so makespan >= 70000 and 400000/70000 = 5.7143.
+#     The measured makespan is 73152, i.e. 95.69% of the bound. No violation.
+#   * The simulator conserves flits exactly (400000 delivered for 400000 asked)
+#     and the binding hop never carries more than 1 flit/cycle: its busiest
+#     50-cycle bin holds exactly 50 crossings, utilisation 1.0000 and never
+#     above.
+#
+# What was wrong is the **comparison**. The per-bin table averages only bins
+# wholly inside the contention window [0, t_fair], because past t_fair a core
+# has run out of quota and its zeros are not unfairness. That window is 55700 of
+# 73152 cycles and it is the *busy* part of the run, so its mean (6.0207)
+# necessarily exceeds the whole-run average (5.4681). Dividing a window mean by
+# a whole-run bound is not a meaningful ratio.
+#
+# A window may exceed R* only by running a mix skewed *away* from the binding
+# hop, and that is measurable rather than a hand-wave: carrying 335353 write
+# flits in 55700 cycles requires the hop's share of them to be at most
+# 55700/335353 = 16.61%, against a 17.50% nominal share. Measured in-window
+# share is 16.20% and in-window hop utilisation 0.9755, with the deferred
+# crossings cleared in the tail at 0.9035. `probe_ring2_hotslot_time.py`.
+OVER_RSTAR = {
+    "k": 20000, "r_star": 5.7143, "makespan": 73152,
+    "whole_run": 5.4681, "whole_run_pct": 95.69,
+    "conservation": {"delivered": 400000, "asked": 400000},
+    "hot_hop": "0->1",
+    # Measured crossings exceed the routing's 70000 because deflected DAT flits
+    # ride an extra lap. The bound is therefore *conservative*, not violated:
+    # the achievable ceiling given real deflections is 400000/70104 = 5.7058.
+    "hot_crossings_measured": 70104, "hot_crossings_nominal": 70000,
+    "achievable_ceiling": 5.7058,
+    "peak_bin_crossings": 50, "bin_w": 50, "peak_bin_util": 1.0,
+    "window": {"bins": 1114, "span": 55700, "pct_of_makespan": 76.1,
+               "write_flits": 335353, "rate": 6.0207, "pct_r_star": 105.4,
+               "hot_util": 0.9755, "hot_share_pct": 16.20,
+               "nominal_share_pct": 17.50, "share_ceiling_pct": 16.61},
+    "tail": {"span": 17452, "write_flits": 64647, "rate": 3.7043,
+             "hot_util": 0.9035},
+    "verdict": (
+        "理论上限没错，仿真也没错，<b>错的是把两个不同口径的数放在一起比</b>："
+        "6.0207 是<u>竞争窗内</u>的均值（1114 个箱、55700 拍，占 makespan 的 "
+        "76.1%），R* 是<u>全程</u> makespan 界。全程实测 5.4681 = 95.69% R*，"
+        "从未越界；绑定 hop 最忙的一个 50 拍箱正好 50 次穿越、利用率 1.0000，"
+        "一次都没超过 1 flit/cycle。窗内能跑到 105.4% 是因为窗内的流量组合"
+        "<b>偏离了绑定 hop</b>：它只吃到 16.20% 的窗内写 flit（名义 17.50%，"
+        "可行上限 16.61%），欠下的穿越在收尾段以 0.9035 的利用率补完。"),
+}
+
+# Frozen: the variance decomposition redone on the per-direction fabric.
+# `probe_ring2_jitter2.py`, official K, 50-cycle bins.
+#
+# This is the measurement that decides whether phase 3's Jain line is reachable
+# at all, and it reverses the old answer. The statistic that matters is
+# `jain_regular`: give every core its own per-bin mean in every bin, i.e. remove
+# all timing jitter and keep only the long-run rate differences, then re-measure
+# binned Jain. That is the ceiling for *any* mechanism that only regularises
+# timing and never moves rate between cores.
+JITTER2 = {
+    "k": 20000, "bin_w": 50,
+    "rows": [
+        # scheme, per-core-per-bin flits, rate min, rate max, rate ratio,
+        # var_between, var_within, within share, jain_regular, Jbin actual
+        ["S0", 30.10, 21.201, 35.901, 1.6934, 44.283, 83.668, 0.654, 0.95341,
+         0.87865],
+        ["S22", 27.15, 27.147, 27.151, 1.0001, 0.0, 10.346, 1.000, 1.0,
+         0.98878],
+    ],
+    # A perfectly fair arbiter, viewed through the same 50-cycle window, does not
+    # score 1.0 -- it scores this. It is the honest reference for the 0.99 line.
+    "null": 0.96783,
+    "s22_over_null": 1.02164,
+    "verdict": (
+        "<b>上一轮「分箱不公平 99.9% 是时间抖动、可以近零代价抹平」的结论，"
+        "在新 fabric 上作废。</b>"
+        "决定性的数是 <code>jain_regular</code>：把每个核每箱的计数换成"
+        "它自己的均值（<u>抖动完全抹平、只留长期速率差</u>）再算分箱 Jain —— "
+        "S0 只有 <b>0.95341</b>。也就是说<b>任何只规整「时机」、"
+        "不搬动「速率」的机制，天花板都是 0.953，够不到 0.99</b>。"
+        "根源就是 3.2.0 那件事：核间长期速率是 21.2 对 35.9（比 1.6934），"
+        "六快四慢是固定分组，不是抖动。<br>"
+        "这里有个统计陷阱值得单独记下来：<b>方差占比会骗人</b>。"
+        "即使在新 fabric 上，within-core（抖动）仍占总方差的 65.4%，"
+        "between-core 只占 34.6% —— 按上一轮的读法又会得出「主要是抖动」。"
+        "但真正封顶的是那 34.6%。"
+        "<b>50 拍窗内每核只有约 30 个 flit，泊松式计数噪声天然主导方差，"
+        "所以方差占比根本不是回答这个问题的正确统计量</b>，"
+        "<code>jain_regular</code> 才是。<br>"
+        "反过来看 S22：它把核间速率差<b>完全消掉了</b>"
+        "（27.147 对 27.151，比 1.0001，var_between = 0，"
+        "<code>jain_regular</code> = 1.0），"
+        "所以它剩下的那 0.98878 到 1.0 的差<b>全部是计数噪声</b>，不是不公平。"
+        "作为参照：一个<u>完美公平</u>的仲裁器透过同样的 50 拍窗口去看也只有 "
+        "<b>0.96783</b>，而 S22 是它的 1.0216 倍。"
+        "<b>所以「Jain@50 > 0.99」这条线本身就画在「比理想随机还要更规整」"
+        "的位置上</b>，S22 差的那 0.0012 不是结构缺陷，"
+        "而是这个窗宽下的噪声底。"),
+}
+
+# Frozen: phase 2 re-run on the per-direction fabric -- 62 AIMD configs, and the
+# reason none of them evens out the CW/CCW board-failure counts.
+# `probe_ring2_s1_dirbal.py`, K=3000.
+S1_RETUNE = {
+    "k": 3000, "n_cfg": 62,
+    "s0": {"thr": 5.3996, "failmax": 2.547, "jbin": 0.87879, "maxmin": 1.7663},
+    # The grid's own pick is bit-for-bit the incumbent S1_CFG, and it lands at
+    # S0's own failure ratio -- i.e. no improvement at all on the phase-2 metric.
+    "best": {"cfg": "dir_split=True, band=spec, cap_scale=0.5, "
+                    "window=64, pace_burst=1, scope=core_only",
+             "failmax": 2.549, "thr": 5.3452, "delta_pct": -1.0,
+             "jbin": 0.87801, "is_incumbent": True},
+    # The only settings that push the ratio below ~2.2 do it by collapsing
+    # throughput, which is not a fairness fix, it is a shutdown.
+    "cheapest_below_22": [
+        ["dir_split=False, harsh, cap 0.5", 2.195, 3.3843, -37.3],
+        ["dir_split=True, spec, cap 0.25, window 128, burst 0", 2.156, 3.4350,
+         -36.4],
+    ],
+    "verdict": (
+        "<b>阶段二的目标在新 fabric 上用 AIMD 参数是够不到的，62 组全试过。</b>"
+        "网格自己选出来的最优点<u>就是现有的 S1_CFG</u>"
+        "（failmax 2.549），而 S0 自己的 failmax 是 2.547 —— "
+        "<b>S1 对方向失败比毫无改善</b>。能把比值压到 2.2 以下的配置只有两组，"
+        "代价都是掉 36–37% 的带宽，那是关机不是调平。<br>"
+        "原因是机制层面的，不是参数没调到：<b>AIMD 调的是两个方向的"
+        "「尝试速率」，两边同比缩放，比值不变</b>；而这个比值是由 hop 拥塞决定的 —— "
+        "0/8/10/18 四个核坐在无 HA 节点的出口上，被迫挤最忙的 hop，"
+        "于是<u>只在一个方向</u>失败 54k 对 22k（其余六核均衡的 33k/33k）。"
+        "要改比值就得改<b>流量的方向配比</b>，那是路由决策，不是速率决策。<br>"
+        "还有一层口径要说清楚：<b>方向「成功」数本来就已经完全均衡</b> —— "
+        "路由把每核每方向钉死在 30000 笔，逐位相同。"
+        "不均衡只出现在<u>失败尝试</u>上，而失败尝试是<b>拥塞信号</b>，"
+        "它不对称恰恰是在忠实报告「一个方向的 hop 更挤」。"
+        "所以把它抹平并不是一个值得追求的目标。"),
+}
+
+# Frozen: phase 3 re-run on the per-direction fabric. Two grids: S22's own
+# parameters (36 configs, `probe_ring2_s22_retune.py`) and S22 crossed with
+# I-tag's threshold and hold (24 configs, `probe_ring2_s22_itag.py`), then the
+# survivors re-measured at the official K (`probe_ring2_s22_confirm2.py`).
+S22_RETUNE2 = {
+    "k_grid": 3000, "k_confirm": 20000,
+    "s0_grid": {"thr": 5.3996, "jbin": 0.87879},
+    "s0_confirm": {"thr": 5.4681, "jbin": 0.87865},
+    "alone": {"n": 36, "n_pass": 0,
+              "best_jain": [0.99063, -3.78], "best_bw": [0.98494, -0.23]},
+    "cross": {"n": 24, "n_pass": 2,
+              "pass_rows": [["margin 3 + hold 2", 0.99109, -0.94],
+                            ["margin 3 + hold 4", 0.99035, -0.94]]},
+    # Official K. The K=3000 passes do not survive: Jain holds, bandwidth cost
+    # roughly doubles. This is the second time this round that a short-K
+    # conclusion reversed, so it is now the default expectation, not a surprise.
+    "confirm": [
+        # case, Jbin, thr, delta%, passes Jain, passes bandwidth
+        ["margin 2 + hold 4", 0.99083, 5.3304, -2.52, True, False],
+        ["margin 3 + hold 2", 0.99014, 5.3842, -1.53, True, False],
+        ["margin 3 + hold 4", 0.98985, 5.3825, -1.57, False, False],
+        ["margin 4 + hold 2（选定）", 0.98878, 5.4255, -0.78, False, True],
+        ["margin 4（上一轮出厂）", 0.98852, 5.4001, -1.24, False, False],
+    ],
+    "chosen": "dfc_margin=4.0, itag_hold=2",
+    # The one unambiguous win: adding `itag_hold=2` to the incumbent improves
+    # both axes at once, so it is shipped regardless of where the line lands.
+    "free_win": {"jbin": [0.98852, 0.98878], "delta_pct": [-1.24, -0.78]},
+    "frontier_price": 1.45,
+    "verdict": (
+        "<b>在修正后的 fabric 上，阶段三的两条线不能同时达到。</b>"
+        "官方 K 上的前沿是单调的：Jain 0.99083 要付 −2.52%，"
+        "0.99014 要付 −1.53%，而把带宽损失压到 1% 以内（−0.78%）时 "
+        "Jain 只有 0.98878。前沿穿过 Jain = 0.99 的位置大约在 "
+        "<b>−1.45%</b>，也就是说「Jain>0.99 且带宽 &lt;1%」在这个 fabric 上"
+        "差了约 0.45 个百分点，<u>不是调参能补的</u>。<br>"
+        "这与 3.1.9 的结论是一致的、可以互相校验：出厂点距可达上限只剩 "
+        "0.8 个点的余量，而这里的不公平是<b>持续速率差</b>而不是抖动"
+        "（六快四慢的固定分组），要抹平就必须把快核的份额让出去，"
+        "总带宽必然要掉。上一轮认为「不公平主要是抖动、可以零代价抹平」"
+        "的判断只在共享端口的 fabric 上成立。<br>"
+        "<b>唯一无条件的收获是 <code>itag_hold=2</code></b>："
+        "它在两个轴上同时赢过不带它的同一控制器"
+        "（Jain 0.98852 → 0.98878，带宽 −1.24% → −0.78%），"
+        "因为它把在环优先原本浪费掉的槽收回来，而不是去限谁的速 —— "
+        "已并入出厂配置。"),
+}
+
+# Frozen: why every per-core injection-rate curve turns *up* in the late phase.
+# Read off the shipped run (`results/ring2_write_fair.json`), no new simulation.
+#
+# It is the closed-batch drain tail, and the step shape is the interesting part:
+# the ten cores do not finish together, they finish in two clean groups, so the
+# capacity of the six that finish early is handed to the four that remain all at
+# once. Those four are structurally determined, which ties this curve to the
+# fairness problem -- they are the same four cores that make Jain 0.879.
+UPTICK = {
+    "bin_w": 50,
+    "s0": {"t_fair": 55708, "makespan": 73152, "thr": 5.4681,
+           "contend_mean_per_core": 0.60, "ratio": 1.693},
+    "s1": {"t_fair": 71531, "makespan": 85336, "thr": 4.6874,
+           "contend_mean_per_core": 0.50, "ratio": 1.416},
+    # Active-core count against mean rate of the still-active cores, S0.
+    "timeline": [
+        # t, active cores, mean rate per active core, total rate
+        [0, 10, 0.5580, 5.5800],
+        [26000, 10, 0.6080, 6.0800],
+        [52000, 10, 0.5960, 5.9600],
+        [57200, 5, 0.8240, 4.1200],
+        [62400, 4, 0.9100, 3.6400],
+        [67600, 4, 0.9350, 3.7400],
+        [72800, 3, 0.8133, 2.4400],
+    ],
+    # The two finish groups, S0. The gap between them is 14000 cycles.
+    "groups": {
+        "early": [["14", 55708], ["12", 56652], ["2", 56683], ["6", 56882],
+                  ["4", 57014], ["16", 57857]],
+        "late": [["0", 71852], ["10", 72945], ["8", 73048], ["18", 73122]],
+    },
+    # Per core, S0: rate while all ten compete, and the peak 50-cycle rate it
+    # reaches once the other six are gone. Per-direction ports allow 2.0.
+    "per_core": [
+        # core, bw over [0,t_fair], peak tail bin rate, fail_cw, fail_ccw, late?
+        ["0", 0.45527, 1.76, 54044, 21688, True],
+        ["2", 0.71521, 0.74, 37037, 31466, False],
+        ["4", 0.71150, 0.98, 35526, 34868, False],
+        ["6", 0.71297, 0.96, 32384, 36387, False],
+        ["8", 0.42409, 1.62, 21886, 54449, True],
+        ["10", 0.44250, 1.70, 54729, 21251, True],
+        ["12", 0.71544, 0.40, 37099, 32010, False],
+        ["14", 0.71803, 0.00, 32984, 33181, False],
+        ["16", 0.68936, 1.24, 32776, 38727, False],
+        ["18", 0.43642, 1.68, 22294, 54006, True],
+    ],
+    # Falsified on the way: it is not a distance effect. Every core has its
+    # nearest HA one hop away and a mean distance of exactly 5.00 hops.
+    "not_distance": {"nearest_ha": 1, "mean_hops": 5.00},
+    "non_terminal": [9, 19],
+    "hot_dat_hops": ["0→1", "10→11", "8→7", "18→17"],
+    "starve_late": "59-89", "starve_early": "21-31",
+    # Every core lands exactly 30000 flits in each direction: the routing's
+    # 50/50 split is enforced, so a core cannot route around its bad direction.
+    "ok_per_dir": 30000,
+    "verdict": (
+        "翘尾不是控制器的产物，是<b>闭合批次的排空尾</b>：每个核的工作量都是固定的 "
+        "K×W，谁先做完，它的份额就让给还没做完的核。"
+        "之所以是<u>一个台阶</u>而不是缓慢上翘，是因为十个核不是陆续做完的，"
+        "而是<b>分成两组</b>：六个核在 55708–57857 拍之间做完，"
+        "剩下四个要拖到 71852–73122 拍，中间空了 14000 拍。"
+        "台阶跳变就发生在第一组排空的那一刻 —— 窗内每核 ~0.60 flit/cycle，"
+        "尾段剩四个核时每核冲到 1.62–1.76（按方向拆端口后单核上限是 2.0）。"
+        "<b>那四个核是被结构决定的</b>：0/8/10/18 正好坐在两个无 HA 节点"
+        "（9 和 19）的出口上，必须把 flit 压进环上最忙的两条 hop，"
+        "而在环流量有绝对优先权，于是它们<u>只在一个方向上</u>被饿死 —— "
+        "上环失败 54k 对 22k，其余六个核是均衡的 33k/33k。"
+        "而路由把每核每方向的成功数钉死在 30000，"
+        "<b>它们没法绕开自己那个坏方向</b>，只能整体拖后。"
+        "所以「翘尾」和「Jain 只有 0.879」是同一件事的两种表现："
+        "竞争期的位置性不公平，排空期的两段式收尾。"
+        "顺便排除了一个看起来最自然的解释：<b>不是距离问题</b> —— "
+        "十个核到最近 HA 都是 1 跳、到所有 HA 的平均跳数都是 5.00，逐位相同。"
+        "S1 的曲线形状完全一样、落后的还是同四个核，"
+        "AIMD 只是把竞争期整体压低（每核 0.50 对 0.60），"
+        "把 max/min 从 1.693 收到 1.416，并没有消掉位置不对称。"
+        "最后一点口径提醒：Jain@50 是在 [0, t_fair] 上统计的，"
+        "<b>尾段本来就不进验收指标</b>，只是画图时画了全程才看得见。"),
+}
+
+# Frozen: has S0 reached the *reachable* ceiling, and what holds the last 4.31%?
+# Produced by `probe_ring2_ceiling_gap.py` (decomposition + idle attribution)
+# and `probe_ring2_ceiling_fix.py` (one intervention per candidate cause), both
+# at the official K on the shipped fabric.
+#
+# The whole section rests on one identity that held exactly in all eight
+# configurations measured, which is what makes the causes additively priceable:
+#
+#     makespan = 70000 (the routing's load on the binding hop)
+#              + surcharge (extra crossings of it by flits riding another lap)
+#              + idle (cycles it sat empty)
+CEILING_GAP = {
+    "k": 20000, "r_star": 5.7143, "floor": 70000,
+    "thr": 5.4681, "pct": 95.69, "makespan": 73152,
+    # The binding VC is RSP, not DAT. Earlier rounds looked at DAT because that
+    # was binding on the shared port; per-direction ports moved it.
+    "binding": {"vc": "rsp", "hops": "1→0, 11→10, 7→8, 17→18",
+                "crossings": 71056, "util": 0.97135, "surcharge": 1056,
+                "idle": 2096},
+    "dat_ref": {"hops": "0→1, 10→11, 8→7, 18→17", "crossings": 70104,
+                "util": 0.95833, "surcharge": 104, "idle": 3048},
+    # Given the deflections that actually happen, the reachable ceiling is
+    # 400000/71056; the shipped run sits at 97.13% of it, which is exactly the
+    # binding hop's utilisation. Consistent by construction.
+    "reachable": 5.6294, "reachable_pct_r_star": 98.51, "pct_of_reachable": 97.13,
+    # Every idle cycle on the four binding RSP hops, attributed by the
+    # simulator's own board-failure causes. `other` is 0: nothing unexplained.
+    "attrib": [
+        # cause, cycles, share, what it means
+        ["I-tag 让位", 4529, 53.97,
+         "I-tag 预留refused了本地上环（<code>_itag_blocks</code>）"],
+        ["dry（无货）", 2600, 30.98,
+         "该方向队列是空的 —— 四段握手是串行的，HA 手里还没有 RSP 可发"],
+        ["raced（同拍被抢）", 1029, 12.26,
+         "试的时候 segment 已被在环 flit 拿走（在环优先，同拍内）"],
+        ["hol（共享 FIFO 队头阻塞）", 234, 2.79,
+         "flit 在两向共享的 12 深 FIFO 里，没能挪进本方向 inject Q"],
+        ["其它", 0, 0.0, "无 —— 归因是完备的"],
+    ],
+    "attrib_total": 8392,
+    # One intervention per candidate cause. `surcharge` + `idle` + 70000 equals
+    # `makespan` on every row, so each row's cost is decomposable.
+    "rows": [
+        # case, thr, pct R*, surcharge, idle, makespan, deflections, Jbin
+        ["现状（shipped）", 5.4681, 95.69, 1056, 2096, 73152, 2306, 0.87865],
+        ["I-tag 休眠 t_inj=1e9", 5.4241, 94.92, 2622, 1123, 73745, 5643,
+         0.81565],
+        ["下环 eject 32", 5.4619, 95.58, 1146, 2089, 73235, 2291, 0.87642],
+        ["下环 eject 64", 5.4787, 95.88, 782, 2228, 73010, 1535, 0.87642],
+        ["下环 eject 64 + I-tag 休眠", 5.2206, 91.36, 3413, 3206, 76619, 6816,
+         0.80562],
+        ["core_outstanding 256", 4.5854, 80.24, 15010, 2224, 87234, 2550,
+         0.85736],
+        ["eject_bw 2（破规则，仅作上界）", 5.5134, 96.49, 0, 2550, 72550, 0,
+         0.87767],
+        ["eject_bw 2 + I-tag 休眠（破规则，仅作上界）", 5.6375, 98.66, 0, 954,
+         70954, 0, 0.81597],
+    ],
+    "verdict": (
+        "<b>没有达到，S0 停在 95.69% R*，缺口 4.31%。</b>"
+        "缺口能<u>逐拍对齐地</u>拆成两块：1.44% 是绕环加价"
+        "（1056 次多余穿越绑定 hop），2.87% 是绑定 hop 的空转（2096 拍）。"
+        "根因排序是被实验定出来的，不是猜的：<b>①下环「两写一读」的读侧速率"
+        "是唯一的结构性根因</b> —— 把 <code>eject_bw</code> 改成 2 让加价"
+        "<u>精确归零</u>、偏转归零；而把 buffer 从 12 加深到 64 只把加价压到 "
+        "782（32 档甚至更差，1146）。<b>加容量治不了，加速率才治得了</b>，"
+        "说明短的是<u>速率</u>不是<u>容量</u>。"
+        "<b>②I-tag 的空转不是浪费，是在买东西</b>：它占了空转的 53.97%，"
+        "但休眠它之后空转只省下 973 拍、加价却涨了 1566 拍，净亏 —— "
+        "吞吐从 95.69% 掉到 94.92%，Jain 从 0.87865 掉到 0.81565。"
+        "I-tag 是在用空槽换绕环，汇率是划算的。"
+        "<b>③不是供给不足</b>：core_outstanding 从 128 加到 256 使加价爆到 "
+        "15010、吞吐崩到 80.24%，多灌载荷只会喂出更多绕环。"
+        "两条根因是<b>耦合</b>的：只有先把读侧速率补上，I-tag 才变成纯开销"
+        "（eject_bw=2 下休眠 I-tag 能到 98.66%）—— 也就是说 I-tag 的价值"
+        "完全是下环速率不足的衍生品。"),
+}
+
+# Frozen: the variance decomposition that sets the phase-3 target. Per-bin
+# unfairness is almost entirely timing jitter around near-equal long-run
+# rates, so regularising injection timing can reach Jain > 0.99 without
+# giving up bandwidth. Numbers are K=2500, 50-cycle bins.
+# Frozen: the I-tag / E-tag audit against the specified semantics, and the
+# measurement that shows where S0's distance from R* actually comes from.
+# K=2000, seed 0, one plane; the same fabric as the official run except for the
+# knob under test. `probe_ring2_hoputil.py`, `probe_ring2_idleslot.py` and
+# `probe_ring2_tags.py` produce these.
+TAG_AUDIT = {
+    "k": 2000, "r_star": 5.7143, "link_lb": 7000, "port_lb": 5000,
+    "base_thr": 5.1673, "base_pct": 90.43, "base_jbin": 0.94909,
+    # The bound is a link bound, and the binding hop carries *exactly* its
+    # routed load, so the whole shortfall is idle cycles on that one link.
+    "hot": [
+        # VC, hot hop, measured util, flits carried, routed load
+        ["rsp", "1→0", 0.90428, 7000, 7000],
+        ["dat", "8→7", 0.90428, 7000, 7000],
+        ["req", "8→7", 0.45214, 3500, 3500],
+    ],
+    # Every wasted slot on the binding hops, classified. `port_none` is the
+    # only column an arbiter or tagging fix could have moved, and it is zero.
+    "waste": [
+        # hop, who, wasted, dry, port(total), port->other dir, port->idle
+        ["1→0 (rsp)", "mem", 741, 92, 649, 649, 0],
+        ["11→10 (rsp)", "mem", 741, 83, 658, 658, 0],
+        ["7→8 (rsp)", "mem", 741, 22, 719, 718, 1],
+        ["8→7 (dat)", "core", 741, 328, 413, 413, 0],
+        ["18→17 (dat)", "core", 741, 324, 417, 417, 0],
+        ["0→1 (dat)", "core", 741, 276, 465, 465, 0],
+    ],
+    "span": 7741,
+    # Breaking the 1 flit/cycle/node rule on purpose, to price the coupling.
+    "per_dir_ports": {"thr": 5.4157, "pct": 94.77, "jbin": 0.85136,
+                      "hot_rsp_util": 0.97604, "hot_dat_util": 0.95695,
+                      "defl_rsp": 209, "defl_dat": 68},
+    # Why neither mechanism ever fired as shipped.
+    "dormant": {"starve_max": 41, "t_inj_shipped": 64, "n_defl": 0,
+                "t_xfer_shipped": 4},
+    # The two blocking semantics side by side at equal thresholds.
+    "modes": [
+        # label, t_inj, thr, thr vs dormant %, Jbin, tags raised, slots yielded
+        ["broadcast（原实现，封停整个方向）", 4, 4.6954, -9.13, 0.98079, 7039, 0],
+        ["broadcast", 8, 5.0422, -2.42, 0.96124, 981, 0],
+        ["broadcast", 16, 5.1813, 0.27, 0.95201, 62, 0],
+        ["segment（只封停会穿越的注入口）", 4, 5.1593, -0.15, 0.96513, 3907, 0],
+        ["segment", 8, 5.1720, 0.09, 0.96251, 622, 0],
+        ["reserve（规定语义：定向上游 + 单槽预约）", 2, 5.1533, -0.27, 0.95898,
+         12146, 4748],
+        ["reserve（选定）", 4, 5.1793, 0.23, 0.95788, 3205, 1554],
+        ["reserve", 8, 5.1660, -0.03, 0.95412, 592, 331],
+        ["reserve", 16, 5.1653, -0.04, 0.95017, 60, 34],
+    ],
+    # E-tag at the specified threshold, on this workload.
+    "etag": [["t_xfer 4 → 1（规定值）", 5.1673, 0.0, 0],
+             ["t_xfer 1 + resv_ej 0", 5.1673, 0.0, 0],
+             ["t_xfer 1 + resv_ej 4", 5.1673, 0.0, 0]],
+    # E-tag on the final fabric at the study's own K, from the full run's S0
+    # digest. It is implemented to spec and covered by a directed test, but
+    # this workload never reaches the condition that raises it: the two-write-
+    # one-read port drains 1 flit/cycle, so although the 12-deep eject buffer
+    # does touch its ceiling, no arriving flit is ever turned away.
+    "etag_official": {
+        "k": 20000, "eject_depth": 12, "max_ejectq": 12,
+        "n_eject_full_deflect": 0, "n_deflections": 0, "n_etag_raised": 0,
+        "note": (
+            "E-tag 在 S0 上<b>一次都没有触发</b>：下环 buffer 占用峰值确实打到 12 "
+            "（满），但两写一读端口每拍排掉 1 flit，预留槽足够吸收瞬时堆积，"
+            "所以没有任何 flit 因为下环失败而被迫绕环（<code>n_deflections=0</code>）。"
+            "这既说明规定的 E-tag 语义在本负载下是一条<b>活性保险</b>而非带宽机制，"
+            "也从侧面确认了 8.7% 的带宽缺口与下环无关 —— 缺口全在上环端口。"),
+    },
+    "chosen": {"itag_mode": "reserve", "t_inj": 4, "t_xfer": 1,
+               "thr": 5.1793, "thr_delta_pct": 0.23, "jbin": 0.95788,
+               "jbin_delta": 0.00879},
+    # What the two implementations did versus what was specified.
+    "gaps": [
+        ["I-tag 的作用范围",
+         "规定：向<b>上游节点</b>发起，该节点暂停注入 / 让出一个空 slot",
+         "原实现：置起后封停该 (plane, 方向, VC) 上<b>所有</b>其他注入口，"
+         "包括 flit 根本不经过饥饿节点那个 hop 的",
+         "已按规定实现（<code>itag_mode=reserve</code>）：标记沿环上溯到"
+         "「其 flit 会占掉该 hop」的最近节点，只有它让路"],
+        ["让出的 slot 归谁",
+         "规定：空 slot 顺环流到发起节点，由发起节点放入 flit，然后清除标记",
+         "原实现：无预约。只是封停别人，直到饥饿节点自己抢到 —— "
+         "所以一个标记的代价是<b>整段饥饿时长</b>，不是一个 slot",
+         "已实现单槽预约：记录 (让路节点, 气泡到达时刻)，"
+         "只封停气泡还要经过的节点、且只封到它到达为止；"
+         "发起节点上环即清除标记与预约"],
+        ["I-tag 门限",
+         "规定：上环「超过一定阈值的时间无空位」",
+         "原实现门限 64 拍，而全程最长连续上环失败只有 41 拍 —— "
+         "<b>结构上永远触发不了</b>（实测 n_itag_raised = 0）",
+         "门限改为 4 拍：会触发，且在 reserve 语义下带宽不降反升 +0.23%"],
+        ["E-tag 触发时机",
+         "规定：因两写一读 buffer 满而<b>未能下环</b>即打标",
+         "原实现要累计 4 次偏转才打标（<code>t_xfer=4</code>）",
+         "改为 <code>t_xfer=1</code>"],
+        ["E-tag 的优先级",
+         "规定：再次到达目的节点时拥有<b>最高下环优先级</b>，"
+         "在仲裁下环端口时<b>挤占普通 flit 的下环权</b>",
+         "原实现<b>完全没有实现这一条</b>：下环仲裁 (<code>_leave_order</code>) "
+         "只按方向轮转，根本不看 <code>e_tag</code>；"
+         "E-tag 拿到的只是几个<b>额外的 buffer 表项</b>（<code>resv_ej</code>），"
+         "那是「保留容量」而不是「优先级」——"
+         "只要仲裁不让它先走，同一个 flit 可以反复丢掉下环权，"
+         "而这正是该机制要防的无限循环",
+         "已实现：<code>_leave_order</code> 把带 E-tag 的排在任何普通 flit 之前，"
+         "多个 E-tag 之间按已绕环次数降序，"
+         "回归 <code>etag_preempts_normal_leave</code> 钉住"],
+    ],
+}
+
+# Written after the runs in probe_ring2_tags.py, against its FORECAST.
+TAG_BELIEF = {
+    "held": (
+        "两条主要预测成立。按规定语义补全 I-tag <b>没有</b>把总带宽抬起来"
+        "（最好 +0.25%，远不足 1%），"
+        "所以「S0 达不到 R* 是因为 I-tag/E-tag 没实现」这个假设被否证；"
+        "而 reserve 语义确实比 broadcast 便宜得多 —— 同一个门限 t_inj=4 上，"
+        "reserve +0.23% vs broadcast −9.13%，差 9.4 个百分点。"
+        "E-tag 按规定门限 t_xfer=1 在本工作负载上完全惰性（下环失败 0 次），"
+        "与预测的 ±0.3% 一致。"
+    ),
+    "wrong": (
+        "预测 broadcast 在 t_inj=8 上要掉 8~25%，实测只掉 2.42%。"
+        "锚错了门限：之前报告里 −23% 那个点是 t_inj=2，"
+        "而标记触发次数随门限陡降（t_inj=4 触发 7039 次，t_inj=8 只有 981 次），"
+        "所以「broadcast 很贵」成立，但贵在低门限，不是在任何门限上都贵。"
+    ),
+    "why": (
+        "更根本的一点是这轮才测出来的：缺口不是「有 flit 却没槽」，"
+        "而是「有槽却没有端口去用它」。绑定 hop 上被浪费的槽里，"
+        "port_none = 0 —— 没有一个是仲裁或标记失误造成的，"
+        "全部是本节点每 VC 那一个上环端口在同一拍被<b>另一个方向</b>占用。"
+        "I-tag 制造气泡，而这里气泡本来就有余；缺的是端口。"
+        "这也解释了为什么把端口按方向拆开（故意违反 1 flit/cycle/node）"
+        "能把占比从 90.43% 拉到 94.77%，而任何 I-tag 设置都不能。"
+    ),
+    "revised": (
+        "R* 作为链路计数上限是对的，但它<b>不可达</b>，"
+        "原因与 I-tag/E-tag 无关：一个节点的两条出向 hop 只能由它自己或 transit 填，"
+        "而它每 VC 只有一个上环端口。要同时填满两条 hop，"
+        "两条 hop 上的气泡必须在时间上恰好互补 —— 那是一个全局调度问题，"
+        "无缓存环上的本地仲裁做不到。I-tag 的正确定位是公平性旋钮，"
+        "E-tag 的正确定位是把下环失败造成的绕环<b>限制在一圈</b>，"
+        "两者都不是带宽机制。"
+    ),
+}
+
+# Superseded on the per-direction fabric by `JITTER2`. Kept because the method
+# is unchanged and the contrast is the finding: here the between-core term was
+# negligible, there it is what binds. The labels also name `inj_sel` variants
+# that are a no-op once the ports are split by direction.
+JITTER_DECOMP = {
+    "k": 2500, "bin_w": 50,
+    "rows": [
+        # label, per-core per-bin mean, var_between, var_within,
+        # within share, Jain if timing were perfectly regular, max/min
+        ["rr", 23.38, 0.016, 18.929, 0.999, 0.99997, 1.015],
+        ["free_slot", 26.82, 1.004, 36.665, 0.973, 0.99861, 1.0982],
+    ],
+}
+
+
+# Frozen: phase 2. Screening S1's AIMD for even CW/CCW board failures, on the
+# spec-compliant fabric (I-tag reserve, E-tag priority), K=2000, 62 settings.
+# The number to move is `failmax` -- the worst core's ratio between its two
+# directions' board-failure counts.
+#
+# The headline is negative and it is the point: the spec I-tag already did
+# this job. I-tag raises its flag on a (plane, dir, VC) key, so a node starved
+# in CW gets its yielded bubble in CW -- the remedy lands on exactly the
+# direction that is short. That drops S0's own failmax from 5.776 (broadcast
+# fabric) to 3.846, and leaves the AIMD with nothing to equalize.
+S1_DIRBAL = {
+    "k": 2000, "s0_thr": 5.1793, "s0_failmax": 3.846, "s0_jbin": 0.95788,
+    "n_settings": 62, "n_better_failmax": 5, "n_identical_to_s0": 7,
+    "s0_failmax_broadcast": 5.776,
+    "rows": [
+        # label, failmax, cores with ratio>=2, thr, thr vs S0 %, Jbin, max/min
+        ["S0（基线，规范 I-tag/E-tag）", 3.846, 5, 5.1793, 0.0, 0.95788, 1.1019],
+        ["S1 默认", 5.54, 3, 4.4608, -13.87, 0.89281, 2.849],
+        ["S1 cap=0.5", 5.28, 3, 4.3469, -16.07, 0.88898, 2.8818],
+        ["S1 dir_split", 4.268, 5, 5.17, -0.18, 0.95559, 1.1445],
+        ["S1 dir_split gentle w=64 burst=1（旧选定）", 3.94, 4, 5.1753, -0.08,
+         0.95825, 1.1158],
+        ["S1 dir_split w=64 burst=0（唯一保带宽且更均）", 3.829, 4, 5.15, -0.57,
+         0.95217, 1.1028],
+        ["S1 dir_split w=128 burst=0", 3.502, 4, 4.3048, -16.88, 0.87575,
+         2.1858],
+        ["S1 harsh cap=0.5", 3.472, 4, 4.111, -20.63, 0.86691, 2.5559],
+    ],
+    # Why the default is still bad: the AIMD decreases on the node's *own*
+    # board failures, and on a bufferless ring those failures come from other
+    # nodes' transit traffic, so the victim throttles itself.
+    "note_default_bw": {"min": 0.2338, "max": 0.5909},
+    "verdict": (
+        "62 组里只有 5 组的 failmax 真的低于 S0 自己的 3.846，其中唯一不砍带宽的一组"
+        "（dir_split w=64 burst=0）把 failmax 只压了 0.4%（3.846 → 3.829），"
+        "却付掉 0.57% 带宽；真正压得动方向失败比的几组（3.47 ~ 3.50）一律要付 "
+        "17% ~ 23% 带宽。另有 7 组的三项指标与 S0 逐位相同 —— 那是 AIMD 根本没有"
+        "生效，等于 S0。所以阶段二的结论是：<b>在规范 fabric 上，方向失败比这条"
+        "旋钮已经被 I-tag 转完了，AIMD 没有剩余可调空间</b>。"
+    ),
+    # Phase 2's second question: does even directional failure buy even
+    # per-core bandwidth? Answered at official K in `S22_CONFIRM` -- no.
+}
+
+# Frozen: phase 3. Confirmation of the shortlist at the study's own K, all
+# against the same S0 reference in the same process, on the spec-compliant
+# fabric (I-tag reserve, E-tag priority).
+S22_CONFIRM = {
+    "k": 20000, "r_star": 5.7143,
+    "targets": {"jain_bin_mean": 0.99, "thr_delta_pct": 1.0},
+    "rows": [
+        # label, Jbin, thr, thr vs S0 %, % of R*, max/min, failmax, pass
+        ["S0", 0.96765, 5.2174, 0.00, 91.30, 1.0288, 3.864, False],
+        ["S0 dirq=32（只加缓存，不加控制）", 0.96831, 5.2121, -0.10, 91.21,
+         1.0304, 3.674, False],
+        # S1_CFG, i.e. the same configuration the main run reports as S1T.
+        ["S1 调优（阶段二，= S1T）", 0.96821, 5.1982, -0.37, 90.97, 1.0461,
+         3.843, False],
+        ["S22 w=3 margin=0", 0.99093, 4.9946, -4.27, 87.41, 1.0002, 2.383,
+         False],
+        ["S22 w=2 margin=2（旧基线上的选定点）", 0.99205, 5.1165, -1.93, 89.54,
+         1.0001, 2.764, False],
+        ["S22 w=3 margin=2", 0.99144, 5.1242, -1.79, 89.67, 1.0004, 2.687,
+         False],
+        ["S22 w=3 margin=3", 0.99114, 5.1887, -0.55, 90.80, 1.0002, 2.954,
+         True],
+        ["S22 w=2 margin=3", 0.99147, 5.1889, -0.55, 90.81, 1.0001, 2.776,
+         True],
+        ["S22 w=2 margin=4（选定）", 0.99062, 5.2153, -0.04, 91.27, 1.0002,
+         3.001, True],
+        ["S22 w=3 margin=4 thresh=1", 0.99005, 5.2022, -0.29, 91.04, 1.0004,
+         2.882, True],
+        ["S22 w=2 margin=4 thresh=1", 0.99030, 5.2074, -0.19, 91.13, 1.0003,
+         3.225, True],
+        ["S22 dirq=8 margin=3（不加缓存）", 0.99076, 5.1038, -2.18, 89.32,
+         1.0001, 2.287, False],
+    ],
+}
+
+# Frozen: phase 3. Why `margin=4` ships rather than `margin=3`, and how far
+# the phase-3 claim extends.
+#
+# A seed sweep cannot break the tie: on the `uniform` pattern this study has
+# no stochastic component -- the tiled channel hash is deterministic and
+# `HA_RSP_JIT = 0` -- so seed 1 reproduces seed 0 bit for bit (verified). The
+# axes that can move the answer are the ones that change the offered load.
+S22_ROBUST = {
+    "targets": {"jain_bin_mean": 0.99, "thr_delta_pct": 1.0},
+    "no_seed_noise": True,
+    "rows": [
+        # pattern, K, label, thr, thr vs S0 %, Jbin, max/min, pass
+        ["uniform", 10000, "S0", 5.2120, 0.0, 0.96772, 1.0400, None],
+        ["uniform", 10000, "S22 m=3", 5.1850, -0.52, 0.99161, 1.0003, True],
+        ["uniform", 10000, "S22 m=4", 5.2062, -0.11, 0.99062, 1.0013, True],
+        ["uniform", 20000, "S0", 5.2174, 0.0, 0.96765, 1.0288, None],
+        ["uniform", 20000, "S22 m=3", 5.1889, -0.55, 0.99147, 1.0001, True],
+        ["uniform", 20000, "S22 m=4", 5.2153, -0.04, 0.99062, 1.0002, True],
+        ["hot", 5000, "S0", 0.9420, 0.0, 0.57664, 1.0704, None],
+        ["hot", 5000, "S22 m=3", 0.9954, 5.67, 0.70654, 1.0922, False],
+        ["hot", 5000, "S22 m=4", 0.9973, 5.87, 0.71590, 1.0881, False],
+    ],
+    "choice": (
+        "两个候选在<b>环受限</b>的 uniform 上都过线，但 margin=4 的 Jain "
+        "在 K 翻一倍时稳定在 0.99062（五位小数不动），说明它 6e-4 的余量是"
+        "<b>稳的</b>而不是运气；margin=3 多 1.5e-3 的 Jain 余量，"
+        "却要一直付 0.55% 带宽。"),
+    "scope": (
+        "在 hot 上（所有写打进一个两节点 mem 簇）总带宽只有 0.94 flit/cycle，"
+        "不到 uniform 的 1/5 —— 瓶颈已经从环挪到了 completer，"
+        "50 拍窗内的差异主要由 HA 的串行服务决定，"
+        "任何<b>环侧</b>控制器都拿不到 0.99（S0 自己只有 0.577）。"
+        "值得记一笔的是 S22 在那里也<b>没有变坏</b>："
+        "Jain 0.577 → 0.716，总带宽还 +5.9%（让路让排队更早交给了空闲的 HA）。"),
+}
+
+# Frozen: phase 3, the two mechanisms that were tried and rejected, and why.
+# Both are recorded because each one's failure mode is what motivates S22.
+S22_REJECTED = {
+    "rows": [
+        # label, Jbin, thr vs S0 %, the structural reason
+        ["I-tag 加 scope=segment + hold（只改仲裁，不加总线）", 0.99013, -5.8,
+         "I-tag 只能整段封停，被 transit 饿死的节点会一直举旗，"
+         "让上游注入口空转 —— 让出的槽位没有交给落后的节点"],
+        ["S21 定速漏桶（sender pacing，burst=1）", 0.99340, -17.0,
+         "信用闸门只能'扣住'，而环上空槽是不规则出现的，"
+         "扣住就错过；burst=1 还把速率量化到 1/2"],
+        ["S21 定速漏桶（burst=2）", 0.99210, -10.0,
+         "放大桶深能拿回速率，但同样的桶深也让突发漏回来，这笔交易不闭合"],
+    ],
+    # Provenance: these three were measured on the pre-fix fabric (I-tag in
+    # broadcast mode, E-tag without eject priority). They are kept as the
+    # design rationale for S22 -- each row's failure mode is structural and the
+    # I-tag fix does not touch it, since neither mechanism's problem was the
+    # baseline's fairness. They are not re-measured because both were rejected
+    # on a structural argument, not on a threshold.
+    "note_fabric": (
+        "这三行测于<b>补全前</b>的 fabric（I-tag broadcast、E-tag 无下环优先）。"
+        "保留原值是因为每一行被否掉的理由都是<b>结构性</b>的 —— "
+        "「扣住的槽没人接手」和「闸门错过不规则空槽」这两件事，"
+        "与基线本身齐不齐无关，规范 I-tag 的修正碰不到它们。"),
+}
+
+# Frozen: hardware cost, counted per node against S1's own bill. Both schemes
+# ride one dedicated broadcast bus; the question the report has to answer is
+# whether S22 needs anything S1 does not.
+HW_COST = {
+    "n_nodes": 20, "n_cores": 10, "bus_bits": 6,
+    "rows": [
+        # item, S1, S22, comment
+        ["专有流控总线", "1 条广播，6 bit/次发布（两个 3 bit 拥塞等级）",
+         "1 条广播，6 bit/次发布（本窗上环计数，饱和）",
+         "同一条总线、同一位宽。S22 复用 S1 的线，只换了线上放什么"],
+        ["总线接收表", "每节点存全环视图（20 × 6 bit）",
+         "每节点存参与核的累计计数（10 × 8 bit 模加）",
+         "两边都要一张全局表，S22 的项数更少但要累加；"
+         "赤字被 dfc_cap=64 夹住，8 bit 模加就够，不会真的无界增长"],
+        ["总线时延", "30 拍（窗口 64 的一半）", "1 拍",
+         "S22 唯一比 S1 更苛刻的地方：它要的是瞬时进度，"
+         "反馈晚一个窗口就退化成长期均值（灵敏度见 6.5.1）"],
+        ["窗口计数器", "1 个 7 bit（window=64）", "1 个 2 bit（window=2）",
+         "S22 的控制窗口短得多，计数器反而更窄"],
+        ["每节点算术", "α/β 乘法 + 预算按比例缩放 + 令牌桶",
+         "10 项加法树求均值 + 减法 + 两次比较",
+         "S22 去掉了乘法器和令牌桶，换成加法树；"
+         "均值可用 10 项定点加法 + 常数乘 1/10（或按 8 近似）"],
+        ["注入闸门", "令牌桶，可扣住空闲槽",
+         "无闸门；只在仲裁时让路",
+         "这是两者机制上的根本差别，也是 S22 不丢带宽的原因"],
+        ["inject Q 深度", "每向 8", "每向 32",
+         "唯一实打实的额外面积：前瞻要有候选可选。"
+         "深度 8 上同一控制器带宽掉 2.18%（见 6.3 表末行与 6.5.2）"],
+        ["保序逻辑", "不需要（先到先发）",
+         "需要：前瞻只允许跨目的地超越",
+         "每拍最多比较 32 个目的地标签，遇到同目的地即停，"
+         "所以同一个 WriteData burst 内部永不换序"],
+    ],
+    "verdict": (
+        "同一条 6 bit 广播总线、同一量级的节点状态：S22 把 S1 的"
+        "「乘法器 + 令牌桶 + 20 项视图」换成「加法树 + 10 项模加表」，"
+        "算术更浅。代价有两笔：总线时延必须做到 1 拍，"
+        "inject Q 从每向 8 加深到 32（含 ≤32 项目的地比较的前瞻逻辑）。"
+    ),
+}
+
+
 def base_params() -> Ring2BaseParams:
     """Shared datapath settings. Every write scheme rides the same fabric."""
     return Ring2BaseParams(**FABRIC)
@@ -584,6 +1553,16 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
         # accepted is grantable and S16 is S0 under another name.
         kw = {"overcommit": S16_OVERCOMMIT, **kw}
         return Ring2GrantSim(topo, Ring2GrantParams(**kw), seed=seed)
+    if scheme == "S22":
+        from rg_ring2_dfc import Ring2DfcParams, Ring2DfcSim
+        kw = {**FABRIC, **S22_CFG, **(cfg or {})}
+        return Ring2DfcSim(topo, Ring2DfcParams(**kw), seed=seed)
+    if scheme == "S21":
+        from rg_ring2_pace import Ring2PaceParams, Ring2PaceSim
+        return Ring2PaceSim(topo, Ring2PaceParams(**kw), seed=seed)
+    if scheme == "S23":
+        from rg_ring2_fair import Ring2FairParams, Ring2FairSim
+        return Ring2FairSim(topo, Ring2FairParams(**kw), seed=seed)
     if scheme in ("S17", "S18", "S19", "S20"):
         from rg_ring2_rate import (Ring2DcqcnSim, Ring2DctcpSim,
                                    Ring2RateParams, Ring2SwiftSim,
@@ -593,7 +1572,11 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
         return cls(topo, Ring2RateParams(**kw), seed=seed)
     from rg_ring2_fc import Ring2FcParams, Ring2FcSim
     kw = {"bus_lat": FC_BUS_LAT, **kw}
-    p = Ring2FcParams(mode="s1" if scheme == "S1" else "s15", **kw)
+    # "S1T" is S1 with the phase-2 direction-balanced settings. It is a
+    # separate name so the published S1 rows keep meaning stock AIMD.
+    if scheme == "S1T":
+        kw = {"bus_lat": FC_BUS_LAT, **FABRIC, **S1_CFG, **(cfg or {})}
+    p = Ring2FcParams(mode="s15" if scheme == "S15" else "s1", **kw)
     return Ring2FcSim(topo, p, seed=seed)
 
 
@@ -626,6 +1609,20 @@ def run_scheme(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
     return r
 
 
+def jain_ideal_bin(n_flits: int, n_cores: int) -> float:
+    """Jain an ideal (deterministic) controller would score on `n_flits`.
+
+    It splits the bin's total as evenly as integers allow, so `r = N mod n`
+    cores take one more flit than the rest. Exact, not an approximation: the
+    per-bin totals it is fed are real counts.
+    """
+    if n_flits <= 0 or n_cores <= 0:
+        return 1.0
+    lo, r = divmod(int(n_flits), int(n_cores))
+    sq = r * (lo + 1) ** 2 + (n_cores - r) * lo * lo
+    return (n_flits * n_flits) / (n_cores * sq) if sq > 0 else 1.0
+
+
 def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
                 t_fair: int) -> dict[str, Any]:
     """Mean over `bin_w`-cycle bins of Jain across the cores in that bin.
@@ -639,23 +1636,26 @@ def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
     first core has run out of work, and a zero there is an empty queue, not
     an unfair arbiter.
 
-    A bin this short holds few flits per core, so the index also carries
-    counting noise, and 1.0 is not reachable. `jain_bin_null` is where a
-    perfectly fair arbiter would land when observed through the same window:
-    split each bin's total multinomially over the cores at equal probability
-    and the per-core count has mean N/n and variance N(1/n)(1-1/n), so
+    A bin this short holds few flits per core, so exact equality is limited by
+    integer arithmetic and 1.0 is not always reachable. `jain_bin_ideal` is the
+    reference: **what an ideal congestion controller would have scored in this
+    same bin, having delivered the same N flits.** Being deterministic rather
+    than randomised, it splits N over n cores as evenly as integers allow --
+    `r = N mod n` cores get `ceil(N/n)`, the rest `floor(N/n)` -- so
 
-        E[J] ~ 1/(1 + CV^2) = N / (N + n - 1)
+        J_ideal(N) = N^2 / ( n * [ r*ceil(N/n)^2 + (n-r)*floor(N/n)^2 ] )
 
-    per bin. `jain_bin_ratio = mean / null` is then the number to judge:
-    >= 1.0 means the fabric is at least as even as perfectly fair
-    arbitration. An absolute threshold on `jain_bin_mean` would be
-    meaningless, because the floor moves with the flit count per bin and a
-    scheme that costs throughput lowers its own floor.
+    which is 1 - O(1/N^2). `jain_vs_ideal = mean / ideal` is then the number to
+    judge, and it isolates fairness cleanly: the ideal is evaluated at the
+    scheme's *own* delivered flit count, so a scheme cannot flatter itself on
+    this axis by throttling. Bandwidth is compared against the ideal separately
+    (`ideal_ring2_cc`), which is where losing throughput is supposed to show up.
 
-    The closed form is first order (1/(1+E[CV^2]) rather than E[1/(1+CV^2)]),
-    so it runs ~1e-3 below an actual equal-probability draw -- the acceptance
-    line is lenient by about that much. `verify_ring2_20` pins the gap.
+    This replaces an earlier reference, the multinomial "null model"
+    N/(N+n-1) -- the score a *fair but memoryless* arbiter earns through the
+    same window, about 0.970 here. That answered the wrong question: a
+    controller is allowed to be regular, not merely unbiased, so the null
+    understates what is achievable and gave no bandwidth reference at all.
     """
     cs = sorted(inject_times)
     nbin = int(t_fair) // bin_w if bin_w > 0 else 0
@@ -671,12 +1671,12 @@ def binned_jain(inject_times: dict[int, list[int]], bin_w: int,
     tot = [sum(cnt[i][b] for i in range(n)) for b in range(nbin)]
     vals = sorted(jain([cnt[i][b] for i in range(n)]) for b in range(nbin))
     per_bin = sum(vals) / nbin
-    null = sum(N / (N + n - 1) if N else 0.0 for N in tot) / nbin
+    ideal = sum(jain_ideal_bin(N, n) for N in tot) / nbin
     return {
         "bin_w": bin_w, "n_bins": nbin, "n_cores": n,
         "jain_bin_mean": round(per_bin, 5),
-        "jain_bin_null": round(null, 5),
-        "jain_bin_ratio": round(per_bin / null, 5) if null else None,
+        "jain_bin_ideal": round(ideal, 5),
+        "jain_vs_ideal": round(per_bin / ideal, 5) if ideal else None,
         "jain_bin_p05": round(vals[int(0.05 * nbin)], 5),
         "jain_bin_min": round(vals[0], 5),
         "flits_per_core_per_bin": round(sum(tot) / n / nbin, 2),
@@ -707,10 +1707,17 @@ def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
         "n_inring_blocked": r.get("n_inring_blocked", 0),
         "max_inring_hold": r.get("max_inring_hold", 0),
         "n_itag_raised": r.get("n_itag_raised", 0),
+        "n_itag_yield": r.get("n_itag_yield", 0),
         "n_etag_raised": r.get("n_etag_raised", 0),
+        # Measured occupancy of every directed hop, and the longest run of
+        # consecutive failed boards: the two things the R* comparison and the
+        # I-tag threshold have to be judged against.
+        "hop_use": r.get("hop_use", {}),
+        "starve": r.get("starve", {}),
         "n_outst_wait": r.get("n_outst_wait", 0),
         "max_core_outstanding": r.get("max_core_outstanding", 0),
         "max_srcq": r.get("max_srcq"), "max_ejectq": r.get("max_ejectq"),
+        "buffers": r.get("buffers") or {},
         "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
         "lat_max": r.get("lat_max"),
         "wall_secs": r.get("wall_secs"),
@@ -961,8 +1968,8 @@ def retry_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "makespan": r.get("makespan"), "completed": r.get("completed"),
         "throughput": f.get("throughput", 0.0), "jain": f.get("jain", 0.0),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "max_min": f.get("max_min", 0.0), "bw_min": f.get("bw_min", 0.0),
         "lat_p50": r.get("lat_p50"), "lat_p99": r.get("lat_p99"),
         "n_retry": q.get("n_retry", 0),
@@ -1230,8 +2237,8 @@ def _ost_point(scheme: str, topo: Ring2Topology, txns: Sequence[Txn], *,
         "retry_per_txn": q.get("retry_per_txn", 0.0),
         "ooo_frac": q.get("ooo_frac", 0.0),
         "jain_bin": jb.get("jain_bin_mean"),
-        "jain_bin_null": jb.get("jain_bin_null"),
-        "jain_bin_ratio": jb.get("jain_bin_ratio"),
+        "jain_bin_ideal": jb.get("jain_bin_ideal"),
+        "jain_vs_ideal": jb.get("jain_vs_ideal"),
         "max_min": f.get("max_min", 0.0),
         "outst_eff": q.get("outst_eff_mean", 0.0),
         "outst_used": q.get("outst_used_mean", 0.0),
@@ -1407,8 +2414,8 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             row[scheme] = {
                 "jain": f["jain"], "max_min": f["max_min"],
                 "jain_bin": jb.get("jain_bin_mean"),
-                "jain_bin_null": jb.get("jain_bin_null"),
-                "jain_bin_ratio": jb.get("jain_bin_ratio"),
+                "jain_bin_ideal": jb.get("jain_bin_ideal"),
+                "jain_vs_ideal": jb.get("jain_vs_ideal"),
                 "throughput": f["throughput"],
                 "thr_delta_pct": (
                     round(100.0 * (f["throughput"] - thr0) / thr0, 2)
@@ -1416,7 +2423,7 @@ def seed_sweep(pattern: str, topo: Ring2Topology, *, k: int, W: int,
             }
         rows.append(row)
         print(f"    seed {sd}: " + "  ".join(
-            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_null']} "
+            f"{s} Jbin={row[s]['jain_bin']}/{row[s]['jain_bin_ideal']} "
             f"mm={row[s]['max_min']} "
             f"({row[s]['thr_delta_pct']:+.2f}%)" for s in schemes), flush=True)
     return rows
@@ -1557,8 +2564,8 @@ def _report(pat: dict[str, Any]) -> None:
         f = d["fairness"]
         jb = f.get("jain_bin") or {}
         print(f"{name:6} {d['makespan']:>8} {int(bool(d['completed'])):>3} "
-              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_null', 0):>8} "
-              f"{jb.get('jain_bin_ratio', 0):>7} {f['max_min']:>8} "
+              f"{jb.get('jain_bin_mean', 0):>8} {jb.get('jain_bin_ideal', 0):>8} "
+              f"{jb.get('jain_vs_ideal', 0):>7} {f['max_min']:>8} "
               f"{f['bw_min']:>8} {f['throughput']:>7} "
               f"{d['n_board_fail']:>9}")
     rc = pat.get("root_cause")
@@ -1690,9 +2697,18 @@ def main() -> None:
             "track128_forecast": TRACK128_FORECAST,
             "track256_forecast": TRACK256_FORECAST,
             "upq_12_8_forecast": UPQ_12_8_FORECAST,
+            "eject12_bufocc_forecast": EJECT12_BUFOCC_FORECAST,
+            "inj_sel_forecast": INJ_SEL_FORECAST,
+            "inj_sel_probe": INJ_SEL_PROBE,
+            "jitter_decomp": JITTER_DECOMP,
+            "inj_sel": bp.inj_sel,
+            "t_inj": bp.t_inj, "t_xfer": bp.t_xfer, "resv_ej": bp.resv_ej,
+            "buf_sample": bp.buf_sample,
             "bus_lat": FC_BUS_LAT,
             "bus_lat_forecast": BUS_LAT_FORECAST,
             "per_vc_ports": bp.per_vc_ports,
+            "per_dir_ports": bp.per_dir_ports,
+            "perdir_probe": PERDIR_PROBE,
             "vc_indep_forecast": VC_INDEP_FORECAST,
             "shared_buf_forecast": SHARED_BUF_FORECAST,
             "per_vc_port_forecast": PER_VC_PORT_FORECAST,

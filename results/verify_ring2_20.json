@@ -1,6 +1,6 @@
 {
-  "n_total": 63,
-  "n_ok": 63,
+  "n_total": 83,
+  "n_ok": 83,
   "all_ok": true,
   "rows": [
     {
@@ -13,6 +13,26 @@
     },
     {
       "name": "shared_inj_depth_board_rate",
+      "ok": true
+    },
+    {
+      "name": "shared_fifo_hol_to_dir_q",
+      "ok": true
+    },
+    {
+      "name": "free_slot_arbiter_picks_open_dir",
+      "ok": true
+    },
+    {
+      "name": "itag_scope_segment_only_crossers",
+      "ok": true
+    },
+    {
+      "name": "itag_hold_expires",
+      "ok": true
+    },
+    {
+      "name": "buffer_occupancy_per_plane",
       "ok": true
     },
     {
@@ -168,7 +188,19 @@
       "ok": true
     },
     {
-      "name": "binned_jain_null_matches_fair",
+      "name": "jain_bin_ideal_achievable_and_bounds_fair",
+      "ok": true
+    },
+    {
+      "name": "ideal_cc_lp_matches_fabric",
+      "ok": true
+    },
+    {
+      "name": "fair_share_is_pattern_dependent",
+      "ok": true
+    },
+    {
+      "name": "window_controllers_inert_on_hot",
       "ok": true
     },
     {
@@ -201,6 +233,22 @@
     },
     {
       "name": "s16_unbounded_equals_s0",
+      "ok": true
+    },
+    {
+      "name": "s16_read_unbounded_equals_s0",
+      "ok": true
+    },
+    {
+      "name": "s16_read_is_local_and_paces",
+      "ok": true
+    },
+    {
+      "name": "read_scheme_feedback_and_scope",
+      "ok": true
+    },
+    {
+      "name": "tiled_read_reverses_only_dat",
       "ok": true
     },
     {
@@ -240,6 +288,38 @@
       "ok": true
     },
     {
+      "name": "etag_preempts_normal_leave",
+      "ok": true
+    },
+    {
+      "name": "itag_reserve_one_slot",
+      "ok": true
+    },
+    {
+      "name": "itag_reserve_cheaper_than_broadcast",
+      "ok": true
+    },
+    {
+      "name": "s22_yield_downhill_and_scoped",
+      "ok": true
+    },
+    {
+      "name": "s22_dodge_keeps_dst_order",
+      "ok": true
+    },
+    {
+      "name": "s22_deficit_via_bus",
+      "ok": true
+    },
+    {
+      "name": "s25_local_target_uses_no_bus",
+      "ok": true
+    },
+    {
+      "name": "fairness_bandwidth_tradeoff",
+      "ok": true
+    },
+    {
       "name": "rate_pinned_equals_s0",
       "ok": true
     },
@@ -256,5 +336,5 @@
       "ok": true
     }
   ],
-  "generated_at": "2026-08-26T10:40:29Z"
+  "generated_at": "2026-08-28T09:11:03Z"
 }

@@ -6,12 +6,18 @@ may not transmit scheduled bytes until the receiver hands out a GRANT, and
 the receiver grants to a few senders at once (overcommitment) so its own
 downlink never idles while one sender is slow to respond.
 
-CHI already has that grant. `WriteNoSnp` forbids WriteData until the
-completer returns `DBIDResp`, so the completer -- the receiver -- already
+CHI already has that grant on writes. `WriteNoSnp` forbids WriteData until
+the completer returns `DBIDResp`, so the completer -- the receiver -- already
 owns the decision of who may put write data on the ring and when. The
 baseline simply squanders the authority by granting on arrival. S16 keeps
 the wire format untouched and only changes *when* and *to whom* DBIDResp is
-issued:
+issued.
+
+`ReadNoSnp` has no DBIDResp. The bulky traffic is CompData the HA itself
+sends, so the same policy applies to *which burst leaves the HA next* -- still
+a local completer decision, still no bus. The grant then retires when the last
+CompData lands, which is when that burst stops occupying the HA's in-flight
+budget.
 
   * REQs queue at the completer instead of being granted immediately.
   * A completer keeps at most `overcommit` grants outstanding (Homa's
@@ -63,6 +69,15 @@ class GrantKnobs:
     # Homa's unscheduled bytes, which CHI cannot express directly.
     eager: bool = True
     trace: bool = True
+    # Cycles added to the grant's flight time, to model carrying it on the
+    # dedicated out-of-band flow-control bus instead of in-band on the RSP
+    # channel. Set 30 for the mandated bus latency. The in-band DBIDResp is not
+    # replaced by a cheaper resource here, and it does not need to be: with a
+    # port per VC the RSP channel is nowhere near binding, so moving the grant
+    # off it frees nothing measurable and the bus variant is a pure latency
+    # penalty. That makes this one knob a faithful test of the only thing at
+    # stake -- whether the grant loop tolerates being 30 cycles slower.
+    grant_lat: int = 0
 
 
 @dataclass
@@ -91,6 +106,9 @@ class GrantMixin:
         st["n_grant_queued"] = 0
         self.grant_delay: list[int] = []
         self._qt: dict[int, int] = {}
+        # ReadNoSnp carries no DBID; the fail tags travel with the REQ and have
+        # to be remembered until CompData is actually released.
+        self._read_fail: dict[int, tuple[int, int]] = {}
 
     # -- the DBIDResp emit differs only in name between the two fabrics ----
 
@@ -99,7 +117,8 @@ class GrantMixin:
 
     # -- receiver-driven admission -----------------------------------------
 
-    def _on_req_at_completer(self, txn: Txn) -> None:
+    def _maybe_grant(self, txn: Txn) -> None:
+        """Queue or grant, same policy for WriteNoSnp and ReadNoSnp."""
         mem = txn.ha
         if self.gp.eager and self.outstanding[mem] < self.gp.overcommit \
                 and self.n_queued[mem] == 0:
@@ -112,19 +131,44 @@ class GrantMixin:
         self._qt[txn.txn_id] = self.t
         self._pump(mem)
 
+    def _on_req_at_completer(self, txn: Txn) -> None:
+        self._maybe_grant(txn)
+
+    def _on_read_req_at_completer(self, txn: Txn, fail_board: int,
+                                 fail_eject: int) -> None:
+        self._read_fail[txn.txn_id] = (fail_board, fail_eject)
+        self._maybe_grant(txn)
+
     def _on_write_data_complete(self, txn: Txn) -> None:
         """A grant retired: its buffer is free, so hand out the next one."""
         self.outstanding[txn.ha] = max(0, self.outstanding[txn.ha] - 1)
         self._pump(txn.ha)
 
+    def _on_txn_done(self, txn: Txn, last) -> None:
+        """Read grant retires when the last CompData lands -- HA was the sender."""
+        if getattr(txn, "op", "read") == "write":
+            return
+        self.outstanding[txn.ha] = max(0, self.outstanding[txn.ha] - 1)
+        self._pump(txn.ha)
+
     def _grant(self, txn: Txn) -> None:
         self.outstanding[txn.ha] += 1
-        # An outstanding DBID *is* a committed write-data buffer at the
-        # completer, so the peak is the buffering the scheme actually needs.
+        # An outstanding grant is a committed burst at the completer, so the
+        # peak is the buffering the scheme actually needs.
         self.peak_outstanding = max(self.peak_outstanding,
                                     self.outstanding[txn.ha])
-        self.served[txn.ha][txn.core] += txn.m_wdata
-        self._emit_dbid(txn)
+        if getattr(txn, "op", "read") == "write":
+            self.served[txn.ha][txn.core] += txn.m_wdata
+            self._emit_dbid(txn)
+            return
+        self.served[txn.ha][txn.core] += txn.m_resp
+        fb, fe = self._read_fail.pop(txn.txn_id, (0, 0))
+        # grant_lat models carrying the decision on the 30-cycle bus. For a
+        # read the HA already owns the data, so this is a pure delay -- there
+        # is no DBID to move off the RSP channel.
+        t_ready = (self.t + self.p.t_ha_service
+                   + getattr(self.gp, "grant_lat", 0))
+        self._enqueue_resps(txn, fb, fe, t_ready)
 
     def _pump(self, mem: int) -> None:
         """Issue grants until the completer is fully committed."""
@@ -198,4 +242,5 @@ class Ring2GrantSim(GrantMixin, Ring2BaseSim):
 
     def _emit_dbid(self, txn: Txn) -> None:
         self._emit_write(txn, "dbid", txn.ha, txn.core, 1,
-                         self.t + self._ha_delay(txn, "dbid"))
+                         self.t + self._ha_delay(txn, "dbid")
+                         + self.p.grant_lat)

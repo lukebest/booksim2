@@ -1,0 +1,136 @@
+{
+  "points": [
+    [
+      "uniform",
+      10000
+    ],
+    [
+      "uniform",
+      20000
+    ],
+    [
+      "hot",
+      5000
+    ]
+  ],
+  "bin_w": 50,
+  "rows": [
+    {
+      "pattern": "uniform",
+      "k": 10000,
+      "label": "S0",
+      "thr": 5.212,
+      "jain_bin": 0.96772,
+      "max_min": 1.04,
+      "makespan": 38373,
+      "thr_delta_pct": 0.0,
+      "pass": null
+    },
+    {
+      "pattern": "uniform",
+      "k": 10000,
+      "label": "m=3",
+      "thr": 5.185,
+      "jain_bin": 0.99161,
+      "max_min": 1.0003,
+      "makespan": 38573,
+      "thr_delta_pct": -0.52,
+      "pass": true
+    },
+    {
+      "pattern": "uniform",
+      "k": 10000,
+      "label": "m=4",
+      "thr": 5.2062,
+      "jain_bin": 0.99062,
+      "max_min": 1.0013,
+      "makespan": 38416,
+      "thr_delta_pct": -0.11,
+      "pass": true
+    },
+    {
+      "pattern": "uniform",
+      "k": 20000,
+      "label": "S0",
+      "thr": 5.2174,
+      "jain_bin": 0.96765,
+      "max_min": 1.0288,
+      "makespan": 76667,
+      "thr_delta_pct": 0.0,
+      "pass": null
+    },
+    {
+      "pattern": "uniform",
+      "k": 20000,
+      "label": "m=3",
+      "thr": 5.1889,
+      "jain_bin": 0.99147,
+      "max_min": 1.0001,
+      "makespan": 77088,
+      "thr_delta_pct": -0.55,
+      "pass": true
+    },
+    {
+      "pattern": "uniform",
+      "k": 20000,
+      "label": "m=4",
+      "thr": 5.2153,
+      "jain_bin": 0.99062,
+      "max_min": 1.0002,
+      "makespan": 76697,
+      "thr_delta_pct": -0.04,
+      "pass": true
+    },
+    {
+      "pattern": "hot",
+      "k": 5000,
+      "label": "S0",
+      "thr": 0.942,
+      "jain_bin": 0.57664,
+      "max_min": 1.0704,
+      "makespan": 106155,
+      "thr_delta_pct": 0.0,
+      "pass": null
+    },
+    {
+      "pattern": "hot",
+      "k": 5000,
+      "label": "m=3",
+      "thr": 0.9954,
+      "jain_bin": 0.70654,
+      "max_min": 1.0922,
+      "makespan": 100466,
+      "thr_delta_pct": 5.67,
+      "pass": false
+    },
+    {
+      "pattern": "hot",
+      "k": 5000,
+      "label": "m=4",
+      "thr": 0.9973,
+      "jain_bin": 0.7159,
+      "max_min": 1.0881,
+      "makespan": 100274,
+      "thr_delta_pct": 5.87,
+      "pass": false
+    }
+  ],
+  "worst": {
+    "m=3": {
+      "jain_min": 0.70654,
+      "abs_thr_delta_max": 5.67,
+      "pass_all": false,
+      "jain_headroom": -0.28346,
+      "thr_headroom_pct": -4.67
+    },
+    "m=4": {
+      "jain_min": 0.7159,
+      "abs_thr_delta_max": 5.87,
+      "pass_all": false,
+      "jain_headroom": -0.2741,
+      "thr_headroom_pct": -4.87
+    }
+  },
+  "note_no_seed_noise": "uniform pattern is deterministic (tiled channel hash) and HA_RSP_JIT=0, so seed has no effect; verified seed 1 == seed 0",
+  "wall_secs": 509.3
+}

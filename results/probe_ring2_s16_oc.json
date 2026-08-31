@@ -1,0 +1,116 @@
+{
+  "k": 2000,
+  "core_outstanding": 32,
+  "bin_w": 100,
+  "rows": [
+    {
+      "overcommit": null,
+      "thr": 5.4533,
+      "bw_vs_ideal": 0.95433,
+      "jain_bin": 0.93194,
+      "eta": 0.8894,
+      "max_min": 1.5285,
+      "makespan": 7335
+    },
+    {
+      "overcommit": 4,
+      "thr": 2.2924,
+      "bw_vs_ideal": 0.40117,
+      "jain_bin": 0.97529,
+      "eta": 0.39127,
+      "max_min": 1.0005,
+      "makespan": 17449
+    },
+    {
+      "overcommit": 6,
+      "thr": 3.3093,
+      "bw_vs_ideal": 0.57913,
+      "jain_bin": 0.98996,
+      "eta": 0.57333,
+      "max_min": 1.001,
+      "makespan": 12087
+    },
+    {
+      "overcommit": 8,
+      "thr": 4.2324,
+      "bw_vs_ideal": 0.74067,
+      "jain_bin": 0.99547,
+      "eta": 0.73734,
+      "max_min": 1.001,
+      "makespan": 9451
+    },
+    {
+      "overcommit": 10,
+      "thr": 4.8298,
+      "bw_vs_ideal": 0.84521,
+      "jain_bin": 0.99492,
+      "eta": 0.84094,
+      "max_min": 1.001,
+      "makespan": 8282
+    },
+    {
+      "overcommit": 12,
+      "thr": 5.275,
+      "bw_vs_ideal": 0.92312,
+      "jain_bin": 0.99433,
+      "eta": 0.91792,
+      "max_min": 1.001,
+      "makespan": 7583
+    },
+    {
+      "overcommit": 16,
+      "thr": 5.4585,
+      "bw_vs_ideal": 0.95524,
+      "jain_bin": 0.98349,
+      "eta": 0.93949,
+      "max_min": 1.0005,
+      "makespan": 7328
+    },
+    {
+      "overcommit": 20,
+      "thr": 5.4318,
+      "bw_vs_ideal": 0.95056,
+      "jain_bin": 0.954,
+      "eta": 0.90686,
+      "max_min": 1.0501,
+      "makespan": 7364
+    },
+    {
+      "overcommit": 24,
+      "thr": 5.3269,
+      "bw_vs_ideal": 0.93221,
+      "jain_bin": 0.93865,
+      "eta": 0.87504,
+      "max_min": 1.3418,
+      "makespan": 7509
+    },
+    {
+      "overcommit": 32,
+      "thr": 5.4503,
+      "bw_vs_ideal": 0.9538,
+      "jain_bin": 0.92207,
+      "eta": 0.8795,
+      "max_min": 1.5987,
+      "makespan": 7339
+    },
+    {
+      "overcommit": 48,
+      "thr": 5.4907,
+      "bw_vs_ideal": 0.96087,
+      "jain_bin": 0.93327,
+      "eta": 0.89678,
+      "max_min": 1.4728,
+      "makespan": 7285
+    },
+    {
+      "overcommit": 64,
+      "thr": 5.4533,
+      "bw_vs_ideal": 0.95433,
+      "jain_bin": 0.93194,
+      "eta": 0.8894,
+      "max_min": 1.5285,
+      "makespan": 7335
+    }
+  ],
+  "best_overcommit": 16
+}

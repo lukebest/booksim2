@@ -1,0 +1,188 @@
+{
+  "k": 2000,
+  "s0_thr": 5.3937,
+  "s0_jbin": 0.87632,
+  "s0_u": 4.7266,
+  "rows": [
+    {
+      "case": "S21 \u65e0 eq: headroom 1.05 gain 0.25",
+      "over": {
+        "pace_headroom": 1.05,
+        "pace_gain": 0.25,
+        "pace_equalise": false
+      },
+      "thr": 2.1602,
+      "delta_pct": -59.95,
+      "jain_bin": 0.98827,
+      "maxmin": 1.3555,
+      "u": 2.1349,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 1.05 gain 0.05",
+      "over": {
+        "pace_headroom": 1.05,
+        "pace_gain": 0.05,
+        "pace_equalise": false
+      },
+      "thr": 3.4098,
+      "delta_pct": -36.78,
+      "jain_bin": 0.99348,
+      "maxmin": 1.0846,
+      "u": 3.3876,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 1.2 gain 0.25",
+      "over": {
+        "pace_headroom": 1.2,
+        "pace_gain": 0.25,
+        "pace_equalise": false
+      },
+      "thr": 2.5421,
+      "delta_pct": -52.87,
+      "jain_bin": 0.9578,
+      "maxmin": 1.773,
+      "u": 2.4348,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 1.2 gain 0.05",
+      "over": {
+        "pace_headroom": 1.2,
+        "pace_gain": 0.05,
+        "pace_equalise": false
+      },
+      "thr": 3.9948,
+      "delta_pct": -25.94,
+      "jain_bin": 0.99235,
+      "maxmin": 1.0858,
+      "u": 3.9642,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 1.5 gain 0.25",
+      "over": {
+        "pace_headroom": 1.5,
+        "pace_gain": 0.25,
+        "pace_equalise": false
+      },
+      "thr": 4.2359,
+      "delta_pct": -21.47,
+      "jain_bin": 0.9894,
+      "maxmin": 1.112,
+      "u": 4.191,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 1.5 gain 0.05",
+      "over": {
+        "pace_headroom": 1.5,
+        "pace_gain": 0.05,
+        "pace_equalise": false
+      },
+      "thr": 4.2359,
+      "delta_pct": -21.47,
+      "jain_bin": 0.9894,
+      "maxmin": 1.112,
+      "u": 4.191,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 2.0 gain 0.25",
+      "over": {
+        "pace_headroom": 2.0,
+        "pace_gain": 0.25,
+        "pace_equalise": false
+      },
+      "thr": 4.0912,
+      "delta_pct": -24.15,
+      "jain_bin": 0.89178,
+      "maxmin": 2.0931,
+      "u": 3.6485,
+      "pass": false
+    },
+    {
+      "case": "S21 \u65e0 eq: headroom 2.0 gain 0.05",
+      "over": {
+        "pace_headroom": 2.0,
+        "pace_gain": 0.05,
+        "pace_equalise": false
+      },
+      "thr": 4.0912,
+      "delta_pct": -24.15,
+      "jain_bin": 0.89178,
+      "maxmin": 2.0931,
+      "u": 3.6485,
+      "pass": false
+    },
+    {
+      "case": "S21+eq headroom 1.5 tol 0.02 win 64",
+      "over": {
+        "pace_headroom": 1.5,
+        "pace_gain": 0.25,
+        "pace_equalise": true,
+        "pace_tol": 0.02,
+        "pace_window": 64,
+        "pace_bus_lat": 30
+      },
+      "thr": 4.2413,
+      "delta_pct": -21.37,
+      "jain_bin": 0.9906,
+      "maxmin": 1.089,
+      "u": 4.2014,
+      "pass": false
+    },
+    {
+      "case": "S21+eq headroom 1.5 tol 0.08 win 64",
+      "over": {
+        "pace_headroom": 1.5,
+        "pace_gain": 0.25,
+        "pace_equalise": true,
+        "pace_tol": 0.08,
+        "pace_window": 64,
+        "pace_bus_lat": 30
+      },
+      "thr": 4.2413,
+      "delta_pct": -21.37,
+      "jain_bin": 0.9906,
+      "maxmin": 1.089,
+      "u": 4.2014,
+      "pass": false
+    },
+    {
+      "case": "S21+eq headroom 2.0 tol 0.02 win 64",
+      "over": {
+        "pace_headroom": 2.0,
+        "pace_gain": 0.25,
+        "pace_equalise": true,
+        "pace_tol": 0.02,
+        "pace_window": 64,
+        "pace_bus_lat": 30
+      },
+      "thr": 4.1767,
+      "delta_pct": -22.56,
+      "jain_bin": 0.89566,
+      "maxmin": 2.1517,
+      "u": 3.7409,
+      "pass": false
+    },
+    {
+      "case": "S21+eq headroom 2.0 tol 0.08 win 64",
+      "over": {
+        "pace_headroom": 2.0,
+        "pace_gain": 0.25,
+        "pace_equalise": true,
+        "pace_tol": 0.08,
+        "pace_window": 64,
+        "pace_bus_lat": 30
+      },
+      "thr": 4.1767,
+      "delta_pct": -22.56,
+      "jain_bin": 0.89566,
+      "maxmin": 2.1517,
+      "u": 3.7409,
+      "pass": false
+    }
+  ]
+}

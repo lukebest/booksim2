@@ -1,0 +1,130 @@
+{
+ "k": 2000,
+ "scheme": "S0",
+ "makespan": 7741,
+ "thr": 5.1673,
+ "rows": [
+  {
+   "hop": "8:-1:req",
+   "role": "core",
+   "n": 3500,
+   "util": 0.45214,
+   "free": 5241,
+   "dry": 823,
+   "port": 3418,
+   "port_other": 478,
+   "port_none": 2940,
+   "wasted_pct_of_span": 54.79
+  },
+  {
+   "hop": "18:-1:req",
+   "role": "core",
+   "n": 3500,
+   "util": 0.45214,
+   "free": 5241,
+   "dry": 698,
+   "port": 3543,
+   "port_other": 480,
+   "port_none": 3063,
+   "wasted_pct_of_span": 54.79
+  },
+  {
+   "hop": "0:1:req",
+   "role": "core",
+   "n": 3500,
+   "util": 0.45214,
+   "free": 5241,
+   "dry": 656,
+   "port": 3585,
+   "port_other": 464,
+   "port_none": 3121,
+   "wasted_pct_of_span": 54.79
+  },
+  {
+   "hop": "1:-1:rsp",
+   "role": "mem",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 3241,
+   "dry": 92,
+   "port": 649,
+   "port_other": 649,
+   "port_none": 0,
+   "wasted_pct_of_span": 9.57
+  },
+  {
+   "hop": "11:-1:rsp",
+   "role": "mem",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 3241,
+   "dry": 83,
+   "port": 658,
+   "port_other": 658,
+   "port_none": 0,
+   "wasted_pct_of_span": 9.57
+  },
+  {
+   "hop": "7:1:rsp",
+   "role": "mem",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 3241,
+   "dry": 22,
+   "port": 719,
+   "port_other": 718,
+   "port_none": 1,
+   "wasted_pct_of_span": 9.57
+  },
+  {
+   "hop": "8:-1:dat",
+   "role": "core",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 2741,
+   "dry": 328,
+   "port": 413,
+   "port_other": 413,
+   "port_none": 0,
+   "wasted_pct_of_span": 9.57
+  },
+  {
+   "hop": "18:-1:dat",
+   "role": "core",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 2741,
+   "dry": 324,
+   "port": 417,
+   "port_other": 417,
+   "port_none": 0,
+   "wasted_pct_of_span": 9.57
+  },
+  {
+   "hop": "0:1:dat",
+   "role": "core",
+   "n": 7000,
+   "util": 0.90428,
+   "free": 2741,
+   "dry": 276,
+   "port": 465,
+   "port_other": 465,
+   "port_none": 0,
+   "wasted_pct_of_span": 9.57
+  }
+ ],
+ "totals": {
+  "req": {
+   "dry": 126104,
+   "port": 63536
+  },
+  "rsp": {
+   "dry": 51410,
+   "port": 18230
+  },
+  "dat": {
+   "dry": 55247,
+   "port": 14393
+  }
+ }
+}

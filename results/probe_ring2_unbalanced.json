@@ -1,0 +1,231 @@
+{
+  "k": 2000,
+  "lam_uniform": 0.2857142857142857,
+  "workloads": {
+    "uniform": {
+      "ideal": {
+        "lam_star": 0.28571428571428575,
+        "r_fair": 5.714285714285715,
+        "binding": "hop:10:11:dat",
+        "n_cores": 10
+      },
+      "rows": [
+        {
+          "name": "S0 baseline",
+          "kind": "—",
+          "thr": 5.3937,
+          "jain_bin": 0.87632,
+          "bw_vs_ideal": 0.9439,
+          "delta_vs_s0_pct": 0.0
+        },
+        {
+          "name": "S24 rate-pinned @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 5.2473,
+          "jain_bin": 0.97385,
+          "bw_vs_ideal": 0.91828,
+          "delta_vs_s0_pct": -2.71
+        },
+        {
+          "name": "S25 local-target @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 5.1033,
+          "jain_bin": 0.97901,
+          "bw_vs_ideal": 0.89308,
+          "delta_vs_s0_pct": -5.38
+        },
+        {
+          "name": "S22 deficit-yield STOCK bus30 w64",
+          "kind": "自适应",
+          "thr": 5.3858,
+          "jain_bin": 0.92046,
+          "bw_vs_ideal": 0.94251,
+          "delta_vs_s0_pct": -0.15
+        },
+        {
+          "name": "S23 fair-share pacer (bus)",
+          "kind": "自适应",
+          "thr": 5.3128,
+          "jain_bin": 0.92205,
+          "bw_vs_ideal": 0.92974,
+          "delta_vs_s0_pct": -1.5
+        },
+        {
+          "name": "S20 DCTCP",
+          "kind": "自适应",
+          "thr": 5.4237,
+          "jain_bin": 0.90441,
+          "bw_vs_ideal": 0.94915,
+          "delta_vs_s0_pct": 0.56
+        },
+        {
+          "name": "S16 grant withhold",
+          "kind": "自适应",
+          "thr": 5.4105,
+          "jain_bin": 0.87945,
+          "bw_vs_ideal": 0.94684,
+          "delta_vs_s0_pct": 0.31
+        },
+        {
+          "name": "S1T AIMD dir-split",
+          "kind": "自适应",
+          "thr": 5.2645,
+          "jain_bin": 0.8796,
+          "bw_vs_ideal": 0.92129,
+          "delta_vs_s0_pct": -2.4
+        }
+      ],
+      "n_txn": 20000
+    },
+    "hot": {
+      "ideal": {
+        "lam_star": 0.10000000000000002,
+        "r_fair": 2.0000000000000004,
+        "binding": "down:11:dat",
+        "n_cores": 10
+      },
+      "rows": [
+        {
+          "name": "S0 baseline",
+          "kind": "—",
+          "thr": 1.4803,
+          "jain_bin": 0.65471,
+          "bw_vs_ideal": 0.74015,
+          "delta_vs_s0_pct": 0.0
+        },
+        {
+          "name": "S24 rate-pinned @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 1.4102,
+          "jain_bin": 0.73632,
+          "bw_vs_ideal": 0.7051,
+          "delta_vs_s0_pct": -4.74
+        },
+        {
+          "name": "S25 local-target @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 1.4584,
+          "jain_bin": 0.68774,
+          "bw_vs_ideal": 0.7292,
+          "delta_vs_s0_pct": -1.48
+        },
+        {
+          "name": "S22 deficit-yield STOCK bus30 w64",
+          "kind": "自适应",
+          "thr": 1.4689,
+          "jain_bin": 0.71477,
+          "bw_vs_ideal": 0.73445,
+          "delta_vs_s0_pct": -0.77
+        },
+        {
+          "name": "S23 fair-share pacer (bus)",
+          "kind": "自适应",
+          "thr": 1.3744,
+          "jain_bin": 0.82353,
+          "bw_vs_ideal": 0.6872,
+          "delta_vs_s0_pct": -7.15
+        },
+        {
+          "name": "S20 DCTCP",
+          "kind": "自适应",
+          "thr": 1.9778,
+          "jain_bin": 0.35195,
+          "bw_vs_ideal": 0.9889,
+          "delta_vs_s0_pct": 33.61
+        },
+        {
+          "name": "S16 grant withhold",
+          "kind": "自适应",
+          "thr": 1.1602,
+          "jain_bin": 0.93109,
+          "bw_vs_ideal": 0.5801,
+          "delta_vs_s0_pct": -21.62
+        },
+        {
+          "name": "S1T AIMD dir-split",
+          "kind": "自适应",
+          "thr": 1.4611,
+          "jain_bin": 0.71183,
+          "bw_vs_ideal": 0.73055,
+          "delta_vs_s0_pct": -1.3
+        }
+      ],
+      "n_txn": 20000
+    },
+    "skew": {
+      "ideal": {
+        "lam_star": 0.28528656971770744,
+        "r_fair": 5.7057313943541486,
+        "binding": "hop:18:17:dat",
+        "n_cores": 10
+      },
+      "rows": [
+        {
+          "name": "S0 baseline",
+          "kind": "—",
+          "thr": 7.1454,
+          "jain_bin": 0.8839,
+          "bw_vs_ideal": 1.25232,
+          "delta_vs_s0_pct": 0.0
+        },
+        {
+          "name": "S24 rate-pinned @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 5.5417,
+          "jain_bin": 0.9763,
+          "bw_vs_ideal": 0.97125,
+          "delta_vs_s0_pct": -22.44
+        },
+        {
+          "name": "S25 local-target @uniform λ* (先验)",
+          "kind": "静态先验",
+          "thr": 5.4975,
+          "jain_bin": 0.97788,
+          "bw_vs_ideal": 0.9635,
+          "delta_vs_s0_pct": -23.06
+        },
+        {
+          "name": "S22 deficit-yield STOCK bus30 w64",
+          "kind": "自适应",
+          "thr": 6.9565,
+          "jain_bin": 0.92497,
+          "bw_vs_ideal": 1.21921,
+          "delta_vs_s0_pct": -2.64
+        },
+        {
+          "name": "S23 fair-share pacer (bus)",
+          "kind": "自适应",
+          "thr": 7.1826,
+          "jain_bin": 0.89663,
+          "bw_vs_ideal": 1.25884,
+          "delta_vs_s0_pct": 0.52
+        },
+        {
+          "name": "S20 DCTCP",
+          "kind": "自适应",
+          "thr": 7.2333,
+          "jain_bin": 0.92971,
+          "bw_vs_ideal": 1.26773,
+          "delta_vs_s0_pct": 1.23
+        },
+        {
+          "name": "S16 grant withhold",
+          "kind": "自适应",
+          "thr": 7.417,
+          "jain_bin": 0.89611,
+          "bw_vs_ideal": 1.29992,
+          "delta_vs_s0_pct": 3.8
+        },
+        {
+          "name": "S1T AIMD dir-split",
+          "kind": "自适应",
+          "thr": 7.0771,
+          "jain_bin": 0.88497,
+          "bw_vs_ideal": 1.24035,
+          "delta_vs_s0_pct": -0.96
+        }
+      ],
+      "n_txn": 13335
+    }
+  }
+}

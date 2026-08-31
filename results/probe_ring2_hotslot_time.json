@@ -1,0 +1,33 @@
+{
+  "k": 20000,
+  "bin_w": 50,
+  "r_star": 5.7143,
+  "makespan": 73152,
+  "whole_run_rate": 5.4681,
+  "hot_hop": {
+    "edge": "0->1",
+    "dir": 1,
+    "measured_crossings": 70104,
+    "bound_assumes": 70000,
+    "peak_bin_crossings": 50,
+    "peak_bin_util": 1.0
+  },
+  "window": {
+    "bins": 1114,
+    "span": 55700,
+    "write_flits": 335353,
+    "rate": 6.0207,
+    "pct_r_star": 105.36,
+    "hot_crossings": 54336,
+    "hot_util": 0.9755,
+    "hot_share_pct": 16.2,
+    "nominal_share_pct": 17.5,
+    "share_ceiling_pct": 16.61
+  },
+  "tail": {
+    "span": 17452,
+    "hot_crossings": 15768,
+    "hot_util": 0.9035
+  },
+  "physically_consistent": true
+}

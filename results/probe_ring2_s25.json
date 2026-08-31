@@ -1,0 +1,186 @@
+{
+  "k": 2000,
+  "s0_thr": 5.3937,
+  "s0_jbin": 0.87632,
+  "ideal_bw": 5.714285714285715,
+  "u_ideal": 5.712609561057374,
+  "fair_per_dir": 0.2857142857142857,
+  "best": {
+    "case": "S25 target0.571 thresh0.5 dodge8",
+    "over": {
+      "dfc_target": 0.5714285714285714,
+      "dfc_thresh": 0.5,
+      "dfc_dodge": 8,
+      "dfc_cap": 8.0
+    },
+    "thr": 5.1713,
+    "jain_bin": 0.98127,
+    "bw_vs_ideal": 0.90498,
+    "delta_vs_s0_pct": -4.12,
+    "eta": 0.88829,
+    "bus_posts": 0,
+    "pass": false
+  },
+  "rows": [
+    {
+      "case": "S25 target0.571 thresh0.5 dodge8",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 0.5,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.1713,
+      "jain_bin": 0.98127,
+      "bw_vs_ideal": 0.90498,
+      "delta_vs_s0_pct": -4.12,
+      "eta": 0.88829,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh0.5 dodge32",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 0.5,
+        "dfc_dodge": 32,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.1713,
+      "jain_bin": 0.98127,
+      "bw_vs_ideal": 0.90498,
+      "delta_vs_s0_pct": -4.12,
+      "eta": 0.88829,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh1.0 dodge8",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 1.0,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0884,
+      "jain_bin": 0.97809,
+      "bw_vs_ideal": 0.89047,
+      "delta_vs_s0_pct": -5.66,
+      "eta": 0.87122,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh1.0 dodge32",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 1.0,
+        "dfc_dodge": 32,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0884,
+      "jain_bin": 0.97809,
+      "bw_vs_ideal": 0.89047,
+      "delta_vs_s0_pct": -5.66,
+      "eta": 0.87122,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh2.0 dodge8",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 2.0,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0384,
+      "jain_bin": 0.97797,
+      "bw_vs_ideal": 0.88172,
+      "delta_vs_s0_pct": -6.59,
+      "eta": 0.86255,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh2.0 dodge32",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 2.0,
+        "dfc_dodge": 32,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0384,
+      "jain_bin": 0.97797,
+      "bw_vs_ideal": 0.88172,
+      "delta_vs_s0_pct": -6.59,
+      "eta": 0.86255,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh4.0 dodge8",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 4.0,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0416,
+      "jain_bin": 0.9796,
+      "bw_vs_ideal": 0.88228,
+      "delta_vs_s0_pct": -6.53,
+      "eta": 0.86454,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target0.571 thresh4.0 dodge32",
+      "over": {
+        "dfc_target": 0.5714285714285714,
+        "dfc_thresh": 4.0,
+        "dfc_dodge": 32,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0416,
+      "jain_bin": 0.9796,
+      "bw_vs_ideal": 0.88228,
+      "delta_vs_s0_pct": -6.53,
+      "eta": 0.86454,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target x1.05 thresh1.0 dodge8",
+      "over": {
+        "dfc_target": 0.6,
+        "dfc_thresh": 1.0,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0346,
+      "jain_bin": 0.96831,
+      "bw_vs_ideal": 0.88105,
+      "delta_vs_s0_pct": -6.66,
+      "eta": 0.85338,
+      "bus_posts": 0,
+      "pass": false
+    },
+    {
+      "case": "S25 target x1.15 thresh1.0 dodge8",
+      "over": {
+        "dfc_target": 0.657142857142857,
+        "dfc_thresh": 1.0,
+        "dfc_dodge": 8,
+        "dfc_cap": 8.0
+      },
+      "thr": 5.0,
+      "jain_bin": 0.94605,
+      "bw_vs_ideal": 0.875,
+      "delta_vs_s0_pct": -7.3,
+      "eta": 0.82804,
+      "bus_posts": 0,
+      "pass": false
+    }
+  ]
+}
