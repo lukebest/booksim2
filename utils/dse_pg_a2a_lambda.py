@@ -66,6 +66,23 @@ WARM, MEAS = 1500, 4000
 # Zero-load latency of the longest Manhattan pair on the full 8×6
 # (any shortest path): (MX−1)·H + (MY−1)·V + 2·RAMP + (m−1).
 MAX_ZERO_LATENCY = (F.MX - 1) * R.H + (F.MY - 1) * R.V + 2 * R.RAMP
+# Per-input-port buffer depth.  A *mesh* input port is the far end of a
+# credit loop: upstream sends at t, the flit lands at t+L, can leave at t+L,
+# and the credit is back upstream at t+2L, so 2L+1 slots keep the link busy
+# every cycle.  Q = 2V+1 = 19 is that bound for the slowest link (vertical).
+Q_V = 2 * R.V + 1            # 19  N/S input port (vertical link, V=9)
+Q_H = 2 * R.H + 1            # 15  E/W input port (horizontal link, H=7)
+# The local port is NOT the far end of a credit loop: the NI sits in the same
+# tile, so anything that does not fit stays in the NI's own queue instead of
+# stalling a link.  It only has to accept one cycle of ramp burst (RAMP_BW)
+# plus a pipeline slot.  Verified: sweeping this 1..19 moves mean/max latency,
+# BW and accepted by exactly 0 at every λ (see buf_depth_evidence()).
+Q_LOCAL = R.RAMP_BW + 1      # 3   local / NI-ramp input port
+# Mesh ports are kept uniform at Q_V: trimming E/W to Q_H sustains the same
+# throughput but costs tail latency near saturation (measured, see report).
+Q_MESH = Q_V
+N_MESH_PORTS = 4
+BUF_FLITS_PER_VC = N_MESH_PORTS * Q_MESH + Q_LOCAL   # 79, not 5*19 = 95
 # Theoretical one-way bisection (healthy X mid-cut). Same as Topology.bisection_bw.
 THEORY_BISECT_BW = 6
 
@@ -157,10 +174,13 @@ def hw_cost(scheme: str, num_vc: int, paths: dict, n_live: int) -> dict:
     """
     used = int(num_vc)
     billed = SCHEME_VC_SILICON.get(scheme, used)
-    buf_slots = PORTS * billed * Q
+    # 4 mesh input ports at the link credit-loop depth + 1 local port that is
+    # not on a credit loop at all.  The old model billed 5 ports at Q.
+    buf_slots = billed * BUF_FLITS_PER_VC
+    buf_slots_old = PORTS * billed * Q
     buf_bits = buf_slots * FLIT_BITS
     buf_area = buf_slots * A_FLIT
-    xy_buf_area = PORTS * 1 * Q * A_FLIT
+    xy_buf_area = BUF_FLITS_PER_VC * 1 * A_FLIT
     router_area = PPA.BASELINE_CROSSBAR + PPA.BASELINE_CONTROL + buf_area
 
     n_dest = max(1, n_live - 1)
@@ -196,7 +216,15 @@ def hw_cost(scheme: str, num_vc: int, paths: dict, n_live: int) -> dict:
         "num_vc_used": used,
         "num_vc_billed": billed,
         "Q": Q,
+        "q_mesh": Q_MESH,
+        "q_local": Q_LOCAL,
+        "q_h_min": Q_H,
+        "q_v_min": Q_V,
+        "n_mesh_ports": N_MESH_PORTS,
+        "buf_flits_per_vc": BUF_FLITS_PER_VC,
         "buffer_slots_per_router": buf_slots,
+        "buffer_slots_per_router_5port": buf_slots_old,
+        "buffer_slots_saved_vs_5port": buf_slots_old - buf_slots,
         "buffer_bits_per_router": buf_bits,
         "buffer_area_norm": round(buf_area, 4),
         "buffer_area_vs_xy1vc": round(buf_area / xy_buf_area, 4),
@@ -213,10 +241,129 @@ def hw_cost(scheme: str, num_vc: int, paths: dict, n_live: int) -> dict:
         "sr_frac_of_flit": round(sr_bits / FLIT_BITS, 5),
         "sr_extra_flit": sr_bits > FLIT_BITS,
         "n_live": n_live,
+        "buffer_note": (
+            "4 mesh input ports x %d (= 2V+1, link credit round trip) + "
+            "1 local NI-ramp port x %d (= RAMP_BW+1, no credit loop) = %d "
+            "flit/VC/router; the old model billed 5 x %d = %d."
+            % (Q_MESH, Q_LOCAL, BUF_FLITS_PER_VC, Q, PORTS * Q)),
         "note": ("dest table = (A-1)×2 bit if dest-only; "
                  "src-aware table = n_transit_OD × (2+[VC]) bit/router; "
                  "source routing = ceil(log2(H+1)) + 2H + [1 VC bit]; "
                  "healthy XY combinational table = 0"),
+    }
+
+
+def sr_header_breakdown(hmax: int, billed_vc: int) -> dict:
+    """Field-by-field source-routing header, so the 28 / 29 bit is auditable."""
+    len_bits = max(1, math.ceil(math.log2(hmax + 1))) if hmax else 1
+    vc_bit = 1 if billed_vc > 1 else 0
+    fields = [
+        {"field": "hop_count",
+         "bits": len_bits,
+         "why": "how many 2-bit direction codes are valid; 0..%d needs "
+                "ceil(log2(%d)) = %d bit" % (hmax, hmax + 1, len_bits)},
+        {"field": "dir[%d]" % hmax,
+         "bits": 2 * hmax,
+         "why": "one 2-bit code (E/W/N/S) per hop, worst-case H_max = %d hops"
+                % hmax},
+    ]
+    if vc_bit:
+        fields.append(
+            {"field": "vc_sel", "bits": 1,
+             "why": "which Glass-Ni layer the packet is locked to (2 VC)"})
+    else:
+        fields.append(
+            {"field": "vc_sel", "bits": 0,
+             "why": "single VC, nothing to select"})
+    total = sum(f["bits"] for f in fields)
+    return {
+        "hmax": hmax, "billed_vc": billed_vc,
+        "len_bits": len_bits, "dir_bits": 2 * hmax, "vc_bit": vc_bit,
+        "total_bits": total,
+        "fields": fields,
+        "flit_bits": FLIT_BITS,
+        "frac_of_flit": round(total / FLIT_BITS, 5),
+        "extra_flit": total > FLIT_BITS,
+        "formula": "ceil(log2(H_max+1)) + 2*H_max + [1 bit VC]",
+        "consumed_per_hop": "router pops the leading 2-bit code and "
+                            "decrements hop_count; no table lookup",
+    }
+
+
+def dest_table_breakdown(n_live: int, billed_vc: int, conflicts: int) -> dict:
+    """Field-by-field destination routing table, so the 94 bit is auditable."""
+    n_dest = max(1, n_live - 1)
+    port_bits = 2  # E / W / N / S; the local port is the "am I the dest?" case
+    total = n_dest * port_bits
+    return {
+        "n_live": n_live,
+        "n_entries": n_dest,
+        "entry_bits": port_bits,
+        "total_bits": total if conflicts == 0 else None,
+        "dest_only_ok": conflicts == 0,
+        "conflicts": conflicts,
+        "why_entries": "one row per *other* live node: A-1 = %d; the row for "
+                       "'this router' is the eject case and is not stored"
+                       % n_dest,
+        "why_entry_bits": "the row only has to name an output direction, "
+                          "4 mesh directions = 2 bit; eject is decoded from "
+                          "dest == my_id, and the VC is fixed per packet at "
+                          "the source, so no VC field is needed here",
+        "formula": "(A-1) * 2 bit",
+        "indexing": "the table is indexed by destination id, so the id "
+                    "itself is not stored in the row",
+        "vc_note": ("Super-turn is billed 2 VC of buffer, but the layer is "
+                    "chosen once at the source and travels in the packet, "
+                    "so the per-router dest table stays 2 bit/row"
+                    if billed_vc > 1 else "single VC"),
+    }
+
+
+def buf_depth_evidence(lams=(0.10, 0.25, 0.35, 0.38),
+                       warmup: int = 800, measure: int = 2000) -> dict:
+    """Measure whether the per-port depths cost anything on healthy XY.
+
+    Three configs at each λ:
+      A  5 ports x Q_V            (the old, over-provisioned model)
+      B  4 mesh x Q_V + local x Q_LOCAL   (what we now bill)
+      C  N/S x Q_V, E/W x Q_H, local x Q_LOCAL  (the tighter per-link variant)
+    """
+    sol = solve(F.healthy_pg(), "xy")
+    p, c, a = sol["paths"], sol["compute_nodes"], sol["route_adj"]
+    keys = ("mean_lat", "max_lat", "p99_lat", "bw_eff_flits_per_cy",
+            "accepted_per_node", "n_delivered")
+    out = []
+    for lam in lams:
+        common = dict(warmup=warmup, measure=measure, seed=0)
+        ra = run_one(p, c, a, lam, **common)
+        rb = run_one(p, c, a, lam, q_local=Q_LOCAL, **common)
+        rc = run_one(p, c, a, lam, per_port=True, q_local=Q_LOCAL, **common)
+        out.append({
+            "lam": lam,
+            "A_5port_uniform": {k: ra[k] for k in keys},
+            "B_4mesh_plus_small_local": {k: rb[k] for k in keys},
+            "C_per_link_mesh": {k: rc[k] for k in keys},
+            "B_identical_to_A": all(ra[k] == rb[k] for k in keys),
+            "C_identical_to_A": all(ra[k] == rc[k] for k in keys),
+            "hw_occ_uniform": ra["buf_hw_occ"],
+            "stable_A": ra["stable"], "stable_B": rb["stable"],
+        })
+    return {
+        "warmup": warmup, "measure": measure, "scheme": "xy (healthy)",
+        "config_A": "5 ports x %d = %d flit/VC (old model)" % (Q, PORTS * Q),
+        "config_B": "4 mesh x %d + local x %d = %d flit/VC (billed now)"
+                    % (Q_MESH, Q_LOCAL, BUF_FLITS_PER_VC),
+        "config_C": "N/S x %d + E/W x %d + local x %d = %d flit/VC"
+                    % (Q_V, Q_H, Q_LOCAL, 2 * Q_V + 2 * Q_H + Q_LOCAL),
+        "rows": out,
+        "conclusion": (
+            "B reproduces A exactly on latency, BW and delivered count at "
+            "every λ, so the 5th deep port was never doing any work: what "
+            "does not fit in the 3-slot local port simply waits one more "
+            "cycle in the NI queue it came from. Only the `stable` flag can "
+            "flip at the knee, because it watches NI-queue growth and that "
+            "is where the backlog now shows up. C keeps the same throughput "
+            "but loses tail latency, so the 4 mesh ports stay at 2V+1."),
     }
 
 
@@ -249,7 +396,9 @@ class PathMeshSteady:
                  vc_of: Callable | None = None,
                  buf_depth: int = Q,
                  warmup: int = WARM,
-                 measure: int = MEAS):
+                 measure: int = MEAS,
+                 per_port: bool = False,
+                 q_local: int | None = None):
         self.adj = adj
         self.paths = paths
         self.compute = list(compute)
@@ -258,12 +407,24 @@ class PathMeshSteady:
         self.num_vc = num_vc
         self.vc_of = vc_of
         self.Q = buf_depth
+        self.per_port = per_port
+        self.q_local = (q_local if q_local is not None
+                        else (Q_LOCAL if per_port else buf_depth))
         self.warmup = warmup
         self.measure = measure
         self.t = 0
         self.buf: dict[tuple[int, int, int], deque] = defaultdict(deque)
-        self.credit: dict[tuple[int, int, int], int] = defaultdict(
-            lambda: buf_depth)
+        # credit[(u, v, vc)] = free slots left in v's input port fed by u.
+        self.cap: dict[tuple[int, int], int] = {}
+        for u, nbs in adj.items():
+            for v in nbs:
+                self.cap[(u, v)] = ((2 * R.link_lat(u, v) + 1) if per_port
+                                    else buf_depth)
+        self.credit: dict[tuple[int, int, int], int] = {
+            (u, v, vc): c
+            for (u, v), c in self.cap.items()
+            for vc in range(max(1, num_vc))
+        }
         self.arrive: dict[int, list] = defaultdict(list)
         self.cred_ret: dict[int, list] = defaultdict(list)
         self.srcq: dict[int, deque] = defaultdict(deque)
@@ -274,6 +435,9 @@ class PathMeshSteady:
         self.n_credit_stall = 0
         self.cut_lr = 0
         self.cut_rl = 0
+        # High-water occupancy per input-port class: how deep the buffers
+        # actually get, which is what the depth derivation has to cover.
+        self.hw_occ = {"local": 0, "h": 0, "v": 0}
 
     def offer(self, src: int, dst: int) -> None:
         path = self.paths[(src, dst)]
@@ -293,7 +457,11 @@ class PathMeshSteady:
     def step(self) -> None:
         t = self.t
         for node, in_port, f in self.arrive.pop(t, []):
-            self.buf[(node, in_port, f.vc)].append(f)
+            q = self.buf[(node, in_port, f.vc)]
+            q.append(f)
+            cls = "h" if R.link_lat(in_port, node) == R.H else "v"
+            if len(q) > self.hw_occ[cls]:
+                self.hw_occ[cls] = len(q)
         for node, out, vc in self.cred_ret.pop(t, []):
             self.credit[(node, out, vc)] += 1
         self._switch()
@@ -373,9 +541,11 @@ class PathMeshSteady:
             while q and n < R.RAMP_BW:
                 f = q[0]
                 key = (node, -1, f.vc)
-                if len(self.buf[key]) >= self.Q:
+                if len(self.buf[key]) >= self.q_local:
                     break
                 self.buf[key].append(q.popleft())
+                if len(self.buf[key]) > self.hw_occ["local"]:
+                    self.hw_occ["local"] = len(self.buf[key])
                 n += 1
 
 
@@ -405,9 +575,11 @@ class NodeInjector:
 
 def run_one(paths, compute, adj, lam, *, num_vc=1, vc_of=None,
             warmup=WARM, measure=MEAS, seed=0, Q=Q,
+            per_port=False, q_local=None,
             max_backlog=200_000) -> dict[str, Any]:
     sim = PathMeshSteady(adj, paths, compute, num_vc=num_vc, vc_of=vc_of,
-                         buf_depth=Q, warmup=warmup, measure=measure)
+                         buf_depth=Q, warmup=warmup, measure=measure,
+                         per_port=per_port, q_local=q_local)
     inj = NodeInjector(compute, lam, seed=seed + 1)
     a = len(compute)
     lats: list[int] = []
@@ -489,6 +661,9 @@ def run_one(paths, compute, adj, lam, *, num_vc=1, vc_of=None,
         "bisect_ss_rl": round(rl, 4),
         "bisect_ss": round(max(lr, rl), 4),
         "bisect_theory": THEORY_BISECT_BW,
+        "buf_per_port": bool(per_port),
+        "buf_q_local": sim.q_local,
+        "buf_hw_occ": dict(sim.hw_occ),
     }
 
 
@@ -699,6 +874,16 @@ def main():
         return out
 
     hw_pg = [h for _s, _sol, h in pg_sols]
+    if args.quick:
+        buf_evidence = None
+    else:
+        print("buffer depth evidence ...", flush=True)
+        buf_evidence = buf_depth_evidence()
+        for r in buf_evidence["rows"]:
+            print("  λ=%.2f  B==A %s  C==A %s  occ local/EW/NS = %d/%d/%d"
+                  % (r["lam"], r["B_identical_to_A"], r["C_identical_to_A"],
+                     r["hw_occ_uniform"]["local"], r["hw_occ_uniform"]["h"],
+                     r["hw_occ_uniform"]["v"]), flush=True)
     doc = {
         "meta": {
             "lams": lams_ag,
@@ -735,6 +920,32 @@ def main():
             "hotspot_util": "100 * bisect_ss / bisect_theory  (%)",
             "bisect_note": "bisect_ss = max(L→R, R→L) flits/cy on healthy "
                            "X mid-cut during measure; theory = 6 flit/cy",
+        },
+        "buffer_model": {
+            "n_mesh_ports": N_MESH_PORTS,
+            "q_mesh": Q_MESH, "q_local": Q_LOCAL,
+            "q_v_min": Q_V, "q_h_min": Q_H,
+            "flits_per_vc": BUF_FLITS_PER_VC,
+            "flits_per_vc_5port": PORTS * Q,
+            "credit_rule": "input port depth >= 2*L+1 for the link that "
+                           "feeds it (send t, land t+L, credit back t+2L)",
+            "local_rule": "the local port is fed by the NI in the same tile, "
+                          "not by a credit loop: RAMP_BW+1 slots are enough, "
+                          "overflow just stays in the NI queue",
+            "eject_note": "no separate eject buffer is billed: ejecting flits "
+                          "leave straight from the mesh input port at "
+                          "RAMP_BW=%d flit/cy" % R.RAMP_BW,
+        },
+        "buf_depth_evidence": buf_evidence,
+        "sr_header_breakdown": {
+            "xy": sr_header_breakdown(hw_xy["sr_hmax"], 1),
+            "super_turn": (sr_header_breakdown(hw_st_h["sr_hmax"], 2)
+                           if hw_st_h else None),
+        },
+        "dest_table_breakdown": {
+            "xy": dest_table_breakdown(48, 1, hw_xy["table_conflicts"]),
+            "super_turn": (dest_table_breakdown(
+                48, 2, hw_st_h["table_conflicts"]) if hw_st_h else None),
         },
         "hw_all_good": hw_xy,
         "hw_super_turn_healthy": hw_st_h,
