@@ -1,0 +1,1830 @@
+{
+  "k": 1500,
+  "bin_w": 100,
+  "rows": [
+    {
+      "name": "S0",
+      "scheme": "S0",
+      "cfg": {},
+      "thr": 5.4775,
+      "d_bw_pct": 0.0,
+      "jain_bin": 0.92964,
+      "max_min": 1.5228,
+      "makespan": 5477,
+      "completed": true,
+      "fc": {}
+    },
+    {
+      "name": "S1",
+      "scheme": "S1",
+      "cfg": {},
+      "thr": 4.4359,
+      "d_bw_pct": -19.02,
+      "jain_bin": 0.96493,
+      "max_min": 1.4375,
+      "makespan": 6763,
+      "completed": true,
+      "fc": {
+        "mode": "s1",
+        "window": 64,
+        "band": "spec",
+        "scope": "core_only",
+        "bus_lat": 30,
+        "bus_posts": 2100,
+        "bus_bits": 12600,
+        "n_fc_deny": 94108,
+        "n_aimd_increase": 937,
+        "n_aimd_decrease": 113,
+        "n_reserved": 0,
+        "n_reserve_used": 0,
+        "n_reserve_yield": 0,
+        "path_nodes": {
+          "0": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "2": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "4": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            16,
+            17,
+            18,
+            19
+          ],
+          "6": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            18,
+            19
+          ],
+          "8": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ],
+          "10": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ],
+          "12": [
+            0,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "14": [
+            0,
+            1,
+            2,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "16": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ],
+          "18": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+          ]
+        },
+        "final_budget": {
+          "0": 163,
+          "2": 192,
+          "4": 192,
+          "6": 192,
+          "8": 152,
+          "10": 155,
+          "12": 185,
+          "14": 171,
+          "16": 180,
+          "18": 179
+        },
+        "mean_budget": {
+          "0": 46.24,
+          "2": 63.9,
+          "4": 68.3,
+          "6": 62.88,
+          "8": 50.43,
+          "10": 51.53,
+          "12": 57.85,
+          "14": 57.63,
+          "16": 58.44,
+          "18": 54.74
+        },
+        "mean_level": {
+          "0": 0.267,
+          "2": 0.181,
+          "4": 0.171,
+          "6": 0.181,
+          "8": 0.219,
+          "10": 0.238,
+          "12": 0.2,
+          "14": 0.21,
+          "16": 0.2,
+          "18": 0.21
+        },
+        "mean_recv_level": {
+          "0": 5.314,
+          "2": 5.486,
+          "4": 5.457,
+          "6": 5.448,
+          "8": 5.4,
+          "10": 5.4,
+          "12": 5.476,
+          "14": 5.467,
+          "16": 5.486,
+          "18": 5.314
+        }
+      }
+    },
+    {
+      "name": "S28 static",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 0.98,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 2.0,
+        "rcp_mode": "static"
+      },
+      "thr": 3.4297,
+      "d_bw_pct": -37.39,
+      "jain_bin": 0.98538,
+      "max_min": 1.0359,
+      "makespan": 8747,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 0.98,
+        "g": 0.5,
+        "rcp_mode": "static",
+        "alpha": 0.5,
+        "pace_burst": 2.0,
+        "bus_posts": 5440,
+        "bus_bits": 32640,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 284754,
+        "rate_final": {
+          "0": 0.18303,
+          "2": 0.16654,
+          "4": 0.15843,
+          "6": 0.15002,
+          "8": 0.26255,
+          "10": 0.24794,
+          "12": 0.13243,
+          "14": 0.14078,
+          "16": 0.14483,
+          "18": 0.38216
+        },
+        "rate_mean": {
+          "0": 0.20433,
+          "2": 0.19953,
+          "4": 0.19855,
+          "6": 0.20021,
+          "8": 0.20342,
+          "10": 0.20081,
+          "12": 0.20001,
+          "14": 0.20181,
+          "16": 0.20054,
+          "18": 0.20045
+        },
+        "rate_mean_all": 0.20097,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.4921
+          ],
+          [
+            "1:11",
+            0.4921
+          ],
+          [
+            "1:12",
+            0.4921
+          ],
+          [
+            "1:13",
+            0.4921
+          ],
+          [
+            "1:14",
+            0.4921
+          ],
+          [
+            "1:16",
+            0.4921
+          ],
+          [
+            "-1:4",
+            0.4921
+          ],
+          [
+            "-1:5",
+            0.4921
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.25 b1.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 1.0,
+        "rcp_alpha": 0.25
+      },
+      "thr": 4.7885,
+      "d_bw_pct": -12.58,
+      "jain_bin": 0.97139,
+      "max_min": 1.3263,
+      "makespan": 6265,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.25,
+        "pace_burst": 1.0,
+        "bus_posts": 3880,
+        "bus_bits": 23280,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 163164,
+        "rate_final": {
+          "0": 0.37713,
+          "2": 0.2998,
+          "4": 0.39611,
+          "6": 0.38037,
+          "8": 0.50926,
+          "10": 0.53475,
+          "12": 0.30431,
+          "14": 0.42715,
+          "16": 0.29717,
+          "18": 0.48871
+        },
+        "rate_mean": {
+          "0": 0.34732,
+          "2": 0.37267,
+          "4": 0.40478,
+          "6": 0.35153,
+          "8": 0.33203,
+          "10": 0.32546,
+          "12": 0.38561,
+          "14": 0.40291,
+          "16": 0.37246,
+          "18": 0.34731
+        },
+        "rate_mean_all": 0.36421,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.5714
+          ],
+          [
+            "-1:6",
+            0.8254
+          ],
+          [
+            "-1:8",
+            0.8413
+          ],
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.25 b2.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 2.0,
+        "rcp_alpha": 0.25
+      },
+      "thr": 4.935,
+      "d_bw_pct": -9.9,
+      "jain_bin": 0.95954,
+      "max_min": 1.4078,
+      "makespan": 6079,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.25,
+        "pace_burst": 2.0,
+        "bus_posts": 3760,
+        "bus_bits": 22560,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 138114,
+        "rate_final": {
+          "0": 0.51263,
+          "2": 0.32399,
+          "4": 0.38534,
+          "6": 0.29459,
+          "8": 0.42841,
+          "10": 0.40093,
+          "12": 0.25314,
+          "14": 0.31009,
+          "16": 0.26176,
+          "18": 0.39568
+        },
+        "rate_mean": {
+          "0": 0.32638,
+          "2": 0.34891,
+          "4": 0.35762,
+          "6": 0.3264,
+          "8": 0.31072,
+          "10": 0.30801,
+          "12": 0.32625,
+          "14": 0.35885,
+          "16": 0.33701,
+          "18": 0.32291
+        },
+        "rate_mean_all": 0.33231,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.4921
+          ],
+          [
+            "-1:8",
+            0.6349
+          ],
+          [
+            "-1:6",
+            0.746
+          ],
+          [
+            "1:12",
+            0.7619
+          ],
+          [
+            "1:0",
+            0.9365
+          ],
+          [
+            "-1:18",
+            0.9683
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.25 b4.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 4.0,
+        "rcp_alpha": 0.25
+      },
+      "thr": 5.0025,
+      "d_bw_pct": -8.67,
+      "jain_bin": 0.96519,
+      "max_min": 1.3304,
+      "makespan": 5997,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.25,
+        "pace_burst": 4.0,
+        "bus_posts": 3720,
+        "bus_bits": 22320,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 134140,
+        "rate_final": {
+          "0": 0.52533,
+          "2": 0.3127,
+          "4": 0.25617,
+          "6": 0.26777,
+          "8": 0.42203,
+          "10": 0.43244,
+          "12": 0.25362,
+          "14": 0.38578,
+          "16": 0.32944,
+          "18": 0.38804
+        },
+        "rate_mean": {
+          "0": 0.31985,
+          "2": 0.34566,
+          "4": 0.33953,
+          "6": 0.31745,
+          "8": 0.30218,
+          "10": 0.29963,
+          "12": 0.32604,
+          "14": 0.37159,
+          "16": 0.34477,
+          "18": 0.31965
+        },
+        "rate_mean_all": 0.32864,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.4444
+          ],
+          [
+            "-1:8",
+            0.5873
+          ],
+          [
+            "-1:6",
+            0.6508
+          ],
+          [
+            "1:12",
+            0.6667
+          ],
+          [
+            "-1:18",
+            0.7937
+          ],
+          [
+            "1:0",
+            0.8254
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.5 b1.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 1.0,
+        "rcp_alpha": 0.5
+      },
+      "thr": 5.1195,
+      "d_bw_pct": -6.54,
+      "jain_bin": 0.95915,
+      "max_min": 1.4395,
+      "makespan": 5860,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.5,
+        "pace_burst": 1.0,
+        "bus_posts": 3640,
+        "bus_bits": 21840,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 131860,
+        "rate_final": {
+          "0": 0.64293,
+          "2": 0.37318,
+          "4": 0.35752,
+          "6": 0.38154,
+          "8": 0.57193,
+          "10": 0.59583,
+          "12": 0.363,
+          "14": 0.49214,
+          "16": 0.39733,
+          "18": 0.79601
+        },
+        "rate_mean": {
+          "0": 0.38733,
+          "2": 0.42418,
+          "4": 0.46205,
+          "6": 0.40243,
+          "8": 0.37168,
+          "10": 0.37121,
+          "12": 0.44986,
+          "14": 0.48811,
+          "16": 0.42573,
+          "18": 0.39176
+        },
+        "rate_mean_all": 0.41743,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.6667
+          ],
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ],
+          [
+            "1:6",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.5 b2.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 2.0,
+        "rcp_alpha": 0.5
+      },
+      "thr": 5.2292,
+      "d_bw_pct": -4.53,
+      "jain_bin": 0.9566,
+      "max_min": 1.4306,
+      "makespan": 5737,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.5,
+        "pace_burst": 2.0,
+        "bus_posts": 3560,
+        "bus_bits": 21360,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 102442,
+        "rate_final": {
+          "0": 0.61182,
+          "2": 0.4106,
+          "4": 0.449,
+          "6": 0.31578,
+          "8": 0.58735,
+          "10": 0.49511,
+          "12": 0.35681,
+          "14": 0.44848,
+          "16": 0.36657,
+          "18": 0.50132
+        },
+        "rate_mean": {
+          "0": 0.34798,
+          "2": 0.39315,
+          "4": 0.42626,
+          "6": 0.36164,
+          "8": 0.3393,
+          "10": 0.33705,
+          "12": 0.37586,
+          "14": 0.43887,
+          "16": 0.38077,
+          "18": 0.34616
+        },
+        "rate_mean_all": 0.37471,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.5397
+          ],
+          [
+            "-1:8",
+            0.7302
+          ],
+          [
+            "-1:18",
+            0.9524
+          ],
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a0.5 b4.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 4.0,
+        "rcp_alpha": 0.5
+      },
+      "thr": 5.2274,
+      "d_bw_pct": -4.57,
+      "jain_bin": 0.94939,
+      "max_min": 1.4521,
+      "makespan": 5739,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 0.5,
+        "pace_burst": 4.0,
+        "bus_posts": 3560,
+        "bus_bits": 21360,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 89280,
+        "rate_final": {
+          "0": 0.56841,
+          "2": 0.41868,
+          "4": 0.38672,
+          "6": 0.35646,
+          "8": 0.54973,
+          "10": 0.53722,
+          "12": 0.32988,
+          "14": 0.41357,
+          "16": 0.39545,
+          "18": 0.518
+        },
+        "rate_mean": {
+          "0": 0.34488,
+          "2": 0.39737,
+          "4": 0.40848,
+          "6": 0.3628,
+          "8": 0.33207,
+          "10": 0.33929,
+          "12": 0.3679,
+          "14": 0.4273,
+          "16": 0.3889,
+          "18": 0.34844
+        },
+        "rate_mean_all": 0.37174,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.5714
+          ],
+          [
+            "-1:8",
+            0.7619
+          ],
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a1.0 b1.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 1.0,
+        "rcp_alpha": 1.0
+      },
+      "thr": 5.2247,
+      "d_bw_pct": -4.62,
+      "jain_bin": 0.94332,
+      "max_min": 1.5682,
+      "makespan": 5742,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 1.0,
+        "pace_burst": 1.0,
+        "bus_posts": 3560,
+        "bus_bits": 21360,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 94424,
+        "rate_final": {
+          "0": 0.70568,
+          "2": 0.43897,
+          "4": 0.56505,
+          "6": 0.50325,
+          "8": 0.90731,
+          "10": 0.70736,
+          "12": 0.47473,
+          "14": 0.63632,
+          "16": 0.66376,
+          "18": 0.81248
+        },
+        "rate_mean": {
+          "0": 0.46167,
+          "2": 0.53176,
+          "4": 0.6194,
+          "6": 0.49653,
+          "8": 0.45098,
+          "10": 0.44917,
+          "12": 0.54609,
+          "14": 0.64714,
+          "16": 0.56432,
+          "18": 0.46343
+        },
+        "rate_mean_all": 0.52305,
+        "tightest_hops": [
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ],
+          [
+            "1:6",
+            1.0
+          ],
+          [
+            "1:7",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a1.0 b2.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 2.0,
+        "rcp_alpha": 1.0
+      },
+      "thr": 5.3381,
+      "d_bw_pct": -2.54,
+      "jain_bin": 0.93729,
+      "max_min": 1.5198,
+      "makespan": 5620,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 1.0,
+        "pace_burst": 2.0,
+        "bus_posts": 3480,
+        "bus_bits": 20880,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 71758,
+        "rate_final": {
+          "0": 0.67641,
+          "2": 0.32907,
+          "4": 0.40701,
+          "6": 0.33766,
+          "8": 0.65153,
+          "10": 0.81516,
+          "12": 0.41166,
+          "14": 0.51433,
+          "16": 0.40968,
+          "18": 0.65279
+        },
+        "rate_mean": {
+          "0": 0.39055,
+          "2": 0.41969,
+          "4": 0.48464,
+          "6": 0.39938,
+          "8": 0.38262,
+          "10": 0.38231,
+          "12": 0.44796,
+          "14": 0.51883,
+          "16": 0.43359,
+          "18": 0.38716
+        },
+        "rate_mean_all": 0.42467,
+        "tightest_hops": [
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ],
+          [
+            "1:6",
+            1.0
+          ],
+          [
+            "1:7",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 a1.0 b4.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.5,
+        "rcp_pace_burst": 4.0,
+        "rcp_alpha": 1.0
+      },
+      "thr": 5.3381,
+      "d_bw_pct": -2.54,
+      "jain_bin": 0.94331,
+      "max_min": 1.5715,
+      "makespan": 5620,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.5,
+        "rcp_mode": "rcp",
+        "alpha": 1.0,
+        "pace_burst": 4.0,
+        "bus_posts": 3480,
+        "bus_bits": 20880,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 48814,
+        "rate_final": {
+          "0": 0.68888,
+          "2": 0.33914,
+          "4": 0.48627,
+          "6": 0.33251,
+          "8": 0.78563,
+          "10": 0.47856,
+          "12": 0.42822,
+          "14": 0.47083,
+          "16": 0.36408,
+          "18": 0.51734
+        },
+        "rate_mean": {
+          "0": 0.38294,
+          "2": 0.42648,
+          "4": 0.5252,
+          "6": 0.41553,
+          "8": 0.38726,
+          "10": 0.38857,
+          "12": 0.44968,
+          "14": 0.51165,
+          "16": 0.42446,
+          "18": 0.38006
+        },
+        "rate_mean_all": 0.42918,
+        "tightest_hops": [
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ],
+          [
+            "1:6",
+            1.0
+          ],
+          [
+            "1:7",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 g0.25",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 0.25,
+        "rcp_pace_burst": 2.0
+      },
+      "thr": 5.1921,
+      "d_bw_pct": -5.21,
+      "jain_bin": 0.94294,
+      "max_min": 1.5236,
+      "makespan": 5778,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 0.25,
+        "rcp_mode": "rcp",
+        "alpha": 0.5,
+        "pace_burst": 2.0,
+        "bus_posts": 3600,
+        "bus_bits": 21600,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 101704,
+        "rate_final": {
+          "0": 0.55658,
+          "2": 0.40668,
+          "4": 0.46773,
+          "6": 0.33962,
+          "8": 0.60341,
+          "10": 0.58117,
+          "12": 0.33506,
+          "14": 0.3863,
+          "16": 0.32579,
+          "18": 0.50379
+        },
+        "rate_mean": {
+          "0": 0.3889,
+          "2": 0.4231,
+          "4": 0.44779,
+          "6": 0.3884,
+          "8": 0.37482,
+          "10": 0.36823,
+          "12": 0.39844,
+          "14": 0.43826,
+          "16": 0.40687,
+          "18": 0.3845
+        },
+        "rate_mean_all": 0.40193,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.619
+          ],
+          [
+            "-1:8",
+            0.8254
+          ],
+          [
+            "-1:18",
+            0.8889
+          ],
+          [
+            "1:0",
+            0.9683
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S28 g1.0",
+      "scheme": "S28",
+      "cfg": {
+        "rcp_window": 64,
+        "rcp_target": 1.0,
+        "rcp_g": 1.0,
+        "rcp_pace_burst": 2.0
+      },
+      "thr": 5.1858,
+      "d_bw_pct": -5.33,
+      "jain_bin": 0.94106,
+      "max_min": 1.5568,
+      "makespan": 5785,
+      "completed": true,
+      "fc": {
+        "mode": "s28",
+        "actuator": "req_leaky_bucket",
+        "signal": "explicit_rate",
+        "window": 64,
+        "bus_lat": 30,
+        "target": 1.0,
+        "g": 1.0,
+        "rcp_mode": "rcp",
+        "alpha": 0.5,
+        "pace_burst": 2.0,
+        "bus_posts": 3600,
+        "bus_bits": 21600,
+        "word_bits": 6,
+        "n_words_per_window": 40,
+        "n_rcp_deny": 104760,
+        "rate_final": {
+          "0": 0.8625,
+          "2": 0.34226,
+          "4": 0.37037,
+          "6": 0.33333,
+          "8": 0.57983,
+          "10": 0.41723,
+          "12": 0.2963,
+          "14": 0.19841,
+          "16": 0.31293,
+          "18": 0.28571
+        },
+        "rate_mean": {
+          "0": 0.34793,
+          "2": 0.37197,
+          "4": 0.39908,
+          "6": 0.35134,
+          "8": 0.32451,
+          "10": 0.32913,
+          "12": 0.35605,
+          "14": 0.36454,
+          "16": 0.36481,
+          "18": 0.33611
+        },
+        "rate_mean_all": 0.35455,
+        "tightest_hops": [
+          [
+            "1:10",
+            0.5079
+          ],
+          [
+            "-1:8",
+            0.7302
+          ],
+          [
+            "1:0",
+            1.0
+          ],
+          [
+            "1:1",
+            1.0
+          ],
+          [
+            "1:2",
+            1.0
+          ],
+          [
+            "1:3",
+            1.0
+          ],
+          [
+            "1:4",
+            1.0
+          ],
+          [
+            "1:5",
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "S29 s1 d8",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 1,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 8
+      },
+      "thr": 5.1555,
+      "d_bw_pct": -5.88,
+      "jain_bin": 0.94574,
+      "max_min": 1.5991,
+      "makespan": 5819,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 1,
+        "frame": 10,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 8,
+        "bus_posts": 900,
+        "bus_bits": 900,
+        "n_tdma_yield": 12800,
+        "n_tdma_dodge": 3490,
+        "n_idle_slots_saved": 120,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 303,
+          "4": 261,
+          "6": 288,
+          "8": 233,
+          "10": 375,
+          "12": 417,
+          "14": 279,
+          "16": 388,
+          "18": 341
+        }
+      }
+    },
+    {
+      "name": "S29 s1 d32",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 1,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 32
+      },
+      "thr": 5.1555,
+      "d_bw_pct": -5.88,
+      "jain_bin": 0.94574,
+      "max_min": 1.5991,
+      "makespan": 5819,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 1,
+        "frame": 10,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 32,
+        "bus_posts": 900,
+        "bus_bits": 900,
+        "n_tdma_yield": 12800,
+        "n_tdma_dodge": 3490,
+        "n_idle_slots_saved": 120,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 303,
+          "4": 261,
+          "6": 288,
+          "8": 233,
+          "10": 375,
+          "12": 417,
+          "14": 279,
+          "16": 388,
+          "18": 341
+        }
+      }
+    },
+    {
+      "name": "S29 s2 d8",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 2,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 8
+      },
+      "thr": 5.0822,
+      "d_bw_pct": -7.22,
+      "jain_bin": 0.95706,
+      "max_min": 1.3768,
+      "makespan": 5903,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 2,
+        "frame": 20,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 8,
+        "bus_posts": 920,
+        "bus_bits": 920,
+        "n_tdma_yield": 16228,
+        "n_tdma_dodge": 3130,
+        "n_idle_slots_saved": 101,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 361,
+          "4": 326,
+          "6": 366,
+          "8": 348,
+          "10": 352,
+          "12": 458,
+          "14": 424,
+          "16": 355,
+          "18": 322
+        }
+      }
+    },
+    {
+      "name": "S29 s2 d32",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 2,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 32
+      },
+      "thr": 5.0822,
+      "d_bw_pct": -7.22,
+      "jain_bin": 0.95706,
+      "max_min": 1.3768,
+      "makespan": 5903,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 2,
+        "frame": 20,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 32,
+        "bus_posts": 920,
+        "bus_bits": 920,
+        "n_tdma_yield": 16228,
+        "n_tdma_dodge": 3130,
+        "n_idle_slots_saved": 101,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 361,
+          "4": 326,
+          "6": 366,
+          "8": 348,
+          "10": 352,
+          "12": 458,
+          "14": 424,
+          "16": 355,
+          "18": 322
+        }
+      }
+    },
+    {
+      "name": "S29 s3 d8",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 3,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 8
+      },
+      "thr": 4.6904,
+      "d_bw_pct": -14.37,
+      "jain_bin": 0.948,
+      "max_min": 1.6216,
+      "makespan": 6396,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 3,
+        "frame": 30,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 8,
+        "bus_posts": 990,
+        "bus_bits": 990,
+        "n_tdma_yield": 18796,
+        "n_tdma_dodge": 2831,
+        "n_idle_slots_saved": 141,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 470,
+          "4": 427,
+          "6": 429,
+          "8": 415,
+          "10": 378,
+          "12": 462,
+          "14": 408,
+          "16": 387,
+          "18": 344
+        }
+      }
+    },
+    {
+      "name": "S29 s3 d32",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 3,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 32
+      },
+      "thr": 4.6904,
+      "d_bw_pct": -14.37,
+      "jain_bin": 0.948,
+      "max_min": 1.6216,
+      "makespan": 6396,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 3,
+        "frame": 30,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 32,
+        "bus_posts": 990,
+        "bus_bits": 990,
+        "n_tdma_yield": 18796,
+        "n_tdma_dodge": 2831,
+        "n_idle_slots_saved": 141,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 470,
+          "4": 427,
+          "6": 429,
+          "8": 415,
+          "10": 378,
+          "12": 462,
+          "14": 408,
+          "16": 387,
+          "18": 344
+        }
+      }
+    },
+    {
+      "name": "S29 s4 d8",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 4,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 8
+      },
+      "thr": 4.4957,
+      "d_bw_pct": -17.92,
+      "jain_bin": 0.94269,
+      "max_min": 1.7036,
+      "makespan": 6673,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 4,
+        "frame": 40,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 8,
+        "bus_posts": 1040,
+        "bus_bits": 1040,
+        "n_tdma_yield": 21620,
+        "n_tdma_dodge": 2360,
+        "n_idle_slots_saved": 161,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 554,
+          "4": 525,
+          "6": 563,
+          "8": 578,
+          "10": 394,
+          "12": 540,
+          "14": 463,
+          "16": 440,
+          "18": 477
+        }
+      }
+    },
+    {
+      "name": "S29 s4 d32",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 4,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 32
+      },
+      "thr": 4.4957,
+      "d_bw_pct": -17.92,
+      "jain_bin": 0.94269,
+      "max_min": 1.7036,
+      "makespan": 6673,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 4,
+        "frame": 40,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 32,
+        "bus_posts": 1040,
+        "bus_bits": 1040,
+        "n_tdma_yield": 21620,
+        "n_tdma_dodge": 2360,
+        "n_idle_slots_saved": 161,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 554,
+          "4": 525,
+          "6": 563,
+          "8": 578,
+          "10": 394,
+          "12": 540,
+          "14": 463,
+          "16": 440,
+          "18": 477
+        }
+      }
+    },
+    {
+      "name": "S29 s2 w16",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 2,
+        "tdma_mode": "demand",
+        "tdma_window": 16,
+        "tdma_dodge": 32
+      },
+      "thr": 5.144,
+      "d_bw_pct": -6.09,
+      "jain_bin": 0.96203,
+      "max_min": 1.3447,
+      "makespan": 5832,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 2,
+        "frame": 20,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 16,
+        "dodge": 32,
+        "bus_posts": 3640,
+        "bus_bits": 3640,
+        "n_tdma_yield": 15839,
+        "n_tdma_dodge": 3194,
+        "n_idle_slots_saved": 358,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 371,
+          "4": 321,
+          "6": 370,
+          "8": 328,
+          "10": 345,
+          "12": 437,
+          "14": 399,
+          "16": 381,
+          "18": 296
+        }
+      }
+    },
+    {
+      "name": "S29 s2 w64",
+      "scheme": "S29",
+      "cfg": {
+        "tdma_slot": 2,
+        "tdma_mode": "demand",
+        "tdma_window": 64,
+        "tdma_dodge": 32
+      },
+      "thr": 5.0822,
+      "d_bw_pct": -7.22,
+      "jain_bin": 0.95706,
+      "max_min": 1.3768,
+      "makespan": 5903,
+      "completed": true,
+      "fc": {
+        "mode": "s29",
+        "actuator": "scheduled_hop_yield",
+        "signal": "calendar+demand_bit",
+        "slot": 2,
+        "frame": 20,
+        "tdma_mode": "demand",
+        "bus_lat": 30,
+        "window": 64,
+        "dodge": 32,
+        "bus_posts": 920,
+        "bus_bits": 920,
+        "n_tdma_yield": 16228,
+        "n_tdma_dodge": 3130,
+        "n_idle_slots_saved": 101,
+        "boarded_in_own_slot": {
+          "0": 0,
+          "2": 361,
+          "4": 326,
+          "6": 366,
+          "8": 348,
+          "10": 352,
+          "12": 458,
+          "14": 424,
+          "16": 355,
+          "18": 322
+        }
+      }
+    }
+  ]
+}

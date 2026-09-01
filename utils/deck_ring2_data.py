@@ -25,9 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dse_ring2_write_fair import (BIN_W, CORE_NODES, CORE_OUTSTANDING_WR,
                                   FABRIC, MEM_NODES, S1_CFG, S16_OVERCOMMIT,
-                                  S22_CFG, W_FLITS, bin_rate, binned_jain,
-                                  build_pattern, digest, fairness_stats, jain,
-                                  jain_ideal_bin, run_scheme)
+                                  S22_CFG, S26_CFG, S27_CFG, S28_CFG,
+                                  S28S_CFG, S29_CFG, W_FLITS, bin_rate,
+                                  binned_jain, build_pattern, digest,
+                                  fairness_stats, jain, jain_ideal_bin,
+                                  run_scheme)
 from rg_ring2_topo import (CHI_VCS, CHI_VCS_WRITE, Ring2Topology,
                            build_tiled_read)
 
@@ -50,6 +52,14 @@ WRITE_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S19", "S19", {}),
     ("S20", "S20", {}),
     ("S22", "S22", S22_STOCK),
+    # The four families the taxonomy had no representative for. Same fabric,
+    # same K, same bin width as every row above, so the deck can put them in
+    # one table with S0 / S1 without a caveat.
+    ("S26", "S26", S26_CFG),
+    ("S27", "S27", S27_CFG),
+    ("S28", "S28", S28_CFG),
+    ("S28S", "S28S", S28S_CFG),
+    ("S29", "S29", S29_CFG),
 ]
 # The read controller has to act where the read data is injected, which is the
 # HA, not the requester: scoping stock S1 to the cores would gate REQs that are

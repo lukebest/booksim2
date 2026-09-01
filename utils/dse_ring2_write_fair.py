@@ -358,6 +358,58 @@ S22_CFG = dict(dfc_window=2, dfc_bus_lat=1, dfc_thresh=0.5, dfc_hold=16,
 # throughput (see `S1_DIRBAL`).
 S1_CFG = dict(dir_split=True, band="spec", cap_scale=0.5, window=64,
               pace_burst=1)
+# -- the four families the taxonomy was missing ------------------------------
+# Adaptive routing, hop-by-hop backpressure, explicit *rate* feedback and
+# proactive scheduling are the four congestion-control families with no
+# representative in S0..S23. Each is added as the cheapest faithful
+# implementation of its family, and each operating point below is the one
+# `probe_ring2_gapcc.py` / `probe_ring2_gapcc2.py` selected out of that
+# family's own grid at the screening K -- so a family that loses here loses
+# on its mechanism and not because a knob was left at a datacentre default.
+#
+# S26 adaptive / non-minimal routing (UGAL / Valiant family). This is the
+# point that is *best for the family*: no row in the grid beat S0 on either
+# fairness axis, and this one is the least bad on both, so the verdict does
+# not depend on which row is published. `route_max_extra=2` is also the only
+# cap that stays cheap -- at 8 the detour costs more link capacity than the
+# hop it relieves and bandwidth falls 10%.
+S26_CFG = dict(route_g=1.0 / 32, route_thresh=0.05, route_max_extra=2)
+# S27 hop-by-hop link backpressure (credit FC / PFC family). The XOFF has to
+# sit *below* the occupancy the fabric reaches when it is merely working --
+# the busiest hop runs at 96.98% in S0 -- or the signal never fires: at
+# 0.99 the scheme is nearly inert. 0.90 / 0.80 is the grid's best trade, and
+# `bp_reach=2` is the buildable bounded-radius variant; the unbounded one
+# (`bp_reach=0`) costs a further 8 points of bandwidth for nothing.
+S27_CFG = dict(bp_window=64, bp_xoff=0.90, bp_xon=0.80, bp_reach=2)
+# S28 explicit-rate feedback (XCP / RCP family). `rcp_mode="rcp"` keeps RCP's
+# residual-capacity term, which is what makes the family efficient here: the
+# static `C/N` share leaves the ring at 63% of R* because a core held down by
+# one hop leaves capacity at every other hop and nothing hands it back.
+# alpha = 0.25 hands out a quarter of the residual per window, which is the
+# grid's best point on all three axes simultaneously. `rcp_pace_burst=1.0`
+# is the strictest bucket, and unusually it is also the *best* one here --
+# on a fabric this close to saturation a deeper bucket only lets a core
+# re-burst into a slot it was not entitled to.
+S28_CFG = dict(rcp_window=64, rcp_mode="rcp", rcp_alpha=0.25, rcp_target=1.0,
+               rcp_g=0.5, rcp_pace_burst=1.0)
+# The same family at its fairness extreme, published as a second point
+# because it is what shows the family spans a real frontier rather than
+# sitting at one spot: dropping the residual term turns S28 into pure
+# per-hop equal-share and buys the highest binned Jain in the whole study,
+# for a third of the bandwidth.
+S28S_CFG = dict(rcp_window=64, rcp_mode="static", rcp_target=0.98,
+                rcp_g=0.5, rcp_pace_burst=2.0)
+# S29 proactive scheduled reservation (TDMA / Fastpass / ExpressPass family).
+# A 2-cycle slot x 10 cores is a 20-cycle frame, so each core is guaranteed
+# right of way five times inside every 100-cycle fairness window. The curve
+# is monotone in slot length over 2..16 -- a longer slot hands one core the
+# hop for longer than it can use it -- and slot 1 is worse again because a
+# single cycle is shorter than the hop latency it is reserving.
+# `tdma_window=16` refreshes the demand bit often enough that a core that has
+# drained is not still holding reservations. `tdma_dodge=32` is the same
+# look-ahead S22 gets, held equal so the pair differs only in the trigger.
+S29_CFG = dict(tdma_slot=2, tdma_mode="demand", tdma_window=16,
+               tdma_dodge=32)
 # I-tag and E-tag at their specified semantics, and live rather than dormant.
 # Both used to be inert on this workload: `t_inj = 64` is above the longest run
 # of consecutive failed boards the fabric ever produces (41 cycles), and E-tag
@@ -1563,6 +1615,23 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
     if scheme == "S23":
         from rg_ring2_fair import Ring2FairParams, Ring2FairSim
         return Ring2FairSim(topo, Ring2FairParams(**kw), seed=seed)
+    if scheme == "S26":
+        from rg_ring2_route import Ring2RouteParams, Ring2RouteSim
+        kw = {**FABRIC, **S26_CFG, **(cfg or {})}
+        return Ring2RouteSim(topo, Ring2RouteParams(**kw), seed=seed)
+    if scheme == "S27":
+        from rg_ring2_bp import Ring2BpParams, Ring2BpSim
+        kw = {**FABRIC, **S27_CFG, **(cfg or {})}
+        return Ring2BpSim(topo, Ring2BpParams(**kw), seed=seed)
+    if scheme in ("S28", "S28S"):
+        from rg_ring2_rcp import Ring2RcpParams, Ring2RcpSim
+        base = S28S_CFG if scheme == "S28S" else S28_CFG
+        kw = {"rcp_bus_lat": FC_BUS_LAT, **FABRIC, **base, **(cfg or {})}
+        return Ring2RcpSim(topo, Ring2RcpParams(**kw), seed=seed)
+    if scheme == "S29":
+        from rg_ring2_tdma import Ring2TdmaParams, Ring2TdmaSim
+        kw = {"tdma_bus_lat": FC_BUS_LAT, **FABRIC, **S29_CFG, **(cfg or {})}
+        return Ring2TdmaSim(topo, Ring2TdmaParams(**kw), seed=seed)
     if scheme in ("S17", "S18", "S19", "S20"):
         from rg_ring2_rate import (Ring2DcqcnSim, Ring2DctcpSim,
                                    Ring2RateParams, Ring2SwiftSim,

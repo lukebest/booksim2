@@ -643,6 +643,220 @@ def fig_s16_compare() -> None:
     save(fig, "23-s16-compare.png")
 
 
+# ------------------------------------------------- new section: CC taxonomy
+# Where every congestion-control family acts, and what it listens to. The two
+# axes are the only two things that distinguish the families from each other:
+# a family is "the same scheme" as another exactly when both agree, which is
+# why S17/S18 and S19/S20 sit in the same column as pairs.
+TAX_POINTS = [
+    # (control point, signal, label, state)
+    #   state: "have" = a scheme in this study occupies the cell
+    #          "s1"   = the cell S1 occupies
+    #          "new"  = a cell that was empty and is now filled
+    ("路径选择", "本地观测", "S26", "new"),
+    ("逐跳背压", "链路占用", "S27", "new"),
+    ("源端速率", "本地观测", "S21", "have"),
+    ("源端速率", "时延", "S17", "have"),
+    ("源端速率", "ECN 标记", "S18", "have"),
+    ("源端速率", "显式等级", "S1 / S1T / S15", "s1"),
+    ("源端速率", "显式速率", "S28 / S28S", "new"),
+    ("源端窗口", "时延", "S19", "have"),
+    ("源端窗口", "ECN 标记", "S20", "have"),
+    ("环上仲裁", "本地观测", "I-tag / E-tag", "have"),
+    ("环上仲裁", "显式等级", "S22", "have"),
+    ("预约调度", "无信号 / 1 bit 需求", "S29", "new"),
+    ("接收端授权", "本地观测", "S16", "have"),
+]
+TAX_X = ["路径选择", "逐跳背压", "源端速率", "源端窗口", "环上仲裁",
+         "预约调度", "接收端授权"]
+TAX_Y = ["无信号 / 1 bit 需求", "本地观测", "链路占用", "时延", "ECN 标记",
+         "显式等级", "显式速率"]
+
+
+def fig_cc_taxonomy() -> None:
+    """The design space as a control-point x signal grid, with S1 located.
+
+    The grid is the argument, not decoration. Reading down a column gives
+    every scheme that acts at the same place and therefore has the same
+    ceiling; reading across a row gives every scheme that listens to the same
+    thing and therefore inherits the same blind spot. S1's cell is
+    highlighted because the deck's finding about it -- that its signal cannot
+    separate "I am too greedy" from "I am being squeezed" -- is a property of
+    the *row*, shared by everything that triggers on the node's own failures.
+    """
+    fig, ax = plt.subplots(figsize=(12.6, 5.35))
+    ax.set_xlim(-0.6, len(TAX_X) - 0.4)
+    ax.set_ylim(-0.9, len(TAX_Y) - 0.3)
+
+    for i in range(len(TAX_X)):
+        ax.axvline(i, color="#e4e9f0", lw=1.0, zorder=0)
+    for j in range(len(TAX_Y)):
+        ax.axhline(j, color="#e4e9f0", lw=1.0, zorder=0)
+
+    for cp, sig, lab, state in TAX_POINTS:
+        x, y = TAX_X.index(cp), TAX_Y.index(sig)
+        if state == "s1":
+            fc, ec, tc, lw, fs = "#fdeaec", RED, RED, 2.4, 10.5
+        elif state == "new":
+            fc, ec, tc, lw, fs = "white", GREEN, GREEN, 2.0, 10.0
+        else:
+            fc, ec, tc, lw, fs = PANEL, GREY, INK, 1.2, 10.0
+        w = 0.86 if len(lab) < 9 else 0.98
+        ax.add_patch(FancyBboxPatch(
+            (x - w / 2, y - 0.20), w, 0.40,
+            boxstyle="round,pad=0.02,rounding_size=0.06",
+            fc=fc, ec=ec, lw=lw, zorder=3))
+        ax.text(x, y, lab, ha="center", va="center", fontsize=fs, color=tc,
+                fontweight="bold", zorder=4)
+
+    ax.set_xticks(range(len(TAX_X)))
+    ax.set_xticklabels(TAX_X, fontsize=11, fontweight="bold")
+    ax.set_yticks(range(len(TAX_Y)))
+    ax.set_yticklabels(TAX_Y, fontsize=10.5)
+    ax.set_xlabel("控制点：这一类在哪里动手（决定它的天花板）",
+                  fontsize=11.5, labelpad=9)
+    ax.set_ylabel("拥塞信号：它听什么（决定它的盲区）", fontsize=11.5,
+                  labelpad=6)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.tick_params(length=0)
+
+    ax.annotate("S1 在这里：源端限速 + 显式拥塞等级",
+                xy=(2.5, 5.0), xytext=(3.15, 6.35), fontsize=11.5,
+                color=RED, fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color=RED, lw=1.6))
+    ax.text(-0.55, -0.60,
+            "灰底 = 本研究已有方案　　绿框 = 本次补齐的四类（原为空列 / 空格）"
+            "　　红框 = S1 所在的格",
+            fontsize=10, color=GREY, va="center")
+    ax.set_title("拥塞控制的两个维度：在哪里动手 × 听什么信号",
+                 fontsize=13.5, fontweight="bold", pad=12)
+    fig.tight_layout()
+    save(fig, "16a-cc-taxonomy.png")
+
+
+def fig_gap_diagram() -> None:
+    """The four newly implemented families, one mechanism panel each."""
+    fig, axes = plt.subplots(2, 2, figsize=(12.2, 6.0))
+    fig.subplots_adjust(left=0.012, right=0.988, top=0.905, bottom=0.015,
+                        hspace=0.30, wspace=0.05)
+    (ax, bx), (cx, dx) = axes
+
+    _panel(ax, "S26 自适应路由 · UGAL / Valiant 类", "控制点：路径选择")
+    ax.plot([0.06, 0.94], [0.66, 0.66], color=GREY, lw=2.4, zorder=1)
+    for x, lab in ((0.20, "core"), (0.52, "最短方向\n(已 97% 满)"),
+                   (0.84, "目的 HA")):
+        ax.scatter([x], [0.66], s=180, c="white", edgecolors=GREY, zorder=3,
+                   linewidths=1.6)
+        ax.text(x, 0.755, lab, ha="center", fontsize=9.2, color=GREY)
+    _arrow(ax, (0.20, 0.60), (0.84, 0.60), color=GREEN, ls="--", rad=-0.45)
+    ax.text(0.52, 0.365, "反向绕远：多走 (n − h) 跳", ha="center",
+            fontsize=9.6, color=GREEN, fontweight="bold")
+    _box(ax, 0.02, 0.02, 0.96, 0.30,
+         "本地 EWMA：出向 hop 上环失败率。最短方向比反向差 0.05 以上，\n"
+         "且绕远不超过 2 跳，就改走反向。无信号、无总线、无新报文。",
+         fc=PANEL, ec=PANEL, fs=9.5)
+
+    _panel(bx, "S27 逐跳背压 · Credit FC / PFC 类", "控制点：上游链路")
+    bx.plot([0.06, 0.94], [0.66, 0.66], color=GREY, lw=2.4, zorder=1)
+    for x in (0.22, 0.44, 0.66, 0.88):
+        bx.scatter([x], [0.66], s=150, c="white", edgecolors=GREY, zorder=3,
+                   linewidths=1.5)
+    bx.text(0.88, 0.775, "占用率 ≥ 0.90\n→ 拉 XOFF", ha="center", fontsize=9.2,
+            color=RED, fontweight="bold")
+    for a, b in ((0.88, 0.66), (0.66, 0.44)):
+        _arrow(bx, (a - 0.02, 0.575), (b + 0.02, 0.575), color=RED)
+    bx.text(0.47, 0.44, "每跳 1 拍逐跳上传，reach = 2 跳", ha="center",
+            fontsize=9.6, color=RED)
+    _box(bx, 0.02, 0.02, 0.96, 0.30,
+         "路径穿过被 XOFF 的 hop 就不许上环。不是广播总线：一根线只连相邻节点。\n"
+         "无缓存环上「保护链路」= 让链路空转，让出的槽不会被记账保留。",
+         fc=PANEL, ec=PANEL, fs=9.5)
+
+    _panel(cx, "S28 显式速率反馈 · XCP / RCP 类", "控制点：瓶颈 hop 算速率")
+    _box(cx, 0.02, 0.60, 0.30, 0.32,
+         "每个 hop 自己算：\nN = 本窗跨过它的核数\ny = 本窗占用率",
+         fc="white", ec=GREEN, fs=9.2)
+    _box(cx, 0.36, 0.60, 0.30, 0.32,
+         "RCP 更新\nshare ← share ×\n[1 + α(C−y)/(C·N)]",
+         fc="#eaf6ec", ec=GREEN, tc=GREEN, fs=9.2, bold=True)
+    _box(cx, 0.70, 0.60, 0.28, 0.32,
+         "6 bit × 40 hop\n广播（30 拍）",
+         fc="white", ec=GREEN, fs=9.2)
+    _arrow(cx, (0.32, 0.76), (0.36, 0.76), color=GREEN)
+    _arrow(cx, (0.66, 0.76), (0.70, 0.76), color=GREEN)
+    cx.text(0.50, 0.475,
+            "核取 min over 路径 hop 的 share / 自己在该 hop 的流量占比",
+            ha="center", fontsize=9.5, color=GREEN, fontweight="bold")
+    _box(cx, 0.02, 0.02, 0.96, 0.30,
+         "和 S1 的关键差别：S1 播的是「我有多堵」，核自己用 AIMD 猜降多少；\n"
+         "S28 播的是「你可以跑多快」，这个数在真正堵的那个 hop 上算出来，"
+         "对该 hop 上所有核都是同一个数。",
+         fc=PANEL, ec=PANEL, fs=9.5)
+
+    _panel(dx, "S29 预约 / 调度式 · Fastpass / TDMA 类", "控制点：预分配时隙")
+    for i, lab in enumerate(("C0", "C2", "C4", "…", "C18")):
+        x = 0.04 + i * 0.187
+        fc, ec, tc = (("#eaf6ec", GREEN, GREEN) if i == 1 else
+                      ("white", GREY, INK))
+        _box(dx, x, 0.62, 0.165, 0.26, lab, fc=fc, ec=ec, tc=tc, fs=9.6,
+             bold=(i == 1))
+    dx.text(0.50, 0.545, "帧 = 2 拍 × 10 核 = 20 拍；100 拍窗内每核保底 5 次",
+            ha="center", fontsize=9.5, color=GREEN, fontweight="bold")
+    _box(dx, 0.02, 0.34, 0.96, 0.17,
+         "轮到某核时，会骑过它出向 hop 的其他核让位（与 S22 同一个执行器）",
+         fc="white", ec=GREEN, fs=9.4)
+    _box(dx, 0.02, 0.02, 0.96, 0.28,
+         "纯日历不需要任何拥塞信号。只加一条：每核 1 bit「我有 WriteData 排队」，\n"
+         "空闲核的时隙不被浪费 —— 这就是 TDMA 与预约式的区别，10 bit / 16 拍。",
+         fc=PANEL, ec=PANEL, fs=9.5)
+
+    fig.suptitle("补齐的四类：各自的机制与它在环上的落点",
+                 fontsize=13.5, fontweight="bold")
+    save(fig, "16b-gap-diagram.png")
+
+
+def fig_gap_compare() -> None:
+    """The four new families against S0 and S1, on the deck's three axes."""
+    d = deck()
+    w, bw = d["write"], d["meta"]["bin_w"]
+    keys = ["S0", "S1", "S26", "S27", "S28", "S28S", "S29"]
+    names = keys
+    cols = [BLUE, AMBER, GREY, GREY, GREY, "#8fb8a0", GREEN]
+    fig, axes = plt.subplots(1, 3, figsize=(14.8, 4.9))
+    _bars_vs(axes[0], names, [w[k]["throughput"] for k in keys], cols,
+             "总写带宽 flit/cycle",
+             f"① 总带宽（uniform 写，K={d['meta']['k_write']}，越高越好）",
+             ref=d["ideal"]["r_fair"],
+             ref_label=f"R* = {d['ideal']['r_fair']:.4f}", fmt="{:.3f}")
+    _bars_vs(axes[1], names,
+             [w[k]["jain_bin"]["jain_bin_mean"] for k in keys], cols,
+             f"每 {bw} 拍算一次 Jain，再取平均",
+             "② 均衡度（瞬时，越高越好）", fmt="{:.4f}")
+    _bars_vs(axes[2], names, [w[k]["max_min"] for k in keys], cols,
+             "整窗 最快核带宽 / 最慢核带宽",
+             "③ 长期速率比（越接近 1 越好）", fmt="{:.3f}")
+    # An S1 line on all three axes: the slide's claim is "who beats S1", and a
+    # reader should be able to check it by eye instead of subtracting labels.
+    for ax, key in ((axes[0], "throughput"), (axes[1], "jain_bin"),
+                    (axes[2], "max_min")):
+        v = w["S1"][key]
+        ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
+                   color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
+        ax.legend(fontsize=8.6, loc="lower left", framealpha=0.95)
+    fig.suptitle("补齐的四类实测：自适应路由与逐跳背压结构性失效，"
+                 "显式速率要么几乎不动公平要么用 40% 带宽换公平\n"
+                 "只有预约 / 调度式（S29）在总带宽、均衡度、长期速率比"
+                 "三条轴上同时优于 S1", fontsize=12.5, fontweight="bold")
+    fig.text(0.5, 0.012,
+             "S26 自适应路由 · S27 逐跳背压 · S28 显式速率（RCP 反馈）· "
+             "S28S 显式速率（每 hop 静态等分）· S29 预约 / 调度式；"
+             "S0 无控制、S1 源端速率 + 显式拥塞等级",
+             ha="center", fontsize=9.6, color=GREY)
+    fig.tight_layout(rect=(0, 0.035, 1, 0.905))
+    save(fig, "16c-gap-compare.png")
+
+
 # --------------------------------------------------------------- slide 25
 def fig_s22_diagram() -> None:
     """S22: broadcast progress on S1's own bus, then yield rather than gate."""
@@ -802,6 +1016,9 @@ def main() -> None:
     fig_saturation()
     fig_instbal()
     fig_s1_effect()
+    fig_cc_taxonomy()
+    fig_gap_diagram()
+    fig_gap_compare()
     fig_tradeoff()
     fig_pareto()
     fig_hot()
