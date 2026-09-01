@@ -360,6 +360,17 @@ def fig_tradeoff() -> None:
 
 
 # --------------------------------------------------------------- slide 20
+def _key_metrics(n: int) -> tuple[float, float]:
+    """Row pitch and font for the key column, so the roster can grow.
+
+    The column has ~0.90 of the axes height below its header. Fourteen schemes
+    fitted at a fixed pitch; twenty do not, and a key that runs off the bottom
+    silently drops exactly the rows a reader came to check.
+    """
+    step = min(0.0575, 0.90 / max(1, n))
+    return step, min(9.6, 9.6 * step / 0.0575 + 1.6)
+
+
 def fig_pareto() -> None:
     """Numbered markers plus a key column: readable at projector distance."""
     from pareto_ring2_cc import frontier
@@ -399,32 +410,38 @@ def fig_pareto() -> None:
 
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
-    ax.set_ylim(0.35, 1.06)
+    # Floor well below the worst scheme so the legend has a band of its own:
+    # at 0.35 the legend box sat on top of S17, which is the study's worst
+    # point and therefore one a reader specifically looks for.
+    ax.set_ylim(0.26, 1.06)
     ax.set_xlabel("新增硬件状态（FF 等效 = 折算成触发器个数，对数轴）→ 越贵")
     ax.set_ylabel("η = （总带宽 × 分箱 Jain）/ 理想控制器同项")
     ax.set_title("收益 — 硬件开销 Pareto（写，uniform，K=2000）\n"
                  "η 越高越接近理想控制器；红 = 前沿，即同价位无人能超",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25, which="both")
-    ax.legend(fontsize=8.5, loc="lower right")
+    # Lower-left, not lower-right: the cheap end of the axis is empty at low
+    # eta, whereas the mid-cost column now runs all the way down to S17.
+    ax.legend(fontsize=8.5, loc="lower left")
 
     cols = ((0.00, "#"), (0.050, "方案（按 η 降序）"), (0.545, "η"),
             (0.675, "Jain"), (0.815, "带宽/R*"), (1.00, "FF 等效"))
     aligns = ("left", "left", "right", "right", "right", "right")
     key.text(0.0, 0.985, "图例", fontsize=12, fontweight="bold", color=INK,
              va="top")
+    step, pt = _key_metrics(len(rows))
     for (x, t), al in zip(cols, aligns):
-        key.text(x, 0.935, t, fontsize=9.6, color="#5b636d", va="top", ha=al,
+        key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
                  fontweight="bold")
     for i, r in enumerate(rows, 1):
         col = RED if r["name"] in front else INK
         nm = r["name"]
         nm = nm if len(nm) <= 22 else nm[:21] + "…"
-        y = 0.935 - i * 0.0575
+        y = 0.935 - i * step
         vals = (str(i), nm, f"{r['eta']:.4f}", f"{r['jain_bin']:.4f}",
                 f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
         for (x, _), al, v in zip(cols, aligns, vals):
-            key.text(x, y, v, fontsize=9.6, color=col, va="top", ha=al)
+            key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
 
     save(fig, "18-pareto.png")
 
@@ -475,6 +492,10 @@ def fig_hot() -> None:
     ax.axhline(s0, c=GREY, ls="-.", lw=1.1, label=f"S0 基线 = {s0:.4f} R*")
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
+    # Same reason as the uniform chart: reserve a band under the worst scheme
+    # so the legend cannot sit on top of a data point.
+    lo = min(r["bw_vs_ideal"] for r in rows)
+    ax.set_ylim(lo - 0.10, 1.015)
     ax.set_xlabel("新增硬件状态（FF 等效，对数轴）→ 越贵")
     ax.set_ylabel("总写带宽 / 该 pattern 自己的 R*")
     ax.set_title("固定非均匀流量（十个核全写 HA 11/13）：只看总带宽\n"
@@ -488,18 +509,19 @@ def fig_hot() -> None:
     aligns = ("left", "left", "right", "right", "right")
     key.text(0.0, 0.985, "图例", fontsize=12, fontweight="bold", color=INK,
              va="top")
+    step, pt = _key_metrics(len(rows))
     for (x, t), al in zip(cols, aligns):
-        key.text(x, 0.935, t, fontsize=9.6, color="#5b636d", va="top", ha=al,
+        key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
                  fontweight="bold")
     for i, r in enumerate(rows, 1):
         col = RED if r["name"] in front else INK
         nm = r["name"]
         nm = nm if len(nm) <= 22 else nm[:21] + "…"
-        y = 0.935 - i * 0.0575
+        y = 0.935 - i * step
         vals = (str(i), nm, f"{r['bw_vs_ideal']:.4f}",
                 f"{r['delta_vs_s0_pct']:+.2f}%", f"{r['hw_cost']:,}")
         for (x, _), al, v in zip(cols, aligns, vals):
-            key.text(x, y, v, fontsize=9.6, color=col, va="top", ha=al)
+            key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
 
     save(fig, "20-hot-pareto.png")
 
@@ -940,6 +962,108 @@ def fig_s22_compare() -> None:
     save(fig, "25-s22-compare.png")
 
 
+def fig_s29_diagram() -> None:
+    """S29: the same yield actuator as S22, driven by a calendar, not a measure."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.0, 1.06]})
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
+                        hspace=0.22)
+
+    _panel(ax, "触发：一张固定日历，外加每核 1 bit「我有活干」",
+           "帧 = 2 拍 × 10 核 = 20 拍")
+    slots = ("C0", "C2", "C4", "C6", "C8", "C10", "C12", "C14", "C16", "C18")
+    for i, lab in enumerate(slots):
+        x = 0.02 + i * 0.0965
+        own = i == 2
+        _box(ax, x, 0.66, 0.088, 0.24, lab,
+             fc="#fdeaec" if own else PANEL, ec=RED if own else GREY,
+             tc=RED if own else INK, fs=9, bold=own)
+    ax.annotate("当前时隙：C4 有路权", xy=(0.245, 0.655), xytext=(0.30, 0.545),
+                fontsize=9.4, color=RED, fontweight="bold",
+                arrowprops=dict(arrowstyle="-|>", lw=1.2, color=RED))
+    _box(ax, 0.02, 0.34, 0.60, 0.145,
+         "日历是常量：无需测量、无需收敛、无控制环路", fc="white", ec=GREY,
+         fs=9.6)
+    _box(ax, 0.655, 0.30, 0.335, 0.22,
+         "10 bit 需求字（每核 1 bit）\n空闲核的时隙立即让给别人",
+         fc="#fdeaec", ec=RED, tc=RED, fs=9.4, bold=True)
+    _box(ax, 0.02, 0.02, 0.97, 0.25,
+         "纯 TDMA 的固有缺陷是「为空闲者保留的时隙被浪费」。"
+         "这里用每核 1 bit、每 16 拍刷新一次的需求位把它补掉：\n"
+         "轮到一个已经排空的核时，它的时隙不会空转。"
+         "这 10 bit 是 S29 全部的信号开销 —— 没有拥塞等级，也没有速率。",
+         fc=PANEL, ec=PANEL, fs=9.6)
+
+    _panel(bx, "执行：与 S22 逐字相同的「限域让位」，只换了触发来源",
+           "队列深度维持出厂 8 / 12")
+    ring_y = 0.80
+    bx.plot([0.04, 0.96], [ring_y, ring_y], color=GREY, lw=2.6, zorder=1)
+    for x, lab, col in ((0.22, "骑过它的上游核", INK), (0.55, "出向 hop", GREY),
+                        (0.86, "本时隙的持有者", RED)):
+        bx.scatter([x], [ring_y], s=200, c="white", edgecolors=col, zorder=3,
+                   linewidths=1.8)
+        bx.text(x, ring_y + 0.07, lab, ha="center", fontsize=9.6, color=col,
+                fontweight="bold")
+    _arrow(bx, (0.84, 0.715), (0.26, 0.715), color=RED, ls="--", rad=-0.055)
+    bx.text(0.55, 0.583, "① 到点即举手：不看拥塞，只看日历",
+            ha="center", fontsize=9.4, color=RED)
+    _box(bx, 0.03, 0.33, 0.46, 0.21,
+         "② 上游让出一个 slot\n（与 S22 同一套仲裁改动）", fc="white", ec=RED,
+         fs=9.6)
+    _box(bx, 0.51, 0.33, 0.46, 0.21,
+         "③ 同拍前瞻改发一个会更早\n下环的 flit → 自己不空转", fc="white",
+         ec=RED, fs=9.6)
+    _box(bx, 0.03, 0.02, 0.94, 0.24,
+         "与 S22 的差别只有触发：S22 要播 10 项进度、算均值、比赤字"
+         "（6 bit 总线 + 10 项表 + 10 输入加法树）；\n"
+         "S29 的触发是一个常量计数器，于是表和加法树全部消失 —— "
+         "同一个执行器，硬件从 13,920 降到 4,440 FF-eq。",
+         fc=PANEL, ec=PANEL, fs=9.6)
+
+    save(fig, "30-s29-diagram.png")
+
+
+def fig_s29_compare() -> None:
+    """S29 against S0 / S1, plus the two schemes it is competing with."""
+    d = deck()
+    w = d["write"]
+    bw = d["meta"]["bin_w"]
+    r_fair = d["ideal"]["r_fair"]
+    names = ["S0", "S1", "S22", "S16", "S29"]
+    cols = [BLUE, AMBER, GREY, GREY, RED]
+
+    fig, axes = plt.subplots(1, 3, figsize=(14.2, 4.7))
+    _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
+             "总写带宽 flit/cycle", f"带宽（uniform 写，K={d['meta']['k_write']}）",
+             ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
+    _bars_vs(axes[1], names,
+             [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
+             f"每 {bw} 拍算一次 Jain，再取平均",
+             "瞬时均衡度：任意 100 拍内十个核齐不齐", fmt="{:.4f}")
+    _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
+             "整窗 最快核带宽 / 最慢核带宽",
+             "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
+    # S1's bar is the shortest one on the bandwidth axis, so a lower-left
+    # legend lands on its value label; the other two axes have their short bar
+    # on the right instead.
+    for ax, key, loc in ((axes[0], "throughput", "lower right"),
+                         (axes[1], "jain_bin", "lower left"),
+                         (axes[2], "max_min", "lower left")):
+        v = w["S1"][key]
+        ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
+                   color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
+        ax.legend(fontsize=8.6, loc=loc, framealpha=0.95)
+    fig.suptitle("S29 在三条轴上同时优于 S1，硬件只有 S1 的 1/5；"
+                 "对 S22 是「便宜 3 倍、略差一点」，对 S16 仍是全面落后",
+                 fontsize=12.5, fontweight="bold")
+    fig.text(0.5, 0.012,
+             "S22 = 环仲裁 + 进度总线（13,920 FF-eq）；S16 = HA 授权保留"
+             "（900 FF-eq）；S29 = 环仲裁 + 日历（4,440 FF-eq）",
+             ha="center", fontsize=9.6, color=GREY)
+    fig.tight_layout(rect=(0, 0.035, 1, 0.93))
+    save(fig, "31-s29-compare.png")
+
+
 def fig_window_diagram() -> None:
     """Shared S19/S20 window actuator with their two feedback signals."""
     fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85))
@@ -1028,6 +1152,8 @@ def main() -> None:
     fig_window_compare()
     fig_s22_diagram()
     fig_s22_compare()
+    fig_s29_diagram()
+    fig_s29_compare()
 
 
 if __name__ == "__main__":
