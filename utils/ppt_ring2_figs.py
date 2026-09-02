@@ -251,7 +251,7 @@ def fig_s1_effect() -> None:
     a1.set_ylim(lo - 0.10, hi + 0.09)
     a1.set_ylabel("每核写带宽 flit/cycle")
     a1.set_xlabel("AI core（C0 / C8 / C10 / C18 邻 mem = 1）")
-    a1.set_title("S1 把十个核一起压低；S1T 把带宽拿回来后又变回 S0",
+    a1.set_title("S0 / S1 / S1T 各核写带宽",
                  fontsize=11.5, fontweight="bold")
     a1.grid(axis="y", alpha=0.25)
     a1.legend(fontsize=9.5, loc="upper center", ncol=3)
@@ -282,7 +282,7 @@ def fig_s1_effect() -> None:
     a2.set_ylim(0.905, 0.975)
     a2.set_xlabel("总写带宽 flit/cycle")
     a2.set_ylabel(f"{bw} 拍分箱平均 Jain")
-    a2.set_title("两个旋钮各拿一头，没有一个点同时变好",
+    a2.set_title("三个工作点在带宽—Jain 平面上的位置",
                  fontsize=11.5, fontweight="bold")
     a2.grid(alpha=0.25)
 
@@ -690,8 +690,8 @@ def fig_s16_compare() -> None:
               r["S1-R"]["jain_bin"]["jain_bin_mean"],
               r["S16-R"]["jain_bin"]["jain_bin_mean"]], cols,
              f"每 {bw} 拍算一次 Jain，再取平均", "读 · 瞬时均衡度", fmt="{:.4f}")
-    fig.suptitle("写侧 S16 两条都赢；读侧 S0 本来就齐，S16 只多 0.47% 带宽 —— "
-                 "读不建议做", fontsize=13, fontweight="bold")
+    fig.suptitle("写侧 S16：Jain 与总带宽；读侧 S0 本来就齐，S16 只多 0.47% 带宽",
+                 fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "23-s16-compare.png")
 
@@ -842,8 +842,7 @@ def fig_gap_diagram() -> None:
             "核取 min over 路径 hop 的 share / 自己在该 hop 的流量占比",
             ha="center", fontsize=9.5, color=GREEN, fontweight="bold")
     _box(cx, 0.02, 0.02, 0.96, 0.30,
-         "和 S1 的关键差别：S1 播的是「我有多堵」，核自己用 AIMD 猜降多少；\n"
-         "S28 播的是「你可以跑多快」，这个数在真正堵的那个 hop 上算出来，"
+         "S1 播拥塞等级，源端用 AIMD 调预算；S28 播 hop 算出的 share，"
          "对该 hop 上所有核都是同一个数。",
          fc=PANEL, ec=PANEL, fs=9.5)
 
@@ -889,18 +888,16 @@ def fig_gap_compare() -> None:
     _bars_vs(axes[2], names, [w[k]["max_min"] for k in keys], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "③ 长期速率比（越接近 1 越好）", fmt="{:.3f}")
-    # An S1 line on all three axes: the slide's claim is "who beats S1", and a
-    # reader should be able to check it by eye instead of subtracting labels.
+    # An S1 line on all three axes so the existing scheme is a visible
+    # reference without subtracting labels.
     for ax, key in ((axes[0], "throughput"), (axes[1], "jain_bin"),
                     (axes[2], "max_min")):
         v = w["S1"][key]
         ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
                    color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
         ax.legend(fontsize=8.6, loc="lower left", framealpha=0.95)
-    fig.suptitle("补齐的四类实测：自适应路由与逐跳背压结构性失效，"
-                 "显式速率要么几乎不动公平要么用 40% 带宽换公平\n"
-                 "只有预约 / 调度式（S29）在总带宽、均衡度、长期速率比"
-                 "三条轴上同时优于 S1", fontsize=12.5, fontweight="bold")
+    fig.suptitle("补齐的四类与 S0 / S1 同口径：总带宽、均衡度、长期速率比",
+                 fontsize=12.5, fontweight="bold")
     fig.text(0.5, 0.012,
              "S26 自适应路由 · S27 逐跳背压 · S28 显式速率（RCP 反馈）· "
              "S28S 显式速率（每 hop 静态等分）· S29 预约 / 调度式；"
@@ -934,10 +931,8 @@ def fig_s22_diagram() -> None:
          fc="white", ec=GREY, fs=9.4)
     _arrow(ax, (0.72, 0.47), (0.755, 0.47), color=RED)
     _box(ax, 0.02, 0.02, 0.97, 0.30,
-         "和 S1 的差别只有一处，但是决定性的：S1 播的是「我这里有多堵」，"
-         "落后的核会因为自己上环失败多而自己降速；\n"
-         "S22 播的是「我做了多少」，于是落后与领先可以直接比较，"
-         "让路的方向永远从领先者流向落后者。",
+         "S1 播的是本窗拥塞等级；S22 播的是本窗成功上环数。\n"
+         "后者让落后与领先可以直接比较，让路方向从领先者流向落后者。",
          fc=PANEL, ec=PANEL, fs=9.6)
 
     _panel(bx, "执行：让位，不是门控", "margin = 3.0 拒掉「差不多齐」的让路")
@@ -959,8 +954,8 @@ def fig_s22_diagram() -> None:
          "③ 同拍前瞻改发一个会更早\n下环的 flit → 自己不空转",
          fc="white", ec=RED, fs=9.6)
     _box(bx, 0.03, 0.02, 0.94, 0.24,
-         "门控（S1 的令牌桶）在无缓存环上会白扔槽位：让出的空隙沿途"
-         "任何节点都能吃掉。\n让位是指名的，所以同等公平度下带宽代价小一个量级。",
+         "S1 令牌桶：没额度本拍不上环。S22 让位是指名的，"
+         "只让出具体某一拍上的具体某个位置。",
          fc=PANEL, ec=PANEL, fs=9.6)
 
     save(fig, "24-s22-diagram.png")
@@ -1084,8 +1079,7 @@ def fig_s29_compare() -> None:
         ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
                    color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
         ax.legend(fontsize=8.6, loc=loc, framealpha=0.95)
-    fig.suptitle("S29 在三条轴上同时优于 S1，硬件只有 S1 的 1/5；"
-                 "对 S22 是「便宜 3 倍、略差一点」，对 S16 仍是全面落后",
+    fig.suptitle("S29 与 S0 / S1 / S22 / S16 同口径：总带宽、均衡度、长期速率比",
                  fontsize=12.5, fontweight="bold")
     fig.text(0.5, 0.012,
              "S22 = 环仲裁 + 进度总线（13,920 FF-eq）；S16 = HA 授权保留"
@@ -1093,6 +1087,448 @@ def fig_s29_compare() -> None:
              ha="center", fontsize=9.6, color=GREY)
     fig.tight_layout(rect=(0, 0.035, 1, 0.93))
     save(fig, "31-s29-compare.png")
+
+
+# ---------------------------------------------------- microarchitecture pages
+# Every block below is a piece of state or logic that exists in the simulator
+# source (rg_ring2_grant / rg_ring2_dfc / rg_ring2_tdma). Grey = the baseline
+# already has it, red = the scheme adds it. Widths are the ones the Pareto cost
+# model charges (sweep_ring2_cc_family.HW_*), so the FF-eq lines agree with the
+# Pareto slides.
+NEW_FC = "#fdeaec"
+
+
+def _hw(ax, x, y, w, h, text, new=False, fs=8.6, bold=False):
+    _box(ax, x, y, w, h, text, fc=NEW_FC if new else PANEL,
+         ec=RED if new else GREY, tc=RED if (new and bold) else INK, fs=fs,
+         bold=bold, lw=1.5 if new else 1.2)
+
+
+def _frame(ax, x, y, w, h, title):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.008",
+                                fc="white", ec=INK, lw=1.2, zorder=1))
+    ax.text(x + 0.012, y + h - 0.035, title, fontsize=9.6, fontweight="bold",
+            color=INK, va="center", zorder=3)
+
+
+def _lab(ax, x, y, s, color=INK, fs=8.4, ha="center", bold=False):
+    ax.text(x, y, s, fontsize=fs, color=color, ha=ha, va="center", zorder=5,
+            fontweight="bold" if bold else "normal",
+            bbox=dict(fc="white", ec="none", pad=0.8, alpha=0.92))
+
+
+def fig_s16_uarch() -> None:
+    """S16 inside one HA: the added state, the decision, the two triggers."""
+    fig, ax = plt.subplots(figsize=(9.7, 5.85))
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01)
+    _panel(ax, "S16 微架构：改动全部落在 HA（completer）内部",
+           "灰 = 已有部件 · 红 = 新增 · 无总线、无新报文、线格式不变")
+
+    _hw(ax, 0.01, 0.26, 0.095, 0.60,
+        "环\n\nREQ 下环 →\n\n\n\n末 flit\n落地 →", fs=8.6)
+    _frame(ax, 0.14, 0.17, 0.85, 0.71, "memory HA · completer（每个 HA 一份）")
+
+    _hw(ax, 0.16, 0.55, 0.20, 0.26,
+        "Request tracker\n（已有，512 条目）\n\n条目新增 1 bit\n「已授权」标志", fs=8.6)
+    _hw(ax, 0.40, 0.55, 0.31, 0.26,
+        "授权决策\n\n直通：在飞 < 16 且无人等待\n→ 到达即授权\n"
+        "排队：有等待的核里选 served 最小\n（同值取小核号），取其最老条目",
+        new=True, bold=True, fs=8.3)
+    _hw(ax, 0.75, 0.55, 0.22, 0.26,
+        "DBIDResp 发送器（已有）\n\nt_ha_service 后放到 RSP 通道\n"
+        "回到被选中的核；报文不变", fs=8.4)
+
+    _hw(ax, 0.16, 0.22, 0.20, 0.25,
+        "末 flit 落地事件\n（已有：一笔写收齐）\n\n→ outstanding −1\n→ 触发一次补授权",
+        fs=8.6)
+    _hw(ax, 0.40, 0.22, 0.145, 0.25,
+        "outstanding\n5 bit\n在飞授权数\n授权 +1\n落地 −1", new=True, fs=8.4)
+    _hw(ax, 0.565, 0.22, 0.145, 0.25,
+        "served[c]\n10 × 10 bit\n每授权 +2 flit\n定期同减\n最小值", new=True,
+        fs=8.4)
+    _hw(ax, 0.75, 0.22, 0.22, 0.25,
+        "每核待授权计数\n10 × 6 bit\n入队 +1 / 授权 −1\n（仿真里是每核一条 FIFO）",
+        new=True, fs=8.4)
+
+    _arrow(ax, (0.105, 0.72), (0.16, 0.72))
+    _lab(ax, 0.132, 0.765, "REQ", fs=7.8, color=GREY)
+    _arrow(ax, (0.105, 0.34), (0.16, 0.34))
+    _arrow(ax, (0.36, 0.68), (0.40, 0.68), color=RED)
+    _arrow(ax, (0.71, 0.68), (0.75, 0.68), color=RED)
+    _arrow(ax, (0.36, 0.345), (0.40, 0.345), color=RED)
+    _lab(ax, 0.38, 0.39, "−1", fs=7.8, color=RED)
+    _arrow(ax, (0.47, 0.47), (0.47, 0.55), color=RED, style="<|-|>")
+    _arrow(ax, (0.64, 0.47), (0.64, 0.55), color=RED, style="<|-|>")
+    _arrow(ax, (0.80, 0.47), (0.69, 0.55), color=RED, style="<|-|>", rad=0.18)
+
+    _box(ax, 0.01, 0.01, 0.98, 0.13,
+         "只有两个触发事件，没有周期性控制环：① REQ 到达 → 直通授权或登记等待；"
+         "② 一笔写的末 flit 落地 → outstanding −1 → 补发一个授权。\n"
+         "成本口径（与 Pareto 图相同）：10 bit 计数 + 2 比较 + 1 加法，×10 = "
+         "900 FF-eq；served 表与标志位挂在 tracker 条目上，未单列。",
+         fc=PANEL, ec=PANEL, fs=9.0)
+    save(fig, "32-s16-uarch.png")
+
+
+def fig_s16_flow() -> None:
+    """Two cores contending for one HA, step by step, with the HA's tables."""
+    fig, ax = plt.subplots(figsize=(9.7, 5.85))
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01)
+    _panel(ax, "S16 工作示例：两个核争一个 HA（示意 overcommit = 2；实际 16，逻辑逐字相同）",
+           "REQ 灰 · DBIDResp 红 · WriteData 蓝")
+    lanes = (("C0（快核）", 0.10, False), ("C2（慢核）", 0.30, False),
+             ("HA", 0.50, True))
+    for lab, x, ha in lanes:
+        _box(ax, x - 0.06, 0.86, 0.12, 0.075, lab, fc=NEW_FC if ha else PANEL,
+             ec=RED if ha else GREY, tc=RED if ha else INK, fs=9.4, bold=True)
+        ax.plot([x, x], [0.14, 0.86], color=GREY, lw=1.0, ls=":", zorder=1)
+
+    ys = (0.81, 0.72, 0.63, 0.54, 0.415, 0.265)
+    C0, C2, HA = 0.10, 0.30, 0.50
+
+    def msg(y, a, b, text, color, ls="-"):
+        _arrow(ax, (a, y), (b, y), color=color, ls=ls, lw=1.3)
+        _lab(ax, (a + b) / 2, y + 0.026, text, color=color, fs=8.0)
+
+    def note(y, text, color=GREY, bold=False):
+        _lab(ax, HA - 0.008, y, text, color=color, fs=7.8, ha="right",
+             bold=bold)
+
+    msg(ys[0], C0, HA, "REQ a", GREY)
+    msg(ys[0] - 0.045, HA, C0, "DBIDResp a（直通）", RED)
+    msg(ys[1], C0, HA, "REQ b", GREY)
+    msg(ys[1] - 0.045, HA, C0, "DBIDResp b（直通）", RED)
+    msg(ys[2], C2, HA, "REQ c", GREY)
+    note(ys[2] - 0.04, "在飞 = 2 已满 → 登记等待")
+    msg(ys[3], C0, HA, "REQ d", GREY)
+    note(ys[3] - 0.04, "有人在等 → 登记等待")
+    msg(ys[4], C0, HA, "WriteData a 末 flit", BLUE, ls="--")
+    msg(ys[4] - 0.045, HA, C2, "DBIDResp c", RED)
+    note(ys[4] - 0.082, "名额空 1 → served: C2 = 0 < C0 = 4 → 给 C2", RED,
+         bold=True)
+    msg(ys[5], C0, HA, "WriteData b 末 flit", BLUE, ls="--")
+    msg(ys[5] - 0.045, HA, C0, "DBIDResp d", RED)
+    note(ys[5] - 0.082, "名额空 1 → 只剩 C0 在等 → 给 C0")
+
+    for i, y in enumerate(ys):
+        ax.text(0.035, y, f"{i + 1}", fontsize=9, color=RED, fontweight="bold",
+                ha="center", va="center", zorder=5,
+                bbox=dict(boxstyle="circle,pad=0.25", fc="white", ec=RED))
+
+    # the HA's tables after each step
+    cols = (("步", 0.635), ("在飞", 0.695), ("served\nC0", 0.765),
+            ("served\nC2", 0.840), ("等待中", 0.935))
+    ax.add_patch(FancyBboxPatch((0.605, 0.13), 0.385, 0.76,
+                                boxstyle="round,pad=0.006", fc="white",
+                                ec=GREY, lw=1.0, zorder=1))
+    for lab, x in cols:
+        ax.text(x, 0.855, lab, fontsize=8.6, color=GREY, ha="center",
+                va="center", fontweight="bold", linespacing=1.1)
+    ax.plot([0.615, 0.98], [0.815, 0.815], color=GREY, lw=0.8)
+    rows = (("1", "1", "2", "0", "—"), ("2", "2", "4", "0", "—"),
+            ("3", "2", "4", "0", "c"), ("4", "2", "4", "0", "c, d"),
+            ("5", "2", "4", "2", "d"), ("6", "2", "6", "2", "—"))
+    for y, row in zip(ys, rows):
+        for (lab, x), v in zip(cols, row):
+            hot = (y == ys[4] and lab.startswith("served\nC2"))
+            ax.text(x, y - 0.02, v, fontsize=9.6,
+                    color=RED if hot else INK, ha="center", va="center",
+                    fontweight="bold" if hot else "normal")
+
+    _box(ax, 0.01, 0.01, 0.98, 0.10,
+         "看点：d 比 c 晚到，C0 又是快核，但第 5 步空出的名额给了 served 最小的 C2 —— "
+         "这就是「迄今被服务最少者优先」。\n名额一空立刻补，在飞授权始终顶在上限，"
+         "HA 的下环口没有一拍空转；改的是「谁」拿授权，不是「多少」授权。",
+         fc=PANEL, ec=PANEL, fs=9.0)
+    save(fig, "33-s16-flow.png")
+
+
+def _arb_pipeline(bx, cross_text, dodge_text, board_text, note_text,
+                  cross_fs=7.9):
+    """The inject-port arbiter S22 and S29 share: FIFO head -> I-tag ->
+    crossing test -> dodge -> free slot -> board. Only the crossing test's
+    operand differs between the two schemes."""
+    y, h = 0.44, 0.38
+    xs = (0.01, 0.155, 0.30, 0.50, 0.70, 0.845)
+    ws = (0.125, 0.125, 0.18, 0.18, 0.125, 0.145)
+    _hw(bx, xs[0], y, ws[0], h, "FIFO 头 flit\n（已有）")
+    _hw(bx, xs[1], y, ws[1], h, "基线 I-tag 判定\n（已有）")
+    _hw(bx, xs[2], y, ws[2], h, cross_text, new=True, bold=True, fs=cross_fs)
+    _hw(bx, xs[3], y, ws[3], h, dodge_text, new=True, fs=8.2)
+    _hw(bx, xs[4], y, ws[4], h, "出向槽空？\n（已有）")
+    _hw(bx, xs[5], y, ws[5], h, board_text, new=True, fs=8.2)
+    mid = y + h / 2
+    for i in range(len(xs) - 1):
+        _arrow(bx, (xs[i] + ws[i], mid), (xs[i + 1], mid),
+               color=RED if i >= 1 else INK)
+    _lab(bx, 0.49, mid + 0.05, "跨 → 前瞻", color=RED, fs=7.8)
+    # the no-cross path skips the dodge stage: arc over it
+    _arrow(bx, (xs[2] + ws[2] / 2, y + h), (xs[4] + ws[4] / 2, y + h),
+           color=INK, rad=-0.14)
+    _lab(bx, (xs[2] + xs[4] + ws[4]) / 2 + 0.04, y + h + 0.14, "不跨 → 照常",
+         color=INK, fs=7.8)
+    _hw(bx, xs[3], 0.13, ws[3], 0.20,
+        "都跨 → 本拍让位\n这个端口不注入", new=True, fs=8.2)
+    _arrow(bx, (xs[3] + ws[3] / 2, y), (xs[3] + ws[3] / 2, 0.33), color=RED)
+    _box(bx, 0.01, 0.0, 0.98, 0.105, note_text, fc=PANEL, ec=PANEL, fs=8.5)
+
+
+def fig_s22_uarch() -> None:
+    """S22 per node: the progress-bus signal path and the arbiter insert."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.12, 1.0]})
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.93, bottom=0.02,
+                        hspace=0.26)
+    _panel(ax, "信号侧（每节点一份）：播进度 → 存表 → 算赤字 → 举请求",
+           "灰 = 已有 · 红 = 新增 · 总线复用 S1 的 6 bit 线")
+    # serpentine: row 1 left -> right, row 2 right -> left
+    r1, r2, h = 0.58, 0.10, 0.34
+    xs = (0.01, 0.26, 0.51, 0.76)
+    w = 0.225
+    _hw(ax, xs[0], r1, w, h, "上环成功事件\n（已有：DAT flit 注入）")
+    _hw(ax, xs[1], r1, w, h, "ok_win\n6 bit 饱和计数\n本窗上环数 +1", new=True)
+    _hw(ax, xs[2], r1, w, h, "窗末发送\nt mod 64 = 63\n6 bit 上总线，然后清零",
+        new=True)
+    _hw(ax, xs[3], r1, w, h, "6 bit 广播总线\n30 拍延迟\n复用 S1 的线", new=True)
+    _hw(ax, xs[3], r2, w, h, "cum_bus 表\n10 × 8 bit\n每窗累加到达的 10 项",
+        new=True)
+    _hw(ax, xs[2], r2, w, h, "10 输入加法树\n÷10（移位近似）\n→ 环均值", new=True)
+    _hw(ax, xs[1], r2, w, h, "deficit[n] = 均值 − 表[n]\n×10，钳位 ±64",
+        new=True)
+    _hw(ax, xs[0], r2, w, h, "请求 FSM ×10\n≥ 0.5 举 · ≤ 0 撤\nhold 16 拍到期强制撤",
+        new=True, bold=True)
+    m1, m2 = r1 + h / 2, r2 + h / 2
+    for i in range(3):
+        _arrow(ax, (xs[i] + w, m1), (xs[i + 1], m1),
+               color=INK if i == 0 else RED)
+        _arrow(ax, (xs[3 - i], m2), (xs[3 - i] - (xs[1] - xs[0] - w), m2),
+               color=RED)
+    _arrow(ax, (xs[3] + w / 2, r1), (xs[3] + w / 2, r2 + h), color=RED)
+    _lab(ax, 0.905, 0.52, "30 拍后送达", color=RED, fs=7.8)
+
+    _panel(bx, "仲裁侧（注入端口，每拍对每个 DAT 候选 flit）",
+           "在已有的 I-tag 判定之后插入两级")
+    _arb_pipeline(
+        bx,
+        "跨越判定（新）\n∃ 请求者 h：\ndeficit[h] ≥ 我的 + 3.0\n且 h 在此 flit 剩余路径上",
+        "前瞻 dodge ≤ 8（新）\n往后找一个目的地不同、\n不跨任何请求者的 flit",
+        "上环（新增动作）\nok_win +1\ndeficit −1\n≤ 0 → 撤请求",
+        "成本（Pareto 同口径）：总线 6 bit × 20 = 120 · 表 10 × 8 bit × 20 = 1,600 · "
+        "计数 10 bit × 20 = 200 · 运算（加法树 360 + 2 加法 80 + 8 比较 160）× 20 = "
+        "12,000 → 13,920 FF-eq。\n运算占 86%，几乎全是那棵加法树。"
+        "实现注记：请求位在仿真中即时可见；硬件按同一张表本地重算即可得到同一集合。")
+    save(fig, "34-s22-uarch.png")
+
+
+def fig_s22_flow() -> None:
+    """One 64-cycle control window, and the deficit trajectory it produces."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.0, 1.05]})
+    fig.subplots_adjust(left=0.06, right=0.985, top=0.93, bottom=0.10,
+                        hspace=0.34)
+    _panel(ax, "一个控制窗的时间线（窗 64 · 总线 30 · 举 0.5 · 撤 0 · hold 16 · margin 3.0）",
+           "示例数值：C4 落后，其余 9 核领先")
+    # Piecewise time axis: the window itself is uneventful, the 16 cycles
+    # after the bus lands are where everything happens.
+    knots = ((0, 0.03), (63, 0.26), (93, 0.44), (135, 0.97))
+
+    def X(t):
+        for (ta, xa), (tb, xb) in zip(knots, knots[1:]):
+            if t <= tb:
+                return xa + (t - ta) / (tb - ta) * (xb - xa)
+        return knots[-1][1]
+
+    yl = 0.50
+    ax.plot([X(0), X(135)], [yl, yl], color=INK, lw=1.8, zorder=1)
+    ax.annotate("", xy=(X(135) + 0.012, yl), xytext=(X(133), yl),
+                arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
+    ax.plot([X(0), X(63)], [yl + 0.26, yl + 0.26], color=GREY, lw=1.0)
+    for t in (0, 63):
+        ax.plot([X(t), X(t)], [yl + 0.23, yl + 0.29], color=GREY, lw=1.0)
+    ax.text(X(31), yl + 0.31, "本窗计数（t = 0–63）：C4 只上环 3 个 flit，其余 9 核各 8 个",
+            ha="center", va="bottom", fontsize=8.4, color=GREY)
+    _lab(ax, X(78), yl + 0.045, "总线 30 拍", color=GREY, fs=7.6)
+    events = (
+        (63, 1, "right", "t=63 全部核把\n6 bit 计数放上总线", GREY),
+        (93, -1, "right", "t=93 送达 → 表累加，均值 7.5\n"
+                          "C4 赤字 +4.5 ≥ 0.5 → 举请求\nC2 赤字 −0.5（领先）", RED),
+        (94, 1, "center", "t=94 上游 C2 的 flit 会骑过 C4 出向 hop\n"
+                          "4.5 ≥ −0.5 + 3.0 → 让位 / 前瞻改发", RED),
+        (103, -1, "left", "t=95…103 C4 每上环 1 个 −1\n到 −0.5 ≤ 0 → 撤请求", RED),
+        (109, 1, "center", "t=109 hold 上限\n被 transit 卡住时\n到此强制撤", GREY),
+        (127, -1, "center", "t=127\n下一窗末再播", GREY),
+    )
+    for t, side, ha, txt, col in events:
+        ax.plot([X(t), X(t)], [yl - 0.04, yl + 0.04], color=col, lw=1.6,
+                zorder=3)
+        ax.scatter([X(t)], [yl], s=28, c=col, zorder=4)
+        yy = yl + 0.10 if side > 0 else yl - 0.10
+        dx = {"left": 0.012, "right": -0.012, "center": 0.0}[ha]
+        ax.text(X(t) + dx, yy, txt, ha=ha, va="bottom" if side > 0 else "top",
+                fontsize=7.9, color=col, linespacing=1.25)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.05, 1.05)
+
+    bx.set_title("落后核 C4 与领先核 C2 的赤字轨迹（示例值）", fontsize=10.5,
+                 fontweight="bold", color=INK, loc="left")
+    ts = [0, 93, 95, 97, 99, 101, 103, 135]
+    c4 = [0, 4.5, 3.5, 2.5, 1.5, 0.5, -0.5, -0.5]
+    bx.step(ts, c4, where="post", color=RED, lw=2.0, label="C4（落后）赤字")
+    bx.step([0, 93, 135], [0, -0.5, -0.5], where="post", color=INK, lw=1.6,
+            label="C2（领先）赤字")
+    bx.axhline(0.5, color=RED, ls=":", lw=1.1)
+    bx.axhline(0.0, color=GREY, ls=":", lw=1.1)
+    bx.text(1.5, 0.62, "举请求线 0.5", fontsize=8, color=RED)
+    bx.text(1.5, -0.42, "撤请求线 0", fontsize=8, color=GREY, va="top")
+    bx.axvspan(93, 103, color=RED, alpha=0.08, lw=0)
+    bx.text(98, 5.0, "C4 请求有效", fontsize=8.2, color=RED, ha="center")
+    bx.axvline(109, color=GREY, ls="--", lw=1.0)
+    bx.text(110.5, 3.4, "hold 到期 109\n（本例未用到）", fontsize=8, color=GREY,
+            linespacing=1.2)
+    bx.axvline(63, color=GREY, ls="--", lw=0.8)
+    bx.text(64, 3.4, "播出 63", fontsize=8, color=GREY)
+    bx.text(46, 2.2, "63 → 93：信号在路上，\n这 30 拍里没有人让位", fontsize=8.4,
+            color=GREY, ha="center")
+    bx.set_xlim(0, 135)
+    bx.set_ylim(-1.2, 5.6)
+    bx.set_xlabel("拍（cycle）", fontsize=9)
+    bx.set_ylabel("赤字（flit）", fontsize=9)
+    bx.tick_params(labelsize=8)
+    bx.legend(fontsize=8.2, loc="upper left", framealpha=0.95)
+    bx.grid(alpha=0.25)
+    save(fig, "35-s22-flow.png")
+
+
+def fig_s29_uarch() -> None:
+    """S29 per node: the calendar trigger, and S22's arbiter reused verbatim."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.12, 1.0]})
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.93, bottom=0.02,
+                        hspace=0.26)
+    _panel(ax, "触发侧（每节点一份）：日历 + 需求位，没有任何测量",
+           "灰 = 已有 · 红 = 新增 · 总线复用 S1 的线，只走 1 bit/核")
+    r1, r2, h = 0.58, 0.10, 0.34
+    xs = (0.01, 0.26, 0.51, 0.76)
+    w = 0.225
+    _hw(ax, xs[0], r1, w, h, "5 bit 帧计数器\nt mod 20\n自由跑，不需要复位", new=True)
+    _hw(ax, xs[1], r1, w, h, "时隙 → 持有者\ncores[cnt >> 1]\n（10 项常量表）", new=True)
+    _hw(ax, xs[2], r1, w, h, "路权有效 =\ndemand[持有者]\n（查 1 bit）", new=True,
+        bold=True)
+    _hw(ax, xs[3], r1, w, h, "demand 寄存器\n10 bit\n到达即整字替换", new=True)
+    _hw(ax, xs[0], r2, w, h, "本地 DAT 队列占用\n（已有队列）\n≥ 1 → 有需求")
+    _hw(ax, xs[1], r2, w, h, "每 16 拍采样\nt mod 16 = 15\n1 bit 上总线", new=True)
+    _hw(ax, xs[2], r2, w, h, "10 bit 广播总线\n30 拍延迟\n复用 S1 的线", new=True)
+    _hw(ax, xs[3], r2, w, h, "送达：10 核的\n需求位整字到达", new=True)
+    m1, m2 = r1 + h / 2, r2 + h / 2
+    _arrow(ax, (xs[0] + w, m1), (xs[1], m1), color=RED)
+    _arrow(ax, (xs[1] + w, m1), (xs[2], m1), color=RED)
+    _arrow(ax, (xs[3], m1), (xs[2] + w, m1), color=RED)
+    for i in range(3):
+        _arrow(ax, (xs[i] + w, m2), (xs[i + 1], m2),
+               color=INK if i == 0 else RED)
+    _arrow(ax, (xs[3] + w / 2, r2 + h), (xs[3] + w / 2, r1), color=RED)
+    _lab(ax, 0.62, 0.52, "→ 仲裁侧：本拍持有者是谁、是否有效", color=RED, fs=8.0)
+
+    _panel(bx, "仲裁侧（注入端口，每拍对每个 DAT 候选 flit）",
+           "与 S22 同一块逻辑，只换第一个操作数")
+    _arb_pipeline(
+        bx,
+        "跨越判定（与 S22 同一块）\n持有者有效 且 我 ≠ 持有者\n且 持有者在此 flit\n剩余路径上；HA 不让位",
+        "前瞻 dodge ≤ 32（新）\n往后找一个目的地不同、\n不跨持有者 hop 的 flit",
+        "上环（无新增动作）\n不计数、不扣减\n没有反馈回路",
+        "成本（Pareto 同口径）：总线 10 bit × 20 = 200 · 计数 (5 + 7) bit × 20 = 240 · "
+        "运算（8 比较 160 + 1 加法 40）× 20 = 4,000 → 4,440 FF-eq。\n"
+        "相对 S22 删掉：10 项表 1,600、加法树与赤字运算 8,000；仲裁侧一个 bit 都没改。",
+        cross_fs=7.7)
+    save(fig, "36-s29-uarch.png")
+
+
+def fig_s29_flow() -> None:
+    """Two frames of the calendar, the demand-word timing, one yield."""
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
+                                 gridspec_kw={"height_ratios": [1.0, 1.0]})
+    fig.subplots_adjust(left=0.015, right=0.985, top=0.93, bottom=0.02,
+                        hspace=0.30)
+    _panel(ax, "日历：帧 20 拍 = 10 核 × 2 拍，两帧示意；需求字每 16 拍采样、30 拍后生效",
+           "红 = 有需求的持有者 · 灰斜线 = 无需求，时隙作废")
+    cores = tuple(range(0, 20, 2))
+    demand = {0, 2, 6, 8, 10, 12, 16, 18}          # C4 / C14 drained
+    x0, sw = 0.015, 0.0485
+    for fr in range(2):
+        for i, c in enumerate(cores):
+            x = x0 + (fr * 10 + i) * sw
+            own = c in demand
+            ax.add_patch(FancyBboxPatch(
+                (x, 0.62), sw - 0.004, 0.20, boxstyle="square,pad=0",
+                fc=NEW_FC if own else "white", ec=RED if own else GREY,
+                lw=0.9, hatch=None if own else "///", zorder=2))
+            ax.text(x + sw / 2 - 0.002, 0.72, f"C{c}", fontsize=7.6,
+                    color=RED if own else GREY, ha="center", va="center",
+                    fontweight="bold" if own else "normal", zorder=3)
+        ax.text(x0 + (fr * 10 + 6.5) * sw, 0.87,
+                f"帧 {fr}：t = {fr * 20}–{fr * 20 + 19}", fontsize=8.6,
+                color=INK, ha="center")
+    ax.annotate("C4 无需求 → 这 2 拍无人让位，谁都可以上",
+                xy=(x0 + 2.5 * sw, 0.62), xytext=(x0 + 3.2 * sw, 0.47),
+                fontsize=8.2, color=GREY,
+                arrowprops=dict(arrowstyle="-|>", lw=1.0, color=GREY))
+    ax.annotate("C6 时隙 t = 6, 7：下图放大", xy=(x0 + 3.5 * sw, 0.82),
+                xytext=(x0 + 3.5 * sw, 0.94), fontsize=8.4, color=RED,
+                fontweight="bold", ha="center",
+                arrowprops=dict(arrowstyle="-|>", lw=1.1, color=RED))
+    yb = 0.22
+    ax.plot([0.03, 0.97], [yb, yb], color=INK, lw=1.4)
+    for t, lab, col in ((15, "t=15 采样需求位", GREY), (31, "t=31 采样", GREY),
+                        (45, "t=45 生效（管 t=45–60）", RED),
+                        (61, "t=61 生效", RED)):
+        x = 0.03 + t / 64 * 0.94
+        ax.plot([x, x], [yb - 0.035, yb + 0.035], color=col, lw=1.4)
+        ax.text(x, yb - 0.07, lab, fontsize=7.9, color=col, ha="center",
+                va="top")
+    for t in (15, 31):
+        _arrow(ax, (0.03 + t / 64 * 0.94, yb + 0.05),
+               (0.03 + (t + 30) / 64 * 0.94, yb + 0.05), color=RED, rad=-0.25,
+               lw=1.0)
+    ax.text(0.03 + 30 / 64 * 0.94, yb + 0.16, "30 拍总线", fontsize=7.9,
+            color=RED, ha="center")
+    ax.text(0.03, yb + 0.05, "生效中的需求字总是\n30–46 拍前的快照", fontsize=8.0,
+            color=GREY, ha="left", va="bottom", linespacing=1.25)
+
+    _panel(bx, "执行：时隙 C6 的两拍里，上游 C2 的两个候选 flit（顺时针方向）",
+           "让位只发生在「会骑过持有者出向 hop」的 flit 上")
+    nodes = ("C2", "H3", "C4", "H5", "C6", "H7", "C8", "H9", "C10")
+    ry = 0.66
+    bx.plot([0.04, 0.96], [ry, ry], color=GREY, lw=2.4, zorder=1)
+    xs = [0.06 + i * 0.11 for i in range(len(nodes))]
+    for x, lab in zip(xs, nodes):
+        own = lab == "C6"
+        up = lab == "C2"
+        col = RED if own else (BLUE if up else GREY)
+        bx.scatter([x], [ry], s=230 if (own or up) else 150, c="white",
+                   edgecolors=col, linewidths=1.9 if (own or up) else 1.2,
+                   zorder=3)
+        bx.text(x, ry + 0.085, lab, ha="center", fontsize=9, color=col,
+                fontweight="bold" if (own or up) else "normal")
+    bx.plot([xs[4] + 0.012, xs[5] - 0.012], [ry, ry], color=RED, lw=5,
+            zorder=2, solid_capstyle="butt")
+    bx.text((xs[4] + xs[5]) / 2, ry - 0.075, "持有者的出向 hop", fontsize=8.2,
+            color=RED, ha="center")
+    _arrow(bx, (xs[0], ry + 0.15), (xs[8], ry + 0.15), color=RED, ls="--",
+           rad=-0.12, lw=1.2)
+    bx.text(xs[4], ry + 0.30, "候选 ①：C2 → C10，路径含 C6→H7 → 跨越 → 不能上",
+            fontsize=8.4, color=RED, ha="center", fontweight="bold")
+    _arrow(bx, (xs[0], ry - 0.15), (xs[3], ry - 0.15), color=BLUE, ls="--",
+           rad=0.16, lw=1.2)
+    bx.text((xs[0] + xs[3]) / 2, ry - 0.30, "候选 ②：C2 → H5，在 C6 之前下环 → 不跨 → 前瞻改发它",
+            fontsize=8.4, color=BLUE, ha="center", fontweight="bold")
+    bx.text(xs[1], ry - 0.13, "HA 节点不参与让位", fontsize=7.8, color=GREY,
+            ha="center")
+    _box(bx, 0.02, 0.01, 0.96, 0.20,
+         "每核每 20 拍保证 2 拍路权 → 100 拍公平窗里 5 次，这是硬保证，不靠收敛。"
+         "但日历不知道谁落后：让位方向按核号轮转，不按赤字，\n"
+         "所以领先核也会拿到时隙 —— 这就是 S29 对 S22 带宽 −6.04% vs −2.21% 的全部来源。",
+         fc=PANEL, ec=PANEL, fs=8.8)
+    save(fig, "37-s29-flow.png")
 
 
 def fig_window_diagram() -> None:
@@ -1185,6 +1621,12 @@ def main() -> None:
     fig_s22_compare()
     fig_s29_diagram()
     fig_s29_compare()
+    fig_s16_uarch()
+    fig_s16_flow()
+    fig_s22_uarch()
+    fig_s22_flow()
+    fig_s29_uarch()
+    fig_s29_flow()
 
 
 if __name__ == "__main__":
