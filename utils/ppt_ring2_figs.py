@@ -303,59 +303,90 @@ def fig_tradeoff() -> None:
     r_max, r_fair = d["r_max"], d["r_fair"]
     w = dk["write"]
 
-    fig, ax = plt.subplots(figsize=(11.8, 5.65))
-    ax.plot(xs, ys, "-", c=RED, lw=2.8, zorder=3,
-            label="理论上限：公平度至少为 J 时，最高总带宽 R(J)")
-    ax.fill_between(xs, 4.35, ys, color=RED, alpha=0.045, zorder=0)
-    ax.axhline(r_max, c=GREY, ls="--", lw=1.0)
-    ax.annotate(f"不要求公平时的总带宽上限 R_max = {r_max:.4f}",
-                xy=(0.866, r_max), xytext=(5, 7), textcoords="offset points",
-                fontsize=9.2, color="#5b636d")
-    ax.scatter([1.0], [r_fair], s=76, facecolors="white", edgecolors=RED,
-               linewidths=1.8, zorder=5)
-    ax.annotate(f"完全等速率\nR* = {r_fair:.4f}",
-                xy=(1.0, r_fair), xytext=(-64, -3), textcoords="offset points",
-                fontsize=9.3, color=RED, ha="right", va="center",
-                arrowprops=dict(arrowstyle="->", color=RED, lw=1.0))
-
-    styles = {
-        "S0": ("S0", BLUE, "o", (-25, -24)),
-        "S1": ("S1", AMBER, "s", (10, -3)),
-        "S1T": ("S1T", "#8b6f47", "s", (-42, 18)),
-        "S16": ("S16", RED, "*", (10, 7)),
-        "ITAG": ("S0 I-tag调参", "#5b636d", "D", (10, -17)),
-        "S19": ("S19", "#8b939e", "^", (18, -21)),
-        "S20": ("S20", INK, "v", (18, 18)),
-        "S22": ("S22", "#8f1d24", "P", (-38, 7)),
+    labels = {
+        "S0": "S0 基线", "S1": "S1 AIMD", "S1T": "S1T 分向",
+        "S16": "S16 授权保留", "ITAG": "S0 I-tag 调参",
+        "S19": "S19 Swift", "S20": "S20 DCTCP",
+        "S22": "S22 赤字让路", "S26": "S26 自适应路由",
+        "S27": "S27 逐跳背压", "S28": "S28 显式速率",
+        "S28S": "S28S 等分速率", "S29": "S29 日历让路",
     }
-    for key, (label, color, marker, offset) in styles.items():
+    new = {"S26", "S27", "S28", "S28S", "S29"}
+    rows = []
+    for key, lab in labels.items():
         r = w[key]
-        x = r["jain_bin"]["jain_bin_mean"]
-        y = r["throughput"]
-        size = 185 if key == "S16" else 105
-        ax.scatter([x], [y], s=size, c=color, marker=marker, zorder=6,
-                   edgecolors="white", linewidths=0.8)
-        ax.annotate(label, xy=(x, y), xytext=offset, textcoords="offset points",
-                    fontsize=9.5, color=color, fontweight="bold",
-                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
-                              ec="none", alpha=0.82),
-                    arrowprops=dict(arrowstyle="-", color=color, lw=0.7))
+        rows.append({"key": key, "name": lab,
+                     "jain": r["jain_bin"]["jain_bin_mean"],
+                     "bw": r["throughput"]})
+    rows.sort(key=lambda r: -r["bw"])
 
-    ax.text(0.868, 4.52,
-            "点到红线的竖直距离\n= 该方案在同等公平度下损失的带宽",
-            fontsize=9.5, color="#5b636d",
-            bbox=dict(boxstyle="round,pad=0.30", fc=PANEL, ec="none"))
+    fig = plt.figure(figsize=(12.4, 6.15))
+    ax = fig.add_axes([0.072, 0.11, 0.50, 0.78])
+    key = fig.add_axes([0.595, 0.02, 0.395, 0.94])
+    key.axis("off")
 
-    ax.set_xlim(0.865, 1.004)
-    ax.set_ylim(4.40, 6.62)
-    ax.set_xlabel(f"公平度 J = {dk['meta']['bin_w']} 拍窗内十个核带宽的 Jain 指数"
-                  "（1 = 完全均等）→ 越往右越公平")
+    lo = min(r["bw"] for r in rows) - 0.18
+    ax.plot(xs, ys, "-", c=RED, lw=2.6, zorder=3,
+            label="理论上限 R(J)")
+    ax.fill_between(xs, lo, ys, color=RED, alpha=0.045, zorder=0)
+    ax.axhline(r_max, c=GREY, ls="--", lw=1.0)
+    ax.annotate(f"R_max = {r_max:.4f}",
+                xy=(0.878, r_max), xytext=(4, 6), textcoords="offset points",
+                fontsize=8.8, color="#5b636d")
+    ax.scatter([1.0], [r_fair], s=70, facecolors="white", edgecolors=RED,
+               linewidths=1.6, zorder=5)
+    ax.annotate(f"R* = {r_fair:.4f}",
+                xy=(1.0, r_fair), xytext=(-8, 10), textcoords="offset points",
+                fontsize=8.8, color=RED, ha="right")
+
+    for i, r in enumerate(rows, 1):
+        if r["key"] == "S16":
+            c, s = RED, 160
+        elif r["key"] == "S0":
+            c, s = BLUE, 130
+        elif r["key"] == "S1":
+            c, s = AMBER, 130
+        elif r["key"] in new:
+            c, s = GREEN, 120
+        else:
+            c, s = "#5b636d", 90
+        ax.scatter([r["jain"]], [r["bw"]], s=s, c=c, zorder=6,
+                   edgecolors="k", linewidths=0.55)
+        dx, dy = ((0, 9), (-10, 3), (10, 3), (0, -12))[i % 4]
+        ax.annotate(str(i), xy=(r["jain"], r["bw"]), xytext=(dx, dy),
+                    textcoords="offset points", fontsize=8.6, ha="center",
+                    color=INK, fontweight="bold")
+
+    ax.set_xlim(0.872, 1.004)
+    ax.set_ylim(lo, 6.62)
+    ax.set_xlabel(f"公平度 J = {dk['meta']['bin_w']} 拍窗 Jain（1 = 完全均等）→")
     ax.set_ylabel("总写带宽 R  flit/cycle")
-    ax.set_title("红线是理论上限；全部官方实测方案都放在同一坐标系",
-                 fontsize=13, fontweight="bold")
+    ax.set_title("红线是理论上限；全部官方 K=20000 方案",
+                 fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=9.5, loc="upper right")
-    fig.tight_layout()
+    ax.legend(fontsize=8.5, loc="upper right")
+
+    cols = ((0.00, "#"), (0.055, "方案（按带宽降序）"), (0.62, "Jain"),
+            (0.80, "带宽"), (1.00, ""))
+    aligns = ("left", "left", "right", "right", "right")
+    key.text(0.0, 0.985, "图例 · 绿 = 本次补齐", fontsize=12,
+             fontweight="bold", color=INK, va="top")
+    step, pt = _key_metrics(len(rows))
+    for (x, t), al in zip(cols, aligns):
+        key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
+                 fontweight="bold")
+    front = {"S16", "S0"}
+    for i, r in enumerate(rows, 1):
+        col = RED if r["key"] in front else (GREEN if r["key"] in new else INK)
+        y = 0.935 - i * step
+        vals = (str(i), r["name"], f"{r['jain']:.4f}", f"{r['bw']:.3f}", "")
+        for (x, _), al, v in zip(cols, aligns, vals):
+            key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
+    key.text(0.0, 0.935 - (len(rows) + 1.25) * step,
+             "点到红线的竖直距离 = 同等公平度下损失的带宽。\n"
+             "绿点 = 本次补齐的四类；I-tag 只是 S0 调参。",
+             fontsize=8.6, color="#5b636d", va="top")
+
     save(fig, "16-tradeoff.png")
 
 
