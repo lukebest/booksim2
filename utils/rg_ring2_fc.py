@@ -71,6 +71,11 @@ class Ring2FcParams(Ring2BaseParams):
     budget_min: int = 1           # never throttle a node to silence
     band: str = "spec"            # alpha / beta band mapping
     scope: str = "core_only"      # "core_only" | "ha_only" | "both"
+    # Which failures feed S1's congestion level. "both" is the specified
+    # scheme: own level = max(board failures, eject deflections), and the bus
+    # carries both 3-bit fields. "up" counts only failed boards (上环失败),
+    # "down" only failed ejects (下环失败); the unused bus field reads 0.
+    signal: str = "both"          # "both" | "up" | "down"
     trace: bool = True            # keep per-window traces for the report
     # -- S15 only -------------------------------------------------------
     reserve_gap: int = 16         # how far below the ring-wide mean a node
@@ -199,6 +204,11 @@ class Ring2FcSim(Ring2BaseSim):
         self._path_seen: set[tuple[int, int, int]] = set()
         self.trace: dict[str, list] = {"t": [], "budget": [], "level": [],
                                        "recv": [], "ok": [], "target": []}
+        # Run totals of the two raw S1 signals per controlled node, and how
+        # many windows each one (and the bus feedback) was non-zero in.
+        self.sig_sum: dict[str, dict[int, int]] = {
+            k: defaultdict(int) for k in
+            ("up", "down", "up_lv", "down_lv", "recv_lv", "windows")}
         # -- S15 state ---------------------------------------------------
         # Census of who crossed each outgoing hop this window:
         # (node, dir, vc) -> src -> flits. This is what lets a node advertise
@@ -454,9 +464,10 @@ class Ring2FcSim(Ring2BaseSim):
                             self.ej_offered.get((i, vc)))
                         if adv is not None:
                             fair_ej[vc] = adv
+            sig = self.p.signal
             self.bus.post(self.t, i, BusMsg(
-                up=level_of(self.fail_net[i]),
-                down=level_of(self.defl_win[i]),
+                up=level_of(self.fail_net[i]) if sig != "down" else 0,
+                down=level_of(self.defl_win[i]) if sig != "up" else 0,
                 ok=ok, demand=dem,
                 active=int(bool(ok or dem)),
                 cum=sum(v for k, v in self.cum.items() if _node_of(k) == i),
@@ -547,9 +558,19 @@ class Ring2FcSim(Ring2BaseSim):
                 rec_ok.append(sum(self.ok_win.get(bk, 0) for bk in keys))
                 continue
             node_b, node_lv = 0, 0
+            self.sig_sum["up"][i] += self.fail_tot[i]
+            self.sig_sum["down"][i] += self.defl_win[i]
+            self.sig_sum["up_lv"][i] += level_of(self.fail_tot[i]) > 0
+            self.sig_sum["down_lv"][i] += level_of(self.defl_win[i]) > 0
+            self.sig_sum["recv_lv"][i] += recv > 0
+            self.sig_sum["windows"][i] += 1
             for bk in keys:
                 if p.dir_split:
                     own = self.fail_dir.get(bk, 0)
+                elif p.signal == "up":
+                    own = self.fail_tot[i]
+                elif p.signal == "down":
+                    own = self.defl_win[i]
                 else:
                     own = max(self.fail_tot[i], self.defl_win[i])
                 final = level_of(max(0, own - LEVEL_STEP * recv))
@@ -728,7 +749,10 @@ class Ring2FcSim(Ring2BaseSim):
         out: dict[str, Any] = {
             "mode": self.p.mode, "window": self.p.window,
             "band": self.p.band, "scope": self.p.scope,
+            "signal": self.p.signal,
             "bus_lat": self.p.bus_lat,
+            "signal_sum": {k: {str(i): v[i] for i in cs}
+                           for k, v in self.sig_sum.items()},
             "bus_posts": self.bus.n_posts,
             "bus_bits": self.bus.n_posts * self.bus.bits_per_post(self.p.mode),
             "n_fc_deny": self.st.get("n_fc_deny", 0),

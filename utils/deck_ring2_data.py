@@ -8,16 +8,23 @@ only the deck's own cases at the current knobs -- `CORE_OUTSTANDING_WR` and
 read, so a slide cannot quote a number no run produced.
 
 Cases:
-  write / uniform   S0, S1, S1T, S16, I-tag hold, S19, S20, S22
+  write / uniform   S0, S1, S1U, S1D, S1T, S16, I-tag hold, S19, S20, S22,
+                    S26, S27, S28, S28S, S29
   read   / uniform  S0, S1-R (HA-scoped AIMD), S16-R (least-served grant)
+  read payload      S0 with CompData = 1 / 2 / 4 flits
+
+Every write row also carries each core's finish cycle and a sampled
+cumulative-progress curve, which is what the per-core completion figures read.
 
 Usage:
-    PYTHONHASHSEED=0 python3 deck_ring2_data.py [K_write] [K_read]
+    PYTHONHASHSEED=0 python3 deck_ring2_data.py [K_write] [K_read] [jobs]
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -34,7 +41,7 @@ from rg_ring2_topo import (CHI_VCS, CHI_VCS_WRITE, Ring2Topology,
                            build_tiled_read)
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "results" / "deck_ring2_data.json"
+OUT = Path(os.environ.get("DECK_OUT") or ROOT / "results" / "deck_ring2_data.json")
 IDEAL = json.loads((ROOT / "results" / "ideal_ring2_cc.json").read_text())
 
 # S22 is taken at its stock-queue operating point: the deep-queue variant buys a
@@ -46,6 +53,11 @@ S22_STOCK = {**S22_CFG, "inj_depth": FABRIC["inj_depth"],
 WRITE_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S0", "S0", {}),
     ("S1", "S1", {}),
+    # S1's congestion level split by which failure feeds it. Stock S1 takes
+    # max(board failures, eject deflections) and broadcasts both fields; the
+    # two variants keep exactly one of them and zero the other bus field.
+    ("S1U", "S1", {"signal": "up"}),
+    ("S1D", "S1", {"signal": "down"}),
     ("S1T", "S1T", dict(S1_CFG)),
     ("S16", "S16", {"overcommit": S16_OVERCOMMIT}),
     ("ITAG", "S0", {"t_inj": 2, "itag_hold": 2}),
@@ -69,6 +81,11 @@ READ_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S1-R", "S1", {"scope": "ha_only"}),
     ("S16-R", "S16", {"overcommit": 16}),
 ]
+# CompData sizes for the read-side S0 payload study. 2 is the deck's stock
+# 128 B burst; 1 and 4 bracket it. Same K transactions per core each time, so
+# the REQ stream is identical and only the DAT payload per REQ changes.
+READ_PAYLOADS = (1, 2, 4)
+CUM_STEP = 200            # cycles between samples of the cumulative curves
 
 
 def _counts(binned: dict[str, Any], t_fair: int) -> tuple[list[int], dict[str, list[int]]]:
@@ -161,112 +178,192 @@ def fail_ratio(board_dir: dict[str, Any]) -> dict[str, float]:
     return out
 
 
-def run_write(k: int) -> dict[str, Any]:  # noqa: C901
+def cumulative(times: dict[int, list[int]], makespan: int,
+               step: int = CUM_STEP) -> dict[str, Any]:
+    """Each core's delivered-flit count sampled every `step` cycles.
+
+    This is the per-core completion curve: it rises until that core's last
+    flit and is flat afterwards, so the x at which it goes flat is the core's
+    finish cycle and the spread of those x's is the completion-time skew.
+    """
+    n = makespan // step + 2
+    xs = [i * step for i in range(n)]
+    out = {}
+    for c, ts in sorted(times.items()):
+        cnt = [0] * n
+        for t in ts:
+            cnt[min(n - 1, int(t) // step + 1)] += 1
+        run = 0
+        for i in range(n):
+            run += cnt[i]
+            cnt[i] = run
+        out[str(c)] = cnt
+    return {"t": xs, "by_core": out}
+
+
+def _write_case(args: tuple[str, str, dict[str, Any], int]) -> tuple[str, dict[str, Any]]:
+    name, scheme, over, k = args
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
     txns = build_pattern("uniform", k=k, W=W_FLITS, seed=0)
-    out: dict[str, Any] = {}
-    for name, scheme, over in WRITE_CASES:
-        cfg = {**FABRIC, **over}
-        raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
-        d = digest(raw, flits_per_core=k * W_FLITS, bin_w=BIN_W)
-        f = d["fairness"]
-        ts, cnt = _counts(d["wr_binned"], int(f["t_fair"] or 0))
-        hop = d.get("hop_use") or {}
-        busiest = sorted(hop.items(),
-                         key=lambda kv: -(kv[1].get("util") or 0))[:4]
-        out[name] = {
-            "throughput": f["throughput"],
-            "bw_by_core": f["bw_by_core"],
-            "max_min": f["max_min"],
-            "t_fair": f["t_fair"],
-            "jain_bin": f["jain_bin"],
-            "makespan": d["makespan"],
-            "lat_p50": d["lat_p50"], "lat_p99": d["lat_p99"],
-            "n_etag": d["n_etag_raised"], "n_itag": d["n_itag_raised"],
-            "n_board_fail": d["n_board_fail"],
-            "max_core_outstanding": d["max_core_outstanding"],
-            "recv_by_ha": d["wr_recv_by_ha"],
-            "busiest_hops": [[h, v.get("util"), v.get("n"), v.get("defl")]
-                             for h, v in busiest],
-            "hop_util": {h: v.get("util") for h, v in hop.items()},
-            "ceiling_gap": ceiling_gap(hop, d["makespan"] or 1, k,
-                                       len(CORE_NODES), IDEAL["r_fair"]),
-            "fail_ratio": fail_ratio(d["board_dir"]),
-            "bin_t": ts, "total": totals(cnt),
-            "regular": regular_ceiling(cnt),
-            "per_core_binned": {c: [round(x / BIN_W, 4) for x in v]
-                                for c, v in cnt.items()},
-        }
-        print(f"  write {name:<4} bw={f['throughput']:.4f} "
-              f"J{BIN_W}={f['jain_bin']['jain_bin_mean']:.5f} "
-              f"max/min={f['max_min']:.4f} mk={d['makespan']}", flush=True)
-    return out
+    cfg = {**FABRIC, **over}
+    raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
+    d = digest(raw, flits_per_core=k * W_FLITS, bin_w=BIN_W)
+    f = d["fairness"]
+    ts, cnt = _counts(d["wr_binned"], int(f["t_fair"] or 0))
+    hop = d.get("hop_use") or {}
+    busiest = sorted(hop.items(),
+                     key=lambda kv: -(kv[1].get("util") or 0))[:4]
+    inj = {int(c): v for c, v in (raw.get("wr_inject_by_core") or {}).items()}
+    row = {
+        "throughput": f["throughput"],
+        "bw_by_core": f["bw_by_core"],
+        "max_min": f["max_min"],
+        "t_fair": f["t_fair"],
+        "finish_by_core": f["finish_by_core"],
+        "bw_run_by_core": f["bw_run_by_core"],
+        "max_min_run": f["max_min_run"],
+        "jain_bin": f["jain_bin"],
+        "makespan": d["makespan"],
+        "lat_p50": d["lat_p50"], "lat_p99": d["lat_p99"],
+        "n_etag": d["n_etag_raised"], "n_itag": d["n_itag_raised"],
+        "n_board_fail": d["n_board_fail"],
+        "n_deflections": d["n_deflections"],
+        "max_core_outstanding": d["max_core_outstanding"],
+        "recv_by_ha": d["wr_recv_by_ha"],
+        "busiest_hops": [[h, v.get("util"), v.get("n"), v.get("defl")]
+                         for h, v in busiest],
+        "hop_util": {h: v.get("util") for h, v in hop.items()},
+        "ceiling_gap": ceiling_gap(hop, d["makespan"] or 1, k,
+                                   len(CORE_NODES), IDEAL["r_fair"]),
+        "fail_ratio": fail_ratio(d["board_dir"]),
+        "bin_t": ts, "total": totals(cnt),
+        "regular": regular_ceiling(cnt),
+        "per_core_binned": {c: [round(x / BIN_W, 4) for x in v]
+                            for c, v in cnt.items()},
+        "cum": cumulative(inj, d["makespan"] or 1),
+    }
+    fc = d.get("fc") or {}
+    if fc:
+        row["fc"] = {k2: fc.get(k2) for k2 in
+                     ("signal", "signal_sum", "n_fc_deny", "n_aimd_increase",
+                      "n_aimd_decrease", "mean_budget", "mean_level",
+                      "mean_recv_level")}
+    print(f"  write {name:<4} bw={f['throughput']:.4f} "
+          f"J{BIN_W}={f['jain_bin']['jain_bin_mean']:.5f} "
+          f"max/min={f['max_min']:.4f} mk={d['makespan']}", flush=True)
+    return name, row
 
 
-def run_read(k: int) -> dict[str, Any]:
+def _read_row(raw: dict[str, Any], k: int, m_resp: int) -> dict[str, Any]:
+    recv = {int(c): list(v)
+            for c, v in (raw.get("rd_recv_by_core") or {}).items()}
+    f = fairness_stats(recv, raw["makespan"] or 1, k * m_resp)
+    jb = binned_jain(recv, BIN_W, f.get("t_fair") or 0)
+    series = {}
+    for c, ts in sorted(recv.items()):
+        xs, ys = bin_rate(ts, raw["makespan"] or 1, BIN_W)
+        series[str(c)] = {"t": xs, "rate": [round(y, 4) for y in ys]}
+    hop = raw.get("hop_use") or {}
+    busiest = sorted(hop.items(),
+                     key=lambda kv: -(kv[1].get("util") or 0))[:4]
+    return {
+        "m_resp": m_resp,
+        "throughput": f["throughput"], "bw_by_core": f["bw_by_core"],
+        "max_min": f["max_min"], "t_fair": f["t_fair"],
+        "finish_by_core": f["finish_by_core"],
+        "max_min_run": f["max_min_run"],
+        "jain_bin": jb, "makespan": raw["makespan"],
+        "lat_p50": raw.get("lat_p50"), "lat_p99": raw.get("lat_p99"),
+        "n_board_fail": raw.get("n_board_fail", 0),
+        "n_deflections": raw.get("n_deflections", 0),
+        "busiest_hops": [[h, v.get("util"), v.get("n"), v.get("defl")]
+                         for h, v in busiest],
+        "recv_binned": series,
+        "cum": cumulative(recv, raw["makespan"] or 1),
+    }
+
+
+def _read_case(args: tuple[str, str, dict[str, Any], int, int]
+               ) -> tuple[str, dict[str, Any]]:
+    name, scheme, over, k, m_resp = args
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS, route="latency")
-    txns = build_tiled_read(k=k, m_resp=W_FLITS, mem=MEM_NODES,
+    txns = build_tiled_read(k=k, m_resp=m_resp, mem=MEM_NODES,
                             core_set=CORE_NODES)
-    out: dict[str, Any] = {}
-    for name, scheme, over in READ_CASES:
-        cfg = {**FABRIC, **over}
-        raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
-        recv = {int(c): list(v)
-                for c, v in (raw.get("rd_recv_by_core") or {}).items()}
-        f = fairness_stats(recv, raw["makespan"] or 1, k * W_FLITS)
-        jb = binned_jain(recv, BIN_W, f.get("t_fair") or 0)
-        series = {}
-        for c, ts in sorted(recv.items()):
-            xs, ys = bin_rate(ts, raw["makespan"] or 1, BIN_W)
-            series[str(c)] = {"t": xs, "rate": [round(y, 4) for y in ys]}
-        out[name] = {
-            "throughput": f["throughput"], "bw_by_core": f["bw_by_core"],
-            "max_min": f["max_min"], "t_fair": f["t_fair"],
-            "jain_bin": jb, "makespan": raw["makespan"],
-            "recv_binned": series,
-        }
-        print(f"  read  {name:<6} bw={f['throughput']:.4f} "
-              f"J{BIN_W}={jb['jain_bin_mean']:.5f} "
-              f"max/min={f['max_min']:.4f}", flush=True)
-    return out
+    cfg = {**FABRIC, **over}
+    raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
+    row = _read_row(raw, k, m_resp)
+    print(f"  read  {name:<6} m={m_resp} bw={row['throughput']:.4f} "
+          f"J{BIN_W}={row['jain_bin']['jain_bin_mean']:.5f} "
+          f"max/min={row['max_min']:.4f}", flush=True)
+    return name, row
 
 
-def main() -> None:
-    kw = int(sys.argv[1]) if len(sys.argv) > 1 else 20_000
-    kr = int(sys.argv[2]) if len(sys.argv) > 2 else 5_000
-    n = len(CORE_NODES)
-    r_fair = IDEAL["r_fair"]
-    print(f"K_write={kw}  K_read={kr}  bin={BIN_W}  "
-          f"core_outstanding={CORE_OUTSTANDING_WR}", flush=True)
+def read_ideal(k: int, m_resp: int) -> tuple[float, float]:
+    """Read-side equal-rate and max-total bounds for a given CompData size.
 
-    write = run_write(kw)
-    read = run_read(kr)
-
-    # Read-side equal-rate bound: same fabric, same tiled destinations, but the
-    # payload travels HA->core, so the binding hop is the mirror of the write
-    # one. Symmetry makes it the same number; it is recomputed, not assumed.
-    from ideal_ring2_cc import coefficients, solve_max_total, solve_theta
+    Same fabric, same tiled destinations, but the payload travels HA->core, so
+    the binding hop is the mirror of the write one. Recomputed per payload
+    size rather than assumed: with a 1-flit payload the REQ stream is as heavy
+    as the DAT stream and the binding VC can change.
+    """
     from collections import defaultdict
+    from ideal_ring2_cc import coefficients, solve_max_total, solve_theta
     mix: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
-    for t in build_tiled_read(k=kr, m_resp=W_FLITS, mem=MEM_NODES,
+    for t in build_tiled_read(k=k, m_resp=m_resp, mem=MEM_NODES,
                               core_set=CORE_NODES):
         mix[t.core][t.ha] += 1
     p = {c: {h: v / sum(row.values()) for h, v in sorted(row.items())}
          for c, row in sorted(mix.items())}
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS, route="latency")
-    _cores, _names, a = coefficients(topo, p, mult={"req": 1, "dat": W_FLITS},
+    _cores, _names, a = coefficients(topo, p, mult={"req": 1, "dat": m_resp},
                                      reverse={"dat"})
-    r_read_fair = W_FLITS * float(solve_theta(a, 1.0).sum())
-    r_read_max = W_FLITS * float(solve_max_total(a).sum())
+    r_fair = m_resp * float(solve_theta(a, 1.0).sum())
+    r_max = m_resp * float(solve_max_total(a).sum())
+    return r_fair, r_max
+
+
+def main() -> None:
+    kw = int(sys.argv[1]) if len(sys.argv) > 1 else 20_000
+    kr = int(sys.argv[2]) if len(sys.argv) > 2 else 5_000
+    jobs = int(sys.argv[3]) if len(sys.argv) > 3 else max(1, (os.cpu_count() or 2) - 1)
+    n = len(CORE_NODES)
+    r_fair = IDEAL["r_fair"]
+    print(f"K_write={kw}  K_read={kr}  bin={BIN_W}  "
+          f"core_outstanding={CORE_OUTSTANDING_WR}  jobs={jobs}", flush=True)
+
+    # Every case is an independent closed-batch run with its own seed state,
+    # so they can go in parallel; the output is keyed, not ordered.
+    write_jobs = [(nm, sc, ov, kw) for nm, sc, ov in WRITE_CASES]
+    read_jobs = [(nm, sc, ov, kr, W_FLITS) for nm, sc, ov in READ_CASES]
+    payload_jobs = [(f"S0-m{m}", "S0", {}, kr, m) for m in READ_PAYLOADS]
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        fw = [ex.submit(_write_case, j) for j in write_jobs]
+        fr = [ex.submit(_read_case, j) for j in read_jobs]
+        fp = [ex.submit(_read_case, j) for j in payload_jobs]
+        write = dict(f.result() for f in fw)
+        read = dict(f.result() for f in fr)
+        payload = dict(f.result() for f in fp)
+    write = {nm: write[nm] for nm, _s, _o in WRITE_CASES}
+    read = {nm: read[nm] for nm, _s, _o in READ_CASES}
+
+    r_read_fair, r_read_max = read_ideal(kr, W_FLITS)
     print(f"  read ideal equal-rate={r_read_fair:.4f}  "
           f"max-total={r_read_max:.4f}", flush=True)
+    for m in READ_PAYLOADS:
+        rf, rm = read_ideal(kr, m)
+        payload[f"S0-m{m}"]["ideal"] = {
+            "r_fair": round(rf, 6), "r_max": round(rm, 6),
+            "jain_bin_ideal": jain_ideal_bin(int(round(rf * BIN_W)), n)}
+        print(f"  read payload m={m}: ideal equal-rate={rf:.4f} "
+              f"max-total={rm:.4f}", flush=True)
 
     data = {
         "meta": {
             "k_write": kw, "k_read": kr, "bin_w": BIN_W,
             "core_outstanding": CORE_OUTSTANDING_WR, "w_flits": W_FLITS,
             "n_cores": n, "cores": list(CORE_NODES), "has": list(MEM_NODES),
-            "fc_bus_lat": 30,
+            "fc_bus_lat": 30, "cum_step": CUM_STEP,
+            "read_payloads": list(READ_PAYLOADS),
         },
         "ideal": {
             "r_fair": r_fair, "r_max": IDEAL["r_max"],
@@ -278,6 +375,7 @@ def main() -> None:
         },
         "write": write,
         "read": read,
+        "read_payload": payload,
     }
     OUT.write_text(json.dumps(data, indent=2, ensure_ascii=False))
     print(f"\nwrote {OUT}")

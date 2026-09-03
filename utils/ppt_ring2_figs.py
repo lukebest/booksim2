@@ -1601,9 +1601,475 @@ def fig_window_compare() -> None:
     save(fig, "29-window-compare.png")
 
 
+# ------------------------------------------------- S1 signal split (item 1)
+def _per_bin_jain(row: dict, bw: int) -> tuple[list[int], list[float]]:
+    cnt = {c: [round(x * bw) for x in v] for c, v in row["per_core_binned"].items()}
+    cs = sorted(cnt, key=int)
+    nb = len(cnt[cs[0]])
+    return row["bin_t"], [jain([cnt[c][b] for c in cs]) for b in range(nb)]
+
+
+def _smooth(ys: list[float], win: int) -> list[float]:
+    return [sum(ys[max(0, i - win):i + win + 1]) / len(ys[max(0, i - win):i + win + 1])
+            for i in range(len(ys))]
+
+
+def _cum_curves(ax, row: dict, cores: list[int], total: int, title: str,
+                slow: set[int] | None = None, legend: bool = False,
+                xmax: float | None = None, fs: float = 9.0) -> None:
+    """Ten per-core cumulative curves, normalised to each core's own quota."""
+    cum = row["cum"]
+    ts = cum["t"]
+    fin = {int(c): v for c, v in row["finish_by_core"].items()}
+    for c in cores:
+        ys = [v / total for v in cum["by_core"][str(c)]]
+        col = RED if slow and c in slow else BLUE
+        ax.plot(ts, ys, lw=1.25, color=col, alpha=0.85 if col == BLUE else 1.0,
+                label=("邻 mem = 1 的核" if c == min(slow) else None) if slow and c in slow
+                else ("其余六核" if c == min(set(cores) - (slow or set())) else None))
+        ax.plot([fin[c]], [1.0], "o", ms=3.2, color=col)
+    lo, hi = min(fin.values()), max(fin.values())
+    ax.axvline(lo, color=GREY, ls=":", lw=0.9)
+    ax.axvline(hi, color=GREY, ls=":", lw=0.9)
+    ax.text(0.97, 0.05, f"最早 {lo:,} · 最晚 {hi:,}\n最晚 / 最早 = {hi / lo:.3f}",
+            transform=ax.transAxes, fontsize=fs - 0.6, va="bottom", ha="right",
+            color=INK, bbox=dict(fc="white", ec="none", alpha=0.85, pad=1.5))
+    ax.set_ylim(0, 1.06)
+    if xmax:
+        ax.set_xlim(0, xmax)
+    ax.set_title(title, fontsize=fs + 1.2, fontweight="bold")
+    ax.grid(alpha=0.22)
+    ax.tick_params(labelsize=fs - 1)
+    if legend:
+        ax.legend(fontsize=fs - 1, loc="upper left")
+
+
+SLOW = {0, 8, 10, 18}
+
+
+def fig_s1_signal() -> None:
+    """S1 with only board failures, only eject failures, or both as its signal."""
+    d = deck()
+    w, bw = d["write"], d["meta"]["bin_w"]
+    names = ["S0", "S1D", "S1U", "S1"]
+    labels = ["S0", "S1D\n只下环", "S1U\n只上环", "S1\n都计"]
+    cols = [BLUE, GREEN, AMBER, RED]
+    fig, axes = plt.subplots(1, 4, figsize=(15.0, 4.55),
+                             gridspec_kw={"width_ratios": [1, 1, 1.55, 1.2]})
+    _bars_vs(axes[0], labels, [w[n]["throughput"] for n in names], cols,
+             "总写带宽 flit/cycle", "总带宽", ref=d["ideal"]["r_fair"],
+             ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
+    _bars_vs(axes[1], labels, [w[n]["jain_bin"]["jain_bin_mean"] for n in names],
+             cols, f"每 {bw} 拍 Jain 的平均", "瞬时均衡度", fmt="{:.4f}")
+    for a in axes[:2]:
+        a.tick_params(axis="x", labelsize=8.6)
+
+    ax = axes[2]
+    for n, lab, col in (("S1D", "S1D（与 S0 逐拍相同）", BLUE),
+                        ("S1U", "S1U（与 S1 逐拍相同）", RED)):
+        xs, ys = _per_bin_jain(w[n], bw)
+        ax.plot(xs, ys, lw=0.45, color=col, alpha=0.35)
+        ax.plot(xs, _smooth(ys, 40), lw=2.0, color=col, label=lab)
+    ax.set_ylim(0.84, 1.0)
+    ax.set_xlabel("cycle")
+    ax.set_ylabel(f"{bw} 拍窗内 10 核 Jain")
+    ax.set_title("瞬时均衡度随时间（细线 = 每箱，粗线 = 滑动平均）",
+                 fontsize=11.5, fontweight="bold")
+    ax.grid(alpha=0.22)
+    ax.legend(fontsize=9, loc="lower right")
+
+    ax = axes[3]
+    ss = w["S1"]["fc"]["signal_sum"]
+    cores = d["meta"]["cores"]
+    up = [ss["up"][str(c)] for c in cores]
+    dn = [max(ss["down"][str(c)], 0.5) for c in cores]
+    xs = list(range(len(cores)))
+    ax.bar([x - 0.2 for x in xs], up, width=0.4, color=AMBER, label="上环失败（全程累计）")
+    ax.bar([x + 0.2 for x in xs], dn, width=0.4, color=GREEN, label="下环失败（全程累计）")
+    ax.set_yscale("log")
+    ax.set_ylim(0.3, 3e7)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
+    ax.set_ylabel("S1 每核的两路原始信号（对数轴）")
+    n_win = ss["windows"][str(cores[0])]
+    ax.set_title(f"S1 信号来源：上环 {sum(up):,} 次 vs 下环 "
+                 f"{sum(ss['down'].values())} 次", fontsize=11.5, fontweight="bold")
+    ax.text(0.02, 0.96, f"{n_win} 个 64 拍窗 × 10 核：\n上环等级 > 0 的窗 "
+            f"{sum(ss['up_lv'].values()):,} 个；下环等级 > 0 的窗 0 个",
+            transform=ax.transAxes, fontsize=8.6, color=INK, va="top")
+    ax.legend(fontsize=8.4, loc="upper right", bbox_to_anchor=(1.0, 0.86))
+    ax.grid(axis="y", alpha=0.22)
+    fig.suptitle("S1 的拥塞等级只由上环失败驱动：只计下环 = S0，只计上环 = S1，"
+                 "两者都计 = S1", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "38-s1-signal.png")
+
+
+def fig_s1_signal_finish() -> None:
+    """Per-core completion curves of the three S1 signal variants."""
+    d = deck()
+    w = d["write"]
+    cores = d["meta"]["cores"]
+    total = d["meta"]["k_write"] * d["meta"]["w_flits"]
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.5),
+                             gridspec_kw={"width_ratios": [1, 1, 1.15]})
+    xmax = max(max(int(v) for v in w[n]["finish_by_core"].values())
+               for n in ("S1D", "S1U", "S1")) * 1.04
+    _cum_curves(axes[0], w["S1D"], cores, total, "S1D 只计下环失败（= S0）",
+                slow=SLOW, legend=True, xmax=xmax)
+    _cum_curves(axes[1], w["S1U"], cores, total, "S1U 只计上环失败（= S1）",
+                slow=SLOW, xmax=xmax)
+    axes[0].set_ylabel("已上环 WriteData / 本核配额")
+    for a in axes[:2]:
+        a.set_xlabel("cycle")
+    ax = axes[2]
+    xs = list(range(len(cores)))
+    for k, (n, lab, col) in enumerate((("S1D", "S1D", GREEN), ("S1U", "S1U", AMBER),
+                                       ("S1", "S1 两者都计", RED))):
+        fin = [w[n]["finish_by_core"][str(c)] / 1000 for c in cores]
+        ax.bar([x + (k - 1) * 0.27 for x in xs], fin, width=0.27, color=col,
+               label=lab, alpha=0.92)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
+    ax.set_ylabel("本核最后一个 WriteData 上环的拍（千拍）")
+    ax.set_ylim(50, 92)
+    ax.set_title("各核完成时间：S1U 与 S1 完全重合", fontsize=10.5, fontweight="bold")
+    ax.legend(fontsize=8.8, loc="upper center", ncol=3)
+    ax.grid(axis="y", alpha=0.22)
+    fig.suptitle("各核完成时间曲线：红 = 邻 mem = 1 的四核（C0 / C8 / C10 / C18）",
+                 fontsize=12.5, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "39-s1-signal-finish.png")
+
+
+# ------------------------------------------------- read payload (item 2)
+def _read_per_bin_jain(row: dict, bw: int) -> tuple[list[int], list[float]]:
+    rb = row["recv_binned"]
+    cs = sorted(rb, key=int)
+    ts = rb[cs[0]]["t"]
+    t_fair = row["t_fair"]
+    idx = [i for i, t in enumerate(ts) if t + bw <= t_fair]
+    ys = [jain([round(rb[c]["rate"][i] * bw) for c in cs]) for i in idx]
+    return [ts[i] for i in idx], ys
+
+
+def fig_read_payload() -> None:
+    """S0 read side with CompData = 1 / 2 / 4 flits."""
+    d = deck()
+    rp, bw = d["read_payload"], d["meta"]["bin_w"]
+    cores = d["meta"]["cores"]
+    ms = d["meta"]["read_payloads"]
+    cols = {1: RED, 2: BLUE, 4: AMBER}
+    fig, axes = plt.subplots(1, 4, figsize=(15.0, 4.55),
+                             gridspec_kw={"width_ratios": [1.6, 0.9, 0.9, 1.4]})
+    ax = axes[0]
+    xs = list(range(len(cores)))
+    for k, m in enumerate(ms):
+        r = rp[f"S0-m{m}"]
+        ax.bar([x + (k - 1) * 0.27 for x in xs],
+               [r["bw_by_core"][str(c)] for c in cores], width=0.27,
+               color=cols[m], label=f"CompData = {m} flit", alpha=0.92)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
+    ax.set_ylim(0.28, 0.72)
+    ax.set_ylabel("每核读带宽 flit/cycle（争用窗内）")
+    ax.set_title("每核读带宽：1 flit 时六快四慢重现", fontsize=11.5, fontweight="bold")
+    ax.legend(fontsize=8.6, loc="lower center", ncol=3, framealpha=0.95)
+    ax.grid(axis="y", alpha=0.22)
+    names = [f"{m} flit" for m in ms]
+    cl = [cols[m] for m in ms]
+    _bars_vs(axes[1], names, [rp[f"S0-m{m}"]["jain_bin"]["jain_bin_mean"] for m in ms],
+             cl, f"每 {bw} 拍 Jain 的平均", "瞬时均衡度", fmt="{:.4f}")
+    _bars_vs(axes[2], names, [rp[f"S0-m{m}"]["max_min"] for m in ms], cl,
+             "整窗 最快核 / 最慢核", "长期速率比", fmt="{:.4f}")
+    ax = axes[3]
+    for m in ms:
+        r = rp[f"S0-m{m}"]
+        xs2, ys = _read_per_bin_jain(r, bw)
+        tf = r["t_fair"]
+        ax.plot([x / tf for x in xs2], ys, lw=0.4, color=cols[m], alpha=0.3)
+        ax.plot([x / tf for x in xs2], _smooth(ys, 12), lw=1.9, color=cols[m],
+                label=f"{m} flit（争用窗 {tf:,} 拍）")
+    ax.set_ylim(0.86, 1.0)
+    ax.set_xlabel("时间 / 本例争用窗长度")
+    ax.set_ylabel(f"{bw} 拍窗内 10 核 Jain")
+    ax.set_title("瞬时均衡度随时间", fontsize=11.5, fontweight="bold")
+    ax.legend(fontsize=8.6, loc="lower right")
+    ax.grid(alpha=0.22)
+    fig.suptitle(f"S0 读侧 · CompData 1 / 2 / 4 flit（K = {d['meta']['k_read']} 笔/核）："
+                 "1 flit 不均最大，4 flit 长期均等但箱内抖动大于 2 flit",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "40-read-payload.png")
+
+
+def fig_read_payload_finish() -> None:
+    d = deck()
+    rp = d["read_payload"]
+    cores = d["meta"]["cores"]
+    ms = d["meta"]["read_payloads"]
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.4))
+    for ax, m in zip(axes, ms):
+        r = rp[f"S0-m{m}"]
+        total = d["meta"]["k_read"] * m
+        hops = ", ".join(sorted({h.split(":")[-1].upper() for h, *_ in r["busiest_hops"]}))
+        _cum_curves(ax, r, cores, total,
+                    f"CompData = {m} flit · 最忙 VC：{hops}（占用 {r['busiest_hops'][0][1]:.3f}）",
+                    slow=SLOW, legend=(m == ms[0]), fs=9.0)
+        ax.set_xlabel("cycle")
+    axes[0].set_ylabel("已收到 CompData / 本核配额")
+    fig.suptitle("S0 读侧各核完成时间曲线：1 flit 时 REQ VC 与 DAT VC 并列绑定，"
+                 "core→HA 方向的几何差异回到读侧", fontsize=12.5, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    save(fig, "41-read-payload-finish.png")
+
+
+# ------------------------------------------------- scalar metric (items 3, 4)
+def _metric() -> dict:
+    return json.loads((RES / "metric_ring2_cc.json").read_text())
+
+
+def _cov(j: float) -> float:
+    return ((1 - j) / j) ** 0.5
+
+
+def fig_metric() -> None:
+    """The frontier in (CoV, R), the fit, and the scalar it induces."""
+    m = _metric()
+    tr = json.loads((RES / "tradeoff_ring2_cc.json").read_text())
+    r_fair, kappa = m["r_fair"], m["kappa"]
+    pts = sorted({(round(p["jain_bin"], 6), round(p["bw_monotone"], 6))
+                  for p in tr["jain_curve"]})
+    cx = [_cov(j) for j, _ in pts]
+    cy = [bw for _, bw in pts]
+    fig = plt.figure(figsize=(13.6, 5.9))
+    ax = fig.add_axes([0.055, 0.105, 0.50, 0.80])
+    bx = fig.add_axes([0.625, 0.105, 0.36, 0.80])
+
+    xs = [x / 100 for x in range(0, 41)]
+    ax.scatter(cx, cy, s=14, color=RED, zorder=4, label="LP 上界 R(J) 的 80 个点")
+    ax.plot(xs, [r_fair + kappa * x for x in xs], color=RED, lw=2.0, zorder=3,
+            label=f"拟合  R = R* + κ·CoV，κ = {kappa:.3f}")
+    for phi in (0.95, 0.90, 0.85, 0.75):
+        ax.plot(xs, [phi * r_fair + kappa * x for x in xs], color=GREY, lw=0.9,
+                ls="--", zorder=1)
+        ax.text(0.405, phi * r_fair + kappa * 0.405 - 0.04, f"φ = {phi:.2f}",
+                fontsize=8.2, color=GREY, va="top")
+    for eta in (0.95, 0.90, 0.85):
+        ax.plot(xs, [eta * r_fair * (1 + x * x) for x in xs], color=BLUE, lw=0.9,
+                ls=":", zorder=1)
+        ax.text(0.405, eta * r_fair * (1 + 0.405 ** 2) + 0.06, f"η = {eta:.2f}",
+                fontsize=8.2, color=BLUE, va="bottom")
+    ax.plot([], [], color=GREY, lw=0.9, ls="--", label="等 φ 线（与上界平行）")
+    ax.plot([], [], color=BLUE, lw=0.9, ls=":", label="等 η 线（R·J = 常数）")
+    show = ["S0", "S1", "S1T", "S16", "ITAG", "S22", "S29", "S28", "S26", "S19", "S20",
+            "S28S", "S27"]
+    off = {"S0": (6, -12), "S1": (6, -12), "S1T": (6, 4), "S16": (6, -12), "ITAG": (6, 4),
+           "S22": (6, -12), "S29": (-30, -12), "S28": (6, 4), "S26": (6, -12),
+           "S19": (6, 5), "S20": (-30, 5), "S28S": (6, -12), "S27": (6, -12)}
+    for nm in show:
+        s = m["schemes"][nm]
+        col = RED if nm == "S16" else BLUE if nm == "S0" else AMBER if nm == "S1" else INK
+        ax.scatter([s["cov"]], [s["bw"]], s=54, color=col, edgecolors="k",
+                   linewidths=0.5, zorder=6)
+        ax.annotate(nm, (s["cov"], s["bw"]), xytext=off[nm], textcoords="offset points",
+                    fontsize=8.6, color=col, fontweight="bold")
+    ax.scatter([0], [r_fair], s=90, facecolors="white", edgecolors=RED, linewidths=1.6,
+               zorder=5)
+    ax.annotate(f"R* = {r_fair:.4f}\n（CoV = 0，J = 1）", (0, r_fair), xytext=(8, -26),
+                textcoords="offset points", fontsize=8.6, color=RED)
+    ax.set_xlim(-0.01, 0.46)
+    ax.set_ylim(3.1, 6.7)
+    ax.set_xlabel("不均衡度 CoV = √((1−J)/J)　（J = 100 拍窗 Jain；J = 1/(1+CoV²) 恒等）")
+    ax.set_ylabel("总写带宽 R  flit/cycle")
+    ax.set_title("上界在 CoV 坐标下是一条直线：等 φ 线与它平行，等 η 线不平行",
+                 fontsize=11.5, fontweight="bold")
+    ax.grid(alpha=0.22)
+    ax.legend(fontsize=8.6, loc="lower right")
+
+    order = sorted(show, key=lambda n: -m["schemes"][n]["phi"])
+    ys = list(range(len(order)))[::-1]
+    gb = [m["schemes"][n]["gap_bw"] for n in order]
+    gf = [m["schemes"][n]["gap_fair"] for n in order]
+    bx.barh(ys, gb, color=BLUE, height=0.62, label="带宽缺口 (R* − R)/R*")
+    bx.barh(ys, gf, left=gb, color=AMBER, height=0.62,
+            label="不均衡按 κ 折成带宽 κ·CoV/R*")
+    for y, n, a, b in zip(ys, order, gb, gf):
+        bx.text(a + b + 0.006, y, f"φ = {m['schemes'][n]['phi']:.3f}", va="center",
+                fontsize=8.6, color=INK)
+    bx.set_yticks(ys)
+    bx.set_yticklabels(order, fontsize=9)
+    bx.set_xlim(0, 0.62)
+    bx.set_xlabel("1 − φ（离理想控制器的总缺口，带宽单位）")
+    bx.set_title("1 − φ 的两项分解", fontsize=11.5, fontweight="bold")
+    bx.legend(fontsize=8.4, loc="upper right")
+    bx.grid(axis="x", alpha=0.22)
+    save(fig, "42-metric-derivation.png")
+
+
+def fig_metric_knobs() -> None:
+    """How each scheme's knob actually moves in the (CoV, R) plane."""
+    m = _metric()
+    r_fair, kappa = m["r_fair"], m["kappa"]
+    fig, axes = plt.subplots(1, 4, figsize=(15.0, 4.55))
+    want = {"S16": ("S16 · overcommit", RED, "oc"),
+            "S29": ("S29 · tdma_slot", GREEN, "slot"),
+            "S28": ("S28 · α · burst", BLUE, ""),
+            "S1": ("S1 · band × cap", AMBER, "")}
+    kb = {k["scheme"]: k for k in m["knobs"]}
+    for ax, (nm, (title, col, pre)) in zip(axes, want.items()):
+        k = kb[nm]
+        rows = sorted(k["rows"], key=lambda r: -r["bw"])
+        if nm == "S16":
+            rows = [r for r in rows if r["knob"] in (4, 6, 8, 10, 12, 16, 20, 24, 32, 64)]
+            rows.sort(key=lambda r: -r["knob"])
+        elif nm == "S29":
+            rows.sort(key=lambda r: r["knob"])
+        elif nm == "S1":
+            order = ["gentle·cap1.0", "gentle·cap0.5", "gentle·cap0.25", "spec·cap1.0",
+                     "spec·cap0.5", "spec·cap0.25", "harsh·cap1.0", "harsh·cap0.5",
+                     "harsh·cap0.25"]
+            rows = sorted(rows, key=lambda r: order.index(r["knob"]))
+        cx = [r["cov"] for r in rows]
+        cy = [r["bw"] for r in rows]
+        ax.plot(cx, cy, "-o", color=col, lw=1.6, ms=5, zorder=4)
+        lab_rows = rows
+        if nm == "S28":
+            # nine (alpha, burst) points sit within 0.05 CoV of each other; label
+            # only the two ends of the band and the best-phi point
+            best = max(rows, key=lambda r: r["phi"])
+            lab_rows = [rows[0], rows[-1]] + ([best] if best not in (rows[0], rows[-1]) else [])
+        for r in lab_rows:
+            lab = str(r["knob"]).replace("gentle·cap", "g").replace("spec·cap", "s") \
+                .replace("harsh·cap", "h").replace("·b", "/b").replace("a", "α")
+            ax.annotate(f"{pre}{lab}", (r["cov"], r["bw"]), xytext=(5, 3),
+                        textcoords="offset points", fontsize=7.6, color=INK)
+        # phi-invariant prediction through the anchor
+        a = next((r for r in rows if r["knob"] == k["anchor"]), rows[0])
+        xs = [x / 100 for x in range(0, 46)]
+        ax.plot(xs, [a["phi"] * r_fair + kappa * x for x in xs], color=GREY, ls="--",
+                lw=1.1, label=f"等 φ 线（φ = {a['phi']:.3f}）")
+        ax.plot([a["cov"], a["cov"]], [2.0, a["bw"]], color=GREY, ls=":", lw=1.0,
+                label="等 CoV 线（均匀限流）")
+        ax.plot(xs, [r_fair + kappa * x for x in xs], color=RED, lw=1.2, alpha=0.6,
+                label="LP 上界")
+        ax.set_xlim(0.03, 0.42)
+        ax.set_ylim(2.1, 6.3)
+        ax.set_xlabel("CoV = √((1−J)/J)")
+        ax.set_title(f"{title}（K = {k['k']}）", fontsize=10.5, fontweight="bold")
+        ax.grid(alpha=0.22)
+        segs = [s for s in k["segments"] if s["kappa_s"] is not None and 0 < s["eff"] < 3]
+        if segs:
+            effs = ", ".join(f"{s['eff']:.2f}" for s in segs[:4])
+            ax.text(0.03, 0.04, f"有效段 ε = κ/κ′：{effs}", transform=ax.transAxes,
+                    fontsize=8.2, color=INK)
+    axes[0].set_ylabel("总写带宽 R  flit/cycle")
+    axes[0].legend(fontsize=7.8, loc="upper right")
+    fig.suptitle("旋钮实测轨迹：等 φ 线是「按理想汇率换」的上界，等 CoV 线是「均匀限流」的下界；"
+                 "每条旋钮都有一个拐点，过了拐点只掉带宽不换公平",
+                 fontsize=12, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    save(fig, "43-metric-knobs.png")
+
+
+# ------------------------------------------------- completion curves (item 5)
+FINISH_ORDER = ["S0", "S1", "S1T", "S16", "ITAG", "S19", "S20", "S22", "S26", "S27",
+                "S28", "S28S", "S29"]
+FINISH_LABEL = {"S0": "S0 基线", "S1": "S1 AIMD", "S1T": "S1T 分向", "S16": "S16 授权保留",
+                "ITAG": "S0 I-tag 调参", "S19": "S19 Swift", "S20": "S20 DCTCP",
+                "S22": "S22 赤字让路", "S26": "S26 自适应路由", "S27": "S27 逐跳背压",
+                "S28": "S28 显式速率", "S28S": "S28S 等分速率", "S29": "S29 日历让路"}
+
+
+def fig_finish_all() -> None:
+    d = deck()
+    w = d["write"]
+    cores = d["meta"]["cores"]
+    total = d["meta"]["k_write"] * d["meta"]["w_flits"]
+    fig, axes = plt.subplots(3, 5, figsize=(15.0, 8.4))
+    flat = list(axes.flat)
+    xmax = max(int(v) for n in FINISH_ORDER for v in w[n]["finish_by_core"].values())
+    for ax, nm in zip(flat, FINISH_ORDER):
+        _cum_curves(ax, w[nm], cores, total, FINISH_LABEL[nm], slow=SLOW, fs=8.4,
+                    xmax=xmax * 1.02, legend=(nm == "S0"))
+        ax.set_xticks([0, 40_000, 80_000, 120_000])
+        ax.set_xticklabels(["0", "40k", "80k", "120k"])
+    for ax in flat[len(FINISH_ORDER):]:
+        ax.axis("off")
+    flat[-1].text(0.0, 0.85, "读法", fontsize=11, fontweight="bold", color=INK,
+                  transform=flat[-1].transAxes)
+    flat[-1].text(0.0, 0.78,
+                  "每条线 = 一个核已上环的 WriteData 占本核配额\n"
+                  "（K = 20000 笔 × 2 flit）的比例；线走平的横坐标\n"
+                  "就是该核的完成时刻，圆点标出。\n\n"
+                  "红 = 邻 mem = 1 的四核（C0 / C8 / C10 / C18），\n"
+                  "蓝 = 其余六核。\n\n"
+                  "斜率 = 该核的瞬时带宽；十条线越贴合、\n"
+                  "最晚 / 最早 越接近 1，长期公平越好。\n"
+                  "S1U / S1D 与 S1 / S0 逐拍相同，不重复画。",
+                  fontsize=8.6, color=INK, va="top", transform=flat[-1].transAxes,
+                  linespacing=1.35)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("进度 / 配额", fontsize=8.5)
+    for ax in axes[2, :]:
+        ax.set_xlabel("cycle", fontsize=8.5)
+    fig.suptitle("十三个方案的各核完成时间曲线（uniform 写，K = 20000，同一 fabric）",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    save(fig, "44-finish-all.png")
+
+
+def fig_finish_spread() -> None:
+    d = deck()
+    w = d["write"]
+    rows = []
+    for nm in FINISH_ORDER:
+        fin = [int(v) for v in w[nm]["finish_by_core"].values()]
+        rows.append((nm, min(fin), max(fin), max(fin) / min(fin), w[nm]["throughput"],
+                     w[nm]["jain_bin"]["jain_bin_mean"]))
+    rows.sort(key=lambda r: r[3])
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(13.6, 4.5),
+                                 gridspec_kw={"width_ratios": [1.35, 1.0]})
+    ys = list(range(len(rows)))[::-1]
+    for y, (nm, lo, hi, ratio, thr, j) in zip(ys, rows):
+        col = RED if nm == "S16" else AMBER if nm == "S1" else BLUE if nm == "S0" else GREY
+        ax.plot([lo / 1000, hi / 1000], [y, y], color=col, lw=5, solid_capstyle="butt",
+                alpha=0.85)
+        ax.plot([lo / 1000], [y], "|", color=INK, ms=11, mew=1.4)
+        ax.plot([hi / 1000], [y], "|", color=INK, ms=11, mew=1.4)
+        ax.text(hi / 1000 + 1.2, y, f"×{ratio:.3f}", va="center", fontsize=8.8, color=INK)
+    ax.set_yticks(ys)
+    ax.set_yticklabels([FINISH_LABEL[r[0]] for r in rows], fontsize=9)
+    ax.set_xlabel("最早完成核 → 最晚完成核（千拍）")
+    ax.set_xlim(45, 128)
+    ax.set_title("完成时间跨度（横条 = 十核从最早到最晚），右侧 = 最晚 / 最早",
+                 fontsize=11, fontweight="bold")
+    ax.grid(axis="x", alpha=0.22)
+    for nm, lo, hi, ratio, thr, j in rows:
+        col = RED if nm == "S16" else AMBER if nm == "S1" else BLUE if nm == "S0" else GREY
+        bx.scatter([j], [ratio], s=60, color=col, edgecolors="k", linewidths=0.5, zorder=4)
+        bx.annotate(nm, (j, ratio), xytext=(5, 3), textcoords="offset points",
+                    fontsize=8.4, color=INK)
+    bx.set_xlabel(f"{d['meta']['bin_w']} 拍窗 Jain（瞬时均衡度）")
+    bx.set_ylabel("完成时间 最晚 / 最早")
+    bx.set_title("瞬时均衡度 vs 完成时间偏斜：两者不是同一件事",
+                 fontsize=11, fontweight="bold")
+    bx.grid(alpha=0.22)
+    fig.tight_layout()
+    save(fig, "45-finish-spread.png")
+
+
 def main() -> None:
     _use_cjk_font()
     OUT.mkdir(parents=True, exist_ok=True)
+    fig_s1_signal()
+    fig_s1_signal_finish()
+    fig_read_payload()
+    fig_read_payload_finish()
+    fig_metric()
+    fig_metric_knobs()
+    fig_finish_all()
+    fig_finish_spread()
     fig_saturation()
     fig_instbal()
     fig_s1_effect()
