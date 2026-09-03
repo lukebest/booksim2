@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -66,6 +67,29 @@ def jain_ideal(n_flits: int, n_cores: int) -> float:
     lo, r = divmod(int(n_flits), n_cores)
     sq = r * (lo + 1) ** 2 + (n_cores - r) * lo * lo
     return (n_flits * n_flits) / (n_cores * sq) if sq else 1.0
+
+
+def cov(v) -> float:
+    """Coefficient of variation (population std / mean) of per-core shares."""
+    n = len(v)
+    m = sum(v) / n
+    if m <= 0:
+        return 0.0
+    return math.sqrt(sum((x - m) ** 2 for x in v) / n) / m
+
+
+def j2cov(j: float) -> float:
+    """Jain -> CoV. Exact for one set of shares (J = 1/(1+CoV^2)); for a run
+    the stored value is the window-mean Jain, so this is the run's CoV under the
+    aggregation 1/(1+CoV^2) = mean over windows, the same convention the LP
+    frontier and metric_ring2_cc use."""
+    j = min(max(j, 1e-9), 1.0)
+    return math.sqrt((1.0 - j) / j)
+
+
+def cov_bin(row: dict) -> float:
+    """Run-level CoV of a deck row, from its stored window-mean Jain."""
+    return j2cov(row["jain_bin"]["jain_bin_mean"])
 
 
 def save(fig, name: str) -> None:
@@ -168,29 +192,31 @@ def fig_instbal() -> None:
            for c, v in s0["per_core_binned"].items()}
     cs = sorted(cnt, key=int)
     nb = len(cnt[cs[0]])
-    per_bin = [jain([cnt[c][b] for c in cs]) for b in range(nb)]
+    per_bin = [cov([cnt[c][b] for c in cs]) for b in range(nb)]
+    run_cov = j2cov(jb["jain_bin_mean"])
+    reg_cov = j2cov(reg["jain_regular"])
 
     fig, (ax, bx) = plt.subplots(
         1, 2, figsize=(13.6, 4.15), gridspec_kw={"width_ratios": [1.5, 1.0]})
 
     xs = s0["bin_t"]
     ax.plot(xs, per_bin, lw=0.5, color=GREY, alpha=0.9,
-            label=f"每 {bw} 拍窗的 Jain")
+            label=f"每 {bw} 拍窗的 CoV")
     win = 40
     sm = [sum(per_bin[max(0, i - win):i + win + 1])
           / len(per_bin[max(0, i - win):i + win + 1]) for i in range(nb)]
     ax.plot(xs, sm, lw=2.2, color=BLUE, label="滑动平均")
-    ax.axhline(jb["jain_bin_mean"], color=RED, ls="--", lw=1.6,
-               label=f"均值 = {jb['jain_bin_mean']:.5f}")
-    ax.axhline(reg["jain_regular"], color=GREEN, ls=":", lw=1.8,
-               label=f"抖动抹平后的上限 = {reg['jain_regular']:.5f}")
+    ax.axhline(run_cov, color=RED, ls="--", lw=1.6,
+               label=f"全程 CoV = {run_cov:.4f}")
+    ax.axhline(reg_cov, color=GREEN, ls=":", lw=1.8,
+               label=f"抖动抹平后的下限 = {reg_cov:.4f}")
     ax.set_xlabel("cycle")
-    ax.set_ylabel(f"{bw} 拍窗内 10 个核的 Jain")
-    ax.set_ylim(min(per_bin) - 0.02, 1.005)
-    ax.set_title("不是个别坏箱：整段都低，而且低得很稳",
+    ax.set_ylabel(f"{bw} 拍窗内 10 核带宽的 CoV（标准差 / 均值）")
+    ax.set_ylim(0, max(per_bin) + 0.03)
+    ax.set_title("不是个别坏箱：整段都高，而且高得很稳",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.22)
-    ax.legend(fontsize=9, loc="lower right", ncol=2)
+    ax.legend(fontsize=9, loc="upper right", ncol=2)
 
     groups = [1, 2, 4, 8, 16, 32, 64]
     obs, idl, wid = [], [], []
@@ -201,22 +227,23 @@ def fig_instbal() -> None:
         o, i2 = [], []
         for b in range(m):
             v = [sum(cnt[c][b * g:(b + 1) * g]) for c in cs]
-            o.append(jain(v))
-            i2.append(jain_ideal(sum(v), n))
+            o.append(cov(v))
+            i2.append(j2cov(jain_ideal(sum(v), n)))
         obs.append(sum(o) / m)
         idl.append(sum(i2) / m)
         wid.append(g * bw)
     bx.plot(wid, obs, "o-", color=RED, lw=2.0, ms=5, label="S0 实测")
     bx.plot(wid, idl, "s--", color=GREY, lw=1.4, ms=4, label="理想控制器")
-    bx.axhline(reg["jain_regular"], color=GREEN, ls=":", lw=1.6,
-               label="只整时机的天花板")
+    bx.axhline(reg_cov, color=GREEN, ls=":", lw=1.6,
+               label="只整时机的地板")
     bx.set_xscale("log", base=2)
     bx.set_xlabel("观察窗宽度（拍，对数轴）")
-    bx.set_ylabel("窗内 Jain 均值")
-    bx.set_title("窗放得再宽也追不上理想：抖动能消，速率差消不掉",
+    bx.set_ylabel("窗内 CoV 均值")
+    bx.set_ylim(0, max(obs) + 0.03)
+    bx.set_title("窗放得再宽也降不到理想：抖动能消，速率差消不掉",
                  fontsize=12, fontweight="bold")
     bx.grid(alpha=0.22, which="both")
-    bx.legend(fontsize=9, loc="lower right")
+    bx.legend(fontsize=9, loc="upper right")
 
     fig.tight_layout()
     save(fig, "09-s0-instbal.png")
@@ -259,30 +286,29 @@ def fig_s1_effect() -> None:
     off = {"S0": (9, -16), "S1": (10, -4), "S1T": (9, 9)}
     for lbl, col in (("S0", BLUE), ("S1", RED), ("S1T", AMBER)):
         r = w[lbl]
-        x, y = r["throughput"], r["jain_bin"]["jain_bin_mean"]
+        x, y = r["throughput"], cov_bin(r)
         a2.scatter([x], [y], s=180, c=col, edgecolors="k", linewidths=0.6,
                    zorder=4)
         a2.annotate(lbl, xy=(x, y), xytext=off[lbl],
                     textcoords="offset points", fontsize=12,
                     fontweight="bold", color=col)
     s0x = w["S0"]["throughput"]
-    s0y = w["S0"]["jain_bin"]["jain_bin_mean"]
+    s0y = cov_bin(w["S0"])
     a2.axvline(s0x, c=GREY, ls="-.", lw=1.0)
-    a2.annotate("", xy=(w["S1"]["throughput"],
-                        w["S1"]["jain_bin"]["jain_bin_mean"]),
+    a2.annotate("", xy=(w["S1"]["throughput"], cov_bin(w["S1"])),
                 xytext=(s0x, s0y),
                 arrowprops=dict(arrowstyle="->", color=RED, lw=1.8))
     dpct = 100 * (w["S1"]["throughput"] / s0x - 1)
-    dj = w["S1"]["jain_bin"]["jain_bin_mean"] - s0y
-    a2.text((s0x + w["S1"]["throughput"]) / 2, s0y - 0.011,
-            f"带宽 {dpct:+.1f}%\n换 Jain {dj:+.3f}", fontsize=11,
+    dj = cov_bin(w["S1"]) - s0y
+    a2.text((s0x + w["S1"]["throughput"]) / 2, s0y - 0.008,
+            f"带宽 {dpct:+.1f}%\n换 CoV {dj:+.3f}", fontsize=11,
             color=RED, ha="center", va="top")
     a2.set_xlim(min(w[n]["throughput"] for n in ("S0", "S1", "S1T")) - 0.25,
                 max(w[n]["throughput"] for n in ("S0", "S1", "S1T")) + 0.25)
-    a2.set_ylim(0.905, 0.975)
+    a2.set_ylim(0.17, 0.32)
     a2.set_xlabel("总写带宽 flit/cycle")
-    a2.set_ylabel(f"{bw} 拍分箱平均 Jain")
-    a2.set_title("三个工作点在带宽—Jain 平面上的位置",
+    a2.set_ylabel(f"{bw} 拍窗不均衡度 CoV（越低越均衡）")
+    a2.set_title("三个工作点在带宽—CoV 平面上的位置",
                  fontsize=11.5, fontweight="bold")
     a2.grid(alpha=0.25)
 
@@ -295,12 +321,15 @@ def fig_tradeoff() -> None:
     """The ideal R(J) upper bound with every official deck scheme overlaid."""
     d = json.loads((RES / "tradeoff_ring2_cc.json").read_text())
     dk = deck()
-    # Use the ideal scheduler's 100-cycle Jain on the x-axis so the curve and
-    # measured markers have exactly the same fairness definition.
-    pts = sorted((p["jain_bin"], p["bw_monotone"]) for p in d["jain_curve"])
+    # x = CoV of the ideal scheduler's 100-cycle shares, the same statistic
+    # the measured markers use, so curve and points share one definition.
+    pts = sorted((j2cov(p["jain_bin"]), p["bw_monotone"]) for p in d["jain_curve"])
+    r_max, r_fair = d["r_max"], d["r_fair"]
+    # past the CoV where the LP hits R_max the fairness constraint is slack and
+    # the bound is flat at R_max
+    pts.append((0.385, r_max))
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
-    r_max, r_fair = d["r_max"], d["r_fair"]
     w = dk["write"]
 
     labels = {
@@ -315,8 +344,7 @@ def fig_tradeoff() -> None:
     rows = []
     for key, lab in labels.items():
         r = w[key]
-        rows.append({"key": key, "name": lab,
-                     "jain": r["jain_bin"]["jain_bin_mean"],
+        rows.append({"key": key, "name": lab, "cov": cov_bin(r),
                      "bw": r["throughput"]})
     rows.sort(key=lambda r: -r["bw"])
 
@@ -327,17 +355,17 @@ def fig_tradeoff() -> None:
 
     lo = min(r["bw"] for r in rows) - 0.18
     ax.plot(xs, ys, "-", c=RED, lw=2.6, zorder=3,
-            label="理论上限 R(J)")
+            label="理论上限 R(CoV)")
     ax.fill_between(xs, lo, ys, color=RED, alpha=0.045, zorder=0)
     ax.axhline(r_max, c=GREY, ls="--", lw=1.0)
-    ax.annotate(f"R_max = {r_max:.4f}",
-                xy=(0.878, r_max), xytext=(4, 6), textcoords="offset points",
-                fontsize=8.8, color="#5b636d")
-    ax.scatter([1.0], [r_fair], s=70, facecolors="white", edgecolors=RED,
+    ax.annotate(f"R_max = {r_max:.4f}（CoV ≥ 0.306 后不再受公平约束）",
+                xy=(0.003, r_max), xytext=(0, -13), textcoords="offset points",
+                fontsize=8.6, color="#5b636d")
+    ax.scatter([0.0], [r_fair], s=70, facecolors="white", edgecolors=RED,
                linewidths=1.6, zorder=5)
     ax.annotate(f"R* = {r_fair:.4f}",
-                xy=(1.0, r_fair), xytext=(-8, 10), textcoords="offset points",
-                fontsize=8.8, color=RED, ha="right")
+                xy=(0.0, r_fair), xytext=(8, 10), textcoords="offset points",
+                fontsize=8.8, color=RED, ha="left")
 
     for i, r in enumerate(rows, 1):
         if r["key"] == "S16":
@@ -350,23 +378,24 @@ def fig_tradeoff() -> None:
             c, s = GREEN, 120
         else:
             c, s = "#5b636d", 90
-        ax.scatter([r["jain"]], [r["bw"]], s=s, c=c, zorder=6,
+        ax.scatter([r["cov"]], [r["bw"]], s=s, c=c, zorder=6,
                    edgecolors="k", linewidths=0.55)
         dx, dy = ((0, 9), (-10, 3), (10, 3), (0, -12))[i % 4]
-        ax.annotate(str(i), xy=(r["jain"], r["bw"]), xytext=(dx, dy),
+        ax.annotate(str(i), xy=(r["cov"], r["bw"]), xytext=(dx, dy),
                     textcoords="offset points", fontsize=8.6, ha="center",
                     color=INK, fontweight="bold")
 
-    ax.set_xlim(0.872, 1.004)
+    ax.set_xlim(-0.012, 0.385)
     ax.set_ylim(lo, 6.62)
-    ax.set_xlabel(f"公平度 J = {dk['meta']['bin_w']} 拍窗 Jain（1 = 完全均等）→")
+    ax.set_xlabel(f"不均衡度 CoV = 十核 {dk['meta']['bin_w']} 拍窗带宽的标准差 / 均值"
+                  "（0 = 完全均等）→")
     ax.set_ylabel("总写带宽 R  flit/cycle")
     ax.set_title("红线是理论上限；全部官方 K=20000 方案",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=8.5, loc="upper right")
+    ax.legend(fontsize=8.5, loc="center right")
 
-    cols = ((0.00, "#"), (0.055, "方案（按带宽降序）"), (0.62, "Jain"),
+    cols = ((0.00, "#"), (0.055, "方案（按带宽降序）"), (0.62, "CoV"),
             (0.80, "带宽"), (1.00, ""))
     aligns = ("left", "left", "right", "right", "right")
     key.text(0.0, 0.985, "图例 · 绿 = 本次补齐", fontsize=12,
@@ -379,11 +408,12 @@ def fig_tradeoff() -> None:
     for i, r in enumerate(rows, 1):
         col = RED if r["key"] in front else (GREEN if r["key"] in new else INK)
         y = 0.935 - i * step
-        vals = (str(i), r["name"], f"{r['jain']:.4f}", f"{r['bw']:.3f}", "")
+        vals = (str(i), r["name"], f"{r['cov']:.4f}", f"{r['bw']:.3f}", "")
         for (x, _), al, v in zip(cols, aligns, vals):
             key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
     key.text(0.0, 0.935 - (len(rows) + 1.25) * step,
-             "点到红线的竖直距离 = 同等公平度下损失的带宽。\n"
+             "点到红线的竖直距离 = 同等不均衡度下损失的带宽。\n"
+             "红线在 CoV 坐标下是直线 R* + κ·CoV（κ = 2.18）。\n"
              "绿点 = 本次补齐的四类；I-tag 只是 S0 调参。",
              fontsize=8.6, color="#5b636d", va="top")
 
@@ -407,8 +437,15 @@ def fig_pareto() -> None:
     from pareto_ring2_cc import frontier
 
     reg = json.loads((RES / "pareto_ring2_cc.json").read_text())
-    rows = sorted(reg["schemes"], key=lambda r: -r["eta"])
     ideal = reg["ideal"]
+    kappa = _metric()["kappa"]
+    # Score every screened point with phi = (R - kappa*CoV)/R*; frontier()
+    # ranks on the "eta" key, so overwrite it with phi.
+    for r in reg["schemes"]:
+        r["cov"] = j2cov(r["jain_bin"])
+        r["phi"] = r["bw_vs_ideal"] - kappa * r["cov"] / ideal["bw"]
+        r["eta"] = r["phi"]
+    rows = sorted(reg["schemes"], key=lambda r: -r["phi"])
     front = {r["name"] for r in frontier(reg["schemes"])}
 
     fig = plt.figure(figsize=(9.9, 6.3))
@@ -417,7 +454,7 @@ def fig_pareto() -> None:
     key.axis("off")
 
     for i, r in enumerate(rows, 1):
-        x, y = max(r["hw_cost"], 1), r["eta"]
+        x, y = max(r["hw_cost"], 1), r["phi"]
         if r["name"] in front:
             c, s = RED, 150
         else:
@@ -429,34 +466,33 @@ def fig_pareto() -> None:
                     textcoords="offset points", fontsize=9, ha="center",
                     color=INK, fontweight="bold")
 
-    fpts = [(max(r["hw_cost"], 1), r["eta"]) for r in frontier(reg["schemes"])]
+    fpts = [(max(r["hw_cost"], 1), r["phi"]) for r in frontier(reg["schemes"])]
     ax.plot([p[0] for p in fpts], [p[1] for p in fpts], "--", c=RED, lw=1.4,
             alpha=0.8, label="Pareto 前沿")
     ax.axhline(1.0, c="#b34700", lw=1.6,
-               label=f"理想控制器 η = 1.0（{ideal['bw']:.4f} flit/cycle，"
-                     f"Jain {ideal['jain_bin']:.4f}）")
-    s0eta = next(r["eta"] for r in rows if r["name"].startswith("S0"))
+               label=f"理想控制器 φ = 1.0（R* = {ideal['bw']:.4f} flit/cycle，CoV = 0）")
+    s0eta = next(r["phi"] for r in rows if r["name"].startswith("S0"))
     ax.axhline(s0eta, c=GREY, ls="-.", lw=1.1,
-               label=f"S0 基线 η = {s0eta:.3f}")
+               label=f"S0 基线 φ = {s0eta:.3f}")
 
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
     # Floor well below the worst scheme so the legend has a band of its own:
     # at 0.35 the legend box sat on top of S17, which is the study's worst
     # point and therefore one a reader specifically looks for.
-    ax.set_ylim(0.26, 1.06)
+    ax.set_ylim(0.14, 1.06)
     ax.set_xlabel("新增硬件状态（FF 等效 = 折算成触发器个数，对数轴）→ 越贵")
-    ax.set_ylabel("η = （总带宽 × 分箱 Jain）/ 理想控制器同项")
+    ax.set_ylabel(f"φ = (R − κ·CoV) / R*，κ = {kappa:.2f}")
     ax.set_title("收益 — 硬件开销 Pareto（写，uniform，K=2000）\n"
-                 "η 越高越接近理想控制器；红 = 前沿，即同价位无人能超",
+                 "φ 越高越接近理想控制器；红 = 前沿，即同价位无人能超",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25, which="both")
     # Lower-left, not lower-right: the cheap end of the axis is empty at low
     # eta, whereas the mid-cost column now runs all the way down to S17.
     ax.legend(fontsize=8.5, loc="lower left")
 
-    cols = ((0.00, "#"), (0.050, "方案（按 η 降序）"), (0.545, "η"),
-            (0.675, "Jain"), (0.815, "带宽/R*"), (1.00, "FF 等效"))
+    cols = ((0.00, "#"), (0.050, "方案（按 φ 降序）"), (0.545, "φ"),
+            (0.675, "CoV"), (0.815, "带宽/R*"), (1.00, "FF 等效"))
     aligns = ("left", "left", "right", "right", "right", "right")
     key.text(0.0, 0.985, "图例", fontsize=12, fontweight="bold", color=INK,
              va="top")
@@ -469,7 +505,7 @@ def fig_pareto() -> None:
         nm = r["name"]
         nm = nm if len(nm) <= 22 else nm[:21] + "…"
         y = 0.935 - i * step
-        vals = (str(i), nm, f"{r['eta']:.4f}", f"{r['jain_bin']:.4f}",
+        vals = (str(i), nm, f"{r['phi']:.4f}", f"{r['cov']:.4f}",
                 f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
         for (x, _), al, v in zip(cols, aligns, vals):
             key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
@@ -660,6 +696,16 @@ def _bars_vs(ax, names, vals, colors, ylabel, title, fmt="{:.4f}",
     ax.grid(axis="y", alpha=0.25)
 
 
+def _cov_bars(ax, names, rows, colors, title="瞬时不均衡度", bw=100,
+              ideal=None):
+    """CoV bars from deck rows; the axis starts at 0 (= perfectly equal)."""
+    vals = [cov_bin(r) for r in rows]
+    _bars_vs(ax, names, vals, colors,
+             f"{bw} 拍窗内十核带宽的 CoV（0 = 完全均等）", title, fmt="{:.4f}",
+             ref=ideal, ref_label=None if ideal is None else f"理想控制器 {ideal:.4f}")
+    ax.set_ylim(0, max(vals) * 1.22)
+
+
 def fig_s16_compare() -> None:
     """S16 against S0 and S1, on writes and on reads, both axes."""
     d = deck()
@@ -675,22 +721,16 @@ def fig_s16_compare() -> None:
               w["S16"]["throughput"]], cols,
              "总写带宽 flit/cycle", f"写 · 带宽（K={d['meta']['k_write']}）",
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
-    _bars_vs(axes[1], ["S0", "S1", "S16"],
-             [w["S0"]["jain_bin"]["jain_bin_mean"],
-              w["S1"]["jain_bin"]["jain_bin_mean"],
-              w["S16"]["jain_bin"]["jain_bin_mean"]], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均", "写 · 瞬时均衡度", fmt="{:.4f}")
+    _cov_bars(axes[1], ["S0", "S1", "S16"], [w["S0"], w["S1"], w["S16"]], cols,
+              "写 · 瞬时不均衡度", bw)
     _bars_vs(axes[2], ["S0", "S1-R", "S16-R"],
              [r["S0"]["throughput"], r["S1-R"]["throughput"],
               r["S16-R"]["throughput"]], cols,
              "总读带宽 flit/cycle", f"读 · 带宽（K={d['meta']['k_read']}）",
              ref=r_read, ref_label=f"R* = {r_read:.4f}")
-    _bars_vs(axes[3], ["S0", "S1-R", "S16-R"],
-             [r["S0"]["jain_bin"]["jain_bin_mean"],
-              r["S1-R"]["jain_bin"]["jain_bin_mean"],
-              r["S16-R"]["jain_bin"]["jain_bin_mean"]], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均", "读 · 瞬时均衡度", fmt="{:.4f}")
-    fig.suptitle("写侧 S16：Jain 与总带宽；读侧 S0 本来就齐，S16 只多 0.47% 带宽",
+    _cov_bars(axes[3], ["S0", "S1-R", "S16-R"], [r["S0"], r["S1-R"], r["S16-R"]],
+              cols, "读 · 瞬时不均衡度", bw)
+    fig.suptitle("写侧 S16：CoV 与总带宽；读侧 S0 本来就齐，S16 只多 0.47% 带宽",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "23-s16-compare.png")
@@ -881,22 +921,19 @@ def fig_gap_compare() -> None:
              f"① 总带宽（uniform 写，K={d['meta']['k_write']}，越高越好）",
              ref=d["ideal"]["r_fair"],
              ref_label=f"R* = {d['ideal']['r_fair']:.4f}", fmt="{:.3f}")
-    _bars_vs(axes[1], names,
-             [w[k]["jain_bin"]["jain_bin_mean"] for k in keys], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均",
-             "② 均衡度（瞬时，越高越好）", fmt="{:.4f}")
+    _cov_bars(axes[1], names, [w[k] for k in keys], cols,
+              "② 不均衡度 CoV（瞬时，越低越好）", bw)
     _bars_vs(axes[2], names, [w[k]["max_min"] for k in keys], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "③ 长期速率比（越接近 1 越好）", fmt="{:.3f}")
     # An S1 line on all three axes so the existing scheme is a visible
     # reference without subtracting labels.
-    for ax, key in ((axes[0], "throughput"), (axes[1], "jain_bin"),
-                    (axes[2], "max_min")):
-        v = w["S1"][key]
-        ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
-                   color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
-        ax.legend(fontsize=8.6, loc="lower left", framealpha=0.95)
-    fig.suptitle("补齐的四类与 S0 / S1 同口径：总带宽、均衡度、长期速率比",
+    for ax, v in ((axes[0], w["S1"]["throughput"]), (axes[1], cov_bin(w["S1"])),
+                  (axes[2], w["S1"]["max_min"])):
+        ax.axhline(v, color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
+        ax.legend(fontsize=8.6, loc="upper left" if ax is axes[1] else "lower left",
+                  framealpha=0.95)
+    fig.suptitle("补齐的四类与 S0 / S1 同口径：总带宽、不均衡度、长期速率比",
                  fontsize=12.5, fontweight="bold")
     fig.text(0.5, 0.012,
              "S26 自适应路由 · S27 逐跳背压 · S28 显式速率（RCP 反馈）· "
@@ -975,14 +1012,12 @@ def fig_s22_compare() -> None:
     _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
              "总写带宽 flit/cycle", f"带宽（uniform 写，K={d['meta']['k_write']}）",
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
-    _bars_vs(axes[1], names,
-             [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均",
-             "瞬时均衡度：任意 100 拍内十个核齐不齐", fmt="{:.4f}")
+    _cov_bars(axes[1], names, [w[n] for n in names], cols,
+              "瞬时不均衡度 CoV：任意 100 拍内十个核齐不齐", bw)
     _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
-    fig.suptitle("S22 确实改善了均衡度，但要付带宽，而且比 S16 贵 15 倍",
+    fig.suptitle("S22 确实降低了不均衡度，但要付带宽，而且比 S16 贵 15 倍",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "25-s22-compare.png")
@@ -1062,24 +1097,19 @@ def fig_s29_compare() -> None:
     _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
              "总写带宽 flit/cycle", f"带宽（uniform 写，K={d['meta']['k_write']}）",
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
-    _bars_vs(axes[1], names,
-             [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均",
-             "瞬时均衡度：任意 100 拍内十个核齐不齐", fmt="{:.4f}")
+    _cov_bars(axes[1], names, [w[n] for n in names], cols,
+              "瞬时不均衡度 CoV：任意 100 拍内十个核齐不齐", bw)
     _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
     # S1's bar is the shortest one on the bandwidth axis, so a lower-left
-    # legend lands on its value label; the other two axes have their short bar
-    # on the right instead.
-    for ax, key, loc in ((axes[0], "throughput", "lower right"),
-                         (axes[1], "jain_bin", "lower left"),
-                         (axes[2], "max_min", "lower left")):
-        v = w["S1"][key]
-        ax.axhline(v["jain_bin_mean"] if isinstance(v, dict) else v,
-                   color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
+    # legend lands on its value label; the CoV axis is tallest on the left.
+    for ax, v, loc in ((axes[0], w["S1"]["throughput"], "lower right"),
+                       (axes[1], cov_bin(w["S1"]), "upper right"),
+                       (axes[2], w["S1"]["max_min"], "lower left")):
+        ax.axhline(v, color=AMBER, ls=":", lw=1.5, zorder=0, label="S1 水平")
         ax.legend(fontsize=8.6, loc=loc, framealpha=0.95)
-    fig.suptitle("S29 与 S0 / S1 / S22 / S16 同口径：总带宽、均衡度、长期速率比",
+    fig.suptitle("S29 与 S0 / S1 / S22 / S16 同口径：总带宽、不均衡度、长期速率比",
                  fontsize=12.5, fontweight="bold")
     fig.text(0.5, 0.012,
              "S22 = 环仲裁 + 进度总线（13,920 FF-eq）；S16 = HA 授权保留"
@@ -1589,9 +1619,7 @@ def fig_window_compare() -> None:
              f"带宽（uniform 写，K={d['meta']['k_write']}）",
              ref=d["ideal"]["r_fair"],
              ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
-    _bars_vs(axes[1], names,
-             [w[n]["jain_bin"]["jain_bin_mean"] for n in names], cols,
-             f"每 {bw} 拍算一次 Jain，再取平均", "瞬时均衡度", fmt="{:.4f}")
+    _cov_bars(axes[1], names, [w[n] for n in names], cols, "瞬时不均衡度 CoV", bw)
     _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差（越接近 1 越好）", fmt="{:.4f}")
@@ -1602,11 +1630,11 @@ def fig_window_compare() -> None:
 
 
 # ------------------------------------------------- S1 signal split (item 1)
-def _per_bin_jain(row: dict, bw: int) -> tuple[list[int], list[float]]:
+def _per_bin_cov(row: dict, bw: int) -> tuple[list[int], list[float]]:
     cnt = {c: [round(x * bw) for x in v] for c, v in row["per_core_binned"].items()}
     cs = sorted(cnt, key=int)
     nb = len(cnt[cs[0]])
-    return row["bin_t"], [jain([cnt[c][b] for c in cs]) for b in range(nb)]
+    return row["bin_t"], [cov([cnt[c][b] for c in cs]) for b in range(nb)]
 
 
 def _smooth(ys: list[float], win: int) -> list[float]:
@@ -1659,24 +1687,23 @@ def fig_s1_signal() -> None:
     _bars_vs(axes[0], labels, [w[n]["throughput"] for n in names], cols,
              "总写带宽 flit/cycle", "总带宽", ref=d["ideal"]["r_fair"],
              ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
-    _bars_vs(axes[1], labels, [w[n]["jain_bin"]["jain_bin_mean"] for n in names],
-             cols, f"每 {bw} 拍 Jain 的平均", "瞬时均衡度", fmt="{:.4f}")
+    _cov_bars(axes[1], labels, [w[n] for n in names], cols, "瞬时不均衡度 CoV", bw)
     for a in axes[:2]:
         a.tick_params(axis="x", labelsize=8.6)
 
     ax = axes[2]
     for n, lab, col in (("S1D", "S1D（与 S0 逐拍相同）", BLUE),
                         ("S1U", "S1U（与 S1 逐拍相同）", RED)):
-        xs, ys = _per_bin_jain(w[n], bw)
+        xs, ys = _per_bin_cov(w[n], bw)
         ax.plot(xs, ys, lw=0.45, color=col, alpha=0.35)
         ax.plot(xs, _smooth(ys, 40), lw=2.0, color=col, label=lab)
-    ax.set_ylim(0.84, 1.0)
+    ax.set_ylim(0.0, 0.46)
     ax.set_xlabel("cycle")
-    ax.set_ylabel(f"{bw} 拍窗内 10 核 Jain")
-    ax.set_title("瞬时均衡度随时间（细线 = 每箱，粗线 = 滑动平均）",
+    ax.set_ylabel(f"{bw} 拍窗内 10 核带宽的 CoV")
+    ax.set_title("瞬时不均衡度随时间（细线 = 每箱，粗线 = 滑动平均）",
                  fontsize=11.5, fontweight="bold")
     ax.grid(alpha=0.22)
-    ax.legend(fontsize=9, loc="lower right")
+    ax.legend(fontsize=9, loc="upper right")
 
     ax = axes[3]
     ss = w["S1"]["fc"]["signal_sum"]
@@ -1743,13 +1770,13 @@ def fig_s1_signal_finish() -> None:
 
 
 # ------------------------------------------------- read payload (item 2)
-def _read_per_bin_jain(row: dict, bw: int) -> tuple[list[int], list[float]]:
+def _read_per_bin_cov(row: dict, bw: int) -> tuple[list[int], list[float]]:
     rb = row["recv_binned"]
     cs = sorted(rb, key=int)
     ts = rb[cs[0]]["t"]
     t_fair = row["t_fair"]
     idx = [i for i, t in enumerate(ts) if t + bw <= t_fair]
-    ys = [jain([round(rb[c]["rate"][i] * bw) for c in cs]) for i in idx]
+    ys = [cov([round(rb[c]["rate"][i] * bw) for c in cs]) for i in idx]
     return [ts[i] for i in idx], ys
 
 
@@ -1778,23 +1805,22 @@ def fig_read_payload() -> None:
     ax.grid(axis="y", alpha=0.22)
     names = [f"{m} flit" for m in ms]
     cl = [cols[m] for m in ms]
-    _bars_vs(axes[1], names, [rp[f"S0-m{m}"]["jain_bin"]["jain_bin_mean"] for m in ms],
-             cl, f"每 {bw} 拍 Jain 的平均", "瞬时均衡度", fmt="{:.4f}")
+    _cov_bars(axes[1], names, [rp[f"S0-m{m}"] for m in ms], cl, "瞬时不均衡度 CoV", bw)
     _bars_vs(axes[2], names, [rp[f"S0-m{m}"]["max_min"] for m in ms], cl,
              "整窗 最快核 / 最慢核", "长期速率比", fmt="{:.4f}")
     ax = axes[3]
     for m in ms:
         r = rp[f"S0-m{m}"]
-        xs2, ys = _read_per_bin_jain(r, bw)
+        xs2, ys = _read_per_bin_cov(r, bw)
         tf = r["t_fair"]
         ax.plot([x / tf for x in xs2], ys, lw=0.4, color=cols[m], alpha=0.3)
         ax.plot([x / tf for x in xs2], _smooth(ys, 12), lw=1.9, color=cols[m],
                 label=f"{m} flit（争用窗 {tf:,} 拍）")
-    ax.set_ylim(0.86, 1.0)
+    ax.set_ylim(0.0, 0.42)
     ax.set_xlabel("时间 / 本例争用窗长度")
-    ax.set_ylabel(f"{bw} 拍窗内 10 核 Jain")
-    ax.set_title("瞬时均衡度随时间", fontsize=11.5, fontweight="bold")
-    ax.legend(fontsize=8.6, loc="lower right")
+    ax.set_ylabel(f"{bw} 拍窗内 10 核带宽的 CoV")
+    ax.set_title("瞬时不均衡度随时间", fontsize=11.5, fontweight="bold")
+    ax.legend(fontsize=8.6, loc="upper right")
     ax.grid(alpha=0.22)
     fig.suptitle(f"S0 读侧 · CompData 1 / 2 / 4 flit（K = {d['meta']['k_read']} 笔/核）："
                  "1 flit 不均最大，4 flit 长期均等但箱内抖动大于 2 flit",
@@ -1847,9 +1873,31 @@ def fig_metric() -> None:
     bx = fig.add_axes([0.625, 0.105, 0.36, 0.80])
 
     xs = [x / 100 for x in range(0, 41)]
-    ax.scatter(cx, cy, s=14, color=RED, zorder=4, label="LP 上界 R(J) 的 80 个点")
+    ax.scatter(cx, cy, s=14, color=RED, zorder=4, label="LP 上界 R(CoV) 的 80 个点")
     ax.plot(xs, [r_fair + kappa * x for x in xs], color=RED, lw=2.0, zorder=3,
             label=f"拟合  R = R* + κ·CoV，κ = {kappa:.3f}")
+    # slope triangle on the frontier: one unit of CoV buys kappa of bandwidth
+    x0, x1 = 0.20, 0.30
+    ax.plot([x0, x1, x1], [r_fair + kappa * x0] * 2 + [r_fair + kappa * x1],
+            color=RED, lw=1.0, ls="-", alpha=0.7, zorder=2)
+    ax.annotate(f"斜率 κ = {kappa:.2f}：每 +0.1 CoV 换 +{kappa * 0.1:.2f} flit/cycle",
+                (x0 + 0.012, r_fair + kappa * x0 - 0.09), fontsize=8.0, color=RED,
+                va="top", ha="left")
+    # construction for S0: the parallel through S0 hits CoV = 0 at Phi
+    s0 = m["schemes"]["S0"]
+    phi_abs = s0["bw"] - kappa * s0["cov"]
+    ax.plot([0, s0["cov"]], [phi_abs, s0["bw"]], color=BLUE, lw=1.3, ls="--", zorder=3,
+            label="S0 的等 φ 线：滑到 CoV = 0 处读出 Φ(S0)")
+    ax.scatter([0], [phi_abs], s=60, color=BLUE, edgecolors="k", linewidths=0.5, zorder=6)
+    ax.annotate(f"Φ(S0) = R − κ·CoV\n= {phi_abs:.3f}", (-0.03, phi_abs), xytext=(0, -8),
+                textcoords="offset points", fontsize=8.2, color=BLUE, va="top", ha="center")
+    ax.annotate("", (-0.03, r_fair), (-0.03, phi_abs),
+                arrowprops=dict(arrowstyle="<->", color=INK, lw=1.0))
+    ax.plot([-0.03, 0], [r_fair, r_fair], color=INK, lw=0.6, ls=":")
+    ax.plot([-0.03, 0], [phi_abs, phi_abs], color=INK, lw=0.6, ls=":")
+    ax.text(-0.025, (r_fair + phi_abs) / 2, f"R* − Φ\n= (1−φ)·R*\n= {r_fair - phi_abs:.3f}",
+            fontsize=7.8, color=INK, va="center", ha="left",
+            bbox=dict(fc="white", ec="none", alpha=0.9, pad=1.0))
     for phi in (0.95, 0.90, 0.85, 0.75):
         ax.plot(xs, [phi * r_fair + kappa * x for x in xs], color=GREY, lw=0.9,
                 ls="--", zorder=1)
@@ -1860,8 +1908,8 @@ def fig_metric() -> None:
                 ls=":", zorder=1)
         ax.text(0.405, eta * r_fair * (1 + 0.405 ** 2) + 0.06, f"η = {eta:.2f}",
                 fontsize=8.2, color=BLUE, va="bottom")
-    ax.plot([], [], color=GREY, lw=0.9, ls="--", label="等 φ 线（与上界平行）")
-    ax.plot([], [], color=BLUE, lw=0.9, ls=":", label="等 η 线（R·J = 常数）")
+    ax.plot([], [], color=GREY, lw=0.9, ls="--", label="等 φ 线：R − κ·CoV = 常数（与上界平行）")
+    ax.plot([], [], color=BLUE, lw=0.9, ls=":", label="等 η 线：R / (1 + CoV²) = 常数（抛物线）")
     show = ["S0", "S1", "S1T", "S16", "ITAG", "S22", "S29", "S28", "S26", "S19", "S20",
             "S28S", "S27"]
     off = {"S0": (6, -12), "S1": (6, -12), "S1T": (6, 4), "S16": (6, -12), "ITAG": (6, 4),
@@ -1876,11 +1924,12 @@ def fig_metric() -> None:
                     fontsize=8.6, color=col, fontweight="bold")
     ax.scatter([0], [r_fair], s=90, facecolors="white", edgecolors=RED, linewidths=1.6,
                zorder=5)
-    ax.annotate(f"R* = {r_fair:.4f}\n（CoV = 0，J = 1）", (0, r_fair), xytext=(8, -26),
-                textcoords="offset points", fontsize=8.6, color=RED)
-    ax.set_xlim(-0.01, 0.46)
+    ax.annotate(f"R* = {r_fair:.4f}\n（CoV = 0：十核完全等速率）", (-0.03, r_fair),
+                xytext=(0, 9), textcoords="offset points", fontsize=8.2, color=RED,
+                ha="center", va="bottom")
+    ax.set_xlim(-0.075, 0.46)
     ax.set_ylim(3.1, 6.7)
-    ax.set_xlabel("不均衡度 CoV = √((1−J)/J)　（J = 100 拍窗 Jain；J = 1/(1+CoV²) 恒等）")
+    ax.set_xlabel("不均衡度 CoV = 十核 100 拍窗带宽的标准差 / 均值（0 = 完全均等）")
     ax.set_ylabel("总写带宽 R  flit/cycle")
     ax.set_title("上界在 CoV 坐标下是一条直线：等 φ 线与它平行，等 η 线不平行",
                  fontsize=11.5, fontweight="bold")
@@ -2026,7 +2075,7 @@ def fig_finish_spread() -> None:
     for nm in FINISH_ORDER:
         fin = [int(v) for v in w[nm]["finish_by_core"].values()]
         rows.append((nm, min(fin), max(fin), max(fin) / min(fin), w[nm]["throughput"],
-                     w[nm]["jain_bin"]["jain_bin_mean"]))
+                     cov_bin(w[nm])))
     rows.sort(key=lambda r: r[3])
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(13.6, 4.5),
                                  gridspec_kw={"width_ratios": [1.35, 1.0]})
@@ -2050,9 +2099,9 @@ def fig_finish_spread() -> None:
         bx.scatter([j], [ratio], s=60, color=col, edgecolors="k", linewidths=0.5, zorder=4)
         bx.annotate(nm, (j, ratio), xytext=(5, 3), textcoords="offset points",
                     fontsize=8.4, color=INK)
-    bx.set_xlabel(f"{d['meta']['bin_w']} 拍窗 Jain（瞬时均衡度）")
+    bx.set_xlabel(f"{d['meta']['bin_w']} 拍窗 CoV（瞬时不均衡度，越左越均衡）")
     bx.set_ylabel("完成时间 最晚 / 最早")
-    bx.set_title("瞬时均衡度 vs 完成时间偏斜：两者不是同一件事",
+    bx.set_title("瞬时不均衡度 vs 完成时间偏斜：两者不是同一件事",
                  fontsize=11, fontweight="bold")
     bx.grid(alpha=0.22)
     fig.tight_layout()
