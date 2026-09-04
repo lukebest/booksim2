@@ -39,7 +39,7 @@ def j2cov(j: float) -> float:
 
 # (panel, scheme, base cfg, knob name, knob values, official value)
 SWEEPS: list[tuple[str, str, dict[str, Any], str, list[Any], Any]] = [
-    ("S0", "S0", {}, "t_inj", [1, 2, 4, 8, 16, 1_000_000_000], 4),
+    ("S0", "S0", {}, "t_inj", [1, 2, 4, 8, 16, 1_000_000_000], 16),
     ("S1", "S1", {}, "band·cap",
      ["gentle·1.0", "gentle·0.5", "gentle·0.25",
       "spec·1.0", "spec·0.5", "spec·0.25",

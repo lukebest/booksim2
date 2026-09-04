@@ -723,7 +723,7 @@
       </div>
       <div class="kicker" data-anim>NOC ARCHITECTURE REVIEW · 20-NODE BUFFERLESS RING</div>
       <h1 class="h-hero" data-anim>满带宽下的<br/>多核带宽不均</h1>
-      <p class="lead cover-subtitle" data-anim>20 节点无缓存双向环上的瞬时写带宽公平性：<br/>问题定位 · 理论极限 · 拥塞控制选型</p>
+      <p class="lead cover-subtitle" data-anim>研究问题：无缓存环接近 R* 时，几何造成的六快四慢<br/>能否在不牺牲总带宽的前提下被控制器抹平？</p>
     </div>
 
     <div class="cover-visual" aria-hidden="true">
@@ -737,7 +737,7 @@
   <div class="cover-wave" aria-hidden="true"></div>
   <div class="cover-meta">
     <div>汇报对象：芯片架构师</div>
-    <div>数据口径：uniform tiled 写 · K = 20000 · 单 plane · 全部可复现</div>
+    <div>口径：问题 → 度量 → 机制 → 上界 → 决策 · uniform tiled 写 · K = 20000 · 每核 outstanding = 128 · 主指标 100 拍窗 CoV</div>
   </div>
 </section>
 
@@ -852,7 +852,7 @@
     </div>
 
     <div class="quote-band" style="margin-top:5vh;font-size:1.32vw;line-height:1.45;padding:2.4vh 2.4vw">
-      公平性主指标：50 拍宽的窗内对 10 个核的写带宽算 Jain，再对所有争用窗内的箱取平均。
+      度量：闭环批量每核 K 笔，争用窗 [0, 第一核耗尽]；主指标 = 100 拍窗内十核写带宽的 CoV（标准差 / 均值）再对窗取平均。每核 outstanding = 128。
     </div>
   </div>
 </section>
@@ -870,7 +870,7 @@
       <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="layers"></i></div><div class="card-title">上环队列</div><p class="card-body">每 (node, VC) 12 深共享 FIFO + 每向 8 深 inject Q，各接一个上环口。</p></div>
       <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="inbox"></i></div><div class="card-title">下环队列</div><p class="card-body">深度 12。DAT 侧平均占用 0.765 / 12（峰值 11），满的比例 0%，从来不是瓶颈。</p></div>
       <div class="card" data-anim style="padding:2.2vh 1.4vw;border-color:rgba(var(--brand-red-rgb),.4)"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="shield-alert"></i></div><div class="card-title">在环绝对优先</div><p class="card-body">bufferless：transit flit 永不被本地注入打断，注入只能挤空隙。</p></div>
-      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="tag"></i></div><div class="card-title">I-tag / E-tag</div><p class="card-body">t_inj = 4 定向上游预约单槽；t_xfer = 1，首次下环失败即打标，再到达时最高优先级下环。</p></div>
+      <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="tag"></i></div><div class="card-title">I-tag / E-tag</div><p class="card-body">t_inj = 16、hold = 8 定向上游预约单槽；t_xfer = 1，首次下环失败即打标，再到达时最高优先级下环。</p></div>
       <div class="card" data-anim style="padding:2.2vh 1.4vw"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="gauge"></i></div><div class="card-title">在飞与 tracker</div><p class="card-body">core_outstanding = 128；HA tracker = 512，峰值占用 422，重试 0 —— 已完全不绑定。</p></div>
       <div class="card" data-anim style="padding:2.2vh 1.4vw;border-color:rgba(var(--brand-red-rgb),.4)"><div class="icon-disc" style="width:3.4vw;height:3.4vw;margin-bottom:1vh"><i data-lucide="radio"></i></div><div class="card-title">专用流控总线</div><p class="card-body">广播，不占 NoC hop；<strong>任何使用固定 30 拍延迟</strong>（硬约束），控制窗 64 拍。</p></div>
     </div>
@@ -961,7 +961,7 @@
 
 <!-- ==================== 10 瞬时公平性 ==================== -->
 <section class="slide" data-layout="H12" data-animate="media-report">
-  <div class="chrome"><div class="l"><span class="square"></span><span>S0：50 拍瞬时公平性</span></div><div></div></div>
+  <div class="chrome"><div class="l"><span class="square"></span><span>S0：100 拍瞬时不均衡度</span></div><div></div></div>
   <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><span>HUAWEI</span></div>
 
   <div style="padding-top:7vh;display:grid;grid-template-columns:.32fr 1fr;gap:2.4vw;align-items:center">
@@ -972,7 +972,7 @@
       <div class="red-rule" style="width:5vw"></div>
     </div>
     <div data-anim>
-      <div class="image-frame fit-contain" style="aspect-ratio:1612/546;height:38vh;width:auto;margin:0"><img src="images/09-s0-instbal.png" alt="左：50 拍窗内 10 核写带宽 Jain 随时间；右：不均衡随观察窗口宽度衰减"></div>
+      <div class="image-frame fit-contain" style="aspect-ratio:1612/546;height:38vh;width:auto;margin:0"><img src="images/09-s0-instbal.png" alt="左：100 拍窗内 10 核写带宽 CoV 随时间；右：不均衡随观察窗口宽度衰减"></div>
       <div class="caption">左 = 主指标随时间；右 = 同一份数据换观察窗宽度，实测始终低于理想控制器。</div>
     </div>
   </div>
@@ -1075,7 +1075,7 @@
       <h2 class="h-xl" style="font-size:min(2.7vw,5vh)">公平性和总带宽，S1 一次只能拿到一头</h2>
     </div>
     <div data-anim>
-      <div class="image-frame fit-contain" style="aspect-ratio:2278/850;height:40vh;width:auto;margin:0 auto"><img src="images/12-s1-effect.png" alt="左：S0 / S1 / S1T 每核写带宽对比；右：三者在带宽—Jain 平面上的位置与验收区"></div>
+      <div class="image-frame fit-contain" style="aspect-ratio:2278/850;height:40vh;width:auto;margin:0 auto"><img src="images/12-s1-effect.png" alt="左：S0 / S1 / S1T 每核写带宽对比；右：三者在带宽—CoV 平面上的位置"></div>
     </div>
     <div class="grid-3 same-size" data-anim>
       <div class="card flat"><div class="card-title">S1 默认（band = spec）</div><p class="card-body">分箱 Jain 0.87865 → <strong>0.94689</strong>，整窗 max/min 1.6931 → 1.4161；总写带宽 5.4681 → <strong>4.6874（−14.3%）</strong>。公平性进步是真的，带宽代价也是真的。</p></div>
@@ -1151,8 +1151,8 @@
 
   <div style="padding-top:8vh;display:grid;grid-template-columns:1.3fr .7fr;gap:2.4vw;align-items:start">
     <div data-anim>
-      <div class="image-frame fit-contain" style="aspect-ratio:1972/951"><img src="images/16-tradeoff.png" alt="理想拥塞控制的精确前沿 R(J)，标出 R_max、R*、S0 实测与 Jain=0.99 的验收区"></div>
-      <div class="caption">红线 = 二阶锥规划精确解的 R(J) 前沿；绿区 = 两条验收线同时满足的区域。本图与 Pareto 图同属 K = 2000 的筛选轮，S0 = 5.3937；官方 K = 20000 的 S0 = 5.4681。</div>
+      <div class="image-frame fit-contain" style="aspect-ratio:1972/951"><img src="images/16-tradeoff.png" alt="理想拥塞控制的精确前沿 R(CoV)，标出 R_max、R* 与官方 K=20000 方案工作点"></div>
+      <div class="caption">红线 = 理论上限 R(CoV)；点 = 官方 K = 20000、outstanding = 128 的实测方案。S0 = 5.5440，S16（overcommit = 20）= 5.6399。</div>
     </div>
     <div class="content-stack" data-anim style="gap:1.5vh">
       <div class="kicker">FORMAL DERIVATION</div>
@@ -1281,13 +1281,13 @@
     <div class="content-stack" data-anim style="gap:1.4vh">
       <div class="kicker">ROBUSTNESS TO TRAFFIC SHIFT</div>
       <div class="card flat" style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.4)">
-        <div class="card-title" style="font-size:1.1vw;color:var(--brand-red)">先修一个免费的错</div>
-        <p class="card-body" style="line-height:1.6">core_outstanding 128 → 32：<strong>零硬件、无流量先验</strong>。带宽从 0.7401 R* 拉到 0.9876 R*（+33%），E-tag 绕环从 6,627 降到 4,384。倾斜度扫描显示 32 在 5 个倾斜度中 4 个最优 —— 它不是新的先验。</p>
+        <div class="card-title" style="font-size:1.1vw;color:var(--brand-red)">官方 outstanding = 128 时，hot 先打容量</div>
+        <p class="card-body" style="line-height:1.6">十核全打 HA 11/13，在飞窗口不再被 RTT 限住，S0 只拿到 R* 的 <strong>74.0%</strong>。窗口类（S19 / S20）收到 98.9%，因为它们会把 requester 窗口从 128 收紧。uniform 写下 128 不绑定；hot 上它就是过量注入。</p>
       </div>
       <div class="card flat" style="padding:1.8vh 1.3vw">
-        <div class="card-title" style="font-size:1.1vw">修正基线后前沿只剩两点</div>
-        <p class="card-body" style="line-height:1.6">S0（0 FF-eq，0.9876）→ <strong style="color:var(--brand-red)">S16</strong>（900 FF-eq，<strong>0.9985</strong>，离理想只差 0.15%）。更贵的方案要么低于免费基线，要么只高出 0.3% 以内（S19 / S20 = 0.9908），全部被 S16 支配。</p>
-        <p class="card-body" style="margin-top:1vh;line-height:1.6">原因：hot 上的拥塞在<strong>目的地</strong>，而 S16 是唯一把控制点放在拥塞发生地的方案；源端之间的公平化（S22 / S23 / S15 / S21）在这里毫无帮助，还因让位 / 门控白扔槽位而亏带宽。</p>
+        <div class="card-title" style="font-size:1.1vw">控制点仍然决定谁能救带宽</div>
+        <p class="card-body" style="line-height:1.6">S16 把决策放在目的地，但 overcommit 是为 uniform 占用调的；hot 上 completer 更满，同一工作点会过狠。S19 / S20 窗口先保容量（98.9% R*）。</p>
+        <p class="card-body" style="margin-top:1vh;line-height:1.6">这一页回答的是「换流量会不会把带宽换掉」，不是把 uniform 的公平结论原样搬过来。官方口径仍是每核 outstanding = 128。</p>
       </div>
       <div class="quote-band" style="font-size:1.04vw;line-height:1.5;padding:1.6vh 1.3vw">
         但公平性没解决：这里 R*<sub>等速率</sub> = R<sub>max</sub>，公平不要钱，而分箱 Jain 只有 0.3684（S16 0.8542）—— <strong>这不是为带宽付的代价，是纯缺陷。</strong>
@@ -1365,7 +1365,7 @@
     <div class="grid-3 same-size" style="margin-top:3vh">
       <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">uniform 实测</div><p class="card-body">η 0.8587（可实现前沿上性价比最好的中价位点），带宽 0.9492 R*（<strong>+0.56% vs S0，本轮唯一带宽为正的中价位方案</strong>），分箱 Jain 0.90441。</p></div>
       <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">为什么带宽为正</div><p class="card-body">标记打在<strong>真正拥塞的那个资源</strong>上，所以它削掉的正是会导致 E-tag 绕环重试的那部分注入 —— 少注入换来更少的无效绕环。</p></div>
-      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">局限（必须讲清）</div><p class="card-body">ECN 是<strong>拥塞</strong>信号而不是<strong>公平</strong>信号，Jain 只到 0.904。hot 上（在飞上限 32）带宽 0.9908 R*、Jain 仅 0.3847；早期看到的「+33.6%」全部来自 win_init = 16 这个静态在飞上限，控制回路整轮一次都没触发（n_mark = 0）。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">局限（必须讲清）</div><p class="card-body">ECN 是<strong>拥塞</strong>信号而不是<strong>公平</strong>信号。官方 outstanding = 128 的 hot 上，S19 / S20 先靠收紧 requester 窗口保住约 98.9% R*；早期「+33.6%」来自把静态上限从 128 收到 32，不是控制回路自己触发的。</p></div>
     </div>
   </div>
 </section>
@@ -1391,7 +1391,7 @@
     <div class="grid-3 same-size" style="margin-top:3vh">
       <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">uniform 实测</div><p class="card-body">η 0.8474，带宽 0.9372 R*（−0.71% vs S0），分箱 Jain 0.90386。硬件与 S20 完全同价：每核 24 bit 计数 + 1 个 EWMA + 2 加 + 2 比较。</p></div>
       <div class="card flat" data-anim style="padding:1.8vh 1.3vw;border-color:rgba(var(--brand-red-rgb),.34)"><div class="card-title" style="font-size:1.05vw;color:var(--brand-red)">同价位被 S20 支配</div><p class="card-body">两者都是 5,840 FF-eq，但 S20 的 η 高 0.0113、带宽还为正。<strong>如果只能选一个 ECN / delay 型窗口控制器，选 S20。</strong>S19 的价值在于它连交换机标记支持都不需要。</p></div>
-      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">非均匀流量</div><p class="card-body">hot（在飞上限 32）带宽 0.9908 R*、Jain 0.3847，与 S20 逐位相同 —— 因为两个控制器在那里都<strong>一次都没触发</strong>（n_win_down = 0）。时延信号在下环口拥塞上同样不灵敏。</p></div>
+      <div class="card flat" data-anim style="padding:1.8vh 1.3vw"><div class="card-title" style="font-size:1.05vw">非均匀流量</div><p class="card-body">官方 outstanding = 128 的 hot 上，S19 / S20 带宽约 98.9% R*，与彼此接近。时延信号对下环口拥塞不灵敏；它们保容量靠的是把窗口从 128 收紧，不是改官方设定。</p></div>
     </div>
   </div>
 </section>
@@ -1498,9 +1498,9 @@
     <div class="process" style="margin-top:4.5vh">
       <div class="process-step" data-anim style="min-height:28vh">
         <div class="num-pill">01</div>
-        <div class="card-title">立刻做 · 0 FF-eq</div>
-        <p class="card-body"><strong>core_outstanding 128 → 32。</strong>零硬件、无流量先验，uniform 带宽 +1.1%（顺带分箱 Jain 0.876 → 0.910），非均匀流量带宽 +33%。</p>
-        <p class="card-body" style="margin-top:1vh;color:var(--brand-red)">注意：本研究此前一直用 128，所以各章节的 S0 基线偏低，排序需在 32 上复核。</p>
+        <div class="card-title">口径 · outstanding = 128</div>
+        <p class="card-body"><strong>口径钉死：每核 outstanding = 128。</strong>覆盖最坏空载写 RTT，uniform 写下不绑定环；hot 上它会过量注入，要靠窗口类收紧，而不是改官方设定。</p>
+        <p class="card-body" style="margin-top:1vh;color:var(--brand-red)">主问题仍是 uniform 写下的六快四慢：带宽已接近 R*，缺的是份额。</p>
       </div>
       <div class="process-step" data-anim style="min-height:28vh">
         <div class="num-pill">02</div>

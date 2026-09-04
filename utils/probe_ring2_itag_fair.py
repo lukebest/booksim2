@@ -49,7 +49,7 @@ OUT = (Path(__file__).resolve().parents[1] / "results"
 # `t_inj` alone, then paired with the two I-tag scoping knobs that decide how
 # much of the ring one tag disturbs.
 CASES = [
-    ("t_inj 4（出厂）", {}),
+    ("t_inj 16 + hold 8（出厂）", {}),
     ("t_inj 1", {"t_inj": 1}),
     ("t_inj 2", {"t_inj": 2}),
     ("t_inj 3", {"t_inj": 3}),

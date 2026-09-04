@@ -525,7 +525,7 @@ def fig_hot() -> None:
     from pareto_ring2_cc import frontier
 
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
-    cap = str(d.get("cap") or 32)
+    cap = str(deck()["meta"]["core_outstanding"])
     rows = d["passes"][cap] if "passes" in d else d["rows"]
     # t_inj=2 / hold=2 is the same I-tag mechanism already present in S0,
     # not an independently buildable controller, so it is a parameter point
@@ -640,7 +640,7 @@ def _s16_row(ax, title, sub, ha_lines, pick, ret, note):
 
 def fig_s16_diagram() -> None:
     """Where S16 sits on the write path and on the read path."""
-    oc = 16
+    oc = int(deck()["meta"].get("s16_overcommit") or 20)
     fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85))
     fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
                         hspace=0.20)
@@ -1017,7 +1017,7 @@ def fig_s22_compare() -> None:
     _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
-    fig.suptitle("S22 确实降低了不均衡度，但要付带宽，而且比 S16 贵 15 倍",
+    fig.suptitle("S22 与 S0 / S1 / S16 同口径：总带宽、瞬时 CoV、长期速率比",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "25-s22-compare.png")
@@ -1161,7 +1161,7 @@ def fig_s16_uarch() -> None:
     _hw(ax, 0.16, 0.55, 0.20, 0.26,
         "Request tracker\n（已有，512 条目）\n\n条目新增 1 bit\n「已授权」标志", fs=8.6)
     _hw(ax, 0.40, 0.55, 0.31, 0.26,
-        "授权决策\n\n直通：在飞 < 16 且无人等待\n→ 到达即授权\n"
+        f"授权决策\n\n直通：在飞 < {int(deck()['meta'].get('s16_overcommit') or 20)} 且无人等待\n→ 到达即授权\n"
         "排队：有等待的核里选 served 最小\n（同值取小核号），取其最老条目",
         new=True, bold=True, fs=8.3)
     _hw(ax, 0.75, 0.55, 0.22, 0.26,
@@ -1172,7 +1172,8 @@ def fig_s16_uarch() -> None:
         "末 flit 落地事件\n（已有：一笔写收齐）\n\n→ outstanding −1\n→ 触发一次补授权",
         fs=8.6)
     _hw(ax, 0.40, 0.22, 0.145, 0.25,
-        "outstanding\n5 bit\n在飞授权数\n授权 +1\n落地 −1", new=True, fs=8.4)
+        f"outstanding\n{max(5, int(deck()['meta'].get('s16_overcommit') or 20).bit_length())} bit\n"
+        "在飞授权数\n授权 +1\n落地 −1", new=True, fs=8.4)
     _hw(ax, 0.565, 0.22, 0.145, 0.25,
         "served[c]\n10 × 10 bit\n每授权 +2 flit\n定期同减\n最小值", new=True,
         fs=8.4)
@@ -1204,7 +1205,8 @@ def fig_s16_flow() -> None:
     """Two cores contending for one HA, step by step, with the HA's tables."""
     fig, ax = plt.subplots(figsize=(9.7, 5.85))
     fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01)
-    _panel(ax, "S16 工作示例：两个核争一个 HA（示意 overcommit = 2；实际 16，逻辑逐字相同）",
+    _panel(ax, "S16 工作示例：两个核争一个 HA（示意 overcommit = 2；"
+           f"实际 {int(deck()['meta'].get('s16_overcommit') or 20)}，逻辑逐字相同）",
            "REQ 灰 · DBIDResp 红 · WriteData 蓝")
     lanes = (("C0（快核）", 0.10, False), ("C2（慢核）", 0.30, False),
              ("HA", 0.50, True))
@@ -1567,8 +1569,9 @@ def fig_window_diagram() -> None:
     fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
                         hspace=0.22)
 
+    _cap = int(deck()["meta"]["core_outstanding"])
     _panel(ax, "共同执行器：每个 core 一扇动态 outstanding 窗口",
-           "初值 16 · 下限 8 · 硬上限 32")
+           f"初值 16 · 下限 8 · 硬上限 {_cap}")
     _box(ax, 0.02, 0.54, 0.18, 0.37, "core 发起端\n待发 WriteNoSnp",
          fc=PANEL, fs=10)
     _box(ax, 0.27, 0.50, 0.25, 0.45,
@@ -1583,7 +1586,7 @@ def fig_window_diagram() -> None:
     _arrow(ax, (0.76, 0.72), (0.83, 0.72), color=RED)
     _arrow(ax, (0.90, 0.53), (0.40, 0.44), color=RED, rad=-0.17)
     _box(ax, 0.02, 0.05, 0.96, 0.29,
-         "窗口只限制新 REQ；Retry 重发不被拦。Wc 不能超过静态 core_outstanding=32。"
+         f"窗口只限制新 REQ；Retry 重发不被拦。Wc 不能超过静态 core_outstanding={_cap}。"
          "与速率门控不同，窗口有名额时可以突发，名额耗尽才停。",
          fc=PANEL, ec=PANEL, fs=9.7)
 

@@ -205,7 +205,7 @@ def _write_case(args: tuple[str, str, dict[str, Any], int]) -> tuple[str, dict[s
     name, scheme, over, k = args
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
     txns = build_pattern("uniform", k=k, W=W_FLITS, seed=0)
-    cfg = {**FABRIC, **over}
+    cfg = {**FABRIC, "core_outstanding": CORE_OUTSTANDING_WR, **over}
     raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
     d = digest(raw, flits_per_core=k * W_FLITS, bin_w=BIN_W)
     f = d["fairness"]
@@ -289,7 +289,7 @@ def _read_case(args: tuple[str, str, dict[str, Any], int, int]
     topo = Ring2Topology(n_planes=1, vcs=CHI_VCS, route="latency")
     txns = build_tiled_read(k=k, m_resp=m_resp, mem=MEM_NODES,
                             core_set=CORE_NODES)
-    cfg = {**FABRIC, **over}
+    cfg = {**FABRIC, "core_outstanding": CORE_OUTSTANDING_WR, **over}
     raw = run_scheme(scheme, topo, txns, cfg=cfg, quiet=True)
     row = _read_row(raw, k, m_resp)
     print(f"  read  {name:<6} m={m_resp} bw={row['throughput']:.4f} "
@@ -364,6 +364,7 @@ def main() -> None:
             "n_cores": n, "cores": list(CORE_NODES), "has": list(MEM_NODES),
             "fc_bus_lat": 30, "cum_step": CUM_STEP,
             "read_payloads": list(READ_PAYLOADS),
+            "s16_overcommit": S16_OVERCOMMIT,
         },
         "ideal": {
             "r_fair": r_fair, "r_max": IDEAL["r_max"],

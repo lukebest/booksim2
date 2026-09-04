@@ -9,7 +9,7 @@ CoV is the official 100-cycle window mean: in each whole bin inside the
 contention window, std/mean of the ten cores' WriteData counts, then the
 average of those CoVs. Bandwidth is closed-batch total write throughput.
 
-Official S0 is t_inj=4, itag_hold=0, core_outstanding=128.
+Official S0 is t_inj=16, itag_hold=8, core_outstanding=128.
 
 Usage:
     PYTHONHASHSEED=0 python3 utils/probe_ring2_s0_itag_curve.py [K] [jobs]
@@ -43,7 +43,7 @@ OUT_PNG = ROOT / "results" / "ring2_wfair_s0_itag_curve.png"
 OFFICIAL_OUTST = 128
 T_INJ = (1, 2, 4, 8, 16, 32)
 HOLD = (0, 1, 2, 4, 8, 16)
-OFFICIAL = (4, 0)
+OFFICIAL = (16, 8)
 R_STAR = 40.0 / 7.0
 
 HOLD_COLOR = {
@@ -154,7 +154,8 @@ def _style_ax(ax, rows: list[dict[str, Any]], *, legend_loc: str) -> None:
         ax.plot([r["cov"] for r in front], [r["thr"] for r in front],
                 color="#94a3b8", lw=1.15, ls="-.", zorder=2,
                 label="Pareto 前沿（更高带宽且更低 CoV）")
-    off = next((r for r in rows if r.get("official")), None)
+    off = next((r for r in rows if (r["t_inj"], r["itag_hold"]) == OFFICIAL),
+               None)
     if off and off["cov"] is not None:
         ax.axvline(off["cov"], color="#94a3b8", ls=":", lw=0.8)
         ax.axhline(off["thr"], color="#94a3b8", ls=":", lw=0.8)
@@ -203,7 +204,7 @@ def plot(data: dict[str, Any], path: Path = OUT_PNG) -> None:
                       + ("（1 拍到期，yield=0）" if hold == 1 else ""))
         if hold in (0, 2):
             for r in pts:
-                if r.get("official"):
+                if (r["t_inj"], r["itag_hold"]) == OFFICIAL:
                     continue
                 ax.annotate(f"t={r['t_inj']}", (r["cov"], r["thr"]),
                             textcoords="offset points", xytext=(4, 4),

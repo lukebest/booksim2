@@ -99,18 +99,16 @@ RETRY_TRACK = 512
 # overcommit >= ha_track its pump never withholds a grant and it degenerates
 # to S0 exactly (pinned by verify_ring2_20.py). Being under the tracker is
 # necessary but not sufficient -- what has to be tight is the in-flight budget
-# the *ring* can sustain, not the tracker. Measured on the study workload at
-# ha_track = 256 (k=3000, peak occupancy ~204): 64 gives max/min 1.073 at
-# +2.4% throughput over S0, while 128 -- also "below the tracker" -- lands at
-# 1.177 and does nothing. So this stays at 64 and is not scaled with ha_track.
+# a completer actually sees, not the tracker and not the core cap.
 #
-# It does have to be scaled with `core_outstanding`, which is the thing that
-# actually sets how much the ring holds in flight. At the old cap of 128, 64 was
-# the tight value; at cap 32 the whole roster only offers ~40 requests per HA, so
-# 64 never withholds anything and S16 was measuring bit-identical to S0. The
-# re-sweep at cap 32 (`probe_ring2_s16_oc`) puts the optimum at 16 -- half the
-# cap, the same ratio as before -- with a broad 12..16 plateau.
-S16_OVERCOMMIT = 16
+# That occupancy is RTT-limited (~26 txn/core × 10 / 8 HA ≈ 30 grants), so
+# once `core_outstanding` is above the RTT window it stops moving the
+# optimum. A K=2000 sweep (`probe_ring2_s16_oc`) peaks at 16; the official
+# K=20000 confirmation at cap 128 moves the peak to 20 (5.6399 flit/cycle,
+# window-mean CoV 0.190, max/min 1.0001). 16 over-equalizes and drops ~9%
+# bandwidth; 64 is already past the bind. The working point tracks
+# completer occupancy, not the core cap.
+S16_OVERCOMMIT = 20
 OUTST_POINTS = (4, 8, 16, 32, 64, 128, 256)
 TRACK_POINTS = (8, 16, 32, 64, 128, 0)      # 0 = unlimited tracker
 RETRY_SCHEMES = ("S0", "S16", "S17", "S18")
@@ -311,10 +309,11 @@ def hop_latency_by_core(topo: Ring2Topology) -> dict[int, float]:
 # Run one scheme
 # ---------------------------------------------------------------------------
 
-# Sized to cover the worst-case unloaded write RTT (89 cycles) at the equal-rate
-# share of 2/7 txn/cycle, i.e. ~26 in flight; 32 is the next power of two. The
-# study used to run 128, which only added queueing on top of a saturated ring.
-CORE_OUTSTANDING_WR = 32
+# Published per-core in-flight cap. Worst-case unloaded write RTT is 89 cycles
+# at the equal-rate share of 2/7 txn/cycle (~26 in flight), so 32 would cover
+# the RTT; 128 is the official setting used by the report and the deck, and it
+# does not bind the ring (HA tracker 512 still covers the occupancy peak).
+CORE_OUTSTANDING_WR = 128
 
 # Every scheme rides the same fabric: one plane, latency-shortest routing
 # (link-delay sum, then hops, then CW), a depth-12 shared up-ring FIFO plus
@@ -419,8 +418,11 @@ S29_CFG = dict(tdma_slot=2, tdma_mode="demand", tdma_window=16,
 # +0.0088 binned Jain), because `itag_mode="reserve"` spends one slot per tag
 # instead of holding off a whole ring direction for a whole starvation period.
 ITAG_MODE = "reserve"
-T_INJ = 4                # consecutive failed boards before a node raises I-tag
+T_INJ = 16               # consecutive failed boards before a node raises I-tag
+ITAG_HOLD = 8            # cycles a raised I-tag may block; 0 = never expire
 T_XFER = 1               # failed ejects before E-tag: the specified value is 1
+# Live S0 point after the t_inj × hold sweep: 16 / 8 is the high-bandwidth
+# corner (R = 5.5440, +1.39% vs the old t_inj=4 / hold=∞ point).
 # The up-ring port structure. This is a full ring, so each node's inject side
 # is *two* port groups -- one per direction -- and each group carries REQ / RSP
 # / DAT. Six inject ports per node, each 1 flit/cycle. The down-ring side is
@@ -437,7 +439,8 @@ FABRIC = dict(plane_sel="least_occupied", per_vc_srcq=True,
               per_vc_ports=True, shared_inj=True, two_write_leave=True,
               inj_depth=12, dir_inj_depth=8, eject_depth=12,
               inj_sel="free_slot", per_dir_ports=PER_DIR_PORTS,
-              itag_mode=ITAG_MODE, t_inj=T_INJ, t_xfer=T_XFER,
+              itag_mode=ITAG_MODE, t_inj=T_INJ, itag_hold=ITAG_HOLD,
+              t_xfer=T_XFER,
               core_outstanding=CORE_OUTSTANDING_WR, ha_track=RETRY_TRACK,
               outst_sample=OUTST_SAMPLE, buf_sample=BUF_SAMPLE,
               ha_rsp_jit_lo=HA_RSP_JIT_LO, ha_rsp_jit=HA_RSP_JIT)

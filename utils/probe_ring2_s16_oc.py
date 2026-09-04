@@ -2,16 +2,11 @@
 """Re-pick S16's overcommit for the current `core_outstanding`.
 
 S16 only acts by *withholding* a grant, so its budget has to sit below the
-number of requests the fabric actually keeps in flight at a completer. That
-number is set by `core_outstanding`, not by the tracker: with the cap at 128 the
-tuned budget was 64, but at cap 32 the ten cores together only offer ~40
-requests across eight HAs, so a budget of 64 never binds and S16 degenerates to
-S0 bit for bit.
-
-Forecast, written before the sweep: the optimum tracks the cap at roughly the
-same ratio, so around 16; bandwidth should fall off sharply below ~10 as the
-completer starves itself, and binned Jain should collapse above ~24 as the
-budget stops binding. Falsifier: no interior point beats S0 on both axes.
+number of requests a completer actually keeps in flight. That occupancy is
+RTT-limited, not cap-limited, once `core_outstanding` covers the worst-case
+write RTT. Forecast: the eta peak stays near 16; bandwidth falls off below
+~10 as the completer starves itself, and binned Jain collapses above ~24 as
+the budget stops binding. Falsifier: no interior point beats S0 on both axes.
 
 Usage:
     PYTHONHASHSEED=0 python3 probe_ring2_s16_oc.py [K]
