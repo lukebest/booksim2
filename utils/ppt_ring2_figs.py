@@ -296,36 +296,58 @@ def fig_s1_effect() -> None:
     a1.grid(axis="y", alpha=0.25)
     a1.legend(fontsize=9.5, loc="upper center", ncol=3)
 
-    off = {"S0": (9, -16), "S1": (10, -4), "S1T": (9, 9)}
+    sw_path = RES / "probe_ring2_s1_covbw.json"
+    sweep = json.loads(sw_path.read_text())["rows"] if sw_path.is_file() else []
+    band_col = {"gentle": BLUE, "spec": AMBER, "harsh": RED}
+    drawn_band: set[str] = set()
+    for row in sweep:
+        if row.get("cov") is None or row.get("thr") is None:
+            continue
+        band = (row.get("cfg") or {}).get("band", "spec")
+        split = bool((row.get("cfg") or {}).get("dir_split"))
+        lab = None
+        if band not in drawn_band:
+            lab = f"S1 网格 · {band}"
+            drawn_band.add(band)
+        a2.scatter([row["cov"]], [row["thr"]],
+                   s=36, c=band_col.get(band, GREY),
+                   marker="s" if split else "o",
+                   alpha=0.72, linewidths=0.35, edgecolors="k",
+                   zorder=3, label=lab)
+    off = {"S0": (8, 8), "S1": (-36, -16), "S1T": (8, -14)}
     for lbl, col in (("S0", BLUE), ("S1", RED), ("S1T", AMBER)):
         r = w[lbl]
-        x, y = r["throughput"], cov_bin(r)
-        a2.scatter([x], [y], s=180, c=col, edgecolors="k", linewidths=0.6,
-                   zorder=4)
+        x, y = cov_bin(r), r["throughput"]
+        a2.scatter([x], [y], s=200, c=col, marker="*",
+                   edgecolors="k", linewidths=0.55, zorder=6)
         a2.annotate(lbl, xy=(x, y), xytext=off[lbl],
                     textcoords="offset points", fontsize=12,
                     fontweight="bold", color=col)
-    s0x = w["S0"]["throughput"]
-    s0y = cov_bin(w["S0"])
-    a2.axvline(s0x, c=GREY, ls="-.", lw=1.0)
-    a2.annotate("", xy=(w["S1"]["throughput"], cov_bin(w["S1"])),
+    s0x = cov_bin(w["S0"])
+    s0y = w["S0"]["throughput"]
+    a2.axhline(s0y, c=GREY, ls="-.", lw=1.0)
+    a2.annotate("", xy=(cov_bin(w["S1"]), w["S1"]["throughput"]),
                 xytext=(s0x, s0y),
                 arrowprops=dict(arrowstyle="->", color=RED, lw=1.8))
-    dpct = 100 * (w["S1"]["throughput"] / s0x - 1)
-    dj = cov_bin(w["S1"]) - s0y
-    a2.text((s0x + w["S1"]["throughput"]) / 2, s0y - 0.008,
+    dpct = 100 * (w["S1"]["throughput"] / s0y - 1)
+    dj = cov_bin(w["S1"]) - s0x
+    a2.text((s0x + cov_bin(w["S1"])) / 2 + 0.008, (s0y + w["S1"]["throughput"]) / 2,
             f"带宽 {dpct:+.1f}%\n换 CoV {dj:+.3f}", fontsize=11,
-            color=RED, ha="center", va="top")
-    a2.set_xlim(min(w[n]["throughput"] for n in ("S0", "S1", "S1T")) - 0.25,
-                max(w[n]["throughput"] for n in ("S0", "S1", "S1T")) + 0.25)
-    ylo = min(cov_bin(w[n]) for n in ("S0", "S1", "S1T"))
-    yhi = max(cov_bin(w[n]) for n in ("S0", "S1", "S1T"))
-    a2.set_ylim(ylo - 0.04, yhi + 0.04)
-    a2.set_xlabel("总写带宽 flit/cycle")
-    a2.set_ylabel(f"{bw} 拍窗不均衡度 CoV（越低越均衡）")
-    a2.set_title("三个工作点在带宽—CoV 平面上的位置",
+            color=RED, ha="left", va="center")
+    xs = [cov_bin(w[n]) for n in ("S0", "S1", "S1T")]
+    ys = [w[n]["throughput"] for n in ("S0", "S1", "S1T")]
+    xs += [r["cov"] for r in sweep if r.get("cov") is not None]
+    ys += [r["thr"] for r in sweep if r.get("thr") is not None]
+    a2.set_xlim(min(xs) - 0.03, max(xs) + 0.03)
+    a2.set_ylim(min(ys) - 0.22, max(ys) + 0.22)
+    a2.set_xlabel(f"{bw} 拍窗不均衡度 CoV（越左越均衡）")
+    a2.set_ylabel("总写带宽 flit/cycle")
+    n_sw = len(sweep)
+    a2.set_title("S1 参数网格在总写带宽—CoV 平面上"
+                 + (f"（{n_sw} 点）" if n_sw else ""),
                  fontsize=11.5, fontweight="bold")
     a2.grid(alpha=0.25)
+    a2.legend(fontsize=8.0, loc="lower left", framealpha=0.92)
 
     fig.tight_layout()
     save(fig, "12-s1-effect.png")

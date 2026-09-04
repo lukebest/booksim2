@@ -973,15 +973,17 @@ def slides(n: Live) -> list:
         stat=n.dthr("S1"), stat_sub=["S1 默认档相对 S0 的总写带宽",
                                      f"CoV {n.dcov('S1')}"],
         img="12-s1-effect.png",
-        caption="左 = 每核写带宽对比；右 = 三个工作点在带宽—CoV 平面上的位置。"
-                "下环失败含 leave FIFO 占用 > 1。",
+        caption="左 = 每核写带宽对比；右 = 总写带宽—CoV（横轴 CoV，纵轴总写带宽）。"
+                "圆 / 方 = S1 的 AIMD 网格（band × cap × window × burst × dir_split × scope）；"
+                "星 = S0 / 出厂 S1 / S1T。下环失败含 leave FIFO 占用 > 1。",
         cards=[
             dict(t="S1 默认（band = spec）",
                  b=[f"100 拍窗 CoV {n.cov('S0')} → **{n.cov('S1')}**，整窗 max/min "
                     f"{n.mm('S0')} → {n.mm('S1')}；"
                     f"总写带宽 {n.thr('S0')} → **{n.thr('S1')}（{n.dthr('S1')}）**。"]),
             dict(t="S1T 每向预算（调参后）", accent=True,
-                 b=["62 组 AIMD 参数网格选出的最优点（dir_split、cap 0.5、w 64、"
+                 b=["S1 的 AIMD 网格（band / cap / window / burst / dir_split / scope）"
+                    "选出的最优点（dir_split、cap 0.5、w 64、"
                     f"burst 1）：带宽 **{n.thr('S1T')}（{n.dthr('S1T')}）**，"
                     f"CoV **{n.cov('S1T')}**，max/min {n.mm('S1T')}。"]),
             dict(t="两档各取一端",
