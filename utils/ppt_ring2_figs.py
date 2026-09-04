@@ -2076,6 +2076,86 @@ def _knob_lab(name: str, val) -> str:
     return str(val)
 
 
+FRONT_KNOB_TITLE = {
+    "S0": "S0 基线 · t_inj",
+    "S16": "S16 授权保留 · overcommit",
+    "S26": "S26 自适应路由 · 绕远上限",
+    "ITAG": "I-tag 调参 · t_inj（hold = 2）",
+    "S22w32": "S22 深队列 w32 · dfc_margin",
+    "S29": "S29 日历让路 · slot",
+    "S21": "S21 定速漏桶 · headroom",
+    "S21eq": "S21+eq · headroom",
+    "S28S": "S28S 静态等分 · target",
+}
+
+
+def fig_one_front_knob(swp: dict, m: dict) -> None:
+    """One scheme's single-knob walk in the (CoV, R) plane."""
+    r_fair, kappa, r_max = m["r_fair"], m["kappa"], m["r_max"]
+    nm = swp["name"]
+
+    def _key(r):
+        v = r["val"]
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    rows = sorted(swp["rows"], key=_key)
+    fig = plt.figure(figsize=(9.4, 5.85))
+    ax = fig.add_axes([0.10, 0.12, 0.86, 0.76])
+    xs = [x / 100 for x in range(0, 56)]
+    ax.plot(xs, [min(r_max, r_fair + kappa * x) for x in xs],
+            color=RED, lw=1.8, zorder=2, label="LP 上界 R* + κ·CoV")
+    ax.plot([r["cov"] for r in rows], [r["thr"] for r in rows],
+            "-o", color=INK, lw=1.8, ms=7, zorder=4, label=f"扫 {swp['knob']}")
+    seen: set[tuple[float, float]] = set()
+    for r in rows:
+        key = (round(r["cov"], 3), round(r["thr"], 2))
+        if key in seen:
+            continue
+        seen.add(key)
+        ax.annotate(_knob_lab(nm if nm != "S21eq" else "S21", r["val"]),
+                    (r["cov"], r["thr"]),
+                    xytext=(5, 4), textcoords="offset points",
+                    fontsize=9.0, color=INK, zorder=5)
+    official = [r for r in rows
+                if abs(float(r["val"]) - float(swp["anchor"])) < 1e-9]
+    if official:
+        o = official[0]
+        ax.scatter([o["cov"]], [o["thr"]], s=160, marker="*", color=RED,
+                   zorder=6, edgecolors="k", linewidths=0.5,
+                   label="第 28 / 29 页工作点")
+    ax.set_xlabel("100 拍窗 CoV（越左越均衡）")
+    ax.set_ylabel("总写带宽 R  flit/cycle")
+    kt = f"（K = {swp['k']}）" if swp.get("k") is not None else ""
+    ax.set_title(FRONT_KNOB_TITLE[nm] + kt, fontsize=13, fontweight="bold")
+    lo_c = min(r["cov"] for r in rows)
+    hi_c = max(r["cov"] for r in rows)
+    lo_r = min(r["thr"] for r in rows)
+    hi_r = max(r["thr"] for r in rows)
+    ax.set_xlim(max(-0.02, lo_c - 0.06), min(0.55, hi_c + 0.08))
+    y_top = max(hi_r + 0.25, min(r_max, r_fair + kappa * max(hi_c, 0.05)) + 0.12)
+    ax.set_ylim(max(0.0, lo_r - 0.25), min(6.65, y_top))
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=9.0, loc="best")
+    save(fig, f"46-knob-{nm}.png")
+
+
+def fig_front_knobs() -> None:
+    """One (CoV, R) figure per page-28/29 front / second-front scheme."""
+    path = RES / "probe_ring2_front_knobs.json"
+    if not path.is_file():
+        print("skip fig_front_knobs: no probe_ring2_front_knobs.json")
+        return
+    sw = json.loads(path.read_text())
+    m = _metric()
+    for swp in sw["sweeps"]:
+        swp = dict(swp)
+        swp["k"] = sw["k"]
+        fig_one_front_knob(swp, m)
+
+
 def fig_metric_knobs() -> None:
     """All 13 official schemes' knob trajectories in the (CoV, R) plane."""
     sw = json.loads((RES / "probe_ring2_knob13.json").read_text())
@@ -2273,6 +2353,7 @@ def main() -> None:
     fig_read_payload_finish()
     fig_metric()
     fig_metric_knobs()
+    fig_front_knobs()
     fig_finish_all()
     fig_finish_spread()
     fig_saturation()

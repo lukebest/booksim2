@@ -1,0 +1,679 @@
+{
+ "k": 2000,
+ "bin_w": 100,
+ "note": "Page 28/29 first+second fronts; no λ*-pinned scheme on those fronts (S24/S25 already withdrawn).",
+ "sweeps": [
+  {
+   "name": "S0",
+   "scheme": "S0",
+   "knob": "t_inj",
+   "anchor": 16,
+   "rows": [
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1,
+     "thr": 5.3383,
+     "jain_bin": 0.96533,
+     "cov": 0.18951,
+     "max_min": 1.3267,
+     "makespan": 7493,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 2,
+     "thr": 5.372,
+     "jain_bin": 0.95928,
+     "cov": 0.20603,
+     "max_min": 1.3694,
+     "makespan": 7446,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 4,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 8,
+     "thr": 5.3093,
+     "jain_bin": 0.90567,
+     "cov": 0.32273,
+     "max_min": 1.9831,
+     "makespan": 7534,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 16,
+     "thr": 5.3865,
+     "jain_bin": 0.89487,
+     "cov": 0.34275,
+     "max_min": 1.8939,
+     "makespan": 7426,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1000000000,
+     "thr": 5.4998,
+     "jain_bin": 0.88978,
+     "cov": 0.35196,
+     "max_min": 1.7219,
+     "makespan": 7273,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S16",
+   "scheme": "S16",
+   "knob": "overcommit",
+   "anchor": 20,
+   "rows": [
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 6,
+     "thr": 3.3093,
+     "jain_bin": 0.98996,
+     "cov": 0.10071,
+     "max_min": 1.001,
+     "makespan": 12087,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 8,
+     "thr": 4.2324,
+     "jain_bin": 0.99547,
+     "cov": 0.06746,
+     "max_min": 1.001,
+     "makespan": 9451,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 10,
+     "thr": 4.8298,
+     "jain_bin": 0.99492,
+     "cov": 0.07146,
+     "max_min": 1.001,
+     "makespan": 8282,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 12,
+     "thr": 5.275,
+     "jain_bin": 0.99433,
+     "cov": 0.07551,
+     "max_min": 1.001,
+     "makespan": 7583,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 16,
+     "thr": 5.4585,
+     "jain_bin": 0.98349,
+     "cov": 0.12957,
+     "max_min": 1.0005,
+     "makespan": 7328,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 20,
+     "thr": 5.4318,
+     "jain_bin": 0.954,
+     "cov": 0.21959,
+     "max_min": 1.0501,
+     "makespan": 7364,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 32,
+     "thr": 5.4503,
+     "jain_bin": 0.92207,
+     "cov": 0.29072,
+     "max_min": 1.5987,
+     "makespan": 7339,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 64,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S26",
+   "scheme": "S26",
+   "knob": "route_max_extra",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 0,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 2,
+     "thr": 5.4069,
+     "jain_bin": 0.92197,
+     "cov": 0.29092,
+     "max_min": 1.6077,
+     "makespan": 7398,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 4,
+     "thr": 5.4069,
+     "jain_bin": 0.92197,
+     "cov": 0.29092,
+     "max_min": 1.6077,
+     "makespan": 7398,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 8,
+     "thr": 4.9074,
+     "jain_bin": 0.89452,
+     "cov": 0.34339,
+     "max_min": 1.7197,
+     "makespan": 8151,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "ITAG",
+   "scheme": "S0",
+   "knob": "t_inj",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1,
+     "thr": 5.2377,
+     "jain_bin": 0.98615,
+     "cov": 0.11851,
+     "max_min": 1.1416,
+     "makespan": 7637,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 2,
+     "thr": 5.3916,
+     "jain_bin": 0.96694,
+     "cov": 0.18491,
+     "max_min": 1.3298,
+     "makespan": 7419,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 4,
+     "thr": 5.4267,
+     "jain_bin": 0.93161,
+     "cov": 0.27094,
+     "max_min": 1.6577,
+     "makespan": 7371,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 8,
+     "thr": 5.3326,
+     "jain_bin": 0.9208,
+     "cov": 0.29328,
+     "max_min": 1.8718,
+     "makespan": 7501,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 16,
+     "thr": 5.493,
+     "jain_bin": 0.91785,
+     "cov": 0.29917,
+     "max_min": 1.7316,
+     "makespan": 7282,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S22w32",
+   "scheme": "S22",
+   "knob": "dfc_margin",
+   "anchor": 3.0,
+   "rows": [
+    {
+     "name": "S22w32",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 0.0,
+     "thr": 5.5294,
+     "jain_bin": 0.96211,
+     "cov": 0.19845,
+     "max_min": 1.0076,
+     "makespan": 7234,
+     "completed": true
+    },
+    {
+     "name": "S22w32",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 1.0,
+     "thr": 5.531,
+     "jain_bin": 0.96574,
+     "cov": 0.18835,
+     "max_min": 1.0083,
+     "makespan": 7232,
+     "completed": true
+    },
+    {
+     "name": "S22w32",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 2.0,
+     "thr": 5.5142,
+     "jain_bin": 0.9593,
+     "cov": 0.20598,
+     "max_min": 1.0073,
+     "makespan": 7254,
+     "completed": true
+    },
+    {
+     "name": "S22w32",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 3.0,
+     "thr": 5.5356,
+     "jain_bin": 0.9567,
+     "cov": 0.21274,
+     "max_min": 1.0058,
+     "makespan": 7226,
+     "completed": true
+    },
+    {
+     "name": "S22w32",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 4.0,
+     "thr": 5.5028,
+     "jain_bin": 0.96612,
+     "cov": 0.18726,
+     "max_min": 1.0086,
+     "makespan": 7269,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S29",
+   "scheme": "S29",
+   "knob": "tdma_slot",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 1,
+     "thr": 5.2213,
+     "jain_bin": 0.94539,
+     "cov": 0.24034,
+     "max_min": 1.5879,
+     "makespan": 7661,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 2,
+     "thr": 5.152,
+     "jain_bin": 0.96042,
+     "cov": 0.20301,
+     "max_min": 1.3405,
+     "makespan": 7764,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 3,
+     "thr": 4.7371,
+     "jain_bin": 0.95219,
+     "cov": 0.22408,
+     "max_min": 1.5558,
+     "makespan": 8444,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 4,
+     "thr": 4.3927,
+     "jain_bin": 0.93219,
+     "cov": 0.26971,
+     "max_min": 1.999,
+     "makespan": 9106,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 8,
+     "thr": 4.3578,
+     "jain_bin": 0.94346,
+     "cov": 0.2448,
+     "max_min": 1.6978,
+     "makespan": 9179,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S21",
+   "scheme": "S21",
+   "knob": "pace_headroom",
+   "anchor": 1.5,
+   "rows": [
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.0,
+     "thr": 2.7503,
+     "jain_bin": 0.99524,
+     "cov": 0.06916,
+     "max_min": 1.0929,
+     "makespan": 14544,
+     "completed": true
+    },
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.15,
+     "thr": 3.547,
+     "jain_bin": 0.98141,
+     "cov": 0.13763,
+     "max_min": 1.2508,
+     "makespan": 11277,
+     "completed": true
+    },
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.3,
+     "thr": 4.2585,
+     "jain_bin": 0.99608,
+     "cov": 0.06273,
+     "max_min": 1.0414,
+     "makespan": 9393,
+     "completed": true
+    },
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.5,
+     "thr": 4.2585,
+     "jain_bin": 0.99608,
+     "cov": 0.06273,
+     "max_min": 1.0414,
+     "makespan": 9393,
+     "completed": true
+    },
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.8,
+     "thr": 4.2132,
+     "jain_bin": 0.92783,
+     "cov": 0.2789,
+     "max_min": 2.008,
+     "makespan": 9494,
+     "completed": true
+    },
+    {
+     "name": "S21",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 2.0,
+     "thr": 4.0808,
+     "jain_bin": 0.90401,
+     "cov": 0.32586,
+     "max_min": 2.1186,
+     "makespan": 9802,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S21eq",
+   "scheme": "S21",
+   "knob": "pace_headroom",
+   "anchor": 1.5,
+   "rows": [
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.0,
+     "thr": 0.6425,
+     "jain_bin": 0.99572,
+     "cov": 0.06556,
+     "max_min": 1.0152,
+     "makespan": 62260,
+     "completed": true
+    },
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.15,
+     "thr": 0.8663,
+     "jain_bin": 0.99329,
+     "cov": 0.08219,
+     "max_min": 1.0293,
+     "makespan": 46172,
+     "completed": true
+    },
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.3,
+     "thr": 3.0953,
+     "jain_bin": 0.95636,
+     "cov": 0.21361,
+     "max_min": 1.5326,
+     "makespan": 12923,
+     "completed": true
+    },
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.5,
+     "thr": 4.2585,
+     "jain_bin": 0.99608,
+     "cov": 0.06273,
+     "max_min": 1.0414,
+     "makespan": 9393,
+     "completed": true
+    },
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 1.8,
+     "thr": 4.1999,
+     "jain_bin": 0.93303,
+     "cov": 0.26791,
+     "max_min": 1.997,
+     "makespan": 9524,
+     "completed": true
+    },
+    {
+     "name": "S21eq",
+     "scheme": "S21",
+     "knob": "pace_headroom",
+     "val": 2.0,
+     "thr": 4.2017,
+     "jain_bin": 0.90669,
+     "cov": 0.3208,
+     "max_min": 2.1097,
+     "makespan": 9520,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S28S",
+   "scheme": "S28S",
+   "knob": "rcp_target",
+   "anchor": 0.98,
+   "rows": [
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.9,
+     "thr": 3.1235,
+     "jain_bin": 0.98606,
+     "cov": 0.1189,
+     "max_min": 1.0463,
+     "makespan": 12806,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.94,
+     "thr": 3.3939,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11786,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.96,
+     "thr": 3.3939,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11786,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.98,
+     "thr": 3.3965,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11777,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 1.0,
+     "thr": 3.6324,
+     "jain_bin": 0.98716,
+     "cov": 0.11405,
+     "max_min": 1.0524,
+     "makespan": 11012,
+     "completed": true
+    }
+   ]
+  }
+ ]
+}

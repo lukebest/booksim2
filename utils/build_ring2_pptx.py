@@ -741,6 +741,95 @@ class Live:
                 and int(wa.get("makespan") or 0) == int(wb.get("makespan") or 0))
 
 
+FRONT_KNOB_META = {
+    "S0": dict(
+        chrome="S0：扫 I-tag 饥饿阈", kicker="FRONT · t_inj",
+        which="第 28 / 29 页前沿（0 FF‑eq）",
+        knob="t_inj：连续上环失败多少拍才升 I-tag。off = 关掉 I-tag。",
+        why="这是基线自己的唯一旋钮，不是拥塞控制器。"),
+    "S16": dict(
+        chrome="S16：扫授权超额 overcommit", kicker="FRONT · overcommit",
+        which="第 28 / 29 页前沿（900 FF‑eq）",
+        knob="overcommit：completer 同时在飞的授权上限。",
+        why="旋钮动的是 HA 授权窗口，不写死 λ*，不含流量先验。"),
+    "S26": dict(
+        chrome="S26：扫绕远跳数上限", kicker="SECOND FRONT · extra hops",
+        which="第 28 / 29 页次前沿（1,560 FF‑eq）",
+        knob="route_max_extra：最短路之外最多允许多走几跳。",
+        why="只看本节点两个出向的失败率 EWMA，无 pattern 常数。"),
+    "ITAG": dict(
+        chrome="I-tag：扫 t_inj（hold 固定为 2）", kicker="SECOND FRONT · S0 RETUNE",
+        which="第 28 页次前沿（3,120 FF‑eq）",
+        knob="t_inj：与 S0 同一旋钮，但 itag_hold 冻在 Pareto 点的 2。",
+        why="不是独立机制，也不是流量先验；留在名单只因它在次前沿上。"),
+    "S22w32": dict(
+        chrome="S22(w32)：扫赤字阈值 dfc_margin", kicker="SECOND FRONT · dfc_margin",
+        which="第 28 页次前沿（深队列 + 窗 32，1,198,560 FF‑eq）",
+        knob="dfc_margin：落后多少才请求让路。窗与队列冻在 w32 工作点。",
+        why="信号是总线上的达成量，不编译 λ*。"),
+    "S29": dict(
+        chrome="S29：扫日历时隙 slot", kicker="SECOND FRONT · slot",
+        which="第 29 页次前沿（4,440 FF‑eq）",
+        knob="tdma_slot：每个核一次占用出向 hop 的拍数。",
+        why="日历是拓扑常量，需求位是本地事实，不含 pattern 先验。"),
+    "S21": dict(
+        chrome="S21：扫漏桶余量 headroom", kicker="SECOND FRONT · headroom",
+        which="第 29 页次前沿（4,960 FF‑eq）",
+        knob="pace_headroom：把测到的达成速率放大多少再写入漏桶。",
+        why="速率从本核已拿到的量自时钟，不写死份额。"),
+    "S21eq": dict(
+        chrome="S21+eq：扫漏桶余量 headroom", kicker="SECOND FRONT · headroom",
+        which="第 29 页次前沿（6,880 FF‑eq）",
+        knob="pace_headroom：测到的达成速率放大多少再写入漏桶。"
+             "均衡开着，tol 冻在 0.02。",
+        why="比的是总线上的实测达成量，不是 λ*。扫 tol 在此工作点完全不动，"
+            "所以改扫会动 (R, CoV) 的 headroom。"),
+    "S28S": dict(
+        chrome="S28S：扫 hop 目标占用 target", kicker="SECOND FRONT · rcp_target",
+        which="第 29 页次前沿（12,680 FF‑eq）",
+        knob="rcp_target：每个 hop 静态等分时的占用目标 C，份额 = C / N。",
+        why="N 是本窗穿过该 hop 的核数，无目的地先验、无 λ*。"),
+}
+
+
+def _front_knob_slides() -> list:
+    """One figside page per first/second-front scheme. Numbers from the sweep."""
+    path = ROOT / "results" / "probe_ring2_front_knobs.json"
+    if not path.is_file():
+        return []
+    blob = json.loads(path.read_text())
+    out = []
+    for swp in blob["sweeps"]:
+        meta = FRONT_KNOB_META[swp["name"]]
+        rows = list(swp["rows"])
+        anchor = next((r for r in rows
+                       if abs(float(r["val"]) - float(swp["anchor"])) < 1e-9),
+                      None)
+        lo_r, hi_r = min(r["thr"] for r in rows), max(r["thr"] for r in rows)
+        lo_c, hi_c = min(r["cov"] for r in rows), max(r["cov"] for r in rows)
+        star = (f"工作点 {swp['knob']} = {swp['anchor']}："
+                f"R = {anchor['thr']:.3f}，CoV = {anchor['cov']:.3f}"
+                if anchor else f"工作点 {swp['knob']} = {swp['anchor']}")
+        out.append(("figside", dict(
+            chrome=meta["chrome"], img=f"46-knob-{swp['name']}.png", fig_w=8.20,
+            caption=f"横轴 = 100 拍窗 CoV，纵轴 = 总写带宽 R；红线 = LP 上界；"
+                    f"折线 = 只动 {swp['knob']}；星 = 第 28 / 29 页工作点。"
+                    f"K = {blob['k']}，与 Pareto 筛选轮相同。",
+            kicker=meta["kicker"],
+            blocks=[
+                dict(kind="card", t=meta["which"], b=[
+                    meta["knob"], meta["why"]], wt=1.15),
+                dict(kind="card", accent=True, t="这一扫走了多远", b=[
+                    f"R 从 {lo_r:.3f} 到 {hi_r:.3f}（Δ = {hi_r - lo_r:+.3f}）；"
+                    f"CoV 从 {lo_c:.3f} 到 {hi_c:.3f}。",
+                    star + "。"], wt=1.25),
+                dict(kind="band",
+                     text="第 28 / 29 页前沿 + 次前沿里没有写死 λ* 的方案"
+                          "（S24 / S25 已撤回），所以这一组一个都没剔除。",
+                     wt=0.70)])))
+    return out
+
+
 def slides(n: Live) -> list:
     s0_lo, s0_hi = n.finish_span("S0")
     s1_lo, s1_hi = n.finish_span("S1")
@@ -1333,8 +1422,10 @@ def slides(n: Live) -> list:
                  wt=1.45),
             dict(kind="band",
                  text="换流量之后窗口能保住容量，但按 φ 计价仍输给授权重排。"
-                      "理想 φ = 1 远在图外（本 pattern 最高实测 0.39）。",
+                      "下一组页：这两个前沿上每个方案只扫一个旋钮的 (R, CoV) 轨迹。",
                  wt=0.70)])),
+
+    *_front_knob_slides(),
 
     ("figside", dict(
         chrome="各方案的各核完成时间曲线", img="44-finish-all.png", fig_w=8.60,
