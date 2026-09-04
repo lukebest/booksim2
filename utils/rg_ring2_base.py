@@ -289,6 +289,7 @@ class Ring2BaseSim:
             "n_injected": 0, "n_delivered_flits": 0,
             "n_delivered_req": 0, "n_delivered_resp": 0,
             "n_txn_done": 0, "n_deflections": 0,
+            "n_leave_occ_gt1": 0,
             "n_etag_raised": 0, "n_itag_raised": 0, "n_itag_yield": 0,
             "n_inring_blocked": 0, "n_eject_full_deflect": 0,
             "n_board_fail": 0, "max_inj_starve": 0,
@@ -700,7 +701,17 @@ class Ring2BaseSim:
         q.append(f)
         self.active_ej.add(key)
         self.st["max_ejectq"] = max(self.st["max_ejectq"], len(q))
+        # Two-write-one-read: a second (or later) occupant is a down-ring
+        # fail that the FIFO absorbed. Do not deflect or raise E-tag — the
+        # flit already left the ring.
+        if len(q) > 1:
+            self._on_leave_occ(f)
         return True
+
+    def _on_leave_occ(self, f: Flit) -> None:
+        """Leave FIFO occupancy went above 1 after this flit entered."""
+        self.st["n_leave_occ_gt1"] += 1
+        self.n_eject_defl_by_dst[f.dst] += 1
 
     def _itag_expire(self, rk: Any) -> set[int]:
         """Drop tags that have outlived `itag_hold`, and return the live ones."""
@@ -1513,6 +1524,9 @@ class Ring2BaseSim:
             out["lat_max"] = lat[-1]
         out["board_by_core"] = self.board_by_core()
         out["core_outstanding"] = self.p.core_outstanding
+        out["n_leave_occ_gt1"] = int(self.st.get("n_leave_occ_gt1") or 0)
+        out["n_down_fail"] = (int(self.st.get("n_deflections") or 0)
+                              + out["n_leave_occ_gt1"])
         out["core_outst"] = dict(self.core_outst)
         if self.wr_inject_times or self.wr_recv_times or self.rd_inject_times:
             if self.wr_inject_times or self.wr_recv_times:

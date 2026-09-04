@@ -274,6 +274,12 @@ class Ring2FcSim(Ring2BaseSim):
         self.ej_offered[(f.dst, f.vc)][f.src] += 1
         super()._deflect(f)
 
+    def _on_leave_occ(self, f: Flit) -> None:
+        # Occupancy > 1 in the two-write-one-read leave FIFO is the same
+        # down-ring pressure a deflection would have reported.
+        self.defl_win[f.dst] += 1
+        super()._on_leave_occ(f)
+
     def _on_arrive_station(self, f: Flit) -> None:
         super()._on_arrive_station(f)
         self.ej_served[(f.dst, f.vc)][f.src] += 1
@@ -552,18 +558,18 @@ class Ring2FcSim(Ring2BaseSim):
         for i in range(self.n):
             recv = self._max_recv_level(i)
             keys = ([(i, 1), (i, -1)] if p.dir_split else [i])
-            if not self._controlled(i):
-                rec_b.append(self.budget.get(keys[0], cap))
-                rec_l.append(0); rec_r.append(recv)
-                rec_ok.append(sum(self.ok_win.get(bk, 0) for bk in keys))
-                continue
-            node_b, node_lv = 0, 0
             self.sig_sum["up"][i] += self.fail_tot[i]
             self.sig_sum["down"][i] += self.defl_win[i]
             self.sig_sum["up_lv"][i] += level_of(self.fail_tot[i]) > 0
             self.sig_sum["down_lv"][i] += level_of(self.defl_win[i]) > 0
             self.sig_sum["recv_lv"][i] += recv > 0
             self.sig_sum["windows"][i] += 1
+            if not self._controlled(i):
+                rec_b.append(self.budget.get(keys[0], cap))
+                rec_l.append(0); rec_r.append(recv)
+                rec_ok.append(sum(self.ok_win.get(bk, 0) for bk in keys))
+                continue
+            node_b, node_lv = 0, 0
             for bk in keys:
                 if p.dir_split:
                     own = self.fail_dir.get(bk, 0)

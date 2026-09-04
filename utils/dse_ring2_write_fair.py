@@ -1775,6 +1775,10 @@ def digest(r: dict[str, Any], *, flits_per_core: int, bin_w: int
         "n_txn_done": r.get("n_txn_done"), "n_txn_target": r.get("n_txn_target"),
         "n_board_fail": r.get("n_board_fail", 0),
         "n_deflections": r.get("n_deflections", 0),
+        "n_leave_occ_gt1": r.get("n_leave_occ_gt1", 0),
+        "n_down_fail": r.get("n_down_fail",
+                             int(r.get("n_deflections") or 0)
+                             + int(r.get("n_leave_occ_gt1") or 0)),
         "n_eject_full_deflect": r.get("n_eject_full_deflect", 0),
         "n_inring_blocked": r.get("n_inring_blocked", 0),
         "max_inring_hold": r.get("max_inring_hold", 0),

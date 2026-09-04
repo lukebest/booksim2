@@ -726,6 +726,20 @@ class Live:
         fin = [int(v) for v in self.P(name)["finish_by_core"].values()]
         return f"{min(fin):,}–{max(fin):,}"
 
+    def down_fail(self, name: str) -> int:
+        w = self.W(name)
+        return int(w.get("n_down_fail") or (
+            int(w.get("n_deflections") or 0)
+            + int(w.get("n_leave_occ_gt1") or 0)))
+
+    def leave_occ(self, name: str) -> int:
+        return int(self.W(name).get("n_leave_occ_gt1") or 0)
+
+    def same_op(self, a: str, b: str) -> bool:
+        wa, wb = self.W(a), self.W(b)
+        return (abs(float(wa["throughput"]) - float(wb["throughput"])) < 5e-4
+                and int(wa.get("makespan") or 0) == int(wb.get("makespan") or 0))
+
 
 def slides(n: Live) -> list:
     s0_lo, s0_hi = n.finish_span("S0")
@@ -738,7 +752,11 @@ def slides(n: Live) -> list:
     s0g = n.cg("S0")
     s0reg = n.W("S0")["regular"]
     s1_fail = int(n.W("S1")["n_board_fail"])
-    s1_defl = int(n.W("S1")["n_deflections"])
+    s1_defl = n.down_fail("S1")
+    s1_occ = n.leave_occ("S1")
+    s1_ring_defl = int(n.W("S1").get("n_deflections") or 0)
+    s1d_eq = n.same_op("S1D", "S0")
+    s1u_eq = n.same_op("S1U", "S1")
     gap_r = 100.0 - float(n.pct_r("S0"))
     return [
     ("cover", dict(
@@ -919,7 +937,10 @@ def slides(n: Live) -> list:
         key=f"S1 默认档：CoV {n.cov('S0')} → {n.cov('S1')}（{n.dcov('S1')}），"
             f"总写带宽 {n.dthr('S1')}；"
             "S1T 把带宽收回后，CoV 回到与 S0 同一水平。"
-            "信号细分显示 S1 的等级完全由上环失败驱动，下环偏转在 uniform 写下不贡献信息。")),
+            + ("计入 leave FIFO 占用 > 1 之后，S1D 不再等于 S0："
+               "下环一路能驱动等级，但几乎只掉带宽、不搬公平。"
+               if not s1d_eq else
+               "下环失败含 FIFO 占用 > 1 后次数变大，核侧 64 拍窗仍到不了等级 1。"))),
 
     ("process", dict(
         chrome="S1 机制：检测 / 传递 / 反馈 / 控制",
@@ -927,7 +948,8 @@ def slides(n: Live) -> list:
         title="S1：拥塞等级广播 + 节点级 AIMD",
         steps=[
             dict(t="拥塞检测",
-                 b=["每节点每 64 拍窗统计**上环失败**与**下环偏转**，"
+                 b=["每节点每 64 拍窗统计**上环失败**与**下环失败**"
+                    "（绕环偏转 + leave FIFO 写入后占用 > 1），"
                     "分 total（任何原因）与 net（仅在环占用造成）两路。",
                     "等级 = min(7, 计数 ÷ 8)，量化成 3 bit：0–7→0，8–15→1，…，≥56→7。"]),
             dict(t="拥塞传递",
@@ -951,7 +973,8 @@ def slides(n: Live) -> list:
         stat=n.dthr("S1"), stat_sub=["S1 默认档相对 S0 的总写带宽",
                                      f"CoV {n.dcov('S1')}"],
         img="12-s1-effect.png",
-        caption="左 = 每核写带宽对比；右 = 三个工作点在带宽—CoV 平面上的位置。",
+        caption="左 = 每核写带宽对比；右 = 三个工作点在带宽—CoV 平面上的位置。"
+                "下环失败含 leave FIFO 占用 > 1。",
         cards=[
             dict(t="S1 默认（band = spec）",
                  b=[f"100 拍窗 CoV {n.cov('S0')} → **{n.cov('S1')}**，整窗 max/min "
@@ -971,11 +994,13 @@ def slides(n: Live) -> list:
         lead=f"max/min 从 {n.mm('S0')} 降到 {n.mm('S1')}：差距在收，总量也在收。",
         cols=[
             dict(t="机制在做什么", b=[
-                "**检测**：本节点上环失败 / 下环偏转，量化成 3 bit 拥塞等级。",
+                "**检测**：本节点上环失败 / 下环失败（真偏转 + leave FIFO 占用 > 1），"
+                "量化成 3 bit 拥塞等级。",
                 "**控制**：按路径上最高等级对注入预算做 AIMD，出口是令牌桶。",
                 "**执行**：没额度的拍不上环。"]),
             dict(t="实测各核变化", accent=True, b=[
-                "**信号来源**：乘性减由本节点上环失败触发；无缓存环上这些失败多数来自 transit。",
+                "**信号来源**：乘性减仍主要由本节点上环失败触发；"
+                "下环一路现在把 leave FIFO 占用 > 1 也算进去。",
                 f"**快核被压、慢核略升**：慢核 C8 {n.bw('S0', 8)} → {n.bw('S1', 8)}"
                 f"（{n.dbw('S1', 8)}），快核 C14 {n.bw('S0', 14)} → {n.bw('S1', 14)}"
                 f"（{n.dbw('S1', 14)}）。",
@@ -988,45 +1013,55 @@ def slides(n: Live) -> list:
         chrome="S1 信号细分：只计上环失败 / 只计下环失败 / 两者都计",
         kicker="S1 SIGNAL SPLIT",
         stat=f"{s1_defl:,} / {s1_fail:,}",
-        stat_sub=["S1 全程下环偏转 / 上环失败累计次数",
-                  "下环计数远小于上环，等级几乎由上环单独决定"],
+        stat_sub=["S1 全程下环失败 / 上环失败",
+                  f"下环 = 真偏转 {s1_ring_defl:,} + FIFO 占用>1  {s1_occ:,}"],
         img="38-s1-signal.png",
         caption="四根柱 = S0 / S1D（只计下环）/ S1U（只计上环）/ S1（都计），K = 20000 uniform 写；"
-                "右一 = S1 全程每核两路原始信号的累计计数（对数轴）。",
+                "下环失败 = 绕环偏转 + 两写一读 leave FIFO 占用 > 1。",
         cards=[
             dict(t="三档怎么实现",
-                 b=["参数 signal = up / down / both：**up** 时拥塞等级只由本节点 64 拍窗内的"
-                    "上环失败计数决定，总线 down 字段恒为 0；**down** 只由下环偏转决定；"
-                    "**both** = 现有 S1，取二者 max。AIMD 参数、30 拍总线、受控节点表全部相同。"]),
-            dict(t="实测：两档各与一端逐拍重合", accent=True,
-                 b=[f"**S1U = S1**：总带宽 {n.thr('S1U')}、100 拍 CoV {n.cov('S1U')}、"
-                    f"完成时间 {s1_lo:,}–{s1_hi:,}。",
-                    f"**S1D = S0**：{n.thr('S1D')} / {n.cov('S1D')} / "
-                    f"{s0_lo:,}–{s0_hi:,}。",
-                    "四组曲线两两完全一致，不是近似。"]),
-            dict(t="原因在信号量级",
-                 b=[f"S1 全程上环失败 **{s1_fail:,}** 次、下环偏转 **{s1_defl:,}** 次；"
-                    "等级 = 计数 ÷ 8，下环这一路几乎到不了等级 1。",
-                    "[[S1 现有等级实际就是上环失败等级；uniform 写下 down 字段不携带信息，"
-                    "省去这 3 bit 不改变任何结果。]]"])])),
+                 b=["参数 signal = up / down / both：**up** 只计上环失败；"
+                    "**down** 只计下环失败（真偏转，以及 leave FIFO 写入后深度 > 1）；"
+                    "**both** = 现有 S1，取二者 max。FIFO 本身仍是两写一读、深度 12。"]),
+            dict(t=("实测：两档仍各与一端重合" if (s1d_eq and s1u_eq)
+                    else "实测：计入 FIFO 占用后下环一路不再沉默"),
+                 accent=True,
+                 b=[f"**S1U{' = S1' if s1u_eq else ''}**：总带宽 {n.thr('S1U')}、"
+                    f"100 拍 CoV {n.cov('S1U')}、完成时间 {n.fspan('S1U')}。",
+                    f"**S1D{' = S0' if s1d_eq else ''}**：{n.thr('S1D')} / "
+                    f"{n.cov('S1D')} / {n.fspan('S1D')}。",
+                    ("四组曲线两两完全一致：全局下环次数变大，但核侧 64 拍窗仍到不了等级 1。"
+                     if (s1d_eq and s1u_eq)
+                     else "S1D 不再等于 S0：leave FIFO 占用 > 1 已经能驱动 down 等级。")]),
+            dict(t="新口径下的量级",
+                 b=[f"S1 全程上环失败 **{s1_fail:,}** 次；下环失败 **{s1_defl:,}** 次"
+                    f"（其中绕环偏转 {s1_ring_defl:,}，FIFO 占用>1  {s1_occ:,}）。",
+                    "[[占用 > 1 只改计数与 S1 的 down 信号，不把 flit 再送回环，也不打 E-tag。]]"])])),
 
     ("media", dict(
         chrome="S1 信号细分：各核完成时间曲线",
         kicker="PER-CORE COMPLETION",
         stat=f"{n.frat('S1D')} → {n.frat('S1U')}",
-        stat_sub=["十核完成时间 最晚 / 最早：S1D（= S0）→ S1U（= S1）",
+        stat_sub=[("十核完成时间 最晚 / 最早：S1D（= S0）→ S1U（= S1）"
+                   if (s1d_eq and s1u_eq)
+                   else "十核完成时间 最晚 / 最早：S1D → S1U"),
                   "同一组四个慢核，差距收窄但仍在"],
         img="39-s1-signal-finish.png",
         caption="横轴 cycle，纵轴 = 该核已上环 WriteData / 本核配额；红 = 邻 mem = 1 的四核"
-                "（C0 / C8 / C10 / C18），蓝 = 其余六核；右 = 十核最后一个 flit 上环的时刻。",
+                "（C0 / C8 / C10 / C18），蓝 = 其余六核；右 = 十核最后一个 flit 上环的时刻。"
+                "下环失败含 leave FIFO 占用 > 1。",
         cards=[
-            dict(t="S1D（= S0）：六快四慢",
+            dict(t=("S1D（= S0）：六快四慢" if s1d_eq else "S1D：只听下环失败"),
                  b=[f"十核完成时间 {n.fspan('S1D')}，比值 {n.frat('S1D')}。"
-                    "快核完成的瞬间慢核斜率抬升 —— "
-                    "慢核不是能力不足，是满载时抢不到上环机会。"]),
-            dict(t="S1U（= S1）：整体推后、差距收窄", accent=True,
+                    + ("快核完成的瞬间慢核斜率抬升 —— "
+                       "慢核不是能力不足，是满载时抢不到上环机会。"
+                       if s1d_eq else
+                       "leave FIFO 占用 > 1 已经进入 down 信号，完成曲线不再等于 S0。")]),
+            dict(t=("S1U（= S1）：整体推后、差距收窄" if s1u_eq
+                    else "S1U：只听上环失败"),
+                 accent=True,
                  b=[f"十核完成时间 {n.fspan('S1U')}，比值 {n.frat('S1U')}；"
-                    f"最早完成时刻从 {s0_lo:,} 推到 {s1_lo:,}。"]),
+                    f"最早完成时刻从 {s0_lo:,} 推到 {n.finish_span('S1U')[0]:,}。"]),
             dict(t="两个口径说的不是一件事",
                  b=[f"100 拍 CoV 看窗内瞬时份额，完成时间比看长期速率。"
                     f"S1 把 CoV 从 {n.cov('S0')} 降到 {n.cov('S1')}（{n.dcov('S1')}），"

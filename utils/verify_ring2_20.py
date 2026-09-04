@@ -368,6 +368,29 @@ def test_per_vc_leave_is_two_write_one_read_per_vc() -> None:
     assert _land() == (2, 2)
 
 
+def test_leave_occ_gt1_counts_as_down_fail() -> None:
+    """A second flit in the two-write-one-read FIFO is a down-ring fail.
+
+    It is not a ring deflection: the flit has already left, so E-tag stays
+    down and n_deflections is unchanged.
+    """
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE)
+    p = Ring2BaseParams(two_write_leave=True, eject_depth=4, eject_bw=0)
+    sim = Ring2BaseSim(topo, p, seed=0)
+    sim.arrivals[0] = [
+        Flit(pid=0, txn_id=0, seq=0, nflit=1, src=0, dst=1,
+             kind="wdata", t_gen=0, plane=0, dir=1, idx=1, target=0, vc="dat"),
+        Flit(pid=1, txn_id=1, seq=0, nflit=1, src=2, dst=1,
+             kind="req", t_gen=0, plane=0, dir=-1, idx=1, target=0, vc="req"),
+    ]
+    sim.step()
+    assert sim.st["n_eject_full_deflect"] == 0
+    assert sim.st["n_deflections"] == 0
+    assert sim.st["n_leave_occ_gt1"] == 1
+    assert sim.st["n_etag_raised"] == 0
+    assert len(sim.ejectq[(1, 0)]) == 2
+
+
 def test_workload_counts() -> None:
     a = build_allpairs(m=2, m_resp=4)
     assert len(a) == 200
@@ -2309,6 +2332,7 @@ def main() -> None:
     c.add("per_vc_ports_board_one_each", test_per_vc_ports_board_one_each_per_cycle)
     c.add("two_write_leave_both_dirs", test_two_write_leave_accepts_both_dirs)
     c.add("per_vc_leave_two_write", test_per_vc_leave_is_two_write_one_read_per_vc)
+    c.add("leave_occ_gt1_down_fail", test_leave_occ_gt1_counts_as_down_fail)
     c.add("workload_counts", test_workload_counts)
     c.add("s0_completes_and_conserves", test_s0_completes_and_conserves)
     c.add("s1_completes_and_conserves", test_s1_completes_and_conserves)

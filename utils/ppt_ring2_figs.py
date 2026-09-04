@@ -43,6 +43,19 @@ PANEL = "#eef2f7"
 
 def _use_cjk_font() -> None:
     from matplotlib import font_manager as fm
+    from pathlib import Path as _P
+    for p in (("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+               "WenQuanYi Micro Hei"),
+              ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+               "WenQuanYi Zen Hei")):
+        if _P(p[0]).is_file():
+            try:
+                fm.fontManager.addfont(p[0])
+            except (OSError, ValueError):
+                pass
+            plt.rcParams["font.sans-serif"] = [p[1], "DejaVu Sans"]
+            plt.rcParams["axes.unicode_minus"] = False
+            return
     wanted = ("micro hei", "cjk", "noto sans sc", "source han sans")
     for f in fm.fontManager.ttflist:
         if any(w in f.name.lower() for w in wanted):
@@ -305,7 +318,9 @@ def fig_s1_effect() -> None:
             color=RED, ha="center", va="top")
     a2.set_xlim(min(w[n]["throughput"] for n in ("S0", "S1", "S1T")) - 0.25,
                 max(w[n]["throughput"] for n in ("S0", "S1", "S1T")) + 0.25)
-    a2.set_ylim(0.17, 0.32)
+    ylo = min(cov_bin(w[n]) for n in ("S0", "S1", "S1T"))
+    yhi = max(cov_bin(w[n]) for n in ("S0", "S1", "S1T"))
+    a2.set_ylim(ylo - 0.04, yhi + 0.04)
     a2.set_xlabel("总写带宽 flit/cycle")
     a2.set_ylabel(f"{bw} 拍窗不均衡度 CoV（越低越均衡）")
     a2.set_title("三个工作点在带宽—CoV 平面上的位置",
@@ -1678,10 +1693,24 @@ def _cum_curves(ax, row: dict, cores: list[int], total: int, title: str,
 SLOW = {0, 8, 10, 18}
 
 
+def _same_op(a: dict, b: dict) -> bool:
+    """Two closed-batch rows landed on the same operating point."""
+    return (abs(float(a["throughput"]) - float(b["throughput"])) < 5e-4
+            and int(a.get("makespan") or 0) == int(b.get("makespan") or 0))
+
+
+def _down_fail(row: dict) -> int:
+    return int(row.get("n_down_fail")
+               or (int(row.get("n_deflections") or 0)
+                   + int(row.get("n_leave_occ_gt1") or 0)))
+
+
 def fig_s1_signal() -> None:
     """S1 with only board failures, only eject failures, or both as its signal."""
     d = deck()
     w, bw = d["write"], d["meta"]["bin_w"]
+    d_eq = _same_op(w["S1D"], w["S0"])
+    u_eq = _same_op(w["S1U"], w["S1"])
     names = ["S0", "S1D", "S1U", "S1"]
     labels = ["S0", "S1D\n只下环", "S1U\n只上环", "S1\n都计"]
     cols = [BLUE, GREEN, AMBER, RED]
@@ -1695,8 +1724,9 @@ def fig_s1_signal() -> None:
         a.tick_params(axis="x", labelsize=8.6)
 
     ax = axes[2]
-    for n, lab, col in (("S1D", "S1D（与 S0 逐拍相同）", BLUE),
-                        ("S1U", "S1U（与 S1 逐拍相同）", RED)):
+    dlab = "S1D（与 S0 逐拍相同）" if d_eq else "S1D 只计下环"
+    ulab = "S1U（与 S1 逐拍相同）" if u_eq else "S1U 只计上环"
+    for n, lab, col in (("S1D", dlab, BLUE), ("S1U", ulab, RED)):
         xs, ys = _per_bin_cov(w[n], bw)
         ax.plot(xs, ys, lw=0.45, color=col, alpha=0.35)
         ax.plot(xs, _smooth(ys, 40), lw=2.0, color=col, label=lab)
@@ -1722,15 +1752,26 @@ def fig_s1_signal() -> None:
     ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
     ax.set_ylabel("S1 每核的两路原始信号（对数轴）")
     n_win = ss["windows"][str(cores[0])]
+    down_all = sum(int(v) for v in ss["down"].values())
+    down_lv = sum(int(v) for v in ss["down_lv"].values())
+    up_lv = sum(int(v) for v in ss["up_lv"].values())
     ax.set_title(f"S1 信号来源：上环 {sum(up):,} 次 vs 下环 "
-                 f"{sum(ss['down'].values())} 次", fontsize=11.5, fontweight="bold")
-    ax.text(0.02, 0.96, f"{n_win} 个 64 拍窗 × 10 核：\n上环等级 > 0 的窗 "
-            f"{sum(ss['up_lv'].values()):,} 个；下环等级 > 0 的窗 0 个",
-            transform=ax.transAxes, fontsize=8.6, color=INK, va="top")
-    ax.legend(fontsize=8.4, loc="upper right", bbox_to_anchor=(1.0, 0.86))
+                 f"{down_all:,} 次", fontsize=11.5, fontweight="bold")
+    ax.text(0.02, 0.96,
+            f"{n_win} 个 64 拍窗：上环等级>0 的窗 {up_lv:,} 个；"
+            f"下环等级>0 的窗 {down_lv:,} 个\n"
+            f"柱 = 核侧 down 信号（含 leave FIFO 占用>1）；"
+            f"全程 n_down_fail={_down_fail(w['S1']):,}",
+            transform=ax.transAxes, fontsize=8.2, color=INK, va="top")
+    ax.legend(fontsize=8.4, loc="upper right", bbox_to_anchor=(1.0, 0.78))
     ax.grid(axis="y", alpha=0.22)
-    fig.suptitle("S1 的拥塞等级只由上环失败驱动：只计下环 = S0，只计上环 = S1，"
-                 "两者都计 = S1", fontsize=13, fontweight="bold")
+    if d_eq and u_eq:
+        head = "S1 的拥塞等级仍由上环失败驱动：只计下环 = S0，只计上环 = S1"
+    elif u_eq and not d_eq:
+        head = "计入 leave FIFO 占用>1 之后，只计下环不再等于 S0"
+    else:
+        head = "S1 信号拆分：只计下环 / 只计上环 / 两者都计"
+    fig.suptitle(head, fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "38-s1-signal.png")
 
@@ -1741,13 +1782,17 @@ def fig_s1_signal_finish() -> None:
     w = d["write"]
     cores = d["meta"]["cores"]
     total = d["meta"]["k_write"] * d["meta"]["w_flits"]
+    d_eq = _same_op(w["S1D"], w["S0"])
+    u_eq = _same_op(w["S1U"], w["S1"])
     fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.5),
                              gridspec_kw={"width_ratios": [1, 1, 1.15]})
     xmax = max(max(int(v) for v in w[n]["finish_by_core"].values())
                for n in ("S1D", "S1U", "S1")) * 1.04
-    _cum_curves(axes[0], w["S1D"], cores, total, "S1D 只计下环失败（= S0）",
+    dtitle = "S1D 只计下环失败（= S0）" if d_eq else "S1D 只计下环失败"
+    utitle = "S1U 只计上环失败（= S1）" if u_eq else "S1U 只计上环失败"
+    _cum_curves(axes[0], w["S1D"], cores, total, dtitle,
                 slow=SLOW, legend=True, xmax=xmax)
-    _cum_curves(axes[1], w["S1U"], cores, total, "S1U 只计上环失败（= S1）",
+    _cum_curves(axes[1], w["S1U"], cores, total, utitle,
                 slow=SLOW, xmax=xmax)
     axes[0].set_ylabel("已上环 WriteData / 本核配额")
     for a in axes[:2]:
@@ -1762,8 +1807,14 @@ def fig_s1_signal_finish() -> None:
     ax.set_xticks(xs)
     ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
     ax.set_ylabel("本核最后一个 WriteData 上环的拍（千拍）")
-    ax.set_ylim(50, 92)
-    ax.set_title("各核完成时间：S1U 与 S1 完全重合", fontsize=10.5, fontweight="bold")
+    lo = min(min(int(v) for v in w[n]["finish_by_core"].values())
+             for n in ("S1D", "S1U", "S1")) / 1000 - 4
+    hi = max(max(int(v) for v in w[n]["finish_by_core"].values())
+             for n in ("S1D", "S1U", "S1")) / 1000 + 4
+    ax.set_ylim(max(0, lo), hi)
+    ax.set_title("各核完成时间：S1U 与 S1 完全重合" if u_eq
+                 else "各核完成时间：三档不再两两重合",
+                 fontsize=10.5, fontweight="bold")
     ax.legend(fontsize=8.8, loc="upper center", ncol=3)
     ax.grid(axis="y", alpha=0.22)
     fig.suptitle("各核完成时间曲线：红 = 邻 mem = 1 的四核（C0 / C8 / C10 / C18）",

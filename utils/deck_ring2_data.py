@@ -228,6 +228,10 @@ def _write_case(args: tuple[str, str, dict[str, Any], int]) -> tuple[str, dict[s
         "n_etag": d["n_etag_raised"], "n_itag": d["n_itag_raised"],
         "n_board_fail": d["n_board_fail"],
         "n_deflections": d["n_deflections"],
+        "n_leave_occ_gt1": d.get("n_leave_occ_gt1", 0),
+        "n_down_fail": d.get("n_down_fail",
+                             int(d.get("n_deflections") or 0)
+                             + int(d.get("n_leave_occ_gt1") or 0)),
         "max_core_outstanding": d["max_core_outstanding"],
         "recv_by_ha": d["wr_recv_by_ha"],
         "busiest_hops": [[h, v.get("util"), v.get("n"), v.get("defl")]
@@ -323,17 +327,38 @@ def read_ideal(k: int, m_resp: int) -> tuple[float, float]:
 
 
 def main() -> None:
-    kw = int(sys.argv[1]) if len(sys.argv) > 1 else 20_000
-    kr = int(sys.argv[2]) if len(sys.argv) > 2 else 5_000
-    jobs = int(sys.argv[3]) if len(sys.argv) > 3 else max(1, (os.cpu_count() or 2) - 1)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    only: list[str] | None = None
+    raw = sys.argv[1:]
+    if "--only" in raw:
+        i = raw.index("--only")
+        only = [x.strip() for x in raw[i + 1].split(",") if x.strip()]
+        del raw[i:i + 2]
+        args = [a for a in raw if not a.startswith("--")]
+    kw = int(args[0]) if args else 20_000
+    kr = int(args[1]) if len(args) > 1 else 5_000
+    jobs = int(args[2]) if len(args) > 2 else max(1, (os.cpu_count() or 2) - 1)
     n = len(CORE_NODES)
     r_fair = IDEAL["r_fair"]
+    cases = ([c for c in WRITE_CASES if c[0] in set(only)]
+             if only else list(WRITE_CASES))
     print(f"K_write={kw}  K_read={kr}  bin={BIN_W}  "
-          f"core_outstanding={CORE_OUTSTANDING_WR}  jobs={jobs}", flush=True)
+          f"core_outstanding={CORE_OUTSTANDING_WR}  jobs={jobs}"
+          + (f"  only={','.join(only)}" if only else ""), flush=True)
 
     # Every case is an independent closed-batch run with its own seed state,
     # so they can go in parallel; the output is keyed, not ordered.
-    write_jobs = [(nm, sc, ov, kw) for nm, sc, ov in WRITE_CASES]
+    write_jobs = [(nm, sc, ov, kw) for nm, sc, ov in cases]
+    if only:
+        with ProcessPoolExecutor(max_workers=jobs) as ex:
+            write = dict(ex.map(_write_case, write_jobs, chunksize=1))
+        data = json.loads(OUT.read_text())
+        data.setdefault("write", {}).update(write)
+        data.setdefault("meta", {})["down_fail_includes_leave_occ"] = True
+        OUT.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        print(f"\nmerged {list(write)} into {OUT}")
+        return
+
     read_jobs = [(nm, sc, ov, kr, W_FLITS) for nm, sc, ov in READ_CASES]
     payload_jobs = [(f"S0-m{m}", "S0", {}, kr, m) for m in READ_PAYLOADS]
     with ProcessPoolExecutor(max_workers=jobs) as ex:
@@ -365,6 +390,7 @@ def main() -> None:
             "fc_bus_lat": 30, "cum_step": CUM_STEP,
             "read_payloads": list(READ_PAYLOADS),
             "s16_overcommit": S16_OVERCOMMIT,
+            "down_fail_includes_leave_occ": True,
         },
         "ideal": {
             "r_fair": r_fair, "r_max": IDEAL["r_max"],
