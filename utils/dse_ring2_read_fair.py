@@ -62,7 +62,7 @@ PARETO_PNG = ROOT / "results" / "ring2_read_pareto.png"
 S0_TIME_PNG = ROOT / "results" / "ring2_read_s0_timeseries.png"
 HOT_HAS = (11, 13)
 R_FLITS = W_FLITS
-CORE_OUTSTANDING = 32
+CORE_OUTSTANDING = 128
 
 # The FF-equivalent accounting is identical to the write Pareto model, with
 # explicit scope for state that exists only at HAs.  S16 includes the
