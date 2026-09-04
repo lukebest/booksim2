@@ -1,0 +1,950 @@
+{
+ "k": 2000,
+ "bin_w": 100,
+ "sweeps": [
+  {
+   "name": "S0",
+   "scheme": "S0",
+   "knob": "t_inj",
+   "anchor": 4,
+   "rows": [
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1,
+     "thr": 5.3383,
+     "jain_bin": 0.96533,
+     "cov": 0.18951,
+     "max_min": 1.3267,
+     "makespan": 7493,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 2,
+     "thr": 5.372,
+     "jain_bin": 0.95928,
+     "cov": 0.20603,
+     "max_min": 1.3694,
+     "makespan": 7446,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 4,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 8,
+     "thr": 5.3093,
+     "jain_bin": 0.90567,
+     "cov": 0.32273,
+     "max_min": 1.9831,
+     "makespan": 7534,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 16,
+     "thr": 5.3865,
+     "jain_bin": 0.89487,
+     "cov": 0.34275,
+     "max_min": 1.8939,
+     "makespan": 7426,
+     "completed": true
+    },
+    {
+     "name": "S0",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1000000000,
+     "thr": 5.4998,
+     "jain_bin": 0.88978,
+     "cov": 0.35196,
+     "max_min": 1.7219,
+     "makespan": 7273,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S1",
+   "scheme": "S1",
+   "knob": "band·cap",
+   "anchor": "spec·1.0",
+   "rows": [
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "gentle·1.0",
+     "thr": 5.1935,
+     "jain_bin": 0.9577,
+     "cov": 0.21016,
+     "max_min": 1.5438,
+     "makespan": 7702,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "gentle·0.5",
+     "thr": 5.2206,
+     "jain_bin": 0.9582,
+     "cov": 0.20886,
+     "max_min": 1.4545,
+     "makespan": 7662,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "gentle·0.25",
+     "thr": 4.6756,
+     "jain_bin": 0.99599,
+     "cov": 0.06345,
+     "max_min": 1.061,
+     "makespan": 8555,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "spec·1.0",
+     "thr": 4.5491,
+     "jain_bin": 0.96131,
+     "cov": 0.20062,
+     "max_min": 1.386,
+     "makespan": 8793,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "spec·0.5",
+     "thr": 4.4984,
+     "jain_bin": 0.96035,
+     "cov": 0.20319,
+     "max_min": 1.4075,
+     "makespan": 8892,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "spec·0.25",
+     "thr": 4.0461,
+     "jain_bin": 0.98365,
+     "cov": 0.12893,
+     "max_min": 1.211,
+     "makespan": 9886,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "harsh·1.0",
+     "thr": 3.5152,
+     "jain_bin": 0.9339,
+     "cov": 0.26604,
+     "max_min": 1.2251,
+     "makespan": 11379,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "harsh·0.5",
+     "thr": 3.4925,
+     "jain_bin": 0.92417,
+     "cov": 0.28645,
+     "max_min": 1.3685,
+     "makespan": 11453,
+     "completed": true
+    },
+    {
+     "name": "S1",
+     "scheme": "S1",
+     "knob": "band·cap",
+     "val": "harsh·0.25",
+     "thr": 3.3999,
+     "jain_bin": 0.94417,
+     "cov": 0.24317,
+     "max_min": 1.3382,
+     "makespan": 11765,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S1T",
+   "scheme": "S1T",
+   "knob": "cap_scale",
+   "anchor": 0.5,
+   "rows": [
+    {
+     "name": "S1T",
+     "scheme": "S1T",
+     "knob": "cap_scale",
+     "val": 1.0,
+     "thr": 5.3945,
+     "jain_bin": 0.92163,
+     "cov": 0.29161,
+     "max_min": 1.6757,
+     "makespan": 7415,
+     "completed": true
+    },
+    {
+     "name": "S1T",
+     "scheme": "S1T",
+     "knob": "cap_scale",
+     "val": 0.75,
+     "thr": 5.4098,
+     "jain_bin": 0.91934,
+     "cov": 0.2962,
+     "max_min": 1.6611,
+     "makespan": 7394,
+     "completed": true
+    },
+    {
+     "name": "S1T",
+     "scheme": "S1T",
+     "knob": "cap_scale",
+     "val": 0.5,
+     "thr": 5.3901,
+     "jain_bin": 0.92351,
+     "cov": 0.28779,
+     "max_min": 1.7376,
+     "makespan": 7421,
+     "completed": true
+    },
+    {
+     "name": "S1T",
+     "scheme": "S1T",
+     "knob": "cap_scale",
+     "val": 0.25,
+     "thr": 5.1626,
+     "jain_bin": 0.93212,
+     "cov": 0.26986,
+     "max_min": 1.7079,
+     "makespan": 7748,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S16",
+   "scheme": "S16",
+   "knob": "overcommit",
+   "anchor": 16,
+   "rows": [
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 6,
+     "thr": 3.3093,
+     "jain_bin": 0.98996,
+     "cov": 0.10071,
+     "max_min": 1.001,
+     "makespan": 12087,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 8,
+     "thr": 4.2324,
+     "jain_bin": 0.99547,
+     "cov": 0.06746,
+     "max_min": 1.001,
+     "makespan": 9451,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 10,
+     "thr": 4.8298,
+     "jain_bin": 0.99492,
+     "cov": 0.07146,
+     "max_min": 1.001,
+     "makespan": 8282,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 12,
+     "thr": 5.275,
+     "jain_bin": 0.99433,
+     "cov": 0.07551,
+     "max_min": 1.001,
+     "makespan": 7583,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 16,
+     "thr": 5.4585,
+     "jain_bin": 0.98349,
+     "cov": 0.12957,
+     "max_min": 1.0005,
+     "makespan": 7328,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 20,
+     "thr": 5.4318,
+     "jain_bin": 0.954,
+     "cov": 0.21959,
+     "max_min": 1.0501,
+     "makespan": 7364,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 32,
+     "thr": 5.4503,
+     "jain_bin": 0.92207,
+     "cov": 0.29072,
+     "max_min": 1.5987,
+     "makespan": 7339,
+     "completed": true
+    },
+    {
+     "name": "S16",
+     "scheme": "S16",
+     "knob": "overcommit",
+     "val": 64,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "ITAG",
+   "scheme": "S0",
+   "knob": "t_inj",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 1,
+     "thr": 5.2377,
+     "jain_bin": 0.98615,
+     "cov": 0.11851,
+     "max_min": 1.1416,
+     "makespan": 7637,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 2,
+     "thr": 5.3916,
+     "jain_bin": 0.96694,
+     "cov": 0.18491,
+     "max_min": 1.3298,
+     "makespan": 7419,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 4,
+     "thr": 5.4267,
+     "jain_bin": 0.93161,
+     "cov": 0.27094,
+     "max_min": 1.6577,
+     "makespan": 7371,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 8,
+     "thr": 5.3326,
+     "jain_bin": 0.9208,
+     "cov": 0.29328,
+     "max_min": 1.8718,
+     "makespan": 7501,
+     "completed": true
+    },
+    {
+     "name": "ITAG",
+     "scheme": "S0",
+     "knob": "t_inj",
+     "val": 16,
+     "thr": 5.493,
+     "jain_bin": 0.91785,
+     "cov": 0.29917,
+     "max_min": 1.7316,
+     "makespan": 7282,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S19",
+   "scheme": "S19",
+   "knob": "swift_t_mult",
+   "anchor": 8.0,
+   "rows": [
+    {
+     "name": "S19",
+     "scheme": "S19",
+     "knob": "swift_t_mult",
+     "val": 4.0,
+     "thr": 5.2549,
+     "jain_bin": 0.93346,
+     "cov": 0.26699,
+     "max_min": 1.7399,
+     "makespan": 7612,
+     "completed": true
+    },
+    {
+     "name": "S19",
+     "scheme": "S19",
+     "knob": "swift_t_mult",
+     "val": 6.0,
+     "thr": 5.4348,
+     "jain_bin": 0.93112,
+     "cov": 0.27198,
+     "max_min": 1.636,
+     "makespan": 7360,
+     "completed": true
+    },
+    {
+     "name": "S19",
+     "scheme": "S19",
+     "knob": "swift_t_mult",
+     "val": 8.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    },
+    {
+     "name": "S19",
+     "scheme": "S19",
+     "knob": "swift_t_mult",
+     "val": 12.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    },
+    {
+     "name": "S19",
+     "scheme": "S19",
+     "knob": "swift_t_mult",
+     "val": 16.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S20",
+   "scheme": "S20",
+   "knob": "win_max",
+   "anchor": 128.0,
+   "rows": [
+    {
+     "name": "S20",
+     "scheme": "S20",
+     "knob": "win_max",
+     "val": 16.0,
+     "thr": 5.0063,
+     "jain_bin": 0.99307,
+     "cov": 0.08354,
+     "max_min": 1.0902,
+     "makespan": 7990,
+     "completed": true
+    },
+    {
+     "name": "S20",
+     "scheme": "S20",
+     "knob": "win_max",
+     "val": 24.0,
+     "thr": 5.3684,
+     "jain_bin": 0.96065,
+     "cov": 0.20239,
+     "max_min": 1.3788,
+     "makespan": 7451,
+     "completed": true
+    },
+    {
+     "name": "S20",
+     "scheme": "S20",
+     "knob": "win_max",
+     "val": 32.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    },
+    {
+     "name": "S20",
+     "scheme": "S20",
+     "knob": "win_max",
+     "val": 64.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    },
+    {
+     "name": "S20",
+     "scheme": "S20",
+     "knob": "win_max",
+     "val": 128.0,
+     "thr": 5.4712,
+     "jain_bin": 0.9391,
+     "cov": 0.25466,
+     "max_min": 1.5226,
+     "makespan": 7311,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S22",
+   "scheme": "S22",
+   "knob": "dfc_margin",
+   "anchor": 3.0,
+   "rows": [
+    {
+     "name": "S22",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 0.0,
+     "thr": 5.3619,
+     "jain_bin": 0.94564,
+     "cov": 0.23976,
+     "max_min": 1.1679,
+     "makespan": 7460,
+     "completed": true
+    },
+    {
+     "name": "S22",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 1.0,
+     "thr": 5.3149,
+     "jain_bin": 0.94921,
+     "cov": 0.23132,
+     "max_min": 1.233,
+     "makespan": 7526,
+     "completed": true
+    },
+    {
+     "name": "S22",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 2.0,
+     "thr": 5.3184,
+     "jain_bin": 0.95387,
+     "cov": 0.21991,
+     "max_min": 1.2055,
+     "makespan": 7521,
+     "completed": true
+    },
+    {
+     "name": "S22",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 3.0,
+     "thr": 5.2729,
+     "jain_bin": 0.95167,
+     "cov": 0.22535,
+     "max_min": 1.2953,
+     "makespan": 7586,
+     "completed": true
+    },
+    {
+     "name": "S22",
+     "scheme": "S22",
+     "knob": "dfc_margin",
+     "val": 4.0,
+     "thr": 5.3706,
+     "jain_bin": 0.94426,
+     "cov": 0.24296,
+     "max_min": 1.2388,
+     "makespan": 7448,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S26",
+   "scheme": "S26",
+   "knob": "route_max_extra",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 0,
+     "thr": 5.4533,
+     "jain_bin": 0.93194,
+     "cov": 0.27024,
+     "max_min": 1.5285,
+     "makespan": 7335,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 2,
+     "thr": 5.4069,
+     "jain_bin": 0.92197,
+     "cov": 0.29092,
+     "max_min": 1.6077,
+     "makespan": 7398,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 4,
+     "thr": 5.4069,
+     "jain_bin": 0.92197,
+     "cov": 0.29092,
+     "max_min": 1.6077,
+     "makespan": 7398,
+     "completed": true
+    },
+    {
+     "name": "S26",
+     "scheme": "S26",
+     "knob": "route_max_extra",
+     "val": 8,
+     "thr": 4.9074,
+     "jain_bin": 0.89452,
+     "cov": 0.34339,
+     "max_min": 1.7197,
+     "makespan": 8151,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S27",
+   "scheme": "S27",
+   "knob": "bp_xoff",
+   "anchor": 0.9,
+   "rows": [
+    {
+     "name": "S27",
+     "scheme": "S27",
+     "knob": "bp_xoff",
+     "val": 0.8,
+     "thr": 3.1641,
+     "jain_bin": 0.92224,
+     "cov": 0.29037,
+     "max_min": 1.5754,
+     "makespan": 12642,
+     "completed": true
+    },
+    {
+     "name": "S27",
+     "scheme": "S27",
+     "knob": "bp_xoff",
+     "val": 0.85,
+     "thr": 3.189,
+     "jain_bin": 0.91951,
+     "cov": 0.29586,
+     "max_min": 1.5736,
+     "makespan": 12543,
+     "completed": true
+    },
+    {
+     "name": "S27",
+     "scheme": "S27",
+     "knob": "bp_xoff",
+     "val": 0.9,
+     "thr": 3.4993,
+     "jain_bin": 0.8686,
+     "cov": 0.38894,
+     "max_min": 1.3123,
+     "makespan": 11431,
+     "completed": true
+    },
+    {
+     "name": "S27",
+     "scheme": "S27",
+     "knob": "bp_xoff",
+     "val": 0.95,
+     "thr": 4.2088,
+     "jain_bin": 0.80105,
+     "cov": 0.49836,
+     "max_min": 1.3477,
+     "makespan": 9504,
+     "completed": true
+    },
+    {
+     "name": "S27",
+     "scheme": "S27",
+     "knob": "bp_xoff",
+     "val": 0.99,
+     "thr": 4.8356,
+     "jain_bin": 0.79585,
+     "cov": 0.50648,
+     "max_min": 1.9831,
+     "makespan": 8272,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S28",
+   "scheme": "S28",
+   "knob": "rcp_alpha",
+   "anchor": 0.25,
+   "rows": [
+    {
+     "name": "S28",
+     "scheme": "S28",
+     "knob": "rcp_alpha",
+     "val": 0.1,
+     "thr": 4.5563,
+     "jain_bin": 0.978,
+     "cov": 0.14998,
+     "max_min": 1.2638,
+     "makespan": 8779,
+     "completed": true
+    },
+    {
+     "name": "S28",
+     "scheme": "S28",
+     "knob": "rcp_alpha",
+     "val": 0.25,
+     "thr": 4.977,
+     "jain_bin": 0.96493,
+     "cov": 0.19064,
+     "max_min": 1.3689,
+     "makespan": 8037,
+     "completed": true
+    },
+    {
+     "name": "S28",
+     "scheme": "S28",
+     "knob": "rcp_alpha",
+     "val": 0.5,
+     "thr": 5.1606,
+     "jain_bin": 0.95221,
+     "cov": 0.22403,
+     "max_min": 1.5009,
+     "makespan": 7751,
+     "completed": true
+    },
+    {
+     "name": "S28",
+     "scheme": "S28",
+     "knob": "rcp_alpha",
+     "val": 1.0,
+     "thr": 5.3598,
+     "jain_bin": 0.93982,
+     "cov": 0.25305,
+     "max_min": 1.5823,
+     "makespan": 7463,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S28S",
+   "scheme": "S28S",
+   "knob": "rcp_target",
+   "anchor": 0.98,
+   "rows": [
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.9,
+     "thr": 3.1235,
+     "jain_bin": 0.98606,
+     "cov": 0.1189,
+     "max_min": 1.0463,
+     "makespan": 12806,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.94,
+     "thr": 3.3939,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11786,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.96,
+     "thr": 3.3939,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11786,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 0.98,
+     "thr": 3.3965,
+     "jain_bin": 0.98605,
+     "cov": 0.11894,
+     "max_min": 1.032,
+     "makespan": 11777,
+     "completed": true
+    },
+    {
+     "name": "S28S",
+     "scheme": "S28S",
+     "knob": "rcp_target",
+     "val": 1.0,
+     "thr": 3.6324,
+     "jain_bin": 0.98716,
+     "cov": 0.11405,
+     "max_min": 1.0524,
+     "makespan": 11012,
+     "completed": true
+    }
+   ]
+  },
+  {
+   "name": "S29",
+   "scheme": "S29",
+   "knob": "tdma_slot",
+   "anchor": 2,
+   "rows": [
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 1,
+     "thr": 5.2213,
+     "jain_bin": 0.94539,
+     "cov": 0.24034,
+     "max_min": 1.5879,
+     "makespan": 7661,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 2,
+     "thr": 5.152,
+     "jain_bin": 0.96042,
+     "cov": 0.20301,
+     "max_min": 1.3405,
+     "makespan": 7764,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 3,
+     "thr": 4.7371,
+     "jain_bin": 0.95219,
+     "cov": 0.22408,
+     "max_min": 1.5558,
+     "makespan": 8444,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 4,
+     "thr": 4.3927,
+     "jain_bin": 0.93219,
+     "cov": 0.26971,
+     "max_min": 1.999,
+     "makespan": 9106,
+     "completed": true
+    },
+    {
+     "name": "S29",
+     "scheme": "S29",
+     "knob": "tdma_slot",
+     "val": 8,
+     "thr": 4.3578,
+     "jain_bin": 0.94346,
+     "cov": 0.2448,
+     "max_min": 1.6978,
+     "makespan": 9179,
+     "completed": true
+    }
+   ]
+  }
+ ]
+}

@@ -1903,13 +1903,7 @@ def fig_metric() -> None:
                 ls="--", zorder=1)
         ax.text(0.405, phi * r_fair + kappa * 0.405 - 0.04, f"φ = {phi:.2f}",
                 fontsize=8.2, color=GREY, va="top")
-    for eta in (0.95, 0.90, 0.85):
-        ax.plot(xs, [eta * r_fair * (1 + x * x) for x in xs], color=BLUE, lw=0.9,
-                ls=":", zorder=1)
-        ax.text(0.405, eta * r_fair * (1 + 0.405 ** 2) + 0.06, f"η = {eta:.2f}",
-                fontsize=8.2, color=BLUE, va="bottom")
     ax.plot([], [], color=GREY, lw=0.9, ls="--", label="等 φ 线：R − κ·CoV = 常数（与上界平行）")
-    ax.plot([], [], color=BLUE, lw=0.9, ls=":", label="等 η 线：R / (1 + CoV²) = 常数（抛物线）")
     show = ["S0", "S1", "S1T", "S16", "ITAG", "S22", "S29", "S28", "S26", "S19", "S20",
             "S28S", "S27"]
     off = {"S0": (6, -12), "S1": (6, -12), "S1T": (6, 4), "S16": (6, -12), "ITAG": (6, 4),
@@ -1931,7 +1925,7 @@ def fig_metric() -> None:
     ax.set_ylim(3.1, 6.7)
     ax.set_xlabel("不均衡度 CoV = 十核 100 拍窗带宽的标准差 / 均值（0 = 完全均等）")
     ax.set_ylabel("总写带宽 R  flit/cycle")
-    ax.set_title("上界在 CoV 坐标下是一条直线：等 φ 线与它平行，等 η 线不平行",
+    ax.set_title("上界在 CoV 坐标下是一条直线；等 φ 线与它平行",
                  fontsize=11.5, fontweight="bold")
     ax.grid(alpha=0.22)
     ax.legend(fontsize=8.6, loc="lower right")
@@ -1956,68 +1950,115 @@ def fig_metric() -> None:
     save(fig, "42-metric-derivation.png")
 
 
+def _knob_lab(name: str, val) -> str:
+    if name == "S0" and isinstance(val, (int, float)) and val >= 1e8:
+        return "off"
+    if name == "S1":
+        return (str(val).replace("gentle·", "g").replace("spec·", "s")
+                .replace("harsh·", "h"))
+    if isinstance(val, float):
+        return f"{val:g}"
+    return str(val)
+
+
 def fig_metric_knobs() -> None:
-    """How each scheme's knob actually moves in the (CoV, R) plane."""
+    """All 13 official schemes' knob trajectories in the (CoV, R) plane."""
+    sw = json.loads((RES / "probe_ring2_knob13.json").read_text())
     m = _metric()
-    r_fair, kappa = m["r_fair"], m["kappa"]
-    fig, axes = plt.subplots(1, 4, figsize=(15.0, 4.55))
-    want = {"S16": ("S16 · overcommit", RED, "oc"),
-            "S29": ("S29 · tdma_slot", GREEN, "slot"),
-            "S28": ("S28 · α · burst", BLUE, ""),
-            "S1": ("S1 · band × cap", AMBER, "")}
-    kb = {k["scheme"]: k for k in m["knobs"]}
-    for ax, (nm, (title, col, pre)) in zip(axes, want.items()):
-        k = kb[nm]
-        rows = sorted(k["rows"], key=lambda r: -r["bw"])
-        if nm == "S16":
-            rows = [r for r in rows if r["knob"] in (4, 6, 8, 10, 12, 16, 20, 24, 32, 64)]
-            rows.sort(key=lambda r: -r["knob"])
-        elif nm == "S29":
-            rows.sort(key=lambda r: r["knob"])
-        elif nm == "S1":
-            order = ["gentle·cap1.0", "gentle·cap0.5", "gentle·cap0.25", "spec·cap1.0",
-                     "spec·cap0.5", "spec·cap0.25", "harsh·cap1.0", "harsh·cap0.5",
-                     "harsh·cap0.25"]
-            rows = sorted(rows, key=lambda r: order.index(r["knob"]))
-        cx = [r["cov"] for r in rows]
-        cy = [r["bw"] for r in rows]
-        ax.plot(cx, cy, "-o", color=col, lw=1.6, ms=5, zorder=4)
-        lab_rows = rows
-        if nm == "S28":
-            # nine (alpha, burst) points sit within 0.05 CoV of each other; label
-            # only the two ends of the band and the best-phi point
-            best = max(rows, key=lambda r: r["phi"])
-            lab_rows = [rows[0], rows[-1]] + ([best] if best not in (rows[0], rows[-1]) else [])
-        for r in lab_rows:
-            lab = str(r["knob"]).replace("gentle·cap", "g").replace("spec·cap", "s") \
-                .replace("harsh·cap", "h").replace("·b", "/b").replace("a", "α")
-            ax.annotate(f"{pre}{lab}", (r["cov"], r["bw"]), xytext=(5, 3),
-                        textcoords="offset points", fontsize=7.6, color=INK)
-        # phi-invariant prediction through the anchor
-        a = next((r for r in rows if r["knob"] == k["anchor"]), rows[0])
-        xs = [x / 100 for x in range(0, 46)]
-        ax.plot(xs, [a["phi"] * r_fair + kappa * x for x in xs], color=GREY, ls="--",
-                lw=1.1, label=f"等 φ 线（φ = {a['phi']:.3f}）")
-        ax.plot([a["cov"], a["cov"]], [2.0, a["bw"]], color=GREY, ls=":", lw=1.0,
-                label="等 CoV 线（均匀限流）")
-        ax.plot(xs, [r_fair + kappa * x for x in xs], color=RED, lw=1.2, alpha=0.6,
-                label="LP 上界")
-        ax.set_xlim(0.03, 0.42)
-        ax.set_ylim(2.1, 6.3)
-        ax.set_xlabel("CoV = √((1−J)/J)")
-        ax.set_title(f"{title}（K = {k['k']}）", fontsize=10.5, fontweight="bold")
+    r_fair, kappa, r_max = m["r_fair"], m["kappa"], m["r_max"]
+    titles = {
+        "S0": "S0 · t_inj", "S1": "S1 · band×cap", "S1T": "S1T · cap",
+        "S16": "S16 · overcommit", "ITAG": "ITAG · t_inj",
+        "S19": "S19 · swift_t_mult", "S20": "S20 · win_max",
+        "S22": "S22 · dfc_margin", "S26": "S26 · extra hops",
+        "S27": "S27 · XOFF", "S28": "S28 · α", "S28S": "S28S · target",
+        "S29": "S29 · slot",
+    }
+    fig, axes = plt.subplots(3, 5, figsize=(15.4, 8.55), sharex=False, sharey=False)
+    xs = [x / 100 for x in range(0, 55)]
+    frontier = [min(r_max, r_fair + kappa * x) for x in xs]
+    for ax, swp in zip(axes.flat, sw["sweeps"]):
+        nm = swp["name"]
+        rows = list(swp["rows"])
+        ax.plot(xs, frontier, color=RED, lw=1.15, alpha=0.75, zorder=1)
+        if nm == "S1":
+            drawn = []
+            for band, col in (("gentle", BLUE), ("spec", AMBER), ("harsh", RED)):
+                sub = [r for r in rows if str(r["val"]).startswith(band)]
+                sub.sort(key=lambda r: -float(str(r["val"]).split("·")[1]))
+                ax.plot([r["cov"] for r in sub], [r["thr"] for r in sub],
+                        "-o", color=col, lw=1.45, ms=3.8, zorder=4, label=band)
+                drawn.extend(sub)
+            ax.legend(fontsize=6.2, loc="lower left", framealpha=0.92,
+                      handlelength=1.2, borderpad=0.25)
+            rows = drawn
+        else:
+            def _key(r):
+                v = r["val"]
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return 0.0
+            rows = sorted(rows, key=_key)
+            ax.plot([r["cov"] for r in rows], [r["thr"] for r in rows],
+                    "-o", color=INK, lw=1.45, ms=3.8, zorder=4)
+        seen: set[tuple[float, float]] = set()
+        for r in rows:
+            key = (round(r["cov"], 3), round(r["thr"], 2))
+            if key in seen:
+                continue
+            seen.add(key)
+            ax.annotate(_knob_lab(nm, r["val"]), (r["cov"], r["thr"]),
+                        xytext=(3, 2), textcoords="offset points",
+                        fontsize=6.0, color=INK, zorder=5)
+        official = [r for r in rows if r["val"] == swp["anchor"]]
+        if official:
+            o = official[0]
+            ax.scatter([o["cov"]], [o["thr"]], s=78, marker="*", color=RED,
+                       zorder=6, edgecolors="k", linewidths=0.4)
+        ax.set_title(titles[nm], fontsize=10, fontweight="bold")
+        ax.set_xlim(-0.02, 0.54)
+        ax.set_ylim(2.85, 6.58)
         ax.grid(alpha=0.22)
-        segs = [s for s in k["segments"] if s["kappa_s"] is not None and 0 < s["eff"] < 3]
-        if segs:
-            effs = ", ".join(f"{s['eff']:.2f}" for s in segs[:4])
-            ax.text(0.03, 0.04, f"有效段 ε = κ/κ′：{effs}", transform=ax.transAxes,
-                    fontsize=8.2, color=INK)
-    axes[0].set_ylabel("总写带宽 R  flit/cycle")
-    axes[0].legend(fontsize=7.8, loc="upper right")
-    fig.suptitle("旋钮实测轨迹：等 φ 线是「按理想汇率换」的上界，等 CoV 线是「均匀限流」的下界；"
-                 "每条旋钮都有一个拐点，过了拐点只掉带宽不换公平",
-                 fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+        ax.tick_params(labelsize=7.2)
+    how, why = axes.flat[13], axes.flat[14]
+    for ax, title, body in (
+        (how, "怎么读",
+         "每个面板 = 该方案自己的一个旋钮。\n"
+         "横轴：100 拍窗 CoV（越左越均衡）\n"
+         "纵轴：总写带宽 R（越高越好）\n"
+         "红线：LP 上界，唯一的理想直线\n"
+         "折线：拧这个旋钮走出的轨迹\n"
+         "星：官方工作点\n"
+         f"K = {sw['k']}（与筛选轮相同）\n"
+         "S1 按 band 拆成三条，不是一条"),
+        (why, "为什么大多不是直线",
+         "理想直线只有一个自由度：\n"
+         "把速率从 4 个慢核挪给 6 个快核。\n"
+         "R 与 σ 都 ∝ δ，所以是直线。\n"
+         "\n"
+         "旋钮不是这个 δ。它改阈值 / 窗口\n"
+         "/ 日历 / 背压，同时搅动份额、\n"
+         "空转和短窗抖动。\n"
+         "\n"
+         "于是走出折线、竖线或一团点，\n"
+         "而不是汇率恒定的直线。"),
+    ):
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+        ax.text(0.04, 0.96, title, fontsize=11, fontweight="bold", color=INK,
+                transform=ax.transAxes, va="top")
+        ax.text(0.04, 0.82, body, fontsize=8.0, color=INK,
+                transform=ax.transAxes, va="top", linespacing=1.35)
+    axes[0, 0].set_ylabel("总写带宽 R  flit/cycle")
+    axes[1, 0].set_ylabel("总写带宽 R  flit/cycle")
+    axes[2, 0].set_ylabel("总写带宽 R  flit/cycle")
+    for ax in (axes[2, 0], axes[2, 1], axes[2, 2]):
+        ax.set_xlabel("100 拍窗 CoV")
+    fig.suptitle("13 个方案各自扫一个旋钮：每条曲线是该方案自己的调参轨迹",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
     save(fig, "43-metric-knobs.png")
 
 
