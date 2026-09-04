@@ -469,10 +469,38 @@ def _key_metrics(n: int) -> tuple[float, float]:
     return step, min(9.6, 9.6 * step / 0.0575 + 1.6)
 
 
+def _two_fronts(rows: list[dict]) -> tuple[list[dict], list[dict], set, set]:
+    """First Pareto front, then the Pareto of whatever is left."""
+    from pareto_ring2_cc import frontier
+    f1 = frontier(rows)
+    n1 = {r["name"] for r in f1}
+    f2 = frontier([r for r in rows if r["name"] not in n1])
+    return f1, f2, n1, {r["name"] for r in f2}
+
+
+def _short_scheme(name: str) -> str:
+    if name.startswith("I-tag"):
+        return "I-tag"
+    if "STOCK" in name:
+        return "S22"
+    if name.startswith("S22") and "w32" in name:
+        return "S22(w32)"
+    if name.startswith("S21+eq"):
+        return "S21+eq"
+    tok = name.split()[0]
+    return tok if tok.startswith("S") else name[:12]
+
+
+def _front_color(name: str, n1: set, n2: set) -> str:
+    if name in n1:
+        return RED
+    if name in n2:
+        return AMBER
+    return "#5b636d"
+
+
 def fig_pareto() -> None:
     """Numbered markers plus a key column: readable at projector distance."""
-    from pareto_ring2_cc import frontier
-
     reg = json.loads((RES / "pareto_ring2_cc.json").read_text())
     ideal = reg["ideal"]
     kappa = _metric()["kappa"]
@@ -483,7 +511,7 @@ def fig_pareto() -> None:
         r["phi"] = r["bw_vs_ideal"] - kappa * r["cov"] / ideal["bw"]
         r["eta"] = r["phi"]
     rows = sorted(reg["schemes"], key=lambda r: -r["phi"])
-    front = {r["name"] for r in frontier(reg["schemes"])}
+    f1, f2, n1, n2 = _two_fronts(reg["schemes"])
 
     fig = plt.figure(figsize=(9.9, 6.3))
     ax = fig.add_axes([0.085, 0.105, 0.455, 0.760])
@@ -492,10 +520,8 @@ def fig_pareto() -> None:
 
     for i, r in enumerate(rows, 1):
         x, y = max(r["hw_cost"], 1), r["phi"]
-        if r["name"] in front:
-            c, s = RED, 150
-        else:
-            c, s = "#5b636d", 80
+        c = _front_color(r["name"], n1, n2)
+        s = 150 if r["name"] in n1 else 130 if r["name"] in n2 else 80
         ax.scatter(x, y, s=s, c=c, marker="o", zorder=3, edgecolors="k",
                    linewidths=0.6)
         dx, dy = ((0, 10), (-11, 3), (11, 3), (0, -14))[i % 4]
@@ -503,9 +529,12 @@ def fig_pareto() -> None:
                     textcoords="offset points", fontsize=9, ha="center",
                     color=INK, fontweight="bold")
 
-    fpts = [(max(r["hw_cost"], 1), r["phi"]) for r in frontier(reg["schemes"])]
-    ax.plot([p[0] for p in fpts], [p[1] for p in fpts], "--", c=RED, lw=1.4,
-            alpha=0.8, label="Pareto 前沿")
+    f1pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f1]
+    f2pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f2]
+    ax.plot([p[0] for p in f1pts], [p[1] for p in f1pts], "--", c=RED, lw=1.4,
+            alpha=0.85, label="Pareto 前沿  " + "、".join(_short_scheme(r["name"]) for r in f1))
+    ax.plot([p[0] for p in f2pts], [p[1] for p in f2pts], "--", c=AMBER, lw=1.3,
+            alpha=0.85, label="次前沿  " + "、".join(_short_scheme(r["name"]) for r in f2))
     ax.axhline(1.0, c="#b34700", lw=1.6,
                label=f"理想控制器 φ = 1.0（R* = {ideal['bw']:.4f} flit/cycle，CoV = 0）")
     s0eta = next(r["phi"] for r in rows if r["name"].startswith("S0"))
@@ -514,31 +543,26 @@ def fig_pareto() -> None:
 
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
-    # Floor well below the worst scheme so the legend has a band of its own:
-    # at 0.35 the legend box sat on top of S17, which is the study's worst
-    # point and therefore one a reader specifically looks for.
     ax.set_ylim(0.14, 1.06)
     ax.set_xlabel("新增硬件状态（FF 等效 = 折算成触发器个数，对数轴）→ 越贵")
     ax.set_ylabel(f"φ = (R − κ·CoV) / R*，κ = {kappa:.2f}")
     ax.set_title("收益 — 硬件开销 Pareto（写，uniform，K=2000）\n"
-                 "φ 越高越接近理想控制器；红 = 前沿，即同价位无人能超",
+                 "φ 越高越接近理想控制器；红 = 前沿，橙 = 去掉前沿后再求的次前沿",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25, which="both")
-    # Lower-left, not lower-right: the cheap end of the axis is empty at low
-    # eta, whereas the mid-cost column now runs all the way down to S17.
-    ax.legend(fontsize=8.5, loc="lower left")
+    ax.legend(fontsize=8.0, loc="lower left")
 
     cols = ((0.00, "#"), (0.050, "方案（按 φ 降序）"), (0.545, "φ"),
             (0.675, "CoV"), (0.815, "带宽/R*"), (1.00, "FF 等效"))
     aligns = ("left", "left", "right", "right", "right", "right")
-    key.text(0.0, 0.985, "图例", fontsize=12, fontweight="bold", color=INK,
-             va="top")
+    key.text(0.0, 0.985, "图例　红=前沿　橙=次前沿", fontsize=11,
+             fontweight="bold", color=INK, va="top")
     step, pt = _key_metrics(len(rows))
     for (x, t), al in zip(cols, aligns):
         key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
                  fontweight="bold")
     for i, r in enumerate(rows, 1):
-        col = RED if r["name"] in front else INK
+        col = RED if r["name"] in n1 else AMBER if r["name"] in n2 else INK
         nm = r["name"]
         nm = nm if len(nm) <= 22 else nm[:21] + "…"
         y = 0.935 - i * step
@@ -552,15 +576,12 @@ def fig_pareto() -> None:
 
 # --------------------------------------------------------------- slide 21
 def fig_hot() -> None:
-    """Non-uniform traffic, bandwidth only.
+    """Non-uniform traffic, same φ as the uniform hardware Pareto.
 
-    Instantaneous fairness is not plotted here on purpose: under `hot` the
-    equal-rate optimum equals the max-total optimum, so fairness costs nothing
-    and the interesting axis is whether a controller can hold the bandwidth at
-    all when the congestion moves to the destination.
+    R* is this pattern's own equal-rate / max-total point (they coincide
+    under hot). κ is the deck-wide exchange rate so both Pareto charts
+    share one y-axis definition: φ = (R − κ·CoV) / R*.
     """
-    from pareto_ring2_cc import frontier
-
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
     cap = str(deck()["meta"]["core_outstanding"])
     rows = d["passes"][cap] if "passes" in d else d["rows"]
@@ -569,10 +590,13 @@ def fig_hot() -> None:
     # rather than a scheme on the hardware Pareto chart.
     rows = [r for r in rows if not r["name"].startswith("I-tag")]
     r_star = d["ideal"]["r_fair"]
-    rows = sorted(rows, key=lambda r: -r["bw_vs_ideal"])
-    for r in rows:                       # bandwidth is the only axis here
-        r["eta"] = r["u"] = r["bw_vs_ideal"]
-    front = {r["name"] for r in frontier(rows)}
+    kappa = _metric()["kappa"]
+    for r in rows:
+        r["cov"] = j2cov(r["jain_bin"])
+        r["phi"] = r["bw_vs_ideal"] - kappa * r["cov"] / r_star
+        r["eta"] = r["u"] = r["phi"]
+    rows = sorted(rows, key=lambda r: -r["phi"])
+    f1, f2, n1, n2 = _two_fronts(rows)
 
     fig = plt.figure(figsize=(9.9, 6.3))
     ax = fig.add_axes([0.090, 0.115, 0.450, 0.745])
@@ -580,50 +604,50 @@ def fig_hot() -> None:
     key.axis("off")
 
     for i, r in enumerate(rows, 1):
-        x, y = max(r["hw_cost"], 1), r["bw_vs_ideal"]
-        c, s = (RED, 150) if r["name"] in front else ("#5b636d", 80)
+        x, y = max(r["hw_cost"], 1), r["phi"]
+        c = _front_color(r["name"], n1, n2)
+        s = 150 if r["name"] in n1 else 130 if r["name"] in n2 else 80
         ax.scatter(x, y, s=s, c=c, zorder=3, edgecolors="k", linewidths=0.6)
         dx, dy = ((0, 10), (-11, 3), (11, 3), (0, -14))[i % 4]
         ax.annotate(str(i), xy=(x, y), xytext=(dx, dy),
                     textcoords="offset points", fontsize=9, ha="center",
                     color=INK, fontweight="bold")
-    fpts = [(max(r["hw_cost"], 1), r["bw_vs_ideal"]) for r in frontier(rows)]
-    ax.plot([p[0] for p in fpts], [p[1] for p in fpts], "--", c=RED, lw=1.4,
-            alpha=0.8, label="Pareto 前沿")
-    ax.axhline(1.0, c="#b34700", lw=1.6,
-               label=f"该 pattern 自己的 R* = {r_star:.4f} flit/cycle")
-    s0 = next(r["bw_vs_ideal"] for r in rows if r["name"].startswith("S0"))
-    ax.axhline(s0, c=GREY, ls="-.", lw=1.1, label=f"S0 基线 = {s0:.4f} R*")
+    f1pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f1]
+    f2pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f2]
+    ax.plot([p[0] for p in f1pts], [p[1] for p in f1pts], "--", c=RED, lw=1.4,
+            alpha=0.85, label="Pareto 前沿  " + "、".join(_short_scheme(r["name"]) for r in f1))
+    ax.plot([p[0] for p in f2pts], [p[1] for p in f2pts], "--", c=AMBER, lw=1.3,
+            alpha=0.85, label="次前沿  " + "、".join(_short_scheme(r["name"]) for r in f2))
+    s0 = next(r["phi"] for r in rows if r["name"].startswith("S0"))
+    ax.axhline(s0, c=GREY, ls="-.", lw=1.1, label=f"S0 基线 φ = {s0:.3f}")
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
-    # Same reason as the uniform chart: reserve a band under the worst scheme
-    # so the legend cannot sit on top of a data point.
-    lo = min(r["bw_vs_ideal"] for r in rows)
-    ax.set_ylim(lo - 0.10, 1.015)
+    lo, hi = min(r["phi"] for r in rows), max(r["phi"] for r in rows)
+    ax.set_ylim(lo - 0.10, hi + 0.12)
     ax.set_xlabel("新增硬件状态（FF 等效，对数轴）→ 越贵")
-    ax.set_ylabel("总写带宽 / 该 pattern 自己的 R*")
-    ax.set_title("固定非均匀流量（十个核全写 HA 11/13）：只看总带宽\n"
-                 f"每核在飞上限 = {cap}，K = {d['k']}",
+    ax.set_ylabel(f"φ = (R − κ·CoV) / R*，κ = {kappa:.2f}，R* = {r_star:.4f}")
+    ax.set_title("固定非均匀流量（十个核全写 HA 11/13）：纵轴改为 φ\n"
+                 f"每核在飞上限 = {cap}，K = {d['k']}；理想 φ = 1 在本图上方",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25, which="both")
-    ax.legend(fontsize=8.5, loc="lower right")
+    ax.legend(fontsize=8.0, loc="upper left")
 
-    cols = ((0.00, "#"), (0.050, "方案（按带宽降序）"), (0.640, "带宽/R*"),
-            (0.815, "vs S0"), (1.00, "FF 等效"))
-    aligns = ("left", "left", "right", "right", "right")
-    key.text(0.0, 0.985, "图例", fontsize=12, fontweight="bold", color=INK,
-             va="top")
+    cols = ((0.00, "#"), (0.050, "方案（按 φ 降序）"), (0.500, "φ"),
+            (0.640, "CoV"), (0.800, "带宽/R*"), (1.00, "FF 等效"))
+    aligns = ("left", "left", "right", "right", "right", "right")
+    key.text(0.0, 0.985, "图例　红=前沿　橙=次前沿", fontsize=11,
+             fontweight="bold", color=INK, va="top")
     step, pt = _key_metrics(len(rows))
     for (x, t), al in zip(cols, aligns):
         key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
                  fontweight="bold")
     for i, r in enumerate(rows, 1):
-        col = RED if r["name"] in front else INK
+        col = RED if r["name"] in n1 else AMBER if r["name"] in n2 else INK
         nm = r["name"]
-        nm = nm if len(nm) <= 22 else nm[:21] + "…"
+        nm = nm if len(nm) <= 18 else nm[:17] + "…"
         y = 0.935 - i * step
-        vals = (str(i), nm, f"{r['bw_vs_ideal']:.4f}",
-                f"{r['delta_vs_s0_pct']:+.2f}%", f"{r['hw_cost']:,}")
+        vals = (str(i), nm, f"{r['phi']:.3f}", f"{r['cov']:.3f}",
+                f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
         for (x, _), al, v in zip(cols, aligns, vals):
             key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
 
@@ -780,15 +804,20 @@ def fig_s16_compare() -> None:
 # why S17/S18 and S19/S20 sit in the same column as pairs.
 TAX_POINTS = [
     # (control point, signal, label, state)
-    #   state: "have" = a scheme in this study occupies the cell
+    #   state: "have" = a retained scheme occupies the cell
     #          "s1"   = the cell S1 occupies
-    #          "new"  = a cell that was empty and is now filled
+    #          "new"  = empty of any retained scheme until this study filled it
+    # Audit (official WRITE_CASES + screening-round Pareto roster):
+    # every retained name maps onto one of these cells. S1U/S1D share S1's
+    # cell. S21+eq and S23 share the explicit-level source-rate cell.
+    # Withdrawn S24 would have sat in 源端速率 × 无信号; S25 overlaps I-tag.
+    # Empty cells therefore have no retained scheme — not "no paper exists".
     ("路径选择", "本地观测", "S26", "new"),
     ("逐跳背压", "链路占用", "S27", "new"),
     ("源端速率", "本地观测", "S21", "have"),
     ("源端速率", "时延", "S17", "have"),
     ("源端速率", "ECN 标记", "S18", "have"),
-    ("源端速率", "显式等级", "S1 / S1T / S15", "s1"),
+    ("源端速率", "显式等级", "S1 / S1T / S15\nS21+eq / S23", "s1"),
     ("源端速率", "显式速率", "S28 / S28S", "new"),
     ("源端窗口", "时延", "S19", "have"),
     ("源端窗口", "ECN 标记", "S20", "have"),
@@ -823,21 +852,31 @@ def fig_cc_taxonomy() -> None:
     for j in range(len(TAX_Y)):
         ax.axhline(j, color="#e4e9f0", lw=1.0, zorder=0)
 
+    occupied = {(TAX_X.index(cp), TAX_Y.index(sig)) for cp, sig, _, _ in TAX_POINTS}
+    for i in range(len(TAX_X)):
+        for j in range(len(TAX_Y)):
+            if (i, j) in occupied:
+                continue
+            ax.text(i, j, "无", ha="center", va="center", fontsize=8.5,
+                    color="#c5ccd4", zorder=1)
+
     for cp, sig, lab, state in TAX_POINTS:
         x, y = TAX_X.index(cp), TAX_Y.index(sig)
         if state == "s1":
-            fc, ec, tc, lw, fs = "#fdeaec", RED, RED, 2.4, 10.5
+            fc, ec, tc, lw, fs = "#fdeaec", RED, RED, 2.4, 9.0
         elif state == "new":
             fc, ec, tc, lw, fs = "white", GREEN, GREEN, 2.0, 10.0
         else:
             fc, ec, tc, lw, fs = PANEL, GREY, INK, 1.2, 10.0
-        w = 0.86 if len(lab) < 9 else 0.98
+        multi = "\n" in lab
+        w = 0.86 if len(lab.split("\n")[0]) < 9 else 0.98
+        h = 0.56 if multi else 0.40
         ax.add_patch(FancyBboxPatch(
-            (x - w / 2, y - 0.20), w, 0.40,
+            (x - w / 2, y - h / 2), w, h,
             boxstyle="round,pad=0.02,rounding_size=0.06",
             fc=fc, ec=ec, lw=lw, zorder=3))
         ax.text(x, y, lab, ha="center", va="center", fontsize=fs, color=tc,
-                fontweight="bold", zorder=4)
+                fontweight="bold", zorder=4, linespacing=1.25)
 
     ax.set_xticks(range(len(TAX_X)))
     ax.set_xticklabels(TAX_X, fontsize=11, fontweight="bold")
@@ -856,9 +895,9 @@ def fig_cc_taxonomy() -> None:
                 color=RED, fontweight="bold",
                 arrowprops=dict(arrowstyle="->", color=RED, lw=1.6))
     ax.text(-0.55, -0.60,
-            "灰底 = 本研究已有方案　　绿框 = 本次补齐的四类（原为空列 / 空格）"
-            "　　红框 = S1 所在的格",
-            fontsize=10, color=GREY, va="center")
+            "「无」= 本研究保留方案（官方名单 + 筛选轮 Pareto）均不在此格"
+            "　　灰底 = 既有　　绿框 = 原无代表、本次补齐　　红框 = S1 所在格",
+            fontsize=9.4, color=GREY, va="center")
     ax.set_title("拥塞控制的两个维度：在哪里动手 × 听什么信号",
                  fontsize=13.5, fontweight="bold", pad=12)
     fig.tight_layout()
