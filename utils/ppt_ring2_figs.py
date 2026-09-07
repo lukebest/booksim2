@@ -596,67 +596,68 @@ def _hot_row(rows: list, prefix: str) -> dict:
 
 
 def fig_hot() -> None:
-    """Hot traffic: two outstanding caps, two axes (R/R* and CoV). No φ.
+    """Hot traffic at outstanding=128. S16 uses overcommit=32.
 
     Under hot, r_fair == r_max so κ_hot = 0: fairness is free and a borrowed
-    uniform κ would invert the ranking. The architect question is whether the
-    completer still has tracker headroom when 10 × outstanding lands on two HAs.
+    uniform κ would invert the ranking. φ is not plotted.
     """
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
     r_star = d["ideal"]["r_fair"]
+    src = d["passes"]["128"]
+    s16p = RES / "probe_ring2_hot_s16_oc32.json"
+    s16 = json.loads(s16p.read_text())["row"] if s16p.is_file() else None
     picks = (
         ("S0 baseline", "S0", BLUE),
-        ("S16 grant withhold", "S16", RED),
+        ("S16 grant withhold", "S16\noc=32", RED),
         ("S19 Swift", "S19", AMBER),
         ("S22 deficit-yield STOCK", "S22", GREY),
         ("S29 scheduled reservation", "S29", INK),
         ("S28S explicit rate equal-share", "S28S", "#b8bec6"),
     )
-    fig, axes = plt.subplots(1, 2, figsize=(13.4, 5.35))
-    for ax, cap, title in (
-        (axes[0], "128", "outstanding = 128（全文口径）"),
-        (axes[1], "32", "outstanding = 32（对照：压到 tracker 之内）"),
-    ):
-        src = d["passes"][cap]
-        names, bws, covs, cols = [], [], [], []
-        for prefix, short, col in picks:
+    names, bws, covs, cols = [], [], [], []
+    for prefix, short, col in picks:
+        if prefix.startswith("S16") and s16:
+            r = s16
+        else:
             r = _hot_row(src, prefix)
-            names.append(short)
-            bws.append(r["bw_vs_ideal"])
-            covs.append(j2cov(r["jain_bin"]))
-            cols.append(col)
-        xs = list(range(len(names)))
-        ax.bar(xs, bws, color=cols, width=0.62, zorder=3, edgecolor="k",
-               linewidth=0.4)
-        ax.axhline(1.0, color=RED, ls="--", lw=1.2, zorder=2,
-                   label=f"R* = {r_star:.1f}")
-        for x, bw, cov in zip(xs, bws, covs):
-            ax.text(x, bw + 0.018, f"{100 * bw:.1f}%", ha="center", va="bottom",
-                    fontsize=8.2, color=INK, fontweight="bold")
-        ax.set_ylim(0.0, 1.22)
-        ax.set_xticks(xs)
-        ax.set_xticklabels(names, fontsize=10)
-        ax.set_ylabel("总写带宽 / R*")
-        ax.set_title(title, fontsize=12, fontweight="bold")
-        ax.grid(axis="y", alpha=0.22)
-        bx = ax.twinx()
-        bx.plot(xs, covs, "o", color="#5b2085", ms=8, zorder=5)
-        bx.set_ylim(0.0, 1.55)
-        bx.set_ylabel("100 拍窗 CoV", color="#5b2085")
-        bx.tick_params(axis="y", colors="#5b2085")
-        for x, cov in zip(xs, covs):
-            bx.annotate(f"{cov:.2f}", (x, cov), xytext=(0, 7),
-                        textcoords="offset points", ha="center", fontsize=7.6,
-                        color="#5b2085")
-    axes[0].legend(fontsize=8.4, loc="upper right")
+        names.append(short)
+        bws.append(r["bw_vs_ideal"])
+        covs.append(j2cov(r["jain_bin"]))
+        cols.append(col)
+    fig, ax = plt.subplots(figsize=(12.4, 5.35))
+    xs = list(range(len(names)))
+    ax.bar(xs, bws, color=cols, width=0.62, zorder=3, edgecolor="k",
+           linewidth=0.4)
+    ax.axhline(1.0, color=RED, ls="--", lw=1.2, zorder=2,
+               label=f"R* = {r_star:.1f}")
+    for x, bw in zip(xs, bws):
+        ax.text(x, bw + 0.018, f"{100 * bw:.1f}%", ha="center", va="bottom",
+                fontsize=9.2, color=INK, fontweight="bold")
+    ax.set_ylim(0.0, 1.22)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(names, fontsize=11)
+    ax.set_ylabel("总写带宽 / R*")
+    ax.set_title("outstanding = 128（全文口径）；S16 授权 overcommit = 32",
+                 fontsize=12, fontweight="bold")
+    ax.grid(axis="y", alpha=0.22)
+    bx = ax.twinx()
+    bx.plot(xs, covs, "o", color="#5b2085", ms=9, zorder=5)
+    bx.set_ylim(0.0, 1.55)
+    bx.set_ylabel("100 拍窗 CoV", color="#5b2085")
+    bx.tick_params(axis="y", colors="#5b2085")
+    for x, cov in zip(xs, covs):
+        bx.annotate(f"{cov:.3f}", (x, cov), xytext=(0, 8),
+                    textcoords="offset points", ha="center", fontsize=8.2,
+                    color="#5b2085")
+    ax.legend(fontsize=9.0, loc="upper right")
     fig.suptitle("hot（十核全写 HA 11 / 13）：φ 在此 pattern 下无效（κ_hot = 0），"
                  "直接读 R/R* 与 CoV",
                  fontsize=13, fontweight="bold")
     fig.text(0.50, 0.012,
-             "灰柱 S28S = hop 静态等分，仅作参考、不入选。"
-             "紫点 = CoV（右轴）。oc = 128 时 10×128 压到 2 个 HA，S16 带宽掉到 57.8% R*；"
-             "oc = 32 时 S16 = 99.7% R*、CoV 0.071。",
-             ha="center", fontsize=8.6, color=GREY)
+             "灰柱 S28S = hop 静态等分，仅作参考、不入选。紫点 = CoV（右轴）。"
+             "每核 outstanding 固定 128；S16 授权 oc = 32。"
+             "放宽授权几乎不动（仍 ≈ 58% R*），溢出在 REQ 进 tracker。",
+             ha="center", fontsize=8.8, color=GREY)
     fig.tight_layout(rect=(0, 0.045, 1, 0.93))
     save(fig, "20-hot-pareto.png")
 
@@ -719,12 +720,9 @@ def fig_knob_grid() -> None:
         ax.plot(xs, frontier, color=RED, lw=1.15, alpha=0.75, zorder=1)
         ax.plot([r["cov"] for r in rows], [r["thr"] for r in rows],
                 "-o", color=INK, lw=1.5, ms=4.2, zorder=4)
-        official = [r for r in rows
-                    if abs(float(r["val"]) - float(swp["anchor"])) < 1e-9]
-        if official:
-            o = official[0]
-            ax.scatter([o["cov"]], [o["thr"]], s=90, marker="*", color=RED,
-                       zorder=6, edgecolors="k", linewidths=0.4)
+        star = _max_phi_row(rows, r_fair, kappa)
+        ax.scatter([star["cov"]], [star["thr"]], s=90, marker="*", color=RED,
+                   zorder=6, edgecolors="k", linewidths=0.4)
         ax.set_title(FRONT_KNOB_TITLE[nm], fontsize=10, fontweight="bold")
         lo_c = min(r["cov"] for r in rows)
         hi_c = max(r["cov"] for r in rows)
@@ -738,7 +736,7 @@ def fig_knob_grid() -> None:
     axes[1, 0].set_ylabel("总写带宽 R")
     for ax in axes[1]:
         ax.set_xlabel("100 拍窗 CoV")
-    fig.suptitle(f"前沿 / 次前沿各扫一个旋钮（K = {sw['k']}）：看轨迹形状，不据此选官方点",
+    fig.suptitle(f"前沿 / 次前沿各扫一个旋钮（K = {sw['k']}）：星 = 该轨迹上 φ 最大的点",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "48-knob-grid.png")
@@ -858,12 +856,22 @@ def _cov_bars(ax, names, rows, colors, title="瞬时不均衡度", bw=100,
 
 
 def fig_s16_compare() -> None:
-    """S16 against S0 and S1, on writes and on reads, both axes."""
+    """S16 against S0 and S1: writes (2-flit) and read-only 1-flit CompData."""
     d = deck()
-    w, r = d["write"], d["read"]
+    w = d["write"]
     bw = d["meta"]["bin_w"]
     r_fair = d["ideal"]["r_fair"]
-    r_read = d["ideal"]["read_r_fair"]
+    m1p = RES / "probe_ring2_read_m1.json"
+    if m1p.is_file():
+        r = json.loads(m1p.read_text())["rows"]
+        r_read = float(d["read_payload"]["S0-m1"]["ideal"]["r_fair"])
+        read_title = f"读 · 只读 1 flit（K={d['meta']['k_read']}）"
+        read_note = "读侧 = 只读 workload，CompData = 1 flit"
+    else:
+        r = d["read"]
+        r_read = d["ideal"]["read_r_fair"]
+        read_title = f"读 · 带宽（K={d['meta']['k_read']}）"
+        read_note = "读侧 S0 128 B"
     cols = [BLUE, AMBER, RED]
 
     fig, axes = plt.subplots(1, 4, figsize=(14.6, 4.5))
@@ -877,11 +885,11 @@ def fig_s16_compare() -> None:
     _bars_vs(axes[2], ["S0", "S1-R", "S16-R"],
              [r["S0"]["throughput"], r["S1-R"]["throughput"],
               r["S16-R"]["throughput"]], cols,
-             "总读带宽 flit/cycle", f"读 · 带宽（K={d['meta']['k_read']}）",
+             "总读带宽 flit/cycle", read_title,
              ref=r_read, ref_label=f"R* = {r_read:.4f}")
     _cov_bars(axes[3], ["S0", "S1-R", "S16-R"], [r["S0"], r["S1-R"], r["S16-R"]],
               cols, "读 · 瞬时不均衡度", bw)
-    fig.suptitle("写侧 S16：CoV 与总带宽；读侧 S0 本来就齐，S16 只多 0.47% 带宽",
+    fig.suptitle("写侧 S16 把份额搬回去；只读 1 flit 时 S16-R ≈ S0，S1-R 能收不均",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "23-s16-compare.png")
@@ -1112,54 +1120,56 @@ def fig_gap_compare() -> None:
 
 # --------------------------------------------------------------- slide 25
 def fig_s22_diagram() -> None:
-    """S22: broadcast progress on S1's own bus, then yield rather than gate."""
+    """S22: who raises a hand (wants to send) vs who stands aside."""
     fig, (ax, bx) = plt.subplots(2, 1, figsize=(9.7, 5.85),
-                                 gridspec_kw={"height_ratios": [1.0, 1.06]})
+                                 gridspec_kw={"height_ratios": [1.02, 1.04]})
     fig.subplots_adjust(left=0.015, right=0.985, top=0.925, bottom=0.02,
-                        hspace=0.22)
+                        hspace=0.24)
 
-    _panel(ax, "信号：复用 S1 那条 6 bit 总线，但播的是「进度」",
-           "位宽不变 · 仍按 30 拍计")
-    for i, lab in enumerate(("C0", "C2", "…", "C18")):
-        _box(ax, 0.02 + i * 0.135, 0.68, 0.11, 0.24, lab, fc=PANEL, fs=10)
-        _arrow(ax, (0.075 + i * 0.135, 0.68), (0.075 + i * 0.135, 0.545),
-               lw=1.1)
-    ax.text(0.56, 0.74, "每个节点播出「我这窗成功上环了多少 flit」，饱和到 6 bit",
-            fontsize=9.2, color=GREY)
-    _box(ax, 0.02, 0.40, 0.70, 0.145,
-         "6 bit 广播总线（30 拍延迟，不占 NoC hop）", fc="#fdeaec", ec=RED,
-         tc=RED, fs=10, bold=True)
-    _box(ax, 0.755, 0.36, 0.235, 0.28,
-         "每个节点收到 10 项进度\n赤字 = 均值 − 自己 → 越线就举手",
-         fc="white", ec=GREY, fs=9.4)
-    _arrow(ax, (0.72, 0.47), (0.755, 0.47), color=RED)
-    _box(ax, 0.02, 0.02, 0.97, 0.30,
-         "S1 播的是本窗拥塞等级；S22 播的是本窗成功上环数。\n"
-         "后者让落后与领先可以直接比较，让路方向从领先者流向落后者。",
+    _panel(ax, "四步：落后核举手 =「我要上环」；领先核看见才停发挡路的那一拍",
+           "复用 S1 的 6 bit 总线 · 30 拍")
+    steps = (
+        (0.02, "① 计数", "本核数这窗\n成功上环的 flit\n（饱和 6 bit）"),
+        (0.26, "② 广播", "10 项进度上总线\n每核都读回同一张表\n含自己那一项"),
+        (0.50, "③ 举手", "赤字 = 均值 − 自己\n越过阈值 → 本核举手\n= 我要发，不是不发"),
+        (0.74, "④ 让路", "领先核：本拍不发\n会骑过落后核出向 hop\n的 flit；可改发早下环"),
+    )
+    for x, title, body in steps:
+        _box(ax, x, 0.52, 0.225, 0.40, title + "\n\n" + body,
+             fc="#fdeaec" if title.startswith("③") else "white",
+             ec=RED if title.startswith("③") else GREY,
+             tc=RED if title.startswith("③") else INK,
+             fs=8.8, bold=title.startswith("③"))
+    for x0, x1 in ((0.245, 0.26), (0.485, 0.50), (0.725, 0.74)):
+        _arrow(ax, (x0, 0.72), (x1, 0.72), color=RED, lw=1.3)
+    _box(ax, 0.02, 0.04, 0.96, 0.42,
+         "越线举手是落后核在要槽：本核继续发、而且希望别人让路。\n"
+         "领先核自己从不举手；它只在「本拍这个 flit 会挡住举手者」时停发那一个 flit。\n"
+         "落后核看见别人举手也不让 —— 让路是单向的，槽永远流向更落后的核。",
          fc=PANEL, ec=PANEL, fs=9.6)
 
-    _panel(bx, "执行：让位，不是门控", "margin = 3.0 拒掉「差不多齐」的让路")
-    ring_y = 0.80
-    bx.plot([0.04, 0.96], [ring_y, ring_y], color=GREY, lw=2.6, zorder=1)
-    for x, lab, col in ((0.20, "领先节点", INK), (0.55, "中间 hop", GREY),
-                        (0.86, "落后节点", RED)):
-        bx.scatter([x], [ring_y], s=200, c="white", edgecolors=col, zorder=3,
+    _panel(bx, "一拍里谁发、谁不发", "margin = 3.0：差不多齐就不让，避免空换")
+    ring_y = 0.78
+    bx.plot([0.06, 0.94], [ring_y, ring_y], color=GREY, lw=2.6, zorder=1)
+    for x, lab, col in ((0.20, "领先核", INK), (0.52, "出向 hop", GREY),
+                        (0.84, "落后核（举手）", RED)):
+        bx.scatter([x], [ring_y], s=210, c="white", edgecolors=col, zorder=3,
                    linewidths=1.8)
-        bx.text(x, ring_y + 0.07, lab, ha="center", fontsize=10, color=col,
+        bx.text(x, ring_y + 0.075, lab, ha="center", fontsize=10, color=col,
                 fontweight="bold")
-    _arrow(bx, (0.84, 0.715), (0.24, 0.715), color=RED, ls="--", rad=-0.055)
-    bx.text(0.54, 0.583, "① 举手：只对「会骑过我出向 hop」的上游喊",
-            ha="center", fontsize=9.4, color=RED)
-    _box(bx, 0.03, 0.33, 0.46, 0.21,
-         "② 领先节点让出一个 slot\n（不是关掉整个方向）", fc="white",
-         ec=RED, fs=9.6)
-    _box(bx, 0.51, 0.33, 0.46, 0.21,
-         "③ 同拍前瞻改发一个会更早\n下环的 flit → 自己不空转",
-         fc="white", ec=RED, fs=9.6)
-    _box(bx, 0.03, 0.02, 0.94, 0.24,
-         "S1 令牌桶：没额度本拍不上环。S22 让位是指名的，"
-         "只让出具体某一拍上的具体某个位置。",
-         fc=PANEL, ec=PANEL, fs=9.6)
+    _arrow(bx, (0.82, 0.68), (0.24, 0.68), color=RED, ls="--", rad=-0.05)
+    bx.text(0.53, 0.575, "举手只对「会骑过我出向 hop」的上游有效",
+            ha="center", fontsize=9.2, color=RED)
+    _box(bx, 0.04, 0.26, 0.44, 0.26,
+         "领先核 · 这一拍不发挡路 flit\n有更早下环的就改发那个\n→ 自己的 hop 不空转",
+         fc="white", ec=RED, fs=9.4)
+    _box(bx, 0.52, 0.26, 0.44, 0.26,
+         "落后核 · 照常发\n从不让路\n拿到被让出的那一拍上环",
+         fc="#fdeaec", ec=RED, tc=RED, fs=9.4, bold=True)
+    _box(bx, 0.04, 0.02, 0.92, 0.20,
+         "和 S1 的差别：S1 没额度就整拍不上环（门控）。"
+         "S22 只让出「这一拍、这个会挡路的位置」。",
+         fc=PANEL, ec=PANEL, fs=9.4)
 
     save(fig, "24-s22-diagram.png")
 
@@ -2062,6 +2072,15 @@ def _cov(j: float) -> float:
     return ((1 - j) / j) ** 0.5
 
 
+def _phi_of(thr: float, cov: float, r_fair: float, kappa: float) -> float:
+    return (thr - kappa * cov) / r_fair
+
+
+def _max_phi_row(rows: list[dict], r_fair: float, kappa: float) -> dict:
+    """The point on a knob sweep closest to the LP line (largest φ)."""
+    return max(rows, key=lambda r: _phi_of(r["thr"], r["cov"], r_fair, kappa))
+
+
 def fig_metric() -> None:
     """The frontier in (CoV, R), the fit, and the scalar it induces."""
     m = _metric()
@@ -2076,7 +2095,12 @@ def fig_metric() -> None:
     bx = fig.add_axes([0.625, 0.105, 0.36, 0.80])
 
     xs = [x / 100 for x in range(0, 41)]
-    ax.scatter(cx, cy, s=14, color=RED, zorder=4, label="LP 上界 R(CoV) 的 80 个点")
+    ax.scatter(cx, cy, s=14, color=RED, zorder=4,
+               label=f"LP 上界 R(CoV) 的 {len(pts)} 个互异点")
+    ax.text(0.98, 0.025,
+            f"{len(tr['jain_curve'])} 次凸规划去重 → {len(pts)} 点",
+            transform=ax.transAxes, ha="right", va="bottom",
+            fontsize=7.6, color=GREY)
     ax.plot(xs, [r_fair + kappa * x for x in xs], color=RED, lw=2.0, zorder=3,
             label=f"拟合  R = R* + κ·CoV，κ = {kappa:.3f}")
     # slope triangle on the frontier: one unit of CoV buys kappa of bandwidth
@@ -2296,11 +2320,9 @@ def fig_metric_knobs() -> None:
             ax.annotate(_knob_lab(nm, r["val"]), (r["cov"], r["thr"]),
                         xytext=(3, 2), textcoords="offset points",
                         fontsize=6.0, color=INK, zorder=5)
-        official = [r for r in rows if r["val"] == swp["anchor"]]
-        if official:
-            o = official[0]
-            ax.scatter([o["cov"]], [o["thr"]], s=78, marker="*", color=RED,
-                       zorder=6, edgecolors="k", linewidths=0.4)
+        star = _max_phi_row(rows, r_fair, kappa)
+        ax.scatter([star["cov"]], [star["thr"]], s=78, marker="*", color=RED,
+                   zorder=6, edgecolors="k", linewidths=0.4)
         ax.set_title(titles[nm], fontsize=10, fontweight="bold")
         ax.set_xlim(-0.02, 0.54)
         ax.set_ylim(2.85, 6.58)
@@ -2314,7 +2336,8 @@ def fig_metric_knobs() -> None:
          "纵轴：总写带宽 R（越高越好）\n"
          "红线：LP 上界，唯一的理想直线\n"
          "折线：拧这个旋钮走出的轨迹\n"
-         "星：官方工作点\n"
+         "星：该方案 φ 最大的点\n"
+         "（最靠近 LP 拟合线）\n"
          f"K = {sw['k']}（与筛选轮相同）\n"
          "S1 按 band 拆成三条，不是一条"),
         (why, "为什么大多不是直线",

@@ -618,9 +618,22 @@ class Live:
         self.rmax = float(d["ideal"]["r_max"])
         met = json.loads((ROOT / "results" / "metric_ring2_cc.json").read_text())
         self.kappa = float(met["kappa"])
+        self.n_fit_pts = int(met["fit"]["n_points"])
+        self.lp_cov_sat = float(met["frontier_cov_max"])
+        tr = json.loads((ROOT / "results" / "tradeoff_ring2_cc.json").read_text())
+        jc = tr["jain_curve"]
+        self.n_jgrid = len({round(p["jain_target"], 6) for p in jc})
+        self.n_lp_pts = len({(round(p["jain_bin"], 6), round(p["bw_monotone"], 6))
+                             for p in jc})
         hot_p = ROOT / "results" / "probe_ring2_hotbw.json"
         self.hot_blob = json.loads(hot_p.read_text()) if hot_p.is_file() else {}
         self.hot_rstar = float(self.hot_blob.get("ideal", {}).get("r_fair") or 2.0)
+        s16h = ROOT / "results" / "probe_ring2_hot_s16_oc32.json"
+        self.hot_s16 = (json.loads(s16h.read_text())["row"]
+                        if s16h.is_file() else None)
+        rm1 = ROOT / "results" / "probe_ring2_read_m1.json"
+        self.read_m1 = (json.loads(rm1.read_text()).get("rows") or {}
+                        if rm1.is_file() else {})
 
     def W(self, name: str) -> dict:
         return self.d["write"][name]
@@ -792,6 +805,38 @@ class Live:
     def hot_cov(self, cap: str, prefix: str, nd: int = 3) -> str:
         return f"{_j2cov(self._hot_row(cap, prefix)['jain_bin']):.{nd}f}"
 
+    def hot_s16_bw(self, nd: int = 1) -> str:
+        r = self.hot_s16 or self._hot_row("128", "S16 grant")
+        return f"{100.0 * float(r['bw_vs_ideal']):.{nd}f}%"
+
+    def hot_s16_cov(self, nd: int = 3) -> str:
+        r = self.hot_s16 or self._hot_row("128", "S16 grant")
+        return f"{_j2cov(r['jain_bin']):.{nd}f}"
+
+    def m1(self, name: str) -> dict:
+        if name in self.read_m1:
+            return self.read_m1[name]
+        if name == "S0":
+            return self.P("S0-m1")
+        raise KeyError(f"read-m1 {name}")
+
+    def m1thr(self, name: str, nd: int = 4) -> str:
+        return f"{self.m1(name)['throughput']:.{nd}f}"
+
+    def m1cov(self, name: str, nd: int = 4) -> str:
+        return f"{_j2cov(self.m1(name)['jain_bin']['jain_bin_mean']):.{nd}f}"
+
+    def m1mm(self, name: str, nd: int = 4) -> str:
+        return f"{self.m1(name)['max_min']:.{nd}f}"
+
+    def m1pct(self, name: str, nd: int = 2) -> str:
+        rstar = float(self.P("S0-m1")["ideal"]["r_fair"])
+        return f"{100.0 * self.m1(name)['throughput'] / rstar:.{nd}f}"
+
+    def m1dthr(self, name: str, vs: str = "S0", nd: int = 1) -> str:
+        a, b = self.m1(name)["throughput"], self.m1(vs)["throughput"]
+        return f"{100.0 * (a - b) / b:+.{nd}f}%"
+
 
 FRONT_KNOB_META = {
     "S0": dict(
@@ -920,7 +965,7 @@ def slides(n: Live) -> list:
         "S1：机制、实测、信号消融 —— 54 点网格无点支配 S0",
         "设计空间：信号 × 控制点；空白格已核对无既有保留方案",
         "理论上界 R(CoV) 与单一标量 φ = (R − κ·CoV)/R*",
-        "可实现点：Pareto、hot 双口径、旋钮形状、方差分解",
+        "可实现点：Pareto、hot、旋钮形状",
         "前沿方案：S16 / S22 / S29 的机制、微架构与实测",
         "结论：一项架构决策（HA 授权能不能改）",
         "附录 A 单旋钮扫描 · 附录 B 时间线走读"])),
@@ -1330,6 +1375,7 @@ def slides(n: Live) -> list:
             f"S16 {n.phi('S16')}、S0 {n.phi('S0')}、S1 {n.phi('S1')}。")),
 
     ("figside", dict(
+        _sid="tradeoff",
         chrome="公平性 — 带宽交换曲线", img="16-tradeoff.png", fig_w=8.15,
         caption="横轴 = 不均衡度 CoV（十核 100 拍窗带宽的标准差 / 均值，0 = 完全均等，越右越不均）；"
                 "红线 = 每个 CoV 上限下的理论最高带宽；"
@@ -1344,52 +1390,60 @@ def slides(n: Live) -> list:
                 "**R(CoV)**：不均衡度 ≤ CoV 时的最高总带宽。"],
                  wt=1.70),
             dict(kind="band",
-                 text="红线点：固定 CoV 上限，枚举十个核的速率组合，链路每拍 ≤ 1 flit，"
-                      "取总带宽最高的那个。CoV 从 0 逐点放宽即得整条红线"
-                      "（凸优化全局上界，不是对仿真点拟合）。", wt=1.10),
+                 text="红线每一点：固定 Jain（即 CoV）下限，在占用表 A'λ ≤ 1 下求 max R。"
+                      "容量约束线性，Jain 约束是二阶锥，整条线是凸规划全局上界，"
+                      "不是枚举十核组合、也不是对仿真点拟合。"
+                      f"网格、去重与 {n.n_lp_pts} 个互异点见第 {{pg:metric}} 页。", wt=1.10),
             dict(kind="band",
                  text="红线上 = 该不均衡度下理论最好；红线下 = 机制损失；红线上方不可能。"
-                      "最左端 CoV = 0 即 R* = 5.7143；CoV ≥ 0.306 后红线平在 R_max = 6.40。"
+                      f"最左端 CoV = 0 即 R* = {n.rstar:.4f}；"
+                      f"CoV ≥ {n.lp_cov_sat:.3f} 后红线平在 R_max = {n.rmax:.2f}。"
                       "在 CoV 坐标下红线是直线 R* + κ·CoV，κ = 2.18 —— 为什么见下一页。", wt=0.90)])),
 
     ("figside", dict(
+        _sid="metric",
         chrome="标量指标推导：把上界在 CoV 坐标下拉直", img="42-metric-derivation.png",
         fig_w=7.05,
-        caption="左：LP 上界的 79 个点画在（CoV，总带宽）平面上是一条直线 R = R* + κ·CoV"
-                "（κ = 2.177，RMS 残差 0.011，最大相对残差 0.43%）；蓝虚线 = 过 S0 的平行线，"
-                "它与纵轴的交点就是 Φ(S0)。右：12 个候选 + S28S 参考点的 1 − φ 分解。",
-        kicker="SYMBOLS, THEN HOW TO READ IT",
+        caption=f"左：{n.n_lp_pts} 个互异点落成 R = R* + κ·CoV"
+                f"（κ = {n.kappa:.3f}，RMS 0.011）。"
+                "蓝虚线过 S0，纵轴交点即 Φ(S0)。右：1 − φ 分解。",
+        kicker="WHERE THE 80 POINTS COME FROM",
         blocks=[
+            dict(kind="card", accent=True, t=f"{n.n_lp_pts} 个红点怎么来的（不是仿真、不是枚举）", b=[
+                "**一次规划**：十核速率 λ；占用表 A'λ ≤ 1（每资源 ≤ 1 flit/拍）；"
+                "Jain(λ) ≥ J（二阶锥 ||λ||₂ ≤ (∑λ)/√(10J)）；max R = 2∑λ。",
+                f"**网格**：J ∈ [0.80, 1]，均匀 121 + 公平端加密 31，去重 **{n.n_jgrid}** 个目标。"
+                "每点一次凸规划，λ → 100 拍整数箱得 CoV；R 做 running-min。",
+                f"**去重**：J 目标 < 无约束解自身 Jain（≈ 0.914）时约束松弛，"
+                f"塌到 (CoV = {n.lp_cov_sat:.3f}, R = {n.rmax:.2f})，"
+                f"{n.n_jgrid} → **{n.n_lp_pts}** 个互异点。",
+                f"**拟合**：截距钉在 R*，其余 **{n.n_fit_pts}** 点最小二乘 κ = {n.kappa:.3f}。"],
+                 wt=2.25),
             dict(kind="card", t="符号表（单位都是带宽 flit/cycle）", b=[
-                "**R** 实测总带宽；**R*** = 5.7143，十核完全等速率（CoV = 0）时的最高带宽。",
-                "**CoV** 不均衡度 = 十核 100 拍窗带宽的标准差 / 均值。",
-                "**κ** = 2.177，红线斜率 = 理想汇率：最好的控制器每多 1 单位 CoV 换到的带宽。",
-                "**Φ = R − κ·CoV**：把不均衡按理想汇率「退」成带宽后剩下的等速率等效带宽；"
-                "**φ = Φ / R***，理想 = 1。"],
-                 wt=1.70),
-            dict(kind="card", accent=True, t="左图怎么读", b=[
-                "红点全在红线上 ⇒ 上界任一点 φ ≡ 1。过 S0 作红线的平行线（蓝虚线），"
-                f"滑到 CoV = 0 读出 **Φ(S0) = {n.W('S0')['throughput'] - n.kappa * n.covf('S0'):.3f}**；"
-                f"竖箭头 R* − Φ = **{(1 - n.phif('S0')) * n.rstar:.3f}** = (1−φ)·R*。",
-                "灰虚线 = 等 φ 线，与红线平行：线上每一点的等速率等效带宽 Φ 相同。"],
-                 wt=1.40),
+                f"**R*** = {n.rstar:.4f}，十核完全等速率时的最高带宽；"
+                f"**κ** = {n.kappa:.3f}，红线斜率 = 理想汇率。",
+                "**Φ = R − κ·CoV**，**φ = Φ / R***：上界任一点 φ ≡ 1。"
+                f"过 S0 的平行线滑到 CoV = 0 读出 Φ(S0) = "
+                f"{n.W('S0')['throughput'] - n.kappa * n.covf('S0'):.3f}。"],
+                 wt=1.10),
             dict(kind="band",
                  text="右图：1 − φ = 蓝（带宽缺口 (R*−R)/R*）+ 橙（不均衡折成带宽 κ·CoV/R*）。"
                       f"S16 {n.phi('S16')}、S0 {n.phi('S0')}、S1 {n.phi('S1')}。",
-                      wt=0.58)])),
+                      wt=0.55)])),
 
     ("figside", dict(
         chrome="12 个候选 + S28S 参考：旋钮轨迹都不是那根 LP 直线",
         img="43-metric-knobs.png", fig_w=7.55,
         caption="每个面板 = 该方案自己的一个旋钮；K = 2000，CoV 仍是 100 拍窗。"
-                "红线 = LP 上界（CoV ≥ 0.306 后平在 R_max）；星 = 官方工作点。"
+                "红线 = LP 上界（CoV ≥ 0.306 后平在 R_max）；"
+                "红星 = 该方案轨迹上 φ 最大的点（最靠近 LP 拟合线）。"
                 "S1 按 band 拆成三条。筛选轮与官方 K 的 φ 相差约 0.03，只看形状。",
         kicker="KNOB ≠ LP LEVER",
         blocks=[
             dict(kind="card", t="每条曲线是该方案自己的旋钮", b=[
                 "每个面板只动一个标量：S0 / ITAG 扫 t_inj，S16 扫 oc，"
                 "S1 按 band 拆成三条，S29 扫 slot。",
-                "红星 = 官方点。独立扫描，不是混拟合。"],
+                "红星 = 该面板 φ = (R − κ·CoV)/R* 最大的一点，不是官方默认点。"],
                  wt=1.00),
             dict(kind="card", accent=True, t="S16 的 oc 旋钮是 L 形", b=[
                 "oc 8→12：R 从 4.23 抬到 5.28，CoV 几乎不动（斜率 ≈ 110–150）。",
@@ -1470,37 +1524,38 @@ def slides(n: Live) -> list:
         chrome="hot 流量：φ 无效，直接读 R/R* 与 CoV", img="20-hot-pareto.png",
         fig_w=8.20,
         caption="hot：十核全写 HA 11 / 13。R* = r_max = 2.0，κ_hot = 0，公平免费。"
-                "左 = outstanding 128（全文口径），右 = 32（对照）。柱 = R/R*，紫点 = CoV。"
-                "灰柱 S28S 仅作参考。K = 2000。",
+                "每核 outstanding 固定 128（全文口径）。S16 授权 overcommit = 32。"
+                "柱 = R/R*，紫点 = CoV。灰柱 S28S 仅作参考。K = 2000。",
         kicker="CAPACITY FIRST, THEN FAIRNESS",
         blocks=[
-            dict(kind="card", accent=True, t="oc = 128：S16 先掉容量", b=[
-                f"S16 带宽 {n.hot_bw('128', 'S16 grant')} R*，低于 S0 的 "
-                f"{n.hot_bw('128', 'S0 baseline')}；S19 / S20 保住 "
-                f"{n.hot_bw('128', 'S19 Swift')}。",
-                "根因：10 × 128 = 1280 条 REQ 压到 2 个 HA，tracker 512 溢出 → RetryAck。"
-                "S16 在授权前排队，崩得最重。"],
+            dict(kind="card", accent=True, t="outstanding = 128，S16 授权 oc = 32", b=[
+                f"S16 带宽 {n.hot_s16_bw()} R*、CoV {n.hot_s16_cov()}，"
+                f"几乎等于官方 oc = 20 的 {n.hot_bw('128', 'S16 grant')}。"
+                f"同口径 S0 = {n.hot_bw('128', 'S0 baseline')}，"
+                f"S19 = {n.hot_bw('128', 'S19 Swift')}。",
+                "授权 oc 是 HA 同时在飞的 DBIDResp 上限，不是 per-core outstanding。"],
                  wt=1.35),
-            dict(kind="card", t="oc = 32：S16 机制本身没坏", b=[
-                f"S16 = {n.hot_bw('32', 'S16 grant')} R*、CoV {n.hot_cov('32', 'S16 grant')}，"
-                "全场最好。S0 / S22 / S29 也回到 98%+。",
-                "设计规则：oc_core ≤ tracker / n_core ≈ 51，或与 requester 窗口配合。"],
+            dict(kind="card", t="放宽授权救不了 tracker", b=[
+                "10 × 128 = 1280 条 REQ 压到 2 个 HA，tracker 512 在授权之前就溢出。",
+                "oc 20 → 32 几乎不动柱高。要把 outstanding 压进 tracker "
+                f"（对照 outstanding = 32 时 S16 = {n.hot_bw('32', 'S16 grant')} R*）。"],
                  wt=1.20),
             dict(kind="band",
-                 text="S16 失效条件 = 每核 outstanding × 热簇核数 > HA tracker。"
-                      "φ 在本 pattern 下无效，不再用来排名字。",
+                 text="φ 在本 pattern 下无效（κ_hot = 0），只读 R/R* 与 CoV。"
+                      "S16 失效条件 = 每核 outstanding × 热簇核数 > HA tracker。",
                  wt=0.70)])),
 
     ("figside", dict(
         _sid="knob_grid",
         chrome="旋钮轨迹汇总：三种形状", img="48-knob-grid.png", fig_w=8.30,
-        caption="前沿 / 次前沿各扫一个旋钮；K = 2000。红线 = LP 上界，星 = 筛选轮工作点。"
+        caption="前沿 / 次前沿各扫一个旋钮；K = 2000。红线 = LP 上界；"
+                "红星 = 该轨迹上 φ 最大的点（最靠近 LP 拟合线）。"
                 "单旋钮细页见附录 A。S28S 不收录。",
         kicker="SHAPES, NOT OPERATING POINTS",
         blocks=[
             dict(kind="card", accent=True, t="L 形：S16 overcommit", b=[
                 "拐点 oc ≈ 12–16 之前带宽白拿；之后只涨 CoV。",
-                "官方点 oc = 20 在拐点右侧，留给 RTT 变化的余量。"],
+                "φ 最大在 oc = 16；官方 oc = 20 在拐点右侧，留给 RTT 余量，本页不标。"],
                  wt=1.10),
             dict(kind="card", t="竖直 / 不动 / 两边都坏", b=[
                 "S21 / S21+eq 近竖直（限流）；S22(w32) 几乎不动；S26 两边都坏。",
@@ -1557,30 +1612,6 @@ def slides(n: Live) -> list:
                  b=["瞬时 CoV 回答「任一 100 拍里有没有核被饿」，完成时间比回答"
                     f"「一批工作最后是谁拖尾」；两者都要看，S1 的 CoV {n.dcov('S1')} "
                     f"对应完成时间比 {n.frat('S1')}（S0 为 {n.frat('S0')}）。"])])),
-
-    ("figside", dict(
-        _sid="var_decomp",
-        chrome="方差分解：搬份额 vs 整时机", img="47-var-decomp.png", fig_w=8.20,
-        caption="核间方差 = 十核长期速率差；核内方差 = 同一核在 100 拍窗之间的抖动。"
-                "红 / 橙 = 落地候选，蓝 = S0。",
-        kicker="BETWEEN VS WITHIN",
-        blocks=[
-            dict(kind="card", accent=True, t="S16：核间方差 = 0", b=[
-                f"核间 {n.var_b('S16')}，max/min {n.mm('S16')}；"
-                f"剩余 CoV {n.cov('S16')} 全是核内抖动。",
-                f"核内方差 {n.var_w('S16')}，比 S0 的 {n.var_w('S0')} 低 58%："
-                "授权节拍同时规整了注入。"],
-                 wt=1.20),
-            dict(kind="card", t="S22 搬份额，S29 整时机", b=[
-                f"S22 核间 {n.var_b('S22')}、核内 {n.var_w('S22')}（比 S0 的 "
-                f"{n.var_w('S0')} 还大 —— 让位制造抖动）；max/min {n.mm('S22')}。",
-                f"S29 核间 {n.var_b('S29')}、核内 {n.var_w('S29')}："
-                f"日历抹平抖动但搬不动份额；max/min {n.mm('S29')}。"],
-                 wt=1.25),
-            dict(kind="band",
-                 text="看长期份额选 S22；看 100 拍瞬时选 S29。两者各赢一个口径，"
-                      "不再说「S22 效果最好」。",
-                 wt=0.70)])),
 
     ("section", dict(
         no="07", kicker="SECTION SEVEN", title=["前沿方案详述"],
@@ -1646,14 +1677,15 @@ def slides(n: Live) -> list:
                  wt=0.72)])),
 
     ("media", dict(
-        chrome="S16 实测：写侧要做，读侧不用做", kicker="MEASURED · UNIFORM",
+        chrome="S16 实测：写侧有效；1 flit 读 S16-R 搬不动",
+        kicker="MEASURED · WRITE + READ-1",
         stat=n.cov("S16"),
         stat_sub=[f"S16 写侧 100 拍 CoV（S0 = {n.cov('S0')}）",
                   f"总写带宽 {n.dthr('S16')}，整窗 max/min = {n.mm('S16')}"],
         img="23-s16-compare.png",
-        caption="左两幅 = 写（K = 20000），右两幅 = 读（K = 5000）；"
-                "每幅内三根柱依次 S0 / S1 / S16，橙虚线 = 理论上限 R*。"
-                "注意读侧 S0 与 S16-R 两根柱几乎一样高。",
+        caption="左两幅 = 写（K = 20000，WriteData 2 flit）；"
+                "右两幅 = 只读 workload，CompData = 1 flit（K = 5000）。"
+                "每幅内三根柱依次 S0 / S1 / S16，橙虚线 = R*。",
         cards=[
             dict(t="写：低代价把份额搬回去", accent=True,
                  b=[f"CoV {n.cov('S0')} → **{n.cov('S16')}**，整窗 max/min "
@@ -1662,16 +1694,16 @@ def slides(n: Live) -> list:
                     f"**账本**：makespan {s0_ms:,} → {s16_ms:,}（−1.7%）；"
                     f"绕环重发 {n.surcharge('S0'):,} → {n.surcharge('S16'):,}；"
                     f"E-tag {n.etag('S0'):,} → {n.etag('S16'):,}。"
-                    "绑定 hop 从 RSP 换到 DAT。+1.7% 几乎全部来自消掉重发。"]),
-            dict(t="读：S0 本来就是齐的（128 B CompData）",
-                 b=[f"十个核读侧 CoV {n.rcov('S0')}、max/min {n.rmm('S0')}，"
-                    f"带宽 {n.rpct('S0')}% R*。"
-                    "**128 B 读没有待解决的问题**；64 B 读见后两页。"]),
-            dict(t="所以读侧建议不做",
-                 b=[f"S16-R 带宽 {n.rpct('S16-R')}% R*（{n.rdthr('S16-R')}）、"
-                    f"CoV {n.rcov('S16-R')}，"
-                    "[[收益在噪声量级，不值一次事务层改动。]]",
-                    f"对照：S1-R 读侧带宽 {n.rdthr('S1-R')}、CoV {n.rcov('S1-R')}。"])])),
+                    "+1.7% 几乎全部来自消掉重发。"]),
+            dict(t="只读 1 flit：S0 和不均的写同一形态",
+                 b=[f"S0：CoV {n.m1cov('S0')}、max/min {n.m1mm('S0')}、"
+                    f"带宽 {n.m1pct('S0')}% R*。慢核仍是 C0 / C8 / C10 / C18。",
+                    f"S16-R：CoV {n.m1cov('S16-R')}、max/min {n.m1mm('S16-R')}、"
+                    f"带宽 {n.m1dthr('S16-R')} —— [[与 S0 在噪声里，授权重排搬不动环上 hop。]]"]),
+            dict(t="1 flit 读里真正动了的是 S1-R",
+                 b=[f"S1-R：CoV {n.m1cov('S1-R')}、max/min {n.m1mm('S1-R')}、"
+                    f"带宽 {n.m1dthr('S1-R')}。HA 侧 AIMD 收的是注入，不是授权顺序。",
+                    "128 B 读仍然齐，见后两页；本页读侧改成与写对称的 1 flit。"])])),
 
     ("media", dict(
         chrome="读侧补充：CompData = 1 / 2 / 4 flit 时 S0 的不均衡度",
@@ -1714,8 +1746,9 @@ def slides(n: Live) -> list:
                  b=[f"{n.pfrat('S0-m2')} 与 {n.pfrat('S0-m4')}，十条线不可分。"
                     "4 flit 的抖动只在 100 拍尺度出现，累计曲线上看不到。"]),
             dict(t="对建议的影响",
-                 b=["若 workload 含大量 64 B 读，读侧需要和写侧一样纳入 S16-R；"
-                    "128 B 及以上读维持现状的结论不变。"])])),
+                 b=["若 workload 含大量 64 B 读，S16-R 搬不动（见前页），"
+                    "要动的是源端（S1-R 把 max/min 收到 1.18）；"
+                    "128 B 及以上读维持现状。"])])),
 
     ("figside", dict(
         chrome="S16 微架构：HA 内部新增的三张小表和一条决策规则",
@@ -1786,26 +1819,23 @@ def slides(n: Live) -> list:
     ("figside", dict(
         chrome="S22 赤字触发的限域让路（13,920 FF‑eq） · 仲裁型 / 总线触发",
         img="24-s22-diagram.png", fig_w=8.75,
-        caption="复用 S1 那条 6 bit 广播总线，位宽完全相同，只换了线上放什么："
-                "从「我有多堵」换成「我这窗发成了多少」。",
-        kicker="RING-ONLY · MECHANISM",
+        caption="越线举手 = 落后核要发（要槽），不是停发。"
+                "领先核看见举手后，才停发「会骑过落后核出向 hop」的那一拍。",
+        kicker="WHO SENDS, WHO YIELDS",
         blocks=[
-            dict(kind="card", t="四段机制", b=[
-                "**① 检测**：每节点只数自己本窗成功上环的 flit 数，饱和到 6 bit。"
-                "播的是进度，不是拥塞等级。",
-                "**② 传递**：复用 S1 的 6 bit 广播总线（30 拍）。"
-                "自己的进度也从总线读回，两边过同一个量化器、同一段延迟。",
-                "**③ 反馈**：赤字 = 总线上 10 项的均值 − 自己那一项，越过 0.5 就举请求。"
-                "让路是**单向**的：落后的节点永不让路。",
-                "**④ 执行：让位，不是门控**。只对「会从请求者出向 hop 骑过去」的 flit "
-                "让路，同时前瞻改发一个会先下环的 flit，让自己的 hop 不空转。"],
-                 wt=1.90),
+            dict(kind="card", accent=True, t="举手是本核要发", b=[
+                "赤字 = 十核进度均值 − 自己。越过 0.5，**本核举手 =「给我上环机会」**。",
+                "落后核继续发，而且从不让路。让路是单向的：槽只流向更落后的核。"],
+                 wt=1.15),
+            dict(kind="card", t="不发的是领先核，而且只停一拍", b=[
+                "领先核检查：我这一拍要发的 flit，会不会骑过举手者的出向 hop？",
+                "会 → 本拍不发这个 flit；能改发一个更早下环的就改发，自己的 hop 不空转。",
+                "不会挡住举手者 → 照常发。不是关掉整个方向。"],
+                 wt=1.25),
             dict(kind="band",
-                 text="S1 用令牌桶：没额度本拍不上环。S22 只在具体某一拍上让出具体某个位置。",
-                 wt=0.86),
-            dict(kind="band",
-                 text="同等不均衡度下让位比门控省 10 倍带宽：S23 门控付 1.50%，"
-                      "S22 让位只付 0.15%（K = 2000 同轮对比）。", wt=0.70)])),
+                 text="S1 没额度就整拍不上环（门控）。S22 只让出「这一拍、这个挡路位置」。"
+                      "K = 2000 同轮：S23 门控付 1.50%，S22 让位付 0.15%。",
+                 wt=0.70)])),
 
     ("media", dict(
         chrome="S22 实测：均匀流量", kicker="MEASURED · UNIFORM",
@@ -2010,8 +2040,8 @@ def slides(n: Live) -> list:
                 "不再推进。**S28S** 是 hop 静态等分，不适用于动态非均匀流量。",
                 f"**读侧**：128 B CompData 下 S0 已达 CoV {n.rcov('S0')}、"
                 f"max/min {n.rmm('S0')}，维持现状；"
-                f"64 B 读会重现六快四慢（max/min {n.pmm('S0-m1')}），"
-                "若 workload 含它则并入 S16-R。"])],
+                f"64 B 只读会重现六快四慢（max/min {n.m1mm('S0')}），"
+                f"S16-R 几乎不动，S1-R 把 max/min 收到 {n.m1mm('S1-R')}。"])],
         band="请架构组只决策一件事：是否允许 HA 改变授权的时机与对象。允许则进入 S16 "
              "微架构验证；不允许则转入环仲裁原型，在 S22 与 S29 之间按面积预算取舍。")),
 
