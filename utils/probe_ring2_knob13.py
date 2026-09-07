@@ -43,7 +43,7 @@ SWEEPS: list[tuple[str, str, dict[str, Any], str, list[Any], Any]] = [
     ("S1", "S1", {}, "band·cap",
      ["gentle·1.0", "gentle·0.5", "gentle·0.25",
       "spec·1.0", "spec·0.5", "spec·0.25",
-      "harsh·1.0", "harsh·0.5", "harsh·0.25"], "spec·1.0"),
+      "harsh·1.0", "harsh·0.5", "harsh·0.25"], "gentle·0.5"),
     ("S1T", "S1T", dict(S1_CFG), "cap_scale", [1.0, 0.75, 0.5, 0.25], 0.5),
     ("S16", "S16", {"overcommit": S16_OVERCOMMIT}, "overcommit",
      [6, 8, 10, 12, 16, 20, 32, 64], S16_OVERCOMMIT),

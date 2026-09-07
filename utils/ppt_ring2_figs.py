@@ -280,7 +280,7 @@ def fig_s1_effect() -> None:
     xs = list(range(len(cores)))
     for k, (nm, lbl, col) in enumerate(
             (("S0", "S0 无流控", BLUE),
-             ("S1", "S1 拥塞等级 AIMD", RED),
+             ("S1", "S1 gentle·cap0.5", RED),
              ("S1T", "S1T 每向预算（调参后）", AMBER))):
         a1.bar([x + (k - 1) * width for x in xs], by_core(nm), width=width,
                label=lbl, color=col, alpha=0.92)

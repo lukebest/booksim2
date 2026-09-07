@@ -1126,13 +1126,13 @@ def slides(n: Live) -> list:
 
     ("section", dict(
         no="03", kicker="SECTION THREE", title=["S1 方案与实测"],
-        lead="拥塞检测、拥塞传递、拥塞反馈、流量控制，以及两个工作点的实测。",
+        lead="拥塞检测、拥塞传递、拥塞反馈、流量控制，以及 gentle 默认点与调参档的实测。",
         key_label="KEY MESSAGE",
-        key=f"54 点 AIMD 网格中没有一个点支配 S0。"
-            f"S1 默认档：CoV {n.cov('S0')} → {n.cov('S1')}（{n.dcov('S1')}），"
-            f"总写带宽 {n.dthr('S1')}。"
-            f"S1T 被 S0 支配（带宽 {n.dthr('S1T')}，CoV {n.cov('S1T')} > {n.cov('S0')}）。"
-            "S1U 与 S1 的 CoV / max/min 相同而带宽更高：下环信号是纯负担。")),
+        key=f"默认档改为 gentle · cap 0.5（第 25 页 gentle 轨迹上 φ 最大）。"
+            f"S1：CoV {n.cov('S0')} → {n.cov('S1')}（{n.dcov('S1')}），"
+            f"总写带宽 {n.dthr('S1')}，φ {n.phi('S0')} → {n.phi('S1')}。"
+            f"54 点网格仍无点同时压过 S0 的带宽与 CoV。"
+            f"S1T 被 S0 支配（带宽 {n.dthr('S1T')}，CoV {n.cov('S1T')}）。")),
 
     ("process", dict(
         chrome="S1 机制：检测 / 传递 / 反馈 / 控制",
@@ -1155,33 +1155,35 @@ def slides(n: Live) -> list:
                     "反馈值取这些节点等级的 **max**：路径上最堵的那一段说了算。"]),
             dict(t="流量控制", accent=True,
                  b=["最终等级 = level_of(自身 total 失败 − 8 × 收到的 max net 等级)。",
-                    "对每窗**整型注入预算**做 AIMD：乘性减 α = 0.75 / 0.5 / 0.25，"
-                    "加性增 β = +16 / +8 / +2，出口是令牌桶闸门。"])],
+                    "对每窗**整型注入预算**做 AIMD。默认 gentle："
+                    "乘性减 α = 0.875 / 0.75 / 0.5，加性增 β = +32 / +16 / +8，"
+                    "cap_scale = 0.5；出口是令牌桶闸门。"])],
         band="第 ① 段的信号是本节点上环失败。无缓存环上这类失败多数来自他人 transit，"
              "因此等级同时反映「本核注入多」和「本核被路过」。")),
 
     ("media", dict(
-        chrome="S1 效果：默认档与调参档", kicker="TWO OPERATING POINTS",
-        stat=n.dthr("S1"), stat_sub=["S1 默认档相对 S0 的总写带宽",
+        chrome="S1 效果：gentle 默认档与调参档", kicker="TWO OPERATING POINTS",
+        stat=n.dthr("S1"), stat_sub=["S1 gentle·cap0.5 相对 S0 的总写带宽",
                                      f"CoV {n.dcov('S1')}"],
         img="12-s1-effect.png",
         caption="左 = 每核写带宽对比；右 = 总写带宽—CoV（横轴 CoV，纵轴总写带宽）。"
                 "圆 / 方 = S1 的 AIMD 网格（band × cap × window × burst × dir_split × scope）；"
-                "星 = S0 / 出厂 S1 / S1T。下环失败含 leave FIFO 占用 > 1。",
+                "星 = S0 / S1 默认（gentle · cap 0.5）/ S1T。",
         cards=[
-            dict(t="S1 默认（band = spec）",
-                 b=[f"100 拍窗 CoV {n.cov('S0')} → **{n.cov('S1')}**，整窗 max/min "
+            dict(t="S1 默认（gentle · cap 0.5）", accent=True,
+                 b=["第 25 页 gentle 三条里 φ 最大的点，现为官方默认。",
+                    f"100 拍窗 CoV {n.cov('S0')} → **{n.cov('S1')}**，整窗 max/min "
                     f"{n.mm('S0')} → {n.mm('S1')}；"
                     f"总写带宽 {n.thr('S0')} → **{n.thr('S1')}（{n.dthr('S1')}）**。"]),
-            dict(t="S1T 每向预算（调参后）", accent=True,
-                 b=["S1 的 AIMD 网格选出的最优点（dir_split、cap 0.5、w 64、"
-                    f"burst 1）：带宽 **{n.thr('S1T')}（{n.dthr('S1T')}）**，"
+            dict(t="S1T 每向预算（调参档）",
+                 b=["dir_split、band spec、cap 0.5、w 64、burst 1："
+                    f"带宽 **{n.thr('S1T')}（{n.dthr('S1T')}）**，"
                     f"CoV **{n.cov('S1T')}**，max/min {n.mm('S1T')}。",
                     f"两个公平口径都比 S0 差，且掉带宽 —— **被 S0 支配**。"]),
             dict(t="网格结论",
-                 b=["54 点里没有一个同时改善带宽与公平。"
-                    f"S1U 与 S1 CoV / max/min 相同，带宽 {n.thr('S1U')} vs {n.thr('S1')}："
-                    "**S1U 严格支配 S1**，下环信号只掉带宽。"])])),
+                 b=["54 点里没有一个同时在带宽和 CoV 上压过 S0。"
+                    f"S1U 与 S1 的 CoV / max/min 相同（{n.cov('S1')} / {n.mm('S1')}），"
+                    f"带宽 {n.thr('S1U')} vs {n.thr('S1')}：下环信号仍只掉带宽。"])])),
 
     ("compare", dict(
         chrome="S1 实测：各核带宽如何变化", kicker="MEASURED PER-CORE SHIFT",
@@ -1200,7 +1202,7 @@ def slides(n: Live) -> list:
                 f"（{n.dbw('S1', 8)}），快核 C14 {n.bw('S0', 14)} → {n.bw('S1', 14)}"
                 f"（{n.dbw('S1', 14)}）。",
                 "**令牌桶**：没额度就不上环；该槽沿途节点都可以使用。"])],
-        stats=[(n.dthr("S1"), "S1 默认档相对 S0 的总写带宽"),
+        stats=[(n.dthr("S1"), "S1 gentle·cap0.5 相对 S0 的总写带宽"),
                ("54 组", "S1 AIMD 参数网格（去重后）"),
                ("21,220", "S1 硬件 FF‑eq（总线 + 表 + 乘法器 + 令牌桶）")])),
 
@@ -1227,7 +1229,8 @@ def slides(n: Live) -> list:
                     f"{n.cov('S1D')} / {n.fspan('S1D')}。",
                     ("四组曲线两两完全一致：全局下环次数变大，但核侧 64 拍窗仍到不了等级 1。"
                      if (s1d_eq and s1u_eq)
-                     else "S1D 不再等于 S0：leave FIFO 占用 > 1 已经能驱动 down 等级。")]),
+                     else "S1D 不再等于 S0：默认 cap_scale = 0.5 先削了预算；"
+                          f"CoV {n.cov('S1D')} 仍接近 S0，公平性几乎没动。")]),
             dict(t="新口径下的量级",
                  b=[f"S1 全程上环失败 **{s1_fail:,}** 次；下环失败 **{s1_defl:,}** 次"
                     f"（其中绕环偏转 {s1_ring_defl:,}，FIFO 占用>1  {s1_occ:,}）。",
@@ -1251,7 +1254,7 @@ def slides(n: Live) -> list:
                     + ("快核完成的瞬间慢核斜率抬升 —— "
                        "慢核不是能力不足，是满载时抢不到上环机会。"
                        if s1d_eq else
-                       "leave FIFO 占用 > 1 已经进入 down 信号，完成曲线不再等于 S0。")]),
+                       "完成曲线离开 S0，主要是 cap 0.5 限住注入，不是下环信号搬了份额。")]),
             dict(t=("S1U（= S1）：整体推后、差距收窄" if s1u_eq
                     else "S1U：只听上环失败"),
                  accent=True,

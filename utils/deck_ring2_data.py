@@ -31,7 +31,8 @@ from typing import Any, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dse_ring2_write_fair import (BIN_W, CORE_NODES, CORE_OUTSTANDING_WR,
-                                  FABRIC, MEM_NODES, S1_CFG, S16_OVERCOMMIT,
+                                  FABRIC, MEM_NODES, S1_CFG, S1_DEFAULT,
+                                  S16_OVERCOMMIT,
                                   S22_CFG, S26_CFG, S27_CFG, S28_CFG,
                                   S28S_CFG, S29_CFG, W_FLITS, bin_rate,
                                   binned_jain, build_pattern, digest,
@@ -52,12 +53,12 @@ S22_STOCK = {**S22_CFG, "inj_depth": FABRIC["inj_depth"],
 
 WRITE_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S0", "S0", {}),
-    ("S1", "S1", {}),
+    ("S1", "S1", dict(S1_DEFAULT)),
     # S1's congestion level split by which failure feeds it. Stock S1 takes
     # max(board failures, eject deflections) and broadcasts both fields; the
     # two variants keep exactly one of them and zero the other bus field.
-    ("S1U", "S1", {"signal": "up"}),
-    ("S1D", "S1", {"signal": "down"}),
+    ("S1U", "S1", {**S1_DEFAULT, "signal": "up"}),
+    ("S1D", "S1", {**S1_DEFAULT, "signal": "down"}),
     ("S1T", "S1T", dict(S1_CFG)),
     ("S16", "S16", {"overcommit": S16_OVERCOMMIT}),
     ("ITAG", "S0", {"t_inj": 2, "itag_hold": 2}),
@@ -354,7 +355,10 @@ def main() -> None:
             write = dict(ex.map(_write_case, write_jobs, chunksize=1))
         data = json.loads(OUT.read_text())
         data.setdefault("write", {}).update(write)
-        data.setdefault("meta", {})["down_fail_includes_leave_occ"] = True
+        meta = data.setdefault("meta", {})
+        meta["down_fail_includes_leave_occ"] = True
+        meta["s1_band"] = S1_DEFAULT["band"]
+        meta["s1_cap_scale"] = S1_DEFAULT["cap_scale"]
         OUT.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         print(f"\nmerged {list(write)} into {OUT}")
         return
@@ -390,6 +394,8 @@ def main() -> None:
             "fc_bus_lat": 30, "cum_step": CUM_STEP,
             "read_payloads": list(READ_PAYLOADS),
             "s16_overcommit": S16_OVERCOMMIT,
+            "s1_band": S1_DEFAULT["band"],
+            "s1_cap_scale": S1_DEFAULT["cap_scale"],
             "down_fail_includes_leave_occ": True,
         },
         "ideal": {

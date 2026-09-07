@@ -352,6 +352,9 @@ FC_BUS_LAT = 30
 S22_CFG = dict(dfc_window=2, dfc_bus_lat=1, dfc_thresh=0.5, dfc_hold=16,
                dfc_margin=4.0, dfc_dodge=32,
                inj_depth=32, dir_inj_depth=32, itag_hold=2)
+# Published S1: gentle band at cap 0.5 — the max-φ point on the page-25
+# (CoV, R) sweep among the three gentle knobs (and the whole S1 panel).
+S1_DEFAULT = dict(band="gentle", cap_scale=0.5)
 # S1's phase-2 operating point: per-direction budgets are what make the
 # CW/CCW board-failure counts even, and they also stop the AIMD from costing
 # throughput (see `S1_DIRBAL`).
