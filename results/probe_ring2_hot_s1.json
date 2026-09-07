@@ -1,0 +1,18 @@
+{
+  "k": 2000,
+  "load": "hot",
+  "row": {
+    "name": "S1 AIMD gentle cap0.5",
+    "scheme": "S1",
+    "cap": 128,
+    "band": "gentle",
+    "cap_scale": 0.5,
+    "thr": 1.4943,
+    "bw_vs_ideal": 0.74715,
+    "jain_bin": 0.7321,
+    "makespan": 26769,
+    "n_etag": 6354,
+    "completed": true,
+    "wall_secs": 16.1
+  }
+}

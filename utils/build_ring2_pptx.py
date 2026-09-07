@@ -631,6 +631,9 @@ class Live:
         s16h = ROOT / "results" / "probe_ring2_hot_s16_oc32.json"
         self.hot_s16 = (json.loads(s16h.read_text())["row"]
                         if s16h.is_file() else None)
+        s1h = ROOT / "results" / "probe_ring2_hot_s1.json"
+        self.hot_s1 = (json.loads(s1h.read_text())["row"]
+                       if s1h.is_file() else None)
         rm1 = ROOT / "results" / "probe_ring2_read_m1.json"
         self.read_m1 = (json.loads(rm1.read_text()).get("rows") or {}
                         if rm1.is_file() else {})
@@ -848,6 +851,14 @@ class Live:
         r = self.hot_s16 or self._hot_row("128", "S16 grant")
         return f"{_j2cov(r['jain_bin']):.{nd}f}"
 
+    def hot_s1_bw(self, nd: int = 1) -> str:
+        r = self.hot_s1 or self._hot_row("128", "S1 AIMD")
+        return f"{100.0 * float(r['bw_vs_ideal']):.{nd}f}%"
+
+    def hot_s1_cov(self, nd: int = 3) -> str:
+        r = self.hot_s1 or self._hot_row("128", "S1 AIMD")
+        return f"{_j2cov(r['jain_bin']):.{nd}f}"
+
     def hot_icovf(self) -> float:
         n = int(self.hot_blob.get("ideal", {}).get("n_cores") or 10)
         N = int(round(self.hot_rstar * 100))
@@ -989,7 +1000,6 @@ def slides(n: Live) -> list:
     s0g = n.cg("S0")
     s0reg = n.W("S0")["regular"]
     s1_fail = int(n.W("S1")["n_board_fail"])
-    s1_defl = n.down_fail("S1")
     s1_occ = n.leave_occ("S1")
     s1_ring_defl = int(n.W("S1").get("n_deflections") or 0)
     s1d_eq = n.same_op("S1D", "S0")
@@ -1209,28 +1219,30 @@ def slides(n: Live) -> list:
              "因此等级同时反映「本核注入多」和「本核被路过」。")),
 
     ("media", dict(
-        chrome="S1 效果：gentle 默认档与调参档", kicker="TWO OPERATING POINTS",
+        chrome="S1 效果：AIMD 网格六轴", kicker="BAND × CAP × WINDOW × BURST × DIR × SCOPE",
         stat=n.dthr("S1"), stat_sub=["S1 gentle·cap0.5 相对 S0 的总写带宽",
                                      f"CoV {n.dcov('S1')}"],
         img="12-s1-effect.png",
-        caption="左 = 每核写带宽对比；右 = 总写带宽—CoV（横轴 CoV，纵轴总写带宽）。"
-                "圆 / 方 = S1 的 AIMD 网格（band × cap × window × burst × dir_split × scope）；"
-                "星 = S0 / S1 默认（gentle · cap 0.5）/ S1T。",
+        caption="左 = 各核写带宽；右 = 54 点网格（颜色 = band，圆 = 节点预算，方 = dir_split）。"
+                "星 = S0 / S1 官方（gentle · cap 0.5 · w 64 · burst 1 · 节点 · core_only）/ S1T。"
+                "无点同时压过 S0 的带宽与 CoV。",
         cards=[
-            dict(t="S1 默认（gentle · cap 0.5）", accent=True,
-                 b=["第 25 页 gentle 三条里 φ 最大的点，现为官方默认。",
-                    f"100 拍窗 CoV {n.cov('S0')} → **{n.cov('S1')}**，整窗 max/min "
-                    f"{n.mm('S0')} → {n.mm('S1')}；"
-                    f"总写带宽 {n.thr('S0')} → **{n.thr('S1')}（{n.dthr('S1')}）**。"]),
-            dict(t="S1T 每向预算（调参档）",
-                 b=["dir_split、band spec、cap 0.5、w 64、burst 1："
-                    f"带宽 **{n.thr('S1T')}（{n.dthr('S1T')}）**，"
-                    f"CoV **{n.cov('S1T')}**，max/min {n.mm('S1T')}。",
-                    f"两个公平口径都比 S0 差，且掉带宽 —— **被 S0 支配**。"]),
-            dict(t="网格结论",
-                 b=["54 点里没有一个同时在带宽和 CoV 上压过 S0。"
-                    f"S1U 与 S1 的 CoV / max/min 相同（{n.cov('S1')} / {n.mm('S1')}），"
-                    f"带宽 {n.thr('S1U')} vs {n.thr('S1')}：下环信号仍只掉带宽。"])])),
+            dict(t="band / cap：怎么加减、加到哪", accent=True,
+                 b=["**band**：α（乘性减）与 β（加性增）的三档表，按最终等级 "
+                    "1–2 / 3–5 / 6–7 取值。gentle = 0.875/0.75/0.5 与 +32/+16/+8；"
+                    "spec 更狠（0.75/0.5/0.25，+16/+8/+2）；harsh 最狠。",
+                    "**cap**：每窗预算上限 = cap_scale × window。"
+                    "1.0 ≈ 每拍 1 flit；0.5 先削一半。官方 gentle · cap 0.5。"]),
+            dict(t="window / burst：多久调、怎么花",
+                 b=["**window**：每多少拍做一次 AIMD、刷新预算。官方 64；网格还扫 32 / 128。"
+                    "总线固定 30 拍，窗短于反馈等于盲调。",
+                    "**burst**：令牌桶深度。0 = 有空槽就花光；1 / 4 = 额度摊在窗内。"
+                    "官方 1，避免各核突发对齐打满下环口。"]),
+            dict(t="dir_split / scope：控哪一向、控谁",
+                 b=["**dir_split**：关 = 一节点一份预算，两向一起缩；"
+                    "开 = CW / CCW 各一份，用该向上环失败做 AIMD。S1T = 开。",
+                    "**scope**：core_only 只闸 AI core（写侧默认）；"
+                    "ha_only 只闸 HA（S1-R）；both 两边都闸。"])])),
 
     ("compare", dict(
         chrome="S1 实测：各核带宽如何变化", kicker="MEASURED PER-CORE SHIFT",
@@ -1250,38 +1262,42 @@ def slides(n: Live) -> list:
                 f"（{n.dbw('S1', 14)}）。",
                 "**令牌桶**：没额度就不上环；该槽沿途节点都可以使用。"])],
         stats=[(n.dthr("S1"), "S1 gentle·cap0.5 相对 S0 的总写带宽"),
-               ("54 组", "S1 AIMD 参数网格（去重后）"),
+               (n.dthr("S1T"), "S1T（dir_split 开）相对 S0；被 S0 支配"),
                ("21,220", "S1 硬件 FF‑eq（总线 + 表 + 乘法器 + 令牌桶）")])),
 
     ("media", dict(
         chrome="S1 信号细分：只计上环失败 / 只计下环失败 / 两者都计",
         kicker="S1 SIGNAL SPLIT",
-        stat=[f"{s1_defl:,}", f"/ {s1_fail:,}"],
-        stat_sub=["下环失败 / 上环失败（S1 全程）",
-                  f"下环 = 真偏转 {s1_ring_defl:,} + FIFO 占用>1  {s1_occ:,}"],
+        stat=[f"{s1_ring_defl:,}", f"/ {s1_fail:,}"],
+        stat_sub=["真正下环失败 / 上环失败（S1 全程）",
+                  f"下环 = 绕环偏转；FIFO 占用>1  {s1_occ:,} 不计入"],
         img="38-s1-signal.png",
         caption="四根柱 = S0 / S1D（只计下环）/ S1U（只计上环）/ S1（都计），K = 20000 uniform 写；"
-                "下环失败 = 绕环偏转 + 两写一读 leave FIFO 占用 > 1。",
+                "下环失败 = 绕环偏转（真正下环失败），不含 leave FIFO 占用 > 1。",
         cards=[
             dict(t="三档怎么实现",
                  b=["参数 signal = up / down / both：**up** 只计上环失败；"
-                    "**down** 只计下环失败（真偏转，以及 leave FIFO 写入后深度 > 1）；"
-                    "**both** = 现有 S1，取二者 max。FIFO 本身仍是两写一读、深度 12。"]),
+                    "**down** 只计真正下环失败（绕环偏转）；"
+                    "**both** = 现有 S1，取二者 max。",
+                    "leave FIFO 占用 > 1 另列，不进入本页下环口径。"]),
             dict(t=("实测：两档仍各与一端重合" if (s1d_eq and s1u_eq)
-                    else "实测：计入 FIFO 占用后下环一路不再沉默"),
+                    else "实测：真正下环失败太少，下环一路仍搬不动份额"),
                  accent=True,
                  b=[f"**S1U{' = S1' if s1u_eq else ''}**：总带宽 {n.thr('S1U')}、"
                     f"100 拍 CoV {n.cov('S1U')}、完成时间 {n.fspan('S1U')}。",
                     f"**S1D{' = S0' if s1d_eq else ''}**：{n.thr('S1D')} / "
                     f"{n.cov('S1D')} / {n.fspan('S1D')}。",
-                    ("四组曲线两两完全一致：全局下环次数变大，但核侧 64 拍窗仍到不了等级 1。"
+                    ("四组曲线两两完全一致：真正下环失败全程只有两位数，"
+                     "核侧 64 拍窗到不了等级 1。"
                      if (s1d_eq and s1u_eq)
                      else "S1D 不再等于 S0：默认 cap_scale = 0.5 先削了预算；"
-                          f"CoV {n.cov('S1D')} 仍接近 S0，公平性几乎没动。")]),
-            dict(t="新口径下的量级",
-                 b=[f"S1 全程上环失败 **{s1_fail:,}** 次；下环失败 **{s1_defl:,}** 次"
-                    f"（其中绕环偏转 {s1_ring_defl:,}，FIFO 占用>1  {s1_occ:,}）。",
-                    "[[占用 > 1 只改计数与 S1 的 down 信号，不把 flit 再送回环，也不打 E-tag。]]"])])),
+                          f"真正下环失败 S1 全程 {s1_ring_defl:,} 次，"
+                          f"CoV {n.cov('S1D')} 仍接近 S0。")]),
+            dict(t="本页口径下的量级",
+                 b=[f"S1 全程上环失败 **{s1_fail:,}** 次；"
+                    f"真正下环失败 **{s1_ring_defl:,}** 次。",
+                    f"leave FIFO 占用>1  {s1_occ:,} 次，不计入下环失败，"
+                    "也不把 flit 再送回环、不打 E-tag。"])])),
 
     ("media", dict(
         chrome="S1 信号细分：各核完成时间曲线",
@@ -1582,7 +1598,7 @@ def slides(n: Live) -> list:
                 f"总写带宽 R* = {n.hot_rstar:.1f} flit/cycle，"
                 f"100 拍 CoV = {n.hot_icov()}（200 flit 整除 10 核）。"
                 "κ_hot = 0，公平免费。每核 outstanding = 128；S16 授权 oc = 32。"
-                "灰柱 S28S 仅作参考。K = 2000。",
+                "S1 = 官方 gentle · cap 0.5。灰柱 S28S 仅作参考。K = 2000。",
         kicker="CAPACITY FIRST, THEN FAIRNESS",
         blocks=[
             dict(kind="card", accent=True, t="hot 理想：R* = 2.0，CoV = 0", b=[
@@ -1590,7 +1606,8 @@ def slides(n: Live) -> list:
                 f"理想总写带宽 {n.hot_rstar:.1f} flit/cycle，"
                 f"100 拍 CoV {n.hot_icov()}。",
                 f"S19 带宽 {n.hot_bw('128', 'S19 Swift')} R* 但 CoV {n.hot_cov('128', 'S19 Swift')}；"
-                f"S0 = {n.hot_bw('128', 'S0 baseline')} / {n.hot_cov('128', 'S0 baseline')}。"],
+                f"S0 = {n.hot_bw('128', 'S0 baseline')} / {n.hot_cov('128', 'S0 baseline')}；"
+                f"S1 gentle = {n.hot_s1_bw()} / {n.hot_s1_cov()}。"],
                  wt=1.25),
             dict(kind="card", t="outstanding = 128，S16 授权 oc = 32", b=[
                 f"S16 带宽 {n.hot_s16_bw()} R*、CoV {n.hot_s16_cov()}，"
@@ -1628,7 +1645,8 @@ def slides(n: Live) -> list:
         _sid="finish_all",
         chrome="各方案的各核完成时间曲线", img="44-finish-all.png", fig_w=8.60,
         caption="12 个方案，同一 fabric、K = 20000 uniform 写；每格十条线 = 十核累计上环 "
-                "WriteData / 配额，虚线 = 最早与最晚完成时刻。S1U / S1D 与 S1 / S0 逐拍相同，不重复。"
+                "WriteData / 配额，虚线 = 最早与最晚完成时刻。"
+                "S1 = 官方 gentle · cap 0.5；S1U / S1D 不重复画。"
                 "S28S 是 hop 静态等分，不适用于动态非均匀流量，未画。",
         kicker="WHO FINISHES LAST",
         blocks=[
@@ -1744,7 +1762,8 @@ def slides(n: Live) -> list:
         img="23-s16-compare.png",
         caption="左两幅 = 写（K = 20000，WriteData 2 flit）；"
                 "右两幅 = 只读 workload，CompData = 1 flit（K = 5000）。"
-                "每幅内三根柱依次 S0 / S1 / S16，橙虚线 = R*。",
+                "每幅内三根柱依次 S0 / S1 gentle·0.5 / S16，橙虚线 = R*。"
+                "S1-R 同为 gentle · cap 0.5、HA 侧 AIMD。",
         cards=[
             dict(t="写：低代价把份额搬回去", accent=True,
                  b=[f"CoV {n.cov('S0')} → **{n.cov('S16')}**，整窗 max/min "
@@ -1760,7 +1779,7 @@ def slides(n: Live) -> list:
                     f"S16-R：CoV {n.m1cov('S16-R')}、max/min {n.m1mm('S16-R')}、"
                     f"带宽 {n.m1dthr('S16-R')} —— [[与 S0 在噪声里，授权重排搬不动环上 hop。]]"]),
             dict(t="1 flit 读里真正动了的是 S1-R",
-                 b=[f"S1-R：CoV {n.m1cov('S1-R')}、max/min {n.m1mm('S1-R')}、"
+                 b=[f"S1-R gentle·0.5：CoV {n.m1cov('S1-R')}、max/min {n.m1mm('S1-R')}、"
                     f"带宽 {n.m1dthr('S1-R')}。HA 侧 AIMD 收的是注入，不是授权顺序。",
                     "128 B 读仍然齐，见后两页；本页读侧改成与写对称的 1 flit。"])])),
 
@@ -1806,7 +1825,7 @@ def slides(n: Live) -> list:
                     "4 flit 的抖动只在 100 拍尺度出现，累计曲线上看不到。"]),
             dict(t="对建议的影响",
                  b=["若 workload 含大量 64 B 读，S16-R 搬不动（见前页），"
-                    "要动的是源端（S1-R 把 max/min 收到 1.18）；"
+                    f"要动的是源端（S1-R gentle 把 max/min 收到 {n.m1mm('S1-R')}）；"
                     "128 B 及以上读维持现状。"])])),
 
     ("figside", dict(
@@ -1859,7 +1878,7 @@ def slides(n: Live) -> list:
                   "两者各 5,840 FF-eq · requester 动态窗口"],
         img="29-window-compare.png",
         caption="三幅依次比较总带宽、100 拍瞬时 CoV、整窗最快 / 最慢核带宽比；"
-                "每幅内四根柱都是 S0 / S1 / S19 / S20。",
+                "每幅内四根柱都是 S0 / S1 gentle·0.5 / S19 / S20。",
         cards=[
             dict(t="信号不同，执行器相同", accent=True,
                  b=["S19 看端到端 RTT，能覆盖 ring 与 completer 等待；"
@@ -1868,7 +1887,9 @@ def slides(n: Live) -> list:
                  b=[f"**S19**：带宽 {n.thr('S19')}（{n.dthr('S19')}）、"
                     f"CoV {n.cov('S19')}、max/min {n.mm('S19')}。",
                     f"**S20**：带宽 {n.thr('S20')}（{n.dthr('S20')}）、"
-                    f"CoV {n.cov('S20')}、max/min {n.mm('S20')}。"]),
+                    f"CoV {n.cov('S20')}、max/min {n.mm('S20')}。",
+                    f"对照 S1 gentle：带宽 {n.thr('S1')}（{n.dthr('S1')}）、"
+                    f"CoV {n.cov('S1')}、max/min {n.mm('S1')}。"]),
             dict(t="参考结论",
                  b=["两者都基本保住总带宽，但 CoV 与长期速率差几乎没有离开 S0。"
                     "这说明 requester 窗口能限制注入量，却没有把瓶颈 hop 的服务机会"
@@ -1902,8 +1923,8 @@ def slides(n: Live) -> list:
         stat_sub=[f"S22 写侧 100 拍 CoV（S0 = {n.cov('S0')}）",
                   f"总写带宽 {n.dthr('S22')}"],
         img="25-s22-compare.png",
-        caption="四根柱依次 S0 / S1 / S16 / S22，橙虚线 = 理论上限 R*；写侧 K = 20000。"
-                "后两幅是公平性的两个不同问题，见右侧第三张卡。",
+        caption="四根柱依次 S0 / S1 gentle·0.5 / S16 / S22，橙虚线 = 理论上限 R*；"
+                "写侧 K = 20000。后两幅是公平性的两个不同问题，见右侧第三张卡。",
         cards=[
             dict(t="与 S1 同口径", accent=True,
                  b=[f"S22：CoV {n.cov('S22')}，带宽 {n.dthr('S22')}，"

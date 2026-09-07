@@ -79,7 +79,7 @@ WRITE_CASES: list[tuple[str, str, dict[str, Any]]] = [
 # not the congested resource. `ha_only` is the honest read-side port of S1.
 READ_CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("S0", "S0", {}),
-    ("S1-R", "S1", {"scope": "ha_only"}),
+    ("S1-R", "S1", {**S1_DEFAULT, "scope": "ha_only"}),
     ("S16-R", "S16", {"overcommit": 16}),
 ]
 # CompData sizes for the read-side S0 payload study. 2 is the deck's stock

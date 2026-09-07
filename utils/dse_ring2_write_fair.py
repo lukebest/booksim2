@@ -1651,6 +1651,8 @@ def make_sim(scheme: str, topo: Ring2Topology, *, seed: int,
     # separate name so the published S1 rows keep meaning stock AIMD.
     if scheme == "S1T":
         kw = {"bus_lat": FC_BUS_LAT, **FABRIC, **S1_CFG, **(cfg or {})}
+    elif scheme == "S1":
+        kw = {"bus_lat": FC_BUS_LAT, **FABRIC, **S1_DEFAULT, **(cfg or {})}
     p = Ring2FcParams(mode="s15" if scheme == "S15" else "s1", **kw)
     return Ring2FcSim(topo, p, seed=seed)
 

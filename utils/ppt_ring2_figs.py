@@ -608,9 +608,12 @@ def fig_hot() -> None:
     src = d["passes"]["128"]
     s16p = RES / "probe_ring2_hot_s16_oc32.json"
     s16 = json.loads(s16p.read_text())["row"] if s16p.is_file() else None
+    s1p = RES / "probe_ring2_hot_s1.json"
+    s1 = json.loads(s1p.read_text())["row"] if s1p.is_file() else None
     gold = "#b34700"
     picks = (
         ("S0 baseline", "S0", BLUE),
+        ("S1 AIMD", "S1\ngentle", GREEN),
         ("S16 grant withhold", "S16\noc=32", RED),
         ("S19 Swift", "S19", AMBER),
         ("S22 deficit-yield STOCK", "S22", GREY),
@@ -621,6 +624,8 @@ def fig_hot() -> None:
     for prefix, short, col in picks:
         if prefix.startswith("S16") and s16:
             r = s16
+        elif prefix.startswith("S1 ") and s1:
+            r = s1
         else:
             r = _hot_row(src, prefix)
         names.append(short)
@@ -881,19 +886,19 @@ def fig_s16_compare() -> None:
     cols = [BLUE, AMBER, RED]
 
     fig, axes = plt.subplots(1, 4, figsize=(14.6, 4.5))
-    _bars_vs(axes[0], ["S0", "S1", "S16"],
+    _bars_vs(axes[0], ["S0", "S1\ngentle", "S16"],
              [w["S0"]["throughput"], w["S1"]["throughput"],
               w["S16"]["throughput"]], cols,
              "总写带宽 flit/cycle", f"写 · 带宽（K={d['meta']['k_write']}）",
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
-    _cov_bars(axes[1], ["S0", "S1", "S16"], [w["S0"], w["S1"], w["S16"]], cols,
+    _cov_bars(axes[1], ["S0", "S1\ngentle", "S16"], [w["S0"], w["S1"], w["S16"]], cols,
               "写 · 瞬时不均衡度", bw)
-    _bars_vs(axes[2], ["S0", "S1-R", "S16-R"],
+    _bars_vs(axes[2], ["S0", "S1-R\ngentle", "S16-R"],
              [r["S0"]["throughput"], r["S1-R"]["throughput"],
               r["S16-R"]["throughput"]], cols,
              "总读带宽 flit/cycle", read_title,
              ref=r_read, ref_label=f"R* = {r_read:.4f}")
-    _cov_bars(axes[3], ["S0", "S1-R", "S16-R"], [r["S0"], r["S1-R"], r["S16-R"]],
+    _cov_bars(axes[3], ["S0", "S1-R\ngentle", "S16-R"], [r["S0"], r["S1-R"], r["S16-R"]],
               cols, "读 · 瞬时不均衡度", bw)
     fig.suptitle("写侧 S16 把份额搬回去；只读 1 flit 时 S16-R ≈ S0，S1-R 能收不均",
                  fontsize=13, fontweight="bold")
@@ -1187,19 +1192,20 @@ def fig_s22_compare() -> None:
     w = d["write"]
     bw = d["meta"]["bin_w"]
     r_fair = d["ideal"]["r_fair"]
-    names = ["S0", "S1", "S16", "S22"]
+    keys = ["S0", "S1", "S16", "S22"]
+    names = ["S0", "S1\ngentle", "S16", "S22"]
     cols = [BLUE, AMBER, GREY, RED]
 
     fig, axes = plt.subplots(1, 3, figsize=(14.2, 4.5))
-    _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
+    _bars_vs(axes[0], names, [w[n]["throughput"] for n in keys], cols,
              "总写带宽 flit/cycle", f"带宽（uniform 写，K={d['meta']['k_write']}）",
              ref=r_fair, ref_label=f"R* = {r_fair:.4f}")
-    _cov_bars(axes[1], names, [w[n] for n in names], cols,
+    _cov_bars(axes[1], names, [w[n] for n in keys], cols,
               "瞬时不均衡度 CoV：任意 100 拍内十个核齐不齐", bw)
-    _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
+    _bars_vs(axes[2], names, [w[n]["max_min"] for n in keys], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差：有没有核被长期拖慢", fmt="{:.4f}")
-    fig.suptitle("S22 与 S0 / S1 / S16 同口径：总带宽、瞬时 CoV、长期速率比",
+    fig.suptitle("S22 与 S0 / S1 gentle·0.5 / S16 同口径：总带宽、瞬时 CoV、长期速率比",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "25-s22-compare.png")
@@ -1796,19 +1802,20 @@ def fig_window_compare() -> None:
     """S19 and S20 against the requested S0 and S1 references."""
     d = deck()
     w, bw = d["write"], d["meta"]["bin_w"]
-    names = ["S0", "S1", "S19", "S20"]
+    keys = ["S0", "S1", "S19", "S20"]
+    names = ["S0", "S1\ngentle", "S19", "S20"]
     cols = [BLUE, AMBER, GREY, RED]
     fig, axes = plt.subplots(1, 3, figsize=(14.2, 4.5))
-    _bars_vs(axes[0], names, [w[n]["throughput"] for n in names], cols,
+    _bars_vs(axes[0], names, [w[n]["throughput"] for n in keys], cols,
              "总写带宽 flit/cycle",
              f"带宽（uniform 写，K={d['meta']['k_write']}）",
              ref=d["ideal"]["r_fair"],
              ref_label=f"R* = {d['ideal']['r_fair']:.4f}")
-    _cov_bars(axes[1], names, [w[n] for n in names], cols, "瞬时不均衡度 CoV", bw)
-    _bars_vs(axes[2], names, [w[n]["max_min"] for n in names], cols,
+    _cov_bars(axes[1], names, [w[n] for n in keys], cols, "瞬时不均衡度 CoV", bw)
+    _bars_vs(axes[2], names, [w[n]["max_min"] for n in keys], cols,
              "整窗 最快核带宽 / 最慢核带宽",
              "长期速率差（越接近 1 越好）", fmt="{:.4f}")
-    fig.suptitle("S19 / S20：不同信号驱动同一动态窗口；当前工作点结果接近",
+    fig.suptitle("S19 / S20：对照 S0 / S1 gentle·0.5；当前工作点结果接近",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     save(fig, "29-window-compare.png")
@@ -1906,36 +1913,33 @@ def fig_s1_signal() -> None:
     ax.legend(fontsize=9, loc="upper right")
 
     ax = axes[3]
-    ss = w["S1"]["fc"]["signal_sum"]
-    cores = d["meta"]["cores"]
-    up = [ss["up"][str(c)] for c in cores]
-    dn = [max(ss["down"][str(c)], 0.5) for c in cores]
-    xs = list(range(len(cores)))
-    ax.bar([x - 0.2 for x in xs], up, width=0.4, color=AMBER, label="上环失败（全程累计）")
-    ax.bar([x + 0.2 for x in xs], dn, width=0.4, color=GREEN, label="下环失败（全程累计）")
+    up_n = int(w["S1"]["n_board_fail"])
+    dn_n = int(w["S1"].get("n_deflections") or 0)
+    occ_n = int(w["S1"].get("n_leave_occ_gt1") or 0)
+    labs = ["上环失败", "真正下环失败\n（绕环偏转）", "FIFO 占用>1\n（不计入）"]
+    vals = [up_n, max(dn_n, 0), occ_n]
+    cols3 = [AMBER, GREEN, GREY]
+    xs = list(range(3))
+    ax.bar(xs, vals, color=cols3, width=0.62, edgecolor="k", linewidth=0.4)
     ax.set_yscale("log")
-    ax.set_ylim(0.3, 1e8)
+    ax.set_ylim(0.8, max(vals) * 8)
     ax.set_xticks(xs)
-    ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
-    ax.set_ylabel("S1 每核的两路原始信号（对数轴）")
-    n_win = ss["windows"][str(cores[0])]
-    down_all = sum(int(v) for v in ss["down"].values())
-    down_lv = sum(int(v) for v in ss["down_lv"].values())
-    up_lv = sum(int(v) for v in ss["up_lv"].values())
-    ax.set_title(f"S1 信号来源：上环 {sum(up):,} vs 下环 {down_all:,}",
+    ax.set_xticklabels(labs, fontsize=8.4)
+    for x, v in zip(xs, vals):
+        ax.text(x, v * 1.15, f"{v:,}", ha="center", va="bottom",
+                fontsize=9.2, fontweight="bold", color=INK)
+    ax.set_ylabel("S1 全程次数（对数轴）")
+    ax.set_title(f"下环失败 = 绕环偏转 {dn_n:,}，不含 FIFO",
                  fontsize=11.0, fontweight="bold")
-    ax.legend(fontsize=8.4, loc="upper right", framealpha=0.92)
-    fig.text(0.50, 0.012,
-             f"{n_win} 个 64 拍窗：上环等级>0 {up_lv:,} · 下环等级>0 {down_lv:,}"
-             f" · n_down_fail={_down_fail(w['S1']):,}",
-             fontsize=8.2, color=GREY, ha="center")
     ax.grid(axis="y", alpha=0.22)
+    fig.text(0.50, 0.012,
+             "本页下环失败只计绕环偏转。leave FIFO 占用>1 另列、不计入、"
+             "不把 flit 再送回环、不打 E-tag。",
+             fontsize=8.2, color=GREY, ha="center")
     if d_eq and u_eq:
         head = "S1 的拥塞等级仍由上环失败驱动：只计下环 = S0，只计上环 = S1"
-    elif u_eq and not d_eq:
-        head = "计入 leave FIFO 占用>1 之后，只计下环不再等于 S0"
     else:
-        head = "S1 信号拆分：只计下环 / 只计上环 / 两者都计"
+        head = "S1 信号拆分：下环失败只计绕环偏转"
     fig.suptitle(head, fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0.045, 1, 0.94))
     save(fig, "38-s1-signal.png")
@@ -2379,7 +2383,7 @@ def fig_metric_knobs() -> None:
 # ------------------------------------------------- completion curves (item 5)
 FINISH_ORDER = ["S0", "S1", "S1T", "S16", "ITAG", "S19", "S20", "S22", "S26", "S27",
                 "S28", "S29"]
-FINISH_LABEL = {"S0": "S0 基线", "S1": "S1 AIMD", "S1T": "S1T 分向", "S16": "S16 授权保留",
+FINISH_LABEL = {"S0": "S0 基线", "S1": "S1 gentle·0.5", "S1T": "S1T 分向", "S16": "S16 授权保留",
                 "ITAG": "S0 I-tag 调参", "S19": "S19 Swift", "S20": "S20 DCTCP",
                 "S22": "S22 赤字让路", "S26": "S26 自适应路由", "S27": "S27 逐跳背压",
                 "S28": "S28 显式速率", "S29": "S29 日历让路"}
@@ -2410,7 +2414,7 @@ def fig_finish_all() -> None:
                   "蓝 = 其余六核。\n\n"
                   "斜率 = 该核的瞬时带宽；十条线越贴合、\n"
                   "最晚 / 最早 越接近 1，长期公平越好。\n"
-                  "S1U / S1D 与 S1 / S0 逐拍相同，不重复画。\n"
+                  "S1 = gentle · cap 0.5（官方默认）。\n"
                   "S28S 静态等分仅作参考，不入选、未画。",
                   fontsize=8.6, color=INK, va="top", transform=flat[-1].transAxes,
                   linespacing=1.35)

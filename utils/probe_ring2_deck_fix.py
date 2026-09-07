@@ -17,6 +17,7 @@ from rg_ring2_topo import CHI_VCS_WRITE, Ring2Topology
 
 ROOT = Path(__file__).resolve().parents[1]
 HOT_OUT = ROOT / "results" / "probe_ring2_hot_s16_oc32.json"
+HOT_S1_OUT = ROOT / "results" / "probe_ring2_hot_s1.json"
 READ_OUT = ROOT / "results" / "probe_ring2_read_m1.json"
 
 
@@ -52,6 +53,55 @@ def run_hot_s16() -> dict:
     return row
 
 
+def run_hot_s1() -> dict:
+    """Official S1 (gentle · cap 0.5) on hot, outstanding=128."""
+    k, cap = 2000, 128
+    topo = Ring2Topology(n_planes=1, vcs=CHI_VCS_WRITE, route="latency")
+    tx = build_pattern("hot", k=k, W=W_FLITS, seed=0)
+    cfg = dict(FABRIC)
+    cfg["core_outstanding"] = cap
+    r = run_scheme("S1", topo, tx, cfg=cfg, quiet=False)
+    inj = {int(c): v for c, v in (r.get("wr_inject_by_core") or {}).items()}
+    f = fairness_stats(inj, r["makespan"] or 1, k * W_FLITS)
+    jb = binned_jain(inj, BIN_W, f.get("t_fair") or 0)
+    r_star = 2.0
+    row = {
+        "name": "S1 AIMD gentle cap0.5",
+        "scheme": "S1",
+        "cap": cap,
+        "band": "gentle",
+        "cap_scale": 0.5,
+        "thr": f["throughput"],
+        "bw_vs_ideal": round(f["throughput"] / r_star, 5),
+        "jain_bin": jb["jain_bin_mean"],
+        "makespan": r["makespan"],
+        "n_etag": r.get("n_etag_raised", 0),
+        "completed": r.get("completed"),
+        "wall_secs": r.get("wall_secs"),
+    }
+    HOT_S1_OUT.write_text(json.dumps({"k": k, "load": "hot", "row": row},
+                                     indent=2, ensure_ascii=False))
+    print("hot S1", row, flush=True)
+    return row
+
+
+def run_s1_read_m1() -> dict:
+    """Re-run only S1-R at CompData=1 with official S1_DEFAULT, merge into JSON."""
+    k, m = 5000, 1
+    job = next(t for t in READ_CASES if t[0] == "S1-R")
+    name, row = _read_case((job[0], job[1], job[2], k, m))
+    blob = json.loads(READ_OUT.read_text()) if READ_OUT.is_file() else {
+        "k": k, "m_resp": m, "rows": {}}
+    blob.setdefault("rows", {})[name] = row
+    blob["k"] = k
+    blob["m_resp"] = m
+    READ_OUT.write_text(json.dumps(blob, indent=2, ensure_ascii=False))
+    print(f"read-m1 {name} bw={row['throughput']:.4f} "
+          f"mm={row['max_min']:.4f} J={row['jain_bin']['jain_bin_mean']:.5f}",
+          flush=True)
+    return row
+
+
 def run_read_m1() -> dict:
     k, m = 5000, 1
     jobs = [(nm, sc, ov, k, m) for nm, sc, ov in READ_CASES]
@@ -67,6 +117,12 @@ def run_read_m1() -> dict:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["s1"]:
+        run_hot_s1()
+        run_s1_read_m1()
+        print(f"wrote {HOT_S1_OUT}")
+        print(f"wrote {READ_OUT} (S1-R only)")
+        return
     run_hot_s16()
     run_read_m1()
     print(f"wrote {HOT_OUT}")
