@@ -405,7 +405,9 @@ def fig_tradeoff() -> None:
                 fontsize=8.8, color=RED, ha="left")
 
     for i, r in enumerate(rows, 1):
-        if r["key"] == "S16":
+        if r["key"] == "S28S":
+            c, s = "#b8bec6", 90
+        elif r["key"] == "S16":
             c, s = RED, 160
         elif r["key"] == "S0":
             c, s = BLUE, 130
@@ -420,14 +422,15 @@ def fig_tradeoff() -> None:
         dx, dy = ((0, 9), (-10, 3), (10, 3), (0, -12))[i % 4]
         ax.annotate(str(i), xy=(r["cov"], r["bw"]), xytext=(dx, dy),
                     textcoords="offset points", fontsize=8.6, ha="center",
-                    color=INK, fontweight="bold")
+                    color="#8b939e" if r["key"] == "S28S" else INK,
+                    fontweight="bold")
 
     ax.set_xlim(-0.012, 0.385)
     ax.set_ylim(lo, 6.62)
     ax.set_xlabel(f"不均衡度 CoV = 十核 {dk['meta']['bin_w']} 拍窗带宽的标准差 / 均值"
                   "（0 = 完全均等）→")
     ax.set_ylabel("总写带宽 R  flit/cycle")
-    ax.set_title("红线是理论上限；全部官方 K=20000 方案",
+    ax.set_title("红线是理论上限；12 个候选 + S28S 参考点（灰）",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25)
     ax.legend(fontsize=8.5, loc="center right")
@@ -443,15 +446,23 @@ def fig_tradeoff() -> None:
                  fontweight="bold")
     front = {"S16", "S0"}
     for i, r in enumerate(rows, 1):
-        col = RED if r["key"] in front else (GREEN if r["key"] in new else INK)
+        if r["key"] == "S28S":
+            col = "#8b939e"
+        elif r["key"] in front:
+            col = RED
+        elif r["key"] in new:
+            col = GREEN
+        else:
+            col = INK
         y = 0.935 - i * step
-        vals = (str(i), r["name"], f"{r['cov']:.4f}", f"{r['bw']:.3f}", "")
+        lab = r["name"] + ("（参考）" if r["key"] == "S28S" else "")
+        vals = (str(i), lab, f"{r['cov']:.4f}", f"{r['bw']:.3f}", "")
         for (x, _), al, v in zip(cols, aligns, vals):
             key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
     key.text(0.0, 0.935 - (len(rows) + 1.25) * step,
              "点到红线的竖直距离 = 同等不均衡度下损失的带宽。\n"
              "红线在 CoV 坐标下是直线 R* + κ·CoV（κ = 2.18）。\n"
-             "绿点 = 本次补齐的四类；I-tag 只是 S0 调参。",
+             "绿点 = 本次补齐；灰 = S28S 静态等分，不入选。",
              fontsize=8.6, color="#5b636d", va="top")
 
     save(fig, "16-tradeoff.png")
@@ -520,14 +531,15 @@ def fig_pareto() -> None:
 
     for i, r in enumerate(rows, 1):
         x, y = max(r["hw_cost"], 1), r["phi"]
-        c = _front_color(r["name"], n1, n2)
-        s = 150 if r["name"] in n1 else 130 if r["name"] in n2 else 80
+        ref = r["name"].startswith("S28S")
+        c = "#b8bec6" if ref else _front_color(r["name"], n1, n2)
+        s = 90 if ref else (150 if r["name"] in n1 else 130 if r["name"] in n2 else 80)
         ax.scatter(x, y, s=s, c=c, marker="o", zorder=3, edgecolors="k",
                    linewidths=0.6)
         dx, dy = ((0, 10), (-11, 3), (11, 3), (0, -14))[i % 4]
         ax.annotate(str(i), xy=(x, y), xytext=(dx, dy),
                     textcoords="offset points", fontsize=9, ha="center",
-                    color=INK, fontweight="bold")
+                    color="#8b939e" if ref else INK, fontweight="bold")
 
     f1pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f1]
     f2pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f2]
@@ -562,9 +574,13 @@ def fig_pareto() -> None:
         key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
                  fontweight="bold")
     for i, r in enumerate(rows, 1):
-        col = RED if r["name"] in n1 else AMBER if r["name"] in n2 else INK
+        ref = r["name"].startswith("S28S")
+        col = ("#8b939e" if ref else
+               RED if r["name"] in n1 else AMBER if r["name"] in n2 else INK)
         nm = r["name"]
         nm = nm if len(nm) <= 22 else nm[:21] + "…"
+        if ref:
+            nm = "S28S 参考"
         y = 0.935 - i * step
         vals = (str(i), nm, f"{r['phi']:.4f}", f"{r['cov']:.4f}",
                 f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
@@ -575,90 +591,157 @@ def fig_pareto() -> None:
 
 
 # --------------------------------------------------------------- slide 21
+def _hot_row(rows: list, prefix: str) -> dict:
+    return next(r for r in rows if r["name"].startswith(prefix))
+
+
 def fig_hot() -> None:
-    """Non-uniform traffic, same φ as the uniform hardware Pareto.
+    """Hot traffic: two outstanding caps, two axes (R/R* and CoV). No φ.
 
-    R* is this pattern's own equal-rate / max-total point (they coincide
-    under hot). κ is the deck-wide exchange rate so both Pareto charts
-    share one y-axis definition: φ = (R − κ·CoV) / R*.
-
-    κ is borrowed from uniform's LP frontier and is not hot's own shadow
-    price: r_fair == r_max here, so hot's frontier is flat and κ_hot = 0,
-    i.e. fairness is free under this pattern. φ therefore overcharges CoV
-    on this chart, and the ranking is not transferable — under κ_hot = 0
-    (φ collapsing to bw_vs_ideal, already tabulated in the key) S19/S20 go
-    from 18th/19th to 1st/2nd. The slide band states this.
+    Under hot, r_fair == r_max so κ_hot = 0: fairness is free and a borrowed
+    uniform κ would invert the ranking. The architect question is whether the
+    completer still has tracker headroom when 10 × outstanding lands on two HAs.
     """
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
-    cap = str(deck()["meta"]["core_outstanding"])
-    rows = d["passes"][cap] if "passes" in d else d["rows"]
-    # t_inj=2 / hold=2 is the same I-tag mechanism already present in S0,
-    # not an independently buildable controller, so it is a parameter point
-    # rather than a scheme on the hardware Pareto chart.
-    rows = [r for r in rows if not r["name"].startswith("I-tag")]
     r_star = d["ideal"]["r_fair"]
-    kappa = _metric()["kappa"]
-    for r in rows:
-        r["cov"] = j2cov(r["jain_bin"])
-        r["phi"] = r["bw_vs_ideal"] - kappa * r["cov"] / r_star
-        r["eta"] = r["u"] = r["phi"]
-    rows = sorted(rows, key=lambda r: -r["phi"])
-    f1, f2, n1, n2 = _two_fronts(rows)
-
-    fig = plt.figure(figsize=(9.9, 6.3))
-    ax = fig.add_axes([0.090, 0.115, 0.450, 0.745])
-    key = fig.add_axes([0.590, 0.02, 0.400, 0.94])
-    key.axis("off")
-
-    for i, r in enumerate(rows, 1):
-        x, y = max(r["hw_cost"], 1), r["phi"]
-        c = _front_color(r["name"], n1, n2)
-        s = 150 if r["name"] in n1 else 130 if r["name"] in n2 else 80
-        ax.scatter(x, y, s=s, c=c, zorder=3, edgecolors="k", linewidths=0.6)
-        dx, dy = ((0, 10), (-11, 3), (11, 3), (0, -14))[i % 4]
-        ax.annotate(str(i), xy=(x, y), xytext=(dx, dy),
-                    textcoords="offset points", fontsize=9, ha="center",
-                    color=INK, fontweight="bold")
-    f1pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f1]
-    f2pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f2]
-    ax.plot([p[0] for p in f1pts], [p[1] for p in f1pts], "--", c=RED, lw=1.4,
-            alpha=0.85, label="Pareto 前沿  " + "、".join(_short_scheme(r["name"]) for r in f1))
-    ax.plot([p[0] for p in f2pts], [p[1] for p in f2pts], "--", c=AMBER, lw=1.3,
-            alpha=0.85, label="次前沿  " + "、".join(_short_scheme(r["name"]) for r in f2))
-    s0 = next(r["phi"] for r in rows if r["name"].startswith("S0"))
-    ax.axhline(s0, c=GREY, ls="-.", lw=1.1, label=f"S0 基线 φ = {s0:.3f}")
-    ax.set_xscale("log")
-    ax.set_xlim(0.6, 4e6)
-    lo, hi = min(r["phi"] for r in rows), max(r["phi"] for r in rows)
-    ax.set_ylim(lo - 0.10, hi + 0.12)
-    ax.set_xlabel("新增硬件状态（FF 等效，对数轴）→ 越贵")
-    ax.set_ylabel(f"φ = (R − κ·CoV) / R*，κ = {kappa:.2f}，R* = {r_star:.4f}")
-    ax.set_title("固定非均匀流量（十个核全写 HA 11/13）：纵轴改为 φ\n"
-                 f"每核在飞上限 = {cap}，K = {d['k']}；理想 φ = 1 在本图上方",
-                 fontsize=12, fontweight="bold")
-    ax.grid(alpha=0.25, which="both")
-    ax.legend(fontsize=8.0, loc="upper left")
-
-    cols = ((0.00, "#"), (0.050, "方案（按 φ 降序）"), (0.500, "φ"),
-            (0.640, "CoV"), (0.800, "带宽/R*"), (1.00, "FF 等效"))
-    aligns = ("left", "left", "right", "right", "right", "right")
-    key.text(0.0, 0.985, "图例　红=前沿　橙=次前沿", fontsize=11,
-             fontweight="bold", color=INK, va="top")
-    step, pt = _key_metrics(len(rows))
-    for (x, t), al in zip(cols, aligns):
-        key.text(x, 0.935, t, fontsize=pt, color="#5b636d", va="top", ha=al,
-                 fontweight="bold")
-    for i, r in enumerate(rows, 1):
-        col = RED if r["name"] in n1 else AMBER if r["name"] in n2 else INK
-        nm = r["name"]
-        nm = nm if len(nm) <= 18 else nm[:17] + "…"
-        y = 0.935 - i * step
-        vals = (str(i), nm, f"{r['phi']:.3f}", f"{r['cov']:.3f}",
-                f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
-        for (x, _), al, v in zip(cols, aligns, vals):
-            key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
-
+    picks = (
+        ("S0 baseline", "S0", BLUE),
+        ("S16 grant withhold", "S16", RED),
+        ("S19 Swift", "S19", AMBER),
+        ("S22 deficit-yield STOCK", "S22", GREY),
+        ("S29 scheduled reservation", "S29", INK),
+        ("S28S explicit rate equal-share", "S28S", "#b8bec6"),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(13.4, 5.35))
+    for ax, cap, title in (
+        (axes[0], "128", "outstanding = 128（全文口径）"),
+        (axes[1], "32", "outstanding = 32（对照：压到 tracker 之内）"),
+    ):
+        src = d["passes"][cap]
+        names, bws, covs, cols = [], [], [], []
+        for prefix, short, col in picks:
+            r = _hot_row(src, prefix)
+            names.append(short)
+            bws.append(r["bw_vs_ideal"])
+            covs.append(j2cov(r["jain_bin"]))
+            cols.append(col)
+        xs = list(range(len(names)))
+        ax.bar(xs, bws, color=cols, width=0.62, zorder=3, edgecolor="k",
+               linewidth=0.4)
+        ax.axhline(1.0, color=RED, ls="--", lw=1.2, zorder=2,
+                   label=f"R* = {r_star:.1f}")
+        for x, bw, cov in zip(xs, bws, covs):
+            ax.text(x, bw + 0.018, f"{100 * bw:.1f}%", ha="center", va="bottom",
+                    fontsize=8.2, color=INK, fontweight="bold")
+        ax.set_ylim(0.0, 1.22)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(names, fontsize=10)
+        ax.set_ylabel("总写带宽 / R*")
+        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.grid(axis="y", alpha=0.22)
+        bx = ax.twinx()
+        bx.plot(xs, covs, "o", color="#5b2085", ms=8, zorder=5)
+        bx.set_ylim(0.0, 1.55)
+        bx.set_ylabel("100 拍窗 CoV", color="#5b2085")
+        bx.tick_params(axis="y", colors="#5b2085")
+        for x, cov in zip(xs, covs):
+            bx.annotate(f"{cov:.2f}", (x, cov), xytext=(0, 7),
+                        textcoords="offset points", ha="center", fontsize=7.6,
+                        color="#5b2085")
+    axes[0].legend(fontsize=8.4, loc="upper right")
+    fig.suptitle("hot（十核全写 HA 11 / 13）：φ 在此 pattern 下无效（κ_hot = 0），"
+                 "直接读 R/R* 与 CoV",
+                 fontsize=13, fontweight="bold")
+    fig.text(0.50, 0.012,
+             "灰柱 S28S = hop 静态等分，仅作参考、不入选。"
+             "紫点 = CoV（右轴）。oc = 128 时 10×128 压到 2 个 HA，S16 带宽掉到 57.8% R*；"
+             "oc = 32 时 S16 = 99.7% R*、CoV 0.071。",
+             ha="center", fontsize=8.6, color=GREY)
+    fig.tight_layout(rect=(0, 0.045, 1, 0.93))
     save(fig, "20-hot-pareto.png")
+
+
+def fig_var_decomp() -> None:
+    """Between-core vs within-core variance of 100-cycle per-core rates."""
+    w = deck()["write"]
+    order = ["S16", "S22", "S29", "S1", "ITAG", "S0", "S1T", "S19", "S20",
+             "S28", "S26", "S27"]
+    fig, ax = plt.subplots(figsize=(12.6, 5.55))
+    ys = list(range(len(order)))[::-1]
+    for y, nm in zip(ys, order):
+        reg = w[nm]["regular"]
+        vb, vw = reg["var_between"], reg["var_within"]
+        col_b = RED if nm == "S16" else AMBER if nm in ("S22", "S29") else BLUE if nm == "S0" else GREY
+        ax.barh([y], [vb], color=col_b, height=0.62, zorder=3)
+        ax.barh([y], [vw], left=[vb], color="#d5dbe3", height=0.62, zorder=2)
+        ax.text(vb + vw + 8, y,
+                f"核间 {vb:.1f}  ·  核内 {vw:.1f}  ·  核内占比 {100 * reg['within_share']:.0f}%",
+                va="center", fontsize=8.2, color=INK)
+    ax.set_yticks(ys)
+    ax.set_yticklabels([f"{nm}  max/min {w[nm]['max_min']:.3f}" for nm in order],
+                       fontsize=9.2)
+    ax.set_xlabel("100 拍窗每核速率的方差（flit/箱）²")
+    ax.set_xlim(0, 920)
+    ax.set_title("方差分解：搬份额压核间，整时机压核内 —— 两者不是同一件事",
+                 fontsize=13, fontweight="bold")
+    ax.barh([], [], color=RED, label="核间方差（长期份额差）")
+    ax.barh([], [], color="#d5dbe3", label="核内方差（短窗抖动）")
+    ax.legend(fontsize=9.0, loc="lower right")
+    ax.grid(axis="x", alpha=0.22)
+    fig.tight_layout()
+    save(fig, "47-var-decomp.png")
+
+
+def fig_knob_grid() -> None:
+    """Eight first/second-front knobs on one page; shapes, not operating points."""
+    path = RES / "probe_ring2_front_knobs.json"
+    if not path.is_file():
+        print("skip fig_knob_grid: no probe_ring2_front_knobs.json")
+        return
+    sw = json.loads(path.read_text())
+    m = _metric()
+    r_fair, kappa, r_max = m["r_fair"], m["kappa"], m["r_max"]
+    sweeps = [s for s in sw["sweeps"] if s["name"] != "S28S"]
+    fig, axes = plt.subplots(2, 4, figsize=(15.2, 6.85), sharex=False, sharey=False)
+    xs = [x / 100 for x in range(0, 55)]
+    frontier = [min(r_max, r_fair + kappa * x) for x in xs]
+    for ax, swp in zip(axes.flat, sweeps):
+        nm = swp["name"]
+
+        def _key(r, _nm=nm):
+            v = r["val"]
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return 0.0
+
+        rows = sorted(swp["rows"], key=_key)
+        ax.plot(xs, frontier, color=RED, lw=1.15, alpha=0.75, zorder=1)
+        ax.plot([r["cov"] for r in rows], [r["thr"] for r in rows],
+                "-o", color=INK, lw=1.5, ms=4.2, zorder=4)
+        official = [r for r in rows
+                    if abs(float(r["val"]) - float(swp["anchor"])) < 1e-9]
+        if official:
+            o = official[0]
+            ax.scatter([o["cov"]], [o["thr"]], s=90, marker="*", color=RED,
+                       zorder=6, edgecolors="k", linewidths=0.4)
+        ax.set_title(FRONT_KNOB_TITLE[nm], fontsize=10, fontweight="bold")
+        lo_c = min(r["cov"] for r in rows)
+        hi_c = max(r["cov"] for r in rows)
+        lo_r = min(r["thr"] for r in rows)
+        hi_r = max(r["thr"] for r in rows)
+        ax.set_xlim(max(-0.02, lo_c - 0.05), min(0.42, hi_c + 0.07))
+        ax.set_ylim(max(0.4, lo_r - 0.35), min(6.55, hi_r + 0.28))
+        ax.grid(alpha=0.22)
+        ax.tick_params(labelsize=7.2)
+    axes[0, 0].set_ylabel("总写带宽 R")
+    axes[1, 0].set_ylabel("总写带宽 R")
+    for ax in axes[1]:
+        ax.set_xlabel("100 拍窗 CoV")
+    fig.suptitle(f"前沿 / 次前沿各扫一个旋钮（K = {sw['k']}）：看轨迹形状，不据此选官方点",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    save(fig, "48-knob-grid.png")
 
 
 # ------------------------------------------------------- schematic helpers
@@ -2031,10 +2114,12 @@ def fig_metric() -> None:
            "S19": (6, 5), "S20": (-30, 5), "S28S": (6, -12), "S27": (6, -12)}
     for nm in show:
         s = m["schemes"][nm]
-        col = RED if nm == "S16" else BLUE if nm == "S0" else AMBER if nm == "S1" else INK
+        col = ("#8b939e" if nm == "S28S" else
+               RED if nm == "S16" else BLUE if nm == "S0" else AMBER if nm == "S1" else INK)
         ax.scatter([s["cov"]], [s["bw"]], s=54, color=col, edgecolors="k",
                    linewidths=0.5, zorder=6)
-        ax.annotate(nm, (s["cov"], s["bw"]), xytext=off[nm], textcoords="offset points",
+        ax.annotate(nm + (" 参考" if nm == "S28S" else ""),
+                    (s["cov"], s["bw"]), xytext=off[nm], textcoords="offset points",
                     fontsize=8.6, color=col, fontweight="bold")
     ax.scatter([0], [r_fair], s=90, facecolors="white", edgecolors=RED, linewidths=1.6,
                zorder=5)
@@ -2130,7 +2215,7 @@ def fig_one_front_knob(swp: dict, m: dict) -> None:
         o = official[0]
         ax.scatter([o["cov"]], [o["thr"]], s=160, marker="*", color=RED,
                    zorder=6, edgecolors="k", linewidths=0.5,
-                   label="第 28 / 29 页工作点")
+                   label="筛选轮工作点")
     ax.set_xlabel("100 拍窗 CoV（越左越均衡）")
     ax.set_ylabel("总写带宽 R  flit/cycle")
     kt = f"（K = {swp['k']}）" if swp.get("k") is not None else ""
@@ -2256,7 +2341,7 @@ def fig_metric_knobs() -> None:
     axes[2, 0].set_ylabel("总写带宽 R  flit/cycle")
     for ax in (axes[2, 0], axes[2, 1], axes[2, 2]):
         ax.set_xlabel("100 拍窗 CoV")
-    fig.suptitle("13 个方案各自扫一个旋钮：每条曲线是该方案自己的调参轨迹",
+    fig.suptitle("12 个候选 + S28S 参考点：各自扫一个旋钮的调参轨迹（K = 筛选轮）",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     save(fig, "43-metric-knobs.png")
@@ -2297,14 +2382,14 @@ def fig_finish_all() -> None:
                   "斜率 = 该核的瞬时带宽；十条线越贴合、\n"
                   "最晚 / 最早 越接近 1，长期公平越好。\n"
                   "S1U / S1D 与 S1 / S0 逐拍相同，不重复画。\n"
-                  "S28S 等分速率不适用于动态非均匀流量，未画。",
+                  "S28S 静态等分仅作参考，不入选、未画。",
                   fontsize=8.6, color=INK, va="top", transform=flat[-1].transAxes,
                   linespacing=1.35)
     for ax in axes[:, 0]:
         ax.set_ylabel("进度 / 配额", fontsize=8.5)
     for ax in axes[2, :]:
         ax.set_xlabel("cycle", fontsize=8.5)
-    fig.suptitle("十二个方案的各核完成时间曲线（uniform 写，K = 20000，同一 fabric）",
+    fig.suptitle("十二个候选的各核完成时间曲线（uniform 写，K = 20000，同一 fabric）",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     save(fig, "44-finish-all.png")
@@ -2360,6 +2445,8 @@ def main() -> None:
     fig_metric()
     fig_metric_knobs()
     fig_front_knobs()
+    fig_knob_grid()
+    fig_var_decomp()
     fig_finish_all()
     fig_finish_spread()
     fig_saturation()
