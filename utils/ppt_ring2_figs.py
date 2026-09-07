@@ -511,26 +511,27 @@ def _front_color(name: str, n1: set, n2: set) -> str:
 
 
 def fig_pareto() -> None:
-    """Numbered markers plus a key column: readable at projector distance."""
+    """Benefit = distance to the ideal controller (1 − φ), vs hardware cost."""
     reg = json.loads((RES / "pareto_ring2_cc.json").read_text())
     ideal = reg["ideal"]
     kappa = _metric()["kappa"]
-    # Score every screened point with phi = (R - kappa*CoV)/R*; frontier()
-    # ranks on the "eta" key, so overwrite it with phi.
+    # 收益 = 1 − φ = L1 distance to (R*, CoV=0) in κ-units, / R*.
+    # frontier() maximises "eta"; keep eta = φ so the front is unchanged.
     for r in reg["schemes"]:
         r["cov"] = j2cov(r["jain_bin"])
         r["phi"] = r["bw_vs_ideal"] - kappa * r["cov"] / ideal["bw"]
+        r["gain"] = 1.0 - r["phi"]
         r["eta"] = r["phi"]
-    rows = sorted(reg["schemes"], key=lambda r: -r["phi"])
+    rows = sorted(reg["schemes"], key=lambda r: r["gain"])
     f1, f2, n1, n2 = _two_fronts(reg["schemes"])
 
     fig = plt.figure(figsize=(9.9, 6.3))
-    ax = fig.add_axes([0.085, 0.105, 0.455, 0.760])
+    ax = fig.add_axes([0.105, 0.105, 0.440, 0.760])
     key = fig.add_axes([0.585, 0.02, 0.405, 0.94])
     key.axis("off")
 
     for i, r in enumerate(rows, 1):
-        x, y = max(r["hw_cost"], 1), r["phi"]
+        x, y = max(r["hw_cost"], 1), r["gain"]
         ref = r["name"].startswith("S28S")
         c = "#b8bec6" if ref else _front_color(r["name"], n1, n2)
         s = 90 if ref else (150 if r["name"] in n1 else 130 if r["name"] in n2 else 80)
@@ -541,33 +542,34 @@ def fig_pareto() -> None:
                     textcoords="offset points", fontsize=9, ha="center",
                     color="#8b939e" if ref else INK, fontweight="bold")
 
-    f1pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f1]
-    f2pts = [(max(r["hw_cost"], 1), r["phi"]) for r in f2]
+    f1pts = [(max(r["hw_cost"], 1), r["gain"]) for r in f1]
+    f2pts = [(max(r["hw_cost"], 1), r["gain"]) for r in f2]
     ax.plot([p[0] for p in f1pts], [p[1] for p in f1pts], "--", c=RED, lw=1.4,
             alpha=0.85, label="Pareto 前沿  " + "、".join(_short_scheme(r["name"]) for r in f1))
     ax.plot([p[0] for p in f2pts], [p[1] for p in f2pts], "--", c=AMBER, lw=1.3,
             alpha=0.85, label="次前沿  " + "、".join(_short_scheme(r["name"]) for r in f2))
-    ax.axhline(1.0, c="#b34700", lw=1.6,
-               label=f"理想控制器 φ = 1.0（R* = {ideal['bw']:.4f} flit/cycle，CoV = 0）")
-    s0eta = next(r["phi"] for r in rows if r["name"].startswith("S0"))
-    ax.axhline(s0eta, c=GREY, ls="-.", lw=1.1,
-               label=f"S0 基线 φ = {s0eta:.3f}")
+    ax.axhline(0.0, c="#b34700", lw=1.6,
+               label=f"理想控制器 收益 = 0（R* = {ideal['bw']:.4f}，CoV = 0）")
+    s0g = next(r["gain"] for r in rows if r["name"].startswith("S0"))
+    ax.axhline(s0g, c=GREY, ls="-.", lw=1.1,
+               label=f"S0 基线 收益 = {s0g:.3f}")
 
     ax.set_xscale("log")
     ax.set_xlim(0.6, 4e6)
-    ax.set_ylim(0.14, 1.06)
+    ax.set_ylim(0.72, -0.04)
     ax.set_xlabel("新增硬件状态（FF 等效 = 折算成触发器个数，对数轴）→ 越贵")
-    ax.set_ylabel(f"φ = (R − κ·CoV) / R*，κ = {kappa:.2f}")
+    ax.set_ylabel(f"收益 = 到理想控制器的距离\n"
+                  f"1 − φ = (R* − R + κ·CoV) / R*，κ = {kappa:.2f}")
     ax.set_title("收益 — 硬件开销 Pareto（写，uniform，K=2000）\n"
-                 "φ 越高越接近理想控制器；红 = 前沿，橙 = 去掉前沿后再求的次前沿",
+                 "收益越小越接近理想；红 = 前沿，橙 = 去掉前沿后再求的次前沿",
                  fontsize=12, fontweight="bold")
     ax.grid(alpha=0.25, which="both")
-    ax.legend(fontsize=8.0, loc="lower left")
+    ax.legend(fontsize=7.8, loc="lower left")
 
-    cols = ((0.00, "#"), (0.050, "方案（按 φ 降序）"), (0.545, "φ"),
+    cols = ((0.00, "#"), (0.050, "方案（按收益升序）"), (0.545, "收益"),
             (0.675, "CoV"), (0.815, "带宽/R*"), (1.00, "FF 等效"))
     aligns = ("left", "left", "right", "right", "right", "right")
-    key.text(0.0, 0.985, "图例　红=前沿　橙=次前沿", fontsize=11,
+    key.text(0.0, 0.985, "图例　红=前沿　橙=次前沿　收益=距离", fontsize=11,
              fontweight="bold", color=INK, va="top")
     step, pt = _key_metrics(len(rows))
     for (x, t), al in zip(cols, aligns):
@@ -582,7 +584,7 @@ def fig_pareto() -> None:
         if ref:
             nm = "S28S 参考"
         y = 0.935 - i * step
-        vals = (str(i), nm, f"{r['phi']:.4f}", f"{r['cov']:.4f}",
+        vals = (str(i), nm, f"{r['gain']:.4f}", f"{r['cov']:.4f}",
                 f"{r['bw_vs_ideal']:.3f}", f"{r['hw_cost']:,}")
         for (x, _), al, v in zip(cols, aligns, vals):
             key.text(x, y, v, fontsize=pt, color=col, va="top", ha=al)
@@ -596,16 +598,17 @@ def _hot_row(rows: list, prefix: str) -> dict:
 
 
 def fig_hot() -> None:
-    """Hot traffic at outstanding=128. S16 uses overcommit=32.
+    """Hot traffic at outstanding=128, with the ideal controller as the ruler.
 
-    Under hot, r_fair == r_max so κ_hot = 0: fairness is free and a borrowed
-    uniform κ would invert the ranking. φ is not plotted.
+    Under hot, r_fair == r_max so κ_hot = 0. The ideal sits at R* = 2.0 and
+    CoV = 0 (200 write flits / 10 cores divides exactly). φ is not plotted.
     """
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
     r_star = d["ideal"]["r_fair"]
     src = d["passes"]["128"]
     s16p = RES / "probe_ring2_hot_s16_oc32.json"
     s16 = json.loads(s16p.read_text())["row"] if s16p.is_file() else None
+    gold = "#b34700"
     picks = (
         ("S0 baseline", "S0", BLUE),
         ("S16 grant withhold", "S16\noc=32", RED),
@@ -614,51 +617,54 @@ def fig_hot() -> None:
         ("S29 scheduled reservation", "S29", INK),
         ("S28S explicit rate equal-share", "S28S", "#b8bec6"),
     )
-    names, bws, covs, cols = [], [], [], []
+    names, thrs, covs, cols = ["理想"], [r_star], [0.0], [gold]
     for prefix, short, col in picks:
         if prefix.startswith("S16") and s16:
             r = s16
         else:
             r = _hot_row(src, prefix)
         names.append(short)
-        bws.append(r["bw_vs_ideal"])
+        thrs.append(float(r["thr"]))
         covs.append(j2cov(r["jain_bin"]))
         cols.append(col)
-    fig, ax = plt.subplots(figsize=(12.4, 5.35))
+
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(13.6, 4.85))
     xs = list(range(len(names)))
-    ax.bar(xs, bws, color=cols, width=0.62, zorder=3, edgecolor="k",
-           linewidth=0.4)
-    ax.axhline(1.0, color=RED, ls="--", lw=1.2, zorder=2,
-               label=f"R* = {r_star:.1f}")
-    for x, bw in zip(xs, bws):
-        ax.text(x, bw + 0.018, f"{100 * bw:.1f}%", ha="center", va="bottom",
-                fontsize=9.2, color=INK, fontweight="bold")
-    ax.set_ylim(0.0, 1.22)
+    ax.bar(xs, thrs, color=cols, width=0.62, zorder=3, edgecolor="k",
+           linewidth=0.45)
+    ax.axhline(r_star, color=gold, ls="--", lw=1.3, zorder=2,
+               label=f"理想 R* = {r_star:.1f}")
+    for x, thr, nm in zip(xs, thrs, names):
+        ax.text(x, thr + 0.045, f"{thr:.2f}", ha="center", va="bottom",
+                fontsize=9.0, color=gold if nm == "理想" else INK,
+                fontweight="bold")
+    ax.set_ylim(0.0, r_star * 1.22)
     ax.set_xticks(xs)
-    ax.set_xticklabels(names, fontsize=11)
-    ax.set_ylabel("总写带宽 / R*")
-    ax.set_title("outstanding = 128（全文口径）；S16 授权 overcommit = 32",
-                 fontsize=12, fontweight="bold")
+    ax.set_xticklabels(names, fontsize=10.5)
+    ax.set_ylabel("总写带宽  flit/cycle")
+    ax.set_title("总写带宽（理想 = R* = 2.0）", fontsize=12, fontweight="bold")
     ax.grid(axis="y", alpha=0.22)
-    bx = ax.twinx()
-    bx.plot(xs, covs, "o", color="#5b2085", ms=9, zorder=5)
-    bx.set_ylim(0.0, 1.55)
-    bx.set_ylabel("100 拍窗 CoV", color="#5b2085")
-    bx.tick_params(axis="y", colors="#5b2085")
-    for x, cov in zip(xs, covs):
-        bx.annotate(f"{cov:.3f}", (x, cov), xytext=(0, 8),
-                    textcoords="offset points", ha="center", fontsize=8.2,
-                    color="#5b2085")
-    ax.legend(fontsize=9.0, loc="upper right")
-    fig.suptitle("hot（十核全写 HA 11 / 13）：φ 在此 pattern 下无效（κ_hot = 0），"
-                 "直接读 R/R* 与 CoV",
+    ax.legend(fontsize=8.6, loc="upper right")
+
+    bx.bar(xs, covs, color=cols, width=0.62, zorder=3, edgecolor="k",
+           linewidth=0.45)
+    bx.axhline(0.0, color=gold, ls="--", lw=1.3, zorder=2,
+               label="理想 CoV = 0")
+    for x, c, nm in zip(xs, covs, names):
+        bx.text(x, c + 0.035, "0" if c == 0.0 else f"{c:.3f}",
+                ha="center", va="bottom", fontsize=9.0,
+                color=gold if nm == "理想" else INK, fontweight="bold")
+    bx.set_ylim(0.0, max(covs) * 1.22)
+    bx.set_xticks(xs)
+    bx.set_xticklabels(names, fontsize=10.5)
+    bx.set_ylabel("100 拍窗 CoV")
+    bx.set_title("瞬时不均衡（理想 = 0）", fontsize=12, fontweight="bold")
+    bx.grid(axis="y", alpha=0.22)
+    bx.legend(fontsize=8.6, loc="upper right")
+
+    fig.suptitle("hot（十核全写 HA 11 / 13）：理想控制器与各方案",
                  fontsize=13, fontweight="bold")
-    fig.text(0.50, 0.012,
-             "灰柱 S28S = hop 静态等分，仅作参考、不入选。紫点 = CoV（右轴）。"
-             "每核 outstanding 固定 128；S16 授权 oc = 32。"
-             "放宽授权几乎不动（仍 ≈ 58% R*），溢出在 REQ 进 tracker。",
-             ha="center", fontsize=8.8, color=GREY)
-    fig.tight_layout(rect=(0, 0.045, 1, 0.93))
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     save(fig, "20-hot-pareto.png")
 
 
@@ -2498,4 +2504,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1:
+        _use_cjk_font()
+        OUT.mkdir(parents=True, exist_ok=True)
+        for name in sys.argv[1:]:
+            fn = name if name.startswith("fig_") else f"fig_{name}"
+            globals()[fn]()
+    else:
+        main()

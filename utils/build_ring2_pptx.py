@@ -672,6 +672,41 @@ class Live:
     def phi(self, name: str, nd: int = 3) -> str:
         return f"{self.phif(name):.{nd}f}"
 
+    def gainf(self, name: str) -> float:
+        """Distance to the ideal controller: 1 − φ."""
+        return 1.0 - self.phif(name)
+
+    def gain(self, name: str, nd: int = 3) -> str:
+        return f"{self.gainf(name):.{nd}f}"
+
+    def closedf(self, name: str, vs: str = "S0") -> float:
+        d0 = self.gainf(vs)
+        return (d0 - self.gainf(name)) / d0 if d0 else 0.0
+
+    def closed(self, name: str, vs: str = "S0", nd: int = 0) -> str:
+        return f"{100.0 * self.closedf(name, vs):.{nd}f}%"
+
+    def ncores(self) -> int:
+        return int(self.d["meta"]["n_cores"])
+
+    def wflits(self) -> int:
+        return int(self.d["meta"]["w_flits"])
+
+    def icovf(self) -> float:
+        return _j2cov(self.d["ideal"]["jain_bin_ideal"])
+
+    def icov(self, nd: int = 4) -> str:
+        return f"{self.icovf():.{nd}f}"
+
+    def icoref(self) -> float:
+        return self.rstar / self.ncores()
+
+    def icore(self, nd: int = 4) -> str:
+        return f"{self.icoref():.{nd}f}"
+
+    def ims(self) -> int:
+        return int(round(self.kw * self.wflits() / self.icoref()))
+
     def triple(self, name: str) -> str:
         return f"{self.thr(name, 3)} / {self.cov(name)} / {self.mm(name)}"
 
@@ -812,6 +847,18 @@ class Live:
     def hot_s16_cov(self, nd: int = 3) -> str:
         r = self.hot_s16 or self._hot_row("128", "S16 grant")
         return f"{_j2cov(r['jain_bin']):.{nd}f}"
+
+    def hot_icovf(self) -> float:
+        n = int(self.hot_blob.get("ideal", {}).get("n_cores") or 10)
+        N = int(round(self.hot_rstar * 100))
+        if N <= 0 or N % n == 0:
+            return 0.0
+        return _j2cov((N * N) / (n * ((N % n) * (N // n + 1) ** 2
+                                      + (n - N % n) * (N // n) ** 2)))
+
+    def hot_icov(self, nd: int = 3) -> str:
+        v = self.hot_icovf()
+        return "0" if v == 0.0 else f"{v:.{nd}f}"
 
     def m1(self, name: str) -> dict:
         if name in self.read_m1:
@@ -965,7 +1012,7 @@ def slides(n: Live) -> list:
         "S1：机制、实测、信号消融 —— 54 点网格无点支配 S0",
         "设计空间：信号 × 控制点；空白格已核对无既有保留方案",
         "理论上界 R(CoV) 与单一标量 φ = (R − κ·CoV)/R*",
-        "可实现点：Pareto、hot、旋钮形状",
+        "可实现点：到理想的距离、hot、旋钮形状",
         "前沿方案：S16 / S22 / S29 的机制、微架构与实测",
         "结论：一项架构决策（HA 授权能不能改）",
         "附录 A 单旋钮扫描 · 附录 B 时间线走读"])),
@@ -1461,12 +1508,13 @@ def slides(n: Live) -> list:
 
     ("section", dict(
         no="06", kicker="SECTION SIX", title=["理论最优与", "各方案 Pareto"],
-        lead="先钉死「无限聪明、无限快的控制器最多能做到什么」，"
-             "再把实测方案摆进同一张图。",
+        lead="先钉死理想控制器的上限，"
+             "再把每个方案到它的距离定义为收益。",
         key_label="KEY MESSAGE",
-        key=f"一个无限聪明的拥塞控制器，最好也就是 {n.rstar:.4f} flit/cycle"
-            f"（S0 的 {100.0 * n.rstar / n.W('S0')['throughput']:.1f}%）"
-            "配 CoV ≈ 0。可争的总带宽只有约 3 个点，均衡那一侧才是主战场。")),
+        key=f"理想点是 R* = {n.rstar:.4f} flit/cycle、CoV ≈ 0。"
+            f"收益 = 到该点的距离 1 − φ；"
+            f"S0 收益 {n.gain('S0')}，S16 收益 {n.gain('S16')}。"
+            f"可争的总带宽只有约 3 个点，距离主要来自不均衡。")),
 
     ("triple", dict(
         chrome="理想拥塞控制器的上限",
@@ -1488,10 +1536,13 @@ def slides(n: Live) -> list:
                 "它就是「最公平」那一端的天花板，全篇的分母都是它。",
                 "瓶颈在环上的链路，不在注入或下环端口 —— 加深队列、加宽端口都抬不高它。"]),
             dict(t="理想控制器能做到什么", b=[
-                "100 拍箱内全环有 571.4 个写 flit，每核约 57.1 个。"
+                f"100 拍箱内全环有 {n.d['ideal']['flits_per_bin']:.1f} 个写 flit，"
+                f"每核约 {n.d['ideal']['flits_per_bin'] / n.ncores():.1f} 个。"
                 "一个确定性的理想控制器把箱内总量按整数尽量均分，得 "
-                "CoV_ideal = **0.0055**。",
-                "也就是说：**理论最优 = 5.7143 flit/cycle（S0 的 103.1%）配 CoV ≈ 0**。"
+                f"CoV_ideal = **{n.icov()}**。",
+                f"**理论最优 = {n.rstar:.4f} flit/cycle"
+                f"（S0 的 {100.0 * n.rstar / n.W('S0')['throughput']:.1f}%）配 CoV ≈ 0**。"
+                f"hot 下理想点见第 {{pg:hot}} 页；"
                 "整数粒度不构成任何限制。"])],
         band="适用范围：λ* = 2/7 是「fabric + 流量 pattern」的联合解，不是 fabric 常数。"
              "换成 hot 之后绑定资源从入环 hop 变成热簇的下环口，λ* 掉到 0.100、"
@@ -1500,53 +1551,58 @@ def slides(n: Live) -> list:
     ("figside", dict(
         _sid="pareto",
         chrome="收益 — 硬件开销 Pareto", img="18-pareto.png", fig_w=7.60,
-        caption="纵轴 φ = (R − κ·CoV)/R*：总带宽减去按理想汇率折成带宽的不均衡，再除以 R*，理想 = 1.0；"
-                "筛选轮 K = 2000，100 拍窗。横轴 FF‑eq = 等效触发器数。"
-                "红 = 前沿（同价无人能超）；橙 = 次前沿（去掉前沿后再求 Pareto）。",
-        kicker="FRONTIER + SECOND FRONT",
+        caption="纵轴收益 = 1 − φ = (R* − R + κ·CoV)/R*：每个方案到理想点 (R*, CoV = 0) 的距离。"
+                "理想 = 0，越小越近。筛选轮 K = 2000，100 拍窗。"
+                "红 = 前沿（同价无人更近）；橙 = 次前沿。",
+        kicker="DISTANCE TO THE IDEAL",
         blocks=[
-            dict(kind="card", t="前沿：S0 → S16", b=[
-                "筛选轮面积—φ：S0（0 FF‑eq，φ = 0.851）被 S16（900，φ = 0.906）支配。"
-                "再贵的点 φ 都超不过 S16，所以前沿只有这两点。",
-                f"官方 K={n.kw} 现算：S0 φ = {n.phi('S0')} → "
-                f"[[S16]] φ = **{n.phi('S16')}**。"],
-                 wt=1.15),
-            dict(kind="card", t="次前沿：S26 / I-tag / S22(w32)", accent=True, b=[
-                "去掉 S0、S16 再求 Pareto：S26（1,560，φ = 0.835）、"
-                "I-tag 调参（3,120，0.873）、S22 深队列（1,198,560，0.886）。",
-                "I-tag 不是独立机制，只是 S0 的 t_inj / hold 调参；"
-                "S22(w32) 用百万级 FF 换 0.886，仍低于 S16。"],
-                 wt=1.45),
+            dict(kind="card", t="收益 := 到理想控制器的距离", b=[
+                f"κ = {n.kappa:.3f} 把 CoV 折成带宽，和带宽缺口相加，再用 R* 归一。"
+                "本图所有点 R ≤ R*，所以 1 − φ 就是到 (R*, 0) 的 L1 距离。",
+                "理想控制器坐在 0。轴已倒置：越靠上越近。"],
+                 wt=1.10),
+            dict(kind="card", t="前沿：S0 → S16", accent=True, b=[
+                "筛选轮：S0（0 FF‑eq，收益 0.149）被 S16（900，收益 0.094）支配。"
+                "再贵的点都近不过 S16，前沿只有这两点。",
+                f"官方 K = {n.kw}：S0 收益 {n.gain('S0')} → "
+                f"[[S16]] **{n.gain('S16')}**，"
+                f"走完 S0 到理想距离的 {n.closed('S16')}。"],
+                 wt=1.35),
             dict(kind="band",
-                 text=f"官方点 S22 / S29 / S1 的 φ 为 {n.phi('S22')} / "
-                      f"{n.phi('S29')} / {n.phi('S1')}，都在两条前沿之外。",
-                 wt=0.64)])),
+                 text=f"次前沿筛选轮收益：S26 0.165 / I-tag 0.127 / S22(w32) 0.114。"
+                      f"官方点 S22 / S29 / S1 = {n.gain('S22')} / "
+                      f"{n.gain('S29')} / {n.gain('S1')}，都在两条前沿之外。",
+                 wt=0.70)])),
 
     ("figside", dict(
         _sid="hot",
-        chrome="hot 流量：φ 无效，直接读 R/R* 与 CoV", img="20-hot-pareto.png",
+        chrome="hot 流量：理想控制器与各方案", img="20-hot-pareto.png",
         fig_w=8.20,
-        caption="hot：十核全写 HA 11 / 13。R* = r_max = 2.0，κ_hot = 0，公平免费。"
-                "每核 outstanding 固定 128（全文口径）。S16 授权 overcommit = 32。"
-                "柱 = R/R*，紫点 = CoV。灰柱 S28S 仅作参考。K = 2000。",
+        caption="hot：十核全写 HA 11 / 13。金柱 = 理想控制器。"
+                f"总写带宽 R* = {n.hot_rstar:.1f} flit/cycle，"
+                f"100 拍 CoV = {n.hot_icov()}（200 flit 整除 10 核）。"
+                "κ_hot = 0，公平免费。每核 outstanding = 128；S16 授权 oc = 32。"
+                "灰柱 S28S 仅作参考。K = 2000。",
         kicker="CAPACITY FIRST, THEN FAIRNESS",
         blocks=[
-            dict(kind="card", accent=True, t="outstanding = 128，S16 授权 oc = 32", b=[
+            dict(kind="card", accent=True, t="hot 理想：R* = 2.0，CoV = 0", b=[
+                "绑定在热簇下环口，r_fair = r_max，κ_hot = 0。"
+                f"理想总写带宽 {n.hot_rstar:.1f} flit/cycle，"
+                f"100 拍 CoV {n.hot_icov()}。",
+                f"S19 带宽 {n.hot_bw('128', 'S19 Swift')} R* 但 CoV {n.hot_cov('128', 'S19 Swift')}；"
+                f"S0 = {n.hot_bw('128', 'S0 baseline')} / {n.hot_cov('128', 'S0 baseline')}。"],
+                 wt=1.25),
+            dict(kind="card", t="outstanding = 128，S16 授权 oc = 32", b=[
                 f"S16 带宽 {n.hot_s16_bw()} R*、CoV {n.hot_s16_cov()}，"
-                f"几乎等于官方 oc = 20 的 {n.hot_bw('128', 'S16 grant')}。"
-                f"同口径 S0 = {n.hot_bw('128', 'S0 baseline')}，"
-                f"S19 = {n.hot_bw('128', 'S19 Swift')}。",
-                "授权 oc 是 HA 同时在飞的 DBIDResp 上限，不是 per-core outstanding。"],
-                 wt=1.35),
-            dict(kind="card", t="放宽授权救不了 tracker", b=[
-                "10 × 128 = 1280 条 REQ 压到 2 个 HA，tracker 512 在授权之前就溢出。",
-                "oc 20 → 32 几乎不动柱高。要把 outstanding 压进 tracker "
-                f"（对照 outstanding = 32 时 S16 = {n.hot_bw('32', 'S16 grant')} R*）。"],
-                 wt=1.20),
+                f"几乎等于官方 oc = 20 的 {n.hot_bw('128', 'S16 grant')}。",
+                "10 × 128 压到 2 个 HA，tracker 512 先溢出；"
+                f"oc 提到 32 几乎不动（对照 outstanding = 32 时 "
+                f"S16 = {n.hot_bw('32', 'S16 grant')} R*）。"],
+                 wt=1.30),
             dict(kind="band",
-                 text="φ 在本 pattern 下无效（κ_hot = 0），只读 R/R* 与 CoV。"
+                 text="φ 在本 pattern 下无效，只读总写带宽与 CoV。"
                       "S16 失效条件 = 每核 outstanding × 热簇核数 > HA tracker。",
-                 wt=0.70)])),
+                 wt=0.60)])),
 
     ("figside", dict(
         _sid="knob_grid",
