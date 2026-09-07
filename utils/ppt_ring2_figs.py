@@ -581,6 +581,13 @@ def fig_hot() -> None:
     R* is this pattern's own equal-rate / max-total point (they coincide
     under hot). κ is the deck-wide exchange rate so both Pareto charts
     share one y-axis definition: φ = (R − κ·CoV) / R*.
+
+    κ is borrowed from uniform's LP frontier and is not hot's own shadow
+    price: r_fair == r_max here, so hot's frontier is flat and κ_hot = 0,
+    i.e. fairness is free under this pattern. φ therefore overcharges CoV
+    on this chart, and the ranking is not transferable — under κ_hot = 0
+    (φ collapsing to bw_vs_ideal, already tabulated in the key) S19/S20 go
+    from 18th/19th to 1st/2nd. The slide band states this.
     """
     d = json.loads((RES / "probe_ring2_hotbw.json").read_text())
     cap = str(deck()["meta"]["core_outstanding"])
@@ -1748,7 +1755,7 @@ def _cum_curves(ax, row: dict, cores: list[int], total: int, title: str,
     ax.grid(alpha=0.22)
     ax.tick_params(labelsize=fs - 1)
     if legend:
-        ax.legend(fontsize=fs - 1, loc="upper left")
+        pass  # caller draws a figure-level legend so it does not cover 1.0
 
 
 SLOW = {0, 8, 10, 18}
@@ -1808,7 +1815,7 @@ def fig_s1_signal() -> None:
     ax.bar([x - 0.2 for x in xs], up, width=0.4, color=AMBER, label="上环失败（全程累计）")
     ax.bar([x + 0.2 for x in xs], dn, width=0.4, color=GREEN, label="下环失败（全程累计）")
     ax.set_yscale("log")
-    ax.set_ylim(0.3, 3e7)
+    ax.set_ylim(0.3, 1e8)
     ax.set_xticks(xs)
     ax.set_xticklabels([f"C{c}" for c in cores], fontsize=8.5)
     ax.set_ylabel("S1 每核的两路原始信号（对数轴）")
@@ -1816,15 +1823,13 @@ def fig_s1_signal() -> None:
     down_all = sum(int(v) for v in ss["down"].values())
     down_lv = sum(int(v) for v in ss["down_lv"].values())
     up_lv = sum(int(v) for v in ss["up_lv"].values())
-    ax.set_title(f"S1 信号来源：上环 {sum(up):,} 次 vs 下环 "
-                 f"{down_all:,} 次", fontsize=11.5, fontweight="bold")
-    ax.text(0.02, 0.96,
-            f"{n_win} 个 64 拍窗：上环等级>0 的窗 {up_lv:,} 个；"
-            f"下环等级>0 的窗 {down_lv:,} 个\n"
-            f"柱 = 核侧 down 信号（含 leave FIFO 占用>1）；"
-            f"全程 n_down_fail={_down_fail(w['S1']):,}",
-            transform=ax.transAxes, fontsize=8.2, color=INK, va="top")
-    ax.legend(fontsize=8.4, loc="upper right", bbox_to_anchor=(1.0, 0.78))
+    ax.set_title(f"S1 信号来源：上环 {sum(up):,} vs 下环 {down_all:,}",
+                 fontsize=11.0, fontweight="bold")
+    ax.legend(fontsize=8.4, loc="upper right", framealpha=0.92)
+    fig.text(0.50, 0.012,
+             f"{n_win} 个 64 拍窗：上环等级>0 {up_lv:,} · 下环等级>0 {down_lv:,}"
+             f" · n_down_fail={_down_fail(w['S1']):,}",
+             fontsize=8.2, color=GREY, ha="center")
     ax.grid(axis="y", alpha=0.22)
     if d_eq and u_eq:
         head = "S1 的拥塞等级仍由上环失败驱动：只计下环 = S0，只计上环 = S1"
@@ -1833,7 +1838,7 @@ def fig_s1_signal() -> None:
     else:
         head = "S1 信号拆分：只计下环 / 只计上环 / 两者都计"
     fig.suptitle(head, fontsize=13, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.tight_layout(rect=(0, 0.045, 1, 0.94))
     save(fig, "38-s1-signal.png")
 
 
@@ -2259,11 +2264,11 @@ def fig_metric_knobs() -> None:
 
 # ------------------------------------------------- completion curves (item 5)
 FINISH_ORDER = ["S0", "S1", "S1T", "S16", "ITAG", "S19", "S20", "S22", "S26", "S27",
-                "S28", "S28S", "S29"]
+                "S28", "S29"]
 FINISH_LABEL = {"S0": "S0 基线", "S1": "S1 AIMD", "S1T": "S1T 分向", "S16": "S16 授权保留",
                 "ITAG": "S0 I-tag 调参", "S19": "S19 Swift", "S20": "S20 DCTCP",
                 "S22": "S22 赤字让路", "S26": "S26 自适应路由", "S27": "S27 逐跳背压",
-                "S28": "S28 显式速率", "S28S": "S28S 等分速率", "S29": "S29 日历让路"}
+                "S28": "S28 显式速率", "S29": "S29 日历让路"}
 
 
 def fig_finish_all() -> None:
@@ -2291,14 +2296,15 @@ def fig_finish_all() -> None:
                   "蓝 = 其余六核。\n\n"
                   "斜率 = 该核的瞬时带宽；十条线越贴合、\n"
                   "最晚 / 最早 越接近 1，长期公平越好。\n"
-                  "S1U / S1D 与 S1 / S0 逐拍相同，不重复画。",
+                  "S1U / S1D 与 S1 / S0 逐拍相同，不重复画。\n"
+                  "S28S 等分速率不适用于动态非均匀流量，未画。",
                   fontsize=8.6, color=INK, va="top", transform=flat[-1].transAxes,
                   linespacing=1.35)
     for ax in axes[:, 0]:
         ax.set_ylabel("进度 / 配额", fontsize=8.5)
     for ax in axes[2, :]:
         ax.set_xlabel("cycle", fontsize=8.5)
-    fig.suptitle("十三个方案的各核完成时间曲线（uniform 写，K = 20000，同一 fabric）",
+    fig.suptitle("十二个方案的各核完成时间曲线（uniform 写，K = 20000，同一 fabric）",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     save(fig, "44-finish-all.png")

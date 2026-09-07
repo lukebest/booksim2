@@ -364,13 +364,23 @@ def s_media(prs, d):
     cwid = (CW - 2 * 0.26) / 3
     ch = row_h(cards, cwid, 13, 11, 0.22, 2.45, floor_h=1.5) if cards else 0.0
     fig_h = (BOT - y - ch - 0.78) if cards else (BOT - y - 0.40)
-    sw = 2.60
+    sw = 2.72
     kicker(s, ML, y, sw, d["kicker"], pt=10.5)
-    textbox(s, ML, y + 0.34, sw, 0.78, [d["stat"]], 40, RED, bold=True,
-            font=FONT_EN)
-    autotext(s, ML, y + 1.20, sw, 0.72, d["stat_sub"], 11.5, MUTED, lsp=1.06)
-    rule(s, ML, y + 2.04, 0.90)
-    fx = ML + sw + 0.42
+    stat = d["stat"]
+    stat_lines = stat if isinstance(stat, list) else [stat]
+    if len(stat_lines) == 1:
+        stat_h = 0.88 if _units(stat_lines[0]) * 32 / 72 > sw else 0.70
+    else:
+        stat_h = min(1.24, 0.20 + 0.36 * len(stat_lines))
+    autotext(s, ML, y + 0.30, sw, stat_h, stat_lines, 34, RED, bold=True,
+             floor=15, font=FONT_EN, lsp=0.94)
+    sub = d["stat_sub"]
+    sub_lines = sub if isinstance(sub, list) else [sub]
+    sub_y = y + 0.30 + stat_h + 0.10
+    sub_h = 0.78
+    autotext(s, ML, sub_y, sw, sub_h, sub_lines, 11.5, MUTED, lsp=1.06, floor=8)
+    rule(s, ML, min(sub_y + sub_h + 0.08, y + fig_h - 0.10), 0.90)
+    fx = ML + sw + 0.36
     fw = W - ML - fx
     _, _, _, dh = image(s, IMG / d["img"], fx, y, fw, fig_h)
     autotext(s, fx, y + (fig_h + dh) / 2 + 0.10, fw, 0.32, [d["caption"]], 10,
@@ -784,11 +794,6 @@ FRONT_KNOB_META = {
              "均衡开着，tol 冻在 0.02。",
         why="比的是总线上的实测达成量，不是 λ*。扫 tol 在此工作点完全不动，"
             "所以改扫会动 (R, CoV) 的 headroom。"),
-    "S28S": dict(
-        chrome="S28S：扫 hop 目标占用 target", kicker="SECOND FRONT · rcp_target",
-        which="第 29 页次前沿（12,680 FF‑eq）",
-        knob="rcp_target：每个 hop 静态等分时的占用目标 C，份额 = C / N。",
-        why="N 是本窗穿过该 hop 的核数，无目的地先验、无 λ*。"),
 }
 
 
@@ -800,6 +805,8 @@ def _front_knob_slides() -> list:
     blob = json.loads(path.read_text())
     out = []
     for swp in blob["sweeps"]:
+        if swp["name"] == "S28S":
+            continue
         meta = FRONT_KNOB_META[swp["name"]]
         rows = list(swp["rows"])
         anchor = next((r for r in rows
@@ -824,8 +831,8 @@ def _front_knob_slides() -> list:
                     f"CoV 从 {lo_c:.3f} 到 {hi_c:.3f}。",
                     star + "。"], wt=1.25),
                 dict(kind="band",
-                     text="第 28 / 29 页前沿 + 次前沿里没有写死 λ* 的方案"
-                          "（S24 / S25 已撤回），所以这一组一个都没剔除。",
+                     text="第 28 / 29 页前沿 + 次前沿里，S24 / S25 因写死 λ* 已撤回；"
+                          "S28S 是 hop 静态等分，不适用于动态非均匀流量，不收录。",
                      wt=0.70)])))
     return out
 
@@ -1103,8 +1110,8 @@ def slides(n: Live) -> list:
     ("media", dict(
         chrome="S1 信号细分：只计上环失败 / 只计下环失败 / 两者都计",
         kicker="S1 SIGNAL SPLIT",
-        stat=f"{s1_defl:,} / {s1_fail:,}",
-        stat_sub=["S1 全程下环失败 / 上环失败",
+        stat=[f"{s1_defl:,}", f"/ {s1_fail:,}"],
+        stat_sub=["下环失败 / 上环失败（S1 全程）",
                   f"下环 = 真偏转 {s1_ring_defl:,} + FIFO 占用>1  {s1_occ:,}"],
         img="38-s1-signal.png",
         caption="四根柱 = S0 / S1D（只计下环）/ S1U（只计上环）/ S1（都计），K = 20000 uniform 写；"
@@ -1132,10 +1139,10 @@ def slides(n: Live) -> list:
     ("media", dict(
         chrome="S1 信号细分：各核完成时间曲线",
         kicker="PER-CORE COMPLETION",
-        stat=f"{n.frat('S1D')} → {n.frat('S1U')}",
-        stat_sub=[("十核完成时间 最晚 / 最早：S1D（= S0）→ S1U（= S1）"
+        stat=[n.frat("S1D"), f"→ {n.frat('S1U')}"],
+        stat_sub=[("最晚 / 最早：S1D（= S0）→ S1U（= S1）"
                    if (s1d_eq and s1u_eq)
-                   else "十核完成时间 最晚 / 最早：S1D → S1U"),
+                   else "最晚 / 最早：S1D → S1U"),
                   "同一组四个慢核，差距收窄但仍在"],
         img="39-s1-signal-finish.png",
         caption="横轴 cycle，纵轴 = 该核已上环 WriteData / 本核配额；红 = 邻 mem = 1 的四核"
@@ -1407,7 +1414,7 @@ def slides(n: Live) -> list:
     ("figside", dict(
         chrome="固定非均匀流量下的 φ Pareto", img="20-hot-pareto.png", fig_w=7.60,
         caption="hot：十个核全部写入 HA 11 / 13。R* = 2.0000（等速率 = 最大吞吐）。"
-                "纵轴改成与上一页相同的 φ = (R − κ·CoV)/R*；"
+                "纵轴改成与上一页相同的 φ = (R − κ·CoV)/R*，κ 沿用 uniform 的 2.1769；"
                 "红 = 前沿，橙 = 次前沿。",
         kicker="SAME φ, SHIFTED TRAFFIC",
         blocks=[
@@ -1415,13 +1422,19 @@ def slides(n: Live) -> list:
                 "同一 κ、该 pattern 自己的 R*。S16 φ = 0.386（900 FF‑eq）支配 S0 的 0.027。"
                 "窗口类 S19 / S20 带宽到 98.9% R*，但 CoV = 1.33，φ 落到 −0.46，不进前沿。"],
                  wt=1.15),
-            dict(kind="card", t="次前沿：S26 / S29 / S21 / S21+eq / S28S", b=[
+            dict(kind="card", t="次前沿：S26 / S29 / S21 / S21+eq", b=[
                 "去掉 S0、S16 再求：S26（1,560，φ = 0.086）、S29（4,440，0.099）、"
-                "S21（4,960，0.313）、S21+eq（6,880，0.314）、S28S（12,680，0.378）。",
-                "S16 仍用最少硬件拿到最高 φ；S28S 带宽高但 CoV 大，只能上次前沿。"],
+                "S21（4,960，0.313）、S21+eq（6,880，0.314）。",
+                "S28S（12,680，φ = 0.378）φ 更高，但是 hop 静态等分，"
+                "只对固定份额成立，不适用于动态非均匀流量，不进入下一组旋钮页。"],
                  wt=1.45),
             dict(kind="band",
-                 text="换流量之后窗口能保住容量，但按 φ 计价仍输给授权重排。"
+                 text="**读图前提**：κ = 2.1769 借自 uniform 前沿，非 hot 自身影子价格 —— hot 的 "
+                      "r_fair = r_max = 2.0，前沿水平、κ_hot = 0，公平免费。故本页对 CoV 计价偏严："
+                      "改用 κ_hot = 0 则 S19 / S20 由倒数第二变第一。",
+                 wt=1.25),
+            dict(kind="band",
+                 text="换流量之后窗口能保住容量，但按 uniform 的 φ 计价仍输给授权重排。"
                       "下一组页：这两个前沿上每个方案只扫一个旋钮的 (R, CoV) 轨迹。",
                  wt=0.70)])),
 
@@ -1429,23 +1442,23 @@ def slides(n: Live) -> list:
 
     ("figside", dict(
         chrome="各方案的各核完成时间曲线", img="44-finish-all.png", fig_w=8.60,
-        caption="13 个方案，同一 fabric、K = 20000 uniform 写；每格十条线 = 十核累计上环 "
-                "WriteData / 配额，虚线 = 最早与最晚完成时刻。S1U / S1D 与 S1 / S0 逐拍相同，不重复。",
+        caption="12 个方案，同一 fabric、K = 20000 uniform 写；每格十条线 = 十核累计上环 "
+                "WriteData / 配额，虚线 = 最早与最晚完成时刻。S1U / S1D 与 S1 / S0 逐拍相同，不重复。"
+                "S28S 是 hop 静态等分，不适用于动态非均匀流量，未画。",
         kicker="WHO FINISHES LAST",
         blocks=[
             dict(kind="card", t="三种形态", b=[
                 f"**六快四慢**（S0 {n.frat('S0')}、S1T {n.frat('S1T')}、"
                 f"S19 {n.frat('S19')}、S20 {n.frat('S20')}）："
                 f"S0 完成时间 {n.fspan('S0')}。",
-                f"**收得很齐**（S16 {n.frat('S16')}、S28S {n.frat('S28S')}）。",
+                f"**收得很齐**：S16 {n.frat('S16')}。",
                 f"**中间态**（S22 {n.frat('S22')}、S29 {n.frat('S29')}、"
                 f"S1 {n.frat('S1')}）：慢核仍慢，差距收窄。"],
                  wt=1.45),
             dict(kind="card", accent=True, t="拐点的含义", b=[
                 "六快四慢的方案里，慢核曲线在快核完成瞬间斜率抬升 —— "
                 "瓶颈是满载环上的上环机会，不是慢核自身。",
-                f"S28S 够齐（比 {n.frat('S28S')}）但总时长被拉到 "
-                f"{n.finish_span('S28S')[1]/1000:.1f}k，带宽 {n.dthr('S28S')}。"],
+                f"S16 完成时间 {n.fspan('S16')}，带宽 {n.dthr('S16')}。"],
                  wt=1.15),
             dict(kind="band",
                  text="完成时间比是长期速率比的另一种读法；它和 100 拍 CoV 不是同一件事，见下页。",
@@ -1467,9 +1480,8 @@ def slides(n: Live) -> list:
                     "背压把所有核一起拖慢，长期份额反而接近。"
                     f"S22 CoV {n.cov('S22')}，完成时间比 {n.frat('S22')}。"]),
             dict(t="S16 两项一起动", accent=True,
-                 b=[f"S16：CoV **{n.cov('S16')}**、完成时间比 **{n.frat('S16')}**、"
-                    f"总带宽 {n.dthr('S16')}。"
-                    f"S28S 完成时间比 {n.frat('S28S')}，但带宽 {n.dthr('S28S')}。"]),
+                 b=[                    f"S16：CoV **{n.cov('S16')}**、完成时间比 **{n.frat('S16')}**、"
+                    f"总带宽 {n.dthr('S16')}。"]),
             dict(t="对架构评审的意义",
                  b=["瞬时 CoV 回答「任一 100 拍里有没有核被饿」，完成时间比回答"
                     f"「一批工作最后是谁拖尾」；两者都要看，S1 的 CoV {n.dcov('S1')} "
@@ -1559,8 +1571,8 @@ def slides(n: Live) -> list:
     ("media", dict(
         chrome="读侧各核完成时间：1 flit 六快四慢，2 / 4 flit 十线重合",
         kicker="READ COMPLETION",
-        stat=f"{n.pfrat('S0-m1')} / {n.pfrat('S0-m2')} / {n.pfrat('S0-m4')}",
-        stat_sub=["十核完成时间 最晚 / 最早：CompData = 1 / 2 / 4 flit",
+        stat=[n.pfrat("S0-m1"), n.pfrat("S0-m2"), n.pfrat("S0-m4")],
+        stat_sub=["完成时间比 · CompData 1 / 2 / 4 flit",
                   "只有 1 flit 出现写侧的形态"],
         img="41-read-payload-finish.png",
         caption="同上三组；纵轴 = 已收到 CompData / 本核配额，红 = 邻 mem = 1 的四核，蓝 = 其余六核。",
@@ -1870,7 +1882,8 @@ def slides(n: Live) -> list:
                 f"max/min {n.mm('S16')}，总带宽 {n.dthr('S16')}，φ {n.phi('S16')}。",
                 f"第 21 页空白格已核对无既有保留方案；绿框四类已实测："
                 f"S26 / S27 结构性失效，S28 不动均衡，"
-                f"S28S 用带宽 {n.dthr('S28S')} 换均衡；S29 为 {n.triple('S29')}。",
+                f"S28S 用带宽 {n.dthr('S28S')} 换均衡，但是 hop 静态等分、"
+                f"不适用于动态非均匀流量；S29 为 {n.triple('S29')}。",
                 f"若事务层不可改，只动环仲裁：S22（13,920 FF‑eq，φ {n.phi('S22')}）"
                 f"效果最好，S29（4,440，φ {n.phi('S29')}）便宜 3.1 倍；"
                 "S19 / S20 仅作对照。",
@@ -1902,7 +1915,7 @@ def slides(n: Live) -> list:
             dict(t="边界 · 明确不进入建议", b=[
                 "**S19 / S20**：仅作 requester-side 对照；实测公平性几乎不变。",
                 "**S26 / S27 / S28**：路由、背压、显式速率三类实测均劣于 S0，"
-                "不再推进。",
+                "不再推进。**S28S** 是 hop 静态等分，不适用于动态非均匀流量。",
                 f"**读侧**：128 B CompData 下 S0 已达 CoV {n.rcov('S0')}、"
                 f"max/min {n.rmm('S0')}，维持现状；"
                 f"64 B 读会重现六快四慢（max/min {n.pmm('S0-m1')}），"
