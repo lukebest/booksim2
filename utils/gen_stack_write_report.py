@@ -6,14 +6,15 @@ vertical unidirectional half rings serving 96 HAs. The attach points are
 grouped 2 rows x 4 columns per top die, and every HA is bound to one D2D
 bridge, so the route is fixed by the destination rather than chosen.
 
-Same question order as the single-ring report: conclusions first, then
-topology and hardware setup with link delays, Jain, bounds, the phenomenon,
-the root cause, S1, the improved scheme, and cost.
+Front of the report lists the existing 20-node top-die setup (geometry and
+per-edge hop delays from the single-ring study; former memory nodes are now
+D2D bridges) and the bottom-die setup, then conclusions, then analysis.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,17 @@ def _jain(xs) -> float:
     return 0.0 if s2 <= 0 else (sum(xs) ** 2) / (len(xs) * s2)
 
 
+def _cov(xs) -> float:
+    xs = [float(x) for x in xs]
+    if not xs:
+        return 0.0
+    m = sum(xs) / len(xs)
+    if m <= 0:
+        return 0.0
+    var = sum((x - m) ** 2 for x in xs) / len(xs)
+    return (var ** 0.5) / m
+
+
 def ideal_group_write_bw(b: dict) -> dict[str, Any]:
     """Equal-share WriteData rate if the batch hits the makespan bound.
 
@@ -105,11 +117,11 @@ def ideal_group_write_bw(b: dict) -> dict[str, Any]:
 
 def inst_group_fairness(ser: dict, t_fair: float | None = None
                         ) -> dict[str, Any]:
-    """E[Jain_t] on per-window group write bandwidth.
+    """E[CoV_t] on per-window group write bandwidth (100-cycle windows).
 
     Windows with zero total WriteData are skipped. If `t_fair` is set
-    (first core out of work), only the contention window is kept — the
-    same interval the long-run group Jain uses.
+    (first core out of work), only the contention window is kept.
+    Lower CoV is more even; 0 = the six groups match in that window.
     """
     t = ser.get("t") or []
     bw = ser.get("bw_by_group") or {}
@@ -117,28 +129,31 @@ def inst_group_fairness(ser: dict, t_fair: float | None = None
     if not dies or not t:
         return {}
     cols = list(zip(*[bw[d] for d in dies]))
-    js, used = [], []
+    cs, js, used = [], [], []
     for i, row in enumerate(cols):
         if sum(row) <= 0:
             continue
         if t_fair is not None and t[i] > t_fair:
             continue
+        cs.append(_cov(row))
         js.append(_jain(row))
         used.append(i)
-    if not js:
+    if not cs:
         return {}
     means = [sum(bw[d][i] for i in used) / len(used) for d in dies]
     jem = _jain(means)
+    ec = sum(cs) / len(cs)
     ej = sum(js) / len(js)
     return {
-        "window": ser.get("window", 50),
-        "nwin": len(js),
+        "window": ser.get("window", 100),
+        "nwin": len(cs),
+        "mean_cov": round(ec, 5),
+        "min_cov": round(min(cs), 5),
+        "p50_cov": round(sorted(cs)[len(cs) // 2], 5),
+        "max_cov": round(max(cs), 5),
+        "frac_gt_020": round(sum(1 for x in cs if x > 0.20) / len(cs), 4),
         "mean_jain": round(ej, 5),
-        "min_jain": round(min(js), 5),
-        "p50_jain": round(sorted(js)[len(js) // 2], 5),
-        "frac_lt_090": round(sum(1 for x in js if x < 0.90) / len(js), 4),
         "jain_of_mean": round(jem, 5),
-        "turn_index": round(1 - ej / jem, 4) if jem > 0 else 0.0,
         "t_fair": t_fair,
     }
 
@@ -245,6 +260,86 @@ def plot_topology(b: dict, path: Path) -> None:
                  fontsize=11.5, pad=14)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def _top_role(i: int) -> str:
+    if i % 2 == 0:
+        return "core"
+    if i in (9, 19):
+        return "other"
+    return "bridge"
+
+
+def _top_tag(i: int) -> str:
+    return {"core": f"C{i}", "bridge": f"B{i}"}.get(_top_role(i), f"N{i}")
+
+
+def _top_planes(b: dict) -> int:
+    t = b.get("topology") or {}
+    if t.get("n_planes"):
+        return int(t["n_planes"])
+    cap = (t.get("capacity") or {}).get("top")
+    n_die = int(t.get("n_die") or 6)
+    n = len(t.get("top_link_lats") or [0] * 20)
+    if cap and n_die and n:
+        return max(1, int(cap) // (n * 2 * n_die))
+    return 2
+
+
+def plot_top_die(b: dict, path: Path) -> None:
+    """One top die: same 20-node ring and per-edge hop delays as the
+    existing single-ring study. Former memory nodes are D2D bridges."""
+    lats = list((b.get("topology") or {}).get("top_link_lats") or [])
+    if len(lats) != 20:
+        return
+    _cjk()
+    n = len(lats)
+    fig, ax = plt.subplots(figsize=(8.6, 8.6))
+    ax.set_aspect("equal")
+    ax.axis("off")
+    pts = []
+    for i in range(n):
+        a = -math.pi / 2 + i * 2 * math.pi / n
+        pts.append((math.cos(a), math.sin(a)))
+    for i in range(n):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % n]
+        wrap = i == n - 1
+        ax.plot([x0, x1], [y0, y1], color="#be123c" if wrap else "#64748b",
+                lw=3.0 if wrap else 1.8, zorder=1, solid_capstyle="round")
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        mag = math.hypot(mx, my) or 1.0
+        ax.text(mx * (1 + 0.16 / mag), my * (1 + 0.16 / mag), str(lats[i]),
+                ha="center", va="center", fontsize=10, fontweight="700",
+                color="#9f1239" if wrap else "#0f172a",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                          ec="#fecaca" if wrap else "#e2e8f0", lw=0.8),
+                zorder=3)
+    face = {"core": "#2563eb", "bridge": "#ea580c", "other": "#94a3b8"}
+    for i, (x, y) in enumerate(pts):
+        r = _top_role(i)
+        ax.add_patch(plt.Circle((x, y), 0.108, fc=face[r], ec="white",
+                                lw=1.6, zorder=4))
+        ax.text(x, y, _top_tag(i), ha="center", va="center", fontsize=7.2,
+                color="white", fontweight="700", zorder=5)
+    n_pl = _top_planes(b)
+    ax.text(0, 0.10, f"plane ×{n_pl}", ha="center", fontsize=11,
+            color="#334155")
+    ax.text(0, -0.02, "双向闭合 full ring · 最短路", ha="center", fontsize=11,
+            color="#334155")
+    ax.text(0, -0.14, "橙 = D2D bridge（原 memory 节点）",
+            ha="center", fontsize=9.5, color="#64748b")
+    ax.set_xlim(-1.45, 1.45)
+    ax.set_ylim(-1.45, 1.45)
+    ax.set_title(
+        f"每个 top die：20 节点{('单' if n_pl == 1 else '双')} plane "
+        f"闭合 full ring · 边上数字 = hop 时延（拍）\n"
+        f"蓝 = AI core（10），橙 = D2D bridge（8），灰 = 非终端。"
+        f"逐边时延与现有 top die 相同",
+        fontsize=12, pad=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
     plt.close(fig)
 
 
@@ -740,13 +835,14 @@ def plot_group_series(b: dict, path: Path) -> None:
 
 
 def plot_group_jain_series(b: dict, path: Path) -> None:
-    """Per-window group Jain vs time, S0 vs S1."""
+    """Per-window group CoV vs time, S0 vs S1."""
     gs = b.get("group_series") or {}
     _cjk()
     fig, ax = plt.subplots(figsize=(13.2, 3.6))
     colors = {"s0": "#2563eb", "s1": "#ea5800"}
     labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
     fair = _fair_lookup(b)
+    w = 100
     for name in ("s0", "s1"):
         ser = gs.get(name) or {}
         t = ser.get("t") or []
@@ -754,26 +850,99 @@ def plot_group_jain_series(b: dict, path: Path) -> None:
         dies = sorted(bw, key=int)
         if not dies or not t:
             continue
+        w = ser.get("window", w)
         cols = list(zip(*[bw[d] for d in dies]))
-        ys = [_jain(row) if sum(row) > 0 else float("nan") for row in cols]
+        ys = [_cov(row) if sum(row) > 0 else float("nan") for row in cols]
         ax.plot(t, ys, "-", color=colors[name], lw=1.1, alpha=0.85,
                 label=labels[name])
-        ej = (fair.get(name) or {}).get("mean_jain")
-        if ej:
-            ax.axhline(ej, color=colors[name], ls=":", lw=1.1,
-                       label=f"{labels[name]}  E[Jain$_t$]={ej:.3f}")
-    ax.axhline(1.0, color="#111827", ls="--", lw=1.0,
-               label="Jain(E[x]) = 1（全程完成量）")
-    ax.set_ylim(0.15, 1.05)
+        ec = (fair.get(name) or {}).get("mean_cov")
+        if ec is not None:
+            ax.axhline(ec, color=colors[name], ls=":", lw=1.1,
+                       label=f"{labels[name]}  E[CoV$_t$]={ec:.3f}")
+    ax.axhline(0.0, color="#111827", ls="--", lw=1.0,
+               label="CoV = 0（该窗六个 group 写带宽相同）")
+    tfs = [v.get("t_fair") for v in fair.values() if v.get("t_fair")]
+    if tfs:
+        tf = min(tfs)
+        ax.axvline(tf, color="#6b7280", ls="--", lw=0.9, alpha=0.8,
+                   label=f"t_fair ≈ {tf:,.0f}（此后有 group 写完）")
     ax.set_xlabel("时间 (cycle)", fontsize=9)
-    ax.set_ylabel("组间 Jain$_t$", fontsize=9)
+    ax.set_ylabel("组间 CoV$_t$", fontsize=9)
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=7.5, ncol=3, loc="lower left")
-    fig.suptitle("瞬时组间均衡度：每个 50-cycle 窗上六个 group 写带宽的 Jain",
+    ax.legend(fontsize=7.5, ncol=3, loc="upper right")
+    fig.suptitle(f"瞬时组间均衡度：每个 {w}-cycle 窗上六个 group 写带宽的 CoV"
+                 "（越低越均）",
                  fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
     plt.close(fig)
+
+
+def plot_group_finish(b: dict, path: Path) -> None:
+    """When each top-die group retires its last write, S0 vs S1."""
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    _cjk()
+    fig, ax = plt.subplots(figsize=(8.4, 4.2))
+    dies = list(range(6))
+    x = list(range(len(dies)))
+    w = 0.36
+    colors = {"s0": "#2563eb", "s1": "#ea5800"}
+    labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
+    ymax = 1
+    for i, name in enumerate(("s0", "s1")):
+        g = (mand.get(name) or {}).get("group") or {}
+        fin = g.get("finish_by_group") or {}
+        ys = [fin.get(str(d), 0) for d in dies]
+        ymax = max(ymax, max(ys) if ys else 0)
+        ax.bar([v + (i - 0.5) * w for v in x], ys, w,
+               color=colors[name], label=labels[name], edgecolor="white")
+        for v, y in zip(x, ys):
+            ax.text(v + (i - 0.5) * w, y + ymax * 0.012, f"{y:,}",
+                    ha="center", va="bottom", fontsize=7.2, color=colors[name])
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"die {d}" for d in dies])
+    ax.set_ylabel("该 group 最后一笔写完成时刻 (cycle)", fontsize=9)
+    ax.set_xlabel("top die group", fontsize=9)
+    ax.legend(fontsize=8.5, loc="upper right")
+    ax.grid(axis="y", alpha=0.25)
+    ax.set_ylim(0, ymax * 1.18)
+    fig.suptitle("S0 / S1：每个 top die group 的完成时间"
+                 "（该 die 10 个 core 最后一笔 Comp 回来）",
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(path, dpi=132)
+    plt.close(fig)
+
+
+def finish_table(b: dict) -> str:
+    mand = (b.get("schemes") or {}).get("mandated") or {}
+    f0 = ((mand.get("s0") or {}).get("group") or {}).get("finish_by_group") or {}
+    f1 = ((mand.get("s1") or {}).get("group") or {}).get("finish_by_group") or {}
+    rows = []
+    ys0, ys1 = [], []
+    for d in range(6):
+        a = f0.get(str(d), 0)
+        c = f1.get(str(d), 0)
+        ys0.append(a)
+        ys1.append(c)
+        delta = (c - a) if (a and c) else "—"
+        rows.append([f"die {d}", f"{a:,}", f"{c:,}",
+                     f"{delta:+,}" if isinstance(delta, int) else delta])
+    if ys0 and ys1:
+        rows.append([
+            "<b>最晚 / 最早</b>",
+            f"<b>{max(ys0):,} / {min(ys0):,}</b>",
+            f"<b>{max(ys1):,} / {min(ys1):,}</b>",
+            "组间完成时刻跨度",
+        ])
+        rows.append([
+            "<b>跨度 (max−min)</b>",
+            f"<b>{max(ys0) - min(ys0):,}</b>",
+            f"<b>{max(ys1) - min(ys1):,}</b>",
+            "越小表示各组差不多同时写完",
+        ])
+    return _t(["top die group", "S0 完成时刻 (cycle)",
+               "S1 完成时刻 (cycle)", "S1 − S0"], rows)
 
 
 def plot_fabric_series(b: dict, path: Path) -> None:
@@ -923,19 +1092,19 @@ def group_table(b: dict) -> str:
     inst = _fair_lookup(b)
     for r in ordered:
         gp = r["goodput_by_group"]
-        ej = (inst.get(r["scheme"]) or {}).get("mean_jain")
+        ec = (inst.get(r["scheme"]) or {}).get("mean_cov")
         rows.append([
             r["outstanding"] if r["scheme"] not in ("s18", "s19")
             else "自适应", r["scheme"].upper(), _ok(r["completed"]),
             " / ".join(_f(v, 4) for v in
                        [gp[d] for d in sorted(gp, key=int)]),
             _f(r["goodput_total"], 4),
-            _f(ej),
+            _f(ec),
         ])
     return _t(["outstanding", "方案", "排空",
                "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
                "合计 flit/cycle",
-               "E[Jain<sub>t</sub>]<br>（瞬时）"], rows)
+               "E[CoV<sub>t</sub>]<br>（瞬时，越低越均）"], rows)
 
 
 def inst_fair_table(b: dict) -> str:
@@ -943,26 +1112,25 @@ def inst_fair_table(b: dict) -> str:
     i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
     ideal = ideal_group_write_bw(b)
     rows = [
-        ["E[Jain<sub>t</sub>]（瞬时均衡度）",
-         _f(i0.get("mean_jain")), _f(i1.get("mean_jain")),
-         "每个 50-cycle 窗上六个 group 写带宽的 Jain，再对竞争窗口平均。"
-         "1 = 每个窗都均；1/6 ≈ 0.17 = 一窗只一家"],
+        ["E[CoV<sub>t</sub>]（瞬时均衡度）",
+         _f(i0.get("mean_cov")), _f(i1.get("mean_cov")),
+         "每个 100-cycle 窗上六个 group 写带宽的变异系数 "
+         "(σ/μ)，再对竞争窗口平均。0 = 每个窗都均"],
+        ["窗内 CoV 中位数 / 最小 / 最大",
+         f"{_f(i0.get('p50_cov'))} / {_f(i0.get('min_cov'))} / "
+         f"{_f(i0.get('max_cov'))}",
+         f"{_f(i1.get('p50_cov'))} / {_f(i1.get('min_cov'))} / "
+         f"{_f(i1.get('max_cov'))}",
+         "竞争窗口内"],
+        ["CoV<sub>t</sub> &gt; 0.20 的窗占比",
+         _pct(i0.get("frac_gt_020") or 0), _pct(i1.get("frac_gt_020") or 0),
+         "该窗六个 group 写带宽相对离散超过 20% 的时间比例"],
         ["Jain(E[x])（全程完成量）",
          _f(i0.get("jain_of_mean")), _f(i1.get("jain_of_mean")),
          "先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1"],
-        ["轮换指数 1 − E[Jain<sub>t</sub>]/Jain(E[x])",
-         _f(i0.get("turn_index"), 3), _f(i1.get("turn_index"), 3),
-         "长程均、短时不均的程度。0 = 每个窗都均"],
-        ["窗内 Jain 中位数 / 最小",
-         f"{_f(i0.get('p50_jain'))} / {_f(i0.get('min_jain'))}",
-         f"{_f(i1.get('p50_jain'))} / {_f(i1.get('min_jain'))}",
-         "竞争窗口内"],
-        ["Jain<sub>t</sub> &lt; 0.90 的窗占比",
-         _pct(i0.get("frac_lt_090") or 0), _pct(i1.get("frac_lt_090") or 0),
-         "短时明显不均的时间比例"],
         ["窗长 / 计入窗数",
-         f"{i0.get('window', 50)} / {i0.get('nwin', 0):,}",
-         f"{i1.get('window', 50)} / {i1.get('nwin', 0):,}",
+         f"{i0.get('window', 100)} / {i0.get('nwin', 0):,}",
+         f"{i1.get('window', 100)} / {i1.get('nwin', 0):,}",
          "只计 t ≤ t_fair 且该窗总写带宽 &gt; 0"],
         ["均衡理想每组写带宽",
          f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
@@ -996,78 +1164,169 @@ def mod4_table(b: dict) -> str:
                "目标列 mod 4", "落到哪条横环", "符合 mod-4 规则"], rows)
 
 
-def setup_table(b: dict) -> str:
+def top_die_setup_table(b: dict) -> str:
+    """Existing 20-node top-die setup, adapted: mem nodes are D2D bridges."""
     t, m = b["topology"], b["meta"]
-    cap = t["capacity"]
+    fab = m.get("fabric") or {}
+    n_pl = _top_planes(b)
+    lats = t.get("top_link_lats") or []
+    n = len(lats) or 20
+    n_vc = len(t.get("vcs") or ("req", "rsp", "dat"))
+    hop_cap = n * 2 * n_pl * n_vc
+    cores = [i for i in range(n) if _top_role(i) == "core"]
+    bridges = [i for i in range(n) if _top_role(i) == "bridge"]
+    inert = [i for i in range(n) if _top_role(i) == "other"]
+    rtt = (m.get("rtt") or t.get("rtt") or {}).get("rtt", "—")
     rows = [
-        ["top die 数量", t["n_die"], "每个是 20 节点、双平面、双向 full ring"],
-        ["每 die 节点角色", "10 core / 8 D2D bridge / 2 非终端",
-         "偶数号为 AI core；节点 9、19 既非 core 也非 HA，只转发"],
-        ["AI core 总数", t["n_cores"], "发起方"],
-        ["HA 总数", t["n_has"], "bottom die，12 行 × 8 列"],
-        ["D2D 链路", t["n_bridges"], "每 die 8 条，双向，跨 SerDes"],
+        ["节点数 / plane 数", f"{n} / {n_pl}",
+         ("一个双向闭合 full ring" if n_pl == 1
+          else "两个独立的双向闭合 full ring，共用同一套几何。"
+          "与现有 top die 相同；堆叠里每个 die 仍是设计上的双 plane")],
+        ["AI core", f"{len(cores)} 个：" + ", ".join(f"C{c}" for c in cores),
+         "写发起方（CHI RN）。六个 die 共 "
+         f"{t.get('n_cores', 60)} 个"],
+        ["D2D bridge",
+         f"{len(bridges)} 个：" + ", ".join(f"B{x}" for x in bridges),
+         "现有 top die 上的 memory 节点，这里改为下到 bottom die 的桥。"
+         "本身不发起、不完成写"],
+        ["非终端节点", ", ".join(f"N{x}" for x in inert),
+         "在环上转发，既不是 core 也不是 bridge"],
+        ["路由", "最短路（链路时延之和；时延平局再比跳数，再平局 CW）",
+         "与现有 top die 相同。出 die 的那一跳由目的 HA 绑定的 bridge 决定，"
+         "不是在 top 环上选 memory"],
+        ["plane 选择", fab.get("plane_sel", "least_occupied"),
+         ("单平面，无 plane 选择" if n_pl == 1
+          else "两个 plane 之间做负载均衡")],
+        ["每 core outstanding", f"<b>{m['core_outstanding']}</b>",
+         "同时在飞的写事务上限：从 REQ 上环占到 Comp 回来。"
+         f"最长无拥塞写 RTT 是 {rtt} cycle"],
+        ["CHI VC", " / ".join(str(v).upper() for v in (t.get("vcs") or
+                                                       ("req", "rsp", "dat"))),
+         "REQ、RSP、DAT 三条独立 VC，各自独立信用。"
+         "每条有向边每拍可同时走 1 REQ + 1 RSP + 1 DAT"],
+        ["hop 容量（每 die）", f"{hop_cap} flit/cycle",
+         f"{n} 节点 × 2 方向 × {n_pl} plane × {n_vc} VC，σ=1。"
+         f"六个 die 合计 {hop_cap * int(t.get('n_die', 6))} flit/cycle；"
+         f"top 有向边 {t.get('capacity', {}).get('top', n * 2 * n_pl * int(t.get('n_die', 6)))}"
+         f"（单 VC）"],
+        ["端口",
+         ("per_dir + per_vc：每 (node, plane, dir, VC) 一个上环口；"
+          "two_write_leave：目的站每个来向可同时下一拍"),
+         "与现有 top die 相同。转向仍每拍一个 tap"],
+        ["上环队列",
+         (f"共享 FIFO {fab.get('inj_depth', 12)} / (node, plane, VC)，"
+          f"再按方向拆 {fab.get('dir_inj_depth', 8)}"),
+         "shared_inj；REQ 被 outstanding 卡住时不占队头，"
+         "避免堵住同核的 WriteData"],
+        ["下环队列深度", fab.get("eject_depth", 12),
+         "每 (node, plane, VC)；PE 每拍读 "
+         f"{fab.get('eject_bw', 1)} flit"],
+        ["I-tag",
+         (f"{fab.get('itag_mode', 'reserve')}，"
+          f"t_inj={fab.get('t_inj', 16)}，"
+          f"hold={fab.get('itag_hold', 8)}"),
+         "reserve：只挡会盖住饥饿源出 hop 的上游注入；"
+         "捐赠者让出后预留气泡"],
+        ["E-tag 门限 t_xfer", fab.get("t_xfer", 1),
+         "偏转这么多次后升 E-tag，可走预留下环槽"],
+        ["HA 跟踪表", f"{m.get('pos_depth', fab.get('ha_pos_depth', 512))}",
+         "每个 HA 同时可收的请求数；满则 RetryAck → PCrdGrant → 重发"],
+        ["环内 hop 时延",
+         " / ".join(str(v) for v in lats) + " cycle",
+         "现有 top die 的 RING2_LINK_LATS："
+         "节点 i 与 (i+1) mod 20 之间；最后一项是 N19 ↔ C0。"
+         "两个 plane 各一份，双向同值"],
+    ]
+    return _t(["项目", "取值", "说明"], rows)
+
+
+def top_die_hop_table(b: dict) -> str:
+    lats = list((b.get("topology") or {}).get("top_link_lats") or [])
+    n = len(lats)
+    rows = []
+    for i, lat in enumerate(lats):
+        a, c = _top_tag(i), _top_tag((i + 1) % n)
+        note = f"闭合边（{a} ↔ {c}）" if i == n - 1 else ""
+        rows.append([f"{a} — {c}", lat, note])
+    return _t(["无向边", "hop 时延（拍）", "备注"], rows)
+
+
+def bottom_die_setup_table(b: dict) -> str:
+    t, m = b["topology"], b["meta"]
+    fab = m.get("fabric") or {}
+    cap = t.get("capacity") or {}
+    rows = [
+        ["HA 阵列", f"{t['n_has']} 个，12 行 × {t['n_cols']} 列",
+         "写目的地（CHI completer）。没有 top-die HA"],
         ["挂接点 / bottom D2D", t["n_attach"],
-         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组。"
+         f"按“2 横 × {t['group_cols']} 列 = 8 个”一组，六个 top die 各一组。"
          "每个 D2D landing <b>两个独立接口</b>：一个接该处横环，"
          "一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，"
-         "只在出环 hop 上互斥；交叉方向靠 SWAP 解死锁"],
+         "只在出环 hop 上互斥"],
+        ["D2D 链路", t["n_bridges"],
+         "每 top die 8 条，双向，跨 SerDes。一条物理边，落地后横/纵口可同时上环"],
         ["bottom die NoC", "6 横 + 8 纵 half ring",
          "half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向"],
-        ["纵环长度", t["v_len"], "12 个 HA + 6 个挂接点交替排列"],
-        ["有向链路总数", f"{t['directed_links']:,}",
-         f"top {cap['top']} / D2D {cap['d2d']} / 横 {cap['h']} / 纵 {cap['v']}"],
-        ["CHI 虚通道", " / ".join(t["vcs"]),
-         "REQ、RSP、DAT <b>三条链路独立</b>：每条有向边每拍可同时走 "
-         "1 REQ + 1 RSP + 1 DAT，互不抢槽"],
-        ["写带宽单位", "flit/cycle",
-         "WriteData 上环速率；织物瞬时 hop 同单位"],
+        ["纵环长度", t["v_len"],
+         "12 个 HA + 6 个挂接点交替排列。最长 17 跳"],
+        ["有向链路",
+         f"横 {cap.get('h', 48)} / 纵 {cap.get('v', 144)} / D2D {cap.get('d2d', 96)}",
+         f"全芯片有向边 {t.get('directed_links', 768):,} "
+         f"（含 top {cap.get('top', 480)}）"],
+        ["CHI 虚通道", " / ".join(str(v).upper() for v in (t.get("vcs") or
+                                                          ("req", "rsp", "dat"))),
+         "与 top die 相同：REQ / RSP / DAT 三条链路独立"],
         ["SWAP（HPCA'22）",
-         "开" if m["fabric"].get("swap_rule", True) else "关",
+         "开" if fab.get("swap_rule", True) else "关",
          "横↔纵挂接点、D2D↔横、D2D↔纵：两拍 flit 互换，各走对方腾出的 hop，"
          "不进 FIFO、不加转向时延"],
         ["D2D 落地 buffer",
-         f"{m['fabric'].get('d2d_land_depth', 16)} / (挂接点, 目标环, VC)",
+         f"{fab.get('d2d_land_depth', 16)} / (挂接点, 目标环, VC)",
          "SWAP 和环 FIFO 都没进时的有界落地队列，下拍再参与 SWAP"],
+        ["转向 / D2D FIFO 深度",
+         f"{fab.get('turn_depth', 64)} / {fab.get('d2d_depth', 128)}",
+         "唯一允许缓冲的地方；链路本身严格无缓冲"],
+        ["HA 请求跟踪表",
+         f"<b>{m.get('pos_depth', fab.get('ha_pos_depth', 0))}</b> 项 / HA",
+         "满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ"],
         ["每笔写的 flit 数",
          f"REQ {m['m_req']}、RSP {m['m_rsp']}、DAT {m['m_wdata']}",
          "WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp"],
-        ["每 core outstanding", f"<b>{m['core_outstanding']}</b>",
-         "在途上限：从 REQ 上环占到 Comp 回来。"
-         f"最长无拥塞写 RTT 是 { (m.get('rtt') or t.get('rtt') or {}).get('rtt', '—') } cycle"],
-        ["HA 请求跟踪表", f"<b>{m.get('pos_depth', m['fabric'].get('ha_pos_depth', 0))}</b> 项 / HA",
-         "满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ"],
-        ["转向 / D2D FIFO 深度",
-         f"{m['fabric']['turn_depth']} / {m['fabric']['d2d_depth']}",
-         "唯一允许缓冲的地方；链路本身严格无缓冲"],
         ["workload",
          f"burst {m.get('burst_len', 128)} B / stride {m.get('stride', 4096)} B / "
          f"tile {m.get('tiling_size', 65536) // 1024} KB × {m.get('n_tiles', 4)}"
          f"（每核 {m.get('txn_per_core', m.get('n_tiles', 4) * 512)} 笔）",
          "二维密铺：每行 stride/burst 笔，tile/stride 行。"
-         f"128 B 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
+         f"地址按 burst 交织到 {t['n_has']} 个 HA，每核均匀覆盖全部 HA"],
     ]
     return _t(["项目", "取值", "说明"], rows)
 
 
-def link_table(b: dict) -> str:
+def bottom_die_link_table(b: dict) -> str:
     t = b["topology"]
-    lats = t["top_link_lats"]
-    uniq = sorted(set(lats))
     rows = [
-        ["top die 环内链路", " / ".join(str(v) for v in uniq) + " cycle",
-         f"共 {len(lats)} 段，按位置不同；两个平面各一份"],
         ["D2D 跨 die", f"{t['d2d_lat']} cycle",
-         "SerDes + 跨时钟域"],
-        ["bottom die 横环节点间", f"<b>{t.get('h_hop_lat', t.get('bot_hop_lat', 4))}</b> cycle",
+         "SerDes + 跨时钟域。落地不再另加转向时延"],
+        ["bottom die 横环节点间",
+         f"<b>{t.get('h_hop_lat', t.get('bot_hop_lat', 4))}</b> cycle",
          "挂接点 → 挂接点，单向 half ring"],
-        ["bottom die 纵环节点间", f"<b>{t.get('v_hop_lat', 6)}</b> cycle",
+        ["bottom die 纵环节点间",
+         f"<b>{t.get('v_hop_lat', 6)}</b> cycle",
          "HA ↔ 挂接点，单向 half ring"],
         ["挂接点转向", f"<b>{t.get('turn_lat', 5)}</b> cycle",
-         "横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不再和转向共队列"],
+         "横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不和转向共队列"],
         ["D2D bottom 双接口", "横环口 + 该列纵环口",
          "SerDes 仍是一条 D2D 边；落地后可同时上横环和上纵环"],
     ]
     return _t(["链路", "延迟", "说明"], rows)
+
+
+def setup_table(b: dict) -> str:
+    return top_die_setup_table(b) + bottom_die_setup_table(b)
+
+
+def link_table(b: dict) -> str:
+    return top_die_hop_table(b) + bottom_die_link_table(b)
 
 
 def routing_table(b: dict) -> str:
@@ -1142,17 +1401,17 @@ def scheme_table(b: dict, tag: str) -> str:
         r = per.get(s)
         if not r:
             continue
-        ej = (inst.get(s) or {}).get("mean_jain")
+        ec = (inst.get(s) or {}).get("mean_cov")
         rows.append([
             LABEL[s], _ok(r["completed"]),
             f"{r['n_txn_done']:,} / {n_txn:,}",
             f"{r['makespan']:,}", _pct(bd / max(1, r["makespan"])),
-            _f(ej),
+            _f(ec),
             f"{r['n_deflections']:,}",
         ])
     return _t(["方案", "批次是否排空", "完成事务", "makespan",
                "达下界比例<br>（综合下界 / makespan）",
-               "E[Jain<sub>t</sub>]", "偏转次数"], rows)
+               "E[CoV<sub>t</sub>]<br>（越低越均）", "偏转次数"], rows)
 
 
 def fabric_inst_table(b: dict, scheme: str) -> str:
@@ -1287,8 +1546,8 @@ def cc_pareto_html() -> str:
         note += f"非支配面稳定在 {' / '.join(front_tags)}。"
     return f"""
 <h2>2.4 拥塞控制：代价–收益 Pareto</h2>
-<p>在 1-tile 同构写上扫发送端/接收端、窗口/速率、触发方式。
-目标：E[Jain<sub>t</sub>] → 1，每组写带宽 → 理想
+<p>下面是此前 1-tile 同构写上的 CC 扫描（不是本页 4-tile / 2-plane 批次）。
+目标当时是 E[Jain<sub>t</sub>] → 1，每组写带宽 → 理想
 {_f(meta.get('ideal_per_group'), 3)} flit/cycle。
 收益 = √(E[Jain<sub>t</sub>] × 写带宽/理想)。代价是相对门数
 （总线 ≫ HA 状态机 ≫ 每核寄存器 ≫ 每 die 计数器）。
@@ -1602,7 +1861,7 @@ def write_focus_report(b: dict) -> None:
     n_txn = mand["n_txn"]
     bd = mand["bounds"]
     oc = m["core_outstanding"]
-    pos = m.get("pos_depth", 32)
+    pos = m.get("pos_depth", 512)
     wl = b.get("workload") or {}
     hist = wl.get("ha_hist") or mand.get("ha_hist") or {}
     k_core = hist.get("per_core_txn") or (n_txn // max(1, t["n_cores"]))
@@ -1622,10 +1881,12 @@ def write_focus_report(b: dict) -> None:
         f"<b>{oc} 这个上限本身没有打满</b>。"
     )
 
+    plot_top_die(b, IMG / "stack_top_die.png")
     plot_topology(b, IMG / "stack_topology.png")
     plot_binding(b, IMG / "stack_binding.png")
     plot_group_series(b, IMG / "stack_group_bw_series.png")
     plot_group_jain_series(b, IMG / "stack_group_jain_series.png")
+    plot_group_finish(b, IMG / "stack_group_finish.png")
     plot_fabric_series(b, IMG / "stack_fabric_bw_series.png")
     if b.get("group"):
         plot_group(b, IMG / "stack_group.png")
@@ -1741,7 +2002,12 @@ img {{ max-width: 100%; height: auto; margin: 0.6rem 0 1rem; }}
 code {{ font-size: 0.86em; }}
 </style></head><body>
 <h1>3D 堆叠 NoC：按 top die 分组的写带宽</h1>
-<p>bottom die 横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
+<p>六个 top die 各是<b>现有的 20 节点双向 full ring × 2 plane</b>
+（逐边 hop 时延与单环报告相同；原 memory 节点改为 D2D bridge；
+数据通路 knobs 与现有 top die 对齐：12+8 上环队列、per-dir/per-vc 端口、
+two-write leave、I-tag reserve）。
+一个 bottom die：96 个 HA、6 横 + 8 纵 half ring，
+横环 {t.get('h_hop_lat', 4)} cycle / 纵环 {t.get('v_hop_lat', 6)} cycle /
 挂接点转向 {t.get('turn_lat', 5)} cycle。
 D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环），
 并用 HPCA'22 <b>SWAP</b> 与有界落地 buffer 解交叉死锁。
@@ -1756,6 +2022,32 @@ tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
 （RetryAck → PCrdGrant → 重发 REQ），不是源端控速。</p>
 <div class="def">S0 <b>没有源端流控</b>——只要 outstanding 有空位、ring 上有 slot 就发。
 S1 再加 AIMD 源端控速。HA 跟踪表满触发的是 CHI 请求 retry，不是源端控速。</div>
+
+<h2>0　Top die 与 bottom die setup</h2>
+<p>下面两张表是本仿真实际用的硬件 setup。
+<b>Top die</b> 的几何、节点角色和逐边 hop 时延沿用现有 20 节点环
+（<code>report_ring2_write_fairness.html</code>）；
+差别只是原来的 8 个 memory 节点在这里改叫 D2D bridge，
+写的 completer 全部在 bottom die。</p>
+
+<h3>0.1 Top die（×6，几何相同）</h3>
+<img src="stack_top_die.png" alt="每个 top die：20 节点环与逐边 hop 时延">
+{top_die_setup_table(b)}
+<h4>逐边 hop 时延（与现有 top die 相同）</h4>
+{top_die_hop_table(b)}
+
+<h3>0.2 Bottom die</h3>
+<img src="stack_topology.png" alt="bottom die 与挂接点分组">
+{bottom_die_setup_table(b)}
+{bottom_die_link_table(b)}
+<div class="def">横环一跳 {t.get('h_hop_lat', 4)} cycle，纵环一跳
+{t.get('v_hop_lat', 6)} cycle，挂接点 H↔V 转向另加
+{t.get('turn_lat', 5)} cycle。
+D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
+落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
+交叉方向（横↔纵、D2D↔环）走 SWAP，不进 FIFO、不加转向时延。
+纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
+{rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
@@ -1781,12 +2073,13 @@ retry {q1.get('n_retry', 0):,}。
  if s0["completed"] and s1["completed"]
  else death_txt + " 根因见第 2.3 节。"}</li>
 
-<li><b>全程完成量均衡，瞬时不均衡。瞬时均衡度用 E[Jain<sub>t</sub>]。</b>
+<li><b>全程完成量均衡，瞬时不均衡。瞬时均衡度用 E[CoV<sub>t</sub>]。</b>
 六个 die 写完同样多的 flit，Jain(E[x]) = 1.00，完成量 max/min = 1.00。
-每个 50-cycle 窗上再算组间 Jain，竞争窗口内
-S0 的 E[Jain<sub>t</sub>] = <b>{_f(i0.get('mean_jain'))}</b>，
-S1 为 <b>{_f(i1.get('mean_jain'))}</b>
-（约 {_pct(i0.get('frac_lt_090') or 0)} 的窗 &lt; 0.90）。
+每个 100-cycle 窗上再算六个 group 写带宽的变异系数 (σ/μ)，竞争窗口内
+S0 的 E[CoV<sub>t</sub>] = <b>{_f(i0.get('mean_cov'))}</b>，
+S1 为 <b>{_f(i1.get('mean_cov'))}</b>
+（约 {_pct(i0.get('frac_gt_020') or 0)} 的窗 CoV &gt; 0.20）。
+越低越均，0 表示该窗六个 group 写带宽相同。
 均衡流量下理想每组写带宽是
 <b>{_f(r_star, 3)} flit/cycle</b>
 （总 WriteData / 综合下界 / 6；下界 {ideal.get('bound', 0):,} cycle，
@@ -1805,8 +2098,10 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
-<img src="stack_group_jain_series.png" alt="每窗组间 Jain 随时间">
+<img src="stack_group_jain_series.png" alt="每窗组间 CoV 随时间">
+<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
 <div class="def">{scheme_table(b, "mandated")}
+{finish_table(b)}
 <p><b>达下界比例</b> = 综合下界 / makespan。
 综合下界是链路、端口、织物切割、单事务时延四条下界的最大值
 （本批次是纵环切割 {ideal.get('bound', 0):,} cycle）。
@@ -1815,9 +2110,10 @@ S0 {_pct(s0.get('eff') or (ideal.get('bound') or 0) / max(1, s0['makespan']))}
 表示实际用了下界的
 {s0['makespan'] / max(1, ideal.get('bound') or 1):.2f} 倍时间，
 写带宽也只有理想的同样比例。
-全程完成量 Jain / max/min / CoV 在批次排空后必接近 1，不区分方案，
-表里改列 <b>E[Jain<sub>t</sub>]</b>：每个 50-cycle 窗上六个 group
-写带宽的 Jain，再对竞争窗口平均。</p>
+全程完成量 Jain / max/min 在批次排空后必接近 1，不区分方案，
+表里改列 <b>E[CoV<sub>t</sub>]</b>：每个 100-cycle 窗上六个 group
+写带宽的变异系数，再对竞争窗口平均（越低越均）。
+完成时间是该 die 10 个 core 最后一笔 Comp 回来的时刻。</p>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
@@ -1827,28 +2123,18 @@ S0 {_pct(s0.get('eff') or (ideal.get('bound') or 0) / max(1, s0['makespan']))}
 / 下界 {ideal.get('bound', 0):,} cycle / 6 组）。
 六条线若贴着这条虚线且缠在一起，才是瞬时也均衡；
 贴着虚线但上下散开，就是长程均、短时轮流抢。
-下面一张是每个窗的组间 Jain<sub>t</sub>，点线是 E[Jain<sub>t</sub>]，
-虚线 1.0 是全程 Jain(E[x])。
-S0 的 E[Jain<sub>t</sub>] = {_f(i0.get('mean_jain'))}，
-S1 为 {_f(i1.get('mean_jain'))}。</div>
+下面一张是每个窗的组间 CoV<sub>t</sub>，点线是 E[CoV<sub>t</sub>]，
+虚线 0 是该窗六个 group 写带宽相同。
+S0 的 E[CoV<sub>t</sub>] = {_f(i0.get('mean_cov'))}，
+S1 为 {_f(i1.get('mean_cov'))}。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
 
-<h2>1　拓扑与硬件 setup</h2>
-<h3>1.1 总体结构</h3>
-{setup_table(b)}
-<h3>1.2 链路延迟</h3>
-{link_table(b)}
-<div class="def">横环一跳 {t.get('h_hop_lat', 4)} cycle，纵环一跳
-{t.get('v_hop_lat', 6)} cycle，挂接点 H↔V 转向另加
-{t.get('turn_lat', 5)} cycle。
-D2D 落地不再加转向时延——那一跳已经算在 D2D 的 {t['d2d_lat']} cycle 里。
-落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
-交叉方向（横↔纵、D2D↔环）走 SWAP，不进 FIFO、不加转向时延。
-纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
-{rtt.get('rev')} cycle，去程只有 {rtt.get('fwd')} cycle。</div>
-<img src="stack_topology.png" alt="bottom die 与挂接点分组">
-<h3>1.3 HA 与 D2D bridge 绑定（mod-4）</h3>
+<h2>1　堆叠装配与绑定</h2>
+<p>六个 top die 的几何完全相同（§0.1）。差别只在挂到 bottom 的哪 4 列、
+走哪条近/远横环。每个 HA 绑定一个 D2D bridge：先确定去哪个 HA，
+就确定了走哪个 bridge。</p>
 <img src="stack_binding.png" alt="HA 到 bridge 的绑定">
+<h3>1.1 HA 与 D2D bridge 绑定（mod-4）</h3>
 {mod4_table(b)}
 
 <h2>2　按 top die 分组的写带宽</h2>
@@ -1861,13 +2147,14 @@ S0 每 die 平均
 （六组合计 {_f(ideal.get('ideal_total'), 3)}）。</p>
 {group_table(b)}
 
-<h3>2.0 瞬时组间均衡度 E[Jain<sub>t</sub>]</h3>
+<h3>2.0 瞬时组间均衡度 E[CoV<sub>t</sub>]</h3>
 <p>全程 Jain / max/min 是时间积分：每个 die 写完同样多的 WriteData，
-排空后必为 1。瞬时（或 50-cycle 窗）六条线可以轮流高低。
-因此用每个窗上六个 group 写带宽的 Jain，再对竞争窗口
-（t ≤ t_fair）取平均，记为 <b>E[Jain<sub>t</sub>]</b>，作为瞬时均衡度。
-S0 = {_f(i0.get('mean_jain'))}，S1 = {_f(i1.get('mean_jain'))}，
-和 AIMD 几乎无关。窗越长这个数字越接近 1，比较方案时固定 50 cycle。</p>
+排空后必为 1。瞬时（100-cycle 窗）六条线可以轮流高低。
+因此用每个窗上六个 group 写带宽的变异系数 CoV = σ/μ，再对竞争窗口
+（t ≤ t_fair）取平均，记为 <b>E[CoV<sub>t</sub>]</b>，作为瞬时均衡度
+（越低越均，0 = 该窗六个 group 写带宽相同）。
+S0 = {_f(i0.get('mean_cov'))}，S1 = {_f(i1.get('mean_cov'))}。
+比较方案时固定 100 cycle 窗。</p>
 {inst_fair_table(b)}
 <div class="def">均衡理想怎么来的。综合下界 {ideal.get('bound', 0):,} cycle
 由纵环切割决定（fabric_lb.v = {ideal.get('cut_lb', 0):,}；
@@ -1879,6 +2166,13 @@ S0 实测每组 {_f(gp0)}（理想的 {_pct(gp0 / r_star if r_star else 0)}）�
 S1 每组 {_f(gp1)}（{_pct(gp1 / r_star if r_star else 0)}），
 与效率 {s0.get('eff', 0):.2f} / {s1.get('eff', 0):.2f} 一致——
 差的是绝对吞吐，不是组间完成量。</div>
+
+<h3>2.0b 每个 top die group 的完成时间</h3>
+<p>完成时刻 = 该 die 10 个 AI core 最后一笔写的 Comp 回到发起核。
+批次排空时 makespan 等于六个 group 完成时刻的最大值。
+柱越齐，组间写完得越同时。</p>
+<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
+{finish_table(b)}
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
 <p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
@@ -1978,6 +2272,7 @@ def main() -> None:
                 if flaky else "扫描范围内未出现")
     b["_rec"] = {"oc": rec["outstanding"]}
 
+    plot_top_die(b, IMG / "stack_top_die.png")
     plot_topology(b, IMG / "stack_topology.png")
     plot_binding(b, IMG / "stack_binding.png")
     plot_v_profile(b, IMG / "stack_v_profile.png")
@@ -2143,8 +2438,8 @@ img {{ max-width: 100%; border: 1px solid #e5e7eb; margin: 0.5rem 0; }}
 </style></head><body>
 
 <h1>3D 堆叠 NoC 上的 per-core 写带宽公平性</h1>
-<p class="note">拓扑：<b>{t['n_die']} 个 top die</b>（每个 20 节点、双平面、
-双向 full ring：10 个 AI core + 8 个 D2D bridge + 2 个非终端节点）
+<p class="note">六个 top die 各是<b>现有的 20 节点双向 full ring</b>
+（逐边 hop 时延与单环报告相同；原 memory 节点改为 D2D bridge）。
 + <b>{t['n_bridges']} 条 D2D 链路</b>
 + <b>1 个 bottom die</b>（{t['n_has']} 个 HA，12 行 × 8 列；
 6 条横向 + 8 条纵向<b>单向</b> half ring）。
@@ -2154,6 +2449,20 @@ workload：<b>{t['n_cores']} 个 AI core 均匀写 {t['n_has']} 个 HA</b>，
 每 core {m['k']} 笔 <code>WriteNoSnp</code>、每笔 {m['m_wdata']} 个 WriteData
 flit，共 {n_txn:,} 笔事务；每 core outstanding 上限
 <b>{oc_mand}</b>。</p>
+
+<h2>0　Top die 与 bottom die setup</h2>
+<p>下面两张表是本仿真实际用的硬件 setup。
+<b>Top die</b> 的几何、节点角色和逐边 hop 时延沿用现有 20 节点环；
+原来的 8 个 memory 节点在这里改叫 D2D bridge。</p>
+<h3>0.1 Top die（×6，几何相同）</h3>
+<img src="stack_top_die.png" alt="每个 top die：20 节点环与逐边 hop 时延">
+{top_die_setup_table(b)}
+<h4>逐边 hop 时延（与现有 top die 相同）</h4>
+{top_die_hop_table(b)}
+<h3>0.2 Bottom die</h3>
+<img src="stack_topology.png" alt="bottom die 与挂接点分组">
+{bottom_die_setup_table(b)}
+{bottom_die_link_table(b)}
 
 <h2>结论</h2>
 <div class="key">
@@ -2375,20 +2684,15 @@ S17 只在按 die 验收时值得叠加上去（§7.6）。</b></li>
 </ol>
 </div>
 
-<h2>1　拓扑与硬件 setup</h2>
+<h2>1　堆叠装配与绑定</h2>
+<p>六个 top die 的几何完全相同（§0.1）。D2D 一跳 {t['d2d_lat']} cycle，
+是 bottom 纵环一跳（{t['bot_hop_lat']} cycle）的
+{t['d2d_lat'] // max(1, t['bot_hop_lat'])} 倍。
+这个比例让“按时延自由最短路”倾向于尽早跨 die，
+再用便宜的 bottom 跳挪位置，从而把流量堆到稀缺的纵环上。
+绑定路由不给它这个机会。</p>
 
-<h3>1.1 总体结构</h3>
-{setup_table(b)}
-
-<h3>1.2 链路延迟</h3>
-{link_table(b)}
-<div class="def">D2D 一跳 {t['d2d_lat']} cycle，是 bottom die 环内一跳
-（{t['bot_hop_lat']} cycle）的 {t['d2d_lat'] // t['bot_hop_lat']} 倍。
-这个比例很重要：正是它让“按时延自由最短路”倾向于<b>尽早跨 die</b>、
-再用便宜的 bottom die 跳挪位置，从而把流量堆到稀缺的纵环上。
-绑定路由不给它这个机会。</div>
-
-<h3>1.3 挂接点分组：2 横 × 4 列</h3>
+<h3>1.1 挂接点分组：2 横 × 4 列</h3>
 <p>48 个挂接点分成 6 组、每组 8 个，形状是 <b>2 个挂接行 × 4 列</b>。
 每个行间隙有 2 个挂接行 × 8 列 = 16 个挂接点，正好是 2 组，按左右半区切开：</p>
 {binding_summary(b)}
@@ -2397,7 +2701,7 @@ S17 只在按 die 验收时值得叠加上去（§7.6）。</b></li>
 所以同一个行间隙里的两个 die 共用这 2 条横环，
 任何一个 die 都可以借横环去到自己组外的列。</div>
 
-<h3>1.4 HA 与 D2D bridge 的绑定</h3>
+<h3>1.2 HA 与 D2D bridge 的绑定</h3>
 <p>每个 HA 与一个 D2D bridge 绑定：<b>先确定去哪个 HA，就确定了走哪个
 bridge</b>。一个 die 有 8 个 bridge、要覆盖 96 个 HA，
 所以每个 bridge 独占<b>一整列的 12 个 HA</b>。

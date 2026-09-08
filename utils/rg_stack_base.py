@@ -54,7 +54,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from rg_stack_topo import StackTopology, Txn, vc_of
+from rg_stack_topo import TOP_PLANES, StackTopology, Txn, vc_of
 
 CORE_OUTSTANDING_WR = 128
 
@@ -62,18 +62,26 @@ CORE_OUTSTANDING_WR = 128
 @dataclass
 class StackBaseParams:
     sigma: int = 1
-    inj_depth: int = 8              # boarding queue per (station, plane, vc)
-    eject_depth: int = 4            # destination PE queue
+    inj_depth: int = 12             # shared boarding FIFO per (station, plane, vc)
+    shared_inj: bool = True
+    dir_inj_depth: int = 8          # per-direction inject Q after the shared FIFO
+    two_write_leave: bool = True    # one write port per incoming dir into leave buf
+    eject_depth: int = 12           # destination PE queue
     eject_bw: int = 1               # PE drain per station per cycle
-    t_inj: int = 64                 # inject starve cycles -> I-tag
-    t_xfer: int = 4                 # deflections -> E-tag
+    t_inj: int = 16                 # inject starve cycles -> I-tag
+    t_xfer: int = 1                 # deflections -> E-tag (specified value)
+    itag_mode: str = "reserve"      # "broadcast" | "reserve"
+    itag_hold: int = 8              # cycles a raised I-tag may block; 0 = never
+    inj_sel: str = "free_slot"      # "rr" | "free_slot"
+    per_dir_ports: bool = True      # one board port per (node, plane, dir, vc)
+    per_vc_ports: bool = True       # independent board / leave / eject per VC
     t_ha_service: int = 0
     per_vc_srcq: bool = True        # WriteNoSnp needs REQ not to head-block DAT
     core_outstanding: int = CORE_OUTSTANDING_WR
     # HA request-tracker entries. A completer that runs out of them cannot
     # queue the request: CHI makes it reject with RetryAck and hand out a
     # PCrdGrant later. 0 keeps the old unlimited-completer behaviour.
-    ha_pos_depth: int = 16
+    ha_pos_depth: int = 512
     turn_depth: int = 4             # ring -> ring transfer FIFO
     d2d_depth: int = 8              # die-crossing FIFO
     # HPCA'22 SWAP: two flits at one bridge, each wanting the other's fabric,
@@ -135,7 +143,7 @@ class StackBaseSim:
         self.t = 0
         self.n = topo.n
         self.sigma = self.p.sigma
-        self.n_planes = 2
+        self.n_planes = TOP_PLANES
 
         self.seg_free: dict[Any, int] = defaultdict(int)     # (eid, vc) -> t
         self.arrivals: dict[int, list[Flit]] = defaultdict(list)
@@ -147,7 +155,11 @@ class StackBaseSim:
         # not scan thousands of waiting new REQs every cycle.
         self.ready: dict[Any, deque[Flit]] = defaultdict(deque)
         self.inj_starve: dict[Any, int] = defaultdict(int)
-        self.i_tag: dict[Any, set[int]] = defaultdict(set)   # (ring, vc)
+        self.i_tag: dict[Any, set[int]] = defaultdict(set)   # (ring, dir, vc)
+        self.itag_t: dict[Any, int] = {}
+        self.itag_resv: dict[Any, tuple] = {}
+        self.itag_donor: dict[Any, int] = {}
+        self._itag_culprit: int | None = None
         self.ejectq: dict[Any, deque[Flit]] = defaultdict(deque)
         self.resv_used: dict[Any, int] = defaultdict(int)
         # Insertion-ordered "sets": a plain set iterates in hash order, which
@@ -213,6 +225,7 @@ class StackBaseSim:
             "max_inring_hold": 0, "n_turns": 0,
             "n_swaps": 0, "n_swaps_hv": 0, "n_swaps_d2d": 0,
             "n_swaps_d2d_h": 0, "n_swaps_d2d_v": 0,
+            "n_itag_yield": 0,
             "n_d2d_buf_push": 0, "max_d2d_buf": 0,
             "n_fc_deny": 0, "n_aimd_increase": 0, "n_aimd_decrease": 0,
         }
@@ -252,6 +265,7 @@ class StackBaseSim:
         self.net_lat: list[int] = []
         self.wr_inject_times: dict[int, list[int]] = defaultdict(list)
         self.wr_recv_times: dict[int, list[int]] = defaultdict(list)
+        self.wr_done_times: dict[int, list[int]] = defaultdict(list)
         self.board_fail_cause: dict[Any, dict[str, int]] = defaultdict(
             lambda: defaultdict(int))
         self.board_ok_by_src: dict[Any, int] = defaultdict(int)
@@ -280,7 +294,15 @@ class StackBaseSim:
         p = self._pk(node, plane)
         return (node, p, vc) if self.p.per_vc_srcq else (node, p)
 
+    def _dk(self, node: int, plane: int, vc: str, direction: int) -> Any:
+        return (node, self._pk(node, plane), vc, direction)
+
+    def _shared_vcs(self) -> tuple[str, ...]:
+        return self._vc_list if self.p.per_vc_srcq else (self._vc_list[0],)
+
     def _src_keys(self, node: int, plane: int) -> list[Any]:
+        if self.p.shared_inj:
+            return [k for g in self._port_groups(node, plane) for k in g]
         if not self.p.per_vc_srcq:
             return [(node, self._pk(node, plane))]
         vcs = self._vc_list
@@ -288,8 +310,32 @@ class StackBaseSim:
         off = self.vc_rr[(node, p)] % len(vcs)
         return [(node, p, vcs[(off + i) % len(vcs)]) for i in range(len(vcs))]
 
-    def _ejk(self, node: int, plane: int) -> Any:
-        return (node, self._pk(node, plane))
+    def _port_groups(self, node: int, plane: int) -> list[list[Any]]:
+        """Queue keys behind each board port; one inner list per port."""
+        p = self._pk(node, plane)
+        if self.p.shared_inj:
+            dirs = (1, -1)
+            groups = [[(node, p, v, d) for d in dirs] for v in self._shared_vcs()]
+        else:
+            groups = [[k] for k in (
+                [(node, p, v) for v in self._vc_list] if self.p.per_vc_srcq
+                else [(node, p)])]
+        if self.p.per_dir_ports:
+            return [[k] for g in groups for k in g]
+        if self.p.per_vc_ports:
+            return groups
+        return [[k for g in groups for k in g]]
+
+    def _q_depth(self, key: Any) -> int:
+        if self.p.shared_inj and isinstance(key, tuple) and len(key) == 4:
+            return self.p.dir_inj_depth
+        return self.p.inj_depth
+
+    def _ejk(self, node: int, plane: int, vc: str | None = None) -> Any:
+        p = self._pk(node, plane)
+        if self.p.per_vc_ports and vc is not None:
+            return (node, p, vc)
+        return (node, p)
 
     # -- routing ------------------------------------------------------------
 
@@ -310,7 +356,7 @@ class StackBaseSim:
         f.hop = 0
         f.node = f.src
         f.ring = None
-        f.dir = 0
+        f.dir = self.topo.edge_dir[f.route[0]] if f.route else 0
 
     # -- workload -----------------------------------------------------------
 
@@ -381,6 +427,7 @@ class StackBaseSim:
 
     def _admit(self, key: Any) -> None:
         q, pend, ready = self.srcq[key], self.pending[key], self.ready[key]
+        depth = self._q_depth(key)
         # Evict new REQs that filled the window after they were admitted.
         if q and self._outst_blocked(q[0]):
             stuck = deque()
@@ -388,18 +435,56 @@ class StackBaseSim:
                 stuck.append(q.popleft())
             stuck.extend(pend)
             self.pending[key] = pend = stuck
-        while ready and len(q) < self.p.inj_depth:
+        while ready and len(q) < depth:
             q.append(ready.popleft())
-        while pend and len(q) < self.p.inj_depth:
+        while pend and len(q) < depth:
             if self._outst_blocked(pend[0]):
                 break
             q.append(pend.popleft())
         if q:
             self.st["max_srcq"] = max(self.st["max_srcq"], len(q))
 
+    def _xfer_shared(self, node: int, plane: int) -> None:
+        """Shared FIFO → per-dir inject Q."""
+        if not self.p.shared_inj:
+            return
+        p = self._pk(node, plane)
+        for v in self._shared_vcs():
+            sk = (node, p, v) if self.p.per_vc_srcq else (node, p)
+            q = self.srcq[sk]
+            parked: deque = deque()
+            while q:
+                f = q[0]
+                if self._outst_blocked(f):
+                    parked.append(q.popleft())
+                    continue
+                d = f.dir if f.dir in (1, -1) else 1
+                dk = (node, p, v, d) if self.p.per_vc_srcq else (node, p, d)
+                if len(self.srcq[dk]) >= self.p.dir_inj_depth:
+                    break
+                self.srcq[dk].append(q.popleft())
+                self.st["max_srcq"] = max(self.st["max_srcq"],
+                                          len(self.srcq[dk]))
+            while parked:
+                self.pending[sk].appendleft(parked.pop())
+
     def _src_idle(self, key: Any) -> bool:
         return (not self.srcq[key] and not self.pending[key]
                 and not self.ready[key])
+
+    def _port_idle(self, node: int, plane: int) -> bool:
+        p = self._pk(node, plane)
+        if not self.p.shared_inj:
+            return all(self._src_idle(k) for k in self._src_keys(node, plane))
+        for v in self._shared_vcs():
+            sk = (node, p, v) if self.p.per_vc_srcq else (node, p)
+            if not self._src_idle(sk):
+                return False
+            for d in (1, -1):
+                dk = (node, p, v, d) if self.p.per_vc_srcq else (node, p, d)
+                if self.srcq[dk]:
+                    return False
+        return True
 
     def _clear_itag(self, node: int) -> None:
         """Drop leftover I-tags. A port with nothing injectable must not
@@ -411,8 +496,10 @@ class StackBaseSim:
         """Re-admit a core after an outstanding slot is freed."""
         for plane in range(self.n_planes):
             self.active_src[(core, plane)] = None
-            for qk in self._src_keys(core, plane):
-                self._admit(qk)
+            p = self._pk(core, plane)
+            for v in self._shared_vcs():
+                self._admit((core, p, v) if self.p.per_vc_srcq else (core, p))
+            self._xfer_shared(core, plane)
 
     # -- movement -----------------------------------------------------------
 
@@ -482,7 +569,7 @@ class StackBaseSim:
         self._launch(f, inring=True)
 
     def _try_eject(self, f: Flit) -> bool:
-        key = self._ejk(f.dst, f.plane)
+        key = self._ejk(f.dst, f.plane, f.vc)
         q = self.ejectq[key]
         if len(q) < self.p.eject_depth:
             pass
@@ -780,10 +867,155 @@ class StackBaseSim:
     def _aimd_tick(self) -> None:
         return
 
-    def _itag_blocks(self, f: Flit, node: int) -> bool:
+    def _itag_rk(self, f: Flit) -> tuple:
         eid = self._next_edge(f)
-        holders = self.i_tag[(self.topo.edge_ring[eid], f.vc)]
-        return bool(holders) and node not in holders
+        return (self.topo.edge_ring[eid], f.dir, f.vc)
+
+    def _step_node(self, ring: Any, node: int, direction: int) -> int | None:
+        eid = self.topo._succ.get((ring, node, direction))
+        if eid is None:
+            return None
+        return self.topo.edges[eid][1]
+
+    def _ring_path_lat(self, ring: Any, src: int, dst: int,
+                       direction: int) -> int:
+        lat, cur = 0, src
+        for _ in range(64):
+            if cur == dst:
+                return lat
+            eid = self.topo._succ.get((ring, cur, direction))
+            if eid is None:
+                return lat
+            lat += self.topo.edge_lat[eid]
+            cur = self.topo.edges[eid][1]
+        return lat
+
+    def _crosses_hop(self, f: Flit, starved: int) -> bool:
+        """Would this flit's first hops ride over `starved`'s outgoing hop?"""
+        if f.dir not in (1, -1) or not f.route:
+            return False
+        ring = self.topo.edge_ring[self._next_edge(f)]
+        if ring not in self.topo.ring_of:
+            return False
+        cur = f.src if f.ring is None else f.node
+        n = len(self.topo.ring_of[ring])
+        for _ in range(n):
+            if cur == starved:
+                return True
+            nxt = self._step_node(ring, cur, f.dir)
+            if nxt is None:
+                return False
+            cur = nxt
+        return False
+
+    def _itag_head(self, u: int, plane: int, vc: str, d: int) -> Flit | None:
+        p = self._pk(u, plane)
+        if self.p.shared_inj:
+            q = self.srcq.get((u, p, vc, d) if self.p.per_vc_srcq
+                              else (u, p, d))
+            return q[0] if q else None
+        q = self.srcq.get(self._sk(u, plane, vc))
+        for fl in (q or ()):
+            if fl.dir == d:
+                return fl
+        return None
+
+    def _itag_donor(self, rk: Any, requester: int) -> int | None:
+        ring, d, vc = rk
+        members = self.topo.ring_of.get(ring)
+        if not members or d not in (1, -1):
+            return None
+        plane = ring[2] if ring[0] == "top" else 0
+        cur = requester
+        for _ in range(len(members) - 1):
+            nxt = self._step_node(ring, cur, -d)
+            if nxt is None:
+                return None
+            cur = nxt
+            fl = self._itag_head(cur, plane, vc, d)
+            if fl is not None and self._crosses_hop(fl, requester):
+                return cur
+        return None
+
+    def _itag_expire(self, rk: Any) -> set[int]:
+        holders = self.i_tag[rk]
+        if holders and self.p.itag_hold:
+            for h in [h for h in holders
+                      if self.t - self.itag_t.get(rk + (h,), self.t)
+                      >= self.p.itag_hold]:
+                holders.discard(h)
+                self.itag_t.pop(rk + (h,), None)
+                self.itag_resv.pop(rk + (h,), None)
+        return holders
+
+    def _itag_pre(self) -> None:
+        if self.p.itag_mode != "reserve":
+            return
+        self.itag_donor = {}
+        for rk in [k for k, v in self.i_tag.items() if v]:
+            for r in self._itag_expire(rk):
+                key = rk + (r,)
+                st = self.itag_resv.get(key)
+                if st is not None and self.t < st[1]:
+                    continue
+                self.itag_resv.pop(key, None)
+                u = self._itag_donor(rk, r)
+                if u is not None:
+                    self.itag_donor[key] = u
+
+    def _itag_blocks(self, f: Flit, node: int) -> bool:
+        rk = self._itag_rk(f)
+        holders = self._itag_expire(rk)
+        if not holders or node in holders:
+            return False
+        if self.p.itag_mode != "reserve":
+            return True
+        ring, d, _vc = rk
+        for r in holders:
+            if r == node or not self._crosses_hop(f, r):
+                continue
+            key = rk + (r,)
+            st = self.itag_resv.get(key)
+            if st is None:
+                if self.itag_donor.get(key) == node:
+                    self._itag_culprit = r
+                    return True
+                continue
+            donor, eta = st
+            if self.t < eta:
+                # Hold only nodes the reserved bubble still has to pass.
+                cur = donor
+                between = False
+                for _ in range(64):
+                    nxt = self._step_node(ring, cur, d)
+                    if nxt is None or cur == r:
+                        break
+                    if nxt == node:
+                        between = True
+                        break
+                    cur = nxt
+                if between:
+                    self._itag_culprit = r
+                    return True
+        return False
+
+    def _itag_yielded(self, node: int, f: Flit) -> None:
+        r = self._itag_culprit
+        if self.p.itag_mode != "reserve" or r is None:
+            return
+        rk = self._itag_rk(f)
+        key = rk + (r,)
+        if key not in self.itag_resv:
+            self.itag_resv[key] = (
+                node, self.t + self._ring_path_lat(rk[0], node, r, f.dir))
+            self.st["n_itag_yield"] += 1
+        self._itag_culprit = None
+
+    def _itag_clear(self, node: int, f: Flit) -> None:
+        rk = self._itag_rk(f)
+        self.i_tag[rk].discard(node)
+        self.itag_t.pop(rk + (node,), None)
+        self.itag_resv.pop(rk + (node,), None)
 
     # -- one cycle ----------------------------------------------------------
 
@@ -815,47 +1047,74 @@ class StackBaseSim:
             swapped, swap_tapped = set(), set()
         self._pop_d2d_buf(from_land & swapped)
 
-        # Phase 2b -- remaining leaves: PE eject or transfer FIFO. One flit
-        # may leave a given ring at a given station per cycle; the rest
-        # deflect a full revolution. D2D leftovers go to the landing buffer.
+        # Phase 2b -- remaining leaves: PE eject or transfer FIFO.
+        # `two_write_leave` lets both incoming dirs write the dest buffer
+        # in one cycle (top-die cores). Turns still take one tap.
         for key, reqs in leave.items():
             node, ring = key
             on_ring = ring is not None and ring[0] != "d2d"
             leftover = [f for f in reqs if id(f) not in swapped]
-            tapped = key in swap_tapped
-            for f in self._tap_order(node, ring, leftover) if on_ring \
-                    else leftover:
-                if tapped:
-                    self.st["n_tap_deflect"] += 1
-                    self._deflect(f)
-                    continue
-                ok = (self._try_eject(f) if self._at_dest(f)
-                      else self._try_turn(f))
-                if ok:
-                    tapped = on_ring
-                    if id(f) in from_land:
-                        self._pop_d2d_buf({id(f)})
-                    continue
-                if self._at_dest(f):
+            dests = [f for f in leftover if self._at_dest(f)]
+            turns = [f for f in leftover if not self._at_dest(f)]
+            swap_hit = key in swap_tapped
+            taken_dir: set[int] = set()
+            n_dest = 0
+
+            def bounce(fl: Flit, *, dest: bool) -> None:
+                if dest:
                     self.st["n_eject_full_deflect"] += 1
                 else:
                     self.st["n_turn_full_deflect"] += 1
                 if on_ring:
-                    self._deflect(f)
-                elif id(f) in from_land:
-                    continue          # already sitting in the landing buffer
-                elif self._push_d2d_buf(f):
-                    continue
+                    self._deflect(fl)
+                elif id(fl) in from_land:
+                    return
+                elif self._push_d2d_buf(fl):
+                    return
                 else:
                     self.st["n_d2d_stall"] += 1
-                    f.fail_eject += 1
-                    if f.fail_eject >= self.p.t_xfer and not f.e_tag:
-                        f.e_tag = True
+                    fl.fail_eject += 1
+                    if fl.fail_eject >= self.p.t_xfer and not fl.e_tag:
+                        fl.e_tag = True
                         self.st["n_etag_raised"] += 1
                     self._land_now[node] = self._land_now[node] + 1
                     self.st["max_d2d_landing"] = max(
                         self.st["max_d2d_landing"], self._land_now[node])
-                    self.arrivals[t + 1].append(f)
+                    self.arrivals[t + 1].append(fl)
+
+            ordered = self._tap_order(node, ring, dests) if on_ring else dests
+            for f in ordered:
+                blocked = swap_hit
+                if self.p.two_write_leave:
+                    blocked = blocked or f.dir in taken_dir
+                else:
+                    blocked = blocked or n_dest > 0
+                if blocked:
+                    if swap_hit:
+                        self.st["n_tap_deflect"] += 1
+                    bounce(f, dest=True)
+                    continue
+                if self._try_eject(f):
+                    taken_dir.add(f.dir)
+                    n_dest += 1
+                    if id(f) in from_land:
+                        self._pop_d2d_buf({id(f)})
+                else:
+                    bounce(f, dest=True)
+
+            tapped = swap_hit or (n_dest > 0 and not self.p.two_write_leave)
+            ordered_t = self._tap_order(node, ring, turns) if on_ring else turns
+            for f in ordered_t:
+                if tapped and on_ring:
+                    self.st["n_tap_deflect"] += 1
+                    bounce(f, dest=False)
+                    continue
+                if self._try_turn(f):
+                    tapped = on_ring
+                    if id(f) in from_land:
+                        self._pop_d2d_buf({id(f)})
+                else:
+                    bounce(f, dest=False)
 
         self._release_ready()
 
@@ -950,79 +1209,99 @@ class StackBaseSim:
             else:
                 self.st["n_turn_board_fail"] += 1
 
+    def _free_slot_order(self, node: int, group: list[Any]) -> list[Any]:
+        ready, blocked = [], []
+        for cand in group:
+            q = self.srcq[cand]
+            f = q[0] if q else None
+            ok = (f is not None
+                  and not self._itag_blocks(f, node)
+                  and self.seg_free[(self._next_edge(f), f.vc)] <= self.t)
+            (ready if ok else blocked).append(cand)
+        return ready + blocked
+
+    def _board_one(self, node: int, plane: int, key: Any,
+                   group: list[Any]) -> None:
+        """Board at most one flit on one port from `group`."""
+        if self.p.inj_sel == "free_slot" and len(group) > 1:
+            group = self._free_slot_order(node, group)
+        qk, f, denied = None, None, None
+        for cand in group:
+            q = self.srcq[cand]
+            if not q:
+                continue
+            cf = q[0]
+            if self._may_inject(node, plane, cf):
+                qk, f = cand, cf
+                break
+            if denied is None:
+                denied = cf
+        if f is None:
+            if denied is not None:
+                self._note_deny(node, denied)
+                self._itag_clear(node, denied)
+                self.inj_starve[key] = 0
+            return
+        starve_key = (node, plane, f.vc, f.dir) if self.p.per_dir_ports \
+            else ((node, plane, f.vc) if self.p.per_vc_ports else key)
+        if self._itag_blocks(f, node):
+            self._fail_cause = "itag"
+        elif self.seg_free[(self._next_edge(f), f.vc)] > self.t:
+            self._fail_cause = "hop_busy"
+        else:
+            self._fail_cause = ""
+        if self._fail_cause:
+            if self._fail_cause == "itag":
+                self._itag_yielded(node, f)
+            self._on_board_fail(node, f)
+            self.inj_starve[starve_key] += 1
+            self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
+                                            self.inj_starve[starve_key])
+            if self.inj_starve[starve_key] >= self.p.t_inj:
+                rk = self._itag_rk(f)
+                if node not in self.i_tag[rk]:
+                    self.i_tag[rk].add(node)
+                    self.itag_t[rk + (node,)] = self.t
+                    self.st["n_itag_raised"] += 1
+            return
+        self.srcq[qk].popleft()
+        self.vc_rr[key] += 1
+        self._itag_clear(node, f)
+        self.inj_starve[starve_key] = 0
+        f.t_inject = self.t
+        self.st["n_injected"] += 1
+        self._on_inject(f)
+        self._launch(f, inring=False)
+
     def _inject(self) -> None:
+        self._itag_pre()
         for key in list(self.active_src):
             node, plane = key
-            qkeys = self._src_keys(node, plane)
+            p = self._pk(node, plane)
             stalled = False
-            for qk in qkeys:
-                self._admit(qk)
-                stalled = stalled or bool(self.pending[qk] or self.ready[qk])
+            for v in self._shared_vcs():
+                sk = (node, p, v) if self.p.per_vc_srcq else (node, p)
+                self._admit(sk)
+                stalled = stalled or bool(self.pending[sk] or self.ready[sk])
+            self._xfer_shared(node, plane)
             if stalled:
                 self.st["n_admit_stall"] += 1
-            if not any(self.srcq[qk] for qk in qkeys):
-                # Pending new REQs may still be waiting on outstanding.
-                # Leave the port active so a later Comp can admit them;
-                # drop I-tag so a full window does not pin the ring.
+            groups = self._port_groups(node, plane)
+            if not any(self.srcq[k] for g in groups for k in g):
                 self._clear_itag(node)
-                self.inj_starve[key] = 0
-                if not any(self.pending[qk] or self.ready[qk] for qk in qkeys):
+                if self._port_idle(node, plane):
                     self.active_src.pop(key, None)
                 continue
-            qk, f, denied, idx = None, None, None, 0
-            for cand in qkeys:
-                q = self.srcq[cand]
-                if not q:
-                    continue
-                for i, cf in enumerate(q):
-                    if self._may_inject(node, plane, cf):
-                        qk, f, idx = cand, cf, i
-                        break
-                    if denied is None:
-                        denied = cf
-                if f is not None:
-                    break
-            if f is None:
-                if denied is None:
-                    continue
-                f = denied
-            if qk is None:
-                # A policy refused the port; that is not hop starvation, and
-                # leaving an I-tag set would lock the ring out for nothing.
-                self._note_deny(node, f)
-                self.i_tag[(self.topo.edge_ring[self._next_edge(f)],
-                            f.vc)].discard(node)
-                self.inj_starve[key] = 0
-                continue
-            if self._itag_blocks(f, node):
-                self._fail_cause = "itag"
-            elif self.seg_free[(self._next_edge(f), f.vc)] > self.t:
-                self._fail_cause = "hop_busy"
-            else:
-                self._fail_cause = ""
-            if self._fail_cause:
-                self._on_board_fail(node, f)
-                self.inj_starve[key] += 1
-                self.st["max_inj_starve"] = max(self.st["max_inj_starve"],
-                                                self.inj_starve[key])
-                if self.inj_starve[key] >= self.p.t_inj:
-                    rk = (self.topo.edge_ring[self._next_edge(f)], f.vc)
-                    if node not in self.i_tag[rk]:
-                        self.i_tag[rk].add(node)
-                        self.st["n_itag_raised"] += 1
-                continue
-            del self.srcq[qk][idx]
-            self._admit(qk)
-            self.vc_rr[key] += 1
-            if all(self._src_idle(k) for k in qkeys):
+            for group in groups:
+                self._board_one(node, plane, key, group)
+            if self.p.shared_inj:
+                self._xfer_shared(node, plane)
+                for v in self._shared_vcs():
+                    self._admit((node, p, v) if self.p.per_vc_srcq
+                                else (node, p))
+                self._xfer_shared(node, plane)
+            if self._port_idle(node, plane):
                 self.active_src.pop(key, None)
-            self.i_tag[(self.topo.edge_ring[self._next_edge(f)],
-                        f.vc)].discard(node)
-            self.inj_starve[key] = 0
-            f.t_inject = self.t
-            self.st["n_injected"] += 1
-            self._on_inject(f)
-            self._launch(f, inring=False)
 
     # -- CHI WriteNoSnp phases ---------------------------------------------
 
@@ -1144,6 +1423,7 @@ class StackBaseSim:
         else:                                    # Comp retires the txn
             self.st["n_txn_done"] += 1
             self.compl_ranks[txn.core].append(self._issue_rank.get(f.txn_id, 0))
+            self.wr_done_times[txn.core].append(self.t)
             self.txn_done.append((f.txn_id, self.t))
             self.resp_lat.append(self.t - self.wr_t0[f.txn_id])
             t_in = self.wr_tinj.get(f.txn_id)
@@ -1302,6 +1582,8 @@ class StackBaseSim:
         # because both are divided by the same makespan.
         out["wr_done_by_core"] = {c: len(v) for c, v
                                   in sorted(self.compl_ranks.items())}
+        out["wr_done_times_by_core"] = {c: list(v) for c, v
+                                        in sorted(self.wr_done_times.items())}
         leftover = self.t % self.fab_win
         if leftover and (self._win_hops or self._win_hops_vc):
             self._flush_fab_window(t_start=self.t - leftover, width=leftover)

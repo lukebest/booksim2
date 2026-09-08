@@ -44,7 +44,7 @@ from rg_stack_topo import StackTopology, Txn
 class StackFcParams(StackBaseParams):
     mode: str = "s1"
     window: int = 64              # control window, cycles
-    bus_lat: int = 1              # broadcast bus delivery delay
+    bus_lat: int = 30             # broadcast bus delivery delay (top-die S1)
     budget_min: int = 1           # never throttle a station to silence
     band: str = "spec"            # alpha / beta band mapping
     scope: str = "core_only"      # who is rate-controlled

@@ -34,25 +34,32 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackGrantSim, StackPaceParams, StackPaceSim,
                          StackTurnParams)
 from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
-                           TILING_SIZE, TOP_BRIDGES, TXN_PER_CORE, V_LEN,
-                           StackTopology, Txn, build_tiled_write,
+                           TILING_SIZE, TOP_BRIDGES, TOP_PLANES, TXN_PER_CORE,
+                           V_LEN, StackTopology, Txn, build_tiled_write,
                            build_uniform_write, ha_histogram)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
 # Per-core write outstanding. Held from REQ inject to Comp retire.
-CORE_OUTSTANDING_WR = 512
+# Matches the existing top-die study.
+CORE_OUTSTANDING_WR = 128
 # CHI request-tracker entries per HA. A completer that runs out answers
 # RetryAck rather than silently queueing.
-HA_POS_DEPTH = 32
-BW_WINDOW = 50
+HA_POS_DEPTH = 512
+BW_WINDOW = 100
 
-# Crossing FIFOs plus the HPCA'22 SWAP bypass and a bounded D2D landing
-# buffer. Depths are a hardware cost that has to be stated, not assumed.
+# Top-die datapath is the existing 20-node ring fabric (2 planes, not 1):
+# 12+8 inject queues, per-VC / per-dir board ports, two-write leave,
+# I-tag reserve. Bottom die keeps SWAP + landing buffer + turn FIFOs.
 FABRIC = dict(turn_depth=64, d2d_depth=128,
               swap_rule=True, d2d_land_depth=16,
               core_outstanding=CORE_OUTSTANDING_WR,
               ha_pos_depth=HA_POS_DEPTH,
-              inj_depth=8, eject_depth=4, eject_bw=1, per_vc_srcq=True)
+              inj_depth=12, dir_inj_depth=8, eject_depth=12, eject_bw=1,
+              shared_inj=True, two_write_leave=True,
+              per_vc_srcq=True, per_vc_ports=True, per_dir_ports=True,
+              inj_sel="free_slot", itag_mode="reserve",
+              t_inj=16, itag_hold=8, t_xfer=1,
+              plane_sel="least_occupied")
 
 ROUTE_LABEL = {
     "bound": "目的地绑定路由（硬件规定）",
@@ -88,7 +95,9 @@ def _sim(name: str, *, route: str, **kw) -> tuple[type, Any]:
 
 def group_stats(topo: StackTopology, inject_times: dict[int, list[int]],
                 done_by_core: dict[int, int] | None = None,
-                makespan: int = 0, m_wdata: int = M_WDATA) -> dict[str, Any]:
+                makespan: int = 0, m_wdata: int = M_WDATA,
+                done_times: dict[int, list[int]] | None = None
+                ) -> dict[str, Any]:
     """Write bandwidth per top die, treating each die's 10 cores as one group.
 
     A per-core number answers "is any single core starved". It is not the
@@ -109,10 +118,16 @@ def group_stats(topo: StackTopology, inject_times: dict[int, list[int]],
     dies = sorted(by_die)
     if not dies:
         return {}
-    finish = {c: (max(ts) if ts else 0) for c, ts in inject_times.items()}
-    # Same contention window as the per-core view: measure while every core
-    # still has work, so the shares are comparable.
-    t_fair = min(finish.values()) or 1
+    inj_finish = {c: (max(ts) if ts else 0) for c, ts in inject_times.items()}
+    if done_times:
+        finish = {c: (max(ts) if ts else 0) for c, ts in done_times.items()}
+        for c in inject_times:
+            finish.setdefault(c, inj_finish.get(c, 0))
+    else:
+        finish = inj_finish
+    # Contention window: while every core still has WriteData to inject.
+    # Group completion time is the last Comp, which is later than this.
+    t_fair = min(inj_finish.values()) or 1
     got = {d: sum(1 for c in by_die[d] for t in inject_times[c] if t <= t_fair)
            for d in dies}
     bw = {d: got[d] / t_fair for d in dies}
@@ -200,7 +215,8 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
     r["fairness"] = fairness_stats(r["wr_inject_by_core"], r["makespan"],
                                    n_per_core)
     r["group"] = group_stats(topo, r["wr_inject_by_core"],
-                             r.get("wr_done_by_core"), r["makespan"])
+                             r.get("wr_done_by_core"), r["makespan"],
+                             done_times=r.get("wr_done_times_by_core"))
     r["scheme"] = name
     r["route"] = route
     r["wall_s"] = round(time.time() - t0, 1)
@@ -209,6 +225,7 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                                      window=BW_WINDOW, makespan=r["makespan"])
     r.pop("wr_inject_by_core", None)
     r.pop("wr_done_by_core", None)
+    r.pop("wr_done_times_by_core", None)
     if not keep_trace and "fc" in r:
         r["fc"].pop("trace", None)
     return r
@@ -941,8 +958,8 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     """Tiled write + HA retry operating point.
 
     Each core writes dense 64 KB tiles (128 B burst, 4 KB stride). Line
-    interleave already spreads every core across all 96 HAs. Outstanding
-    is 128; an HA accepts 32 in-flight requests and RetryAcks the rest.
+    interleave already spreads every core across all 96 HAs.     Outstanding
+    is 128; an HA accepts 512 in-flight requests and RetryAcks the rest.
     S0 has no source-side rate control. S1 adds AIMD.
     """
     oc = blob["meta"]["core_outstanding"]
@@ -972,16 +989,18 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
         board[name] = die_board_table(topo, r.get("board_by_core_dir") or {},
                                       die=0)
         f, g, q = r["fairness"], r["group"], r.get("retry", {})
+        fin = g.get("finish_by_group") or {}
         print("      %-4s %-8s t=%6d done=%d/%d jain=%.4f "
               "grp_jain=%.4f gp_mm=%.2f retry=%d "
-              "swap=%d (hv=%d d2d=%d) d2d_buf=%d"
+              "swap=%d (hv=%d d2d=%d) d2d_buf=%d  finish=%s"
               % (name, "OK" if r["completed"] else "COLLAPSE",
                  r["makespan"], r["n_txn_done"], len(txns),
                  f.get("jain", 0), g.get("jain", 0),
                  g.get("goodput_max_min", 0), q.get("n_retry", 0),
                  r.get("n_swaps", 0), r.get("n_swaps_hv", 0),
                  r.get("n_swaps_d2d", 0),
-                 (r.get("fifo") or {}).get("d2d_buf_peak", 0)),
+                 (r.get("fifo") or {}).get("d2d_buf_peak", 0),
+                 "/".join(str(fin.get(str(d), 0)) for d in range(6))),
               flush=True)
     blob["schemes"] = {"mandated": per, "work": per}
     blob["group_series"] = series
@@ -1067,6 +1086,7 @@ def main() -> None:
         "top_bridges": list(TOP_BRIDGES),
         "directed_links": topo0.directed_links,
         "capacity": topo0.capacity(),
+        "n_planes": TOP_PLANES,
         "top_link_lats": list(topo0.top_link_lats),
         "h_hop_lat": topo0.h_hop_lat, "v_hop_lat": topo0.v_hop_lat,
         "bot_hop_lat": topo0.bot_hop_lat, "d2d_lat": topo0.d2d_lat,

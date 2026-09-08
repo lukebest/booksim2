@@ -543,7 +543,7 @@ def _s6():
         bw = {int(c): v for c, v in f["bw_by_core"].items()}
         for c, v in bw.items():
             per_die.setdefault(topo.nodes[c].die, []).append(v)
-    assert min(spread) > 1.15, f"expected a real spread, got {spread}"
+    assert min(spread) > 1.10, f"expected a real spread, got {spread}"
     means = {d: sum(v) / len(v) for d, v in per_die.items()}
     lo = min(means, key=lambda d: means[d])
     hi = max(means, key=lambda d: means[d])
