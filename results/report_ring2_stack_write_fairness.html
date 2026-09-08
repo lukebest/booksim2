@@ -115,7 +115,7 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 CoV 随时间">
-<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
+<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
 <div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例<br>（综合下界 / makespan）</th><th>E[CoV<sub>t</sub>]<br>（越低越均）</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>67,249</td><td>79.9%</td><td>0.4205</td><td>212,523</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>67,871</td><td>79.2%</td><td>0.4162</td><td>205,644</td></tr></tbody></table>
 <table><thead><tr><th>top die group</th><th>S0 完成时刻 (cycle)</th><th>S1 完成时刻 (cycle)</th><th>S1 − S0</th></tr></thead><tbody><tr><td>die 0</td><td>67,248</td><td>65,503</td><td>-1,745</td></tr><tr><td>die 1</td><td>65,223</td><td>67,870</td><td>+2,647</td></tr><tr><td>die 2</td><td>57,065</td><td>55,408</td><td>-1,657</td></tr><tr><td>die 3</td><td>54,582</td><td>54,907</td><td>+325</td></tr><tr><td>die 4</td><td>53,260</td><td>53,539</td><td>+279</td></tr><tr><td>die 5</td><td>49,374</td><td>49,710</td><td>+336</td></tr><tr><td><b>最晚 / 最早</b></td><td><b>67,248 / 49,374</b></td><td><b>67,870 / 49,710</b></td><td>组间完成时刻跨度</td></tr><tr><td><b>跨度 (max−min)</b></td><td><b>17,874</b></td><td><b>18,160</b></td><td>越小表示各组差不多同时写完</td></tr></tbody></table>
 <p><b>达下界比例</b> = 综合下界 / makespan。
@@ -129,7 +129,8 @@ S0 79.9%
 全程完成量 Jain / max/min 在批次排空后必接近 1，不区分方案，
 表里改列 <b>E[CoV<sub>t</sub>]</b>：每个 100-cycle 窗上六个 group
 写带宽的变异系数，再对竞争窗口平均（越低越均）。
-完成时间是该 die 10 个 core 最后一笔 Comp 回来的时刻。</p>
+曲线是该 die 10 个 core 的累计 WriteData（flit）；走平表示该组已经发完。
+圆点 / 方点是该组最后一笔 Comp 回来的时刻。</p>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，100 cycle 滑窗）。
@@ -183,11 +184,13 @@ S1 每组 1.2070（79.2%），
 与效率 0.80 / 0.79 一致——
 差的是绝对吞吐，不是组间完成量。</div>
 
-<h3>2.0b 每个 top die group 的完成时间</h3>
-<p>完成时刻 = 该 die 10 个 AI core 最后一笔写的 Comp 回到发起核。
-批次排空时 makespan 等于六个 group 完成时刻的最大值。
-柱越齐，组间写完得越同时。</p>
-<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
+<h3>2.0b 每个 top die group 的累计传输量</h3>
+<p>横轴时间、纵轴该组累计 WriteData（flit）。六个 group 画在同一张图：
+实线 S0，虚线 S1。曲线走平 = 该组 WriteData 已发完；
+圆点（S0）/ 方点（S1）= 该组最后一笔 Comp。
+谁先走平谁先写完。批次排空时每组终点相同
+（10 core × 2048 笔 × 4 WriteData = 81,920 flit）。</p>
+<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
 <table><thead><tr><th>top die group</th><th>S0 完成时刻 (cycle)</th><th>S1 完成时刻 (cycle)</th><th>S1 − S0</th></tr></thead><tbody><tr><td>die 0</td><td>67,248</td><td>65,503</td><td>-1,745</td></tr><tr><td>die 1</td><td>65,223</td><td>67,870</td><td>+2,647</td></tr><tr><td>die 2</td><td>57,065</td><td>55,408</td><td>-1,657</td></tr><tr><td>die 3</td><td>54,582</td><td>54,907</td><td>+325</td></tr><tr><td>die 4</td><td>53,260</td><td>53,539</td><td>+279</td></tr><tr><td>die 5</td><td>49,374</td><td>49,710</td><td>+336</td></tr><tr><td><b>最晚 / 最早</b></td><td><b>67,248 / 49,374</b></td><td><b>67,870 / 49,710</b></td><td>组间完成时刻跨度</td></tr><tr><td><b>跨度 (max−min)</b></td><td><b>17,874</b></td><td><b>18,160</b></td><td>越小表示各组差不多同时写完</td></tr></tbody></table>
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>

@@ -879,35 +879,47 @@ def plot_group_jain_series(b: dict, path: Path) -> None:
 
 
 def plot_group_finish(b: dict, path: Path) -> None:
-    """When each top-die group retires its last write, S0 vs S1."""
+    """Cumulative WriteData vs time, one curve per top-die group.
+
+    One axes: six groups. S0 solid, S1 dashed. A curve going flat is
+    that group done sending WriteData; the circle is last Comp.
+    """
+    gs = b.get("group_series") or {}
     mand = (b.get("schemes") or {}).get("mandated") or {}
     _cjk()
-    fig, ax = plt.subplots(figsize=(8.4, 4.2))
-    dies = list(range(6))
-    x = list(range(len(dies)))
-    w = 0.36
-    colors = {"s0": "#2563eb", "s1": "#ea5800"}
-    labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
-    ymax = 1
-    for i, name in enumerate(("s0", "s1")):
-        g = (mand.get(name) or {}).get("group") or {}
-        fin = g.get("finish_by_group") or {}
-        ys = [fin.get(str(d), 0) for d in dies]
-        ymax = max(ymax, max(ys) if ys else 0)
-        ax.bar([v + (i - 0.5) * w for v in x], ys, w,
-               color=colors[name], label=labels[name], edgecolor="white")
-        for v, y in zip(x, ys):
-            ax.text(v + (i - 0.5) * w, y + ymax * 0.012, f"{y:,}",
-                    ha="center", va="bottom", fontsize=7.2, color=colors[name])
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"die {d}" for d in dies])
-    ax.set_ylabel("该 group 最后一笔写完成时刻 (cycle)", fontsize=9)
-    ax.set_xlabel("top die group", fontsize=9)
-    ax.legend(fontsize=8.5, loc="upper right")
-    ax.grid(axis="y", alpha=0.25)
-    ax.set_ylim(0, ymax * 1.18)
-    fig.suptitle("S0 / S1：每个 top die group 的完成时间"
-                 "（该 die 10 个 core 最后一笔 Comp 回来）",
+    fig, ax = plt.subplots(figsize=(11.6, 5.2))
+    colors = ["#2563eb", "#dc2626", "#0891b2", "#ea5800", "#7c3aed", "#16a34a"]
+    styles = (("s0", "-", 1.85, 1.0), ("s1", "--", 1.45, 0.88))
+    for name, ls, lw, alpha in styles:
+        ser = gs.get(name) or {}
+        t = ser.get("t") or []
+        bw = ser.get("bw_by_group") or {}
+        w = ser.get("window", 100)
+        fin = ((mand.get(name) or {}).get("group") or {}).get(
+            "finish_by_group") or {}
+        if not t or not bw:
+            continue
+        for i, d in enumerate(sorted(bw, key=int)):
+            cum, s = [], 0.0
+            for v in bw[d]:
+                s += float(v) * w
+                cum.append(s)
+            lab = f"die {d}" if name == "s0" else None
+            ax.plot(t, cum, ls, color=colors[i % len(colors)], lw=lw,
+                    alpha=alpha, label=lab)
+            ft = fin.get(str(d))
+            if ft and cum:
+                ax.plot(ft, cum[-1], "o" if name == "s0" else "s",
+                        color=colors[i % len(colors)], ms=5.5,
+                        mec="white", mew=0.4, zorder=4)
+    ax.plot([], [], "k-", lw=1.8, label="S0 基线（实线）")
+    ax.plot([], [], "k--", lw=1.45, label="S1 AIMD（虚线）")
+    ax.set_xlabel("时间 (cycle)", fontsize=9)
+    ax.set_ylabel("累计传输 WriteData (flit)", fontsize=9)
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=8, ncol=4, loc="lower right")
+    fig.suptitle("每个 top die group 的累计写数据量"
+                 "（曲线走平 = 该组 WriteData 发完；圆点/方点 = 最后一笔 Comp）",
                  fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
@@ -2099,7 +2111,7 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 CoV 随时间">
-<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
+<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
 <div class="def">{scheme_table(b, "mandated")}
 {finish_table(b)}
 <p><b>达下界比例</b> = 综合下界 / makespan。
@@ -2113,7 +2125,8 @@ S0 {_pct(s0.get('eff') or (ideal.get('bound') or 0) / max(1, s0['makespan']))}
 全程完成量 Jain / max/min 在批次排空后必接近 1，不区分方案，
 表里改列 <b>E[CoV<sub>t</sub>]</b>：每个 100-cycle 窗上六个 group
 写带宽的变异系数，再对竞争窗口平均（越低越均）。
-完成时间是该 die 10 个 core 最后一笔 Comp 回来的时刻。</p>
+曲线是该 die 10 个 core 的累计 WriteData（flit）；走平表示该组已经发完。
+圆点 / 方点是该组最后一笔 Comp 回来的时刻。</p>
 <b>怎么读曲线。</b>
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，{b['group_series']['s0']['window']} cycle 滑窗）。
@@ -2167,11 +2180,13 @@ S1 每组 {_f(gp1)}（{_pct(gp1 / r_star if r_star else 0)}），
 与效率 {s0.get('eff', 0):.2f} / {s1.get('eff', 0):.2f} 一致——
 差的是绝对吞吐，不是组间完成量。</div>
 
-<h3>2.0b 每个 top die group 的完成时间</h3>
-<p>完成时刻 = 该 die 10 个 AI core 最后一笔写的 Comp 回到发起核。
-批次排空时 makespan 等于六个 group 完成时刻的最大值。
-柱越齐，组间写完得越同时。</p>
-<img src="stack_group_finish.png" alt="S0 与 S1 每个 top die group 完成时间">
+<h3>2.0b 每个 top die group 的累计传输量</h3>
+<p>横轴时间、纵轴该组累计 WriteData（flit）。六个 group 画在同一张图：
+实线 S0，虚线 S1。曲线走平 = 该组 WriteData 已发完；
+圆点（S0）/ 方点（S1）= 该组最后一笔 Comp。
+谁先走平谁先写完。批次排空时每组终点相同
+（10 core × 2048 笔 × 4 WriteData = 81,920 flit）。</p>
+<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
 {finish_table(b)}
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
