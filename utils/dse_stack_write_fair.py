@@ -35,8 +35,9 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackTurnParams)
 from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
                            TILING_SIZE, TOP_BRIDGES, TOP_PLANES, TXN_PER_CORE,
-                           V_LEN, StackTopology, Txn, build_tiled_write,
-                           build_uniform_write, ha_histogram)
+                           V_LEN, StackTopology, Txn, build_tiled_rw,
+                           build_tiled_write, build_uniform_write,
+                           ha_histogram)
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
 # Per-core write outstanding. Held from REQ inject to Comp retire.
@@ -211,21 +212,36 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
     t0 = time.time()
     r = run_batch(topo, txns, params=params, sim_cls=cls, seed=seed,
                   stall_after=stall_after)
-    n_per_core = (len(txns) // max(1, len(topo.cores))) * M_WDATA
-    r["fairness"] = fairness_stats(r["wr_inject_by_core"], r["makespan"],
-                                   n_per_core)
-    r["group"] = group_stats(topo, r["wr_inject_by_core"],
+    n_wr = sum(1 for t in txns if getattr(t, "op", "write") != "read")
+    n_rd = len(txns) - n_wr
+    n_per_core = (n_wr // max(1, len(topo.cores))) * M_WDATA
+    r["fairness"] = fairness_stats(r.get("wr_inject_by_core") or {},
+                                   r["makespan"], n_per_core)
+    r["group"] = group_stats(topo, r.get("wr_inject_by_core") or {},
                              r.get("wr_done_by_core"), r["makespan"],
                              done_times=r.get("wr_done_times_by_core"))
+    if r.get("rd_inject_by_core"):
+        r["rd_group"] = group_stats(topo, r["rd_inject_by_core"],
+                                    r.get("rd_done_by_core"), r["makespan"],
+                                    m_wdata=M_WDATA,
+                                    done_times=r.get("rd_done_times_by_core"))
+        r["rd_bw_series"] = group_bw_series(
+            topo, r["rd_inject_by_core"],
+            window=BW_WINDOW, makespan=r["makespan"])
     r["scheme"] = name
     r["route"] = route
+    r["n_write"] = n_wr
+    r["n_read"] = n_rd
     r["wall_s"] = round(time.time() - t0, 1)
     r["max_core_outstanding"] = r.get("max_core_outstanding", 0)
-    r["bw_series"] = group_bw_series(topo, r["wr_inject_by_core"],
+    r["bw_series"] = group_bw_series(topo, r.get("wr_inject_by_core") or {},
                                      window=BW_WINDOW, makespan=r["makespan"])
     r.pop("wr_inject_by_core", None)
     r.pop("wr_done_by_core", None)
     r.pop("wr_done_times_by_core", None)
+    r.pop("rd_inject_by_core", None)
+    r.pop("rd_done_by_core", None)
+    r.pop("rd_done_times_by_core", None)
     if not keep_trace and "fc" in r:
         r["fc"].pop("trace", None)
     return r
@@ -266,7 +282,7 @@ def arrival_vpos(topo: StackTopology, die: int, col: int) -> int:
 
 
 def v_ring_profile(topo: StackTopology, col: int = 0) -> dict[str, Any]:
-    """Analytic per-edge load on one column's vertical half ring.
+    """Analytic per-edge load on one column's vertical full ring.
 
     Columns are no longer interchangeable: under the 2x4 grouping a column is
     reached at the near ring by the die that owns it and at the far ring by
@@ -965,17 +981,21 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     oc = blob["meta"]["core_outstanding"]
     pos = args.pos_depth
     n_tiles = getattr(args, "n_tiles", N_TILES)
-    txns = build_tiled_write(topo, n_tiles=n_tiles, seed=args.seed)
+    txns = build_tiled_rw(topo, n_tiles=n_tiles, seed=args.seed)
     hist = ha_histogram(topo, txns)
     bound = topo.write_bounds(txns, m_req=M_REQ, m_rsp=M_RSP, m_wdata=M_WDATA)
+    n_wr = sum(1 for t in txns if getattr(t, "op", "write") != "read")
     per: dict[str, Any] = {"bounds": bound, "n_txn": len(txns),
+                           "n_write": n_wr, "n_read": len(txns) - n_wr,
                            "outstanding": oc, "pos_depth": pos,
                            "ha_hist": hist}
     series: dict[str, Any] = {}
+    rd_series: dict[str, Any] = {}
     stall = max(80_000, 160 * hist["per_core_txn"])
     print(f"[focus] outstanding={oc}  HA POS={pos}  "
-          f"tiles={n_tiles}  txn/core={hist['per_core_txn']}  "
-          f"ntxn={len(txns)}  HA cover={hist['covers_all_ha']}  "
+          f"tiles={n_tiles}  wr+rd/core={hist['per_core_txn']}  "
+          f"ntxn={len(txns)} (wr={n_wr} rd={len(txns) - n_wr})  "
+          f"HA cover={hist['covers_all_ha']}  "
           f"per-core HA max/min Δ={hist['per_core_max_min']}", flush=True)
     names = ("s0", "s1")
     board: dict[str, Any] = {}
@@ -986,6 +1006,7 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
         r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
         per[name] = r
         series[name] = r.get("bw_series", {})
+        rd_series[name] = r.get("rd_bw_series", {})
         board[name] = die_board_table(topo, r.get("board_by_core_dir") or {},
                                       die=0)
         f, g, q = r["fairness"], r["group"], r.get("retry", {})
@@ -1002,13 +1023,19 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
                  (r.get("fifo") or {}).get("d2d_buf_peak", 0),
                  "/".join(str(fin.get(str(d), 0)) for d in range(6))),
               flush=True)
+        rg = (r.get("rd_group") or {}).get("finish_by_group") or {}
+        if rg:
+            print("           rd_finish=%s"
+                  % "/".join(str(rg.get(str(d), 0)) for d in range(6)),
+                  flush=True)
     blob["schemes"] = {"mandated": per, "work": per}
     blob["group_series"] = series
+    blob["rd_group_series"] = rd_series
     blob["fabric_series"] = {name: per[name].get("fabric_series", {})
                              for name in names}
     blob["die0_board"] = board
     blob["workload"] = {
-        "kind": "tiled_write",
+        "kind": "tiled_rw",
         "burst_len": BURST_LEN, "stride": STRIDE,
         "tiling_size": TILING_SIZE, "n_tiles": n_tiles,
         "ha_hist": hist,

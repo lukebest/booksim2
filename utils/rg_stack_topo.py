@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""3D-stacked fabric: 6 top-die full rings over one bottom die of half rings.
+"""3D-stacked fabric: 6 top-die full rings over one bottom die of full rings.
 
 Geometry
 --------
@@ -13,14 +13,12 @@ ring. Roles by ring index:
 The former memory nodes are now die-to-die bridges: no HA lives on a top die.
 
 **Bottom die**. 96 HAs as 12 rows x 8 columns, plus 48 attach points. The NoC
-is 6 horizontal + 8 vertical *half rings*, where a half ring is a
-**unidirectional closed ring** -- it still wraps, but carries one direction
-only, so distance is not symmetric and `dst - src` must be taken modulo the
-ring length.
+is 6 horizontal + 8 vertical *bidirectional full rings* -- each still wraps,
+and traffic takes the shorter of the two directions.
 
-  * 6 horizontal half rings, 8 attach points each (one per column).
+  * 6 horizontal full rings, 8 attach points each (one per column).
     Rings 0,1 sit in the row1/row2 gap; 2,3 in row6/row7; 4,5 in row11/row12.
-  * 8 vertical half rings, 18 nodes each: the column's 12 HAs interleaved with
+  * 8 vertical full rings, 18 nodes each: the column's 12 HAs interleaved with
     the 6 attach points that cross it. Travel order is
 
         HA r1, A(h0), A(h1), HA r2..r6, A(h2), A(h3),
@@ -54,9 +52,8 @@ column outside its own group.
 
 The consequence that drives the whole study: a die's group covers only **4 of
 the 8 columns**, so half of every core's writes must ride a horizontal ring to
-reach the target column. The horizontal rings are therefore load bearing, and
-with only 48 directed horizontal links against 144 vertical ones they are a
-candidate bottleneck in their own right.
+reach the target column. The horizontal rings are therefore load bearing.
+Bidirectional rings give 96 directed H links against 288 vertical ones.
 
 HA-to-bridge binding
 --------------------
@@ -126,7 +123,7 @@ H_GAP_AFTER_ROW = (1, 6, 11)
 H_PER_GAP = 2
 N_HRING = len(H_GAP_AFTER_ROW) * H_PER_GAP  # 6
 N_ATTACH = N_HRING * N_COLS                 # 48
-V_LEN = N_ROWS + N_HRING                    # 18 nodes per vertical half ring
+V_LEN = N_ROWS + N_HRING                    # 18 nodes per vertical ring
 
 # An attach group is 2 attach rows x GROUP_COLS columns = 8 points per top die.
 GROUP_COLS = 4
@@ -138,8 +135,8 @@ ANY_PLANE = -1         # bottom-die and D2D links are shared by both planes
 
 # -- default latencies -------------------------------------------------------
 
-H_HOP_LAT = 4          # horizontal half-ring hop (attach -> attach)
-V_HOP_LAT = 6          # vertical half-ring hop (HA <-> attach)
+H_HOP_LAT = 4          # horizontal full-ring hop (attach <-> attach)
+V_HOP_LAT = 6          # vertical full-ring hop (HA <-> attach)
 D2D_LAT = 4            # die-to-die crossing: SerDes + CDC
 TURN_LAT = 5           # attach-point H <-> V turn
 BOT_HOP_LAT = H_HOP_LAT  # leftover alias; the two axes are no longer equal
@@ -161,8 +158,8 @@ class Node:
     idx: int = -1             # top-die ring index
     row: int = -1             # bottom-die row (1-based), HA only
     col: int = -1             # bottom-die column, attach + HA
-    hring: int = -1           # horizontal half ring, attach only
-    vpos: int = -1            # position on the vertical half ring
+    hring: int = -1           # horizontal ring, attach only
+    vpos: int = -1            # position on the vertical ring
 
     @property
     def on_bottom(self) -> bool:
@@ -170,7 +167,7 @@ class Node:
 
 
 def _v_layout() -> tuple[tuple[str, int], ...]:
-    """Travel order of one vertical half ring.
+    """Travel order of one vertical full ring.
 
     Returns 18 entries of ("ha", row) or ("attach", hring).
     """
@@ -189,7 +186,7 @@ V_LAYOUT = _v_layout()
 
 
 class StackTopology:
-    """6 bidirectional top-die rings + 48 D2D links + bottom half rings."""
+    """6 bidirectional top-die rings + 48 D2D links + bottom full rings."""
 
     def __init__(self, *, n_die: int = N_TOP_DIE,
                  top_link_lats: Sequence[int] = RING2_LINK_LATS,
@@ -390,18 +387,20 @@ class StackTopology:
                 u, v = self.top(d, idx), self.bridge_landing(d, idx)
                 self._link(u, v, self.d2d_lat, ANY_PLANE, ("d2d", d, j))
                 self._link(v, u, self.d2d_lat, ANY_PLANE, ("d2d", d, j))
-        # horizontal half rings: unidirectional, wraps
+        # horizontal full rings: bidirectional, wraps
         for h in range(N_HRING):
             for c in range(N_COLS):
                 u = self.attach(h, c)
                 v = self.attach(h, (c + 1) % N_COLS)
                 self._link(u, v, self.h_hop_lat, ANY_PLANE, ("h", h, 0))
-        # vertical half rings: unidirectional, wraps
+                self._link(v, u, self.h_hop_lat, ANY_PLANE, ("h", h, 0))
+        # vertical full rings: bidirectional, wraps
         for c in range(N_COLS):
             for pos in range(V_LEN):
                 u = self._v_node(c, pos)
                 v = self._v_node(c, (pos + 1) % V_LEN)
                 self._link(u, v, self.v_hop_lat, ANY_PLANE, ("v", c, 0))
+                self._link(v, u, self.v_hop_lat, ANY_PLANE, ("v", c, 0))
 
     def _v_node(self, col: int, pos: int) -> int:
         what, key = V_LAYOUT[pos]
@@ -419,8 +418,8 @@ class StackTopology:
             self.ring_of[("v", c, 0)] = [self._v_node(c, p)
                                          for p in range(V_LEN)]
         # Travel direction of every edge, and the ring successor map that
-        # `lap()` walks. Top rings carry both directions; a half ring and a
-        # D2D crossing carry one.
+        # `lap()` walks. Top, H and V rings carry both directions; a D2D
+        # crossing carries one.
         pos: dict[tuple[Any, int], int] = {}
         for rk, members in self.ring_of.items():
             for i, nid in enumerate(members):
@@ -689,8 +688,17 @@ class StackTopology:
             plane = self.pick_plane(t.core, t.ha, occupancy=occ)
             fwd = self.route(t.core, t.ha, plane)
             rev = self.route(t.ha, t.core, plane)
-            for vc, path, m in (("req", fwd, m_req), ("dat", fwd, m_wdata),
-                                ("rsp", rev, m_rsp)):
+            op = getattr(t, "op", "write")
+            if op == "read":
+                phases = (("req", fwd, t.m_req or m_req),
+                          ("dat", rev, t.m_resp or m_wdata))
+            else:
+                phases = (("req", fwd, t.m_req or m_req),
+                          ("dat", fwd, t.m_wdata or m_wdata),
+                          ("rsp", rev, m_rsp))
+            for vc, path, m in phases:
+                if not path:
+                    continue
                 for eid in path:
                     link[vc][eid] += m
                     fabric[self.fabric_of(eid)] += m
@@ -790,6 +798,52 @@ def build_tiled_write(topo: StackTopology, *,
                                               burst_len=burst_len),
                            1, 0, "write", m_wdata))
             tid += 1
+    return out
+
+
+def build_tiled_read(topo: StackTopology, *,
+                     burst_len: int = BURST_LEN, stride: int = STRIDE,
+                     tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
+                     m_resp: int | None = None, seed: int = 0,
+                     dies: Sequence[int] | None = None) -> list[Txn]:
+    """ReadNoSnp counterpart of `build_tiled_write`. Same addresses, reverse DAT."""
+    del seed
+    if m_resp is None:
+        m_resp = max(1, burst_len // FLIT_BYTES)
+    cs = ([c for c in topo.cores if topo.nodes[c].die in set(dies)]
+          if dies is not None else list(topo.cores))
+    out: list[Txn] = []
+    tid = 0
+    for rank, c in enumerate(cs):
+        base = rank * n_tiles * tiling_size
+        for addr in tiled_addrs(burst_len=burst_len, stride=stride,
+                                tiling_size=tiling_size, n_tiles=n_tiles,
+                                base=base):
+            out.append(Txn(tid, c, ha_of_addr(topo, addr,
+                                              burst_len=burst_len),
+                           1, m_resp, "read", 0))
+            tid += 1
+    return out
+
+
+def build_tiled_rw(topo: StackTopology, *,
+                   burst_len: int = BURST_LEN, stride: int = STRIDE,
+                   tiling_size: int = TILING_SIZE, n_tiles: int = N_TILES,
+                   m_dat: int | None = None, seed: int = 0,
+                   dies: Sequence[int] | None = None) -> list[Txn]:
+    """Each address issues one WriteNoSnp then one ReadNoSnp (1:1 mixed)."""
+    if m_dat is None:
+        m_dat = max(1, burst_len // FLIT_BYTES)
+    wr = build_tiled_write(topo, burst_len=burst_len, stride=stride,
+                           tiling_size=tiling_size, n_tiles=n_tiles,
+                           m_wdata=m_dat, seed=seed, dies=dies)
+    out: list[Txn] = []
+    tid = 0
+    for w in wr:
+        out.append(Txn(tid, w.core, w.ha, 1, 0, "write", m_dat))
+        tid += 1
+        out.append(Txn(tid, w.core, w.ha, 1, m_dat, "read", 0))
+        tid += 1
     return out
 
 

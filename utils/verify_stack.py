@@ -225,7 +225,7 @@ def _t6():
                 assert nh == 0, f"in-group column took {nh} H hops"
                 near += 1
             else:
-                assert nh == N_COLS // 2, f"far column took {nh} H hops"
+                assert 1 <= nh <= N_COLS // 2, f"far column took {nh} H hops"
                 far += 1
     assert near == far, f"{near} near vs {far} far"
     return (f"half of every core's writes ({far}/{near + far}) ride "
@@ -236,7 +236,7 @@ def _t6():
 def _t7():
     t = StackTopology()
     for rk, members in t.ring_of.items():
-        dirs = (1, -1) if rk[0] == "top" else (1,)
+        dirs = (1, -1)
         for d in dirs:
             node = members[0]
             lap = t.lap(rk, node, d)

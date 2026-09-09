@@ -6,8 +6,8 @@ Why this is not `Ring2BaseSim`
 The ring simulator inlines its geometry into movement: a flit's entire route
 is `(dir, hops_remaining)`, the next hop is `(idx + dir) % n`, and a failed
 eject is expressed as `target = n`. None of that survives a fabric where one
-transfer crosses a top-die ring, a die boundary, a horizontal half ring and a
-vertical half ring. Here a flit carries an explicit list of directed edges and
+transfer crosses a top-die ring, a die boundary, a horizontal full ring and a
+vertical full ring. Here a flit carries an explicit list of directed edges and
 walks it, so a turn, a die crossing and a revolution are all just edits to
 that list. The reusable parts -- CHI WriteNoSnp phasing, boarding queues,
 per-VC occupancy, the completer hooks -- are kept.
@@ -266,6 +266,9 @@ class StackBaseSim:
         self.wr_inject_times: dict[int, list[int]] = defaultdict(list)
         self.wr_recv_times: dict[int, list[int]] = defaultdict(list)
         self.wr_done_times: dict[int, list[int]] = defaultdict(list)
+        self.rd_inject_times: dict[int, list[int]] = defaultdict(list)
+        self.rd_done_times: dict[int, list[int]] = defaultdict(list)
+        self.resp_left: dict[int, int] = {}
         self.board_fail_cause: dict[Any, dict[str, int]] = defaultdict(
             lambda: defaultdict(int))
         self.board_ok_by_src: dict[Any, int] = defaultdict(int)
@@ -362,8 +365,11 @@ class StackBaseSim:
 
     def offer_txn(self, txn: Txn) -> None:
         self.txn_by_id[txn.txn_id] = txn
-        self.wdata_left[txn.txn_id] = txn.m_wdata
-        self.wr_t0[txn.txn_id] = self.t
+        if getattr(txn, "op", "write") == "read":
+            self.resp_left[txn.txn_id] = txn.m_resp or 4
+        else:
+            self.wdata_left[txn.txn_id] = txn.m_wdata
+            self.wr_t0[txn.txn_id] = self.t
         self._n_txn_target += 1
         plane = self._pick_plane(txn.core, txn.ha)
         f = Flit(pid=self._pid, txn_id=txn.txn_id, seq=0, nflit=txn.m_req,
@@ -821,6 +827,8 @@ class StackBaseSim:
         self._note_core_board(f, ok=True)
         if f.kind == "wdata":
             self.wr_inject_times[f.src].append(self.t)
+        if f.kind == "resp":
+            self.rd_inject_times[f.dst].append(self.t)
         if f.kind != "req" or not self._is_core[f.src]:
             return
         # Batch latency is measured from the offer, which for a closed batch
@@ -1384,6 +1392,10 @@ class StackBaseSim:
         """
         if not self._ha_take_credit(txn):
             return
+        if getattr(txn, "op", "write") == "read":
+            self._emit(txn, "resp", txn.ha, txn.core, txn.m_resp or 4,
+                       self.t + self.p.t_ha_service)
+            return
         self._emit(txn, "dbid", txn.ha, txn.core, 1,
                    self.t + self.p.t_ha_service)
 
@@ -1399,6 +1411,19 @@ class StackBaseSim:
         self.st[key] = self.st.get(key, 0) + 1
         if f.kind == "req":
             self._on_req_at_completer(txn)
+        elif f.kind == "resp":
+            left = self.resp_left.get(f.txn_id, 1) - 1
+            self.resp_left[f.txn_id] = left
+            if left == 0:
+                self.st["n_txn_done"] += 1
+                self.rd_done_times[txn.core].append(self.t)
+                self.txn_done.append((f.txn_id, self.t))
+                self._ha_free_credit(txn)
+                if self.p.core_outstanding > 0:
+                    self.core_outst[txn.core] = max(
+                        0, self.core_outst[txn.core] - 1)
+                    self._wake_core(txn.core)
+                self._on_txn_done(txn, f)
         elif f.kind == "dbid":
             self._emit(txn, "wdata", txn.core, txn.ha, txn.m_wdata, self.t)
         elif f.kind == "wdata":
@@ -1584,6 +1609,12 @@ class StackBaseSim:
                                   in sorted(self.compl_ranks.items())}
         out["wr_done_times_by_core"] = {c: list(v) for c, v
                                         in sorted(self.wr_done_times.items())}
+        out["rd_inject_by_core"] = {c: list(v) for c, v
+                                    in sorted(self.rd_inject_times.items())}
+        out["rd_done_by_core"] = {c: len(v) for c, v
+                                  in sorted(self.rd_done_times.items())}
+        out["rd_done_times_by_core"] = {c: list(v) for c, v
+                                        in sorted(self.rd_done_times.items())}
         leftover = self.t % self.fab_win
         if leftover and (self._win_hops or self._win_hops_vc):
             self._flush_fab_window(t_start=self.t - leftover, width=leftover)

@@ -24,7 +24,7 @@ code { font-size: 0.86em; }
 （逐边 hop 时延与单环报告相同；原 memory 节点改为 D2D bridge；
 数据通路 knobs 与现有 top die 对齐：12+8 上环队列、per-dir/per-vc 端口、
 two-write leave、I-tag reserve）。
-一个 bottom die：96 个 HA、6 横 + 8 纵 half ring，
+一个 bottom die：96 个 HA、6 横 + 8 纵 full ring，
 横环 4 cycle / 纵环 6 cycle /
 挂接点转向 5 cycle。
 D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所在列纵环），
@@ -32,9 +32,10 @@ D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所�
 带宽口径为<b>瞬时带宽</b>，写带宽单位为 <b>flit/cycle</b>。
 workload：burst <b>128 B</b>、stride <b>4096 B</b>、
 tiling_size <b>64 KB</b> × 4 tile / core
-（每核 2048 笔 WriteNoSnp，共 122,880 笔）。
+（每核写+读共 4096 笔，同一地址 1:1 WriteNoSnp / ReadNoSnp，
+共 245,760 笔）。
 地址按 128 B 交织到 96 个 HA，每核覆盖全部 HA
-（每核打到同一 HA 的次数 21–22）。
+（每核打到同一 HA 的次数 42–44）。
 每 core outstanding = <b>128</b>。
 每个 HA 跟踪表 <b>512</b> 项，满了走<b>请求 retry</b>
 （RetryAck → PCrdGrant → 重发 REQ），不是源端控速。</p>
@@ -56,75 +57,75 @@ S1 再加 AIMD 源端控速。HA 跟踪表满触发的是 CHI 请求 retry，不
 
 <h3>0.2 Bottom die</h3>
 <img src="stack_topology.png" alt="bottom die 与挂接点分组">
-<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>HA 阵列</td><td>96 个，12 行 × 8 列</td><td>写目的地（CHI completer）。没有 top-die HA</td></tr><tr><td>挂接点 / bottom D2D</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，六个 top die 各一组。每个 D2D landing <b>两个独立接口</b>：一个接该处横环，一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，只在出环 hop 上互斥</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 top die 8 条，双向，跨 SerDes。一条物理边，落地后横/纵口可同时上环</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 half ring</td><td>half ring = <b>单向闭环</b>，仍然回绕，但只走一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列。最长 17 跳</td></tr><tr><td>有向链路</td><td>横 48 / 纵 144 / D2D 96</td><td>全芯片有向边 768 （含 top 480）</td></tr><tr><td>CHI 虚通道</td><td>REQ / RSP / DAT</td><td>与 top die 相同：REQ / RSP / DAT 三条链路独立</td></tr><tr><td>SWAP（HPCA'22）</td><td>开</td><td>横↔纵挂接点、D2D↔横、D2D↔纵：两拍 flit 互换，各走对方腾出的 hop，不进 FIFO、不加转向时延</td></tr><tr><td>D2D 落地 buffer</td><td>16 / (挂接点, 目标环, VC)</td><td>SWAP 和环 FIFO 都没进时的有界落地队列，下拍再参与 SWAP</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>HA 请求跟踪表</td><td><b>512</b> 项 / HA</td><td>满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>workload</td><td>burst 128 B / stride 4096 B / tile 64 KB × 4（每核 2048 笔）</td><td>二维密铺：每行 stride/burst 笔，tile/stride 行。地址按 burst 交织到 96 个 HA，每核均匀覆盖全部 HA</td></tr></tbody></table>
-<table><thead><tr><th>链路</th><th>延迟</th><th>说明</th></tr></thead><tbody><tr><td>D2D 跨 die</td><td>4 cycle</td><td>SerDes + 跨时钟域。落地不再另加转向时延</td></tr><tr><td>bottom die 横环节点间</td><td><b>4</b> cycle</td><td>挂接点 → 挂接点，单向 half ring</td></tr><tr><td>bottom die 纵环节点间</td><td><b>6</b> cycle</td><td>HA ↔ 挂接点，单向 half ring</td></tr><tr><td>挂接点转向</td><td><b>5</b> cycle</td><td>横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不和转向共队列</td></tr><tr><td>D2D bottom 双接口</td><td>横环口 + 该列纵环口</td><td>SerDes 仍是一条 D2D 边；落地后可同时上横环和上纵环</td></tr></tbody></table>
+<table><thead><tr><th>项目</th><th>取值</th><th>说明</th></tr></thead><tbody><tr><td>HA 阵列</td><td>96 个，12 行 × 8 列</td><td>写目的地（CHI completer）。没有 top-die HA</td></tr><tr><td>挂接点 / bottom D2D</td><td>48</td><td>按“2 横 × 4 列 = 8 个”一组，六个 top die 各一组。每个 D2D landing <b>两个独立接口</b>：一个接该处横环，一个接所在列纵环。D2D→横、D2D→纵、横↔纵转向是三条 FIFO，只在出环 hop 上互斥</td></tr><tr><td>D2D 链路</td><td>48</td><td>每 top die 8 条，双向，跨 SerDes。一条物理边，落地后横/纵口可同时上环</td></tr><tr><td>bottom die NoC</td><td>6 横 + 8 纵 full ring</td><td>full ring = <b>双向闭环</b>，走较短的那一个方向</td></tr><tr><td>纵环长度</td><td>18</td><td>12 个 HA + 6 个挂接点交替排列。最长 9 跳（双向取短）</td></tr><tr><td>有向链路</td><td>横 96 / 纵 288 / D2D 96</td><td>全芯片有向边 960 （含 top 480）</td></tr><tr><td>CHI 虚通道</td><td>REQ / RSP / DAT</td><td>与 top die 相同：REQ / RSP / DAT 三条链路独立</td></tr><tr><td>SWAP（HPCA'22）</td><td>开</td><td>横↔纵挂接点、D2D↔横、D2D↔纵：两拍 flit 互换，各走对方腾出的 hop，不进 FIFO、不加转向时延</td></tr><tr><td>D2D 落地 buffer</td><td>16 / (挂接点, 目标环, VC)</td><td>SWAP 和环 FIFO 都没进时的有界落地队列，下拍再参与 SWAP</td></tr><tr><td>转向 / D2D FIFO 深度</td><td>64 / 128</td><td>唯一允许缓冲的地方；链路本身严格无缓冲</td></tr><tr><td>HA 请求跟踪表</td><td><b>512</b> 项 / HA</td><td>满了走<b>请求 retry</b>：回 RetryAck，再发 PCrdGrant 后重传 REQ</td></tr><tr><td>每笔写的 flit 数</td><td>REQ 1、RSP 2、DAT 4</td><td>WriteNoSnp 四段握手：REQ → DBIDResp → WriteData → Comp</td></tr><tr><td>workload</td><td>burst 128 B / stride 4096 B / tile 64 KB × 4（每核 2048 笔）</td><td>二维密铺：每行 stride/burst 笔，tile/stride 行。地址按 burst 交织到 96 个 HA，每核均匀覆盖全部 HA</td></tr></tbody></table>
+<table><thead><tr><th>链路</th><th>延迟</th><th>说明</th></tr></thead><tbody><tr><td>D2D 跨 die</td><td>4 cycle</td><td>SerDes + 跨时钟域。落地不再另加转向时延</td></tr><tr><td>bottom die 横环节点间</td><td><b>4</b> cycle</td><td>挂接点 ↔ 挂接点，双向 full ring</td></tr><tr><td>bottom die 纵环节点间</td><td><b>6</b> cycle</td><td>HA ↔ 挂接点，双向 full ring</td></tr><tr><td>挂接点转向</td><td><b>5</b> cycle</td><td>横环 ↔ 纵环，经转向 FIFO；D2D 落地走自己的横/纵接口，不和转向共队列</td></tr><tr><td>D2D bottom 双接口</td><td>横环口 + 该列纵环口</td><td>SerDes 仍是一条 D2D 边；落地后可同时上横环和上纵环</td></tr></tbody></table>
 <div class="def">横环一跳 4 cycle，纵环一跳
 6 cycle，挂接点 H↔V 转向另加
 5 cycle。
 D2D 落地不再加转向时延——那一跳已经算在 D2D 的 4 cycle 里。
 落地后横环口和纵环口是两条独立 FIFO，不和 H↔V 转向共队列。
 交叉方向（横↔纵、D2D↔环）走 SWAP，不进 FIFO、不加转向时延。
-纵环单向且最长 17 跳，所以回程往往比去程贵：最坏回程
-147 cycle，去程只有 58 cycle。</div>
+纵环双向，走较短方向，最长 9 跳。最坏回程
+105 cycle，去程只有 100 cycle。</div>
 
 <h2>结论</h2>
 <div class="key"><ol>
 <li><b>outstanding 设为 128。</b>
 无拥塞的 WriteNoSnp 往返 = REQ 去程 + DBID 回程 + WriteData 去程
 （4 flit 流水，最后一拍比第一拍晚 3 cycle）+ Comp 回程。
-最坏一对 (core 4, HA 231) 的去程
-58 cycle、回程 147 cycle，合计
+最坏一对 (core 4, HA 238) 的去程
+100 cycle、回程 105 cycle，合计
 <b>413 cycle</b>。额度从 REQ 上环一直占到 Comp 回来。
 窗口 128 小于最长 RTT
 413，长路径上 core 会先把 128 个槽占满再等 Comp。
-本批次每 core 2048 笔，大于窗口 128，实测峰值占用 128，<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。</li>
+本批次每 core 4096 笔，大于窗口 128，实测峰值占用 128，<b>outstanding 上限已经打满</b>——S0 能发出去的条件只剩 outstanding 空位和 ring slot。</li>
 
 <li><b>HA 跟踪表满是请求 retry 机制。S0 不另加源端控速，S1 才控速。</b>
 每个 HA 同时只能收 512 个请求；再来的 REQ 走
 RetryAck → PCrdGrant → 重发 REQ，占真实 RSP/REQ 带宽。
-S0 完成 <b>122,880/122,880</b>，makespan 67,249 cycle，
+S0 完成 <b>4,012/245,760</b>，makespan 663,434 cycle，
 RetryAck 0 次，有效并发是名义值的
 100.0%；
-S1 完成 122,880/122,880，67,871 cycle，
+S1 完成 4,971/245,760，658,942 cycle，
 retry 0。
-两个方案都排空，没有活锁、没有停在停滞检测器上。</li>
+S1 的组写带宽在 t≈3,100 cycle 掉到接近 0（峰值 27.3100 flit/cycle @ t=700），之后 6558 个滑窗没有 WriteData 上环，停滞检测在 658,942 cycle 切断。 根因见第 2.3 节。</li>
 
 <li><b>全程完成量均衡，瞬时不均衡。瞬时均衡度用 E[CoV<sub>t</sub>]。</b>
 六个 die 写完同样多的 flit，Jain(E[x]) = 1.00，完成量 max/min = 1.00。
 每个 100-cycle 窗上再算六个 group 写带宽的变异系数 (σ/μ)，竞争窗口内
-S0 的 E[CoV<sub>t</sub>] = <b>0.4205</b>，
-S1 为 <b>0.4162</b>
-（约 95.4% 的窗 CoV &gt; 0.20）。
+S0 的 E[CoV<sub>t</sub>] = <b>0.1465</b>，
+S1 为 <b>0.1413</b>
+（约 22.2% 的窗 CoV &gt; 0.20）。
 越低越均，0 表示该窗六个 group 写带宽相同。
 均衡流量下理想每组写带宽是
-<b>1.524 flit/cycle</b>
-（总 WriteData / 综合下界 / 6；下界 53,760 cycle，
-由纵环切割决定）。S0 全程平均每组 1.2182，
-约是理想的 79.9%。
+<b>2.631 flit/cycle</b>
+（总 WriteData / 综合下界 / 6；下界 62,272 cycle，
+由纵环切割决定）。S0 全程平均每组 0.0012，
+约是理想的 0.0%。
 虚线画在组写带宽曲线上。</li>
 
 <li><b>对分 / 环带宽按瞬时口径看。</b>
-S0：top die REQ 瞬时 90.0%（打满）；D2D 对分 REQ 瞬时 50.0%（未打满）；横环 DAT 瞬时 95.8%（打满）；纵环 REQ 瞬时 86.1%（接近打满）。
-S1：top die REQ 瞬时 82.7%（接近打满）；D2D 对分 REQ 瞬时 50.0%（未打满）；横环 DAT 瞬时 97.9%（打满）；纵环 REQ 瞬时 85.4%（接近打满）。
+S0：top die REQ 瞬时 85.0%（接近打满）；D2D 对分 DAT 瞬时 52.1%（未打满）；横环 DAT 瞬时 100.0%（打满）；纵环 DAT 瞬时 91.7%（打满）。
+S1：top die REQ 瞬时 83.5%（接近打满）；D2D 对分 DAT 瞬时 56.2%（未打满）；横环 DAT 瞬时 100.0%（打满）；纵环 DAT 瞬时 89.2%（接近打满）。
 “打满”看最忙那条 CHI VC 的瞬时峰值是否达到该织物有向边数；
 全程平均会把排空尾部算进去，会低估峰值占用。
 D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上环。</li>
 
-<li><b>SWAP + D2D 落地 buffer 解除交叉死锁。</b>S0 SWAP 54,468 次（H↔V 20,134，D2D 34,334）；S1 53,402 次（H↔V 20,130，D2D 33,272）。下降的 WriteData 与上升的 Comp/PCrd 在 D2D bridge 互换 hop；远列转向在横↔纵挂接点互换。落地 buffer 峰值 16。</li>
+<li><b>S1 崩溃是纵环 RSP + retry 环被掐断，不是 AIMD 把源端刹死。</b> S1 的组写带宽在 t≈3,100 cycle 掉到接近 0（峰值 27.3100 flit/cycle @ t=700），之后 6558 个滑窗没有 WriteData 上环，停滞检测在 658,942 cycle 切断。 AIMD 几乎只升窗（617,605 vs 降窗 95）。锁死链：纵环 RSP 打满 → HA 发不出 PCrd/Comp → 0 笔 retry 没有对应重发 → outstanding 挂死 → 写带宽归零。细节在第 2.3 节。</li>
 </ol></div>
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 CoV 随时间">
-<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
-<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例<br>（综合下界 / makespan）</th><th>E[CoV<sub>t</sub>]<br>（越低越均）</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>67,249</td><td>79.9%</td><td>0.4205</td><td>212,523</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#16a34a">完成</b></td><td>122,880 / 122,880</td><td>67,871</td><td>79.2%</td><td>0.4162</td><td>205,644</td></tr></tbody></table>
-<table><thead><tr><th>top die group</th><th>S0 完成时刻 (cycle)</th><th>S1 完成时刻 (cycle)</th><th>S1 − S0</th></tr></thead><tbody><tr><td>die 0</td><td>67,248</td><td>65,503</td><td>-1,745</td></tr><tr><td>die 1</td><td>65,223</td><td>67,870</td><td>+2,647</td></tr><tr><td>die 2</td><td>57,065</td><td>55,408</td><td>-1,657</td></tr><tr><td>die 3</td><td>54,582</td><td>54,907</td><td>+325</td></tr><tr><td>die 4</td><td>53,260</td><td>53,539</td><td>+279</td></tr><tr><td>die 5</td><td>49,374</td><td>49,710</td><td>+336</td></tr><tr><td><b>最晚 / 最早</b></td><td><b>67,248 / 49,374</b></td><td><b>67,870 / 49,710</b></td><td>组间完成时刻跨度</td></tr><tr><td><b>跨度 (max−min)</b></td><td><b>17,874</b></td><td><b>18,160</b></td><td>越小表示各组差不多同时写完</td></tr></tbody></table>
+<img src="stack_group_finish.png" alt="每个 top die group 写/读累计传输量随时间">
+<div class="def"><table><thead><tr><th>方案</th><th>批次是否排空</th><th>完成事务</th><th>makespan</th><th>达下界比例<br>（综合下界 / makespan）</th><th>E[CoV<sub>t</sub>]<br>（越低越均）</th><th>偏转次数</th></tr></thead><tbody><tr><td>S0 基线（无源端流控）</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>4,012 / 245,760</td><td>663,434</td><td>9.4%</td><td>0.1465</td><td>20,622,288</td></tr><tr><td>S1 源端 AIMD 控速</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>4,971 / 245,760</td><td>658,942</td><td>9.5%</td><td>0.1413</td><td>19,674,477</td></tr></tbody></table>
+<table><thead><tr><th>top die group</th><th>S0 写完成</th><th>S0 读完成</th><th>S1 写完成</th><th>S1 读完成</th></tr></thead><tbody><tr><td>die 0</td><td>8,072</td><td>5,369</td><td>2,293</td><td>2,607</td></tr><tr><td>die 1</td><td>2,165</td><td>2,051</td><td>3,445</td><td>2,621</td></tr><tr><td>die 2</td><td>2,157</td><td>5,390</td><td>1,849</td><td>1,799</td></tr><tr><td>die 3</td><td>1,484</td><td>1,399</td><td>3,299</td><td>2,905</td></tr><tr><td>die 4</td><td>5,083</td><td>5,094</td><td>1,597</td><td>2,682</td></tr><tr><td>die 5</td><td>1,595</td><td>2,060</td><td>3,313</td><td>2,599</td></tr></tbody></table>
 <p><b>达下界比例</b> = 综合下界 / makespan。
 综合下界是链路、端口、织物切割、单事务时延四条下界的最大值
-（本批次是纵环切割 53,760 cycle）。
+（本批次是纵环切割 62,272 cycle）。
 100% 表示批次在这个最短可能时间里排空；
-S0 79.9%
+S0 9.4%
 表示实际用了下界的
-1.25 倍时间，
+10.65 倍时间，
 写带宽也只有理想的同样比例。
 全程完成量 Jain / max/min 在批次排空后必接近 1，不区分方案，
 表里改列 <b>E[CoV<sub>t</sub>]</b>：每个 100-cycle 窗上六个 group
@@ -135,15 +136,15 @@ S0 79.9%
 纵轴是该 top die 10 个 AI core 合计的 WriteData 上环速率
 （flit/cycle，100 cycle 滑窗）。
 <b>黑色虚线</b>是均衡流量下的理想每组写带宽
-1.524 flit/cycle
-（122,880 笔 × 4 WriteData
-/ 下界 53,760 cycle / 6 组）。
+2.631 flit/cycle
+（245,760 笔 × 4 WriteData
+/ 下界 62,272 cycle / 6 组）。
 六条线若贴着这条虚线且缠在一起，才是瞬时也均衡；
 贴着虚线但上下散开，就是长程均、短时轮流抢。
 下面一张是每个窗的组间 CoV<sub>t</sub>，点线是 E[CoV<sub>t</sub>]，
 虚线 0 是该窗六个 group 写带宽相同。
-S0 的 E[CoV<sub>t</sub>] = 0.4205，
-S1 为 0.4162。</div>
+S0 的 E[CoV<sub>t</sub>] = 0.1465，
+S1 为 0.1413。</div>
 <img src="stack_group.png" alt="各 group 整次运行写吞吐">
 
 <h2>1　堆叠装配与绑定</h2>
@@ -158,11 +159,11 @@ S1 为 0.4162。</div>
 <p>一个 top die 的 10 个 AI core 共用一条环、一组 8 个挂接点和 8 条 D2D，
 是不可再往下调度的单位。下表是整次运行的合计（flit/cycle）；上图是同一指标的时间展开。
 S0 每 die 平均
-1.2182 flit/cycle，
-六 die 合计 7.3090 flit/cycle。
-均衡理想每组 <b>1.524</b> flit/cycle
-（六组合计 9.143）。</p>
-<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计 flit/cycle</th><th>E[CoV<sub>t</sub>]<br>（瞬时，越低越均）</th></tr></thead><tbody><tr><td>128</td><td>S0</td><td><b style="color:#16a34a">完成</b></td><td>1.2182 / 1.2182 / 1.2182 / 1.2182 / 1.2182 / 1.2182</td><td>7.3090</td><td>0.4205</td></tr><tr><td>128</td><td>S1</td><td><b style="color:#16a34a">完成</b></td><td>1.2070 / 1.2070 / 1.2070 / 1.2070 / 1.2070 / 1.2070</td><td>7.2420</td><td>0.4162</td></tr></tbody></table>
+0.0012 flit/cycle，
+六 die 合计 0.0086 flit/cycle。
+均衡理想每组 <b>2.631</b> flit/cycle
+（六组合计 15.786）。</p>
+<table><thead><tr><th>outstanding</th><th>方案</th><th>排空</th><th>各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5</th><th>合计 flit/cycle</th><th>E[CoV<sub>t</sub>]<br>（瞬时，越低越均）</th></tr></thead><tbody><tr><td>128</td><td>S0</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.0012 / 0.0009 / 0.0019 / 0.0020 / 0.0010 / 0.0016</td><td>0.0086</td><td>0.1465</td></tr><tr><td>128</td><td>S1</td><td><b style="color:#dc2626">拥塞崩溃</b></td><td>0.0010 / 0.0015 / 0.0019 / 0.0029 / 0.0012 / 0.0023</td><td>0.0108</td><td>0.1413</td></tr></tbody></table>
 
 <h3>2.0 瞬时组间均衡度 E[CoV<sub>t</sub>]</h3>
 <p>全程 Jain / max/min 是时间积分：每个 die 写完同样多的 WriteData，
@@ -170,37 +171,36 @@ S0 每 die 平均
 因此用每个窗上六个 group 写带宽的变异系数 CoV = σ/μ，再对竞争窗口
 （t ≤ t_fair）取平均，记为 <b>E[CoV<sub>t</sub>]</b>，作为瞬时均衡度
 （越低越均，0 = 该窗六个 group 写带宽相同）。
-S0 = 0.4205，S1 = 0.4162。
+S0 = 0.1465，S1 = 0.1413。
 比较方案时固定 100 cycle 窗。</p>
-<table><thead><tr><th>指标</th><th>S0</th><th>S1</th><th>含义</th></tr></thead><tbody><tr><td>E[CoV<sub>t</sub>]（瞬时均衡度）</td><td>0.4205</td><td>0.4162</td><td>每个 100-cycle 窗上六个 group 写带宽的变异系数 (σ/μ)，再对竞争窗口平均。0 = 每个窗都均</td></tr><tr><td>窗内 CoV 中位数 / 最小 / 最大</td><td>0.3902 / 0.0451 / 1.2500</td><td>0.3997 / 0.0623 / 0.9492</td><td>竞争窗口内</td></tr><tr><td>CoV<sub>t</sub> &gt; 0.20 的窗占比</td><td>95.4%</td><td>94.0%</td><td>该窗六个 group 写带宽相对离散超过 20% 的时间比例</td></tr><tr><td>Jain(E[x])（全程完成量）</td><td>0.9774</td><td>0.9765</td><td>先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1</td></tr><tr><td>窗长 / 计入窗数</td><td>100 / 475</td><td>100 / 479</td><td>只计 t ≤ t_fair 且该窗总写带宽 &gt; 0</td></tr><tr><td>均衡理想每组写带宽</td><td>1.524 flit/cycle</td><td>1.524 flit/cycle</td><td>n_txn × WriteData / 综合下界 / 6 组 = 122,880 × 4 / 53,760 / 6。下界是纵环切割 53,760 cycle</td></tr><tr><td>均衡理想六组合计</td><td>9.143 flit/cycle</td><td>9.143 flit/cycle</td><td>若跑到下界且组间均分，全芯片 WriteData 上环速率</td></tr></tbody></table>
-<div class="def">均衡理想怎么来的。综合下界 53,760 cycle
-由纵环切割决定（fabric_lb.v = 53,760；
-最忙 DAT 链路下界 46,096）。
-总 WriteData = 122,880 × 4 flit。
+<table><thead><tr><th>指标</th><th>S0</th><th>S1</th><th>含义</th></tr></thead><tbody><tr><td>E[CoV<sub>t</sub>]（瞬时均衡度）</td><td>0.1465</td><td>0.1413</td><td>每个 100-cycle 窗上六个 group 写带宽的变异系数 (σ/μ)，再对竞争窗口平均。0 = 每个窗都均</td></tr><tr><td>窗内 CoV 中位数 / 最小 / 最大</td><td>0.1432 / 0.0746 / 0.2782</td><td>0.1246 / 0.0394 / 0.2742</td><td>竞争窗口内</td></tr><tr><td>CoV<sub>t</sub> &gt; 0.20 的窗占比</td><td>22.2%</td><td>25.0%</td><td>该窗六个 group 写带宽相对离散超过 20% 的时间比例</td></tr><tr><td>Jain(E[x])（全程完成量）</td><td>0.9888</td><td>0.9963</td><td>先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1</td></tr><tr><td>窗长 / 计入窗数</td><td>100 / 9</td><td>100 / 8</td><td>只计 t ≤ t_fair 且该窗总写带宽 &gt; 0</td></tr><tr><td>均衡理想每组写带宽</td><td>2.631 flit/cycle</td><td>2.631 flit/cycle</td><td>n_txn × WriteData / 综合下界 / 6 组 = 245,760 × 4 / 62,272 / 6。下界是纵环切割 30,720 cycle</td></tr><tr><td>均衡理想六组合计</td><td>15.786 flit/cycle</td><td>15.786 flit/cycle</td><td>若跑到下界且组间均分，全芯片 WriteData 上环速率</td></tr></tbody></table>
+<div class="def">均衡理想怎么来的。综合下界 62,272 cycle
+由纵环切割决定（fabric_lb.v = 30,720；
+最忙 DAT 链路下界 62,272）。
+总 WriteData = 245,760 × 4 flit。
 若六个 group 均分且跑到下界，每组写带宽 =
-总 WriteData / 下界 / 6 = <b>1.524 flit/cycle</b>。
-S0 实测每组 1.2182（理想的 79.9%），
-S1 每组 1.2070（79.2%），
-与效率 0.80 / 0.79 一致——
+总 WriteData / 下界 / 6 = <b>2.631 flit/cycle</b>。
+S0 实测每组 0.0012（理想的 0.0%），
+S1 每组 0.0010（0.0%），
+与效率 0.09 / 0.09 一致——
 差的是绝对吞吐，不是组间完成量。</div>
 
-<h3>2.0b 每个 top die group 的累计传输量</h3>
-<p>横轴时间、纵轴该组累计 WriteData（flit）。六个 group 画在同一张图：
-实线 S0，虚线 S1。曲线走平 = 该组 WriteData 已发完；
-圆点（S0）/ 方点（S1）= 该组最后一笔 Comp。
-谁先走平谁先写完。批次排空时每组终点相同
-（10 core × 2048 笔 × 4 WriteData = 81,920 flit）。</p>
-<img src="stack_group_finish.png" alt="每个 top die group 累计写数据量随时间">
-<table><thead><tr><th>top die group</th><th>S0 完成时刻 (cycle)</th><th>S1 完成时刻 (cycle)</th><th>S1 − S0</th></tr></thead><tbody><tr><td>die 0</td><td>67,248</td><td>65,503</td><td>-1,745</td></tr><tr><td>die 1</td><td>65,223</td><td>67,870</td><td>+2,647</td></tr><tr><td>die 2</td><td>57,065</td><td>55,408</td><td>-1,657</td></tr><tr><td>die 3</td><td>54,582</td><td>54,907</td><td>+325</td></tr><tr><td>die 4</td><td>53,260</td><td>53,539</td><td>+279</td></tr><tr><td>die 5</td><td>49,374</td><td>49,710</td><td>+336</td></tr><tr><td><b>最晚 / 最早</b></td><td><b>67,248 / 49,374</b></td><td><b>67,870 / 49,710</b></td><td>组间完成时刻跨度</td></tr><tr><td><b>跨度 (max−min)</b></td><td><b>17,874</b></td><td><b>18,160</b></td><td>越小表示各组差不多同时写完</td></tr></tbody></table>
+<h3>2.0b 每个 top die group 的累计传输量（写 + 读）</h3>
+<p>横轴时间、纵轴该组累计 DAT（flit）。左 S0、右 S1，六个 group 同图：
+<b>实线写</b>（WriteData core→HA），<b>虚线读</b>（CompData HA→core）。
+同一地址 1:1：每笔写跟着一笔读，每组每种方向排空都是 81,920 flit。
+走平 = 该组该方向发完；圆点写完成、方点读完成。</p>
+<img src="stack_group_finish.png" alt="每个 top die group 写/读累计传输量随时间">
+<table><thead><tr><th>top die group</th><th>S0 写完成</th><th>S0 读完成</th><th>S1 写完成</th><th>S1 读完成</th></tr></thead><tbody><tr><td>die 0</td><td>8,072</td><td>5,369</td><td>2,293</td><td>2,607</td></tr><tr><td>die 1</td><td>2,165</td><td>2,051</td><td>3,445</td><td>2,621</td></tr><tr><td>die 2</td><td>2,157</td><td>5,390</td><td>1,849</td><td>1,799</td></tr><tr><td>die 3</td><td>1,484</td><td>1,399</td><td>3,299</td><td>2,905</td></tr><tr><td>die 4</td><td>5,083</td><td>5,094</td><td>1,597</td><td>2,682</td></tr><tr><td>die 5</td><td>1,595</td><td>2,060</td><td>3,313</td><td>2,599</td></tr></tbody></table>
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
 <p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
 失败 = 环 slot 忙或 I-tag 挡住，<b>不含</b> outstanding / AIMD 拒发。
 <b>成功 CW/CCW</b>、<b>失败 CW/CCW</b> 是次数比（CW ÷ CCW）。</p>
 <h4>S0 无源端流控</h4>
-<table><thead><tr><th>die 0 AI core</th><th>成功 CW</th><th>成功 CCW</th><th>成功 CW/CCW</th><th>成功合计</th><th>失败 CW</th><th>失败 CCW</th><th>失败 CW/CCW</th><th>失败合计</th></tr></thead><tbody><tr><td>core 0（环位 0）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>1,757</td><td>2,086</td><td>0.84</td><td>3,843</td></tr><tr><td>core 2（环位 2）</td><td>5,180</td><td>5,060</td><td>1.02</td><td>10,240</td><td>1,515</td><td>1,895</td><td>0.80</td><td>3,410</td></tr><tr><td>core 4（环位 4）</td><td>5,080</td><td>5,160</td><td>0.98</td><td>10,240</td><td>1,375</td><td>1,779</td><td>0.77</td><td>3,154</td></tr><tr><td>core 6（环位 6）</td><td>5,040</td><td>5,200</td><td>0.97</td><td>10,240</td><td>1,053</td><td>1,671</td><td>0.63</td><td>2,724</td></tr><tr><td>core 8（环位 8）</td><td>5,120</td><td>5,120</td><td>1.00</td><td>10,240</td><td>1,319</td><td>1,865</td><td>0.71</td><td>3,184</td></tr><tr><td>core 10（环位 10）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>2,001</td><td>1,129</td><td>1.77</td><td>3,130</td></tr><tr><td>core 12（环位 12）</td><td>5,100</td><td>5,140</td><td>0.99</td><td>10,240</td><td>2,359</td><td>1,263</td><td>1.87</td><td>3,622</td></tr><tr><td>core 14（环位 14）</td><td>5,040</td><td>5,200</td><td>0.97</td><td>10,240</td><td>2,304</td><td>1,351</td><td>1.71</td><td>3,655</td></tr><tr><td>core 16（环位 16）</td><td>5,100</td><td>5,140</td><td>0.99</td><td>10,240</td><td>2,122</td><td>1,455</td><td>1.46</td><td>3,577</td></tr><tr><td>core 18（环位 18）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>1,155</td><td>2,663</td><td>0.43</td><td>3,818</td></tr><tr><td><b>die 0 合计</b></td><td><b>51,260</b></td><td><b>51,140</b></td><td><b>1.00</b></td><td><b>102,400</b></td><td><b>16,960</b></td><td><b>17,157</b></td><td><b>0.99</b></td><td><b>34,117</b></td></tr></tbody></table>
+<table><thead><tr><th>die 0 AI core</th><th>成功 CW</th><th>成功 CCW</th><th>成功 CW/CCW</th><th>成功合计</th><th>失败 CW</th><th>失败 CCW</th><th>失败 CW/CCW</th><th>失败合计</th></tr></thead><tbody><tr><td>core 0（环位 0）</td><td>370</td><td>95</td><td>3.89</td><td>465</td><td>502</td><td>44</td><td>11.41</td><td>546</td></tr><tr><td>core 2（环位 2）</td><td>244</td><td>200</td><td>1.22</td><td>444</td><td>319</td><td>291</td><td>1.10</td><td>610</td></tr><tr><td>core 4（环位 4）</td><td>181</td><td>287</td><td>0.63</td><td>468</td><td>296</td><td>405</td><td>0.73</td><td>701</td></tr><tr><td>core 6（环位 6）</td><td>231</td><td>324</td><td>0.71</td><td>555</td><td>121</td><td>289</td><td>0.42</td><td>410</td></tr><tr><td>core 8（环位 8）</td><td>250</td><td>254</td><td>0.98</td><td>504</td><td>216</td><td>163</td><td>1.33</td><td>379</td></tr><tr><td>core 10（环位 10）</td><td>169</td><td>192</td><td>0.88</td><td>361</td><td>329</td><td>75</td><td>4.39</td><td>404</td></tr><tr><td>core 12（环位 12）</td><td>209</td><td>343</td><td>0.61</td><td>552</td><td>218</td><td>209</td><td>1.04</td><td>427</td></tr><tr><td>core 14（环位 14）</td><td>198</td><td>273</td><td>0.73</td><td>471</td><td>100</td><td>134</td><td>0.75</td><td>234</td></tr><tr><td>core 16（环位 16）</td><td>315</td><td>183</td><td>1.72</td><td>498</td><td>200</td><td>39</td><td>5.13</td><td>239</td></tr><tr><td>core 18（环位 18）</td><td>389</td><td>126</td><td>3.09</td><td>515</td><td>325</td><td>90</td><td>3.61</td><td>415</td></tr><tr><td><b>die 0 合计</b></td><td><b>2,556</b></td><td><b>2,277</b></td><td><b>1.12</b></td><td><b>4,833</b></td><td><b>2,626</b></td><td><b>1,739</b></td><td><b>1.51</b></td><td><b>4,365</b></td></tr></tbody></table>
 <h4>S1 源端 AIMD 控速</h4>
-<table><thead><tr><th>die 0 AI core</th><th>成功 CW</th><th>成功 CCW</th><th>成功 CW/CCW</th><th>成功合计</th><th>失败 CW</th><th>失败 CCW</th><th>失败 CW/CCW</th><th>失败合计</th></tr></thead><tbody><tr><td>core 0（环位 0）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>1,582</td><td>952</td><td>1.66</td><td>2,534</td></tr><tr><td>core 2（环位 2）</td><td>5,180</td><td>5,060</td><td>1.02</td><td>10,240</td><td>1,087</td><td>865</td><td>1.26</td><td>1,952</td></tr><tr><td>core 4（环位 4）</td><td>5,080</td><td>5,160</td><td>0.98</td><td>10,240</td><td>970</td><td>1,030</td><td>0.94</td><td>2,000</td></tr><tr><td>core 6（环位 6）</td><td>5,040</td><td>5,200</td><td>0.97</td><td>10,240</td><td>783</td><td>1,130</td><td>0.69</td><td>1,913</td></tr><tr><td>core 8（环位 8）</td><td>5,120</td><td>5,120</td><td>1.00</td><td>10,240</td><td>768</td><td>1,375</td><td>0.56</td><td>2,143</td></tr><tr><td>core 10（环位 10）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>1,179</td><td>912</td><td>1.29</td><td>2,091</td></tr><tr><td>core 12（环位 12）</td><td>5,100</td><td>5,140</td><td>0.99</td><td>10,240</td><td>1,310</td><td>870</td><td>1.51</td><td>2,180</td></tr><tr><td>core 14（环位 14）</td><td>5,040</td><td>5,200</td><td>0.97</td><td>10,240</td><td>1,132</td><td>879</td><td>1.29</td><td>2,011</td></tr><tr><td>core 16（环位 16）</td><td>5,100</td><td>5,140</td><td>0.99</td><td>10,240</td><td>965</td><td>817</td><td>1.18</td><td>1,782</td></tr><tr><td>core 18（环位 18）</td><td>5,200</td><td>5,040</td><td>1.03</td><td>10,240</td><td>1,029</td><td>1,582</td><td>0.65</td><td>2,611</td></tr><tr><td><b>die 0 合计</b></td><td><b>51,260</b></td><td><b>51,140</b></td><td><b>1.00</b></td><td><b>102,400</b></td><td><b>10,805</b></td><td><b>10,412</b></td><td><b>1.04</b></td><td><b>21,217</b></td></tr></tbody></table>
+<table><thead><tr><th>die 0 AI core</th><th>成功 CW</th><th>成功 CCW</th><th>成功 CW/CCW</th><th>成功合计</th><th>失败 CW</th><th>失败 CCW</th><th>失败 CW/CCW</th><th>失败合计</th></tr></thead><tbody><tr><td>core 0（环位 0）</td><td>271</td><td>93</td><td>2.91</td><td>364</td><td>306</td><td>2</td><td>153.00</td><td>308</td></tr><tr><td>core 2（环位 2）</td><td>245</td><td>229</td><td>1.07</td><td>474</td><td>196</td><td>239</td><td>0.82</td><td>435</td></tr><tr><td>core 4（环位 4）</td><td>188</td><td>299</td><td>0.63</td><td>487</td><td>166</td><td>356</td><td>0.47</td><td>522</td></tr><tr><td>core 6（环位 6）</td><td>216</td><td>272</td><td>0.79</td><td>488</td><td>111</td><td>193</td><td>0.58</td><td>304</td></tr><tr><td>core 8（环位 8）</td><td>251</td><td>228</td><td>1.10</td><td>479</td><td>267</td><td>111</td><td>2.41</td><td>378</td></tr><tr><td>core 10（环位 10）</td><td>222</td><td>257</td><td>0.86</td><td>479</td><td>234</td><td>185</td><td>1.26</td><td>419</td></tr><tr><td>core 12（环位 12）</td><td>186</td><td>269</td><td>0.69</td><td>455</td><td>144</td><td>125</td><td>1.15</td><td>269</td></tr><tr><td>core 14（环位 14）</td><td>243</td><td>312</td><td>0.78</td><td>555</td><td>174</td><td>95</td><td>1.83</td><td>269</td></tr><tr><td>core 16（环位 16）</td><td>293</td><td>215</td><td>1.36</td><td>508</td><td>138</td><td>42</td><td>3.29</td><td>180</td></tr><tr><td>core 18（环位 18）</td><td>325</td><td>143</td><td>2.27</td><td>468</td><td>295</td><td>51</td><td>5.78</td><td>346</td></tr><tr><td><b>die 0 合计</b></td><td><b>2,440</b></td><td><b>2,317</b></td><td><b>1.05</b></td><td><b>4,757</b></td><td><b>2,031</b></td><td><b>1,399</b></td><td><b>1.45</b></td><td><b>3,430</b></td></tr></tbody></table>
 
 <h3>2.2 各织物瞬时带宽</h3>
 <p>口径：每个 cycle 该织物上新发出的 hop 数（瞬时带宽，flit/cycle）。
@@ -209,35 +209,48 @@ S1 每组 1.2070（79.2%），
 “单 VC 打满”= 峰值达到有向边数，“三 VC 打满”= 达到 3× 边数。</p>
 <img src="stack_fabric_bw_series.png" alt="各织物瞬时带宽随时间">
 <h4>S0</h4>
-<table><thead><tr><th>织物</th><th>有向边</th><th>单 VC 容量<br>flit/cycle</th><th>三 VC 容量<br>flit/cycle</th><th>瞬时峰值<br>flit/cycle</th><th>峰值 / 单 VC</th><th>峰值 / 三 VC</th><th>REQ 峰值</th><th>RSP 峰值</th><th>DAT 峰值</th><th>全程平均<br>（三 VC）</th></tr></thead><tbody><tr><td>top die 环</td><td>480</td><td>480</td><td>1440</td><td>551</td><td>114.8%</td><td>38.3%</td><td>90.0%</td><td>15.2%</td><td>65.0%</td><td>5.5%</td></tr><tr><td>D2D 对分</td><td>96</td><td>96</td><td>288</td><td>68</td><td>70.8%</td><td>23.6%</td><td>50.0%</td><td>20.8%</td><td>37.5%</td><td>4.4%</td></tr><tr><td>bottom 横环</td><td>48</td><td>48</td><td>144</td><td>101</td><td>210.4%</td><td>70.1%</td><td>89.6%</td><td>50.0%</td><td>95.8%</td><td>29.4%</td></tr><tr><td>bottom 纵环</td><td>144</td><td>144</td><td>432</td><td>284</td><td>197.2%</td><td>65.7%</td><td>86.1%</td><td>82.6%</td><td>83.3%</td><td>27.8%</td></tr></tbody></table>
+<table><thead><tr><th>织物</th><th>有向边</th><th>单 VC 容量<br>flit/cycle</th><th>三 VC 容量<br>flit/cycle</th><th>瞬时峰值<br>flit/cycle</th><th>峰值 / 单 VC</th><th>峰值 / 三 VC</th><th>REQ 峰值</th><th>RSP 峰值</th><th>DAT 峰值</th><th>全程平均<br>（三 VC）</th></tr></thead><tbody><tr><td>top die 环</td><td>480</td><td>480</td><td>1440</td><td>616</td><td>128.3%</td><td>42.8%</td><td>85.0%</td><td>12.3%</td><td>66.9%</td><td>0.0%</td></tr><tr><td>D2D 对分</td><td>96</td><td>96</td><td>288</td><td>75</td><td>78.1%</td><td>26.0%</td><td>47.9%</td><td>13.5%</td><td>52.1%</td><td>0.0%</td></tr><tr><td>bottom 横环</td><td>96</td><td>96</td><td>288</td><td>155</td><td>161.5%</td><td>53.8%</td><td>62.5%</td><td>24.0%</td><td>100.0%</td><td>47.4%</td></tr><tr><td>bottom 纵环</td><td>288</td><td>288</td><td>864</td><td>510</td><td>177.1%</td><td>59.0%</td><td>44.1%</td><td>62.8%</td><td>91.7%</td><td>29.2%</td></tr></tbody></table>
 <h4>S1</h4>
-<table><thead><tr><th>织物</th><th>有向边</th><th>单 VC 容量<br>flit/cycle</th><th>三 VC 容量<br>flit/cycle</th><th>瞬时峰值<br>flit/cycle</th><th>峰值 / 单 VC</th><th>峰值 / 三 VC</th><th>REQ 峰值</th><th>RSP 峰值</th><th>DAT 峰值</th><th>全程平均<br>（三 VC）</th></tr></thead><tbody><tr><td>top die 环</td><td>480</td><td>480</td><td>1440</td><td>529</td><td>110.2%</td><td>36.7%</td><td>82.7%</td><td>15.4%</td><td>71.7%</td><td>5.4%</td></tr><tr><td>D2D 对分</td><td>96</td><td>96</td><td>288</td><td>55</td><td>57.3%</td><td>19.1%</td><td>50.0%</td><td>20.8%</td><td>41.7%</td><td>4.4%</td></tr><tr><td>bottom 横环</td><td>48</td><td>48</td><td>144</td><td>95</td><td>197.9%</td><td>66.0%</td><td>83.3%</td><td>50.0%</td><td>97.9%</td><td>29.1%</td></tr><tr><td>bottom 纵环</td><td>144</td><td>144</td><td>432</td><td>283</td><td>196.5%</td><td>65.5%</td><td>85.4%</td><td>82.6%</td><td>82.6%</td><td>27.5%</td></tr></tbody></table>
+<table><thead><tr><th>织物</th><th>有向边</th><th>单 VC 容量<br>flit/cycle</th><th>三 VC 容量<br>flit/cycle</th><th>瞬时峰值<br>flit/cycle</th><th>峰值 / 单 VC</th><th>峰值 / 三 VC</th><th>REQ 峰值</th><th>RSP 峰值</th><th>DAT 峰值</th><th>全程平均<br>（三 VC）</th></tr></thead><tbody><tr><td>top die 环</td><td>480</td><td>480</td><td>1440</td><td>606</td><td>126.2%</td><td>42.1%</td><td>83.5%</td><td>13.3%</td><td>78.1%</td><td>0.0%</td></tr><tr><td>D2D 对分</td><td>96</td><td>96</td><td>288</td><td>75</td><td>78.1%</td><td>26.0%</td><td>46.9%</td><td>15.6%</td><td>56.2%</td><td>0.0%</td></tr><tr><td>bottom 横环</td><td>96</td><td>96</td><td>288</td><td>160</td><td>166.7%</td><td>55.6%</td><td>61.5%</td><td>27.1%</td><td>100.0%</td><td>49.9%</td></tr><tr><td>bottom 纵环</td><td>288</td><td>288</td><td>864</td><td>465</td><td>161.5%</td><td>53.8%</td><td>43.1%</td><td>57.6%</td><td>89.2%</td><td>24.8%</td></tr></tbody></table>
 <div class="def">点线是该织物单 VC 容量（= 有向边数），虚线是三 VC 合计。
-S0：top die REQ 瞬时 90.0%（打满）；D2D 对分 REQ 瞬时 50.0%（未打满）；横环 DAT 瞬时 95.8%（打满）；纵环 REQ 瞬时 86.1%（接近打满）。<br>S1：top die REQ 瞬时 82.7%（接近打满）；D2D 对分 REQ 瞬时 50.0%（未打满）；横环 DAT 瞬时 97.9%（打满）；纵环 REQ 瞬时 85.4%（接近打满）。</div>
+S0：top die REQ 瞬时 85.0%（接近打满）；D2D 对分 DAT 瞬时 52.1%（未打满）；横环 DAT 瞬时 100.0%（打满）；纵环 DAT 瞬时 91.7%（打满）。<br>S1：top die REQ 瞬时 83.5%（接近打满）；D2D 对分 DAT 瞬时 56.2%（未打满）；横环 DAT 瞬时 100.0%（打满）；纵环 DAT 瞬时 89.2%（接近打满）。</div>
 
-<h3>2.3 SWAP 与 D2D buffer</h3>
-<p>两个方案都排空。下表对照 SWAP / 落地 buffer / retry。
-S0 同期峰值 28.8200 flit/cycle（六 die 合计），
-全程平均 7.3090 flit/cycle，并在
-67,249 cycle 排空。</p>
-<table><thead><tr><th>证据</th><th>S0</th><th>S1</th></tr></thead><tbody><tr><td>完成事务</td><td>122,880/122,880</td><td>122,880/122,880</td></tr><tr><td>停滞检测</td><td>否</td><td>否</td></tr><tr><td>RetryAck / PCrdGrant / REQ 重发</td><td>0 / 0 / 0</td><td>0 / 0 / 0</td></tr><tr><td>未兑现的 PCrd（Retry − 重发）</td><td>0</td><td><b>0</b></td></tr><tr><td>HA 上环失败（RSP）</td><td>143,351</td><td><b>119,043</b></td></tr><tr><td>纵环 RSP 瞬时占用</td><td>82.6%</td><td>82.6%</td></tr><tr><td>转向 / D2D FIFO 峰值</td><td>64 / 128</td><td>64 / 128</td></tr><tr><td>SWAP 次数（H↔V / D2D）</td><td>54,468 (20,134 / 34,334)</td><td>53,402 (20,130 / 33,272)</td></tr><tr><td>D2D 落地 buffer 峰值 / 残留</td><td>16 / 0</td><td>16 / 0</td></tr><tr><td>结束时 FIFO 残留 / 在途 / 源端积压</td><td>0 / 0 / 0</td><td>0 / 0 / 0</td></tr><tr><td>AIMD 升窗 / 降窗 / 拒发</td><td>—（S0 无源端控速）</td><td>62,806 / 794 / 282,062</td></tr><tr><td>有效并发 / 名义 outstanding</td><td>100.0%</td><td>100.0%</td></tr></tbody></table>
+<h3>2.3 S1 拥塞崩溃的原因</h3>
+<p>S1 的组写带宽在 t≈3,100 cycle 掉到接近 0（峰值 27.3100 flit/cycle @ t=700），之后 6558 个滑窗没有 WriteData 上环，停滞检测在 658,942 cycle 切断。
+S0 同期峰值 24.6300 flit/cycle（六 die 合计），
+全程平均 0.0086 flit/cycle，并在
+663,434 cycle 排空。</p>
+<table><thead><tr><th>证据</th><th>S0</th><th>S1</th></tr></thead><tbody><tr><td>完成事务</td><td>4,012/245,760</td><td>4,971/245,760</td></tr><tr><td>停滞检测</td><td>是</td><td><b>是（连续无 flit 交付）</b></td></tr><tr><td>RetryAck / PCrdGrant / REQ 重发</td><td>0 / 0 / 0</td><td>0 / 0 / 0</td></tr><tr><td>未兑现的 PCrd（Retry − 重发）</td><td>0</td><td><b>0</b></td></tr><tr><td>HA 上环失败（RSP）</td><td>8,485</td><td><b>5,868</b></td></tr><tr><td>纵环 RSP 瞬时占用</td><td>62.8%</td><td>57.6%</td></tr><tr><td>转向 / D2D FIFO 峰值</td><td>64 / 128</td><td>64 / 128</td></tr><tr><td>SWAP 次数（H↔V / D2D）</td><td>10,661 (2,151 / 8,510)</td><td>10,324 (2,342 / 7,982)</td></tr><tr><td>D2D 落地 buffer 峰值 / 残留</td><td>16 / 1254</td><td>16 / 1240</td></tr><tr><td>结束时 FIFO 残留 / 在途 / 源端积压</td><td>9324 / 15521 / 235593</td><td>8470 / 15279 / 235070</td></tr><tr><td>AIMD 升窗 / 降窗 / 拒发</td><td>—（S0 无源端控速）</td><td>617,605 / 95 / 166,907</td></tr><tr><td>有效并发 / 名义 outstanding</td><td>100.0%</td><td>100.0%</td></tr></tbody></table>
 <div class="def"><ol>
-<li><b>SWAP 让交叉方向不必互相等 FIFO。</b>
-下降 WriteData（D2D→纵/横）与上升 Comp/PCrd（纵/横→D2D）在同一
-挂接点互换，各走对方腾出的 hop，不进 FIFO、不加
-5 cycle 转向。远列 H↔V 转向同样互换。
-S0 SWAP 54,468 次（H↔V 20,134 / D2D 34,334），
-S1 53,402 次（H↔V 20,130 / D2D 33,272）。</li>
-<li><b>D2D 落地 buffer 把无界 stall 收成有界队列。</b>
-错过 SWAP 和环 FIFO 的落地 flit 进
-16 深的
-(挂接点, 目标环, VC) 队列，下拍再作为 D2D 到达参与 SWAP。
-S1 峰值占用 16，
-残留 0。</li>
-<li><b>retry 环能闭环。</b>
-S1 RetryAck 0、重发
-0，未兑现 PCrd 0。
-有效并发 100.0%。</li>
+<li><b>触发点在 bottom 纵环的 RSP，不是 top die，也不是 D2D 对分。</b>
+双接口让 D2D 落地可以同时上横环和纵环，纵环 DAT/RSP 瞬时被打满
+（S1 纵环 RSP 瞬时 57.6%）。
+96 个 HA 的 RSP 上环失败合计
+5,868
+次，几乎全是 <code>hop_busy</code> / I-tag，说明 HA 要把
+RetryAck、PCrdGrant、Comp 送上纵环时，槽已经被在环流量占住。</li>
+<li><b>CHI retry 环被掐断，outstanding 槽回不来。</b>
+RetryAck 0 次，但 REQ 只重发了
+0 次，差 <b>0</b> 笔：
+PCrdGrant 发不出（或发在网上走不到 core），core 就一直占着
+outstanding。有效并发只剩名义值的 100.0%，
+峰值挂起 0 笔。新 REQ 发不出，
+P-Credit 重发也发不出，写数据在 t≈3,100 之后为 0。</li>
+<li><b>S1 的 AIMD 没有刹住这场风暴。</b>
+升窗 617,605 次、降窗只有
+95 次，结束时每核预算都顶在窗口 64。
+S1 把路径上的拥塞等级从本节点失败里减掉，core 自己上环失败不多，
+于是判定“该加窗”；真正挤爆的是 HA 侧 RSP。
+<code>scope=core_only</code> 也不限 HA。窗口上限 64 flit / 64 cycle
+等于每核最多 1 flit/cycle，反而把写数据变慢，retry 风暴有更长时间
+把纵环锁死。S0 没有这个 1 flit/cycle 帽子，在 663,434
+cycle 冲完，retry 与重发数量对齐，FIFO 残留 0。</li>
+<li><b>锁死后出不去。</b>
+结束时转向/D2D FIFO 仍坐着 8470 个 flit，
+在途 15,279、源端积压 235,070。
+FIFO 深度已经顶满（转向 64、D2D 128），偏转把纵环喂饱，
+HA 更上不去环。连续 655,360 cycle
+没有任何 flit 交付，停滞检测判定崩溃——不是“慢”，是死锁。</li>
 </ol></div>
 
 
@@ -253,8 +266,8 @@ n_txn=30,720。当前面：S16 HA 授权压低瞬时公平（E[Jain<sub>t</sub>]
 <table><thead><tr><th>方案</th><th>维度</th><th>排空</th><th>E[Jain<sub>t</sub>]</th><th>每组写带宽<br>（占理想）</th><th>代价</th><th>收益 √(J·η)</th></tr></thead><tbody><tr><td>S0 无控</td><td>无</td><td><b style="color:#16a34a">完成</b></td><td>0.8569</td><td>0.8984 (59.0%)</td><td>0</td><td>0.711 ← Pareto</td></tr><tr><td>S1 AIMD 窗+总线</td><td>发送端 / 窗口 / 拥塞等级</td><td><b style="color:#16a34a">完成</b></td><td>0.8302</td><td>0.9006 (59.1%)</td><td>80</td><td>0.701</td></tr><tr><td>S1 无路径抵消 <b>（最贴近目标）</b></td><td>发送端 / 窗口 / 本地失败</td><td><b style="color:#16a34a">完成</b></td><td>0.8742</td><td>0.9454 (62.0%)</td><td>80</td><td>0.737 ← Pareto</td></tr><tr><td>S1 本地 AIMD</td><td>发送端 / 窗口 / 本地失败无总线</td><td><b style="color:#16a34a">完成</b></td><td>0.8497</td><td>0.8902 (58.4%)</td><td>18</td><td>0.705</td></tr><tr><td>S16 HA 授权</td><td>接收端 / 窗口 / DBID 授权</td><td><b style="color:#16a34a">完成</b></td><td>0.7605</td><td>0.8898 (58.4%)</td><td>48</td><td>0.666</td></tr><tr><td>S17 转向让行</td><td>织物侧 / 饥饿计数 / 转向</td><td><b style="color:#16a34a">完成</b></td><td>0.8292</td><td>0.8836 (58.0%)</td><td>12</td><td>0.693</td></tr><tr><td>S18 RTT 窗口</td><td>发送端 / 窗口 / RTT</td><td><b style="color:#16a34a">完成</b></td><td>0.8873</td><td>0.7312 (48.0%)</td><td>35</td><td>0.652</td></tr><tr><td>S20 每核 DAT 配额</td><td>发送端 / 速率 / 周期配额</td><td><b style="color:#16a34a">完成</b></td><td>0.8381</td><td>0.8237 (54.1%)</td><td>8</td><td>0.673</td></tr><tr><td>S20 漏桶</td><td>发送端 / 速率 / 漏桶</td><td><b style="color:#16a34a">完成</b></td><td>0.8703</td><td>0.8585 (56.3%)</td><td>9</td><td>0.700</td></tr><tr><td>S21 每 die DAT 配额</td><td>发送端 / 速率 / die 配额</td><td><b style="color:#16a34a">完成</b></td><td>0.7890</td><td>0.8559 (56.2%)</td><td>4</td><td>0.666</td></tr><tr><td>S21 漏桶</td><td>发送端 / 速率 / die 漏桶</td><td><b style="color:#16a34a">完成</b></td><td>0.8571</td><td>0.8756 (57.5%)</td><td>5</td><td>0.702</td></tr></tbody></table>
 
 <h2>3　理论下界</h2>
-<table><thead><tr><th>下界来源</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>链路下界（分 VC 取最大）</td><td>46,096</td><td>最忙的一条有向链路上、单个 VC 需要搬运的 flit 数</td></tr><tr><td>　└ 分 VC 明细</td><td>dat 46,096 / req 11,524 / rsp 25,600</td><td>DAT 是 4 flit/笔，通常是它决定链路下界</td></tr><tr><td>端口下界</td><td>10,240</td><td>某个站点注入或弹出端口的总需求（各 VC 合并，端口只有一个）</td></tr><tr><td>　└ 分织物明细</td><td>d2d 8,960 / h 35,840 / top 8,960 / v 53,760</td><td>纵环 144 条、横环 48 条，横环少但只承担换列流量</td></tr><tr><td>织物切割下界</td><td>53,760</td><td>某类织物的总 flit·跳 ÷ 该类链路数</td></tr><tr><td>单事务时延下界</td><td>609</td><td>一笔写的四段握手串行时延，与并发无关</td></tr><tr><td><b>综合下界</b></td><td><b>53,760</b></td><td>以上四者取最大</td></tr></tbody></table>
-<p class="note">S0 效率 0.80，S1 0.79
+<table><thead><tr><th>下界来源</th><th>cycle</th><th>含义</th></tr></thead><tbody><tr><td>链路下界（分 VC 取最大）</td><td>62,272</td><td>最忙的一条有向链路上、单个 VC 需要搬运的 flit 数</td></tr><tr><td>　└ 分 VC 明细</td><td>dat 62,272 / req 15,376 / rsp 16,614</td><td>DAT 是 4 flit/笔，通常是它决定链路下界</td></tr><tr><td>端口下界</td><td>12,288</td><td>某个站点注入或弹出端口的总需求（各 VC 合并，端口只有一个）</td></tr><tr><td>　└ 分织物明细</td><td>d2d 15,360 / h 30,720 / top 15,360 / v 23,893</td><td>纵环 288 条、横环 96 条（双向 full ring）</td></tr><tr><td>织物切割下界</td><td>30,720</td><td>某类织物的总 flit·跳 ÷ 该类链路数</td></tr><tr><td>单事务时延下界</td><td>422</td><td>一笔写的四段握手串行时延，与并发无关</td></tr><tr><td><b>综合下界</b></td><td><b>62,272</b></td><td>以上四者取最大</td></tr></tbody></table>
+<p class="note">S0 效率 0.09，S1 0.09
 （下界 / makespan）。</p>
 
 <h2>4　复现</h2>
@@ -262,6 +275,6 @@ n_txn=30,720。当前面：S16 HA 授权压低瞬时公平（E[Jain<sub>t</sub>]
 <code>python3 utils/dse_stack_write_fair.py --focus --oc 128 --pos-depth 512</code><br>
 <code>python3 utils/gen_stack_write_report.py</code>
 <br><br>
-仿真 12249 s。outstanding = 128，HA POS = 512。
+仿真 36988 s。outstanding = 128，HA POS = 512。
 </div>
 </body></html>
