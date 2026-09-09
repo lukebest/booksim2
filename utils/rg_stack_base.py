@@ -216,6 +216,7 @@ class StackBaseSim:
             "n_txn_done": 0, "n_deflections": 0, "n_etag_raised": 0,
             "n_itag_raised": 0, "n_inring_blocked": 0,
             "n_eject_full_deflect": 0, "n_turn_full_deflect": 0,
+            "n_turn_hold": 0,
             "n_tap_deflect": 0, "n_board_fail": 0, "n_turn_board_fail": 0,
             "max_inj_starve": 0, "max_deflections": 0, "max_ejectq": 0,
             "max_srcq": 0, "max_pending": 0, "n_admit_stall": 0,
@@ -559,8 +560,15 @@ class StackBaseSim:
                                              self.inring_hold[seg])
         self.arrivals[self.t + 1].append(f)
 
+    def _age_xfer_wait(self, f: Flit) -> None:
+        """E-tag a flit that is sitting on a full transfer FIFO."""
+        f.fail_eject += 1
+        if f.fail_eject >= self.p.t_xfer and not f.e_tag:
+            f.e_tag = True
+            self.st["n_etag_raised"] += 1
+
     def _deflect(self, f: Flit) -> None:
-        """No room to leave the ring: ride one full revolution of it."""
+        """No room to eject at the destination: ride one revolution."""
         f.deflections += 1
         f.fail_eject += 1
         self.st["n_deflections"] += 1
@@ -1071,20 +1079,37 @@ class StackBaseSim:
             def bounce(fl: Flit, *, dest: bool) -> None:
                 if dest:
                     self.st["n_eject_full_deflect"] += 1
-                else:
-                    self.st["n_turn_full_deflect"] += 1
+                    if on_ring:
+                        self._deflect(fl)
+                    elif id(fl) in from_land:
+                        return
+                    elif self._push_d2d_buf(fl):
+                        return
+                    else:
+                        self.st["n_d2d_stall"] += 1
+                        self._age_xfer_wait(fl)
+                        self._land_now[node] = self._land_now[node] + 1
+                        self.st["max_d2d_landing"] = max(
+                            self.st["max_d2d_landing"], self._land_now[node])
+                        self.arrivals[t + 1].append(fl)
+                    return
+                # Turn FIFO full (or the tap was already taken). Circling
+                # occupies every hop of the ring and starves FIFO drain.
+                # Mixed RW puts WriteData down and CompData up on the same
+                # DAT VC; both directions fill, deflectors livelock, and
+                # outstanding never retires. Sit at the station and retry.
+                self.st["n_turn_full_deflect"] += 1
                 if on_ring:
-                    self._deflect(fl)
+                    self._age_xfer_wait(fl)
+                    self.st["n_turn_hold"] += 1
+                    self.arrivals[t + 1].append(fl)
                 elif id(fl) in from_land:
                     return
                 elif self._push_d2d_buf(fl):
                     return
                 else:
                     self.st["n_d2d_stall"] += 1
-                    fl.fail_eject += 1
-                    if fl.fail_eject >= self.p.t_xfer and not fl.e_tag:
-                        fl.e_tag = True
-                        self.st["n_etag_raised"] += 1
+                    self._age_xfer_wait(fl)
                     self._land_now[node] = self._land_now[node] + 1
                     self.st["max_d2d_landing"] = max(
                         self.st["max_d2d_landing"], self._land_now[node])
@@ -1538,6 +1563,7 @@ class StackBaseSim:
             "turn_flits": sum(turn.values()), "d2d_flits": sum(d2d.values()),
             "d2d_landing_peak": self.st["max_d2d_landing"],
             "n_d2d_stall": self.st["n_d2d_stall"],
+            "n_turn_hold": self.st["n_turn_hold"],
             "n_swaps": self.st["n_swaps"],
             "n_swaps_hv": self.st["n_swaps_hv"],
             "n_swaps_d2d": self.st["n_swaps_d2d"],

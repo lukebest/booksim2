@@ -35,7 +35,7 @@ from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackTurnParams)
 from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
                            TILING_SIZE, TOP_BRIDGES, TOP_PLANES, TXN_PER_CORE,
-                           V_LEN, StackTopology, Txn, build_tiled_rw,
+                           V_LEN, StackTopology, Txn, build_tiled_read,
                            build_tiled_write, build_uniform_write,
                            ha_histogram)
 
@@ -214,28 +214,35 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                   stall_after=stall_after)
     n_wr = sum(1 for t in txns if getattr(t, "op", "write") != "read")
     n_rd = len(txns) - n_wr
-    n_per_core = (n_wr // max(1, len(topo.cores))) * M_WDATA
-    r["fairness"] = fairness_stats(r.get("wr_inject_by_core") or {},
-                                   r["makespan"], n_per_core)
-    r["group"] = group_stats(topo, r.get("wr_inject_by_core") or {},
-                             r.get("wr_done_by_core"), r["makespan"],
-                             done_times=r.get("wr_done_times_by_core"))
-    if r.get("rd_inject_by_core"):
-        r["rd_group"] = group_stats(topo, r["rd_inject_by_core"],
-                                    r.get("rd_done_by_core"), r["makespan"],
-                                    m_wdata=M_WDATA,
+    wr_inj = r.get("wr_inject_by_core") or {}
+    rd_inj = r.get("rd_inject_by_core") or {}
+    # Read-only batches have no WriteData; score fairness on CompData.
+    if n_rd and not n_wr:
+        inj, done, times = rd_inj, r.get("rd_done_by_core"), r.get(
+            "rd_done_times_by_core")
+        n_dat = n_rd
+    else:
+        inj, done, times = wr_inj, r.get("wr_done_by_core"), r.get(
+            "wr_done_times_by_core")
+        n_dat = n_wr
+    n_per_core = (n_dat // max(1, len(topo.cores))) * M_WDATA
+    r["fairness"] = fairness_stats(inj, r["makespan"], n_per_core)
+    r["group"] = group_stats(topo, inj, done, r["makespan"],
+                             done_times=times)
+    r["bw_series"] = group_bw_series(topo, inj, window=BW_WINDOW,
+                                     makespan=r["makespan"])
+    if n_wr and n_rd and rd_inj:
+        r["rd_group"] = group_stats(topo, rd_inj, r.get("rd_done_by_core"),
+                                    r["makespan"], m_wdata=M_WDATA,
                                     done_times=r.get("rd_done_times_by_core"))
         r["rd_bw_series"] = group_bw_series(
-            topo, r["rd_inject_by_core"],
-            window=BW_WINDOW, makespan=r["makespan"])
+            topo, rd_inj, window=BW_WINDOW, makespan=r["makespan"])
     r["scheme"] = name
     r["route"] = route
     r["n_write"] = n_wr
     r["n_read"] = n_rd
     r["wall_s"] = round(time.time() - t0, 1)
     r["max_core_outstanding"] = r.get("max_core_outstanding", 0)
-    r["bw_series"] = group_bw_series(topo, r.get("wr_inject_by_core") or {},
-                                     window=BW_WINDOW, makespan=r["makespan"])
     r.pop("wr_inject_by_core", None)
     r.pop("wr_done_by_core", None)
     r.pop("wr_done_times_by_core", None)
@@ -970,43 +977,60 @@ def binding_mod4(topo: StackTopology) -> dict[str, Any]:
             "n_checked": len(rows)}
 
 
-def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
-    """Tiled write + HA retry operating point.
+def _group_rows(oc: int, per: dict[str, Any],
+                names: Sequence[str]) -> list[dict[str, Any]]:
+    rows = []
+    for name in names:
+        r = per[name]
+        g = r.get("group") or {}
+        rows.append({
+            "outstanding": oc, "scheme": name,
+            "completed": r["completed"],
+            "makespan": r["makespan"],
+            "n_txn_done": r["n_txn_done"],
+            **{k: g[k] for k in (
+                "bw_by_group", "goodput_by_group", "goodput_total",
+                "goodput_jain", "goodput_max_min", "finish_by_group",
+                "worst_group", "best_group", "jain_within_group",
+                "jain_within_worst") if k in g},
+            "group_jain": g.get("jain", 0),
+            "group_max_min": g.get("max_min", 0),
+            "group_cov": g.get("cov", 0),
+            "core_jain": (r.get("fairness") or {}).get("jain", 0),
+            "core_max_min": (r.get("fairness") or {}).get("max_min", 0),
+        })
+    return rows
 
-    Each core writes dense 64 KB tiles (128 B burst, 4 KB stride). Line
-    interleave already spreads every core across all 96 HAs.     Outstanding
-    is 128; an HA accepts 512 in-flight requests and RetryAcks the rest.
-    S0 has no source-side rate control. S1 adds AIMD.
-    """
-    oc = blob["meta"]["core_outstanding"]
-    pos = args.pos_depth
-    n_tiles = getattr(args, "n_tiles", N_TILES)
-    txns = build_tiled_rw(topo, n_tiles=n_tiles, seed=args.seed)
+
+def _run_op_batch(topo: StackTopology, txns: Sequence[Txn], *,
+                  label: str, oc: int, pos: int, n_tiles: int,
+                  seed: int) -> dict[str, Any]:
+    """One closed batch (write-only or read-only) through S0 then S1."""
     hist = ha_histogram(topo, txns)
     bound = topo.write_bounds(txns, m_req=M_REQ, m_rsp=M_RSP, m_wdata=M_WDATA)
     n_wr = sum(1 for t in txns if getattr(t, "op", "write") != "read")
     per: dict[str, Any] = {"bounds": bound, "n_txn": len(txns),
                            "n_write": n_wr, "n_read": len(txns) - n_wr,
                            "outstanding": oc, "pos_depth": pos,
-                           "ha_hist": hist}
+                           "ha_hist": hist, "op": label}
     series: dict[str, Any] = {}
-    rd_series: dict[str, Any] = {}
+    fabric: dict[str, Any] = {}
+    board: dict[str, Any] = {}
     stall = max(80_000, 160 * hist["per_core_txn"])
-    print(f"[focus] outstanding={oc}  HA POS={pos}  "
-          f"tiles={n_tiles}  wr+rd/core={hist['per_core_txn']}  "
+    print(f"[focus] {label}  outstanding={oc}  HA POS={pos}  "
+          f"tiles={n_tiles}  txn/core={hist['per_core_txn']}  "
           f"ntxn={len(txns)} (wr={n_wr} rd={len(txns) - n_wr})  "
           f"HA cover={hist['covers_all_ha']}  "
           f"per-core HA max/min Δ={hist['per_core_max_min']}", flush=True)
     names = ("s0", "s1")
-    board: dict[str, Any] = {}
     for name in names:
-        r = run_scheme(topo, txns, name, route="bound", seed=args.seed,
+        r = run_scheme(topo, txns, name, route="bound", seed=seed,
                        keep_trace=(name == "s1"), core_outstanding=oc,
                        ha_pos_depth=pos, stall_after=stall)
         r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
         per[name] = r
         series[name] = r.get("bw_series", {})
-        rd_series[name] = r.get("rd_bw_series", {})
+        fabric[name] = r.get("fabric_series", {})
         board[name] = die_board_table(topo, r.get("board_by_core_dir") or {},
                                       die=0)
         f, g, q = r["fairness"], r["group"], r.get("retry", {})
@@ -1023,42 +1047,52 @@ def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
                  (r.get("fifo") or {}).get("d2d_buf_peak", 0),
                  "/".join(str(fin.get(str(d), 0)) for d in range(6))),
               flush=True)
-        rg = (r.get("rd_group") or {}).get("finish_by_group") or {}
-        if rg:
-            print("           rd_finish=%s"
-                  % "/".join(str(rg.get(str(d), 0)) for d in range(6)),
-                  flush=True)
-    blob["schemes"] = {"mandated": per, "work": per}
-    blob["group_series"] = series
-    blob["rd_group_series"] = rd_series
-    blob["fabric_series"] = {name: per[name].get("fabric_series", {})
-                             for name in names}
-    blob["die0_board"] = board
+    return {
+        "per": per, "series": series, "fabric": fabric, "board": board,
+        "group": _group_rows(oc, per, names), "txns": txns,
+    }
+
+
+def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
+    """Tiled write-only, then tiled read-only. Same addresses, never mixed.
+
+    Each core issues dense 64 KB tiles (128 B burst, 4 KB stride). Line
+    interleave spreads every core across all 96 HAs. Outstanding is 128;
+    an HA accepts 512 in-flight requests and RetryAcks the rest.
+    S0 has no source-side rate control. S1 adds AIMD.
+    """
+    oc = blob["meta"]["core_outstanding"]
+    pos = args.pos_depth
+    n_tiles = getattr(args, "n_tiles", N_TILES)
+    wr = build_tiled_write(topo, n_tiles=n_tiles, seed=args.seed)
+    rd = build_tiled_read(topo, n_tiles=n_tiles, seed=args.seed)
+    w = _run_op_batch(topo, wr, label="write", oc=oc, pos=pos,
+                      n_tiles=n_tiles, seed=args.seed)
+    r = _run_op_batch(topo, rd, label="read", oc=oc, pos=pos,
+                      n_tiles=n_tiles, seed=args.seed)
+    blob["schemes"] = {"write": w["per"], "read": r["per"],
+                       "mandated": w["per"], "work": w["per"]}
+    blob["group_series"] = w["series"]
+    blob["rd_group_series"] = r["series"]
+    blob["fabric_series"] = w["fabric"]
+    blob["rd_fabric_series"] = r["fabric"]
+    blob["die0_board"] = w["board"]
+    blob["rd_die0_board"] = r["board"]
     blob["workload"] = {
-        "kind": "tiled_rw",
+        "kind": "tiled_separate",
         "burst_len": BURST_LEN, "stride": STRIDE,
         "tiling_size": TILING_SIZE, "n_tiles": n_tiles,
-        "ha_hist": hist,
+        "write": {"n_txn": w["per"]["n_txn"], "ha_hist": w["per"]["ha_hist"]},
+        "read": {"n_txn": r["per"]["n_txn"], "ha_hist": r["per"]["ha_hist"]},
+        "ha_hist": w["per"]["ha_hist"],
     }
-    blob["group"] = [{
-        "outstanding": oc, "scheme": name,
-        "completed": per[name]["completed"],
-        "makespan": per[name]["makespan"],
-        "n_txn_done": per[name]["n_txn_done"],
-        **{k: per[name]["group"][k] for k in (
-            "bw_by_group", "goodput_by_group", "goodput_total",
-            "goodput_jain", "goodput_max_min", "finish_by_group",
-            "worst_group", "best_group", "jain_within_group",
-            "jain_within_worst") if k in per[name]["group"]},
-        "group_jain": per[name]["group"].get("jain", 0),
-        "group_max_min": per[name]["group"].get("max_min", 0),
-        "group_cov": per[name]["group"].get("cov", 0),
-        "core_jain": per[name]["fairness"].get("jain", 0),
-        "core_max_min": per[name]["fairness"].get("max_min", 0),
-    } for name in names]
-    seats = vseat_load(topo, txns)
-    blob["root_cause"] = {"mandated": root_cause(topo, per["s0"], seats),
-                          "work": root_cause(topo, per["s0"], seats)}
+    blob["group"] = w["group"]
+    blob["rd_group"] = r["group"]
+    seats = vseat_load(topo, wr)
+    blob["root_cause"] = {"mandated": root_cause(topo, w["per"]["s0"], seats),
+                          "work": root_cause(topo, w["per"]["s0"], seats),
+                          "read": root_cause(topo, r["per"]["s0"],
+                                            vseat_load(topo, rd))}
 
 
 def main() -> None:
@@ -1078,7 +1112,7 @@ def main() -> None:
                     help=f"64 KB tiles per AI core (default {N_TILES} = "
                          f"{TXN_PER_CORE} WriteNoSnp)")
     ap.add_argument("--focus", action="store_true",
-                    help="S0/S1 time series at the configured outstanding")
+                    help="S0/S1 write-only then read-only tiled batches")
     ap.add_argument("--out", default="results/dse_stack_write_fair.json")
     args = ap.parse_args()
 

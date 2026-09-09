@@ -784,6 +784,26 @@ def _r6():
             f"6 groups, integral matches 800 write flits/die")
 
 
+@check("mixed_rw_turn_full_holds_instead_of_circling")
+def _r7():
+    """Turn-blocked ring flits must sit, not lap. Circling livelocks mixed RW.
+
+    The full tiled 1:1 batch is the real collapse (see diag_stack_collapse).
+    This check only asserts the policy on a short write-only run: every
+    turn-full event on a ring increments n_turn_hold, and deflections stay
+    an eject-side counter.
+    """
+    _, _, r = _run("s0", k=20)
+    assert r["completed"]
+    hold = r.get("n_turn_hold", 0)
+    turn_blk = r.get("n_turn_full_deflect", 0)
+    assert hold <= turn_blk, (hold, turn_blk)
+    # On-ring turn blocks become holds; D2D turn blocks do not.
+    if turn_blk:
+        assert hold > 0, r.get("n_turn_full_deflect")
+    return f"turn_full={turn_blk} hold={hold} deflect={r['n_deflections']}"
+
+
 def main() -> None:
     print("stacked-fabric checks\n")
     n_ok = sum(1 for _, ok, _ in RESULTS if ok)

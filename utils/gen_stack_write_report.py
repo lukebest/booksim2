@@ -95,13 +95,15 @@ def _cov(xs) -> float:
     return (var ** 0.5) / m
 
 
-def ideal_group_write_bw(b: dict) -> dict[str, Any]:
-    """Equal-share WriteData rate if the batch hits the makespan bound.
+def ideal_group_write_bw(b: dict, tag: str = "mandated") -> dict[str, Any]:
+    """Equal-share DAT rate if the batch hits the makespan bound.
 
-    Total WriteData flits = n_txn * m_wdata. The bound is the V-ring cut
+    Total DAT flits = n_txn * m_wdata. The bound is the V-ring cut
     (all CHI VCs). Six groups split that rate equally.
     """
-    mand = (b.get("schemes") or {}).get("mandated") or {}
+    mand = (b.get("schemes") or {}).get(tag) or {}
+    if not mand and tag == "mandated":
+        mand = (b.get("schemes") or {}).get("write") or {}
     bd = mand.get("bounds") or {}
     n_txn = mand.get("n_txn") or 0
     m_wdata = (b.get("meta") or {}).get("m_wdata", 4)
@@ -158,9 +160,10 @@ def inst_group_fairness(ser: dict, t_fair: float | None = None
     }
 
 
-def _fair_lookup(b: dict) -> dict[str, dict[str, Any]]:
-    gs = b.get("group_series") or {}
-    mand = (b.get("schemes") or {}).get("mandated") or {}
+def _fair_lookup(b: dict, *, series_key: str = "group_series",
+                 tag: str = "mandated") -> dict[str, dict[str, Any]]:
+    gs = b.get(series_key) or {}
+    mand = (b.get("schemes") or {}).get(tag) or {}
     out = {}
     for name in ("s0", "s1"):
         ser = gs.get(name) or {}
@@ -756,9 +759,12 @@ def plot_scenario(b: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_group(b: dict, path: Path) -> None:
-    """Write bandwidth per top die, which is where the asymmetry is visible."""
-    g = b["group"]
+def plot_group(b: dict, path: Path, *, rows_key: str = "group",
+               tag: str = "mandated", kind: str = "写") -> None:
+    """DAT bandwidth per top die, which is where the asymmetry is visible."""
+    g = b.get(rows_key) or []
+    if not g:
+        return
     ocs = sorted({r["outstanding"] for r in g}, reverse=True)
     _cjk()
     fig, axes = plt.subplots(1, len(ocs), figsize=(7.2 * len(ocs), 5.1),
@@ -776,8 +782,9 @@ def plot_group(b: dict, path: Path) -> None:
                             _f(r["goodput_max_min"], 2)))
         ax.set_xticks([j + 0.4 - w / 2 for j in range(len(dies))])
         ax.set_xticklabels([f"die {d}" for d in dies], fontsize=8)
-        ax.set_ylabel("该 die 10 个 core 合计的写吞吐 (flit/cycle)", fontsize=9)
-        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        ax.set_ylabel(f"该 die 10 个 core 合计的{kind}吞吐 (flit/cycle)",
+                      fontsize=9)
+        ideal = ideal_group_write_bw(b, tag).get("ideal_per_group") or 0
         if ideal > 0:
             ax.axhline(ideal, color="#111827", ls="--", lw=1.1,
                        label="均衡理想 %s flit/cycle" % _f(ideal, 3))
@@ -804,9 +811,10 @@ def plot_group(b: dict, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_group_series(b: dict, path: Path) -> None:
-    """Write bandwidth vs time, one curve per top-die group, S0 vs S1."""
-    gs = b.get("group_series") or {}
+def plot_group_series(b: dict, path: Path, *, series_key: str = "group_series",
+                      tag: str = "mandated", kind: str = "写") -> None:
+    """DAT bandwidth vs time, one curve per top-die group, S0 vs S1."""
+    gs = b.get(series_key) or {}
     _cjk()
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 4.8), sharey=True)
     colors = ["#2563eb", "#dc2626", "#0891b2", "#ea5800", "#7c3aed", "#16a34a"]
@@ -820,31 +828,33 @@ def plot_group_series(b: dict, path: Path) -> None:
             ax.plot(t, bw[d], "-",
                     color=colors[i % len(colors)], lw=1.5,
                     label=f"die {d}（10 个 AI core）")
-        ideal = ideal_group_write_bw(b).get("ideal_per_group") or 0
+        ideal = ideal_group_write_bw(b, tag).get("ideal_per_group") or 0
         if ideal > 0:
             ax.axhline(ideal, color="#111827", ls="--", lw=1.3,
                        label=f"均衡理想 {_f(ideal, 3)}")
         ax.set_title(title, fontsize=11)
         ax.set_xlabel("时间 (cycle)", fontsize=9)
-        ax.set_ylabel(f"组写带宽 (flit/cycle，窗={w} cycle)", fontsize=9)
+        ax.set_ylabel(f"组{kind}带宽 (flit/cycle，窗={w} cycle)", fontsize=9)
         ax.grid(alpha=0.25)
         ax.legend(fontsize=7.5, ncol=2, loc="upper right")
-    fig.suptitle("每个 top die 一组：该组 10 个 AI core 合计写带宽（flit/cycle）；"
-                 "虚线 = 均衡流量下的理想每组写带宽",
+    fig.suptitle(f"每个 top die 一组：该组 10 个 AI core 合计{kind}带宽（flit/cycle）；"
+                 f"虚线 = 均衡流量下的理想每组{kind}带宽",
                  fontsize=12)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
     plt.close(fig)
 
 
-def plot_group_jain_series(b: dict, path: Path) -> None:
+def plot_group_jain_series(b: dict, path: Path, *,
+                          series_key: str = "group_series",
+                          tag: str = "mandated", kind: str = "写") -> None:
     """Per-window group CoV vs time, S0 vs S1."""
-    gs = b.get("group_series") or {}
+    gs = b.get(series_key) or {}
     _cjk()
     fig, ax = plt.subplots(figsize=(13.2, 3.6))
     colors = {"s0": "#2563eb", "s1": "#ea5800"}
     labels = {"s0": "S0 基线", "s1": "S1 AIMD"}
-    fair = _fair_lookup(b)
+    fair = _fair_lookup(b, series_key=series_key, tag=tag)
     w = 100
     for name in ("s0", "s1"):
         ser = gs.get(name) or {}
@@ -863,17 +873,17 @@ def plot_group_jain_series(b: dict, path: Path) -> None:
             ax.axhline(ec, color=colors[name], ls=":", lw=1.1,
                        label=f"{labels[name]}  E[CoV$_t$]={ec:.3f}")
     ax.axhline(0.0, color="#111827", ls="--", lw=1.0,
-               label="CoV = 0（该窗六个 group 写带宽相同）")
+               label=f"CoV = 0（该窗六个 group {kind}带宽相同）")
     tfs = [v.get("t_fair") for v in fair.values() if v.get("t_fair")]
     if tfs:
         tf = min(tfs)
         ax.axvline(tf, color="#6b7280", ls="--", lw=0.9, alpha=0.8,
-                   label=f"t_fair ≈ {tf:,.0f}（此后有 group 写完）")
+                   label=f"t_fair ≈ {tf:,.0f}（此后有 group 发完）")
     ax.set_xlabel("时间 (cycle)", fontsize=9)
     ax.set_ylabel("组间 CoV$_t$", fontsize=9)
     ax.grid(alpha=0.25)
     ax.legend(fontsize=7.5, ncol=3, loc="upper right")
-    fig.suptitle(f"瞬时组间均衡度：每个 {w}-cycle 窗上六个 group 写带宽的 CoV"
+    fig.suptitle(f"瞬时组间均衡度：每个 {w}-cycle 窗上六个 group {kind}带宽的 CoV"
                  "（越低越均）",
                  fontsize=12)
     fig.tight_layout()
@@ -895,73 +905,68 @@ def _cum_from_series(ser: dict) -> tuple[list[int], dict[str, list[float]]]:
     return t, out
 
 
-def plot_group_finish(b: dict, path: Path) -> None:
-    """Cumulative write and read DAT vs time, one curve per top-die group."""
-    wr_s = b.get("group_series") or {}
-    rd_s = b.get("rd_group_series") or {}
-    mand = (b.get("schemes") or {}).get("mandated") or {}
+def plot_group_finish(b: dict, path: Path, *, series_key: str = "group_series",
+                      tag: str = "mandated", kind: str = "写",
+                      dat_name: str = "WriteData") -> None:
+    """Cumulative DAT vs time for one isolated batch, one curve per group."""
+    ser = b.get(series_key) or {}
+    mand = (b.get("schemes") or {}).get(tag) or {}
     _cjk()
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 5.2), sharey=True)
     colors = ["#2563eb", "#dc2626", "#0891b2", "#ea5800", "#7c3aed", "#16a34a"]
     for ax, name, title in ((axes[0], "s0", "S0 基线（无源端流控）"),
                             (axes[1], "s1", "S1 源端 AIMD 控速")):
-        tw, cw = _cum_from_series(wr_s.get(name) or {})
-        tr, cr = _cum_from_series(rd_s.get(name) or {})
-        g = (mand.get(name) or {})
-        fw = ((g.get("group") or {}).get("finish_by_group") or {})
-        fr = ((g.get("rd_group") or {}).get("finish_by_group") or {})
-        dies = sorted(set(cw) | set(cr), key=int)
-        for i, d in enumerate(dies):
+        t, cum = _cum_from_series(ser.get(name) or {})
+        rec = mand.get(name) or {}
+        if series_key == "rd_group_series":
+            fw = ((rec.get("rd_group") or {}).get("finish_by_group")
+                  or (rec.get("group") or {}).get("finish_by_group") or {})
+        else:
+            fw = ((rec.get("group") or {}).get("finish_by_group") or {})
+        for i, d in enumerate(sorted(cum, key=int)):
             col = colors[i % len(colors)]
-            if d in cw and tw:
-                ax.plot(tw, cw[d], "-", color=col, lw=1.7,
-                        label=f"die {d} 写")
-                if fw.get(d) and cw[d]:
-                    ax.plot(fw[d], cw[d][-1], "o", color=col, ms=5,
-                            mec="white", mew=0.4, zorder=4)
-            if d in cr and tr:
-                ax.plot(tr, cr[d], "--", color=col, lw=1.45, alpha=0.9,
-                        label=f"die {d} 读")
-                if fr.get(d) and cr[d]:
-                    ax.plot(fr[d], cr[d][-1], "s", color=col, ms=4.5,
-                            mec="white", mew=0.4, zorder=4)
+            if not t:
+                continue
+            ax.plot(t, cum[d], "-", color=col, lw=1.7, label=f"die {d}")
+            if fw.get(d) and cum[d]:
+                ax.plot(fw[d], cum[d][-1], "o", color=col, ms=5,
+                        mec="white", mew=0.4, zorder=4)
         ax.set_title(title, fontsize=11)
         ax.set_xlabel("时间 (cycle)", fontsize=9)
-        ax.set_ylabel("累计传输 DAT (flit)", fontsize=9)
+        ax.set_ylabel(f"累计 {dat_name} (flit)", fontsize=9)
         ax.grid(alpha=0.25)
-        ax.legend(fontsize=6.8, ncol=2, loc="lower right")
-    fig.suptitle("每个 top die group 的累计传输量：实线写（WriteData），虚线读（CompData）；"
-                 "走平 = 该组该方向发完，圆点/方点 = 最后一笔完成",
+        ax.legend(fontsize=7.2, ncol=2, loc="lower right")
+    fig.suptitle(f"{kind}批次：每个 top die group 的累计 {dat_name}；"
+                 "走平 = 该组发完，圆点 = 最后一笔完成",
                  fontsize=11.5)
     fig.tight_layout()
     fig.savefig(path, dpi=132)
     plt.close(fig)
 
 
-def finish_table(b: dict) -> str:
-    mand = (b.get("schemes") or {}).get("mandated") or {}
+def finish_table(b: dict, tag: str = "mandated", kind: str = "写") -> str:
+    mand = (b.get("schemes") or {}).get(tag) or {}
 
-    def _fin(name: str, key: str) -> dict:
-        return ((mand.get(name) or {}).get(key) or {}).get(
+    def _fin(name: str) -> dict:
+        return ((mand.get(name) or {}).get("group") or {}).get(
             "finish_by_group") or {}
 
-    w0, w1 = _fin("s0", "group"), _fin("s1", "group")
-    r0, r1 = _fin("s0", "rd_group"), _fin("s1", "rd_group")
+    f0, f1 = _fin("s0"), _fin("s1")
     rows = []
     for d in range(6):
         rows.append([
             f"die {d}",
-            f"{w0.get(str(d), 0):,}", f"{r0.get(str(d), 0):,}",
-            f"{w1.get(str(d), 0):,}", f"{r1.get(str(d), 0):,}",
+            f"{f0.get(str(d), 0):,}",
+            f"{f1.get(str(d), 0):,}",
         ])
-    return _t(["top die group",
-               "S0 写完成", "S0 读完成",
-               "S1 写完成", "S1 读完成"], rows)
+    return _t(["top die group", f"S0 {kind}完成 (cycle)",
+               f"S1 {kind}完成 (cycle)"], rows)
 
 
-def plot_fabric_series(b: dict, path: Path) -> None:
+def plot_fabric_series(b: dict, path: Path, *,
+                      series_key: str = "fabric_series") -> None:
     """Instantaneous fabric bandwidth vs time, S0 vs S1."""
-    fs = b.get("fabric_series") or {}
+    fs = b.get(series_key) or {}
     cap = (b.get("topology") or {}).get("capacity") or {}
     nvc = len((b.get("topology") or {}).get("vcs") or ("req", "rsp", "dat"))
     _cjk()
@@ -1056,9 +1061,10 @@ def _cw_ccw_ratio(cw: int, ccw: int) -> str:
     return f"{cw / ccw:.2f}"
 
 
-def die0_board_table(b: dict, scheme: str) -> str:
+def die0_board_table(b: dict, scheme: str, *,
+                    board_key: str = "die0_board") -> str:
     """Top die 0: per-core CW / CCW board success and failure."""
-    rows_in = (b.get("die0_board") or {}).get(scheme) or []
+    rows_in = (b.get(board_key) or {}).get(scheme) or []
     rows = []
     tot = {"ok_cw": 0, "ok_ccw": 0, "fail_cw": 0, "fail_ccw": 0}
     for r in rows_in:
@@ -1090,20 +1096,25 @@ def die0_board_table(b: dict, scheme: str) -> str:
                "失败 CW", "失败 CCW", "失败 CW/CCW", "失败合计"], rows)
 
 
-def group_table(b: dict) -> str:
+def group_table(b: dict, *, rows_key: str = "group",
+                tag: str = "mandated", kind: str = "写") -> str:
     rows = []
     # The adaptive schemes set their own limit, so they appear once under
     # every static setting swept. Keep one row for them, listed last.
     ad = {}
     static = []
-    for r in b["group"]:
+    src = b.get(rows_key) or []
+    if not src:
+        return ""
+    for r in src:
         if r["scheme"] in ("s18", "s19"):
             ad.setdefault(r["scheme"], r)
         else:
             static.append(r)
     ordered = sorted(static, key=lambda r: (-r["outstanding"], r["scheme"]))
     ordered += [ad[k] for k in sorted(ad)]
-    inst = _fair_lookup(b)
+    series_key = "rd_group_series" if tag == "read" else "group_series"
+    inst = _fair_lookup(b, series_key=series_key, tag=tag)
     for r in ordered:
         gp = r["goodput_by_group"]
         ec = (inst.get(r["scheme"]) or {}).get("mean_cov")
@@ -1116,19 +1127,20 @@ def group_table(b: dict) -> str:
             _f(ec),
         ])
     return _t(["outstanding", "方案", "排空",
-               "各 die 写吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
+               f"各 die {kind}吞吐 (flit/cycle)<br>die 0 / 1 / 2 / 3 / 4 / 5",
                "合计 flit/cycle",
                "E[CoV<sub>t</sub>]<br>（瞬时，越低越均）"], rows)
 
 
-def inst_fair_table(b: dict) -> str:
-    inst = _fair_lookup(b)
+def inst_fair_table(b: dict, *, series_key: str = "group_series",
+                   tag: str = "mandated", kind: str = "写") -> str:
+    inst = _fair_lookup(b, series_key=series_key, tag=tag)
     i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
-    ideal = ideal_group_write_bw(b)
+    ideal = ideal_group_write_bw(b, tag)
     rows = [
         ["E[CoV<sub>t</sub>]（瞬时均衡度）",
          _f(i0.get("mean_cov")), _f(i1.get("mean_cov")),
-         "每个 100-cycle 窗上六个 group 写带宽的变异系数 "
+         f"每个 100-cycle 窗上六个 group {kind}带宽的变异系数 "
          "(σ/μ)，再对竞争窗口平均。0 = 每个窗都均"],
         ["窗内 CoV 中位数 / 最小 / 最大",
          f"{_f(i0.get('p50_cov'))} / {_f(i0.get('min_cov'))} / "
@@ -1138,18 +1150,18 @@ def inst_fair_table(b: dict) -> str:
          "竞争窗口内"],
         ["CoV<sub>t</sub> &gt; 0.20 的窗占比",
          _pct(i0.get("frac_gt_020") or 0), _pct(i1.get("frac_gt_020") or 0),
-         "该窗六个 group 写带宽相对离散超过 20% 的时间比例"],
+         f"该窗六个 group {kind}带宽相对离散超过 20% 的时间比例"],
         ["Jain(E[x])（全程完成量）",
          _f(i0.get("jain_of_mean")), _f(i1.get("jain_of_mean")),
          "先对时间平均再算 Jain。批次排空时六个 die 完成量相同，必为 1"],
         ["窗长 / 计入窗数",
          f"{i0.get('window', 100)} / {i0.get('nwin', 0):,}",
          f"{i1.get('window', 100)} / {i1.get('nwin', 0):,}",
-         "只计 t ≤ t_fair 且该窗总写带宽 &gt; 0"],
-        ["均衡理想每组写带宽",
+         f"只计 t ≤ t_fair 且该窗总{kind}带宽 &gt; 0"],
+        [f"均衡理想每组{kind}带宽",
          f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
          f"{_f(ideal.get('ideal_per_group'), 3)} flit/cycle",
-         f"n_txn × WriteData / 综合下界 / 6 组 "
+         f"n_txn × DAT / 综合下界 / 6 组 "
          f"= {ideal.get('n_txn', 0):,} × {ideal.get('m_wdata', 4)} / "
          f"{ideal.get('bound', 0):,} / 6。"
          f"下界是纵环切割 {ideal.get('cut_lb', 0):,} cycle"],
@@ -1409,7 +1421,8 @@ def scheme_table(b: dict, tag: str) -> str:
     per = b["schemes"][tag]
     bd = per["bounds"]["bound"]
     n_txn = per["n_txn"]
-    inst = _fair_lookup(b)
+    series_key = "rd_group_series" if tag == "read" else "group_series"
+    inst = _fair_lookup(b, series_key=series_key, tag=tag)
     rows = []
     for s in SCHEMES:
         r = per.get(s)
@@ -1428,9 +1441,9 @@ def scheme_table(b: dict, tag: str) -> str:
                "E[CoV<sub>t</sub>]<br>（越低越均）", "偏转次数"], rows)
 
 
-def fabric_inst_table(b: dict, scheme: str) -> str:
+def fabric_inst_table(b: dict, scheme: str, tag: str = "mandated") -> str:
     """Peak instantaneous bandwidth per fabric, vs single-VC and 3-VC caps."""
-    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+    r = ((b.get("schemes") or {}).get(tag) or {}).get(scheme) or {}
     fab = r.get("fabric") or {}
     cap = (b.get("topology") or {}).get("capacity") or {}
     names = [("top", "top die 环"), ("d2d", "D2D 对分"),
@@ -1457,8 +1470,8 @@ def fabric_inst_table(b: dict, scheme: str) -> str:
                "全程平均<br>（三 VC）"], rows)
 
 
-def _fabric_full_txt(b: dict, scheme: str) -> str:
-    r = ((b.get("schemes") or {}).get("mandated") or {}).get(scheme) or {}
+def _fabric_full_txt(b: dict, scheme: str, tag: str = "mandated") -> str:
+    r = ((b.get("schemes") or {}).get(tag) or {}).get(scheme) or {}
     fab = r.get("fabric") or {}
     bits = []
     labels = {"top": "top die", "d2d": "D2D 对分", "h": "横环", "v": "纵环"}
@@ -1475,10 +1488,10 @@ def _fabric_full_txt(b: dict, scheme: str) -> str:
     return "；".join(bits)
 
 
-def _write_bw_death(b: dict, scheme: str, floor: float = 0.05
-                    ) -> dict[str, Any]:
-    """When group WriteData injection fell below `floor` flit/cycle total."""
-    ser = (b.get("group_series") or {}).get(scheme) or {}
+def _write_bw_death(b: dict, scheme: str, floor: float = 0.05,
+                    series_key: str = "group_series") -> dict[str, Any]:
+    """When group DAT injection fell below `floor` flit/cycle total."""
+    ser = (b.get(series_key) or {}).get(scheme) or {}
     t = ser.get("t") or []
     bw = ser.get("bw_by_group") or {}
     if not t or not bw:
@@ -1572,10 +1585,10 @@ n_txn={meta.get('n_txn', 0):,}。{note}</p>
 """
 
 
-def collapse_table(b: dict) -> str:
+def collapse_table(b: dict, tag: str = "mandated") -> str:
     """Protocol leftovers that show why S1 stopped making progress."""
-    s0 = ((b.get("schemes") or {}).get("mandated") or {}).get("s0") or {}
-    s1 = ((b.get("schemes") or {}).get("mandated") or {}).get("s1") or {}
+    s0 = ((b.get("schemes") or {}).get(tag) or {}).get("s0") or {}
+    s1 = ((b.get("schemes") or {}).get(tag) or {}).get("s1") or {}
     q0, q1 = s0.get("retry") or {}, s1.get("retry") or {}
     rows = [
         ["完成事务",
@@ -1900,10 +1913,29 @@ def write_focus_report(b: dict) -> None:
     plot_binding(b, IMG / "stack_binding.png")
     plot_group_series(b, IMG / "stack_group_bw_series.png")
     plot_group_jain_series(b, IMG / "stack_group_jain_series.png")
-    plot_group_finish(b, IMG / "stack_group_finish.png")
+    plot_group_finish(b, IMG / "stack_group_finish.png",
+                      series_key="group_series", tag="mandated",
+                      kind="写", dat_name="WriteData")
     plot_fabric_series(b, IMG / "stack_fabric_bw_series.png")
     if b.get("group"):
         plot_group(b, IMG / "stack_group.png")
+    has_read = bool((b.get("schemes") or {}).get("read"))
+    if has_read or (b.get("rd_group_series") or {}).get("s0"):
+        rd_tag = "read" if has_read else "mandated"
+        plot_group_series(b, IMG / "stack_group_bw_series_read.png",
+                          series_key="rd_group_series", tag=rd_tag, kind="读")
+        plot_group_jain_series(b, IMG / "stack_group_jain_series_read.png",
+                               series_key="rd_group_series", tag=rd_tag,
+                               kind="读")
+        plot_group_finish(b, IMG / "stack_group_finish_read.png",
+                          series_key="rd_group_series", tag=rd_tag,
+                          kind="读", dat_name="CompData")
+        plot_fabric_series(b, IMG / "stack_fabric_bw_series_read.png",
+                           series_key="rd_fabric_series" if has_read
+                           else "fabric_series")
+        if b.get("rd_group"):
+            plot_group(b, IMG / "stack_group_read.png",
+                       rows_key="rd_group", tag="read", kind="读")
     inst = _fair_lookup(b)
     i0, i1 = inst.get("s0") or {}, inst.get("s1") or {}
     ideal = ideal_group_write_bw(b)
@@ -1993,6 +2025,74 @@ HA 更上不去环。连续 {max(80_000, 160 * k_core):,} cycle
         f"HA 发不出 PCrd/Comp → {pcrd_gap:,} 笔 retry 没有对应重发 → "
         f"outstanding 挂死 → 写带宽归零。细节在第 2.3 节。"
     )
+    rd_per = (b.get("schemes") or {}).get("read") or {}
+    has_read = bool(rd_per.get("s0"))
+    rs0, rs1 = rd_per.get("s0") or {}, rd_per.get("s1") or {}
+    n_rd_txn = rd_per.get("n_txn") or 0
+    rd_hist = ((wl.get("read") or {}).get("ha_hist")
+               or rd_per.get("ha_hist") or {})
+    k_rd = rd_hist.get("per_core_txn") or (
+        n_rd_txn // max(1, t["n_cores"]))
+    rg0 = (rs0.get("group") or {}) if has_read else {}
+    rg1 = (rs1.get("group") or {}) if has_read else {}
+    ri = (_fair_lookup(b, series_key="rd_group_series", tag="read")
+          if has_read else {})
+    ri0, ri1 = ri.get("s0") or {}, ri.get("s1") or {}
+    rd_ideal = ideal_group_write_bw(b, "read") if has_read else {}
+    rd_star = rd_ideal.get("ideal_per_group") or 0
+    rgp0 = ((rg0.get("goodput_by_group") or {}).get("0")
+            or (rg0.get("goodput_total", 0) / 6) if has_read else 0)
+    rgp1 = ((rg1.get("goodput_by_group") or {}).get("0")
+            or (rg1.get("goodput_total", 0) / 6) if has_read else 0)
+    rfab0 = _fabric_full_txt(b, "s0", "read") if has_read else ""
+    rfab1 = _fabric_full_txt(b, "s1", "read") if has_read else ""
+    rq0, rq1 = (rs0.get("retry") or {}), (rs1.get("retry") or {})
+    wl_kind = wl.get("kind") or "tiled_rw"
+    separate = wl_kind == "tiled_separate" or has_read
+    wr_win = ((b.get("group_series") or {}).get("s0") or {}).get("window", 100)
+    rd_section = ""
+    if has_read:
+        rd_ok = bool(rs0.get("completed") and rs1.get("completed"))
+        rd_section = f"""
+<h2>2R　读批次（独立仿真，与写不同一次跑）</h2>
+<p>同一套 tiled 地址，只发 ReadNoSnp：REQ 下行、CompData 上行。
+每核 {k_rd} 笔，共 {n_rd_txn:,}。S0 完成
+<b>{rs0.get('n_txn_done', 0):,}/{n_rd_txn:,}</b>，
+makespan {rs0.get('makespan', 0):,} cycle，RetryAck
+{rq0.get('n_retry', 0):,}；
+S1 完成 {rs1.get('n_txn_done', 0):,}/{n_rd_txn:,}，
+{rs1.get('makespan', 0):,} cycle，retry {rq1.get('n_retry', 0):,}。
+{"两个方案都排空。" if rd_ok else "有方案没有排空。"}
+S0 每 die 平均 {_f(rgp0)} flit/cycle，
+均衡理想每组 <b>{_f(rd_star, 3)}</b>。
+瞬时 E[CoV<sub>t</sub>] S0 = {_f(ri0.get('mean_cov'))}，
+S1 = {_f(ri1.get('mean_cov'))}。</p>
+{scheme_table(b, "read")}
+{group_table(b, rows_key="rd_group", tag="read", kind="读")}
+{inst_fair_table(b, series_key="rd_group_series", tag="read", kind="读")}
+<img src="stack_group_bw_series_read.png" alt="读批次各 group CompData 带宽随时间">
+<img src="stack_group_jain_series_read.png" alt="读批次每窗组间 CoV 随时间">
+<h3>2R.1 每个 top die group 的累计 CompData</h3>
+<p>横轴时间、纵轴该组累计 CompData（flit）。左 S0、右 S1。
+走平 = 该组读完；圆点 = 最后一拍 CompData 到达。</p>
+<img src="stack_group_finish_read.png" alt="读批次每个 top die group 累计 CompData">
+{finish_table(b, "read", "读")}
+<img src="stack_group_read.png" alt="读批次各 group 整次运行吞吐">
+<h3>2R.2 读批次各织物瞬时带宽</h3>
+<img src="stack_fabric_bw_series_read.png" alt="读批次各织物瞬时带宽随时间">
+<h4>S0</h4>
+{fabric_inst_table(b, "s0", "read")}
+<h4>S1</h4>
+{fabric_inst_table(b, "s1", "read")}
+<div class="def">S0：{rfab0}。<br>S1：{rfab1}。</div>
+{collapse_table(b, "read")}
+<h3>2R.3 top die 0 上环（读批次）</h3>
+<p>核侧主要是 REQ；CompData 从 HA 上环，不计入下表。</p>
+<h4>S0</h4>
+{die0_board_table(b, "s0", board_key="rd_die0_board")}
+<h4>S1</h4>
+{die0_board_table(b, "s1", board_key="rd_die0_board")}
+"""
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -2027,9 +2127,11 @@ D2D landing 在 bottom die 上有<b>两个独立接口</b>（接横环、接所�
 并用 HPCA'22 <b>SWAP</b> 与有界落地 buffer 解交叉死锁。
 带宽口径为<b>瞬时带宽</b>，写带宽单位为 <b>flit/cycle</b>。
 workload：burst <b>{burst} B</b>、stride <b>{stride} B</b>、
-tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core
-（每核写+读共 {k_core} 笔，同一地址 1:1 WriteNoSnp / ReadNoSnp，
-共 {n_txn:,} 笔）。
+tiling_size <b>{tile // 1024} KB</b> × {n_tiles} tile / core。
+{"<b>写、读分开跑</b>：写批次每核 %s 笔 WriteNoSnp（共 %s），读批次每核 %s 笔 ReadNoSnp（共 %s），同一套地址，两次独立仿真。"
+ % (f"{k_core:,}", f"{n_txn:,}", f"{k_rd:,}", f"{n_rd_txn:,}")
+ if separate else
+ f"每核 {k_core} 笔，共 {n_txn:,} 笔。"}
 地址按 {burst} B 交织到 {t['n_has']} 个 HA，每核覆盖全部 HA
 （每核打到同一 HA 的次数 {hist.get('per_core_lo', '?')}–{hist.get('per_core_hi', '?')}）。
 每 core outstanding = <b>{oc}</b>。
@@ -2114,9 +2216,9 @@ D2D 对分是 48 对双向 SerDes；bottom 落地后横口、纵口可同时上�
 
 <img src="stack_group_bw_series.png" alt="S0 与 S1 各 group 写带宽随时间">
 <img src="stack_group_jain_series.png" alt="每窗组间 CoV 随时间">
-<img src="stack_group_finish.png" alt="每个 top die group 写/读累计传输量随时间">
+<img src="stack_group_finish.png" alt="写批次每个 top die group 累计 WriteData">
 <div class="def">{scheme_table(b, "mandated")}
-{finish_table(b)}
+{finish_table(b, "mandated", "写")}
 <p><b>达下界比例</b> = 综合下界 / makespan。
 综合下界是链路、端口、织物切割、单事务时延四条下界的最大值
 （本批次是纵环切割 {ideal.get('bound', 0):,} cycle）。
@@ -2183,13 +2285,11 @@ S1 每组 {_f(gp1)}（{_pct(gp1 / r_star if r_star else 0)}），
 与效率 {s0.get('eff', 0):.2f} / {s1.get('eff', 0):.2f} 一致——
 差的是绝对吞吐，不是组间完成量。</div>
 
-<h3>2.0b 每个 top die group 的累计传输量（写 + 读）</h3>
-<p>横轴时间、纵轴该组累计 DAT（flit）。左 S0、右 S1，六个 group 同图：
-<b>实线写</b>（WriteData core→HA），<b>虚线读</b>（CompData HA→core）。
-同一地址 1:1：每笔写跟着一笔读，每组每种方向排空都是 81,920 flit。
-走平 = 该组该方向发完；圆点写完成、方点读完成。</p>
-<img src="stack_group_finish.png" alt="每个 top die group 写/读累计传输量随时间">
-{finish_table(b)}
+<h3>2.0b 每个 top die group 的累计 WriteData（写批次）</h3>
+<p>横轴时间、纵轴该组累计 WriteData（flit）。左 S0、右 S1，六个 group 同图。
+写批次单独跑，图上没有读流量。走平 = 该组写完；圆点 = 最后一笔 Comp。</p>
+<img src="stack_group_finish.png" alt="写批次每个 top die group 累计 WriteData">
+{finish_table(b, "mandated", "写")}
 
 <h3>2.1 top die 0：十个 AI core 的上环次数（CW / CCW）</h3>
 <p>CW = 顺时针（环下标 +1），CCW = 逆时针。次数含该核发出的 REQ 和 WriteData。
@@ -2224,6 +2324,7 @@ S0 同期峰值 {_f(death0.get('peak_fc', 0))} flit/cycle（六 die 合计），
 {s23_body}
 </ol></div>
 
+{rd_section}
 {cc_pareto_html()}
 <h2>3　理论下界</h2>
 {bounds_table(bd)}
