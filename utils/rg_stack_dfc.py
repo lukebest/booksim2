@@ -79,8 +79,8 @@ class StackDfcParams(StackBaseParams):
     dfc_bus_bits: int = BUS_BITS
     dfc_thresh: float = 2.0       # deficit (flits) before requesting a yield
     dfc_clear: float = 0.0        # deficit at which a requester stands down
-    dfc_hold: int = 8             # cycles a request may block before standing
-                                  # down; 0 = never expire
+    # Cycles a request may block before standing down; 0 = never expire.
+    dfc_hold: int = 8
     dfc_backoff: int = 0          # cycles a stood-down request stays quiet
     dfc_cap: float = 64.0         # clamp on the accumulated deficit
     dfc_margin: float = 0.0       # how much further behind a requester must be

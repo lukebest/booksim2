@@ -348,7 +348,6 @@ def final_table(b: dict) -> str:
     ss = schemes_present(b)
     rows = []
     for s in ss:
-        r = {op: rec(b, op, s) for op in OPS}
         base = {op: makespan(b, op, "s0") or 1 for op in OPS}
         eff = []
         for op in OPS:
@@ -439,6 +438,8 @@ def rootcause_text(b: dict, rc: dict) -> str:
                   for r in rows)
         dem = [r["flit_hops_total"] for r in rows]
         fs = m.get("finish_spread") or 0.0
+        shared = ("，占比低意味着这条链路主要是<b>别人的</b>流量"
+                  if min(own) < 0.9 else "，链路基本是本组独占")
         # A correlation against a quantity that barely varies is arithmetic
         # on noise, so say which case this is before quoting the number.
         verdict = (
@@ -468,9 +469,7 @@ Spearman ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
 也不在跨 die 那一跳。</p>
 <p>剩下的量是<b>各自路径上最热的那条有向链路要驮多少 flit</b>：
 最热 {max(crit):,}、最冷 {min(crit):,}，倍差 <b>{cs:.3f}</b>；
-本组在这条链路上的占比从 {100 * min(own):.1f}% 到 {100 * max(own):.1f}%
-{"，占比低意味着这条链路主要是<b>别人的</b>流量"
- if min(own) < 0.9 else "，链路基本是本组独占"}。
+本组在这条链路上的占比从 {100 * min(own):.1f}% 到 {100 * max(own):.1f}%{shared}。
 实测 S0 完成时刻 {m.get('finish')}。{verdict}</p>""")
     return "\n".join(out)
 
@@ -611,15 +610,22 @@ def build(b: dict, area: dict, rc: dict) -> str:
     crit = [r["crit_load"] for r in rd_rows] or [0, 0]
     rc_hi, rc_lo = f"{max(crit):,}", f"{min(crit):,}"
     rc_gap = f"{100 * (max(crit) / max(1, min(crit)) - 1):.0f}%"
-    d2d_sp = f"{max((max(r['d2d']['up']['spread'], r['d2d']['down']['spread']) for r in rd_rows), default=1.0):.3f}"
-    sp_w0, sp_r0 = f"{spread(b, 'write', 's0'):.3f}", \
-        f"{spread(b, 'read', 's0'):.3f}"
+    d2d_sp = "{:.3f}".format(
+        max((max(r["d2d"]["up"]["spread"], r["d2d"]["down"]["spread"])
+             for r in rd_rows), default=1.0))
+    sp_w0 = f"{spread(b, 'write', 's0'):.3f}"
+    sp_r0 = f"{spread(b, 'read', 's0'):.3f}"
     sp_r1 = f"{spread(b, 'read', 's1'):.3f}"
     sp_r22 = f"{spread(b, 'read', 's22'):.3f}"
     sp_r16g = f"{spread(b, 'read', 's16g'):.3f}"
-    eff_w0 = f"{100 * bounds(b, 'write').get('bound', 0) / max(1, makespan(b, 'write', 's0')):.0f}%"
-    eff_r0 = f"{100 * bounds(b, 'read').get('bound', 0) / max(1, makespan(b, 'read', 's0')):.0f}%"
-    d_r16g = f"{100 * (1 - makespan(b, 'read', 's16g') / max(1, makespan(b, 'read', 's0'))):.1f}%"
+
+    def _eff(op: str) -> str:
+        lb = bounds(b, op).get("bound", 0)
+        return f"{100 * lb / max(1, makespan(b, op, 's0')):.0f}%"
+
+    eff_w0, eff_r0 = _eff("write"), _eff("read")
+    r0, r16g = makespan(b, "read", "s0"), makespan(b, "read", "s16g")
+    d_r16g = f"{100 * (1 - r16g / max(1, r0)):.1f}%"
     cost = {r["scheme"]: r["cost_ff"] for r in (area.get("rows") or [])}
     c16g = max(1, cost.get("s16g", 0))
     cost_16g = f"{cost.get('s16g', 0):,}"
