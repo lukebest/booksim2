@@ -94,6 +94,9 @@ class StackDfcParams(StackBaseParams):
     dfc_vcs: tuple[str, ...] = ("dat",)
     # VCs the actuator may reorder or hold back. Adding "rsp" lets an HA
     # order DBIDResp by group, which is the grant that gates WriteData.
+    # Adding "req" is what gives a *core* a lever on a read batch, where the
+    # DAT it is credited with is issued by the HA and never passes its own
+    # inject port: without it the core-grain actuator degenerates to S0.
     dfc_act_vcs: tuple[str, ...] = ("dat",)
     # How many entries past the head the inject arbiter may look for a flit
     # that serves a requester instead. Yielding by idling wastes the
