@@ -126,10 +126,15 @@ def spec_s22(fc: dict[str, Any], knobs: dict[str, Any]) -> tuple[dict, str]:
     depth = int(knobs.get("dir_inj_depth", STOCK_DIR_DEPTH))
     tree = "addtree60" if entries > 10 else ("addtree10" if entries > 6
                                              else "addtree6")
+    # The post has to be wide enough to distinguish members that are not
+    # equal; a saturating post makes the whole controller blind, so the width
+    # the run actually used is the width that gets charged.
+    width = int(fc.get("bus_width_bits") or 6)
     spec = {
-        "bus_bits": 0 if bus_free else 6,
+        "bus_bits": 0 if bus_free else width,
         "bus_scope": 0 if bus_free else act,
-        "table_entries": 0 if bus_free else entries, "table_bits": 8,
+        "table_entries": 0 if bus_free else entries,
+        "table_bits": max(8, width),
         "table_scope": 0 if bus_free else act,
         # deficit register plus the window count it posts
         "counter_bits": 10 + (8 if bus_free else 0), "counter_scope": act,
@@ -142,8 +147,8 @@ def spec_s22(fc: dict[str, Any], knobs: dict[str, Any]) -> tuple[dict, str]:
         "queue_scope": N_TOP if depth > STOCK_DIR_DEPTH else 0,
     }
     note = (f"{'按 core' if grain == 'core' else '按 group'}记赤字，"
-            f"表 {entries} 项 × 8 bit，落在 {act} 个站点；"
-            f"前瞻 {dodge} 项要 {max(1, dodge)} 个比较器")
+            f"表 {entries} 项 × {max(8, width)} bit，落在 {act} 个站点；"
+            f"总线 {width} bit；前瞻 {dodge} 项要 {max(1, dodge)} 个比较器")
     if bus_free:
         note += "；无总线变体：赤字本地累加，总线与表全部取消"
     if depth > STOCK_DIR_DEPTH:
