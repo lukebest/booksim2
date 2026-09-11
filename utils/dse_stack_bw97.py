@@ -38,7 +38,6 @@ TARGET = 0.97
 OPS = ("write", "read")
 SWEEP_TILES = 1
 CONFIRM_TILES = 4
-POS = 512
 
 # Name -> knobs. FIFO depths are never in here.
 GRID: dict[str, dict[str, Any]] = {
@@ -124,9 +123,10 @@ def run_job(spec: tuple[str, str, int, bool]) -> tuple[str, dict[str, Any]]:
     hist = ha_histogram(_TOPO, txns)
     stall = max(80_000, 160 * hist["per_core_txn"])
     t0 = time.time()
+    extra = dict(FABRIC)
+    extra.update(kw)
     r = run_scheme(_TOPO, txns, "s0", route="bound", seed=0,
-                   keep_trace=False, ha_pos_depth=POS, stall_after=stall,
-                   **{**FABRIC, **kw})
+                   keep_trace=False, stall_after=stall, **extra)
     bound = _TOPO.write_bounds(
         txns, m_req=1, m_rsp=M_RSP, m_wdata=M_WDATA,
         fab_bw=fab_bw_of(kw), inject_bw=int(kw.get("inject_bw", 1)))
