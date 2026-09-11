@@ -91,8 +91,8 @@ class GroupGrantMixin(GrantMixin):
         super()._on_write_data_complete(txn)
 
     def _on_txn_done(self, txn: Txn, last) -> None:
-        if getattr(txn, "op", "read") == "write":
-            return
+        if getattr(txn, "op", "write") == "write":
+            return          # already retired when its WriteData landed
         self._retire_group(txn)
         super()._on_txn_done(txn, last)
 
