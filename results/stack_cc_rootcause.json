@@ -114,7 +114,7 @@
       "v": 621208
      },
      "flit_hops_total": 1768872,
-     "crit_edge": 624,
+     "crit_edge": 638,
      "crit_vc": "dat",
      "crit_fabric": "h",
      "crit_load": 30752,
@@ -147,7 +147,7 @@
       "v": 692874
      },
      "flit_hops_total": 1840426,
-     "crit_edge": 646,
+     "crit_edge": 644,
      "crit_vc": "dat",
      "crit_fabric": "h",
      "crit_load": 30736,
@@ -324,7 +324,57 @@
       "5": 0
      }
     }
-   ]
+   ],
+   "measured": {
+    "groups": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "finish": [
+     33589,
+     33357,
+     32795,
+     32865,
+     32951,
+     33278
+    ],
+    "crit_load": [
+     30672,
+     30736,
+     30752,
+     30752,
+     30736,
+     30672
+    ],
+    "crit_own": [
+     30672,
+     30736,
+     30752,
+     30752,
+     30736,
+     30672
+    ],
+    "demand": [
+     1838970,
+     1839082,
+     1768200,
+     1768872,
+     1840426,
+     1839642
+    ],
+    "pearson_crit_finish": -0.7961,
+    "spearman_crit_finish": -0.8367,
+    "pearson_own_finish": -0.7961,
+    "spearman_own_finish": -0.8367,
+    "pearson_demand_finish": 0.7504,
+    "finish_spread": 1.0242,
+    "demand_spread": 1.0408,
+    "crit_spread": 1.0026
+   }
   },
   "read": {
    "op": "read",
@@ -649,7 +699,57 @@
       "5": 852
      }
     }
-   ]
+   ],
+   "measured": {
+    "groups": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "finish": [
+     26967,
+     38279,
+     18352,
+     26137,
+     26998,
+     38251
+    ],
+    "crit_load": [
+     33228,
+     33228,
+     23072,
+     23072,
+     33228,
+     33228
+    ],
+    "crit_own": [
+     12780,
+     3408,
+     12828,
+     4280,
+     12780,
+     4260
+    ],
+    "demand": [
+     1313550,
+     1313630,
+     1263000,
+     1263480,
+     1314590,
+     1314030
+    ],
+    "pearson_crit_finish": 0.6905,
+    "spearman_crit_finish": 0.8281,
+    "pearson_own_finish": -0.7331,
+    "spearman_own_finish": -0.8117,
+    "pearson_demand_finish": 0.6896,
+    "finish_spread": 2.0858,
+    "demand_spread": 1.0408,
+    "crit_spread": 1.4402
+   }
   }
  }
 }

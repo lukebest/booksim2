@@ -170,14 +170,15 @@ def plot_overlay(b: dict, path: Path) -> None:
 
 
 def plot_makespan(b: dict, path: Path) -> None:
+    """Speed and fairness together: neither number means much alone."""
     ss = schemes_present(b)
-    fig, ax = plt.subplots(figsize=(8.4, 3.6))
+    fig, axes = plt.subplots(1, 2, figsize=(11.4, 3.8))
     w = 0.38
     xs = range(len(ss))
+    ax = axes[0]
     for i, op in enumerate(OPS):
         vals = [makespan(b, op, s) for s in ss]
-        off = (i - 0.5) * w
-        bars = ax.bar([x + off for x in xs], vals, w,
+        bars = ax.bar([x + (i - 0.5) * w for x in xs], vals, w,
                       label=OP_CN[op],
                       color="#2563eb" if op == "write" else "#f59e0b")
         base = makespan(b, op, "s0") or 1
@@ -185,14 +186,26 @@ def plot_makespan(b: dict, path: Path) -> None:
             ax.text(r.get_x() + r.get_width() / 2, v,
                     f"{v:,}\n{(v / base - 1) * 100:+.1f}%", ha="center",
                     va="bottom", fontsize=7)
-    ax.set_xticks(list(xs))
-    ax.set_xticklabels([s.upper() for s in ss])
     ax.set_ylabel("makespan（cycle）")
-    ax.set_title("同一流量 pattern 下的 makespan（百分比相对 S0）",
-                 fontsize=10)
-    ax.grid(axis="y", alpha=0.3)
-    ax.legend(fontsize=8)
-    ax.margins(y=0.18)
+    ax.set_title("makespan（百分比相对 S0）", fontsize=10)
+    ax = axes[1]
+    for i, op in enumerate(OPS):
+        vals = [spread(b, op, s) for s in ss]
+        bars = ax.bar([x + (i - 0.5) * w for x in xs], vals, w,
+                      label=OP_CN[op],
+                      color="#2563eb" if op == "write" else "#f59e0b")
+        for r, v in zip(bars, vals):
+            ax.text(r.get_x() + r.get_width() / 2, v, f"{v:.3f}",
+                    ha="center", va="bottom", fontsize=7)
+    ax.axhline(1.0, color="#16a34a", lw=1.0, ls="--")
+    ax.set_ylabel("最慢组 / 最快组完成时刻")
+    ax.set_title("组间不均衡（1.000 = 六组同时收尾）", fontsize=10)
+    for ax in axes:
+        ax.set_xticks(list(xs))
+        ax.set_xticklabels([s.upper() for s in ss])
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize=8)
+        ax.margins(y=0.18)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -204,21 +217,22 @@ def plot_cost(b: dict, area: dict, path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.0))
     for ax, op in zip(axes, OPS):
         base = makespan(b, op, "s0") or 1
+        # Points land on top of each other on the log axis, so they are
+        # named in the legend rather than beside the marker.
         for s in schemes_present(b):
-            r = rows.get(s)
-            if r is None:
+            if s not in rows:
                 continue
-            x = max(r["cost_ff"], 1)
-            y = makespan(b, op, s) / base
-            ax.scatter([x], [y], s=70, color=COLOR[s], zorder=3)
-            ax.annotate(f"{s.upper()}", (x, y), fontsize=8.5,
-                        xytext=(6, 5), textcoords="offset points")
+            ax.scatter([max(rows[s]["cost_ff"], 1)],
+                       [makespan(b, op, s) / base], s=80, color=COLOR[s],
+                       zorder=3, label=f"{s.upper()} ({rows[s]['cost_ff']:,})")
         ax.axhline(1.0, color="#dc2626", lw=1.0, ls="--")
         ax.set_xscale("log")
         ax.set_xlabel("新增状态（FF 等效，对数轴；S0 记 1）")
         ax.set_ylabel(f"{OP_CN[op]} makespan / S0")
-        ax.set_title(f"{OP_CN[op]}：效果 vs 面积", fontsize=10)
+        ax.set_title(f"{OP_CN[op]}：效果 vs 面积（越靠左下越好）",
+                     fontsize=10)
         ax.grid(alpha=0.3, which="both")
+        ax.legend(fontsize=7.5, loc="upper left")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -421,26 +435,59 @@ def rootcause_text(b: dict, rc: dict) -> str:
         crit = [r["crit_load"] for r in rows]
         own = [r["crit_own_frac"] for r in rows]
         cs = max(crit) / min(crit) if min(crit) else 0.0
-        d2d_ok = all(r["d2d"]["up"]["spread"] <= 1.001
-                     and r["d2d"]["down"]["spread"] <= 1.001 for r in rows)
+        d2d = max(max(r["d2d"]["up"]["spread"], r["d2d"]["down"]["spread"])
+                  for r in rows)
+        dem = [r["flit_hops_total"] for r in rows]
+        fs = m.get("finish_spread") or 0.0
+        # A correlation against a quantity that barely varies is arithmetic
+        # on noise, so say which case this is before quoting the number.
+        verdict = (
+            f"""结构下界在六个 group 之间只差 {100 * (cs - 1):.1f}%，
+而实测完成时刻差 {100 * (fs - 1):.1f}%，
+<b>量级对不上</b>：这一批的组间先后是仲裁的随机性，不是织物的形状。
+相关系数（Spearman ρ = {_f(m.get('spearman_crit_finish'), 3)}）
+是在一个几乎不变的量上算出来的，不能当作证据。"""
+            if cs < 1.05 else
+            f"""结构下界在六个 group 之间差 <b>{100 * (cs - 1):.0f}%</b>，
+实测完成时刻差 {100 * (fs - 1):.0f}%，两者<b>同向且同量级</b>：
+Spearman ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
+（Pearson {_f(m.get('pearson_crit_finish'), 3)}）。
+“本组占比”这一项的相关性同样强而反向
+（ρ = {_f(m.get('spearman_own_finish'), 3)}）——
+一个 group 在自己最热的那条链路上占得越少，它排在越后面完成，
+因为它等的是<b>别人的</b> flit 过完。
+相比之下“活的多少”几乎不解释什么
+（Pearson {_f(m.get('pearson_demand_finish'), 3)}，
+而六个 group 的解析需求本来就只差
+{100 * (max(dem) / min(dem) - 1):.1f}%）。""")
         out.append(f"""<h4>{OP_CN[op]}</h4>
-<p>六个 group 的解析需求几乎相同（flit·hop 极差
-{max(r['flit_hops_total'] for r in rows) - min(r['flit_hops_total'] for r in rows):,}，
-约 {100 * (max(r['flit_hops_total'] for r in rows) / min(r['flit_hops_total'] for r in rows) - 1):.1f}%），
-{"每个 group 自己的 8 条 D2D 上下行也完全均衡（倍差 1.000）"
- if d2d_ok else "组内 D2D 已经不均衡"}，
-所以差异不在“谁的活多”，也不在跨 die 那一跳。
-真正分开它们的是<b>各自路径上最热的那条有向链路要驮多少 flit</b>：
+<p>先排除两个常见的怀疑对象。六个 group 的解析需求几乎相同
+（flit·hop 最多差 {100 * (max(dem) / min(dem) - 1):.1f}%），
+每个 group 自己那 8 条 D2D 上下行也是均衡的
+（组内最大倍差 {d2d:.3f}），所以差异不在“谁的活多”，
+也不在跨 die 那一跳。</p>
+<p>剩下的量是<b>各自路径上最热的那条有向链路要驮多少 flit</b>：
 最热 {max(crit):,}、最冷 {min(crit):,}，倍差 <b>{cs:.3f}</b>；
 本组在这条链路上的占比从 {100 * min(own):.1f}% 到 {100 * max(own):.1f}%
-{"——占比低意味着这条链路主要是<b>别人的</b>流量，该组只能排队"
- if min(own) < 0.9 else "——链路基本是本组独占"}。
-实测 S0 完成时刻 {m.get('finish')}，
-倍差 {_f(m.get('finish_spread'), 3)}，与结构瓶颈的 Spearman
-ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
-（Pearson {_f(m.get('pearson_crit_finish'), 3)}）；
-与“活的多少”只有 Pearson {_f(m.get('pearson_demand_finish'), 3)}。</p>""")
+{"，占比低意味着这条链路主要是<b>别人的</b>流量"
+ if min(own) < 0.9 else "，链路基本是本组独占"}。
+实测 S0 完成时刻 {m.get('finish')}。{verdict}</p>""")
     return "\n".join(out)
+
+
+NOISE = 0.01     # below this, a makespan difference is not a result
+
+
+def _verdict(dw: float, dr: float) -> str:
+    """Describe a makespan pair without dressing up sub-1% differences."""
+    def one(d: float) -> str:
+        return "持平" if abs(d) < NOISE else ("更快" if d < 0 else "更慢")
+    w, r = one(dw), one(dr)
+    if w == r == "持平":
+        return "两个批次都在 1% 以内，等于没动"
+    if w == r:
+        return f"两个批次都{w}"
+    return f"写{w}、读{r}"
 
 
 def effect_text(b: dict, area: dict) -> str:
@@ -452,20 +499,100 @@ def effect_text(b: dict, area: dict) -> str:
         cost = (rows.get(s) or {}).get("cost_ff", 0)
         dw = makespan(b, "write", s) / max(1, makespan(b, "write", "s0")) - 1
         dr = makespan(b, "read", s) / max(1, makespan(b, "read", "s0")) - 1
-        verdict = ("两个批次都比 S0 快" if dw < 0 and dr < 0 else
-                   "写更快、读更慢" if dw < 0 else
-                   "读更快、写更慢" if dr < 0 else
-                   "两个批次都没有比 S0 快")
+        sr = spread(b, "read", s)
+        s0r = spread(b, "read", "s0")
+        fair = (f"读的组间倍差从 {s0r:.3f} 降到 <b>{sr:.3f}</b>"
+                if sr < s0r - 0.02 else
+                f"读的组间倍差仍是 {sr:.3f}，没有改善")
         items.append(
             f"<li><b>{label(b, s)}</b>（<code>{chosen(b, s)}</code>）："
-            f"写 {dw * 100:+.1f}%、读 {dr * 100:+.1f}%，{verdict}；"
-            f"新增状态 <b>{cost:,}</b> FF 等效。</li>")
+            f"写 {dw * 100:+.1f}%、读 {dr * 100:+.1f}%，{_verdict(dw, dr)}；"
+            f"{fair}；新增状态 <b>{cost:,}</b> FF 等效。</li>")
     return "<ul>" + "\n".join(items) + "</ul>"
+
+
+def grant_table(b: dict) -> str:
+    """Every confirmed receiver-grant configuration, both grains together.
+
+    The two grains have to be read against each other at *matched fairness*,
+    not at matched knob value: equalising the six groups is exactly what
+    costs throughput, so a scheme that equalises less looks faster for a
+    reason that has nothing to do with its granularity.
+    """
+    cf = b.get("confirm") or {}
+    ct = int((b.get("meta") or {}).get("tiles") or 4)
+    acc: dict[tuple[str, str], dict[str, Any]] = {}
+    for r in cf.values():
+        if r.get("scheme") in ("s16", "s16g") and r.get("tiles") == ct:
+            acc.setdefault((r["scheme"], r["config"]), {})[r["op"]] = r
+    rows = []
+    for (s, cfg), per in sorted(acc.items(),
+                                key=lambda kv: (kv[0][0] != "s16g",
+                                                kv[0][1])):
+        if len(per) < 2:
+            continue
+        rows.append([
+            "per-group" if s == "s16g" else "per-core",
+            f"<code>{cfg}</code>",
+            "6" if s == "s16g" else "60",
+            f"{per['write']['makespan']:,}",
+            _f(per["write"].get("finish_spread"), 3),
+            f"{per['read']['makespan']:,}",
+            _f(per["read"].get("finish_spread"), 3),
+        ])
+    return _t(["仲裁粒度", "配置", "每 HA 表项", "写 makespan", "写 倍差",
+               "读 makespan", "读 倍差"], rows)
 
 
 # ---------------------------------------------------------------------------
 # the document
 # ---------------------------------------------------------------------------
+
+def _fairest(b: dict) -> dict[str, tuple[float, str, int, int]]:
+    """Per grain, the confirmed config with the tightest read spread."""
+    cf = b.get("confirm") or {}
+    ct = int((b.get("meta") or {}).get("tiles") or 4)
+    best: dict[str, tuple[float, str, int, int]] = {}
+    for r in cf.values():
+        if r.get("scheme") not in ("s16", "s16g") or r.get("tiles") != ct:
+            continue
+        if r.get("op") != "read":
+            continue
+        sp = r.get("finish_spread") or 0.0
+        cur = best.get(r["scheme"])
+        if cur is None or sp < cur[0]:
+            w = cf.get(f"{r['scheme']}|{r['config']}|write|{ct}") or {}
+            best[r["scheme"]] = (sp, r["config"], r["makespan"],
+                                 w.get("makespan", 0))
+    return best
+
+
+def _matched_gain(b: dict) -> str:
+    best = _fairest(b)
+    g, c = best.get("s16g"), best.get("s16")
+    if not g or not c or not c[2]:
+        return "—"
+    return f"{100 * (1 - g[2] / c[2]):.1f}%"
+
+
+def matched_text(b: dict) -> str:
+    """Compare the two grains at the closest thing to equal read fairness."""
+    best = _fairest(b)
+    g, c = best.get("s16g"), best.get("s16")
+    if not g or not c:
+        return ""
+    return f"""<div class="def good">
+<b>在同等公平下，per-group 严格更好。</b>
+把两个粒度各自最公平的配置放在一起：per-group 的
+<code>{g[1]}</code> 把读的组间倍差压到 {g[0]:.3f}，makespan
+<b>{g[2]:,}</b>；per-core 的 <code>{c[1]}</code> 压到 {c[0]:.3f}，
+makespan <b>{c[2]:,}</b>。<b>公平度相同，per-group 快
+{100 * (1 - g[2] / max(1, c[2])):.1f}%</b>，写批次同样快
+{100 * (1 - g[3] / max(1, c[3])):.1f}%，而每个 HA 的服务计数表只有
+六分之一。原因很直接：per-core 要在 60 个类别之间轮转，
+一个 HA 的授权窗口被切成 60 份，谁都拿不到足够的并发把自己的
+纵环喂满；per-group 只切成 6 份，组内仍是先到先服务。</div>"""
+
 
 def build(b: dict, area: dict, rc: dict) -> str:
     t, m = b["topology"], b["meta"]
@@ -477,6 +604,28 @@ def build(b: dict, area: dict, rc: dict) -> str:
     tile = m.get("tiling_size", 65536) // 1024
     st = m.get("sweep_tiles", 1)
     ct = m.get("tiles", 4)
+
+    # Numbers the conclusions quote. Read them from the data rather than
+    # from the draft, so a rerun cannot leave the prose behind.
+    rd_rows = (((rc.get("ops") or {}).get("read")) or {}).get("groups") or []
+    crit = [r["crit_load"] for r in rd_rows] or [0, 0]
+    rc_hi, rc_lo = f"{max(crit):,}", f"{min(crit):,}"
+    rc_gap = f"{100 * (max(crit) / max(1, min(crit)) - 1):.0f}%"
+    d2d_sp = f"{max((max(r['d2d']['up']['spread'], r['d2d']['down']['spread']) for r in rd_rows), default=1.0):.3f}"
+    sp_w0, sp_r0 = f"{spread(b, 'write', 's0'):.3f}", \
+        f"{spread(b, 'read', 's0'):.3f}"
+    sp_r1 = f"{spread(b, 'read', 's1'):.3f}"
+    sp_r22 = f"{spread(b, 'read', 's22'):.3f}"
+    sp_r16g = f"{spread(b, 'read', 's16g'):.3f}"
+    eff_w0 = f"{100 * bounds(b, 'write').get('bound', 0) / max(1, makespan(b, 'write', 's0')):.0f}%"
+    eff_r0 = f"{100 * bounds(b, 'read').get('bound', 0) / max(1, makespan(b, 'read', 's0')):.0f}%"
+    d_r16g = f"{100 * (1 - makespan(b, 'read', 's16g') / max(1, makespan(b, 'read', 's0'))):.1f}%"
+    cost = {r["scheme"]: r["cost_ff"] for r in (area.get("rows") or [])}
+    c16g = max(1, cost.get("s16g", 0))
+    cost_16g = f"{cost.get('s16g', 0):,}"
+    cost_ratio = f"{cost.get('s16', 0) / c16g:.0f}"
+    cost_ratio_s1 = f"{cost.get('s1', 0) / c16g:.0f}"
+    matched_gain = _matched_gain(b)
 
     _cjk()
     plot_top_die(b, IMG / "cc_top_die.png")
@@ -626,6 +775,13 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 改进后按 <b>group</b> 仲裁——先选累计服务最少的 group，
 组内再轮转——每个 HA 只需要 6 项，并且可选按组预留配额下限。</p>
 {sec.get("s16g", "")}{sec.get("s16", "")}
+<h3>两种粒度必须在“同等公平”下比</h3>
+<p>目的端授权是<b>唯一会主动扣住授权</b>的方案，所以它天然存在
+公平与吞吐的取舍：越是把六个 group 拉齐，就越要压住本来能跑快的组。
+只比 makespan 会奖励“拉得不够齐”的配置，所以下表把两个粒度的
+全部确认配置放在一起，让公平度和 makespan 同时可见。</p>
+{grant_table(b)}
+{matched_text(b)}
 
 <h2>6　对比与总结</h2>
 <h3>6.1　这块织物还剩多少余量</h3>
@@ -672,20 +828,34 @@ S22 的赤字表用它实际跑的成员数，S16 的服务表用它的仲裁粒
 <h3>6.5　结论</h3>
 <div class="def good">
 <ol>
-<li><b>S0 的写已经接近结构下界，读的组间差异是拓扑造成的，不是调度造成的。</b>
-读的最热链路负载在六个 group 之间有一档真实的差距，
-与实测完成顺序高度相关；而 D2D 跨 die 那一跳、以及各组的总工作量，
-都是均衡的，都不是根因。</li>
-<li><b>源端方案（S1）在这个 pattern 上没有可利用的空间。</b>
-它花在总线和路径表上的面积买到的是“少发一点”，
-但瓶颈链路的总负载不变，makespan 只能持平或变差。</li>
-<li><b>S22 的价值在注入排序而不在降速。</b>
-让行在组粒度上结构性失效，真正起作用的是按目的地的绕行前瞻；
-一旦为它加深注入队列，队列 SRAM 就会以两个数量级压过整个控制器的面积，
-这是它在成本轴上唯一需要小心的地方。</li>
-<li><b>S16 从 per-core 改成 per-group，是本文里性价比最好的一处改动。</b>
-仲裁轴从 60 项缩到 6 项，每个 HA 的服务计数表和比较树都跟着缩一个数量级，
-授权仍然搭在既有 DBIDResp / CompData 上，不加报文也不加总线。</li>
+<li><b>读的组间差异是拓扑造成的，不是调度造成的。</b>
+六个 group 的工作量只差 4%，各自八条 D2D 上下行也基本均衡（倍差 {d2d_sp}），
+但各自路径上最热链路的负载分成 {rc_hi} 和 {rc_lo} 两档（差 {rc_gap}），
+与实测完成顺序同向同量级。写批次没有这一档差距，
+所以写本来就齐（倍差 {sp_w0}），读本来就不齐（倍差 {sp_r0}）。</li>
+<li><b>这块织物的 makespan 余量本来就不到一成，源端方案分不到。</b>
+S0 已经跑到写下界的 {eff_w0}、读下界的 {eff_r0}。
+S1 与 S22 都只动源端：S1 少发一点，S22 让行加绕行，
+两者对 makespan 的影响都在 ±1% 以内，对读的组间倍差<b>完全没有改善</b>
+（S1 {sp_r1}、S22 {sp_r22}，S0 是 {sp_r0}）。
+瓶颈是一条<b>过境</b>链路上别人的 flit，源端排序改不了它要驮的总量。</li>
+<li><b>S22 的组粒度在这个 fabric 上结构性失效，这是拓扑的结论而不是调参的结论。</b>
+一个 top 环恰好就是一个 group，组间在环上永远不相遇，让行的判定恒为假；
+唯一同时握有多个 group 流量的注入口在 HA，而 HA 的注入队列几乎总是空的
+（96 个 HA 摊 122,880 笔），没有东西可重排。
+S22 “绝不扣住空槽”的原则，正是它在这里帮不上忙的原因——
+要缓解一条过境热链路，必须有人真的少发。</li>
+<li><b>目的端授权是唯一真的动了读的方案，而 per-group 是它该有的粒度。</b>
+S16G 把读 makespan 降了 {d_r16g}，同时把组间倍差从 {sp_r0} 压到 {sp_r16g}；
+在同等公平度下它比 per-core 快 {matched_gain}。
+面积上它也是全场最便宜的：{cost_16g} FF 等效，
+只有 per-core 的 1/{cost_ratio}、S1 的 1/{cost_ratio_s1}，
+因为仲裁轴从 60 项缩到 6 项，而授权本身仍然搭在既有的
+DBIDResp / CompData 上，不加报文、不加总线、不加缓存。</li>
+<li><b>要再往下就得改绑定或改路由。</b>
+读的结构下界 {rc_hi} 是四个 group 共用一条横环重段的结果，
+而这条重段是“HA 按列绑定到 D2D bridge”这条硬件规则的直接后果。
+任何拥塞控制都只能在这条下界之上分配，消不掉它。</li>
 </ol>
 </div>
 

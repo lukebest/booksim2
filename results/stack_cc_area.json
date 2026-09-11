@@ -1,0 +1,156 @@
+{
+ "geometry": {
+  "n_top": 120,
+  "n_core": 60,
+  "n_ha": 96,
+  "n_attach": 48,
+  "n_station": 264,
+  "n_group": 6,
+  "flit_bits": 288,
+  "stock_dir_depth": 8,
+  "stock_inj_depth": 12,
+  "n_vc": 3,
+  "n_dir": 2
+ },
+ "arith": {
+  "cmp": 20,
+  "add": 40,
+  "addtree6": 200,
+  "addtree10": 360,
+  "addtree60": 2360,
+  "mult": 400,
+  "ewma": 440
+ },
+ "rows": [
+  {
+   "scheme": "s0",
+   "config": "base",
+   "label": "S0 基线（无源端流控）",
+   "cost_ff": 0,
+   "breakdown": {
+    "bus": 0,
+    "table": 0,
+    "counters": 0,
+    "arith": 0,
+    "queue": 0
+   },
+   "spec": {},
+   "note": "没有任何新增状态：核只看 outstanding 窗口和环上有没有空槽。"
+  },
+  {
+   "scheme": "s16g",
+   "config": "oc32-quota",
+   "label": "S16G 目的端授权（per-group）",
+   "cost_ff": 26496,
+   "breakdown": {
+    "bus": 0,
+    "table": 11520,
+    "counters": 1536,
+    "arith": 13440,
+    "queue": 0
+   },
+   "spec": {
+    "table_entries": 6,
+    "table_bits": 20,
+    "table_scope": 96,
+    "counter_bits": 16,
+    "counter_scope": 96,
+    "arith": {
+     "cmp": 5,
+     "add": 1
+    },
+    "arith_scope": 96,
+    "queue_scope": 0
+   },
+   "note": "每个 HA 一张 6 项服务计数表（按 group），仲裁是 5 级比较；授权本身走已有的 DBIDResp/CompData，不加总线、不加缓存（承诺峰值 32 笔，S0 也要同样的落地缓存）"
+  },
+  {
+   "scheme": "s1",
+   "config": "w32-spec",
+   "label": "S1 源端 AIMD 控速",
+   "cost_ff": 108084,
+   "breakdown": {
+    "bus": 1584,
+    "table": 50400,
+    "counters": 900,
+    "arith": 55200,
+    "queue": 0
+   },
+   "spec": {
+    "bus_bits": 6,
+    "bus_scope": 264,
+    "table_entries": 140,
+    "table_bits": 6,
+    "table_scope": 60,
+    "counter_bits": 15,
+    "counter_scope": 60,
+    "arith": {
+     "mult": 2,
+     "add": 2,
+     "cmp": 2
+    },
+    "arith_scope": 60,
+    "queue_scope": 120
+   },
+   "note": "每个 core 一份受控节点表，实测平均 139.9 项 × 6 bit；6-bit 拥塞总线在 264 个站点各latch 一份"
+  },
+  {
+   "scheme": "s22",
+   "config": "core-w64-t2-b9-d8",
+   "label": "S22 赤字流控（让行 / 绕行）",
+   "cost_ff": 189540,
+   "breakdown": {
+    "bus": 540,
+    "table": 32400,
+    "counters": 600,
+    "arith": 156000,
+    "queue": 0
+   },
+   "spec": {
+    "bus_bits": 9,
+    "bus_scope": 60,
+    "table_entries": 60,
+    "table_bits": 9,
+    "table_scope": 60,
+    "counter_bits": 10,
+    "counter_scope": 60,
+    "arith": {
+     "addtree60": 1,
+     "add": 2,
+     "cmp": 8
+    },
+    "arith_scope": 60,
+    "dir_inj_depth": 8,
+    "queue_scope": 0
+   },
+   "note": "按 core记赤字，表 60 项 × 9 bit，落在 60 个站点；总线 9 bit；前瞻 8 项要 8 个比较器"
+  },
+  {
+   "scheme": "s16",
+   "config": "oc32",
+   "label": "S16 目的端授权（per-core）",
+   "cost_ff": 233856,
+   "breakdown": {
+    "bus": 0,
+    "table": 115200,
+    "counters": 1536,
+    "arith": 117120,
+    "queue": 0
+   },
+   "spec": {
+    "table_entries": 60,
+    "table_bits": 20,
+    "table_scope": 96,
+    "counter_bits": 16,
+    "counter_scope": 96,
+    "arith": {
+     "cmp": 59,
+     "add": 1
+    },
+    "arith_scope": 96,
+    "queue_scope": 0
+   },
+   "note": "每个 HA 一张 60 项服务计数表（按 core），仲裁是 59 级比较；授权本身走已有的 DBIDResp/CompData，不加总线、不加缓存（承诺峰值 32 笔，S0 也要同样的落地缓存）"
+  }
+ ]
+}
