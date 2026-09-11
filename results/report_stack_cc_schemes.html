@@ -293,7 +293,7 @@ FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
 只翻倍 outstanding、D2D 链路宽、bridge 上环宽，以及必要时的横/纵/top 环宽。
 目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
 达成率都 ≥ 97%。选中的配置是 <code>base</code>：与 §0 相同（未加宽）。
-还没两边都到 97%，表里是目前最好的加宽组合。</p>
+1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑。</p>
 <h3>7.1　和 §0 差在哪</h3>
 <table><thead><tr><th>项目</th><th>§0 原 setup</th><th>加宽 setup（base）</th><th>变化</th></tr></thead><tbody><tr><td>每核 outstanding</td><td>128</td><td>128</td><td>—</td></tr><tr><td>D2D 链路宽（flit/拍/VC）</td><td>1</td><td>1</td><td>—</td></tr><tr><td>bridge / 落地 上环宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>底 die 横环宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>底 die 纵环宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>top die 环宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>注入口宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>弹出宽</td><td>1</td><td>1</td><td>—</td></tr><tr><td>转向 FIFO（未改）</td><td>64</td><td>64</td><td>—</td></tr><tr><td>D2D FIFO（未改）</td><td>128</td><td>128</td><td>—</td></tr><tr><td>落地 buffer（未改）</td><td>16</td><td>16</td><td>—</td></tr><tr><td>注入 FIFO（未改）</td><td>12</td><td>12</td><td>—</td></tr></tbody></table>
 <div class="def"><b>为什么不动 buffer、动带宽。</b>

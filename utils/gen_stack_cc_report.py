@@ -639,8 +639,14 @@ def bw97_section(bw: dict) -> str:
 <img src="cc_done_bw97.png" alt="加宽 setup 各 group 完成曲线">"""
     else:
         figs = "<p>4 tile 确认曲线还在跑，下表是 1 tile 扫描。</p>"
-    verdict = ("读写都到了 97% 以上" if ok_w and ok_r
-               else "还没两边都到 97%，表里是目前最好的加宽组合")
+    has_wide = any(c != "base" and _bw97_rec(bw, c, "write")
+                   for c in (bw.get("grid") or {}))
+    if ok_w and ok_r and win != "base":
+        verdict = "读写都到了 97% 以上"
+    elif not has_wide:
+        verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
+    else:
+        verdict = "还没两边都到 97%，表里是目前最好的加宽组合"
     return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
 <p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
 FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
