@@ -49,7 +49,7 @@ AREA = ROOT / "results" / "stack_cc_area.json"
 RCAUSE = ROOT / "results" / "stack_cc_rootcause.json"
 OUT = ROOT / "results" / "report_stack_cc_schemes.html"
 
-ORDER = ("s0", "s1", "s22", "s16", "s16g")
+ORDER = ("s0", "s1", "s22", "s16g", "s16")
 COLOR = {"s0": "#dc2626", "s1": "#f59e0b", "s22": "#16a34a",
          "s16": "#7c3aed", "s16g": "#2563eb"}
 OPS = ("write", "read")
@@ -300,12 +300,46 @@ def sweep_table(b: dict, s: str) -> str:
                "写+读", "写 组间倍差", "读 组间倍差"], rows)
 
 
+def bounds(b: dict, op: str) -> dict[str, Any]:
+    """The composite lower bound; identical for every scheme on one batch."""
+    for s in schemes_present(b):
+        bd = (rec(b, op, s).get("full") or {}).get("bounds")
+        if bd:
+            return bd
+    return {}
+
+
+def bound_table(b: dict) -> str:
+    rows = []
+    for op in OPS:
+        bd = bounds(b, op)
+        if not bd:
+            continue
+        t0 = makespan(b, op, "s0")
+        rows.append([
+            OP_CN[op],
+            f"{bd.get('link_lb', 0):,}",
+            f"{bd.get('port_lb', 0):,}",
+            f"{bd.get('cut_lb', 0):,}",
+            f"{bd.get('txn_lb', 0):,}",
+            f"<b>{bd.get('bound', 0):,}</b>",
+            f"{t0:,}",
+            f"<b>{100 * bd.get('bound', 0) / max(1, t0):.1f}%</b>",
+        ])
+    return _t(["批次", "单链路", "站点端口", "织物对分", "单事务时延",
+               "合成下界", "S0 实测 makespan", "S0 达成率"], rows)
+
+
 def final_table(b: dict) -> str:
     ss = schemes_present(b)
     rows = []
     for s in ss:
         r = {op: rec(b, op, s) for op in OPS}
         base = {op: makespan(b, op, "s0") or 1 for op in OPS}
+        eff = []
+        for op in OPS:
+            bd = bounds(b, op).get("bound", 0)
+            eff.append(100 * bd / max(1, makespan(b, op, s)))
         rows.append([
             f"<b>{label(b, s)}</b>",
             f"<code>{chosen(b, s)}</code>",
@@ -315,10 +349,10 @@ def final_table(b: dict) -> str:
             f"{(makespan(b, 'read', s) / base['read'] - 1) * 100:+.1f}%",
             _f(spread(b, "write", s), 3),
             _f(spread(b, "read", s), 3),
-            _f((r["write"].get("goodput_jain")), 4),
+            f"{eff[0]:.1f}% / {eff[1]:.1f}%",
         ])
     return _t(["方案", "配置", "写 makespan", "对 S0", "读 makespan", "对 S0",
-               "写 组间倍差", "读 组间倍差", "写 Jain"], rows)
+               "写 组间倍差", "读 组间倍差", "达成率 写/读"], rows)
 
 
 def finish_table(b: dict, op: str) -> str:
@@ -457,11 +491,11 @@ def build(b: dict, area: dict, rc: dict) -> str:
     if rc.get("ops"):
         plot_rootcause(b, rc, IMG / "cc_rootcause.png")
 
-    per_scheme = []
+    sec = {}
     for s in ss:
         if s == "s0":
             continue
-        per_scheme.append(f"""
+        sec[s] = f"""
 <h3>{label(b, s)}</h3>
 <p>参数 sweep（{st} tile，{len(((b.get('grid') or {}).get(s) or {}))} 组配置，
 写读各跑一遍，按写+读 makespan 之和排序；★ 是被 {ct} tile 确认后选中的配置）：</p>
@@ -470,7 +504,7 @@ def build(b: dict, area: dict, rc: dict) -> str:
 在 {ct} tile 全量批次上，写 makespan
 <b>{makespan(b, 'write', s):,}</b>、读 makespan
 <b>{makespan(b, 'read', s):,}</b>。</p>
-<img src="cc_done_{s}.png" alt="{s} 各 group 完成曲线">""")
+<img src="cc_done_{s}.png" alt="{s} 各 group 完成曲线">"""
 
     html = f"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -562,7 +596,7 @@ code {{ font-size: 0.86em; }}
 <p>每个 core 维持一个发送窗口，按 6 bit 拥塞总线广播回来的等级
 乘性减、加性增。总线延迟 30 cycle；受控节点表让 core 看到自己路径上
 每个站点的等级并取最大。</p>
-{per_scheme[0] if len(per_scheme) > 0 else ""}
+{sec.get("s1", "")}
 
 <h2>4　S22：赤字流控（细化）</h2>
 <p>S22 记的不是拥塞等级而是<b>赤字</b>：每个成员在一个窗口里实际拿到的
@@ -582,7 +616,7 @@ code {{ font-size: 0.86em; }}
 组间在环上根本不相遇，让行恒不触发；有意义的执行点在 HA 侧，
 六个 group 的响应在那里共用端口，绕行按目的地排序。
 网格里这两条路线是分开扫的，参数配对也是按这个结构定的。</div>
-{per_scheme[1] if len(per_scheme) > 1 else ""}
+{sec.get("s22", "")}
 
 <h2>5　S16：目的端授权（改进为 per-group 粒度）</h2>
 <p>Homa 式接收端授权：HA 不再见到 REQ 就回 DBIDResp，
@@ -591,14 +625,19 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 原方案按 <b>core</b> 仲裁，每个 HA 要维护 60 项服务计数；
 改进后按 <b>group</b> 仲裁——先选累计服务最少的 group，
 组内再轮转——每个 HA 只需要 6 项，并且可选按组预留配额下限。</p>
-{"".join(per_scheme[2:])}
+{sec.get("s16g", "")}{sec.get("s16", "")}
 
 <h2>6　对比与总结</h2>
-<h3>6.1　同一流量 pattern 下的 makespan</h3>
+<h3>6.1　这块织物还剩多少余量</h3>
+<p>在比较方案之前先要知道能比出多少。下界取四项里的最大：
+任意一条有向链路每 VC 每拍过 1 个 flit、任意一个站点端口每拍上/下 1 个 flit、
+每类织物的总 flit·hop 除以它的链路数、以及一笔事务本身的串行时延。</p>
+{bound_table(b)}
+<h3>6.2　同一流量 pattern 下的 makespan</h3>
 <img src="cc_makespan.png" alt="makespan 对比">
 {final_table(b)}
 <img src="cc_overlay.png" alt="各方案最慢/最快组对比">
-<h3>6.2　S0 各 group 带宽差异的根因</h3>
+<h3>6.3　S0 各 group 带宽差异的根因</h3>
 <p>把每一笔事务的正反向路由都走一遍，按发起 core 所属 group 记账，
 得到三个纯结构量：该 group 的解析 flit·hop 需求（活有多少）、
 它自己那 8 条 D2D 上下行的负载（跨 die 那一跳有没有偏）、
@@ -619,7 +658,7 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 其余四个撞在同一条重段上，结构下界就分成了两档。
 这一档差距不是仲裁造成的，任何只在源端做文章的方案都消不掉它——
 要消掉得改绑定或改路由。</div>
-<h3>6.3　效果与芯片面积成本</h3>
+<h3>6.4　效果与芯片面积成本</h3>
 <p>面积按 FF 等效计：总线是每个要听的站点latch 一份广播；
 表是每个站点对其他成员的视图；计数器是窗口、赤字、服务计数；
 算术把比较器、加法器和求均值的归约树折算成面积；
@@ -630,7 +669,7 @@ S22 的赤字表用它实际跑的成员数，S16 的服务表用它的仲裁粒
 {area_table(area)}
 <img src="cc_cost.png" alt="效果与面积">
 {effect_text(b, area)}
-<h3>6.4　结论</h3>
+<h3>6.5　结论</h3>
 <div class="def good">
 <ol>
 <li><b>S0 的写已经接近结构下界，读的组间差异是拓扑造成的，不是调度造成的。</b>
