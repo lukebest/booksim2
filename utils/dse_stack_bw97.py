@@ -71,6 +71,16 @@ GRID: dict[str, dict[str, Any]] = {
     "oc256-all2-turn2": dict(core_outstanding=256, d2d_bw=2, bridge_bw=2,
                              h_bw=2, v_bw=2, top_bw=2, inject_bw=2,
                              eject_bw=2, turn_bw=2),
+    # Outstanding is the remaining tradeoff: 128 writes at 95.6% but
+    # reads collapse to 86%; 256 keeps read ~95% and write ~93%.
+    "oc160-d2d2-br2-turn2": dict(core_outstanding=160, d2d_bw=2,
+                                 bridge_bw=2, turn_bw=2),
+    "oc192-d2d2-br2-turn2": dict(core_outstanding=192, d2d_bw=2,
+                                 bridge_bw=2, turn_bw=2),
+    "oc224-d2d2-br2-turn2": dict(core_outstanding=224, d2d_bw=2,
+                                 bridge_bw=2, turn_bw=2),
+    "oc256-d2d4-br4-turn2": dict(core_outstanding=256, d2d_bw=4,
+                                 bridge_bw=4, turn_bw=2),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -94,6 +104,10 @@ COST = {
     "oc256-d2d2-br2-turn4": 6,
     "oc256-d2d2-br2-turn2-inj2-ej2": 7,
     "oc256-all2-turn2": 10,
+    "oc160-d2d2-br2-turn2": 5,
+    "oc192-d2d2-br2-turn2": 5,
+    "oc224-d2d2-br2-turn2": 5,
+    "oc256-d2d4-br4-turn2": 7,
 }
 
 
@@ -266,6 +280,10 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "oc256-d2d2-br2-turn4",
         "oc256-d2d2-br2-turn2-inj2-ej2",
         "oc256-all2-turn2",
+        "oc160-d2d2-br2-turn2",
+        "oc192-d2d2-br2-turn2",
+        "oc224-d2d2-br2-turn2",
+        "oc256-d2d4-br4-turn2",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
