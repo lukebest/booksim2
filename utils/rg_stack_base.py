@@ -99,6 +99,17 @@ class StackBaseParams:
     # every flit is E-tagged anyway, so it buys nothing and costs a lap.
     resv_turn: int = 0
     plane_sel: str = "least_occupied"
+    # Per-fabric link width: flits per directed edge per VC per sigma window.
+    # 1 is the original R1. Raising a fabric's width is a bandwidth change,
+    # not a buffer change -- FIFO depths stay put.
+    d2d_bw: int = 1
+    h_bw: int = 1
+    v_bw: int = 1
+    top_bw: int = 1
+    # How many flits a D2D landing / D2D transfer FIFO may board per cycle.
+    bridge_bw: int = 1
+    # How many PE injects one port-group may board per cycle.
+    inject_bw: int = 1
 
 
 @dataclass
@@ -146,6 +157,14 @@ class StackBaseSim:
         self.n_planes = TOP_PLANES
 
         self.seg_free: dict[Any, int] = defaultdict(int)     # (eid, vc) -> t
+        self.seg_win: dict[Any, int] = {}                    # wide-link window
+        self.seg_used: dict[Any, int] = defaultdict(int)     # slots in window
+        self._fab_bw = {
+            "top": max(1, int(self.p.top_bw)),
+            "d2d": max(1, int(self.p.d2d_bw)),
+            "h": max(1, int(self.p.h_bw)),
+            "v": max(1, int(self.p.v_bw)),
+        }
         self.arrivals: dict[int, list[Flit]] = defaultdict(list)
 
         self.srcq: dict[Any, deque[Flit]] = defaultdict(deque)
@@ -510,6 +529,39 @@ class StackBaseSim:
 
     # -- movement -----------------------------------------------------------
 
+    def _hop_cap(self, eid: int) -> int:
+        """Flits one directed edge may carry on one VC in a sigma window."""
+        return self._fab_bw.get(self.topo.fabric_of(eid), 1)
+
+    def _hop_ready(self, eid: int, vc: str) -> bool:
+        """True if `(eid, vc)` still has a slot this cycle.
+
+        Width 1 is the original R1: `seg_free[seg] <= t`. Wider fabrics
+        keep a per-window slot count so two flits can share one hop
+        without changing FIFO depths.
+        """
+        seg = (eid, vc)
+        if self._hop_cap(eid) <= 1:
+            return self.seg_free[seg] <= self.t
+        win = self.seg_win.get(seg)
+        if win is None or self.t >= win + self.sigma:
+            return True
+        return self.seg_used.get(seg, 0) < self._hop_cap(eid)
+
+    def _hop_take(self, eid: int, vc: str) -> None:
+        seg = (eid, vc)
+        if self._hop_cap(eid) <= 1:
+            self.seg_free[seg] = self.t + self.sigma
+            return
+        win = self.seg_win.get(seg)
+        if win is None or self.t >= win + self.sigma:
+            self.seg_win[seg] = self.t
+            self.seg_used[seg] = 1
+        else:
+            self.seg_used[seg] += 1
+        if self.seg_used[seg] >= self._hop_cap(eid):
+            self.seg_free[seg] = self.seg_win[seg] + self.sigma
+
     def _next_edge(self, f: Flit) -> int:
         """The edge this flit wants next: a deflection lap outranks the route."""
         if f.dpos < len(f.detour):
@@ -522,7 +574,7 @@ class StackBaseSim:
     def _launch(self, f: Flit, *, inring: bool) -> bool:
         eid = self._next_edge(f)
         seg = (eid, f.vc)
-        if self.seg_free[seg] > self.t:
+        if not self._hop_ready(eid, f.vc):
             if inring:
                 self.st["n_inring_blocked"] += 1
                 self._hold(f, seg)
@@ -530,7 +582,7 @@ class StackBaseSim:
         if f.held:
             f.held = False
             self.inring_hold[seg] -= 1
-        self.seg_free[seg] = self.t + self.sigma
+        self._hop_take(eid, f.vc)
         rk = self.topo.edge_ring[eid]
         if inring and f.ring == rk:
             self.pass_through[(f.node, rk, f.vc)] += 1
@@ -639,19 +691,20 @@ class StackBaseSim:
             if not q:
                 self.active_d2d_buf.pop(key, None)
                 continue
-            f = q[0]
-            leave[(f.node, f.ring)].append(f)
-            from_land.add(id(f))
+            n = max(1, int(self.p.bridge_bw))
+            for f in list(q)[:n]:
+                leave[(f.node, f.ring)].append(f)
+                from_land.add(id(f))
         return from_land
 
     def _pop_d2d_buf(self, ids: set[int]) -> None:
         if not ids:
             return
         for key, q in list(self.d2d_buf.items()):
-            if q and id(q[0]) in ids:
+            while q and id(q[0]) in ids:
                 q.popleft()
-                if not q:
-                    self.active_d2d_buf.pop(key, None)
+            if not q:
+                self.active_d2d_buf.pop(key, None)
 
     def _push_d2d_buf(self, f: Flit) -> bool:
         key = self._d2d_buf_key(f)
@@ -685,9 +738,9 @@ class StackBaseSim:
         if a.node != b.node:
             return False
         ea, eb = self._next_edge(a), self._next_edge(b)
-        if self.seg_free[(ea, a.vc)] > self.t:
+        if not self._hop_ready(ea, a.vc):
             return False
-        if self.seg_free[(eb, b.vc)] > self.t:
+        if not self._hop_ready(eb, b.vc):
             return False
         sa, sb = self._src_fab(a), self._src_fab(b)
         da, db = self._dst_fab(a), self._dst_fab(b)
@@ -1232,15 +1285,20 @@ class StackBaseSim:
             if not q:
                 self.active_xq.pop(key, None)
                 continue
-            f = q[0]
-            if f.turn_ready > self.t:
-                continue
-            if self._launch(f, inring=False):
-                q.popleft()
-                if not q:
-                    self.active_xq.pop(key, None)
-            else:
-                self.st["n_turn_board_fail"] += 1
+            n = max(1, int(self.p.bridge_bw)) if self._xfer_is_d2d(key) else 1
+            launched = 0
+            while q and launched < n:
+                f = q[0]
+                if f.turn_ready > self.t:
+                    break
+                if self._launch(f, inring=False):
+                    q.popleft()
+                    launched += 1
+                else:
+                    self.st["n_turn_board_fail"] += 1
+                    break
+            if not q:
+                self.active_xq.pop(key, None)
 
     def _select_inject_flit(self, node: int, plane: int, q) -> Flit | None:
         """Which boarding-queue flit tries the inject port. Default: FIFO head."""
@@ -1253,7 +1311,7 @@ class StackBaseSim:
             f = self._select_inject_flit(node, cand[1], q) if q else None
             ok = (f is not None
                   and not self._itag_blocks(f, node)
-                  and self.seg_free[(self._next_edge(f), f.vc)] <= self.t)
+                  and self._hop_ready(self._next_edge(f), f.vc))
             (ready if ok else blocked).append(cand)
         return ready + blocked
 
@@ -1285,7 +1343,7 @@ class StackBaseSim:
             else ((node, plane, f.vc) if self.p.per_vc_ports else key)
         if self._itag_blocks(f, node):
             self._fail_cause = "itag"
-        elif self.seg_free[(self._next_edge(f), f.vc)] > self.t:
+        elif not self._hop_ready(self._next_edge(f), f.vc):
             self._fail_cause = "hop_busy"
         else:
             self._fail_cause = ""
@@ -1335,8 +1393,10 @@ class StackBaseSim:
                 if self._port_idle(node, plane):
                     self.active_src.pop(key, None)
                 continue
-            for group in groups:
-                self._board_one(node, plane, key, group)
+            n_inj = max(1, int(self.p.inject_bw))
+            for _ in range(n_inj):
+                for group in groups:
+                    self._board_one(node, plane, key, group)
             if self.p.shared_inj:
                 self._xfer_shared(node, plane)
                 for v in self._shared_vcs():
@@ -1633,6 +1693,9 @@ class StackBaseSim:
             out["net_mean"] = round(sum(net) / len(net), 1)
         out["core_outstanding"] = self.p.core_outstanding
         out["ha_pos_depth"] = self.p.ha_pos_depth
+        out["fab_bw"] = dict(self._fab_bw)
+        out["bridge_bw"] = self.p.bridge_bw
+        out["inject_bw"] = self.p.inject_bw
         out["retry"] = self._retry_stats()
         out["wr_inject_by_core"] = {c: list(v) for c, v
                                     in sorted(self.wr_inject_times.items())}

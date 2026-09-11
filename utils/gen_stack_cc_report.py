@@ -47,6 +47,7 @@ IMG = ROOT / "results"
 FOCUS = ROOT / "results" / "stack_cc_focus.json"
 AREA = ROOT / "results" / "stack_cc_area.json"
 RCAUSE = ROOT / "results" / "stack_cc_rootcause.json"
+BW97 = ROOT / "results" / "stack_bw97_focus.json"
 OUT = ROOT / "results" / "report_stack_cc_schemes.html"
 
 ORDER = ("s0", "s1", "s22", "s16g", "s16")
@@ -475,6 +476,185 @@ Spearman ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
 
 
 NOISE = 0.01     # below this, a makespan difference is not a result
+BW97_TARGET = 0.97
+
+
+def _bw97_rec(bw: dict, cfg: str, op: str, slot: str = "confirm") -> dict:
+    return ((bw.get(slot) or {}).get(cfg) or {}).get(op) or {}
+
+
+def _bw97_eff(bw: dict, cfg: str, op: str, slot: str = "confirm") -> float:
+    r = _bw97_rec(bw, cfg, op, slot)
+    return float(r.get("eff") or 0)
+
+
+def _bw97_knob_txt(kw: dict) -> str:
+    if not kw:
+        return "与 §0 相同（未加宽）"
+    names = {
+        "core_outstanding": "outstanding",
+        "d2d_bw": "D2D 链路宽",
+        "h_bw": "横环宽",
+        "v_bw": "纵环宽",
+        "top_bw": "top 环宽",
+        "bridge_bw": "bridge 上环宽",
+        "inject_bw": "注入口宽",
+        "eject_bw": "弹出宽",
+    }
+    return "，".join(f"{names.get(k, k)} = {v}" for k, v in sorted(kw.items()))
+
+
+def plot_bw97_done(bw: dict, cfg: str, path: Path) -> None:
+    """Same axes as plot_done, but the series live under confirm[cfg][op]."""
+    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.1))
+    for ax, op in zip(axes, OPS):
+        rec = _bw97_rec(bw, cfg, op)
+        ser = (rec.get("full") or {}).get("done_series") or {}
+        cum = ser.get("cum_by_group") or {}
+        ts = ser.get("t") or []
+        for g in sorted(cum, key=int):
+            ax.plot(ts, cum[g], lw=1.5, color=DIE_COLOR[int(g) % 6],
+                    label=f"group {g}")
+        fin = ser.get("finish_by_group") or rec.get("group_finish") or {}
+        fin = {str(k): v for k, v in fin.items()}
+        if fin:
+            lo, hi = min(fin.values()), max(fin.values())
+            ax.axvspan(lo, hi, color="#94a3b8", alpha=0.16, zorder=0)
+            ax.axvline(hi, color="#475569", lw=1.0, ls="--")
+            top = max((max(v) for v in cum.values()), default=1)
+            ax.annotate(f"makespan {hi:,}", (hi, 0.5 * top),
+                        xytext=(-6, 0), textcoords="offset points",
+                        fontsize=7.5, color="#475569", ha="right")
+        vals = [v for v in fin.values() if v]
+        sp = (max(vals) / min(vals)) if vals else 0
+        ax.set_title(f"{OP_CN[op]}  最慢/最快 = {sp:.3f}  "
+                     f"达成率 {_bw97_eff(bw, cfg, op):.1%}", fontsize=9.5)
+        ax.set_xlabel("时间（cycle）")
+        ax.set_ylabel("该 group 已完成的 DAT flit 数")
+        ax.grid(alpha=0.3)
+        ax.margins(y=0.12)
+        ax.legend(fontsize=7, ncol=2, loc="upper left", framealpha=0.9)
+    fig.suptitle(f"加宽 setup　{cfg}", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def bw97_setup_table(bw: dict) -> str:
+    win = (bw.get("meta") or {}).get("winner") or "—"
+    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
+    base = {
+        "core_outstanding": 128, "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
+        "top_bw": 1, "bridge_bw": 1, "inject_bw": 1, "eject_bw": 1,
+        "turn_depth": 64, "d2d_depth": 128, "d2d_land_depth": 16,
+        "inj_depth": 12, "dir_inj_depth": 8,
+    }
+    new = dict(base)
+    new.update(knobs)
+    rows = []
+    labels = [
+        ("core_outstanding", "每核 outstanding"),
+        ("d2d_bw", "D2D 链路宽（flit/拍/VC）"),
+        ("bridge_bw", "bridge / 落地 上环宽"),
+        ("h_bw", "底 die 横环宽"),
+        ("v_bw", "底 die 纵环宽"),
+        ("top_bw", "top die 环宽"),
+        ("inject_bw", "注入口宽"),
+        ("eject_bw", "弹出宽"),
+        ("turn_depth", "转向 FIFO（未改）"),
+        ("d2d_depth", "D2D FIFO（未改）"),
+        ("d2d_land_depth", "落地 buffer（未改）"),
+        ("inj_depth", "注入 FIFO（未改）"),
+    ]
+    for k, lab in labels:
+        a, b = base[k], new.get(k, base[k])
+        mark = "—" if a == b else f"<b>{a} → {b}</b>"
+        rows.append([lab, str(a), str(b), mark])
+    return _t(["项目", "§0 原 setup", f"加宽 setup（{win}）", "变化"], rows)
+
+
+def bw97_sweep_table(bw: dict) -> str:
+    grid = bw.get("grid") or {}
+    rows = []
+    for cfg, kw in grid.items():
+        wr = _bw97_rec(bw, cfg, "write", "sweep")
+        rd = _bw97_rec(bw, cfg, "read", "sweep")
+        if not wr and not rd:
+            continue
+        star = " ★" if cfg == (bw.get("meta") or {}).get("winner") else ""
+        rows.append([
+            f"<code>{cfg}</code>{star}",
+            _bw97_knob_txt(kw),
+            f"{wr.get('makespan', 0):,}" if wr else "—",
+            f"{100 * float(wr.get('eff') or 0):.1f}%" if wr else "—",
+            f"{rd.get('makespan', 0):,}" if rd else "—",
+            f"{100 * float(rd.get('eff') or 0):.1f}%" if rd else "—",
+        ])
+    return _t(["配置", "加宽项", "写 makespan（1 tile）", "写达成率",
+               "读 makespan", "读达成率"], rows)
+
+
+def bw97_final_table(bw: dict) -> str:
+    rows = []
+    for cfg in ("base", (bw.get("meta") or {}).get("winner")):
+        if not cfg:
+            continue
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr and not rd:
+            continue
+        rows.append([
+            f"<b>{cfg}</b>",
+            _bw97_knob_txt((bw.get("grid") or {}).get(cfg) or {}),
+            f"{wr.get('makespan', 0):,}",
+            f"{wr.get('bounds', {}).get('bound', 0):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{rd.get('makespan', 0):,}",
+            f"{rd.get('bounds', {}).get('bound', 0):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+        ])
+    return _t(["配置", "加宽项", "写 makespan", "写下界", "写达成率",
+               "读 makespan", "读下界", "读达成率"], rows)
+
+
+def bw97_section(bw: dict) -> str:
+    if not bw:
+        return ""
+    win = (bw.get("meta") or {}).get("winner") or "—"
+    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
+    wr = _bw97_rec(bw, win, "write")
+    rd = _bw97_rec(bw, win, "read")
+    ok_w = float(wr.get("eff") or 0) >= BW97_TARGET
+    ok_r = float(rd.get("eff") or 0) >= BW97_TARGET
+    if wr.get("full"):
+        plot_bw97_done(bw, "base", IMG / "cc_done_bw97_base.png")
+        plot_bw97_done(bw, win, IMG / "cc_done_bw97.png")
+        figs = """<img src="cc_done_bw97_base.png" alt="原 setup 各 group 完成曲线">
+<img src="cc_done_bw97.png" alt="加宽 setup 各 group 完成曲线">"""
+    else:
+        figs = "<p>4 tile 确认曲线还在跑，下表是 1 tile 扫描。</p>"
+    verdict = ("读写都到了 97% 以上" if ok_w and ok_r
+               else "还没两边都到 97%，表里是目前最好的加宽组合")
+    return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
+<p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
+FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
+只翻倍 outstanding、D2D 链路宽、bridge 上环宽，以及必要时的横/纵/top 环宽。
+目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
+达成率都 ≥ 97%。选中的配置是 <code>{win}</code>：{_bw97_knob_txt(knobs)}。
+{verdict}。</p>
+<h3>7.1　和 §0 差在哪</h3>
+{bw97_setup_table(bw)}
+<div class="def"><b>为什么不动 buffer、动带宽。</b>
+写差的 8% 里握手只占约 2%，其余是落地口和注入口喂不饱独占的
+<i>h:dat</i> 边；读差的 13% 里有 POS retry，但下界本身是四组叠在
+同一条横环重段上。加深队列只堆库存，加宽 D2D / bridge / 横环才改
+每拍能过的 flit 数。outstanding 从 128 提到 256 是为了盖住 413 cycle
+的写 RTT，不是加队列。</div>
+<h3>7.2　1 tile 扫描</h3>
+{bw97_sweep_table(bw)}
+<h3>7.3　4 tile 确认</h3>
+{figs}
+{bw97_final_table(bw)}
+"""
 
 
 def _verdict(dw: float, dr: float) -> str:
@@ -593,7 +773,7 @@ makespan <b>{c[2]:,}</b>。<b>公平度相同，per-group 快
 纵环喂满；per-group 只切成 6 份，组内仍是先到先服务。</div>"""
 
 
-def build(b: dict, area: dict, rc: dict) -> str:
+def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
     t, m = b["topology"], b["meta"]
     ss = schemes_present(b)
     n_txn = m.get("n_txn", 0)
@@ -870,6 +1050,7 @@ DBIDResp / CompData 上，不加报文、不加总线、不加缓存。</li>
 </ol>
 </div>
 
+{bw97_section(bw97 or {})}
 <h2>附录　完整网格</h2>
 {"".join(f"<h4>{label(b, s)}</h4>{sweep_table(b, s)}" for s in ss if s != "s0")}
 </body></html>"""
@@ -882,7 +1063,8 @@ def main() -> None:
     b = json.loads(FOCUS.read_text())
     area = json.loads(AREA.read_text()) if AREA.exists() else {}
     rc = json.loads(RCAUSE.read_text()) if RCAUSE.exists() else {}
-    OUT.write_text(build(b, area, rc))
+    bw97 = json.loads(BW97.read_text()) if BW97.exists() else {}
+    OUT.write_text(build(b, area, rc, bw97))
     print(f"wrote {OUT}  ({OUT.stat().st_size / 1024:.0f} KB)")
 
 
