@@ -498,6 +498,7 @@ def _bw97_knob_txt(kw: dict) -> str:
         "v_bw": "纵环宽",
         "top_bw": "top 环宽",
         "bridge_bw": "bridge 上环宽",
+        "turn_bw": "H↔V 转向宽",
         "inject_bw": "注入口宽",
         "eject_bw": "弹出宽",
     }
@@ -545,7 +546,7 @@ def bw97_setup_table(bw: dict) -> str:
     knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
     base = {
         "core_outstanding": 128, "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
-        "top_bw": 1, "bridge_bw": 1, "inject_bw": 1, "eject_bw": 1,
+        "top_bw": 1, "bridge_bw": 1, "turn_bw": 1, "inject_bw": 1, "eject_bw": 1,
         "turn_depth": 64, "d2d_depth": 128, "d2d_land_depth": 16,
         "inj_depth": 12, "dir_inj_depth": 8,
     }
@@ -556,6 +557,7 @@ def bw97_setup_table(bw: dict) -> str:
         ("core_outstanding", "每核 outstanding"),
         ("d2d_bw", "D2D 链路宽（flit/拍/VC）"),
         ("bridge_bw", "bridge / 落地 上环宽"),
+        ("turn_bw", "H↔V 转向宽（离开 tap + FIFO 下环）"),
         ("h_bw", "底 die 横环宽"),
         ("v_bw", "底 die 纵环宽"),
         ("top_bw", "top die 环宽"),
@@ -594,33 +596,62 @@ def bw97_sweep_table(bw: dict) -> str:
                "读 makespan", "读达成率"], rows)
 
 
+def _bw97_n(rec: dict, *keys, default: int = 0) -> int:
+    cur: Any = rec
+    for k in keys:
+        cur = (cur or {}).get(k) if isinstance(cur, dict) else None
+    return int(cur or default)
+
+
 def bw97_final_table(bw: dict) -> str:
     rows = []
-    for cfg in ("base", (bw.get("meta") or {}).get("winner")):
-        if not cfg:
-            continue
+    win = (bw.get("meta") or {}).get("winner")
+    confirm = bw.get("confirm") or {}
+    cfgs: list[str] = []
+    if "base" in confirm:
+        cfgs.append("base")
+    for cfg in bw.get("grid") or {}:
+        if cfg != "base" and cfg in confirm:
+            cfgs.append(cfg)
+    for extra in confirm:
+        if extra not in cfgs:
+            cfgs.append(extra)
+    for cfg in cfgs:
         wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
         if not wr and not rd:
             continue
-
-        def _n(rec: dict, *keys, default: int = 0) -> int:
-            cur: Any = rec
-            for k in keys:
-                cur = (cur or {}).get(k) if isinstance(cur, dict) else None
-            return int(cur or default)
-
+        star = " ★" if cfg == win else ""
         rows.append([
-            f"<b>{cfg}</b>",
+            f"<b>{cfg}</b>{star}",
             _bw97_knob_txt((bw.get("grid") or {}).get(cfg) or {}),
-            f"{_n(wr, 'makespan'):,}",
-            f"{_n(wr, 'bounds', 'bound'):,}",
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
             f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
-            f"{_n(rd, 'makespan'):,}",
-            f"{_n(rd, 'bounds', 'bound'):,}",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
             f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
         ])
     return _t(["配置", "加宽项", "写 makespan", "写下界", "写达成率",
                "读 makespan", "读下界", "读达成率"], rows)
+
+
+def bw97_confirm_note(bw: dict) -> str:
+    items = []
+    for cfg in bw.get("grid") or {}:
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if cfg == "base" or not wr or not rd:
+            continue
+        sp = float(wr.get("finish_spread") or 0)
+        tail = (f"，写组间倍差 {sp:.3f}" if sp > 1.05 else "")
+        items.append(
+            f"<li><code>{cfg}</code>：写 "
+            f"{_bw97_n(wr, 'makespan'):,} / {_bw97_n(wr, 'bounds', 'bound'):,} "
+            f"= {100 * float(wr.get('eff') or 0):.1f}%，读 "
+            f"{_bw97_n(rd, 'makespan'):,} / {_bw97_n(rd, 'bounds', 'bound'):,} "
+            f"= {100 * float(rd.get('eff') or 0):.1f}%{tail}</li>")
+    if not items:
+        return "<p>4 tile 确认还在跑。</p>"
+    return "<ul>" + "".join(items) + "</ul>"
 
 
 def bw97_section(bw: dict) -> str:
@@ -632,9 +663,10 @@ def bw97_section(bw: dict) -> str:
     rd = _bw97_rec(bw, win, "read")
     ok_w = float(wr.get("eff") or 0) >= BW97_TARGET
     ok_r = float(rd.get("eff") or 0) >= BW97_TARGET
-    if wr.get("full"):
+    if wr.get("full") or _bw97_rec(bw, "base", "write").get("full"):
         plot_bw97_done(bw, "base", IMG / "cc_done_bw97_base.png")
-        plot_bw97_done(bw, win, IMG / "cc_done_bw97.png")
+        if wr.get("full"):
+            plot_bw97_done(bw, win, IMG / "cc_done_bw97.png")
         figs = """<img src="cc_done_bw97_base.png" alt="原 setup 各 group 完成曲线">
 <img src="cc_done_bw97.png" alt="加宽 setup 各 group 完成曲线">"""
     else:
@@ -646,11 +678,12 @@ def bw97_section(bw: dict) -> str:
     elif not has_wide:
         verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
     else:
-        verdict = "还没两边都到 97%，表里是目前最好的加宽组合"
+        verdict = "还没两边都到 97%，★ 是目前最差一侧达成率最高的加宽组合"
     return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
 <p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
 FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
-只翻倍 outstanding、D2D 链路宽、bridge 上环宽，以及必要时的横/纵/top 环宽。
+只翻倍 outstanding、D2D 链路宽、bridge 上环宽、H↔V 转向宽，
+以及必要时的横/纵/top 环宽。
 目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
 达成率都 ≥ 97%。选中的配置是 <code>{win}</code>：{_bw97_knob_txt(knobs)}。
 {verdict}。</p>
@@ -661,11 +694,13 @@ FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
 <i>h:dat</i> 边；读差的 13% 里有 POS retry，但下界本身是四组叠在
 同一条横环重段上。加深队列只堆库存，加宽 D2D / bridge / 横环才改
 每拍能过的 flit 数。outstanding 从 128 提到 256 是为了盖住 413 cycle
-的写 RTT，不是加队列。</div>
+的写 RTT，不是加队列。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
+H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。</div>
 <h3>7.2　1 tile 扫描</h3>
 {bw97_sweep_table(bw)}
 <h3>7.3　4 tile 确认</h3>
 {figs}
+{bw97_confirm_note(bw)}
 {bw97_final_table(bw)}
 """
 

@@ -108,6 +108,11 @@ class StackBaseParams:
     top_bw: int = 1
     # How many flits a D2D landing / D2D transfer FIFO may board per cycle.
     bridge_bw: int = 1
+    # How many H↔V turns one station may leave, and one turn FIFO may
+    # drain, per cycle. 1 is the original R2 tap. Width is a bandwidth
+    # change: FIFO depths stay put. Needed once a dest hop is wider than 1,
+    # or the extra hop slots starve behind a one-flit tap.
+    turn_bw: int = 1
     # How many PE injects one port-group may board per cycle.
     inject_bw: int = 1
 
@@ -1118,7 +1123,7 @@ class StackBaseSim:
 
         # Phase 2b -- remaining leaves: PE eject or transfer FIFO.
         # `two_write_leave` lets both incoming dirs write the dest buffer
-        # in one cycle (top-die cores). Turns still take one tap.
+        # in one cycle (top-die cores). Turns take `turn_bw` taps (default 1).
         for key, reqs in leave.items():
             node, ring = key
             on_ring = ring is not None and ring[0] != "d2d"
@@ -1189,6 +1194,8 @@ class StackBaseSim:
                     bounce(f, dest=True)
 
             tapped = swap_hit or (n_dest > 0 and not self.p.two_write_leave)
+            n_turn = 0
+            turn_cap = max(1, int(self.p.turn_bw))
             ordered_t = self._tap_order(node, ring, turns) if on_ring else turns
             for f in ordered_t:
                 if tapped and on_ring:
@@ -1196,7 +1203,9 @@ class StackBaseSim:
                     bounce(f, dest=False)
                     continue
                 if self._try_turn(f):
-                    tapped = on_ring
+                    n_turn += 1
+                    if on_ring and n_turn >= turn_cap:
+                        tapped = True
                     if id(f) in from_land:
                         self._pop_d2d_buf({id(f)})
                 else:
@@ -1285,7 +1294,8 @@ class StackBaseSim:
             if not q:
                 self.active_xq.pop(key, None)
                 continue
-            n = max(1, int(self.p.bridge_bw)) if self._xfer_is_d2d(key) else 1
+            n = (max(1, int(self.p.bridge_bw)) if self._xfer_is_d2d(key)
+                 else max(1, int(self.p.turn_bw)))
             launched = 0
             while q and launched < n:
                 f = q[0]
@@ -1695,6 +1705,7 @@ class StackBaseSim:
         out["ha_pos_depth"] = self.p.ha_pos_depth
         out["fab_bw"] = dict(self._fab_bw)
         out["bridge_bw"] = self.p.bridge_bw
+        out["turn_bw"] = self.p.turn_bw
         out["inject_bw"] = self.p.inject_bw
         out["retry"] = self._retry_stats()
         out["wr_inject_by_core"] = {c: list(v) for c, v

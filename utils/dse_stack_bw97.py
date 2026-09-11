@@ -49,8 +49,12 @@ GRID: dict[str, dict[str, Any]] = {
     "oc256-d2d2-br2": dict(core_outstanding=256, d2d_bw=2, bridge_bw=2),
     "oc256-d2d2-br2-inj2": dict(core_outstanding=256, d2d_bw=2,
                                 bridge_bw=2, inject_bw=2),
+    "oc256-d2d2-br2-turn2": dict(core_outstanding=256, d2d_bw=2,
+                                 bridge_bw=2, turn_bw=2),
     "oc256-d2d2-br2-h2": dict(core_outstanding=256, d2d_bw=2,
                               bridge_bw=2, h_bw=2),
+    "oc256-d2d2-br2-h2-turn2": dict(core_outstanding=256, d2d_bw=2,
+                                    bridge_bw=2, h_bw=2, turn_bw=2),
     "oc256-d2d2-br2-h2-v2": dict(core_outstanding=256, d2d_bw=2,
                                  bridge_bw=2, h_bw=2, v_bw=2),
     "oc256-all2": dict(core_outstanding=256, d2d_bw=2, bridge_bw=2,
@@ -68,7 +72,9 @@ COST = {
     "oc256-d2d2": 3,
     "oc256-d2d2-br2": 4,
     "oc256-d2d2-br2-inj2": 5,
+    "oc256-d2d2-br2-turn2": 5,
     "oc256-d2d2-br2-h2": 6,
+    "oc256-d2d2-br2-h2-turn2": 7,
     "oc256-d2d2-br2-h2-v2": 7,
     "oc256-all2": 9,
 }
@@ -224,12 +230,23 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
     1-tile write cannot reach 97% of an *h:dat* bound: the CHI handshake
     is ~400 cycle against a 7,712-cycle floor. 4-tile amortises that to
     ~1.3% and leaves the back-pressure the 1-tile D2D/bridge knobs never
-    saw. So confirm both (a) width-1 fabrics + D2D/bridge/outstanding,
-    which keeps the published bound, and (b) H-ring x2, which is the
-    only knob that actually moved 1-tile write makespan.
+    saw. Confirm in cost order, skipping rows already in the store.
+
+    Width-1 + D2D/bridge/oc keeps the published bound. H×2 is the only
+    1-tile knob that moved write makespan, but sigma=1 means the dest
+    hop then wants two flits/cycle while the H↔V tap still drains one
+    -- so H×2 is paired with turn×2 before H+V / all-2.
     """
-    cfgs = ["oc256-d2d2-br2", "oc256-d2d2-br2-h2"]
-    return [(c, op, CONFIRM_TILES, True) for c in cfgs for op in OPS]
+    order = [
+        "oc256-d2d2-br2",
+        "oc256-d2d2-br2-h2",
+        "oc256-d2d2-br2-h2-turn2",
+        "oc256-d2d2-br2-h2-v2",
+        "oc256-all2",
+        "oc256-d2d2-br2-turn2",
+    ]
+    return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
+            if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
 
 
 def _seed_base_from_cc_focus(store: dict[str, Any]) -> None:
@@ -306,7 +323,7 @@ def emit(store: dict[str, Any]) -> None:
             "tiles": CONFIRM_TILES,
             "sweep_tiles": SWEEP_TILES,
             "note": "FIFO depths unchanged; only outstanding / link / "
-                    "bridge / inject widths move.",
+                    "bridge / turn / inject widths move.",
         },
         "grid": {c: dict(k) for c, k in GRID.items()},
         "sweep": {},
