@@ -37,8 +37,10 @@ code { font-size: 0.86em; }
 每个方案一张图，纵轴是该 group 已经<b>完成</b>的 DAT flit 数
 （写数 WriteData，读数 CompData，都按事务退休的那一拍计），横轴是时间。
 六条线并在一起 = 织物公平；散开 = 有 group 在等别人。
-最慢那条线的右端就是 makespan，也是全文唯一的效果指标。
-灰带标出最快组与最慢组完成时刻之间的差。</div>
+最慢那条线的右端就是 <b>makespan</b>，这是全文比较效果的主指标；
+灰带宽度是最快组与最慢组完成时刻之差，用“最慢/最快”的倍差记，
+它回答的是各 group 带宽差异那个问题。两个指标必须一起看：
+把六个 group 拉齐本身就要压住跑得快的组，只看其中一个会得出相反的结论。</div>
 
 <h2>0　硬件 setup</h2>
 <h3>0.1　Top die（六个，互相独立）</h3>
@@ -58,7 +60,8 @@ code { font-size: 0.86em; }
 
 <h2>1　方法：两阶段参数 sweep</h2>
 <p>一个 4 tile 批次是 122,880 笔事务，跑一次要几十分钟，
-把三个方案的全部配置都按这个规模跑一遍不现实。所以分两阶段：</p>
+把 4 个方案的全部 42
+组配置都按这个规模跑一遍不现实。所以分两阶段：</p>
 <ul>
 <li><b>阶段一</b>（1 tile）：每个方案的<b>全部</b>配置，写读各一遍。
 同样的 60 个核覆盖同样的 96 个 HA，只是事务数少四分之一，
@@ -89,7 +92,6 @@ code { font-size: 0.86em; }
 乘性减、加性增。总线延迟 30 cycle；受控节点表让 core 看到自己路径上
 每个站点的等级并取最大。</p>
 
-<h3>S1 源端 AIMD 控速</h3>
 <p>参数 sweep（1 tile，10 组配置，
 写读各跑一遍，按写+读 makespan 之和排序；★ 是被 4 tile 确认后选中的配置）：</p>
 <table><thead><tr><th>配置</th><th>参数</th><th>写 makespan（1 tile）</th><th>读 makespan</th><th>写+读</th><th>写 组间倍差</th><th>读 组间倍差</th></tr></thead><tbody><tr><td><code>w32-spec</code> ★</td><td><code>window=32</code></td><td>8,942</td><td>8,468</td><td>17,410</td><td>1.054</td><td>1.633</td></tr><tr><td><code>w32-gentle</code></td><td><code>band=gentle</code>, <code>window=32</code></td><td>8,934</td><td>8,487</td><td>17,421</td><td>1.054</td><td>1.634</td></tr><tr><td><code>w64-spec</code></td><td><code>window=64</code></td><td>8,986</td><td>8,484</td><td>17,470</td><td>1.028</td><td>1.652</td></tr><tr><td><code>w64-both</code></td><td><code>scope=both</code>, <code>window=64</code></td><td>8,986</td><td>8,500</td><td>17,486</td><td>1.028</td><td>1.410</td></tr><tr><td><code>w64-gentle</code></td><td><code>band=gentle</code>, <code>window=64</code></td><td>9,018</td><td>8,514</td><td>17,532</td><td>1.049</td><td>1.649</td></tr><tr><td><code>w128-gentle</code></td><td><code>band=gentle</code>, <code>window=128</code></td><td>9,049</td><td>8,508</td><td>17,557</td><td>1.057</td><td>1.635</td></tr><tr><td><code>w64-local</code></td><td><code>path_credit=False</code>, <code>use_bus=False</code>, <code>window=64</code></td><td>9,162</td><td>8,479</td><td>17,641</td><td>1.055</td><td>1.644</td></tr><tr><td><code>w64-harsh</code></td><td><code>band=harsh</code>, <code>window=64</code></td><td>9,218</td><td>8,468</td><td>17,686</td><td>1.037</td><td>1.656</td></tr><tr><td><code>w64-nopath</code></td><td><code>path_credit=False</code>, <code>window=64</code></td><td>9,287</td><td>8,473</td><td>17,760</td><td>1.044</td><td>1.653</td></tr><tr><td><code>w128-spec</code></td><td><code>window=128</code></td><td>9,672</td><td>8,492</td><td>18,164</td><td>1.085</td><td>1.637</td></tr></tbody></table>
@@ -118,7 +120,6 @@ code { font-size: 0.86em; }
 六个 group 的响应在那里共用端口，绕行按目的地排序。
 网格里这两条路线是分开扫的，参数配对也是按这个结构定的。</div>
 
-<h3>S22 赤字流控（让行 / 绕行）</h3>
 <p>参数 sweep（1 tile，20 组配置，
 写读各跑一遍，按写+读 makespan 之和排序；★ 是被 4 tile 确认后选中的配置）：</p>
 <table><thead><tr><th>配置</th><th>参数</th><th>写 makespan（1 tile）</th><th>读 makespan</th><th>写+读</th><th>写 组间倍差</th><th>读 组间倍差</th></tr></thead><tbody><tr><td><code>core-w64-t2-h16-m3-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_hold=16</code>, <code>dfc_margin=3.0</code></td><td>8,852</td><td>8,509</td><td>17,361</td><td>1.042</td><td>1.642</td></tr><tr><td><code>core-w64-t2-b9-d8</code> ★</td><td><code>dfc_bus_bits=9</code>, <code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code></td><td>8,881</td><td>8,509</td><td>17,390</td><td>1.048</td><td>1.642</td></tr><tr><td><code>grp-ha-datrsp-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code></td><td>8,883</td><td>8,509</td><td>17,392</td><td>1.061</td><td>1.642</td></tr><tr><td><code>grp-both-datrsp-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=both</code>, <code>dfc_thresh=0.5</code></td><td>8,883</td><td>8,509</td><td>17,392</td><td>1.061</td><td>1.642</td></tr><tr><td><code>grp-ha-datrsp-m3-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_margin=3.0</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code></td><td>8,883</td><td>8,509</td><td>17,392</td><td>1.061</td><td>1.642</td></tr><tr><td><code>grp-ha-datrsp-b12-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_bus_bits=12</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code></td><td>8,894</td><td>8,498</td><td>17,392</td><td>1.052</td><td>1.644</td></tr><tr><td><code>core-w64-t2-deepq</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=32</code>, <code>dfc_grain=core</code>, <code>dir_inj_depth=32</code></td><td>8,909</td><td>8,499</td><td>17,408</td><td>1.056</td><td>1.661</td></tr><tr><td><code>core-req-t05-h16-m3-d8</code></td><td><code>dfc_act_vcs=['dat', 'req']</code>, <code>dfc_bus_bits=9</code>, <code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_hold=16</code>, <code>dfc_margin=3.0</code>, <code>dfc_thresh=0.5</code></td><td>8,921</td><td>8,504</td><td>17,425</td><td>1.050</td><td>1.641</td></tr><tr><td><code>core-w16-t05-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_thresh=0.5</code>, <code>dfc_window=16</code></td><td>8,922</td><td>8,509</td><td>17,431</td><td>1.053</td><td>1.642</td></tr><tr><td><code>core-w64-t05-h16-m3-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_hold=16</code>, <code>dfc_margin=3.0</code>, <code>dfc_thresh=0.5</code></td><td>8,925</td><td>8,509</td><td>17,434</td><td>1.053</td><td>1.642</td></tr><tr><td><code>core-w64-t2</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_grain=core</code></td><td>8,926</td><td>8,509</td><td>17,435</td><td>1.046</td><td>1.642</td></tr><tr><td><code>grp-ha-datrsp-deepq</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=32</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code>, <code>dir_inj_depth=32</code></td><td>8,938</td><td>8,499</td><td>17,437</td><td>1.057</td><td>1.661</td></tr><tr><td><code>core-req-t05-d8</code></td><td><code>dfc_act_vcs=['dat', 'req']</code>, <code>dfc_bus_bits=9</code>, <code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_thresh=0.5</code></td><td>8,937</td><td>8,500</td><td>17,437</td><td>1.057</td><td>1.639</td></tr><tr><td><code>core-w64-t2-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code></td><td>8,958</td><td>8,509</td><td>17,467</td><td>1.063</td><td>1.642</td></tr><tr><td><code>grp-ha-dat-d8</code></td><td><code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code></td><td>8,960</td><td>8,509</td><td>17,469</td><td>1.065</td><td>1.642</td></tr><tr><td><code>core-w64-t05-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_thresh=0.5</code></td><td>8,981</td><td>8,509</td><td>17,490</td><td>1.064</td><td>1.642</td></tr><tr><td><code>grp-ha-busfree-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_target=2.66</code>, <code>dfc_thresh=0.5</code></td><td>8,991</td><td>8,499</td><td>17,490</td><td>1.060</td><td>1.642</td></tr><tr><td><code>grp-ha-datrsp-w16-d8</code></td><td><code>dfc_act_vcs=['dat', 'rsp']</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=group</code>, <code>dfc_scope_nodes=ha_only</code>, <code>dfc_thresh=0.5</code>, <code>dfc_window=16</code></td><td>9,022</td><td>8,509</td><td>17,531</td><td>1.065</td><td>1.635</td></tr><tr><td><code>core-busfree-d8</code></td><td><code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code>, <code>dfc_target=0.266</code>, <code>dfc_thresh=0.5</code></td><td>9,044</td><td>8,509</td><td>17,553</td><td>1.068</td><td>1.642</td></tr><tr><td><code>core-req-t2-d8</code></td><td><code>dfc_act_vcs=['dat', 'req']</code>, <code>dfc_bus_bits=9</code>, <code>dfc_dest_pref=False</code>, <code>dfc_dodge=8</code>, <code>dfc_grain=core</code></td><td>9,087</td><td>8,492</td><td>17,579</td><td>1.071</td><td>1.637</td></tr></tbody></table>
@@ -135,8 +136,8 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 原方案按 <b>core</b> 仲裁，每个 HA 要维护 60 项服务计数；
 改进后按 <b>group</b> 仲裁——先选累计服务最少的 group，
 组内再轮转——每个 HA 只需要 6 项，并且可选按组预留配额下限。</p>
+<h3>5.1　S16G 目的端授权（per-group）</h3>
 
-<h3>S16G 目的端授权（per-group）</h3>
 <p>参数 sweep（1 tile，10 组配置，
 写读各跑一遍，按写+读 makespan 之和排序；★ 是被 4 tile 确认后选中的配置）：</p>
 <table><thead><tr><th>配置</th><th>参数</th><th>写 makespan（1 tile）</th><th>读 makespan</th><th>写+读</th><th>写 组间倍差</th><th>读 组间倍差</th></tr></thead><tbody><tr><td><code>oc32-quota</code> ★</td><td><code>group_quota=True</code>, <code>overcommit=32</code></td><td>8,785</td><td>8,492</td><td>17,277</td><td>1.039</td><td>1.577</td></tr><tr><td><code>oc64</code></td><td><code>overcommit=64</code></td><td>9,007</td><td>8,516</td><td>17,523</td><td>1.057</td><td>1.006</td></tr><tr><td><code>oc16-quota</code></td><td><code>group_quota=True</code>, <code>overcommit=16</code></td><td>8,878</td><td>8,679</td><td>17,557</td><td>1.020</td><td>1.185</td></tr><tr><td><code>oc8-quota</code></td><td><code>group_quota=True</code>, <code>overcommit=8</code></td><td>8,966</td><td>9,074</td><td>18,040</td><td>1.021</td><td>1.060</td></tr><tr><td><code>oc16-rr</code></td><td><code>overcommit=16</code>, <code>policy=round_robin</code></td><td>10,085</td><td>8,927</td><td>19,012</td><td>1.029</td><td>1.011</td></tr><tr><td><code>oc32</code></td><td><code>overcommit=32</code></td><td>10,254</td><td>8,761</td><td>19,015</td><td>1.059</td><td>1.005</td></tr><tr><td><code>oc16-noeager</code></td><td><code>eager=False</code>, <code>overcommit=16</code></td><td>10,307</td><td>9,182</td><td>19,489</td><td>1.024</td><td>1.006</td></tr><tr><td><code>oc16</code></td><td><code>overcommit=16</code></td><td>10,391</td><td>9,105</td><td>19,496</td><td>1.018</td><td>1.006</td></tr><tr><td><code>oc16-bus30</code></td><td><code>grant_lat=30</code>, <code>overcommit=16</code></td><td>10,178</td><td>9,429</td><td>19,607</td><td>1.013</td><td>1.008</td></tr><tr><td><code>oc8</code></td><td><code>overcommit=8</code></td><td>9,661</td><td>10,104</td><td>19,765</td><td>1.025</td><td>1.007</td></tr></tbody></table>
@@ -145,7 +146,8 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 <b>33,654</b>、读 makespan
 <b>37,463</b>。</p>
 <img src="cc_done_s16g.png" alt="s16g 各 group 完成曲线">
-<h3>S16 目的端授权（per-core）</h3>
+<h3>5.2　S16 目的端授权（per-core）：作为对照的原粒度</h3>
+
 <p>参数 sweep（1 tile，2 组配置，
 写读各跑一遍，按写+读 makespan 之和排序；★ 是被 4 tile 确认后选中的配置）：</p>
 <table><thead><tr><th>配置</th><th>参数</th><th>写 makespan（1 tile）</th><th>读 makespan</th><th>写+读</th><th>写 组间倍差</th><th>读 组间倍差</th></tr></thead><tbody><tr><td><code>oc32</code> ★</td><td><code>overcommit=32</code></td><td>10,127</td><td>8,915</td><td>19,042</td><td>1.039</td><td>1.005</td></tr><tr><td><code>oc16</code></td><td><code>overcommit=16</code></td><td>10,337</td><td>9,665</td><td>20,002</td><td>1.021</td><td>1.005</td></tr></tbody></table>
@@ -154,7 +156,7 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 <b>35,810</b>、读 makespan
 <b>40,191</b>。</p>
 <img src="cc_done_s16.png" alt="s16 各 group 完成曲线">
-<h3>两种粒度必须在“同等公平”下比</h3>
+<h3>5.3　两种粒度必须在“同等公平”下比</h3>
 <p>目的端授权是<b>唯一会主动扣住授权</b>的方案，所以它天然存在
 公平与吞吐的取舍：越是把六个 group 拉齐，就越要压住本来能跑快的组。
 只比 makespan 会奖励“拉得不够齐”的配置，所以下表把两个粒度的
