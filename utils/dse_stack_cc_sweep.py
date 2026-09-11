@@ -37,9 +37,10 @@ import time
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from dse_stack_write_fair import (BW_WINDOW, FABRIC, M_RSP, M_WDATA,
-                                  die_board_table, root_cause, run_scheme,
-                                  vseat_load)
+from dse_stack_write_fair import (BURST_LEN, BW_WINDOW, FABRIC, M_RSP,
+                                  M_WDATA, ROUTE_LABEL, STRIDE, TILING_SIZE,
+                                  binding_table, die_board_table, root_cause,
+                                  run_scheme, topology_summary, vseat_load)
 from rg_stack_topo import (StackTopology, build_tiled_read, build_tiled_write,
                            ha_histogram)
 
@@ -102,6 +103,20 @@ S22_GRID: dict[str, dict[str, Any]] = {
                             dfc_dodge=8),
     "core-w64-t2-deepq": dict(dfc_grain="core", dfc_dest_pref=False,
                               dfc_dodge=32, dir_inj_depth=32),
+    # On a read batch a core injects nothing but REQ -- the CompData it is
+    # waiting for is issued by the HA -- so a DAT-only actuator has nothing
+    # to act on and the scheme degenerates to S0. Letting the actuator reach
+    # REQ gives the core-grain variant its only read-side lever: a core that
+    # has already banked more than its share holds its next request back.
+    "core-req-t05-d8": dict(dfc_grain="core", dfc_dest_pref=False,
+                            dfc_act_vcs=("dat", "req"), dfc_thresh=0.5,
+                            dfc_dodge=8),
+    "core-req-t2-d8": dict(dfc_grain="core", dfc_dest_pref=False,
+                           dfc_act_vcs=("dat", "req"), dfc_dodge=8),
+    "core-req-t05-h16-m3-d8": dict(dfc_grain="core", dfc_dest_pref=False,
+                                   dfc_act_vcs=("dat", "req"),
+                                   dfc_thresh=0.5, dfc_hold=16,
+                                   dfc_margin=3.0, dfc_dodge=8),
     "grp-ha-dat-d8": dict(dfc_grain="group", dfc_scope_nodes="ha_only",
                           dfc_dodge=8, dfc_thresh=0.5),
     "grp-ha-datrsp-d8": dict(dfc_grain="group", dfc_scope_nodes="ha_only",
@@ -271,6 +286,17 @@ def save_store(store: dict[str, Any]) -> None:
     STORE.write_text(json.dumps(store, indent=1, ensure_ascii=False))
 
 
+def use_store(path: str) -> None:
+    """Point the store elsewhere, so a rehearsal cannot disturb the real run."""
+    global STORE
+    STORE = Path(path)
+
+
+def use_focus(path: str) -> None:
+    global FOCUS
+    FOCUS = Path(path)
+
+
 def run_all(specs: Sequence[tuple], jobs: int, store: dict[str, Any]) -> None:
     todo = [s for s in specs
             if job_key(s[0], s[1], s[2], s[3]) not in store["runs"]]
@@ -331,8 +357,8 @@ def rank(store: dict[str, Any], scheme: str, tiles: int
     return rows
 
 
-def confirm_specs(store: dict[str, Any], schemes: Iterable[str],
-                  top_k: int) -> list[tuple]:
+def confirm_specs(store: dict[str, Any], schemes: Iterable[str], top_k: int,
+                  tiles: int = CONFIRM_TILES) -> list[tuple]:
     out = []
     for s in schemes:
         picks = [c for c, _, _ in rank(store, s, SWEEP_TILES)[:top_k]]
@@ -343,7 +369,7 @@ def confirm_specs(store: dict[str, Any], schemes: Iterable[str],
         print(f"[confirm] {s}: {', '.join(picks)}")
         for cfg in picks:
             for op in OPS:
-                out.append((s, cfg, op, CONFIRM_TILES, True))
+                out.append((s, cfg, op, tiles, True))
     return out
 
 
@@ -355,13 +381,14 @@ def base_specs(tiles: int) -> list[tuple]:
 # the blob the report reads
 # ---------------------------------------------------------------------------
 
-def pick_final(store: dict[str, Any], scheme: str) -> str | None:
-    """The confirmed config with the lowest write+read makespan at 4 tiles."""
+def pick_final(store: dict[str, Any], scheme: str,
+               tiles: int = CONFIRM_TILES) -> str | None:
+    """The confirmed config with the lowest write+read makespan."""
     best, best_t = None, None
     for cfg in GRID.get(scheme, {"base": {}}):
         per = []
         for op in OPS:
-            r = store["runs"].get(job_key(scheme, cfg, op, CONFIRM_TILES))
+            r = store["runs"].get(job_key(scheme, cfg, op, tiles))
             if r is None or not r["completed"]:
                 per = []
                 break
@@ -374,19 +401,19 @@ def pick_final(store: dict[str, Any], scheme: str) -> str | None:
     return best
 
 
-def emit(store: dict[str, Any]) -> None:
+def emit(store: dict[str, Any], tiles: int = CONFIRM_TILES) -> None:
     topo = StackTopology()
     schemes = ["s0"] + [s for s in SWEEP_SCHEMES]
     chosen: dict[str, str] = {}
     per_op: dict[str, dict[str, Any]] = {op: {} for op in OPS}
     for s in schemes:
-        cfg = "base" if s == "s0" else pick_final(store, s)
+        cfg = "base" if s == "s0" else pick_final(store, s, tiles)
         if cfg is None:
             print(f"[emit] {s}: no confirmed run; left out")
             continue
         rows = {}
         for op in OPS:
-            r = store["runs"].get(job_key(s, cfg, op, CONFIRM_TILES))
+            r = store["runs"].get(job_key(s, cfg, op, tiles))
             if r is None or "full" not in r:
                 rows = {}
                 break
@@ -398,19 +425,28 @@ def emit(store: dict[str, Any]) -> None:
         for op in OPS:
             per_op[op][s] = rows[op]
 
-    wr = build_tiled_write(topo, n_tiles=CONFIRM_TILES, seed=0)
-    rd = build_tiled_read(topo, n_tiles=CONFIRM_TILES, seed=0)
+    wr = build_tiled_write(topo, n_tiles=tiles, seed=0)
+    rd = build_tiled_read(topo, n_tiles=tiles, seed=0)
+    fabric = dict(FABRIC)
+    fabric.update({"core_outstanding": OC, "ha_pos_depth": POS})
+    topology = topology_summary(topo)
     blob = {
         "meta": {
-            "tiles": CONFIRM_TILES, "sweep_tiles": SWEEP_TILES,
+            "tiles": tiles, "sweep_tiles": SWEEP_TILES,
+            "n_tiles": tiles,
             "core_outstanding": OC, "pos_depth": POS,
             "m_req": 1, "m_rsp": M_RSP, "m_wdata": M_WDATA,
-            "bw_window": BW_WINDOW, "fabric": FABRIC,
+            "bw_window": BW_WINDOW, "fabric": fabric,
+            "burst_len": BURST_LEN, "stride": STRIDE,
+            "tiling_size": TILING_SIZE,
+            "route_label": ROUTE_LABEL, "rtt": topology["rtt"],
             "n_txn": len(wr), "txn_per_core": len(wr) // len(topo.cores),
             "chosen": chosen, "label": LABEL,
             "wall_s": round(sum(r.get("wall_s", 0.0)
                                 for r in store["runs"].values()), 1),
         },
+        "topology": topology,
+        "binding": binding_table(topo),
         "grid": {s: {c: {k: (list(v) if isinstance(v, tuple) else v)
                          for k, v in kw.items()}
                      for c, kw in g.items()} for s, g in GRID.items()},
@@ -419,10 +455,10 @@ def emit(store: dict[str, Any]) -> None:
                   if r["tiles"] == SWEEP_TILES},
         "confirm": {k: {kk: vv for kk, vv in r.items() if kk != "full"}
                     for k, r in store["runs"].items()
-                    if r["tiles"] == CONFIRM_TILES},
+                    if r["tiles"] == tiles},
         "schemes": {op: per_op[op] for op in OPS},
         "workload": {
-            "kind": "tiled_separate", "n_tiles": CONFIRM_TILES,
+            "kind": "tiled_separate", "n_tiles": tiles,
             "write": {"n_txn": len(wr), "ha_hist": ha_histogram(topo, wr)},
             "read": {"n_txn": len(rd), "ha_hist": ha_histogram(topo, rd)},
         },
@@ -464,11 +500,20 @@ def main() -> None:
                     help="build the report blob from the store and stop")
     ap.add_argument("--rank", action="store_true",
                     help="print the stage-1 ranking and stop")
+    ap.add_argument("--store", default="",
+                    help="use a different result store (for rehearsals)")
+    ap.add_argument("--focus-out", default="",
+                    help="write the report blob somewhere other than the "
+                         "default")
     args = ap.parse_args()
 
+    if args.store:
+        use_store(args.store)
+    if args.focus_out:
+        use_focus(args.focus_out)
     store = load_store()
     if args.emit:
-        emit(store)
+        emit(store, args.tiles or CONFIRM_TILES)
         return
     if args.rank:
         for s in args.schemes:
@@ -482,7 +527,8 @@ def main() -> None:
         tiles = args.tiles or SWEEP_TILES
         specs = sweep_specs(args.schemes, tiles)
     elif args.stage == "confirm":
-        specs = confirm_specs(store, args.schemes, args.top_k)
+        specs = confirm_specs(store, args.schemes, args.top_k,
+                              args.tiles or CONFIRM_TILES)
     else:
         specs = base_specs(args.tiles or CONFIRM_TILES)
     run_all(specs, args.jobs, store)

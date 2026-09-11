@@ -1106,6 +1106,29 @@ def _run_op_batch(topo: StackTopology, txns: Sequence[Txn], *,
     }
 
 
+def topology_summary(topo: StackTopology) -> dict[str, Any]:
+    """The hardware description every report prints before any measurement."""
+    return {
+        "n_nodes": topo.n, "n_die": topo.n_die,
+        "n_cores": len(topo.cores), "n_has": len(topo.has),
+        "n_attach": len(topo.attaches), "n_bridges": len(topo.bridges),
+        "n_cols": N_COLS, "v_len": V_LEN, "group_cols": GROUP_COLS,
+        "top_bridges": list(TOP_BRIDGES),
+        "directed_links": topo.directed_links,
+        "capacity": topo.capacity(),
+        "n_planes": TOP_PLANES,
+        "top_link_lats": list(topo.top_link_lats),
+        "h_hop_lat": topo.h_hop_lat, "v_hop_lat": topo.v_hop_lat,
+        "bot_hop_lat": topo.bot_hop_lat, "d2d_lat": topo.d2d_lat,
+        "turn_lat": topo.turn_lat,
+        "vcs": list(topo.vcs),
+        "h_assign": topo.h_assign,
+        "d2d_bot_ifaces": 2,
+        "d2d_bot_iface": ["h", "v"],
+        "rtt": topo.max_write_rtt(m_wdata=M_WDATA),
+    }
+
+
 def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     """Tiled write-only, then tiled read-only. Same addresses, never mixed.
 
@@ -1192,25 +1215,7 @@ def main() -> None:
             "rtt": rtt,
         },
     }
-    blob["topology"] = {
-        "n_nodes": topo0.n, "n_die": topo0.n_die,
-        "n_cores": len(topo0.cores), "n_has": len(topo0.has),
-        "n_attach": len(topo0.attaches), "n_bridges": len(topo0.bridges),
-        "n_cols": N_COLS, "v_len": V_LEN, "group_cols": GROUP_COLS,
-        "top_bridges": list(TOP_BRIDGES),
-        "directed_links": topo0.directed_links,
-        "capacity": topo0.capacity(),
-        "n_planes": TOP_PLANES,
-        "top_link_lats": list(topo0.top_link_lats),
-        "h_hop_lat": topo0.h_hop_lat, "v_hop_lat": topo0.v_hop_lat,
-        "bot_hop_lat": topo0.bot_hop_lat, "d2d_lat": topo0.d2d_lat,
-        "turn_lat": topo0.turn_lat,
-        "vcs": list(topo0.vcs),
-        "h_assign": topo0.h_assign,
-        "d2d_bot_ifaces": 2,
-        "d2d_bot_iface": ["h", "v"],
-        "rtt": rtt,
-    }
+    blob["topology"] = topology_summary(topo0)
     blob["binding"] = binding_table(topo0)
     blob["binding_mod4"] = binding_mod4(topo0)
     blob["v_profile"] = v_ring_profile(topo0, col=0)
