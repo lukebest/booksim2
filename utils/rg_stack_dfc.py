@@ -62,9 +62,8 @@ from typing import Any
 from rg_stack_base import Flit, StackBaseParams, StackBaseSim
 from rg_stack_topo import StackTopology
 
-# Window counts ride the bus at S1's width: 6 bits, saturating.
+# Window counts ride the bus at S1's width by default: 6 bits, saturating.
 BUS_BITS = 6
-BUS_MAX = (1 << BUS_BITS) - 1
 
 
 @dataclass
@@ -72,6 +71,12 @@ class StackDfcParams(StackBaseParams):
     mode: str = "s22"
     dfc_window: int = 64          # control window, cycles
     dfc_bus_lat: int = 30         # the same bus delay S1 is charged
+    # Bus width. A post saturates at 2**bits - 1, and a member that saturates
+    # is indistinguishable from any other that does, so the width has to cover
+    # the *member's* window count, not one node's. One core boards at most one
+    # DAT per cycle, so 6 bits is enough per core at a 64-cycle window; a
+    # ten-core group boards up to ten times that and needs 10.
+    dfc_bus_bits: int = BUS_BITS
     dfc_thresh: float = 2.0       # deficit (flits) before requesting a yield
     dfc_clear: float = 0.0        # deficit at which a requester stands down
     dfc_hold: int = 8             # cycles a request may block before standing
@@ -138,6 +143,7 @@ class StackDfcSim(StackBaseSim):
         self.cum_bus: dict[int, int] = defaultdict(int)
         self._pipe: dict[int, dict[int, int]] = defaultdict(dict)
         self.bus_posts = 0
+        self._bus_max = (1 << p.dfc_bus_bits) - 1
         self._span: dict[Any, frozenset[int]] = {}
         # Activity counters, not event counts: the free-slot arbiter looks at
         # a candidate once to order the group and again to board it, so one
@@ -145,6 +151,9 @@ class StackDfcSim(StackBaseSim):
         self.st["n_dfc_yield"] = 0
         self.st["n_dfc_req"] = 0
         self.st["n_dfc_dodge"] = 0
+        # Posts that hit the ceiling. Any run with these is measuring a
+        # controller that cannot tell its members apart.
+        self.st["n_dfc_bus_sat"] = 0
         self.trace: dict[str, list] = {"t": [], "deficit": [], "ok": []}
 
     # -- membership ---------------------------------------------------------
@@ -359,9 +368,11 @@ class StackDfcSim(StackBaseSim):
         rec_d, rec_ok = [], []
         for m in self._member_ids:
             if p.dfc_target <= 0:      # the bus-free variant posts nothing
-                self._pipe[self.t + p.dfc_bus_lat][m] = min(BUS_MAX,
+                self._pipe[self.t + p.dfc_bus_lat][m] = min(self._bus_max,
                                                             self.ok_win[m])
                 self.bus_posts += 1
+                if self.ok_win[m] > self._bus_max:
+                    self.st["n_dfc_bus_sat"] += 1
             rec_d.append(round(self.deficit[m], 2))
             rec_ok.append(self.ok_win[m])
         self.ok_win.clear()
@@ -385,8 +396,9 @@ class StackDfcSim(StackBaseSim):
             "dodge": p.dfc_dodge, "dest_pref": p.dfc_dest_pref,
             "margin": p.dfc_margin,
             "bus_posts": self.bus_posts,
-            "bus_bits": self.bus_posts * BUS_BITS,
-            "bus_width_bits": BUS_BITS,
+            "bus_bits": self.bus_posts * p.dfc_bus_bits,
+            "bus_width_bits": p.dfc_bus_bits,
+            "bus_saturated": self.st["n_dfc_bus_sat"],
             "table_entries": len(ids),
             "n_dfc_req": self.st["n_dfc_req"],
             "n_dfc_yield": self.st["n_dfc_yield"],

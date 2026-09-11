@@ -108,15 +108,29 @@ S22_GRID: dict[str, dict[str, Any]] = {
     # to act on and the scheme degenerates to S0. Letting the actuator reach
     # REQ gives the core-grain variant its only read-side lever: a core that
     # has already banked more than its share holds its next request back.
+    #
+    # These also widen the bus. A 6-bit post saturates at 63, and a member
+    # that saturates looks exactly like every other member that does, which
+    # is how a controller ends up seeing a perfectly fair fabric that is not.
     "core-req-t05-d8": dict(dfc_grain="core", dfc_dest_pref=False,
                             dfc_act_vcs=("dat", "req"), dfc_thresh=0.5,
-                            dfc_dodge=8),
+                            dfc_dodge=8, dfc_bus_bits=9),
     "core-req-t2-d8": dict(dfc_grain="core", dfc_dest_pref=False,
-                           dfc_act_vcs=("dat", "req"), dfc_dodge=8),
+                           dfc_act_vcs=("dat", "req"), dfc_dodge=8,
+                           dfc_bus_bits=9),
     "core-req-t05-h16-m3-d8": dict(dfc_grain="core", dfc_dest_pref=False,
                                    dfc_act_vcs=("dat", "req"),
                                    dfc_thresh=0.5, dfc_hold=16,
-                                   dfc_margin=3.0, dfc_dodge=8),
+                                   dfc_margin=3.0, dfc_dodge=8,
+                                   dfc_bus_bits=9),
+    "core-w64-t2-b9-d8": dict(dfc_grain="core", dfc_dest_pref=False,
+                              dfc_dodge=8, dfc_bus_bits=9),
+    # A group boards up to ten cores' worth per window, so its post needs
+    # 12 bits. Kept in the grid to show the group grain stays inert even
+    # once the bus can actually tell the six groups apart.
+    "grp-ha-datrsp-b12-d8": dict(dfc_grain="group", dfc_scope_nodes="ha_only",
+                                 dfc_act_vcs=("dat", "rsp"), dfc_dodge=8,
+                                 dfc_thresh=0.5, dfc_bus_bits=12),
     "grp-ha-dat-d8": dict(dfc_grain="group", dfc_scope_nodes="ha_only",
                           dfc_dodge=8, dfc_thresh=0.5),
     "grp-ha-datrsp-d8": dict(dfc_grain="group", dfc_scope_nodes="ha_only",
