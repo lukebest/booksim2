@@ -219,27 +219,85 @@ def best_so_far(store: dict[str, Any], tiles: int) -> str:
 
 
 def confirm_specs(store: dict[str, Any]) -> list[tuple]:
-    win = pick_winner(store, SWEEP_TILES) or best_so_far(store, SWEEP_TILES)
-    # Always keep the original base at 4 tiles so the report can
-    # put the two setups next to each other. Reuse the published
-    # S0 numbers if the caller already has them; we still re-run
-    # base here so the widened-setup blob is self-contained.
-    cfgs = ["base", win]
-    seen: set[str] = set()
-    out: list[tuple] = []
-    for c in cfgs:
-        if c in seen:
+    """4-tile is the real 97% test.
+
+    1-tile write cannot reach 97% of an *h:dat* bound: the CHI handshake
+    is ~400 cycle against a 7,712-cycle floor. 4-tile amortises that to
+    ~1.3% and leaves the back-pressure the 1-tile D2D/bridge knobs never
+    saw. So confirm both (a) width-1 fabrics + D2D/bridge/outstanding,
+    which keeps the published bound, and (b) H-ring x2, which is the
+    only knob that actually moved 1-tile write makespan.
+    """
+    cfgs = ["oc256-d2d2-br2", "oc256-d2d2-br2-h2"]
+    return [(c, op, CONFIRM_TILES, True) for c in cfgs for op in OPS]
+
+
+def _seed_base_from_cc_focus(store: dict[str, Any]) -> None:
+    """Copy the published 4-tile S0 so §7 can sit next to §0 without a rerun."""
+    src = ROOT / "results" / "stack_cc_focus.json"
+    if not src.exists():
+        return
+    old = json.loads(src.read_text())
+    for op in OPS:
+        key = job_key("base", op, CONFIRM_TILES)
+        if key in store["runs"]:
             continue
-        seen.add(c)
-        for op in OPS:
-            out.append((c, op, CONFIRM_TILES, True))
-    return out
+        light = (old.get("confirm") or {}).get(f"s0|base|{op}|4") or {}
+        fullrec = ((old.get("schemes") or {}).get(op) or {}).get("s0") or {}
+        rec = dict(light)
+        if fullrec.get("full") and not rec.get("full"):
+            rec["full"] = fullrec["full"]
+        if not rec.get("makespan") and fullrec.get("makespan"):
+            rec.update({k: fullrec[k] for k in (
+                "makespan", "completed", "n_txn_done", "goodput_total",
+                "group_finish", "finish_spread", "eff") if k in fullrec})
+        if not rec.get("makespan"):
+            continue
+        bd = ((rec.get("full") or {}).get("bounds")
+              or fullrec.get("bounds") or {})
+        mk = max(1, int(rec.get("makespan") or 0))
+        bound = int(bd.get("bound") or 0)
+        store["runs"][key] = {
+            "cfg": "base", "op": op, "tiles": CONFIRM_TILES, "knobs": {},
+            "makespan": rec.get("makespan"),
+            "completed": rec.get("completed", True),
+            "n_txn_done": rec.get("n_txn_done"),
+            "retry": rec.get("retry"),
+            "goodput_total": rec.get("goodput_total"),
+            "group_finish": rec.get("group_finish"),
+            "finish_spread": rec.get("finish_spread"),
+            "bounds": {k: bd.get(k) for k in (
+                "link_lb", "port_lb", "cut_lb", "txn_lb", "bound",
+                "link_by_vc", "fabric_lb")} | {
+                    "fab_bw": {"top": 1, "d2d": 1, "h": 1, "v": 1},
+                    "inject_bw": 1},
+            "eff": round(bound / mk, 4) if bound else rec.get("eff"),
+            "full": rec.get("full"),
+            "seeded_from": "stack_cc_focus.json",
+        }
 
 
 def emit(store: dict[str, Any]) -> None:
-    win = (pick_winner(store, CONFIRM_TILES)
-           or pick_winner(store, SWEEP_TILES)
-           or best_so_far(store, CONFIRM_TILES))
+    _seed_base_from_cc_focus(store)
+    # Do not crown the published S0 as the widened winner just because
+    # it is the only 4-tile row we have copied in.
+    widened = [c for c in GRID if c != "base"
+               and all(job_key(c, op, CONFIRM_TILES) in store["runs"]
+                       for op in OPS)]
+    win = None
+    if widened:
+        win = pick_winner(store, CONFIRM_TILES)
+        if not win or win == "base":
+            scored = []
+            for c in widened:
+                recs = [store["runs"][job_key(c, op, CONFIRM_TILES)]
+                        for op in OPS]
+                scored.append((min(float(r["eff"]) for r in recs),
+                               -COST[c], c))
+            scored.sort(reverse=True)
+            win = scored[0][2]
+    if not win:
+        win = pick_winner(store, SWEEP_TILES) or best_so_far(store, SWEEP_TILES)
     blob: dict[str, Any] = {
         "meta": {
             "target": TARGET,

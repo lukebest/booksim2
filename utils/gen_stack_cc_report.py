@@ -602,14 +602,21 @@ def bw97_final_table(bw: dict) -> str:
         wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
         if not wr and not rd:
             continue
+
+        def _n(rec: dict, *keys, default: int = 0) -> int:
+            cur: Any = rec
+            for k in keys:
+                cur = (cur or {}).get(k) if isinstance(cur, dict) else None
+            return int(cur or default)
+
         rows.append([
             f"<b>{cfg}</b>",
             _bw97_knob_txt((bw.get("grid") or {}).get(cfg) or {}),
-            f"{wr.get('makespan', 0):,}",
-            f"{wr.get('bounds', {}).get('bound', 0):,}",
+            f"{_n(wr, 'makespan'):,}",
+            f"{_n(wr, 'bounds', 'bound'):,}",
             f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
-            f"{rd.get('makespan', 0):,}",
-            f"{rd.get('bounds', {}).get('bound', 0):,}",
+            f"{_n(rd, 'makespan'):,}",
+            f"{_n(rd, 'bounds', 'bound'):,}",
             f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
         ])
     return _t(["配置", "加宽项", "写 makespan", "写下界", "写达成率",

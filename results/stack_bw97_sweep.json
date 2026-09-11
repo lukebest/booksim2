@@ -1,0 +1,1143 @@
+{
+ "runs": {
+  "base|read|1": {
+   "makespan": 8509,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 177529,
+   "goodput_total": 14.44118,
+   "finish_spread": 1.0041,
+   "group_finish": {
+    "0": 6682,
+    "1": 8508,
+    "2": 5181,
+    "3": 6384,
+    "4": 6652,
+    "5": 8480
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 69647,
+   "n_turn_board_fail": 182234,
+   "cfg": "base",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {},
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 1600,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9717,
+   "wall_s": 121.7
+  },
+  "oc256|read|1": {
+   "makespan": 8581,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 207569,
+   "goodput_total": 14.32001,
+   "finish_spread": 1.0064,
+   "group_finish": {
+    "0": 6856,
+    "1": 8580,
+    "2": 5267,
+    "3": 6277,
+    "4": 6815,
+    "5": 8553
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 1407380,
+   "n_turn_board_fail": 195363,
+   "cfg": "oc256",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 1600,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9635,
+   "wall_s": 139.7
+  },
+  "base|write|1": {
+   "makespan": 8960,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 4273,
+   "board_fail": 89814,
+   "goodput_total": 13.71429,
+   "finish_spread": 1.0104,
+   "group_finish": {
+    "0": 8931,
+    "1": 8959,
+    "2": 8411,
+    "3": 8513,
+    "4": 8503,
+    "5": 8670
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 51460993,
+   "n_turn_board_fail": 153198,
+   "cfg": "base",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {},
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 2240,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8607,
+   "wall_s": 221.6
+  },
+  "d2d2|read|1": {
+   "makespan": 8510,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 178367,
+   "goodput_total": 14.43948,
+   "finish_spread": 1.0042,
+   "group_finish": {
+    "0": 6680,
+    "1": 8509,
+    "2": 5194,
+    "3": 6407,
+    "4": 6656,
+    "5": 8481
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 68533,
+   "n_turn_board_fail": 165525,
+   "cfg": "d2d2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "d2d_bw": 2
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9716,
+   "wall_s": 119.6
+  },
+  "d2d2|write|1": {
+   "makespan": 9011,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 4281,
+   "board_fail": 91585,
+   "goodput_total": 13.63667,
+   "finish_spread": 1.0074,
+   "group_finish": {
+    "0": 8807,
+    "1": 9010,
+    "2": 8515,
+    "3": 8476,
+    "4": 8541,
+    "5": 8662
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 52453026,
+   "n_turn_board_fail": 150847,
+   "cfg": "d2d2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "d2d_bw": 2
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8558,
+   "wall_s": 220.8
+  },
+  "oc256|write|1": {
+   "makespan": 9024,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 3320,
+   "board_fail": 124648,
+   "goodput_total": 13.61702,
+   "finish_spread": 1.0098,
+   "group_finish": {
+    "0": 9019,
+    "1": 9023,
+    "2": 8724,
+    "3": 8574,
+    "4": 8753,
+    "5": 8680
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 76706027,
+   "n_turn_board_fail": 148428,
+   "cfg": "oc256",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 2240,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8546,
+   "wall_s": 359.9
+  },
+  "br2|read|1": {
+   "makespan": 8504,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 178929,
+   "goodput_total": 14.44967,
+   "finish_spread": 1.0043,
+   "group_finish": {
+    "0": 6684,
+    "1": 8503,
+    "2": 5207,
+    "3": 6386,
+    "4": 6653,
+    "5": 8476
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 70284,
+   "n_turn_board_fail": 223854,
+   "cfg": "br2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "bridge_bw": 2
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 1600,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9722,
+   "wall_s": 117.7
+  },
+  "br2|write|1": {
+   "makespan": 9047,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 5155,
+   "board_fail": 90424,
+   "goodput_total": 13.5824,
+   "finish_spread": 1.0047,
+   "group_finish": {
+    "0": 8802,
+    "1": 9046,
+    "2": 8541,
+    "3": 8610,
+    "4": 8677,
+    "5": 8836
+   },
+   "max_core_outstanding": 128,
+   "n_d2d_stall": 46368599,
+   "n_turn_board_fail": 287538,
+   "cfg": "br2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "bridge_bw": 2
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 2240,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 1,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8524,
+   "wall_s": 204.9
+  },
+  "oc256-d2d2|read|1": {
+   "makespan": 8570,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 207734,
+   "goodput_total": 14.33839,
+   "finish_spread": 1.0082,
+   "group_finish": {
+    "0": 6823,
+    "1": 8569,
+    "2": 5279,
+    "3": 6268,
+    "4": 6799,
+    "5": 8552
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 1416180,
+   "n_turn_board_fail": 177277,
+   "cfg": "oc256-d2d2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9648,
+   "wall_s": 136.7
+  },
+  "oc256-d2d2-br2|read|1": {
+   "makespan": 8620,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 209205,
+   "goodput_total": 14.25522,
+   "finish_spread": 1.0079,
+   "group_finish": {
+    "0": 6824,
+    "1": 8619,
+    "2": 5255,
+    "3": 6298,
+    "4": 6798,
+    "5": 8600
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 1568782,
+   "n_turn_board_fail": 205892,
+   "cfg": "oc256-d2d2-br2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 2048,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.9592,
+   "wall_s": 144.9
+  },
+  "oc256-d2d2|write|1": {
+   "makespan": 9046,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 3229,
+   "board_fail": 122651,
+   "goodput_total": 13.5839,
+   "finish_spread": 1.0187,
+   "group_finish": {
+    "0": 8936,
+    "1": 9045,
+    "2": 8862,
+    "3": 8586,
+    "4": 8708,
+    "5": 8752
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 73724393,
+   "n_turn_board_fail": 144710,
+   "cfg": "oc256-d2d2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8525,
+   "wall_s": 352.7
+  },
+  "oc256-d2d2-br2-inj2|read|1": {
+   "makespan": 8632,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 536700,
+   "goodput_total": 14.2354,
+   "finish_spread": 1.0098,
+   "group_finish": {
+    "0": 6833,
+    "1": 8631,
+    "2": 5280,
+    "3": 6280,
+    "4": 6806,
+    "5": 8609
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 1551056,
+   "n_turn_board_fail": 208685,
+   "cfg": "oc256-d2d2-br2-inj2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "inject_bw": 2
+   },
+   "bounds": {
+    "link_lb": 8268,
+    "port_lb": 1024,
+    "cut_lb": 3200,
+    "txn_lb": 212,
+    "bound": 8268,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 0,
+     "dat": 8268
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 2489,
+     "h": 3200
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 2
+   },
+   "eff": 0.9578,
+   "wall_s": 147.8
+  },
+  "oc256-d2d2-br2|write|1": {
+   "makespan": 9051,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 4000,
+   "board_fail": 125345,
+   "goodput_total": 13.5764,
+   "finish_spread": 1.0054,
+   "group_finish": {
+    "0": 9042,
+    "1": 9050,
+    "2": 8674,
+    "3": 8741,
+    "4": 8854,
+    "5": 8895
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 61584399,
+   "n_turn_board_fail": 224990,
+   "cfg": "oc256-d2d2-br2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 2560,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8521,
+   "wall_s": 355.7
+  },
+  "oc256-d2d2-br2-h2|read|1": {
+   "makespan": 5110,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 0,
+   "board_fail": 215572,
+   "goodput_total": 24.04697,
+   "finish_spread": 1.0079,
+   "group_finish": {
+    "0": 5038,
+    "1": 5109,
+    "2": 5040,
+    "3": 4928,
+    "4": 5009,
+    "5": 5069
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 314111,
+   "n_turn_board_fail": 130138,
+   "cfg": "oc256-d2d2-br2-h2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2
+   },
+   "bounds": {
+    "link_lb": 4916,
+    "port_lb": 2048,
+    "cut_lb": 2489,
+    "txn_lb": 212,
+    "bound": 4916,
+    "link_by_vc": {
+     "req": 1284,
+     "rsp": 0,
+     "dat": 4916
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 2489,
+     "h": 1600
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 2,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.962,
+   "wall_s": 47.7
+  },
+  "oc256-d2d2-br2-inj2|write|1": {
+   "makespan": 9017,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 3823,
+   "board_fail": 366105,
+   "goodput_total": 13.62759,
+   "finish_spread": 1.0104,
+   "group_finish": {
+    "0": 8935,
+    "1": 9016,
+    "2": 8723,
+    "3": 8678,
+    "4": 8790,
+    "5": 8915
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 60782310,
+   "n_turn_board_fail": 224547,
+   "cfg": "oc256-d2d2-br2-inj2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "inject_bw": 2
+   },
+   "bounds": {
+    "link_lb": 7712,
+    "port_lb": 1280,
+    "cut_lb": 4480,
+    "txn_lb": 417,
+    "bound": 7712,
+    "link_by_vc": {
+     "req": 1928,
+     "rsp": 4134,
+     "dat": 7712
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 3484,
+     "h": 4480
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 1,
+     "v": 1
+    },
+    "inject_bw": 2
+   },
+   "eff": 0.8553,
+   "wall_s": 359.0
+  },
+  "oc256-d2d2-br2-h2-v2|write|1": {
+   "makespan": 5628,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 16785,
+   "board_fail": 145002,
+   "goodput_total": 21.83369,
+   "finish_spread": 1.0087,
+   "group_finish": {
+    "0": 5165,
+    "1": 5355,
+    "2": 5627,
+    "3": 5531,
+    "4": 5213,
+    "5": 5478
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 19936824,
+   "n_turn_board_fail": 83001,
+   "cfg": "oc256-d2d2-br2-h2-v2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2,
+    "v_bw": 2
+   },
+   "bounds": {
+    "link_lb": 3856,
+    "port_lb": 2560,
+    "cut_lb": 2240,
+    "txn_lb": 417,
+    "bound": 3856,
+    "link_by_vc": {
+     "req": 964,
+     "rsp": 2067,
+     "dat": 3856
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 1742,
+     "h": 2240
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 2,
+     "v": 2
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.6851,
+   "wall_s": 193.3
+  },
+  "oc256-d2d2-br2-h2|write|1": {
+   "makespan": 7075,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 4077,
+   "board_fail": 128107,
+   "goodput_total": 17.3682,
+   "finish_spread": 1.2452,
+   "group_finish": {
+    "0": 6433,
+    "1": 7074,
+    "2": 5171,
+    "3": 5282,
+    "4": 6389,
+    "5": 5820
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 17144075,
+   "n_turn_board_fail": 154788,
+   "cfg": "oc256-d2d2-br2-h2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2
+   },
+   "bounds": {
+    "link_lb": 5136,
+    "port_lb": 2560,
+    "cut_lb": 3484,
+    "txn_lb": 417,
+    "bound": 5136,
+    "link_by_vc": {
+     "req": 1284,
+     "rsp": 2458,
+     "dat": 5136
+    },
+    "fabric_lb": {
+     "top": 2240,
+     "d2d": 1120,
+     "v": 3484,
+     "h": 2240
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 2,
+     "v": 1
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.7259,
+   "wall_s": 286.0
+  },
+  "oc256-d2d2-br2-h2-v2|read|1": {
+   "makespan": 4761,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 1040,
+   "board_fail": 73112,
+   "goodput_total": 25.8097,
+   "finish_spread": 1.0817,
+   "group_finish": {
+    "0": 4461,
+    "1": 4760,
+    "2": 3754,
+    "3": 3742,
+    "4": 4432,
+    "5": 4747
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 319337,
+   "n_turn_board_fail": 116118,
+   "cfg": "oc256-d2d2-br2-h2-v2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2,
+    "v_bw": 2
+   },
+   "bounds": {
+    "link_lb": 4134,
+    "port_lb": 2048,
+    "cut_lb": 1600,
+    "txn_lb": 212,
+    "bound": 4134,
+    "link_by_vc": {
+     "req": 964,
+     "rsp": 0,
+     "dat": 4134
+    },
+    "fabric_lb": {
+     "top": 1600,
+     "d2d": 800,
+     "v": 1245,
+     "h": 1600
+    },
+    "fab_bw": {
+     "top": 1,
+     "d2d": 2,
+     "h": 2,
+     "v": 2
+    },
+    "inject_bw": 1
+   },
+   "eff": 0.8683,
+   "wall_s": 228.3
+  },
+  "oc256-all2|write|1": {
+   "makespan": 5528,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 19243,
+   "board_fail": 89663,
+   "goodput_total": 22.22865,
+   "finish_spread": 1.0112,
+   "group_finish": {
+    "0": 5021,
+    "1": 5073,
+    "2": 5395,
+    "3": 5527,
+    "4": 5460,
+    "5": 5304
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 22622092,
+   "n_turn_board_fail": 67537,
+   "cfg": "oc256-all2",
+   "op": "write",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2,
+    "v_bw": 2,
+    "top_bw": 2,
+    "inject_bw": 2,
+    "eject_bw": 2
+   },
+   "bounds": {
+    "link_lb": 3856,
+    "port_lb": 1280,
+    "cut_lb": 2240,
+    "txn_lb": 417,
+    "bound": 3856,
+    "link_by_vc": {
+     "req": 964,
+     "rsp": 2067,
+     "dat": 3856
+    },
+    "fabric_lb": {
+     "top": 1120,
+     "d2d": 1120,
+     "v": 1742,
+     "h": 2240
+    },
+    "fab_bw": {
+     "top": 2,
+     "d2d": 2,
+     "h": 2,
+     "v": 2
+    },
+    "inject_bw": 2
+   },
+   "eff": 0.6975,
+   "wall_s": 218.8
+  },
+  "oc256-all2|read|1": {
+   "makespan": 4838,
+   "completed": true,
+   "n_txn_done": 30720,
+   "stall": null,
+   "retry": 0,
+   "deflections": 9106,
+   "board_fail": 156152,
+   "goodput_total": 25.39893,
+   "finish_spread": 1.103,
+   "group_finish": {
+    "0": 4444,
+    "1": 4837,
+    "2": 3746,
+    "3": 3747,
+    "4": 4418,
+    "5": 4817
+   },
+   "max_core_outstanding": 256,
+   "n_d2d_stall": 455805,
+   "n_turn_board_fail": 53603,
+   "cfg": "oc256-all2",
+   "op": "read",
+   "tiles": 1,
+   "knobs": {
+    "core_outstanding": 256,
+    "d2d_bw": 2,
+    "bridge_bw": 2,
+    "h_bw": 2,
+    "v_bw": 2,
+    "top_bw": 2,
+    "inject_bw": 2,
+    "eject_bw": 2
+   },
+   "bounds": {
+    "link_lb": 4134,
+    "port_lb": 1024,
+    "cut_lb": 1600,
+    "txn_lb": 212,
+    "bound": 4134,
+    "link_by_vc": {
+     "req": 964,
+     "rsp": 0,
+     "dat": 4134
+    },
+    "fabric_lb": {
+     "top": 800,
+     "d2d": 800,
+     "v": 1245,
+     "h": 1600
+    },
+    "fab_bw": {
+     "top": 2,
+     "d2d": 2,
+     "h": 2,
+     "v": 2
+    },
+    "inject_bw": 2
+   },
+   "eff": 0.8545,
+   "wall_s": 233.2
+  }
+ },
+ "meta": {
+  "target": 0.97
+ }
+}
