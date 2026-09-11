@@ -261,6 +261,13 @@ class StackGrantSim(GrantMixin, StackBaseSim):
     the binding resource. So the node deciding who may send write data is the
     node that owns the contended link -- no side channel has to carry that
     information anywhere.
+
+    Two things the ring's `GrantMixin` cannot supply on this fabric. The
+    request tracker still has to be charged before anything is queued, or the
+    scheme would be silently running with an unlimited completer while every
+    other scheme pays for RetryAck. And `ReadNoSnp` has no DBIDResp: the grant
+    is the release of the CompData burst the HA already holds, which on this
+    fabric is one `_emit`, not the ring's response-queue plumbing.
     """
 
     def __init__(self, topo: StackTopology,
@@ -268,6 +275,28 @@ class StackGrantSim(GrantMixin, StackBaseSim):
                  seed: int = 0) -> None:
         super().__init__(topo, params or StackGrantParams(), seed=seed)
         self._grant_init()
+
+    def _on_req_at_completer(self, txn: Txn) -> None:
+        if not self._ha_take_credit(txn):
+            return
+        self._maybe_grant(txn)
+
+    def _grant(self, txn: Txn) -> None:
+        self.outstanding[txn.ha] += 1
+        # An outstanding grant is a committed burst at the completer, so the
+        # peak is the buffering the scheme actually needs.
+        self.peak_outstanding = max(self.peak_outstanding,
+                                    self.outstanding[txn.ha])
+        write = getattr(txn, "op", "write") == "write"
+        self.served[txn.ha][txn.core] += txn.m_wdata if write else txn.m_resp
+        self._emit_grant(txn)
+
+    def _emit_grant(self, txn: Txn) -> None:
+        t_ready = self.t + self.p.t_ha_service + self.gp.grant_lat
+        if getattr(txn, "op", "write") == "write":
+            self._emit(txn, "dbid", txn.ha, txn.core, 1, t_ready)
+            return
+        self._emit(txn, "resp", txn.ha, txn.core, txn.m_resp or 4, t_ready)
 
     def _emit_dbid(self, txn: Txn) -> None:
         self._emit(txn, "dbid", txn.ha, txn.core, 1,

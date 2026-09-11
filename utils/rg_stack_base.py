@@ -1242,11 +1242,15 @@ class StackBaseSim:
             else:
                 self.st["n_turn_board_fail"] += 1
 
+    def _select_inject_flit(self, node: int, plane: int, q) -> Flit | None:
+        """Which boarding-queue flit tries the inject port. Default: FIFO head."""
+        return q[0] if q else None
+
     def _free_slot_order(self, node: int, group: list[Any]) -> list[Any]:
         ready, blocked = [], []
         for cand in group:
             q = self.srcq[cand]
-            f = q[0] if q else None
+            f = self._select_inject_flit(node, cand[1], q) if q else None
             ok = (f is not None
                   and not self._itag_blocks(f, node)
                   and self.seg_free[(self._next_edge(f), f.vc)] <= self.t)
@@ -1263,7 +1267,9 @@ class StackBaseSim:
             q = self.srcq[cand]
             if not q:
                 continue
-            cf = q[0]
+            cf = self._select_inject_flit(node, plane, q)
+            if cf is None:
+                continue
             if self._may_inject(node, plane, cf):
                 qk, f = cand, cf
                 break
@@ -1297,7 +1303,11 @@ class StackBaseSim:
                     self.itag_t[rk + (node,)] = self.t
                     self.st["n_itag_raised"] += 1
             return
-        self.srcq[qk].popleft()
+        q = self.srcq[qk]
+        if f is q[0]:
+            q.popleft()
+        else:
+            q.remove(f)
         self.vc_rr[key] += 1
         self._itag_clear(node, f)
         self.inj_starve[starve_key] = 0

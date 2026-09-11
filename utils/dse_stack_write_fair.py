@@ -28,11 +28,13 @@ from typing import Any, Sequence
 
 from dse_ring2_write_fair import cov, fairness_stats, jain, pearson, spearman
 from rg_stack_base import StackBaseParams, StackBaseSim, run_batch
+from rg_stack_dfc import StackDfcParams, StackDfcSim
 from rg_stack_fc import (StackAdaptParams, StackAdaptSim, StackAdaptTurnParams,
                          StackAdaptTurnSim, StackFairTurnSim,
                          StackFcParams, StackFcSim, StackGrantParams,
                          StackGrantSim, StackPaceParams, StackPaceSim,
                          StackTurnParams)
+from rg_stack_grantg import StackGroupGrantParams, StackGroupGrantSim
 from rg_stack_topo import (BURST_LEN, GROUP_COLS, N_COLS, N_TILES, STRIDE,
                            TILING_SIZE, TOP_BRIDGES, TOP_PLANES, TXN_PER_CORE,
                            V_LEN, StackTopology, Txn, build_tiled_read,
@@ -79,6 +81,10 @@ def _sim(name: str, *, route: str, **kw) -> tuple[type, Any]:
         return StackFcSim, StackFcParams(**f)
     if name == "s16":
         return StackGrantSim, StackGrantParams(**f)
+    if name == "s16g":
+        return StackGroupGrantSim, StackGroupGrantParams(**f)
+    if name == "s22":
+        return StackDfcSim, StackDfcParams(**f)
     if name == "s17":
         return StackFairTurnSim, StackTurnParams(**f)
     if name == "s18":
@@ -205,6 +211,51 @@ def group_bw_series(topo: StackTopology, inject_times: dict[int, list[int]],
     }
 
 
+def group_done_series(topo: StackTopology,
+                      done_times: dict[int, list[int]] | None,
+                      window: int = BW_WINDOW, makespan: int = 0,
+                      m_dat: int = M_WDATA) -> dict[str, Any]:
+    """Cumulative *completed* DAT flits per top-die group, against time.
+
+    `group_bw_series` bins the cycle a flit boards, so its integral is the
+    traffic a group put on the ring. This bins the cycle a transaction
+    retires -- the last Comp for a write, the last CompData for a read -- and
+    scales by the burst's DAT flits, so the curve is the flit count the group
+    has actually banked. The two differ by everything still in flight, which
+    at this outstanding window is up to 128 transactions per core, and it is
+    the retired figure a group's completion time is read off.
+    """
+    by_die: dict[int, list[int]] = defaultdict(list)
+    for c, ts in (done_times or {}).items():
+        by_die[topo.nodes[int(c)].die].extend(ts)
+    last = makespan or 0
+    for ts in by_die.values():
+        if ts:
+            last = max(last, max(ts))
+    nwin = max(1, (last + window) // window)
+    cum: dict[str, list[int]] = {}
+    finish: dict[str, int] = {}
+    for d in sorted(by_die):
+        hist = [0] * nwin
+        for t in by_die[d]:
+            hist[min(max(0, t // window), nwin - 1)] += m_dat
+        run = 0
+        acc = []
+        for h in hist:
+            run += h
+            acc.append(run)
+        cum[str(d)] = acc
+        finish[str(d)] = max(by_die[d]) if by_die[d] else 0
+    return {
+        "window": window, "n_windows": nwin, "makespan": last,
+        "m_dat": m_dat,
+        "t": [i * window for i in range(nwin)],
+        "cum_by_group": cum,
+        "finish_by_group": finish,
+        "total_by_group": {d: (v[-1] if v else 0) for d, v in cum.items()},
+    }
+
+
 def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                route: str, seed: int = 0, keep_trace: bool = False,
                stall_after: int = 6_000, **kw) -> dict[str, Any]:
@@ -231,6 +282,8 @@ def run_scheme(topo: StackTopology, txns: Sequence[Txn], name: str, *,
                              done_times=times)
     r["bw_series"] = group_bw_series(topo, inj, window=BW_WINDOW,
                                      makespan=r["makespan"])
+    r["done_series"] = group_done_series(topo, times, window=BW_WINDOW,
+                                         makespan=r["makespan"])
     if n_wr and n_rd and rd_inj:
         r["rd_group"] = group_stats(topo, rd_inj, r.get("rd_done_by_core"),
                                     r["makespan"], m_wdata=M_WDATA,
@@ -1053,6 +1106,29 @@ def _run_op_batch(topo: StackTopology, txns: Sequence[Txn], *,
     }
 
 
+def topology_summary(topo: StackTopology) -> dict[str, Any]:
+    """The hardware description every report prints before any measurement."""
+    return {
+        "n_nodes": topo.n, "n_die": topo.n_die,
+        "n_cores": len(topo.cores), "n_has": len(topo.has),
+        "n_attach": len(topo.attaches), "n_bridges": len(topo.bridges),
+        "n_cols": N_COLS, "v_len": V_LEN, "group_cols": GROUP_COLS,
+        "top_bridges": list(TOP_BRIDGES),
+        "directed_links": topo.directed_links,
+        "capacity": topo.capacity(),
+        "n_planes": TOP_PLANES,
+        "top_link_lats": list(topo.top_link_lats),
+        "h_hop_lat": topo.h_hop_lat, "v_hop_lat": topo.v_hop_lat,
+        "bot_hop_lat": topo.bot_hop_lat, "d2d_lat": topo.d2d_lat,
+        "turn_lat": topo.turn_lat,
+        "vcs": list(topo.vcs),
+        "h_assign": topo.h_assign,
+        "d2d_bot_ifaces": 2,
+        "d2d_bot_iface": ["h", "v"],
+        "rtt": topo.max_write_rtt(m_wdata=M_WDATA),
+    }
+
+
 def _run_focus(blob: dict[str, Any], topo: StackTopology, args: Any) -> None:
     """Tiled write-only, then tiled read-only. Same addresses, never mixed.
 
@@ -1139,25 +1215,7 @@ def main() -> None:
             "rtt": rtt,
         },
     }
-    blob["topology"] = {
-        "n_nodes": topo0.n, "n_die": topo0.n_die,
-        "n_cores": len(topo0.cores), "n_has": len(topo0.has),
-        "n_attach": len(topo0.attaches), "n_bridges": len(topo0.bridges),
-        "n_cols": N_COLS, "v_len": V_LEN, "group_cols": GROUP_COLS,
-        "top_bridges": list(TOP_BRIDGES),
-        "directed_links": topo0.directed_links,
-        "capacity": topo0.capacity(),
-        "n_planes": TOP_PLANES,
-        "top_link_lats": list(topo0.top_link_lats),
-        "h_hop_lat": topo0.h_hop_lat, "v_hop_lat": topo0.v_hop_lat,
-        "bot_hop_lat": topo0.bot_hop_lat, "d2d_lat": topo0.d2d_lat,
-        "turn_lat": topo0.turn_lat,
-        "vcs": list(topo0.vcs),
-        "h_assign": topo0.h_assign,
-        "d2d_bot_ifaces": 2,
-        "d2d_bot_iface": ["h", "v"],
-        "rtt": rtt,
-    }
+    blob["topology"] = topology_summary(topo0)
     blob["binding"] = binding_table(topo0)
     blob["binding_mod4"] = binding_mod4(topo0)
     blob["v_profile"] = v_ring_profile(topo0, col=0)
