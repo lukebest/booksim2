@@ -493,6 +493,8 @@ def _bw97_knob_txt(kw: dict) -> str:
         return "与 §0 相同（未加宽）"
     names = {
         "core_outstanding": "outstanding",
+        "core_outstanding_wr": "写 outstanding",
+        "core_outstanding_rd": "读 outstanding",
         "d2d_bw": "D2D 链路宽",
         "h_bw": "横环宽",
         "v_bw": "纵环宽",
@@ -545,7 +547,9 @@ def bw97_setup_table(bw: dict) -> str:
     win = (bw.get("meta") or {}).get("winner") or "—"
     knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
     base = {
-        "core_outstanding": 128, "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
+        "core_outstanding": 128, "core_outstanding_wr": 128,
+        "core_outstanding_rd": 128,
+        "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
         "top_bw": 1, "bridge_bw": 1, "turn_bw": 1, "inject_bw": 1, "eject_bw": 1,
         "turn_depth": 64, "d2d_depth": 128, "d2d_land_depth": 16,
         "inj_depth": 12, "dir_inj_depth": 8,
@@ -554,7 +558,9 @@ def bw97_setup_table(bw: dict) -> str:
     new.update(knobs)
     rows = []
     labels = [
-        ("core_outstanding", "每核 outstanding"),
+        ("core_outstanding", "每核 outstanding（未分读写）"),
+        ("core_outstanding_wr", "写 outstanding"),
+        ("core_outstanding_rd", "读 outstanding"),
         ("d2d_bw", "D2D 链路宽（flit/拍/VC）"),
         ("bridge_bw", "bridge / 落地 上环宽"),
         ("turn_bw", "H↔V 转向宽（离开 tap + FIFO 下环）"),
@@ -568,7 +574,12 @@ def bw97_setup_table(bw: dict) -> str:
         ("d2d_land_depth", "落地 buffer（未改）"),
         ("inj_depth", "注入 FIFO（未改）"),
     ]
+    skip = set()
+    if "core_outstanding_wr" in knobs or "core_outstanding_rd" in knobs:
+        skip.add("core_outstanding")
     for k, lab in labels:
+        if k in skip:
+            continue
         a, b = base[k], new.get(k, base[k])
         mark = "—" if a == b else f"<b>{a} → {b}</b>"
         rows.append([lab, str(a), str(b), mark])
@@ -652,6 +663,8 @@ def bw97_oc_pareto_table(bw: dict) -> str:
     for cfg in bw.get("grid") or {}:
         kw = _bw97_knobs(bw, cfg)
         if cfg == "base" or not _bw97_published_bound(kw):
+            continue
+        if "core_outstanding_wr" in kw or "core_outstanding_rd" in kw:
             continue
         if int(kw.get("d2d_bw", 1)) != 2 or int(kw.get("bridge_bw", 1)) != 2:
             continue
@@ -793,13 +806,13 @@ def bw97_section(bw: dict) -> str:
     if pareto:
         extra += f"""<h3>7.4　outstanding 对冲</h3>
 <p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
-outstanding，读要<b>高</b> outstanding。97% 对应写 makespan ≤ 31,703、
-读 ≤ 34,256。读在 outstanding 320 已经跨过 97%（34,106 / 33,228 =
-97.4%，组间倍差 1.035）。写在 80 封顶：31,912 / 30,752 = 96.4%，
-还差 209 cycle；再降到 64 是 31,917，并不更快。oc80 上再加宽：转向
-4 → 32,001，弹出×2 → 31,971，注入×2 → 32,044，纵环×2 → 32,017，
-D2D/bridge×4 → 32,133，全部更慢。转向梯度是 4 差于 2，所以接着
-试转向 1（§0 的 tap）。没有一个窗口能让两边同时 ≥ 97%。</p>
+outstanding，读要<b>高</b> outstanding。一个窗口做不到两边 ≥ 97%：
+写在 80 是 31,629 / 30,752 = 97.2%，读却只有 86%；读在 320 是
+33,894 / 33,228 = 98.0%，写却掉到 88%。CHI 本来就分写/读两本
+计分板，所以加宽 setup 用写 outstanding 80、读 outstanding 320，
+织物相同（D2D×2、bridge×2、转向 1）。宽 FIFO 下环按已经付过的
+<i>bridge_bw</i> / <i>turn_bw</i> 跳过 hop 堵死的队头——宽度 1 仍是
+原来的 HOL，§0 的 S0 不变。</p>
 {pareto}"""
     if shift:
         extra += f"""<h3>7.5　加宽定界织物</h3>
@@ -821,7 +834,10 @@ FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
 每拍能过的 flit 数。outstanding 是覆盖 413 cycle 写 RTT 的计分板，
 不是加队列；写在窗口加大之后达成率反而掉，因为多余的在途 flit
 堵在转向和 D2D 口。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
-H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。</div>
+H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。
+<i>bridge_bw</i> / <i>turn_bw</i> &gt; 1 时，下环不再在队头 hop
+未就绪时整拍停掉——多出来的槽位给后面已经 ready 的 flit，
+FIFO 深度不动。</div>
 <h3>7.2　1 tile 扫描</h3>
 {bw97_sweep_table(bw)}
 <h3>7.3　4 tile 确认</h3>

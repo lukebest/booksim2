@@ -123,6 +123,12 @@ GRID: dict[str, dict[str, Any]] = {
     # leftover 209 cycles without dropping the h:dat floor.
     "oc80-d2d2-br2": dict(core_outstanding=80, d2d_bw=2, bridge_bw=2),
     "oc64-d2d2-br2": dict(core_outstanding=64, d2d_bw=2, bridge_bw=2),
+    # Same wires as the two measured rows that each clear 97%: write
+    # oc80-d2d2-br2 (31,629 / 30,752) and read oc320-d2d2-br2
+    # (33,894 / 33,228). CHI already keeps separate WR/RD scoreboards.
+    "oc80w-320r-d2d2-br2": dict(d2d_bw=2, bridge_bw=2,
+                                core_outstanding_wr=80,
+                                core_outstanding_rd=320),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -166,6 +172,7 @@ COST = {
     "oc80-d2d4-br4-turn2": 6,
     "oc80-d2d2-br2": 4,
     "oc64-d2d2-br2": 4,
+    "oc80w-320r-d2d2-br2": 4,
 }
 
 
@@ -211,6 +218,18 @@ def _light(r: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def sim_knobs(op: str, kw: dict[str, Any]) -> dict[str, Any]:
+    """Drop per-op outstanding aliases so StackBaseParams sees one cap."""
+    out = dict(kw)
+    wr = out.pop("core_outstanding_wr", None)
+    rd = out.pop("core_outstanding_rd", None)
+    if op == "write" and wr is not None:
+        out["core_outstanding"] = int(wr)
+    elif op == "read" and rd is not None:
+        out["core_outstanding"] = int(rd)
+    return out
+
+
 def run_job(spec: tuple[str, str, int, bool]) -> tuple[str, dict[str, Any]]:
     cfg, op, tiles, full = spec
     kw = dict(GRID.get(cfg, {}))
@@ -219,7 +238,7 @@ def run_job(spec: tuple[str, str, int, bool]) -> tuple[str, dict[str, Any]]:
     stall = max(80_000, 160 * hist["per_core_txn"])
     t0 = time.time()
     extra = dict(FABRIC)
-    extra.update(kw)
+    extra.update(sim_knobs(op, kw))
     r = run_scheme(_TOPO, txns, "s0", route="bound", seed=0,
                    keep_trace=False, stall_after=stall, **extra)
     bound = _TOPO.write_bounds(
@@ -358,6 +377,7 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "oc80-d2d4-br4-turn2",
         "oc80-d2d2-br2",
         "oc64-d2d2-br2",
+        "oc80w-320r-d2d2-br2",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
@@ -408,8 +428,34 @@ def _seed_base_from_cc_focus(store: dict[str, Any]) -> None:
         }
 
 
+def _seed_paired_outstanding(store: dict[str, Any]) -> None:
+    """Copy already-measured per-op rows into a two-scoreboard setup.
+
+    `oc80-d2d2-br2` write and `oc320-d2d2-br2` read used the same
+    D2D×2 / bridge×2 / turn1 fabric; only the credit window changed.
+    """
+    pairs = {
+        "oc80w-320r-d2d2-br2": {
+            "write": "oc80-d2d2-br2",
+            "read": "oc320-d2d2-br2",
+        },
+    }
+    for dst, srcs in pairs.items():
+        for op, src in srcs.items():
+            dk = job_key(dst, op, CONFIRM_TILES)
+            sk = job_key(src, op, CONFIRM_TILES)
+            if dk in store["runs"] or sk not in store["runs"]:
+                continue
+            rec = json.loads(json.dumps(store["runs"][sk]))
+            rec["cfg"] = dst
+            rec["knobs"] = dict(GRID.get(dst, {}))
+            rec["seeded_from"] = sk
+            store["runs"][dk] = rec
+
+
 def emit(store: dict[str, Any]) -> None:
     _seed_base_from_cc_focus(store)
+    _seed_paired_outstanding(store)
     # Do not crown the published S0 as the widened winner just because
     # it is the only 4-tile row we have copied in.
     widened = [c for c in GRID if c != "base"
@@ -467,6 +513,7 @@ def main() -> None:
         tag = "" if w else " (best-so-far, under target)"
         print(f"[bw97] 1-tile winner: {pick}{tag}")
     if args.stage in ("confirm", "all"):
+        _seed_paired_outstanding(store)
         run_all(confirm_specs(store), args.jobs, store)
         w = pick_winner(store, CONFIRM_TILES)
         pick = w or best_so_far(store, CONFIRM_TILES)
