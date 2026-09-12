@@ -86,6 +86,11 @@ GRID: dict[str, dict[str, Any]] = {
     "oc224-d2d2-br2-h2-turn2": dict(core_outstanding=224, d2d_bw=2,
                                     bridge_bw=2, h_bw=2, turn_bw=2),
     "d2d2-br2-h2-turn2": dict(d2d_bw=2, bridge_bw=2, h_bw=2, turn_bw=2),
+    "oc192-d2d2-br2-turn4": dict(core_outstanding=192, d2d_bw=2,
+                                 bridge_bw=2, turn_bw=4),
+    "oc224-all2-turn2": dict(core_outstanding=224, d2d_bw=2, bridge_bw=2,
+                             h_bw=2, v_bw=2, top_bw=2, inject_bw=2,
+                             eject_bw=2, turn_bw=2),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -116,6 +121,8 @@ COST = {
     "oc224-d2d2-br2-turn4": 6,
     "oc224-d2d2-br2-h2-turn2": 8,
     "d2d2-br2-h2-turn2": 7,
+    "oc192-d2d2-br2-turn4": 6,
+    "oc224-all2-turn2": 10,
 }
 
 
@@ -295,6 +302,8 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "oc224-d2d2-br2-turn4",
         "oc224-d2d2-br2-h2-turn2",
         "d2d2-br2-h2-turn2",
+        "oc192-d2d2-br2-turn4",
+        "oc224-all2-turn2",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
