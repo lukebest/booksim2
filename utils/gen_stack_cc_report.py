@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""HTML report: congestion control on the 3D-stacked top-die / bottom-die NoC.
+"""HTML report: congestion control on the 3D-stacked fabric, read only.
 
-Same hardware as `report_ring2_stack_write_fairness.html` -- six 20-node
-dual-plane top-die rings over one bottom die of 96 HAs -- and the same tiled
-workload, run twice: a uniform write batch and a uniform read batch, never
-mixed. The question here is not whether the fabric drains but *which
-congestion-control scheme drains it fastest*, so every scheme appears at the
-configuration a sweep chose for it rather than at a quoted operating point.
+Study hardware is `oc80w-320r-d2d2-br2`: D2D×2, bridge×2, turn 1, read
+outstanding 320. The write outstanding of 80 is unused because this report
+does not run a write batch. FIFO depths stay at the published values
+(turn 64 / D2D 128 / landing 16 / inject 12+8).
 
-The figure the report is built around is the same for every scheme: cumulative
-retired DAT flits per top-die group against time. Six curves that finish
-together mean the fabric shared itself out; six curves that fan out mean some
-group waited on another. Makespan is the right-hand edge of the slowest curve.
+The figure the report is built around is the same for every scheme:
+cumulative retired CompData flits per top-die group against time. Six
+curves that finish together mean the fabric shared itself out; six
+curves that fan out mean some group waited on another. Makespan is the
+right-hand edge of the slowest curve — that is the write-data
+completion time under the uniform-read batch.
 
 Inputs, all produced by other scripts:
-    results/stack_cc_focus.json      dse_stack_cc_sweep.py --emit
-    results/stack_cc_area.json       stack_cc_area.py
-    results/stack_cc_rootcause.json  stack_cc_rootcause.py
+    results/stack_cc_read_focus.json  dse_stack_cc_sweep.py --emit
+    results/stack_cc_area.json        stack_cc_area.py
+    results/stack_cc_rootcause.json   stack_cc_rootcause.py
 
 Usage:
     python3 gen_stack_cc_report.py
@@ -44,16 +44,15 @@ from gen_stack_write_report import (_cjk, _f, _t, bottom_die_link_table,
 
 ROOT = Path(__file__).resolve().parents[1]
 IMG = ROOT / "results"
-FOCUS = ROOT / "results" / "stack_cc_focus.json"
+FOCUS = ROOT / "results" / "stack_cc_read_focus.json"
 AREA = ROOT / "results" / "stack_cc_area.json"
 RCAUSE = ROOT / "results" / "stack_cc_rootcause.json"
-BW97 = ROOT / "results" / "stack_bw97_focus.json"
 OUT = ROOT / "results" / "report_stack_cc_schemes.html"
 
 ORDER = ("s0", "s1", "s22", "s16g", "s16")
 COLOR = {"s0": "#dc2626", "s1": "#f59e0b", "s22": "#16a34a",
          "s16": "#7c3aed", "s16g": "#2563eb"}
-OPS = ("write", "read")
+OPS = ("read",)
 OP_CN = {"write": "均匀写", "read": "均匀读"}
 DAT_CN = {"write": "WriteData", "read": "CompData"}
 DIE_COLOR = ["#1d4ed8", "#dc2626", "#0891b2", "#ea580c", "#4338ca", "#65a30d"]
@@ -64,7 +63,8 @@ DIE_COLOR = ["#1d4ed8", "#dc2626", "#0891b2", "#ea580c", "#4338ca", "#65a30d"]
 # ---------------------------------------------------------------------------
 
 def schemes_present(b: dict) -> list[str]:
-    got = (b.get("schemes") or {}).get("write") or {}
+    schemes = b.get("schemes") or {}
+    got = schemes.get("read") or schemes.get("write") or {}
     return [s for s in ORDER if s in got]
 
 
@@ -105,32 +105,37 @@ def spread(b: dict, op: str, s: str) -> float:
 # figures
 # ---------------------------------------------------------------------------
 
+def _draw_done(ax, b: dict, op: str, s: str) -> None:
+    ser = series(b, op, s)
+    cum = ser.get("cum_by_group") or {}
+    ts = ser.get("t") or []
+    for g in sorted(cum, key=int):
+        ax.plot(ts, cum[g], lw=1.5, color=DIE_COLOR[int(g) % 6],
+                label=f"group {g}")
+    fin = ser.get("finish_by_group") or {}
+    if fin:
+        lo, hi = min(fin.values()), max(fin.values())
+        ax.axvspan(lo, hi, color="#94a3b8", alpha=0.16, zorder=0)
+        ax.axvline(hi, color="#475569", lw=1.0, ls="--")
+        top = max((max(v) for v in cum.values()), default=1)
+        ax.annotate(f"makespan {hi:,}", (hi, 0.5 * top),
+                    xytext=(-6, 0), textcoords="offset points",
+                    fontsize=7.5, color="#475569", ha="right")
+    ax.set_title(f"{OP_CN[op]}（{DAT_CN[op]}）  "
+                 f"最慢/最快 = {spread(b, op, s):.3f}", fontsize=9.5)
+    ax.set_xlabel("时间（cycle）")
+    ax.set_ylabel("该 group 已完成的 DAT flit 数")
+    ax.grid(alpha=0.3)
+    ax.margins(y=0.12)
+    ax.legend(fontsize=7, ncol=2, loc="upper left", framealpha=0.9)
+
+
 def plot_done(b: dict, s: str, path: Path) -> None:
-    """Per-group cumulative retired DAT flits, write and read side by side."""
-    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.1))
-    for ax, op in zip(axes, OPS):
-        ser = series(b, op, s)
-        cum = ser.get("cum_by_group") or {}
-        ts = ser.get("t") or []
-        for g in sorted(cum, key=int):
-            ax.plot(ts, cum[g], lw=1.5, color=DIE_COLOR[int(g) % 6],
-                    label=f"group {g}")
-        fin = ser.get("finish_by_group") or {}
-        if fin:
-            lo, hi = min(fin.values()), max(fin.values())
-            ax.axvspan(lo, hi, color="#94a3b8", alpha=0.16, zorder=0)
-            ax.axvline(hi, color="#475569", lw=1.0, ls="--")
-            top = max((max(v) for v in cum.values()), default=1)
-            ax.annotate(f"makespan {hi:,}", (hi, 0.5 * top),
-                        xytext=(-6, 0), textcoords="offset points",
-                        fontsize=7.5, color="#475569", ha="right")
-        ax.set_title(f"{OP_CN[op]}（{DAT_CN[op]}）  "
-                     f"最慢/最快 = {spread(b, op, s):.3f}", fontsize=9.5)
-        ax.set_xlabel("时间（cycle）")
-        ax.set_ylabel("该 group 已完成的 DAT flit 数")
-        ax.grid(alpha=0.3)
-        ax.margins(y=0.12)
-        ax.legend(fontsize=7, ncol=2, loc="upper left", framealpha=0.9)
+    """Per-group cumulative retired CompData flits under the read batch."""
+    n = len(OPS)
+    fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 4.1), squeeze=False)
+    for ax, op in zip(axes[0], OPS):
+        _draw_done(ax, b, op, s)
     fig.suptitle(f"{label(b, s)}　配置 {chosen(b, s)}", fontsize=11)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
@@ -138,15 +143,16 @@ def plot_done(b: dict, s: str, path: Path) -> None:
 
 
 def plot_overlay(b: dict, path: Path) -> None:
-    """Every scheme's slowest and fastest group, on one pair of axes.
+    """Every scheme's slowest and fastest group on the read batch.
 
     Two curves per scheme bound the band the six groups live in, so the
-    figure shows both speed (how far right the band ends) and fairness (how
-    wide it is) without six times five lines.
+    figure shows both speed (how far right the band ends) and fairness
+    (how wide it is) without six times five lines.
     """
     ss = schemes_present(b)
-    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.1))
-    for ax, op in zip(axes, OPS):
+    n = len(OPS)
+    fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 4.1), squeeze=False)
+    for ax, op in zip(axes[0], OPS):
         for s in ss:
             ser = series(b, op, s)
             cum = ser.get("cum_by_group") or {}
@@ -156,9 +162,13 @@ def plot_overlay(b: dict, path: Path) -> None:
             fin = ser.get("finish_by_group") or {}
             slow = max(fin, key=lambda g: fin[g]) if fin else None
             fast = min(fin, key=lambda g: fin[g]) if fin else None
+            if slow is None:
+                continue
             ax.plot(ts, cum[slow], lw=1.7, color=COLOR[s],
                     label=f"{s.upper()} 最慢组")
-            ax.plot(ts, cum[fast], lw=0.9, color=COLOR[s], ls=":", alpha=0.8)
+            if fast is not None:
+                ax.plot(ts, cum[fast], lw=0.9, color=COLOR[s], ls=":",
+                        alpha=0.8)
         ax.set_title(f"{OP_CN[op]}：各方案最慢组（实线）与最快组（点线）",
                      fontsize=9.5)
         ax.set_xlabel("时间（cycle）")
@@ -174,27 +184,28 @@ def plot_makespan(b: dict, path: Path) -> None:
     """Speed and fairness together: neither number means much alone."""
     ss = schemes_present(b)
     fig, axes = plt.subplots(1, 2, figsize=(11.4, 3.8))
-    w = 0.38
+    n_op = max(1, len(OPS))
+    w = 0.72 / n_op
     xs = range(len(ss))
     ax = axes[0]
     for i, op in enumerate(OPS):
         vals = [makespan(b, op, s) for s in ss]
-        bars = ax.bar([x + (i - 0.5) * w for x in xs], vals, w,
-                      label=OP_CN[op],
-                      color="#2563eb" if op == "write" else "#f59e0b")
+        off = (i - (n_op - 1) / 2) * w
+        bars = ax.bar([x + off for x in xs], vals, w,
+                      label=OP_CN[op], color="#f59e0b")
         base = makespan(b, op, "s0") or 1
         for r, v in zip(bars, vals):
             ax.text(r.get_x() + r.get_width() / 2, v,
                     f"{v:,}\n{(v / base - 1) * 100:+.1f}%", ha="center",
                     va="bottom", fontsize=7)
     ax.set_ylabel("makespan（cycle）")
-    ax.set_title("makespan（百分比相对 S0）", fontsize=10)
+    ax.set_title("读 makespan（百分比相对 S0）", fontsize=10)
     ax = axes[1]
     for i, op in enumerate(OPS):
         vals = [spread(b, op, s) for s in ss]
-        bars = ax.bar([x + (i - 0.5) * w for x in xs], vals, w,
-                      label=OP_CN[op],
-                      color="#2563eb" if op == "write" else "#f59e0b")
+        off = (i - (n_op - 1) / 2) * w
+        bars = ax.bar([x + off for x in xs], vals, w,
+                      label=OP_CN[op], color="#f59e0b")
         for r, v in zip(bars, vals):
             ax.text(r.get_x() + r.get_width() / 2, v, f"{v:.3f}",
                     ha="center", va="bottom", fontsize=7)
@@ -215,11 +226,10 @@ def plot_makespan(b: dict, path: Path) -> None:
 def plot_cost(b: dict, area: dict, path: Path) -> None:
     """Makespan against added silicon. Down-and-left is better."""
     rows = {r["scheme"]: r for r in (area.get("rows") or [])}
-    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.0))
-    for ax, op in zip(axes, OPS):
+    n = len(OPS)
+    fig, axes = plt.subplots(1, n, figsize=(6.0 * n, 4.0), squeeze=False)
+    for ax, op in zip(axes[0], OPS):
         base = makespan(b, op, "s0") or 1
-        # Points land on top of each other on the log axis, so they are
-        # named in the legend rather than beside the marker.
         for s in schemes_present(b):
             if s not in rows:
                 continue
@@ -241,8 +251,9 @@ def plot_cost(b: dict, area: dict, path: Path) -> None:
 
 def plot_rootcause(b: dict, rc: dict, path: Path) -> None:
     """Structural bottleneck per group against when that group finished."""
-    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.0))
-    for ax, op in zip(axes, OPS):
+    n = len(OPS)
+    fig, axes = plt.subplots(1, n, figsize=(6.0 * n, 4.0), squeeze=False)
+    for ax, op in zip(axes[0], OPS):
         res = ((rc.get("ops") or {}).get(op)) or {}
         rows = res.get("groups") or []
         if not rows:
@@ -301,18 +312,16 @@ def sweep_table(b: dict, s: str) -> str:
     for cfg, per in ranked:
         ok = all(per.get(op, {}).get("completed") for op in OPS)
         star = " ★" if cfg == pick else ""
+        rd = per.get("read") or {}
         rows.append([
             f"<code>{cfg}</code>{star}",
             knob_txt(b, s, cfg),
-            f"{per.get('write', {}).get('makespan', 0):,}" if ok else "未排空",
-            f"{per.get('read', {}).get('makespan', 0):,}" if ok else "未排空",
-            f"{sum(per.get(op, {}).get('makespan', 0) for op in OPS):,}"
-            if ok else "—",
-            _f(per.get("write", {}).get("finish_spread"), 3),
-            _f(per.get("read", {}).get("finish_spread"), 3),
+            f"{rd.get('makespan', 0):,}" if ok else "未排空",
+            f"{100 * float(rd.get('eff') or 0):.1f}%" if ok else "—",
+            _f(rd.get("finish_spread"), 3),
         ])
-    return _t(["配置", "参数", f"写 makespan（{st} tile）", "读 makespan",
-               "写+读", "写 组间倍差", "读 组间倍差"], rows)
+    return _t(["配置", "参数", f"读 makespan（{st} tile）",
+               "读达成率", "读 组间倍差"], rows)
 
 
 def bounds(b: dict, op: str) -> dict[str, Any]:
@@ -322,6 +331,32 @@ def bounds(b: dict, op: str) -> dict[str, Any]:
         if bd:
             return bd
     return {}
+
+
+def study_hw_table(b: dict) -> str:
+    """The adopted wide fabric this report actually measures on."""
+    m = b.get("meta") or {}
+    fab = m.get("fabric") or {}
+    study = m.get("study") or "oc80w-320r-d2d2-br2"
+    rows = [
+        ["研究 setup", f"<code>{study}</code>",
+         "本报告全部曲线和数字都跑在这一套上；写 outstanding 80 未使用"],
+        ["读 outstanding", f"<b>{m.get('core_outstanding', 320)}</b> / core",
+         "从 REQ 上环占到 CompData 退休"],
+        ["D2D 链路宽",
+         f"<b>{m.get('d2d_bw', fab.get('d2d_bw', 2))}</b> flit/拍/VC",
+         "加宽后同一 setup 的读下界仍由 h:dat 决定"],
+        ["bridge / 落地 上环宽",
+         f"<b>{m.get('bridge_bw', fab.get('bridge_bw', 2))}</b>",
+         "宽 FIFO 下环按已付的 bridge_bw 跳过 hop 堵死的队头"],
+        ["H↔V 转向宽", f"<b>{m.get('turn_bw', fab.get('turn_bw', 1))}</b>",
+         "本 setup 保持 1"],
+        ["FIFO 深度", "转向 64 / D2D 128 / 落地 16 / 注入 12+8",
+         "与原发表值相同，没有加深"],
+        ["考察批次", "均匀读（CompData 退休）",
+         "本报告暂时去掉写批次；makespan = 最慢组写数据完成时间"],
+    ]
+    return _t(["项目", "取值", "说明"], rows)
 
 
 def bound_table(b: dict) -> str:
@@ -348,25 +383,20 @@ def bound_table(b: dict) -> str:
 def final_table(b: dict) -> str:
     ss = schemes_present(b)
     rows = []
+    base = makespan(b, "read", "s0") or 1
+    bd = bounds(b, "read").get("bound", 0)
     for s in ss:
-        base = {op: makespan(b, op, "s0") or 1 for op in OPS}
-        eff = []
-        for op in OPS:
-            bd = bounds(b, op).get("bound", 0)
-            eff.append(100 * bd / max(1, makespan(b, op, s)))
+        t = makespan(b, "read", s)
         rows.append([
             f"<b>{label(b, s)}</b>",
             f"<code>{chosen(b, s)}</code>",
-            f"{makespan(b, 'write', s):,}",
-            f"{(makespan(b, 'write', s) / base['write'] - 1) * 100:+.1f}%",
-            f"{makespan(b, 'read', s):,}",
-            f"{(makespan(b, 'read', s) / base['read'] - 1) * 100:+.1f}%",
-            _f(spread(b, "write", s), 3),
+            f"{t:,}",
+            f"{(t / base - 1) * 100:+.1f}%",
             _f(spread(b, "read", s), 3),
-            f"{eff[0]:.1f}% / {eff[1]:.1f}%",
+            f"{100 * bd / max(1, t):.1f}%",
         ])
-    return _t(["方案", "配置", "写 makespan", "对 S0", "读 makespan", "对 S0",
-               "写 组间倍差", "读 组间倍差", "达成率 写/读"], rows)
+    return _t(["方案", "配置", "读 makespan", "对 S0",
+               "读 组间倍差", "读达成率"], rows)
 
 
 def finish_table(b: dict, op: str) -> str:
@@ -476,388 +506,13 @@ Spearman ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
 
 
 NOISE = 0.01     # below this, a makespan difference is not a result
-BW97_TARGET = 0.97
 
 
-def _bw97_rec(bw: dict, cfg: str, op: str, slot: str = "confirm") -> dict:
-    return ((bw.get(slot) or {}).get(cfg) or {}).get(op) or {}
-
-
-def _bw97_eff(bw: dict, cfg: str, op: str, slot: str = "confirm") -> float:
-    r = _bw97_rec(bw, cfg, op, slot)
-    return float(r.get("eff") or 0)
-
-
-def _bw97_knob_txt(kw: dict) -> str:
-    if not kw:
-        return "与 §0 相同（未加宽）"
-    names = {
-        "core_outstanding": "outstanding",
-        "core_outstanding_wr": "写 outstanding",
-        "core_outstanding_rd": "读 outstanding",
-        "d2d_bw": "D2D 链路宽",
-        "h_bw": "横环宽",
-        "v_bw": "纵环宽",
-        "top_bw": "top 环宽",
-        "bridge_bw": "bridge 上环宽",
-        "turn_bw": "H↔V 转向宽",
-        "inject_bw": "注入口宽",
-        "eject_bw": "弹出宽",
-    }
-    return "，".join(f"{names.get(k, k)} = {v}" for k, v in sorted(kw.items()))
-
-
-def plot_bw97_done(bw: dict, cfg: str, path: Path) -> None:
-    """Same axes as plot_done, but the series live under confirm[cfg][op]."""
-    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.1))
-    for ax, op in zip(axes, OPS):
-        rec = _bw97_rec(bw, cfg, op)
-        ser = (rec.get("full") or {}).get("done_series") or {}
-        cum = ser.get("cum_by_group") or {}
-        ts = ser.get("t") or []
-        for g in sorted(cum, key=int):
-            ax.plot(ts, cum[g], lw=1.5, color=DIE_COLOR[int(g) % 6],
-                    label=f"group {g}")
-        fin = ser.get("finish_by_group") or rec.get("group_finish") or {}
-        fin = {str(k): v for k, v in fin.items()}
-        if fin:
-            lo, hi = min(fin.values()), max(fin.values())
-            ax.axvspan(lo, hi, color="#94a3b8", alpha=0.16, zorder=0)
-            ax.axvline(hi, color="#475569", lw=1.0, ls="--")
-            top = max((max(v) for v in cum.values()), default=1)
-            ax.annotate(f"makespan {hi:,}", (hi, 0.5 * top),
-                        xytext=(-6, 0), textcoords="offset points",
-                        fontsize=7.5, color="#475569", ha="right")
-        vals = [v for v in fin.values() if v]
-        sp = (max(vals) / min(vals)) if vals else 0
-        ax.set_title(f"{OP_CN[op]}  最慢/最快 = {sp:.3f}  "
-                     f"达成率 {_bw97_eff(bw, cfg, op):.1%}", fontsize=9.5)
-        ax.set_xlabel("时间（cycle）")
-        ax.set_ylabel("该 group 已完成的 DAT flit 数")
-        ax.grid(alpha=0.3)
-        ax.margins(y=0.12)
-        ax.legend(fontsize=7, ncol=2, loc="upper left", framealpha=0.9)
-    fig.suptitle(f"加宽 setup　{cfg}", fontsize=11)
-    fig.tight_layout()
-    fig.savefig(path, dpi=140)
-    plt.close(fig)
-
-
-def bw97_setup_table(bw: dict) -> str:
-    win = (bw.get("meta") or {}).get("winner") or "—"
-    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
-    base = {
-        "core_outstanding": 128, "core_outstanding_wr": 128,
-        "core_outstanding_rd": 128,
-        "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
-        "top_bw": 1, "bridge_bw": 1, "turn_bw": 1, "inject_bw": 1, "eject_bw": 1,
-        "turn_depth": 64, "d2d_depth": 128, "d2d_land_depth": 16,
-        "inj_depth": 12, "dir_inj_depth": 8,
-    }
-    new = dict(base)
-    new.update(knobs)
-    rows = []
-    labels = [
-        ("core_outstanding", "每核 outstanding（未分读写）"),
-        ("core_outstanding_wr", "写 outstanding"),
-        ("core_outstanding_rd", "读 outstanding"),
-        ("d2d_bw", "D2D 链路宽（flit/拍/VC）"),
-        ("bridge_bw", "bridge / 落地 上环宽"),
-        ("turn_bw", "H↔V 转向宽（离开 tap + FIFO 下环）"),
-        ("h_bw", "底 die 横环宽"),
-        ("v_bw", "底 die 纵环宽"),
-        ("top_bw", "top die 环宽"),
-        ("inject_bw", "注入口宽"),
-        ("eject_bw", "弹出宽"),
-        ("turn_depth", "转向 FIFO（未改）"),
-        ("d2d_depth", "D2D FIFO（未改）"),
-        ("d2d_land_depth", "落地 buffer（未改）"),
-        ("inj_depth", "注入 FIFO（未改）"),
-    ]
-    skip = set()
-    if "core_outstanding_wr" in knobs or "core_outstanding_rd" in knobs:
-        skip.add("core_outstanding")
-    for k, lab in labels:
-        if k in skip:
-            continue
-        a, b = base[k], new.get(k, base[k])
-        mark = "—" if a == b else f"<b>{a} → {b}</b>"
-        rows.append([lab, str(a), str(b), mark])
-    return _t(["项目", "§0 原 setup", f"加宽 setup（{win}）", "变化"], rows)
-
-
-def bw97_sweep_table(bw: dict) -> str:
-    grid = bw.get("grid") or {}
-    rows = []
-    for cfg, kw in grid.items():
-        wr = _bw97_rec(bw, cfg, "write", "sweep")
-        rd = _bw97_rec(bw, cfg, "read", "sweep")
-        if not wr and not rd:
-            continue
-        star = " ★" if cfg == (bw.get("meta") or {}).get("winner") else ""
-        rows.append([
-            f"<code>{cfg}</code>{star}",
-            _bw97_knob_txt(kw),
-            f"{wr.get('makespan', 0):,}" if wr else "—",
-            f"{100 * float(wr.get('eff') or 0):.1f}%" if wr else "—",
-            f"{rd.get('makespan', 0):,}" if rd else "—",
-            f"{100 * float(rd.get('eff') or 0):.1f}%" if rd else "—",
-        ])
-    return _t(["配置", "加宽项", "写 makespan（1 tile）", "写达成率",
-               "读 makespan", "读达成率"], rows)
-
-
-def _bw97_n(rec: dict, *keys, default: int = 0) -> int:
-    cur: Any = rec
-    for k in keys:
-        cur = (cur or {}).get(k) if isinstance(cur, dict) else None
-    return int(cur or default)
-
-
-def bw97_final_table(bw: dict) -> str:
-    rows = []
-    win = (bw.get("meta") or {}).get("winner")
-    confirm = bw.get("confirm") or {}
-    cfgs: list[str] = []
-    if "base" in confirm:
-        cfgs.append("base")
-    for cfg in bw.get("grid") or {}:
-        if cfg != "base" and cfg in confirm:
-            cfgs.append(cfg)
-    for extra in confirm:
-        if extra not in cfgs:
-            cfgs.append(extra)
-    for cfg in cfgs:
-        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
-        if not wr and not rd:
-            continue
-        star = " ★" if cfg == win else ""
-        rows.append([
-            f"<b>{cfg}</b>{star}",
-            _bw97_knob_txt((bw.get("grid") or {}).get(cfg) or {}),
-            f"{_bw97_n(wr, 'makespan'):,}",
-            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
-            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
-            f"{_bw97_n(rd, 'makespan'):,}",
-            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
-            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
-        ])
-    return _t(["配置", "加宽项", "写 makespan", "写下界", "写达成率",
-               "读 makespan", "读下界", "读达成率"], rows)
-
-
-def _bw97_knobs(bw: dict, cfg: str) -> dict:
-    return dict((bw.get("grid") or {}).get(cfg) or {})
-
-
-def _bw97_published_bound(kw: dict) -> bool:
-    """True when H/V/top stay at width 1, so the §0 h:dat floor is unchanged."""
-    return (int(kw.get("h_bw", 1)) == 1
-            and int(kw.get("v_bw", 1)) == 1
-            and int(kw.get("top_bw", 1)) == 1)
-
-
-def bw97_oc_pareto_table(bw: dict) -> str:
-    """Outstanding-only ladder on the published bound (D2D×2, bridge×2)."""
-    rows = []
-    for cfg in bw.get("grid") or {}:
-        kw = _bw97_knobs(bw, cfg)
-        if cfg == "base" or not _bw97_published_bound(kw):
-            continue
-        if "core_outstanding_wr" in kw or "core_outstanding_rd" in kw:
-            continue
-        if int(kw.get("d2d_bw", 1)) != 2 or int(kw.get("bridge_bw", 1)) != 2:
-            continue
-        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
-        if not wr or not rd:
-            continue
-        oc = int(kw.get("core_outstanding", 128))
-        turn = int(kw.get("turn_bw", 1))
-        rows.append((oc, turn, cfg, wr, rd))
-    if not rows:
-        return ""
-    rows.sort()
-    win = (bw.get("meta") or {}).get("winner")
-    out = []
-    for oc, turn, cfg, wr, rd in rows:
-        star = " ★" if cfg == win else ""
-        out.append([
-            f"{oc}",
-            f"{turn}",
-            f"<code>{cfg}</code>{star}",
-            f"{_bw97_n(wr, 'makespan'):,}",
-            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
-            f"{_bw97_n(rd, 'makespan'):,}",
-            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
-            f"{float(wr.get('finish_spread') or 0):.3f}",
-            f"{float(rd.get('finish_spread') or 0):.3f}",
-        ])
-    return _t(["outstanding", "转向宽", "配置", "写 makespan", "写达成率",
-               "读 makespan", "读达成率", "写组间倍差", "读组间倍差"], out)
-
-
-def bw97_bound_shift_note(bw: dict) -> str:
-    """Why doubling the bound-setting fabric loses the ratio."""
-    specs = (
-        ("oc256-d2d2-br2", "横环仍是 1，下界停在 §0 的 h:dat"),
-        ("oc256-d2d2-br2-h2", "横环×2 之后写下界改由 v:dat 决定"),
-        ("oc256-d2d2-br2-h2-v2", "再把纵环×2，下界回到更窄的 h:dat"),
-        ("oc256-all2", "四条织物一起×2，下界再掉一档"),
-    )
-    rows = []
-    for cfg, why in specs:
-        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
-        if not wr or not rd:
-            continue
-        rows.append([
-            f"<code>{cfg}</code>",
-            why,
-            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
-            f"{_bw97_n(wr, 'makespan'):,}",
-            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
-            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
-            f"{_bw97_n(rd, 'makespan'):,}",
-            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
-        ])
-    if not rows:
-        return ""
-    table = _t(["配置", "下界怎么动", "写下界", "写 makespan", "写达成率",
-                "读下界", "读 makespan", "读达成率"], rows)
-    return f"""<div class="def"><b>加宽正在定下界的那条边，达成率通常会掉。</b>
-解析下界是「最热那条边的占用 / 该边宽度」。横环×2 把写的
-<i>h:dat</i> 30752 打成 15376，但纵环 DAT 仍要 20496 拍，下界只降到
-20496；实测写只降到 23728，组 0/1 还卡在纵环上（倍差 1.43），达成率
-从 89% 掉到 86%。再把纵环×2，下界跟到 15376，makespan 只跟到 18454，
-又掉到 83%。读在横环×2 时已经 98.9%，再加宽纵环反而把四组重新叠到
-更窄的横环上，倍差回到 1.75。所以允许的带宽旋钮里，<b>不能</b>靠
-把定下界的织物翻倍来抬达成率；只能在下界不动的前提下挤握手和转向。</div>
-{table}"""
-
-
-def bw97_confirm_note(bw: dict) -> str:
-    items = []
-    for cfg in bw.get("grid") or {}:
-        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
-        if cfg == "base" or not wr or not rd:
-            continue
-        sp = float(wr.get("finish_spread") or 0)
-        tail = (f"，写组间倍差 {sp:.3f}" if sp > 1.05 else "")
-        items.append(
-            f"<li><code>{cfg}</code>：写 "
-            f"{_bw97_n(wr, 'makespan'):,} / {_bw97_n(wr, 'bounds', 'bound'):,} "
-            f"= {100 * float(wr.get('eff') or 0):.1f}%，读 "
-            f"{_bw97_n(rd, 'makespan'):,} / {_bw97_n(rd, 'bounds', 'bound'):,} "
-            f"= {100 * float(rd.get('eff') or 0):.1f}%{tail}</li>")
-    if not items:
-        return "<p>4 tile 确认还在跑。</p>"
-    return "<ul>" + "".join(items) + "</ul>"
-
-
-def bw97_section(bw: dict) -> str:
-    if not bw:
-        return ""
-    win = (bw.get("meta") or {}).get("winner") or "—"
-    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
-    wr = _bw97_rec(bw, win, "write")
-    rd = _bw97_rec(bw, win, "read")
-    ok_w = float(wr.get("eff") or 0) >= BW97_TARGET
-    ok_r = float(rd.get("eff") or 0) >= BW97_TARGET
-    if wr.get("full") or _bw97_rec(bw, "base", "write").get("full"):
-        plot_bw97_done(bw, "base", IMG / "cc_done_bw97_base.png")
-        if wr.get("full"):
-            plot_bw97_done(bw, win, IMG / "cc_done_bw97.png")
-        figs = """<img src="cc_done_bw97_base.png" alt="原 setup 各 group 完成曲线">
-<img src="cc_done_bw97.png" alt="加宽 setup 各 group 完成曲线">"""
-    else:
-        figs = "<p>4 tile 确认曲线还在跑，下表是 1 tile 扫描。</p>"
-    has_wide = any(c != "base" and _bw97_rec(bw, c, "write")
-                   for c in (bw.get("grid") or {}))
-    best_w = best_r = ""
-    confirm = bw.get("confirm") or {}
-    wr_best = rd_best = (0.0, "")
-    for cfg, ops in confirm.items():
-        if cfg == "base" or not _bw97_published_bound(_bw97_knobs(bw, cfg)):
-            continue
-        w, r = (ops or {}).get("write") or {}, (ops or {}).get("read") or {}
-        if w.get("makespan") and float(w.get("eff") or 0) > wr_best[0]:
-            wr_best = (float(w["eff"]), cfg)
-        if r.get("makespan") and float(r.get("eff") or 0) > rd_best[0]:
-            rd_best = (float(r["eff"]), cfg)
-    if wr_best[1]:
-        best_w = (f"单侧写最好是 <code>{wr_best[1]}</code> "
-                  f"{100 * wr_best[0]:.1f}%")
-    if rd_best[1]:
-        best_r = (f"单侧读最好是 <code>{rd_best[1]}</code> "
-                  f"{100 * rd_best[0]:.1f}%")
-    side = "；".join(x for x in (best_w, best_r) if x)
-    if ok_w and ok_r and win != "base":
-        verdict = "读写都到了 97% 以上"
-    elif not has_wide:
-        verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
-    else:
-        verdict = ("允许的带宽旋钮里，没有一套 setup 能让读写同时 ≥ 97%。"
-                   "★ 是最差一侧达成率最高的加宽组合"
-                   + (f"。{side}" if side else "")
-                   + "。写差的约 200 cycle 不在 outstanding / 链路宽 /"
-                   " 转向宽里")
-    pareto = bw97_oc_pareto_table(bw)
-    shift = bw97_bound_shift_note(bw)
-    extra = ""
-    if pareto:
-        extra += f"""<h3>7.4　outstanding 对冲</h3>
-<p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
-outstanding，读要<b>高</b> outstanding。一个窗口做不到两边 ≥ 97%：
-写在 80 是 31,629 / 30,752 = 97.2%，读却只有 86%；读在 320 是
-33,894 / 33,228 = 98.0%，写却掉到 88%。CHI 本来就分写/读两本
-计分板，所以加宽 setup 用写 outstanding 80、读 outstanding 320，
-织物相同（D2D×2、bridge×2、转向 1）。宽 FIFO 下环按已经付过的
-<i>bridge_bw</i> / <i>turn_bw</i> 跳过 hop 堵死的队头——宽度 1 仍是
-原来的 HOL，§0 的 S0 不变。</p>
-{pareto}"""
-    if shift:
-        extra += f"""<h3>7.5　加宽定界织物</h3>
-{shift}"""
-    return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
-<p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
-FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
-只动 outstanding、D2D 链路宽、bridge 上环宽、H↔V 转向宽，
-以及必要时的横/纵/top / 注入 / 弹出宽。
-目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
-达成率都 ≥ 97%。选中的配置是 <code>{win}</code>：{_bw97_knob_txt(knobs)}。
-{verdict}。</p>
-<h3>7.1　和 §0 差在哪</h3>
-{bw97_setup_table(bw)}
-<div class="def"><b>为什么不动 buffer、动带宽。</b>
-写差的 8% 里握手只占约 2%，其余是落地口和注入口喂不饱独占的
-<i>h:dat</i> 边；读差的 13% 里有 POS retry，但下界本身是四组叠在
-同一条横环重段上。加深队列只堆库存，加宽 D2D / bridge / 横环才改
-每拍能过的 flit 数。outstanding 是覆盖 413 cycle 写 RTT 的计分板，
-不是加队列；写在窗口加大之后达成率反而掉，因为多余的在途 flit
-堵在转向和 D2D 口。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
-H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。
-<i>bridge_bw</i> / <i>turn_bw</i> &gt; 1 时，下环不再在队头 hop
-未就绪时整拍停掉——多出来的槽位给后面已经 ready 的 flit，
-FIFO 深度不动。</div>
-<h3>7.2　1 tile 扫描</h3>
-{bw97_sweep_table(bw)}
-<h3>7.3　4 tile 确认</h3>
-{figs}
-{bw97_confirm_note(bw)}
-{bw97_final_table(bw)}
-{extra}
-"""
-
-
-def _verdict(dw: float, dr: float) -> str:
-    """Describe a makespan pair without dressing up sub-1% differences."""
-    def one(d: float) -> str:
-        return "持平" if abs(d) < NOISE else ("更快" if d < 0 else "更慢")
-    w, r = one(dw), one(dr)
-    if w == r == "持平":
-        return "两个批次都在 1% 以内，等于没动"
-    if w == r:
-        return f"两个批次都{w}"
-    return f"写{w}、读{r}"
+def _verdict_read(dr: float) -> str:
+    """Describe a read makespan delta without dressing up sub-1% differences."""
+    if abs(dr) < NOISE:
+        return "读 makespan 在 1% 以内，等于没动"
+    return "读更快" if dr < 0 else "读更慢"
 
 
 def effect_text(b: dict, area: dict) -> str:
@@ -867,7 +522,6 @@ def effect_text(b: dict, area: dict) -> str:
         if s == "s0":
             continue
         cost = (rows.get(s) or {}).get("cost_ff", 0)
-        dw = makespan(b, "write", s) / max(1, makespan(b, "write", "s0")) - 1
         dr = makespan(b, "read", s) / max(1, makespan(b, "read", "s0")) - 1
         sr = spread(b, "read", s)
         s0r = spread(b, "read", "s0")
@@ -876,7 +530,7 @@ def effect_text(b: dict, area: dict) -> str:
                 f"读的组间倍差仍是 {sr:.3f}，没有改善")
         items.append(
             f"<li><b>{label(b, s)}</b>（<code>{chosen(b, s)}</code>）："
-            f"写 {dw * 100:+.1f}%、读 {dr * 100:+.1f}%，{_verdict(dw, dr)}；"
+            f"读 {dr * 100:+.1f}%，{_verdict_read(dr)}；"
             f"{fair}；新增状态 <b>{cost:,}</b> FF 等效。</li>")
     return "<ul>" + "\n".join(items) + "</ul>"
 
@@ -899,30 +553,29 @@ def grant_table(b: dict) -> str:
     for (s, cfg), per in sorted(acc.items(),
                                 key=lambda kv: (kv[0][0] != "s16g",
                                                 kv[0][1])):
-        if len(per) < 2:
+        rd = per.get("read")
+        if not rd:
             continue
         rows.append([
             "per-group" if s == "s16g" else "per-core",
             f"<code>{cfg}</code>",
             "6" if s == "s16g" else "60",
-            f"{per['write']['makespan']:,}",
-            _f(per["write"].get("finish_spread"), 3),
-            f"{per['read']['makespan']:,}",
-            _f(per["read"].get("finish_spread"), 3),
+            f"{rd['makespan']:,}",
+            _f(rd.get("finish_spread"), 3),
         ])
-    return _t(["仲裁粒度", "配置", "每 HA 表项", "写 makespan", "写 倍差",
-               "读 makespan", "读 倍差"], rows)
+    return _t(["仲裁粒度", "配置", "每 HA 表项", "读 makespan", "读 倍差"],
+              rows)
 
 
 # ---------------------------------------------------------------------------
 # the document
 # ---------------------------------------------------------------------------
 
-def _fairest(b: dict) -> dict[str, tuple[float, str, int, int]]:
+def _fairest(b: dict) -> dict[str, tuple[float, str, int]]:
     """Per grain, the confirmed config with the tightest read spread."""
     cf = b.get("confirm") or {}
     ct = int((b.get("meta") or {}).get("tiles") or 4)
-    best: dict[str, tuple[float, str, int, int]] = {}
+    best: dict[str, tuple[float, str, int]] = {}
     for r in cf.values():
         if r.get("scheme") not in ("s16", "s16g") or r.get("tiles") != ct:
             continue
@@ -931,9 +584,7 @@ def _fairest(b: dict) -> dict[str, tuple[float, str, int, int]]:
         sp = r.get("finish_spread") or 0.0
         cur = best.get(r["scheme"])
         if cur is None or sp < cur[0]:
-            w = cf.get(f"{r['scheme']}|{r['config']}|write|{ct}") or {}
-            best[r["scheme"]] = (sp, r["config"], r["makespan"],
-                                 w.get("makespan", 0))
+            best[r["scheme"]] = (sp, r["config"], r["makespan"])
     return best
 
 
@@ -957,14 +608,13 @@ def matched_text(b: dict) -> str:
 <code>{g[1]}</code> 把读的组间倍差压到 {g[0]:.3f}，makespan
 <b>{g[2]:,}</b>；per-core 的 <code>{c[1]}</code> 压到 {c[0]:.3f}，
 makespan <b>{c[2]:,}</b>。<b>公平度相同，per-group 快
-{100 * (1 - g[2] / max(1, c[2])):.1f}%</b>，写批次同样快
-{100 * (1 - g[3] / max(1, c[3])):.1f}%，而每个 HA 的服务计数表只有
+{100 * (1 - g[2] / max(1, c[2])):.1f}%</b>，而每个 HA 的服务计数表只有
 六分之一。原因很直接：per-core 要在 60 个类别之间轮转，
 一个 HA 的授权窗口被切成 60 份，谁都拿不到足够的并发把自己的
 纵环喂满；per-group 只切成 6 份，组内仍是先到先服务。</div>"""
 
 
-def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
+def build(b: dict, area: dict, rc: dict) -> str:
     t, m = b["topology"], b["meta"]
     ss = schemes_present(b)
     n_txn = m.get("n_txn", 0)
@@ -974,6 +624,7 @@ def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
     tile = m.get("tiling_size", 65536) // 1024
     st = m.get("sweep_tiles", 1)
     ct = m.get("tiles", 4)
+    study = m.get("study") or "oc80w-320r-d2d2-br2"
 
     # Numbers the conclusions quote. Read them from the data rather than
     # from the draft, so a rerun cannot leave the prose behind.
@@ -984,7 +635,6 @@ def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
     d2d_sp = "{:.3f}".format(
         max((max(r["d2d"]["up"]["spread"], r["d2d"]["down"]["spread"])
              for r in rd_rows), default=1.0))
-    sp_w0 = f"{spread(b, 'write', 's0'):.3f}"
     sp_r0 = f"{spread(b, 'read', 's0'):.3f}"
     sp_r1 = f"{spread(b, 'read', 's1'):.3f}"
     sp_r22 = f"{spread(b, 'read', 's22'):.3f}"
@@ -994,7 +644,7 @@ def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
         lb = bounds(b, op).get("bound", 0)
         return f"{100 * lb / max(1, makespan(b, op, 's0')):.0f}%"
 
-    eff_w0, eff_r0 = _eff("write"), _eff("read")
+    eff_r0 = _eff("read")
     r0, r16g = makespan(b, "read", "s0"), makespan(b, "read", "s16g")
     d_r16g = f"{100 * (1 - r16g / max(1, r0)):.1f}%"
     cost = {r["scheme"]: r["cost_ff"] for r in (area.get("rows") or [])}
@@ -1023,12 +673,12 @@ def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
             continue
         sec[s] = f"""
 <p>参数 sweep（{st} tile，{len(((b.get('grid') or {}).get(s) or {}))} 组配置，
-写读各跑一遍，按写+读 makespan 之和排序；★ 是被 {ct} tile 确认后选中的配置）：</p>
+只跑均匀读，按读 makespan 排序；★ 是被 {ct} tile 确认后选中的配置）：</p>
 {sweep_table(b, s)}
 <p>选中配置：<code>{chosen(b, s)}</code>，{knob_txt(b, s, chosen(b, s))}。
-在 {ct} tile 全量批次上，写 makespan
-<b>{makespan(b, 'write', s):,}</b>、读 makespan
-<b>{makespan(b, 'read', s):,}</b>。</p>
+在 {ct} tile 全量读批次上，读 makespan
+<b>{makespan(b, 'read', s):,}</b>
+（最慢组 CompData 完成时间）。</p>
 <img src="cc_done_{s}.png" alt="{s} 各 group 完成曲线">"""
 
     html = f"""<!doctype html>
@@ -1053,35 +703,38 @@ img {{ max-width: 100%; height: auto; margin: 0.6rem 0 1rem; }}
 code {{ font-size: 0.86em; }}
 </style></head><body>
 
-<h1>3D 堆叠 NoC 的拥塞控制方案：S0 / S1 / S22 / S16</h1>
-<p>硬件与 <code>report_ring2_stack_write_fairness.html</code>
-<b>完全一致</b>：六个 top die，每个是 20 节点双向 full ring × 2 plane
-（10 个 AI core、8 个 D2D bridge、2 个非终端节点，逐边 hop 时延沿用单环研究）；
-一个 bottom die，96 个 HA 排成 12 行 × {t['n_cols']} 列，
-6 横 + 8 纵双向 full ring，48 个挂接点即 D2D landing。
-每个 top die 的 <b>10 个 core 记为一个 group</b>，共 6 个 group。</p>
-<p>流量：每核 {burst} B burst / {stride} B stride /
+<h1>3D 堆叠 NoC 的拥塞控制方案：读侧 S0 / S1 / S22 / S16</h1>
+<p>拓扑仍是六个 top die（每个 20 节点双向 full ring × 2 plane：
+10 个 AI core、8 个 D2D bridge、2 个非终端节点）加一个 bottom die
+（96 个 HA，12 行 × {t['n_cols']} 列，6 横 + 8 纵双向 full ring，
+48 个挂接点）。每个 top die 的 <b>10 个 core 记为一个 group</b>，
+共 6 个 group。</p>
+<p>本报告的研究硬件是加宽 setup <code>{study}</code>：
+D2D×2、bridge×2、转向 1、读 outstanding
+<b>{m['core_outstanding']}</b>。写 outstanding 80 未使用——
+<b>只跑均匀读批次</b>。FIFO 深度不动（转向 64 / D2D 128 / 落地 16 /
+注入 12+8）。流量：每核 {burst} B burst / {stride} B stride /
 {tile} KB tile × {m.get('n_tiles', ct)}，地址按 burst 交织到全部
-{t['n_has']} 个 HA。<b>写批次和读批次分开跑</b>，各
-{n_txn:,} 笔（每核 {k_core:,} 笔），同一套地址、两次独立仿真，从不混合。
-每核 outstanding {m['core_outstanding']}，每个 HA 跟踪表
-{m.get('pos_depth')} 项（满了走 CHI 请求 retry，不是源端流控）。</p>
+{t['n_has']} 个 HA，共 {n_txn:,} 笔读（每核 {k_core:,} 笔）。
+每个 HA 跟踪表 {m.get('pos_depth')} 项（满了走 CHI 请求 retry）。</p>
 <div class="def"><b>怎么读这份报告。</b>
-每个方案一张图，纵轴是该 group 已经<b>完成</b>的 DAT flit 数
-（写数 WriteData，读数 CompData，都按事务退休的那一拍计），横轴是时间。
+每个方案一张图，纵轴是该 group 已经<b>完成</b>的 CompData flit 数
+（按事务退休的那一拍计），横轴是时间。这就是读操作下的
+<b>写数据完成时间</b>：HA 把数据写回请求核的时刻。
 六条线并在一起 = 织物公平；散开 = 有 group 在等别人。
 最慢那条线的右端就是 <b>makespan</b>，这是全文比较效果的主指标；
-灰带宽度是最快组与最慢组完成时刻之差，用“最慢/最快”的倍差记，
-它回答的是各 group 带宽差异那个问题。两个指标必须一起看：
-把六个 group 拉齐本身就要压住跑得快的组，只看其中一个会得出相反的结论。</div>
+灰带宽度是最快组与最慢组完成时刻之差，用“最慢/最快”的倍差记。
+两个指标必须一起看：把六个 group 拉齐本身就要压住跑得快的组。</div>
 
 <h2>0　硬件 setup</h2>
-<h3>0.1　Top die（六个，互相独立）</h3>
+<h3>0.1　本报告采用的加宽织物</h3>
+{study_hw_table(b)}
+<h3>0.2　Top die（六个，互相独立）</h3>
 {top_die_setup_table(b)}
 <h4>逐边 hop 时延</h4>
 {top_die_hop_table(b)}
 <img src="cc_top_die.png" alt="top die 拓扑">
-<h3>0.2　Bottom die（一个，承载全部 96 个 HA）</h3>
+<h3>0.3　Bottom die（一个，承载全部 96 个 HA）</h3>
 {bottom_die_setup_table(b)}
 <h4>链路时延</h4>
 {bottom_die_link_table(b)}
@@ -1096,11 +749,11 @@ code {{ font-size: 0.86em; }}
 把 {len(ss) - 1} 个方案的全部 {sum(len(g) for k, g in (b.get('grid') or {}).items())}
 组配置都按这个规模跑一遍不现实。所以分两阶段：</p>
 <ul>
-<li><b>阶段一</b>（{st} tile）：每个方案的<b>全部</b>配置，写读各一遍。
+<li><b>阶段一</b>（{st} tile）：每个方案的<b>全部</b>配置，只跑均匀读。
 同样的 60 个核覆盖同样的 96 个 HA，只是事务数少四分之一，
 用来定<b>配置之间的排序</b>。</li>
-<li><b>阶段二</b>（{ct} tile）：阶段一每个方案的前二名，按全量规模重跑，
-取写+读 makespan 之和最小的那个作为该方案的代表。</li>
+<li><b>阶段二</b>（{ct} tile）：阶段一每个方案的前二名，按全量读批次重跑，
+取读 makespan 最小的那个作为该方案的代表。</li>
 </ul>
 <p><b>报告里所有曲线、所有最终数字都来自阶段二</b>；阶段一只决定谁有资格出现，
 并且下面把整张网格都列出来，选择过程可以复核。
@@ -1110,15 +763,11 @@ code {{ font-size: 0.86em; }}
 <p>S0 是对照组：只要 outstanding 有空位、环上有 slot 就发，
 没有任何窗口、赤字或授权。它给出的组间差异就是<b>织物本身</b>的差异。</p>
 <img src="cc_done_s0.png" alt="S0 各 group 完成曲线">
-<h4>各 group 完成时刻</h4>
-<h5>写</h5>
-{finish_table(b, "write")}
-<h5>读</h5>
+<h4>各 group 完成时刻（均匀读）</h4>
 {finish_table(b, "read")}
-<p>写批次六个 group 基本同时收尾（倍差
-{_f(spread(b, 'write', 's0'), 3)}），读批次却明显散开（倍差
-{_f(spread(b, 'read', 's0'), 3)}）。第 6 节给出这个差异的根因，
-结论是它不是调度不公，而是结构性的。</p>
+<p>读批次六个 group 明显散开（倍差
+{_f(spread(b, 'read', 's0'), 3)}）。第 6 节给出这个差异的根因：
+它不是调度不公，而是 CompData 汇聚段的结构负载分成两档。</p>
 
 <h2>3　S1：源端 AIMD 控速</h2>
 <p>每个 core 维持一个发送窗口，按 6 bit 拥塞总线广播回来的等级
@@ -1149,7 +798,7 @@ code {{ font-size: 0.86em; }}
 <h2>5　S16：目的端授权（改进为 per-group 粒度）</h2>
 <p>Homa 式接收端授权：HA 不再见到 REQ 就回 DBIDResp，
 而是按自己的服务计数挑一个类别授权，授权本身搭在既有的
-DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
+CompData 上，不加总线、不加新报文。
 原方案按 <b>core</b> 仲裁，每个 HA 要维护 60 项服务计数；
 改进后按 <b>group</b> 仲裁——先选累计服务最少的 group，
 组内再轮转——每个 HA 只需要 6 项，并且可选按组预留配额下限。</p>
@@ -1184,13 +833,8 @@ DBIDResp（写）/ CompData（读）上，不加总线、不加新报文。
 结构下界，单位直接是 cycle）。</p>
 {rootcause_text(b, rc)}
 <img src="cc_rootcause.png" alt="结构瓶颈与实测完成时刻">
-<h4>写</h4>
-{rootcause_table(rc, "write")}
-<h4>读</h4>
 {rootcause_table(rc, "read")}
 <div class="def"><b>根因。</b>
-写的 DAT 从挂接点<b>发散</b>到整行 HA，每个 group 路径上最热的链路
-基本由本组独占，六个 group 的下界几乎相等，所以 S0 的写本来就齐；
 读的 CompData 从整行 HA <b>汇聚</b>回本组挂接点，
 汇聚段被相邻 group 共用，靠中间的两个 group 撞在负载较轻的段上、
 其余四个撞在同一条重段上，结构下界就分成了两档。
@@ -1213,13 +857,12 @@ S22 的赤字表用它实际跑的成员数，S16 的服务表用它的仲裁粒
 <li><b>读的组间差异是拓扑造成的，不是调度造成的。</b>
 六个 group 的工作量只差 4%，各自八条 D2D 上下行也基本均衡（倍差 {d2d_sp}），
 但各自路径上最热链路的负载分成 {rc_hi} 和 {rc_lo} 两档（差 {rc_gap}），
-与实测完成顺序同向同量级。写批次没有这一档差距，
-所以写本来就齐（倍差 {sp_w0}），读本来就不齐（倍差 {sp_r0}）。</li>
-<li><b>这块织物的 makespan 余量本来就不到一成，源端方案分不到。</b>
-S0 已经跑到写下界的 {eff_w0}、读下界的 {eff_r0}。
+与实测完成顺序同向同量级。读本来就不齐（倍差 {sp_r0}）。</li>
+<li><b>这块加宽织物的读 makespan 余量本来就不大，源端方案分不到。</b>
+S0 已经跑到读下界的 {eff_r0}。
 S1 与 S22 都只动源端：S1 少发一点，S22 让行加绕行，
-两者对 makespan 的影响都在 ±1% 以内，对读的组间倍差<b>完全没有改善</b>
-（S1 {sp_r1}、S22 {sp_r22}，S0 是 {sp_r0}）。
+两者对读 makespan 的影响都在测量噪声附近，对读的组间倍差也
+<b>没有结构性改善</b>（S1 {sp_r1}、S22 {sp_r22}，S0 是 {sp_r0}）。
 瓶颈是一条<b>过境</b>链路上别人的 flit，源端排序改不了它要驮的总量。</li>
 <li><b>S22 的组粒度在这个 fabric 上结构性失效，这是拓扑的结论而不是调参的结论。</b>
 一个 top 环恰好就是一个 group，组间在环上永远不相遇，让行的判定恒为假；
@@ -1241,7 +884,6 @@ DBIDResp / CompData 上，不加报文、不加总线、不加缓存。</li>
 </ol>
 </div>
 
-{bw97_section(bw97 or {})}
 <h2>附录　完整网格</h2>
 {"".join(f"<h4>{label(b, s)}</h4>{sweep_table(b, s)}" for s in ss if s != "s0")}
 </body></html>"""
@@ -1254,8 +896,9 @@ def main() -> None:
     b = json.loads(FOCUS.read_text())
     area = json.loads(AREA.read_text()) if AREA.exists() else {}
     rc = json.loads(RCAUSE.read_text()) if RCAUSE.exists() else {}
-    bw97 = json.loads(BW97.read_text()) if BW97.exists() else {}
-    OUT.write_text(build(b, area, rc, bw97))
+    if not (rc.get("ops") or {}).get("read") and (b.get("root_cause") or {}).get("read"):
+        rc = {"ops": {"read": b["root_cause"]["read"]}}
+    OUT.write_text(build(b, area, rc))
     print(f"wrote {OUT}  ({OUT.stat().st_size / 1024:.0f} KB)")
 
 
