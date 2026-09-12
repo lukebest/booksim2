@@ -118,6 +118,11 @@ GRID: dict[str, dict[str, Any]] = {
                                    bridge_bw=2, turn_bw=2, v_bw=2),
     "oc80-d2d4-br4-turn2": dict(core_outstanding=80, d2d_bw=4,
                                 bridge_bw=4, turn_bw=2),
+    # turn4 at oc80 was worse than turn2. If the knee wants less
+    # turn aggression, turn1 (the published tap) may pick up the
+    # leftover 209 cycles without dropping the h:dat floor.
+    "oc80-d2d2-br2": dict(core_outstanding=80, d2d_bw=2, bridge_bw=2),
+    "oc64-d2d2-br2": dict(core_outstanding=64, d2d_bw=2, bridge_bw=2),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -159,6 +164,8 @@ COST = {
     "oc80-d2d2-br2-turn2-inj2": 5,
     "oc80-d2d2-br2-turn2-v2": 6,
     "oc80-d2d4-br4-turn2": 6,
+    "oc80-d2d2-br2": 4,
+    "oc64-d2d2-br2": 4,
 }
 
 
@@ -349,6 +356,8 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "oc80-d2d2-br2-turn2-inj2",
         "oc80-d2d2-br2-turn2-v2",
         "oc80-d2d4-br4-turn2",
+        "oc80-d2d2-br2",
+        "oc64-d2d2-br2",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
