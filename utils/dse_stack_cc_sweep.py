@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
-"""Two-stage congestion-control sweep on the 3D-stacked fabric.
+"""Two-stage congestion-control sweep: read-only, adopted wide fabric.
+
+The study hardware is `oc80w-320r-d2d2-br2`: D2D×2, bridge×2, turn 1,
+read outstanding 320. Write outstanding 80 is unused because this sweep
+does not run a write batch. FIFO depths stay at the published values
+(turn 64 / D2D 128 / landing 16 / inject 12+8).
 
 The question the report has to answer is which *configuration* of each
-scheme is worth showing, and the honest way to answer it is to measure every
-candidate rather than quote the ring study's operating point. A full 4-tile
-batch is 122,880 transactions and takes tens of minutes, so a 37-configuration
-grid across write and read is not affordable at that size. It is affordable at
-one tile, where the same 60 cores cover the same 96 HAs with a quarter of the
-transactions and the ordering between configurations is what is being asked
-for, not the absolute number. So:
+scheme is worth showing on that fabric, ranked by how soon the slowest
+top-die group retires its last CompData flit. A full 4-tile read batch
+is 122,880 transactions and takes tens of minutes, so the grid is first
+ranked at one tile:
 
-    stage 1  `--stage sweep`    every configuration, 1 tile, write and read
+    stage 1  `--stage sweep`    every configuration, 1 tile, read only
     stage 2  `--stage confirm`  the survivors, 4 tiles, the numbers that ship
 
-Stage 2 is where every figure and table in the report comes from. Stage 1 only
-decides which knob settings get to appear there, and the report prints its
-whole grid so the choice can be audited.
+Stage 2 is where every figure and table in the report come from. Stage 1
+only decides which knob settings get to appear there, and the report
+prints its whole grid so the choice can be audited.
 
-Results are keyed by `scheme|config|op|tiles` and merged into the store on
-every run, so an interrupted sweep resumes instead of restarting.
+Results live in `results/stack_cc_read_sweep.json` (not the older
+write+read store) and are keyed by `scheme|config|op|tiles` so an
+interrupted sweep resumes instead of restarting.
 
 Usage:
-    python3 dse_stack_cc_sweep.py --stage sweep   --jobs 3
-    python3 dse_stack_cc_sweep.py --stage confirm --jobs 3 --top-k 2
+    python3 dse_stack_cc_sweep.py --stage sweep   --jobs 4
+    python3 dse_stack_cc_sweep.py --stage confirm --jobs 4 --top-k 2
     python3 dse_stack_cc_sweep.py --stage base    --jobs 2
     python3 dse_stack_cc_sweep.py --emit
 """
@@ -41,23 +44,29 @@ from dse_stack_write_fair import (BURST_LEN, BW_WINDOW, FABRIC, M_RSP,
                                   M_WDATA, ROUTE_LABEL, STRIDE, TILING_SIZE,
                                   binding_table, die_board_table, root_cause,
                                   run_scheme, topology_summary, vseat_load)
-from rg_stack_topo import (StackTopology, build_tiled_read, build_tiled_write,
-                           ha_histogram)
+from rg_stack_topo import StackTopology, build_tiled_read, ha_histogram
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE = ROOT / "results" / "stack_cc_sweep.json"
-FOCUS = ROOT / "results" / "stack_cc_focus.json"
+STORE = ROOT / "results" / "stack_cc_read_sweep.json"
+FOCUS = ROOT / "results" / "stack_cc_read_focus.json"
 
-OPS = ("write", "read")
+OPS = ("read",)
 SWEEP_TILES = 1
 CONFIRM_TILES = 4
-OC = 128
+OC = 320
 POS = 512
+D2D_BW = 2
+BRIDGE_BW = 2
+TURN_BW = 1
+STUDY = "oc80w-320r-d2d2-br2"
+WIDE = dict(d2d_bw=D2D_BW, bridge_bw=BRIDGE_BW)
+FAB_BW = {"top": 1, "d2d": D2D_BW, "h": 1, "v": 1}
 
-# Equal-share DAT rate per core at the 4-tile bound: 2048 txn x 4 flits over
-# the 30,752-cycle composite bound. The bus-free S22 variant accrues this
-# instead of learning the mean from the broadcast.
-TARGET_PER_CORE = 0.266
+# Equal-share DAT rate per core at the 4-tile same-setup read bound:
+# 2048 txn × 4 CompData flits over the 33,228-cycle H:dat floor.
+# The bus-free S22 variant accrues this instead of learning the mean
+# from the broadcast.
+TARGET_PER_CORE = 0.2465
 TARGET_PER_GROUP = TARGET_PER_CORE * 10
 
 
@@ -206,8 +215,9 @@ def _txns(op: str, tiles: int) -> list:
     key = (op, tiles)
     got = _TXNS.get(key)
     if got is None:
-        build = build_tiled_write if op == "write" else build_tiled_read
-        got = build(_TOPO, n_tiles=tiles, seed=0)
+        if op != "read":
+            raise ValueError(f"this sweep is read-only; got op={op}")
+        got = build_tiled_read(_TOPO, n_tiles=tiles, seed=0)
         _TXNS[key] = got
     return got
 
@@ -249,10 +259,13 @@ def run_job(spec: tuple[str, str, str, int, bool]) -> tuple[str, dict[str, Any]]
     hist = ha_histogram(_TOPO, txns)
     stall = max(80_000, 160 * hist["per_core_txn"])
     t0 = time.time()
+    extra = dict(WIDE)
+    extra.update(kw)
     r = run_scheme(_TOPO, txns, scheme, route="bound", seed=0,
                    keep_trace=False, core_outstanding=OC, ha_pos_depth=POS,
-                   stall_after=stall, **kw)
-    bound = _TOPO.write_bounds(txns, m_req=1, m_rsp=M_RSP, m_wdata=M_WDATA)
+                   stall_after=stall, **extra)
+    bound = _TOPO.write_bounds(txns, m_req=1, m_rsp=M_RSP, m_wdata=M_WDATA,
+                               fab_bw=FAB_BW)
     r["eff"] = round(bound["bound"] / max(1, r["makespan"]), 4)
     rec = _light(r)
     rec.update({"scheme": scheme, "config": cfg, "op": op, "tiles": tiles,
@@ -350,10 +363,10 @@ def sweep_specs(schemes: Iterable[str], tiles: int) -> list[tuple]:
 
 def rank(store: dict[str, Any], scheme: str, tiles: int
          ) -> list[tuple[str, int, dict[str, int]]]:
-    """Configs of one scheme by summed write+read makespan, best first.
+    """Configs of one scheme by read makespan, best first.
 
-    A configuration that fails to drain either batch is not ranked at all: a
-    short makespan on an unfinished batch is not a result.
+    A configuration that fails to drain the read batch is not ranked at
+    all: a short makespan on an unfinished batch is not a result.
     """
     rows = []
     for cfg in GRID[scheme]:
@@ -375,7 +388,15 @@ def confirm_specs(store: dict[str, Any], schemes: Iterable[str], top_k: int,
                   tiles: int = CONFIRM_TILES) -> list[tuple]:
     out = []
     for s in schemes:
-        picks = [c for c, _, _ in rank(store, s, SWEEP_TILES)[:top_k]]
+        picks = []
+        seen: set[int] = set()
+        for cfg, tot, _ in rank(store, s, SWEEP_TILES):
+            if tot in seen:
+                continue
+            seen.add(tot)
+            picks.append(cfg)
+            if len(picks) >= top_k:
+                break
         if not picks:
             print(f"[confirm] {s}: no drained configuration at "
                   f"{SWEEP_TILES} tile(s); skipped")
@@ -397,7 +418,7 @@ def base_specs(tiles: int) -> list[tuple]:
 
 def pick_final(store: dict[str, Any], scheme: str,
                tiles: int = CONFIRM_TILES) -> str | None:
-    """The confirmed config with the lowest write+read makespan."""
+    """The confirmed config with the lowest read makespan."""
     best, best_t = None, None
     for cfg in GRID.get(scheme, {"base": {}}):
         per = []
@@ -439,22 +460,23 @@ def emit(store: dict[str, Any], tiles: int = CONFIRM_TILES) -> None:
         for op in OPS:
             per_op[op][s] = rows[op]
 
-    wr = build_tiled_write(topo, n_tiles=tiles, seed=0)
     rd = build_tiled_read(topo, n_tiles=tiles, seed=0)
     fabric = dict(FABRIC)
-    fabric.update({"core_outstanding": OC, "ha_pos_depth": POS})
+    fabric.update({"core_outstanding": OC, "ha_pos_depth": POS, **WIDE})
     topology = topology_summary(topo)
     blob = {
         "meta": {
             "tiles": tiles, "sweep_tiles": SWEEP_TILES,
             "n_tiles": tiles,
+            "study": STUDY, "ops": list(OPS),
             "core_outstanding": OC, "pos_depth": POS,
+            "d2d_bw": D2D_BW, "bridge_bw": BRIDGE_BW, "turn_bw": TURN_BW,
             "m_req": 1, "m_rsp": M_RSP, "m_wdata": M_WDATA,
-            "bw_window": BW_WINDOW, "fabric": fabric,
+            "bw_window": BW_WINDOW, "fabric": fabric, "fab_bw": dict(FAB_BW),
             "burst_len": BURST_LEN, "stride": STRIDE,
             "tiling_size": TILING_SIZE,
             "route_label": ROUTE_LABEL, "rtt": topology["rtt"],
-            "n_txn": len(wr), "txn_per_core": len(wr) // len(topo.cores),
+            "n_txn": len(rd), "txn_per_core": len(rd) // len(topo.cores),
             "chosen": chosen, "label": LABEL,
             "wall_s": round(sum(r.get("wall_s", 0.0)
                                 for r in store["runs"].values()), 1),
@@ -472,16 +494,13 @@ def emit(store: dict[str, Any], tiles: int = CONFIRM_TILES) -> None:
                     if r["tiles"] == tiles},
         "schemes": {op: per_op[op] for op in OPS},
         "workload": {
-            "kind": "tiled_separate", "n_tiles": tiles,
-            "write": {"n_txn": len(wr), "ha_hist": ha_histogram(topo, wr)},
+            "kind": "tiled_read", "n_tiles": tiles,
             "read": {"n_txn": len(rd), "ha_hist": ha_histogram(topo, rd)},
         },
     }
-    s0w = per_op["write"].get("s0")
     s0r = per_op["read"].get("s0")
-    if s0w and s0r:
+    if s0r:
         blob["root_cause"] = {
-            "write": root_cause(topo, _rehydrate(s0w), vseat_load(topo, wr)),
             "read": root_cause(topo, _rehydrate(s0r), vseat_load(topo, rd)),
         }
     FOCUS.write_text(json.dumps(blob, indent=1, ensure_ascii=False))
@@ -533,8 +552,10 @@ def main() -> None:
         for s in args.schemes:
             print(f"\n{s}")
             for cfg, tot, per in rank(store, s, SWEEP_TILES):
-                print(f"  {cfg:26s} sum={tot:7d}  "
-                      + "  ".join(f"{op}={per[op]}" for op in OPS))
+                print(f"  {cfg:26s} {tot:7d}  spread="
+                      + ",".join(
+                          f"{(store['runs'].get(job_key(s, cfg, op, SWEEP_TILES)) or {}).get('finish_spread', 0):.3f}"
+                          for op in OPS))
         return
 
     if args.stage == "sweep":

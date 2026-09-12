@@ -96,34 +96,34 @@
   },
   {
    "scheme": "s22",
-   "config": "core-w64-t2-b9-d8",
+   "config": "core-w64-t2",
    "label": "S22 赤字流控（让行 / 绕行）",
-   "cost_ff": 189540,
+   "cost_ff": 177360,
    "breakdown": {
-    "bus": 540,
-    "table": 32400,
+    "bus": 360,
+    "table": 28800,
     "counters": 600,
-    "arith": 156000,
+    "arith": 147600,
     "queue": 0
    },
    "spec": {
-    "bus_bits": 9,
+    "bus_bits": 6,
     "bus_scope": 60,
     "table_entries": 60,
-    "table_bits": 9,
+    "table_bits": 8,
     "table_scope": 60,
     "counter_bits": 10,
     "counter_scope": 60,
     "arith": {
      "addtree60": 1,
      "add": 2,
-     "cmp": 8
+     "cmp": 1
     },
     "arith_scope": 60,
     "dir_inj_depth": 8,
     "queue_scope": 0
    },
-   "note": "按 core记赤字，表 60 项 × 9 bit，落在 60 个站点；总线 9 bit；前瞻 8 项要 8 个比较器"
+   "note": "按 core记赤字，表 60 项 × 8 bit，落在 60 个站点；总线 6 bit；前瞻 0 项要 1 个比较器"
   },
   {
    "scheme": "s16",

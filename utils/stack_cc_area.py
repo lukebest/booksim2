@@ -26,7 +26,7 @@ its arbitration grain, and the inject depth from the parameters the winning
 configuration used.
 
 Usage:
-    python3 stack_cc_area.py            # from results/stack_cc_focus.json
+    python3 stack_cc_area.py            # from results/stack_cc_read_focus.json
     python3 stack_cc_area.py --list
 """
 
@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-FOCUS = ROOT / "results" / "stack_cc_focus.json"
+FOCUS = ROOT / "results" / "stack_cc_read_focus.json"
 OUT = ROOT / "results" / "stack_cc_area.json"
 
 # Geometry of the fabric the cost is paid on.
@@ -193,8 +193,10 @@ def build(blob: dict[str, Any]) -> dict[str, Any]:
             continue
         cfg = chosen.get(s, "base")
         knobs = (grid.get(s) or {}).get(cfg, {})
-        wr = ((blob.get("schemes") or {}).get("write") or {}).get(s) or {}
-        fc = ((wr.get("full") or {}).get("fc")) or {}
+        rec = ((blob.get("schemes") or {}).get("read") or {}).get(s) or {}
+        if not rec:
+            rec = ((blob.get("schemes") or {}).get("write") or {}).get(s) or {}
+        fc = ((rec.get("full") or {}).get("fc")) or {}
         spec, note = fn(fc, knobs)
         cost, brk = hw_cost(spec)
         rows.append({

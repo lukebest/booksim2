@@ -32,7 +32,7 @@ are 5,760 pairs against 122,880 transactions and each pair's route is fixed
 `least_occupied` does on a batch this balanced.
 
 Usage:
-    python3 stack_cc_rootcause.py            # 4 tiles, write and read
+    python3 stack_cc_rootcause.py            # 4 tiles, read only
 """
 
 from __future__ import annotations
@@ -44,11 +44,10 @@ from pathlib import Path
 from typing import Any
 
 from dse_ring2_write_fair import pearson, spearman
-from rg_stack_topo import (N_TILES, StackTopology, Txn, build_tiled_read,
-                           build_tiled_write)
+from rg_stack_topo import N_TILES, StackTopology, Txn, build_tiled_read
 
 ROOT = Path(__file__).resolve().parents[1]
-FOCUS = ROOT / "results" / "stack_cc_focus.json"
+FOCUS = ROOT / "results" / "stack_cc_read_focus.json"
 OUT = ROOT / "results" / "stack_cc_rootcause.json"
 
 M_REQ, M_RSP, M_WDATA = 1, 2, 4
@@ -195,7 +194,7 @@ def main() -> None:
     topo = StackTopology()
     blob = json.loads(FOCUS.read_text()) if FOCUS.exists() else {}
     out: dict[str, Any] = {"tiles": args.tiles, "ops": {}}
-    for op, build in (("write", build_tiled_write), ("read", build_tiled_read)):
+    for op, build in (("read", build_tiled_read),):
         txns = build(topo, n_tiles=args.tiles, seed=0)
         res = analyse(topo, txns, op)
         fin = _measured(blob, op)
