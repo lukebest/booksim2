@@ -91,6 +91,19 @@ GRID: dict[str, dict[str, Any]] = {
     "oc224-all2-turn2": dict(core_outstanding=224, d2d_bw=2, bridge_bw=2,
                              h_bw=2, v_bw=2, top_bw=2, inject_bw=2,
                              eject_bw=2, turn_bw=2),
+    # Outstanding Pareto tails. Write on the published h:dat bound gets
+    # *better* as the window shrinks (oc128 = 95.6%, oc256 = 89.1%): extra
+    # inflight just piles onto the turn/D2D hold. Read wants the opposite
+    # (oc128 = 86.1%, oc256 = 96.0%). Neither side has cleared 97% at its
+    # own sweet spot, so probe below 128 and above 256 before declaring
+    # the allowed knobs exhausted.
+    "oc64-d2d2-br2-turn2": dict(core_outstanding=64, d2d_bw=2,
+                                bridge_bw=2, turn_bw=2),
+    "oc80-d2d2-br2-turn2": dict(core_outstanding=80, d2d_bw=2,
+                                bridge_bw=2, turn_bw=2),
+    "oc96-d2d2-br2-turn2": dict(core_outstanding=96, d2d_bw=2,
+                                bridge_bw=2, turn_bw=2),
+    "oc320-d2d2-br2": dict(core_outstanding=320, d2d_bw=2, bridge_bw=2),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -123,6 +136,10 @@ COST = {
     "d2d2-br2-h2-turn2": 7,
     "oc192-d2d2-br2-turn4": 6,
     "oc224-all2-turn2": 10,
+    "oc64-d2d2-br2-turn2": 4,
+    "oc80-d2d2-br2-turn2": 4,
+    "oc96-d2d2-br2-turn2": 4,
+    "oc320-d2d2-br2": 4,
 }
 
 
@@ -304,6 +321,10 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "d2d2-br2-h2-turn2",
         "oc192-d2d2-br2-turn4",
         "oc224-all2-turn2",
+        "oc64-d2d2-br2-turn2",
+        "oc80-d2d2-br2-turn2",
+        "oc96-d2d2-br2-turn2",
+        "oc320-d2d2-br2",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]

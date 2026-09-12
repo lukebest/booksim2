@@ -635,6 +635,92 @@ def bw97_final_table(bw: dict) -> str:
                "读 makespan", "读下界", "读达成率"], rows)
 
 
+def _bw97_knobs(bw: dict, cfg: str) -> dict:
+    return dict((bw.get("grid") or {}).get(cfg) or {})
+
+
+def _bw97_published_bound(kw: dict) -> bool:
+    """True when H/V/top stay at width 1, so the §0 h:dat floor is unchanged."""
+    return (int(kw.get("h_bw", 1)) == 1
+            and int(kw.get("v_bw", 1)) == 1
+            and int(kw.get("top_bw", 1)) == 1)
+
+
+def bw97_oc_pareto_table(bw: dict) -> str:
+    """Outstanding-only ladder on the published bound (D2D×2, bridge×2)."""
+    rows = []
+    for cfg in bw.get("grid") or {}:
+        kw = _bw97_knobs(bw, cfg)
+        if cfg == "base" or not _bw97_published_bound(kw):
+            continue
+        if int(kw.get("d2d_bw", 1)) != 2 or int(kw.get("bridge_bw", 1)) != 2:
+            continue
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr or not rd:
+            continue
+        oc = int(kw.get("core_outstanding", 128))
+        turn = int(kw.get("turn_bw", 1))
+        rows.append((oc, turn, cfg, wr, rd))
+    if not rows:
+        return ""
+    rows.sort()
+    win = (bw.get("meta") or {}).get("winner")
+    out = []
+    for oc, turn, cfg, wr, rd in rows:
+        star = " ★" if cfg == win else ""
+        out.append([
+            f"{oc}",
+            f"{turn}",
+            f"<code>{cfg}</code>{star}",
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+            f"{float(wr.get('finish_spread') or 0):.3f}",
+            f"{float(rd.get('finish_spread') or 0):.3f}",
+        ])
+    return _t(["outstanding", "转向宽", "配置", "写 makespan", "写达成率",
+               "读 makespan", "读达成率", "写组间倍差", "读组间倍差"], out)
+
+
+def bw97_bound_shift_note(bw: dict) -> str:
+    """Why doubling the bound-setting fabric loses the ratio."""
+    specs = (
+        ("oc256-d2d2-br2", "横环仍是 1，下界停在 §0 的 h:dat"),
+        ("oc256-d2d2-br2-h2", "横环×2 之后写下界改由 v:dat 决定"),
+        ("oc256-d2d2-br2-h2-v2", "再把纵环×2，下界回到更窄的 h:dat"),
+        ("oc256-all2", "四条织物一起×2，下界再掉一档"),
+    )
+    rows = []
+    for cfg, why in specs:
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr or not rd:
+            continue
+        rows.append([
+            f"<code>{cfg}</code>",
+            why,
+            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+        ])
+    if not rows:
+        return ""
+    table = _t(["配置", "下界怎么动", "写下界", "写 makespan", "写达成率",
+                "读下界", "读 makespan", "读达成率"], rows)
+    return f"""<div class="def"><b>加宽正在定下界的那条边，达成率通常会掉。</b>
+解析下界是「最热那条边的占用 / 该边宽度」。横环×2 把写的
+<i>h:dat</i> 30752 打成 15376，但纵环 DAT 仍要 20496 拍，下界只降到
+20496；实测写只降到 23728，组 0/1 还卡在纵环上（倍差 1.43），达成率
+从 89% 掉到 86%。再把纵环×2，下界跟到 15376，makespan 只跟到 18454，
+又掉到 83%。读在横环×2 时已经 98.9%，再加宽纵环反而把四组重新叠到
+更窄的横环上，倍差回到 1.75。所以允许的带宽旋钮里，<b>不能</b>靠
+把定下界的织物翻倍来抬达成率；只能在下界不动的前提下挤握手和转向。</div>
+{table}"""
+
+
 def bw97_confirm_note(bw: dict) -> str:
     items = []
     for cfg in bw.get("grid") or {}:
@@ -673,17 +759,48 @@ def bw97_section(bw: dict) -> str:
         figs = "<p>4 tile 确认曲线还在跑，下表是 1 tile 扫描。</p>"
     has_wide = any(c != "base" and _bw97_rec(bw, c, "write")
                    for c in (bw.get("grid") or {}))
+    best_w = best_r = ""
+    confirm = bw.get("confirm") or {}
+    wr_best = rd_best = (0.0, "")
+    for cfg, ops in confirm.items():
+        if cfg == "base":
+            continue
+        w, r = (ops or {}).get("write") or {}, (ops or {}).get("read") or {}
+        if w.get("makespan") and float(w.get("eff") or 0) > wr_best[0]:
+            wr_best = (float(w["eff"]), cfg)
+        if r.get("makespan") and float(r.get("eff") or 0) > rd_best[0]:
+            rd_best = (float(r["eff"]), cfg)
+    if wr_best[1]:
+        best_w = (f"单侧写最好是 <code>{wr_best[1]}</code> "
+                  f"{100 * wr_best[0]:.1f}%")
+    if rd_best[1]:
+        best_r = (f"单侧读最好是 <code>{rd_best[1]}</code> "
+                  f"{100 * rd_best[0]:.1f}%")
+    side = "；".join(x for x in (best_w, best_r) if x)
     if ok_w and ok_r and win != "base":
         verdict = "读写都到了 97% 以上"
     elif not has_wide:
         verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
     else:
-        verdict = "还没两边都到 97%，★ 是目前最差一侧达成率最高的加宽组合"
+        verdict = ("还没两边都到 97%，★ 是目前最差一侧达成率最高的加宽组合"
+                   + (f"。{side}" if side else ""))
+    pareto = bw97_oc_pareto_table(bw)
+    shift = bw97_bound_shift_note(bw)
+    extra = ""
+    if pareto:
+        extra += f"""<h3>7.4　outstanding 对冲</h3>
+<p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
+outstanding，读要<b>高</b> outstanding。两边的最优点中间没有同时 ≥ 97%
+的交叉。97% 对应写 makespan ≤ 31,703、读 ≤ 34,256。</p>
+{pareto}"""
+    if shift:
+        extra += f"""<h3>7.5　加宽定界织物</h3>
+{shift}"""
     return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
 <p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
 FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
-只翻倍 outstanding、D2D 链路宽、bridge 上环宽、H↔V 转向宽，
-以及必要时的横/纵/top 环宽。
+只动 outstanding、D2D 链路宽、bridge 上环宽、H↔V 转向宽，
+以及必要时的横/纵/top / 注入 / 弹出宽。
 目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
 达成率都 ≥ 97%。选中的配置是 <code>{win}</code>：{_bw97_knob_txt(knobs)}。
 {verdict}。</p>
@@ -693,8 +810,9 @@ FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
 写差的 8% 里握手只占约 2%，其余是落地口和注入口喂不饱独占的
 <i>h:dat</i> 边；读差的 13% 里有 POS retry，但下界本身是四组叠在
 同一条横环重段上。加深队列只堆库存，加宽 D2D / bridge / 横环才改
-每拍能过的 flit 数。outstanding 从 128 提到 256 是为了盖住 413 cycle
-的写 RTT，不是加队列。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
+每拍能过的 flit 数。outstanding 是覆盖 413 cycle 写 RTT 的计分板，
+不是加队列；写在窗口加大之后达成率反而掉，因为多余的在途 flit
+堵在转向和 D2D 口。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
 H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。</div>
 <h3>7.2　1 tile 扫描</h3>
 {bw97_sweep_table(bw)}
@@ -702,6 +820,7 @@ H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。</div>
 {figs}
 {bw97_confirm_note(bw)}
 {bw97_final_table(bw)}
+{extra}
 """
 
 

@@ -170,6 +170,29 @@
    "inject_bw": 2,
    "eject_bw": 2,
    "turn_bw": 2
+  },
+  "oc64-d2d2-br2-turn2": {
+   "core_outstanding": 64,
+   "d2d_bw": 2,
+   "bridge_bw": 2,
+   "turn_bw": 2
+  },
+  "oc80-d2d2-br2-turn2": {
+   "core_outstanding": 80,
+   "d2d_bw": 2,
+   "bridge_bw": 2,
+   "turn_bw": 2
+  },
+  "oc96-d2d2-br2-turn2": {
+   "core_outstanding": 96,
+   "d2d_bw": 2,
+   "bridge_bw": 2,
+   "turn_bw": 2
+  },
+  "oc320-d2d2-br2": {
+   "core_outstanding": 320,
+   "d2d_bw": 2,
+   "bridge_bw": 2
   }
  },
  "sweep": {
