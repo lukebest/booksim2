@@ -388,7 +388,15 @@ def confirm_specs(store: dict[str, Any], schemes: Iterable[str], top_k: int,
                   tiles: int = CONFIRM_TILES) -> list[tuple]:
     out = []
     for s in schemes:
-        picks = [c for c, _, _ in rank(store, s, SWEEP_TILES)[:top_k]]
+        picks = []
+        seen: set[int] = set()
+        for cfg, tot, _ in rank(store, s, SWEEP_TILES):
+            if tot in seen:
+                continue
+            seen.add(tot)
+            picks.append(cfg)
+            if len(picks) >= top_k:
+                break
         if not picks:
             print(f"[confirm] {s}: no drained configuration at "
                   f"{SWEEP_TILES} tile(s); skipped")
@@ -544,8 +552,10 @@ def main() -> None:
         for s in args.schemes:
             print(f"\n{s}")
             for cfg, tot, per in rank(store, s, SWEEP_TILES):
-                print(f"  {cfg:26s} read={tot:7d}  "
-                      + "  ".join(f"{op}={per[op]}" for op in OPS))
+                print(f"  {cfg:26s} {tot:7d}  spread="
+                      + ",".join(
+                          f"{(store['runs'].get(job_key(s, cfg, op, SWEEP_TILES)) or {}).get('finish_spread', 0):.3f}"
+                          for op in OPS))
         return
 
     if args.stage == "sweep":
