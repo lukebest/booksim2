@@ -1289,6 +1289,13 @@ class StackBaseSim:
         return [reqs[i] for i in idx]
 
     def _drain_xfer(self) -> None:
+        """Board up to `bridge_bw` / `turn_bw` flits from one transfer FIFO.
+
+        Width 1 keeps the original head-of-line rule: one miss ends the
+        drain. Wider taps already paid for extra slots; a hop miss on the
+        head must not waste them -- later flits may want a free hop.
+        FIFO depths are unchanged; only which ready bodies may leave.
+        """
         for key in list(self.active_xq):
             q = self.xq[key]
             if not q:
@@ -1296,17 +1303,29 @@ class StackBaseSim:
                 continue
             n = (max(1, int(self.p.bridge_bw)) if self._xfer_is_d2d(key)
                  else max(1, int(self.p.turn_bw)))
+            items = list(q)
+            q.clear()
             launched = 0
-            while q and launched < n:
-                f = q[0]
+            held: list[Flit] = []
+            for idx, f in enumerate(items):
+                if launched >= n:
+                    held.extend(items[idx:])
+                    break
                 if f.turn_ready > self.t:
-                    break
+                    held.append(f)
+                    if n <= 1:
+                        held.extend(items[idx + 1:])
+                        break
+                    continue
                 if self._launch(f, inring=False):
-                    q.popleft()
                     launched += 1
-                else:
-                    self.st["n_turn_board_fail"] += 1
+                    continue
+                self.st["n_turn_board_fail"] += 1
+                held.append(f)
+                if n <= 1:
+                    held.extend(items[idx + 1:])
                     break
+            q.extend(held)
             if not q:
                 self.active_xq.pop(key, None)
 
