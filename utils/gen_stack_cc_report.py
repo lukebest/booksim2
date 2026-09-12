@@ -47,6 +47,7 @@ IMG = ROOT / "results"
 FOCUS = ROOT / "results" / "stack_cc_focus.json"
 AREA = ROOT / "results" / "stack_cc_area.json"
 RCAUSE = ROOT / "results" / "stack_cc_rootcause.json"
+BW97 = ROOT / "results" / "stack_bw97_focus.json"
 OUT = ROOT / "results" / "report_stack_cc_schemes.html"
 
 ORDER = ("s0", "s1", "s22", "s16g", "s16")
@@ -475,6 +476,376 @@ Spearman ρ = <b>{_f(m.get('spearman_crit_finish'), 3)}</b>
 
 
 NOISE = 0.01     # below this, a makespan difference is not a result
+BW97_TARGET = 0.97
+
+
+def _bw97_rec(bw: dict, cfg: str, op: str, slot: str = "confirm") -> dict:
+    return ((bw.get(slot) or {}).get(cfg) or {}).get(op) or {}
+
+
+def _bw97_eff(bw: dict, cfg: str, op: str, slot: str = "confirm") -> float:
+    r = _bw97_rec(bw, cfg, op, slot)
+    return float(r.get("eff") or 0)
+
+
+def _bw97_knob_txt(kw: dict) -> str:
+    if not kw:
+        return "与 §0 相同（未加宽）"
+    names = {
+        "core_outstanding": "outstanding",
+        "core_outstanding_wr": "写 outstanding",
+        "core_outstanding_rd": "读 outstanding",
+        "d2d_bw": "D2D 链路宽",
+        "h_bw": "横环宽",
+        "v_bw": "纵环宽",
+        "top_bw": "top 环宽",
+        "bridge_bw": "bridge 上环宽",
+        "turn_bw": "H↔V 转向宽",
+        "inject_bw": "注入口宽",
+        "eject_bw": "弹出宽",
+    }
+    return "，".join(f"{names.get(k, k)} = {v}" for k, v in sorted(kw.items()))
+
+
+def plot_bw97_done(bw: dict, cfg: str, path: Path) -> None:
+    """Same axes as plot_done, but the series live under confirm[cfg][op]."""
+    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.1))
+    for ax, op in zip(axes, OPS):
+        rec = _bw97_rec(bw, cfg, op)
+        ser = (rec.get("full") or {}).get("done_series") or {}
+        cum = ser.get("cum_by_group") or {}
+        ts = ser.get("t") or []
+        for g in sorted(cum, key=int):
+            ax.plot(ts, cum[g], lw=1.5, color=DIE_COLOR[int(g) % 6],
+                    label=f"group {g}")
+        fin = ser.get("finish_by_group") or rec.get("group_finish") or {}
+        fin = {str(k): v for k, v in fin.items()}
+        if fin:
+            lo, hi = min(fin.values()), max(fin.values())
+            ax.axvspan(lo, hi, color="#94a3b8", alpha=0.16, zorder=0)
+            ax.axvline(hi, color="#475569", lw=1.0, ls="--")
+            top = max((max(v) for v in cum.values()), default=1)
+            ax.annotate(f"makespan {hi:,}", (hi, 0.5 * top),
+                        xytext=(-6, 0), textcoords="offset points",
+                        fontsize=7.5, color="#475569", ha="right")
+        vals = [v for v in fin.values() if v]
+        sp = (max(vals) / min(vals)) if vals else 0
+        ax.set_title(f"{OP_CN[op]}  最慢/最快 = {sp:.3f}  "
+                     f"达成率 {_bw97_eff(bw, cfg, op):.1%}", fontsize=9.5)
+        ax.set_xlabel("时间（cycle）")
+        ax.set_ylabel("该 group 已完成的 DAT flit 数")
+        ax.grid(alpha=0.3)
+        ax.margins(y=0.12)
+        ax.legend(fontsize=7, ncol=2, loc="upper left", framealpha=0.9)
+    fig.suptitle(f"加宽 setup　{cfg}", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def bw97_setup_table(bw: dict) -> str:
+    win = (bw.get("meta") or {}).get("winner") or "—"
+    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
+    base = {
+        "core_outstanding": 128, "core_outstanding_wr": 128,
+        "core_outstanding_rd": 128,
+        "d2d_bw": 1, "h_bw": 1, "v_bw": 1,
+        "top_bw": 1, "bridge_bw": 1, "turn_bw": 1, "inject_bw": 1, "eject_bw": 1,
+        "turn_depth": 64, "d2d_depth": 128, "d2d_land_depth": 16,
+        "inj_depth": 12, "dir_inj_depth": 8,
+    }
+    new = dict(base)
+    new.update(knobs)
+    rows = []
+    labels = [
+        ("core_outstanding", "每核 outstanding（未分读写）"),
+        ("core_outstanding_wr", "写 outstanding"),
+        ("core_outstanding_rd", "读 outstanding"),
+        ("d2d_bw", "D2D 链路宽（flit/拍/VC）"),
+        ("bridge_bw", "bridge / 落地 上环宽"),
+        ("turn_bw", "H↔V 转向宽（离开 tap + FIFO 下环）"),
+        ("h_bw", "底 die 横环宽"),
+        ("v_bw", "底 die 纵环宽"),
+        ("top_bw", "top die 环宽"),
+        ("inject_bw", "注入口宽"),
+        ("eject_bw", "弹出宽"),
+        ("turn_depth", "转向 FIFO（未改）"),
+        ("d2d_depth", "D2D FIFO（未改）"),
+        ("d2d_land_depth", "落地 buffer（未改）"),
+        ("inj_depth", "注入 FIFO（未改）"),
+    ]
+    skip = set()
+    if "core_outstanding_wr" in knobs or "core_outstanding_rd" in knobs:
+        skip.add("core_outstanding")
+    for k, lab in labels:
+        if k in skip:
+            continue
+        a, b = base[k], new.get(k, base[k])
+        mark = "—" if a == b else f"<b>{a} → {b}</b>"
+        rows.append([lab, str(a), str(b), mark])
+    return _t(["项目", "§0 原 setup", f"加宽 setup（{win}）", "变化"], rows)
+
+
+def bw97_sweep_table(bw: dict) -> str:
+    grid = bw.get("grid") or {}
+    rows = []
+    for cfg, kw in grid.items():
+        wr = _bw97_rec(bw, cfg, "write", "sweep")
+        rd = _bw97_rec(bw, cfg, "read", "sweep")
+        if not wr and not rd:
+            continue
+        star = " ★" if cfg == (bw.get("meta") or {}).get("winner") else ""
+        rows.append([
+            f"<code>{cfg}</code>{star}",
+            _bw97_knob_txt(kw),
+            f"{wr.get('makespan', 0):,}" if wr else "—",
+            f"{100 * float(wr.get('eff') or 0):.1f}%" if wr else "—",
+            f"{rd.get('makespan', 0):,}" if rd else "—",
+            f"{100 * float(rd.get('eff') or 0):.1f}%" if rd else "—",
+        ])
+    return _t(["配置", "加宽项", "写 makespan（1 tile）", "写达成率",
+               "读 makespan", "读达成率"], rows)
+
+
+def _bw97_n(rec: dict, *keys, default: int = 0) -> int:
+    cur: Any = rec
+    for k in keys:
+        cur = (cur or {}).get(k) if isinstance(cur, dict) else None
+    return int(cur or default)
+
+
+def bw97_final_table(bw: dict) -> str:
+    rows = []
+    win = (bw.get("meta") or {}).get("winner")
+    confirm = bw.get("confirm") or {}
+    cfgs: list[str] = []
+    if "base" in confirm:
+        cfgs.append("base")
+    for cfg in bw.get("grid") or {}:
+        if cfg != "base" and cfg in confirm:
+            cfgs.append(cfg)
+    for extra in confirm:
+        if extra not in cfgs:
+            cfgs.append(extra)
+    for cfg in cfgs:
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr and not rd:
+            continue
+        star = " ★" if cfg == win else ""
+        rows.append([
+            f"<b>{cfg}</b>{star}",
+            _bw97_knob_txt((bw.get("grid") or {}).get(cfg) or {}),
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+        ])
+    return _t(["配置", "加宽项", "写 makespan", "写下界", "写达成率",
+               "读 makespan", "读下界", "读达成率"], rows)
+
+
+def _bw97_knobs(bw: dict, cfg: str) -> dict:
+    return dict((bw.get("grid") or {}).get(cfg) or {})
+
+
+def _bw97_published_bound(kw: dict) -> bool:
+    """True when H/V/top stay at width 1, so the §0 h:dat floor is unchanged."""
+    return (int(kw.get("h_bw", 1)) == 1
+            and int(kw.get("v_bw", 1)) == 1
+            and int(kw.get("top_bw", 1)) == 1)
+
+
+def bw97_oc_pareto_table(bw: dict) -> str:
+    """Outstanding-only ladder on the published bound (D2D×2, bridge×2)."""
+    rows = []
+    for cfg in bw.get("grid") or {}:
+        kw = _bw97_knobs(bw, cfg)
+        if cfg == "base" or not _bw97_published_bound(kw):
+            continue
+        if "core_outstanding_wr" in kw or "core_outstanding_rd" in kw:
+            continue
+        if int(kw.get("d2d_bw", 1)) != 2 or int(kw.get("bridge_bw", 1)) != 2:
+            continue
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr or not rd:
+            continue
+        oc = int(kw.get("core_outstanding", 128))
+        turn = int(kw.get("turn_bw", 1))
+        rows.append((oc, turn, cfg, wr, rd))
+    if not rows:
+        return ""
+    rows.sort()
+    win = (bw.get("meta") or {}).get("winner")
+    out = []
+    for oc, turn, cfg, wr, rd in rows:
+        star = " ★" if cfg == win else ""
+        out.append([
+            f"{oc}",
+            f"{turn}",
+            f"<code>{cfg}</code>{star}",
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+            f"{float(wr.get('finish_spread') or 0):.3f}",
+            f"{float(rd.get('finish_spread') or 0):.3f}",
+        ])
+    return _t(["outstanding", "转向宽", "配置", "写 makespan", "写达成率",
+               "读 makespan", "读达成率", "写组间倍差", "读组间倍差"], out)
+
+
+def bw97_bound_shift_note(bw: dict) -> str:
+    """Why doubling the bound-setting fabric loses the ratio."""
+    specs = (
+        ("oc256-d2d2-br2", "横环仍是 1，下界停在 §0 的 h:dat"),
+        ("oc256-d2d2-br2-h2", "横环×2 之后写下界改由 v:dat 决定"),
+        ("oc256-d2d2-br2-h2-v2", "再把纵环×2，下界回到更窄的 h:dat"),
+        ("oc256-all2", "四条织物一起×2，下界再掉一档"),
+    )
+    rows = []
+    for cfg, why in specs:
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if not wr or not rd:
+            continue
+        rows.append([
+            f"<code>{cfg}</code>",
+            why,
+            f"{_bw97_n(wr, 'bounds', 'bound'):,}",
+            f"{_bw97_n(wr, 'makespan'):,}",
+            f"<b>{100 * float(wr.get('eff') or 0):.1f}%</b>",
+            f"{_bw97_n(rd, 'bounds', 'bound'):,}",
+            f"{_bw97_n(rd, 'makespan'):,}",
+            f"<b>{100 * float(rd.get('eff') or 0):.1f}%</b>",
+        ])
+    if not rows:
+        return ""
+    table = _t(["配置", "下界怎么动", "写下界", "写 makespan", "写达成率",
+                "读下界", "读 makespan", "读达成率"], rows)
+    return f"""<div class="def"><b>加宽正在定下界的那条边，达成率通常会掉。</b>
+解析下界是「最热那条边的占用 / 该边宽度」。横环×2 把写的
+<i>h:dat</i> 30752 打成 15376，但纵环 DAT 仍要 20496 拍，下界只降到
+20496；实测写只降到 23728，组 0/1 还卡在纵环上（倍差 1.43），达成率
+从 89% 掉到 86%。再把纵环×2，下界跟到 15376，makespan 只跟到 18454，
+又掉到 83%。读在横环×2 时已经 98.9%，再加宽纵环反而把四组重新叠到
+更窄的横环上，倍差回到 1.75。所以允许的带宽旋钮里，<b>不能</b>靠
+把定下界的织物翻倍来抬达成率；只能在下界不动的前提下挤握手和转向。</div>
+{table}"""
+
+
+def bw97_confirm_note(bw: dict) -> str:
+    items = []
+    for cfg in bw.get("grid") or {}:
+        wr, rd = _bw97_rec(bw, cfg, "write"), _bw97_rec(bw, cfg, "read")
+        if cfg == "base" or not wr or not rd:
+            continue
+        sp = float(wr.get("finish_spread") or 0)
+        tail = (f"，写组间倍差 {sp:.3f}" if sp > 1.05 else "")
+        items.append(
+            f"<li><code>{cfg}</code>：写 "
+            f"{_bw97_n(wr, 'makespan'):,} / {_bw97_n(wr, 'bounds', 'bound'):,} "
+            f"= {100 * float(wr.get('eff') or 0):.1f}%，读 "
+            f"{_bw97_n(rd, 'makespan'):,} / {_bw97_n(rd, 'bounds', 'bound'):,} "
+            f"= {100 * float(rd.get('eff') or 0):.1f}%{tail}</li>")
+    if not items:
+        return "<p>4 tile 确认还在跑。</p>"
+    return "<ul>" + "".join(items) + "</ul>"
+
+
+def bw97_section(bw: dict) -> str:
+    if not bw:
+        return ""
+    win = (bw.get("meta") or {}).get("winner") or "—"
+    knobs = (bw.get("meta") or {}).get("winner_knobs") or {}
+    wr = _bw97_rec(bw, win, "write")
+    rd = _bw97_rec(bw, win, "read")
+    ok_w = float(wr.get("eff") or 0) >= BW97_TARGET
+    ok_r = float(rd.get("eff") or 0) >= BW97_TARGET
+    if wr.get("full") or _bw97_rec(bw, "base", "write").get("full"):
+        plot_bw97_done(bw, "base", IMG / "cc_done_bw97_base.png")
+        if wr.get("full"):
+            plot_bw97_done(bw, win, IMG / "cc_done_bw97.png")
+        figs = """<img src="cc_done_bw97_base.png" alt="原 setup 各 group 完成曲线">
+<img src="cc_done_bw97.png" alt="加宽 setup 各 group 完成曲线">"""
+    else:
+        figs = "<p>4 tile 确认曲线还在跑，下表是 1 tile 扫描。</p>"
+    has_wide = any(c != "base" and _bw97_rec(bw, c, "write")
+                   for c in (bw.get("grid") or {}))
+    best_w = best_r = ""
+    confirm = bw.get("confirm") or {}
+    wr_best = rd_best = (0.0, "")
+    for cfg, ops in confirm.items():
+        if cfg == "base" or not _bw97_published_bound(_bw97_knobs(bw, cfg)):
+            continue
+        w, r = (ops or {}).get("write") or {}, (ops or {}).get("read") or {}
+        if w.get("makespan") and float(w.get("eff") or 0) > wr_best[0]:
+            wr_best = (float(w["eff"]), cfg)
+        if r.get("makespan") and float(r.get("eff") or 0) > rd_best[0]:
+            rd_best = (float(r["eff"]), cfg)
+    if wr_best[1]:
+        best_w = (f"单侧写最好是 <code>{wr_best[1]}</code> "
+                  f"{100 * wr_best[0]:.1f}%")
+    if rd_best[1]:
+        best_r = (f"单侧读最好是 <code>{rd_best[1]}</code> "
+                  f"{100 * rd_best[0]:.1f}%")
+    side = "；".join(x for x in (best_w, best_r) if x)
+    if ok_w and ok_r and win != "base":
+        verdict = "读写都到了 97% 以上"
+    elif not has_wide:
+        verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
+    else:
+        verdict = ("允许的带宽旋钮里，没有一套 setup 能让读写同时 ≥ 97%。"
+                   "★ 是最差一侧达成率最高的加宽组合"
+                   + (f"。{side}" if side else "")
+                   + "。写差的约 200 cycle 不在 outstanding / 链路宽 /"
+                   " 转向宽里")
+    pareto = bw97_oc_pareto_table(bw)
+    shift = bw97_bound_shift_note(bw)
+    extra = ""
+    if pareto:
+        extra += f"""<h3>7.4　outstanding 对冲</h3>
+<p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
+outstanding，读要<b>高</b> outstanding。一个窗口做不到两边 ≥ 97%：
+写在 80 是 31,629 / 30,752 = 97.2%，读却只有 86%；读在 320 是
+33,894 / 33,228 = 98.0%，写却掉到 88%。CHI 本来就分写/读两本
+计分板，所以加宽 setup 用写 outstanding 80、读 outstanding 320，
+织物相同（D2D×2、bridge×2、转向 1）。宽 FIFO 下环按已经付过的
+<i>bridge_bw</i> / <i>turn_bw</i> 跳过 hop 堵死的队头——宽度 1 仍是
+原来的 HOL，§0 的 S0 不变。</p>
+{pareto}"""
+    if shift:
+        extra += f"""<h3>7.5　加宽定界织物</h3>
+{shift}"""
+    return f"""<h2>7　加宽 setup：把读写达成率推过 97%</h2>
+<p>§0–§6 的硬件一字未改。这一节<b>单独</b>换了一套加宽 setup，
+FIFO 深度全部不动（转向 64 / D2D 128 / 落地 16 / 注入 12+8），
+只动 outstanding、D2D 链路宽、bridge 上环宽、H↔V 转向宽，
+以及必要时的横/纵/top / 注入 / 弹出宽。
+目标是 S0 在同一套均匀写 / 均匀读上，对<b>该 setup 自己的</b>解析下界
+达成率都 ≥ 97%。选中的配置是 <code>{win}</code>：{_bw97_knob_txt(knobs)}。
+{verdict}。</p>
+<h3>7.1　和 §0 差在哪</h3>
+{bw97_setup_table(bw)}
+<div class="def"><b>为什么不动 buffer、动带宽。</b>
+写差的 8% 里握手只占约 2%，其余是落地口和注入口喂不饱独占的
+<i>h:dat</i> 边；读差的 13% 里有 POS retry，但下界本身是四组叠在
+同一条横环重段上。加深队列只堆库存，加宽 D2D / bridge / 横环才改
+每拍能过的 flit 数。outstanding 是覆盖 413 cycle 写 RTT 的计分板，
+不是加队列；写在窗口加大之后达成率反而掉，因为多余的在途 flit
+堵在转向和 D2D 口。横环×2 之后 σ=1 的目的 hop 每拍能走 2 条 flit，
+H↔V tap 仍是每站每拍 1 条，所以转向宽也要一起加。
+<i>bridge_bw</i> / <i>turn_bw</i> &gt; 1 时，下环不再在队头 hop
+未就绪时整拍停掉——多出来的槽位给后面已经 ready 的 flit，
+FIFO 深度不动。</div>
+<h3>7.2　1 tile 扫描</h3>
+{bw97_sweep_table(bw)}
+<h3>7.3　4 tile 确认</h3>
+{figs}
+{bw97_confirm_note(bw)}
+{bw97_final_table(bw)}
+{extra}
+"""
 
 
 def _verdict(dw: float, dr: float) -> str:
@@ -593,7 +964,7 @@ makespan <b>{c[2]:,}</b>。<b>公平度相同，per-group 快
 纵环喂满；per-group 只切成 6 份，组内仍是先到先服务。</div>"""
 
 
-def build(b: dict, area: dict, rc: dict) -> str:
+def build(b: dict, area: dict, rc: dict, bw97: dict | None = None) -> str:
     t, m = b["topology"], b["meta"]
     ss = schemes_present(b)
     n_txn = m.get("n_txn", 0)
@@ -870,6 +1241,7 @@ DBIDResp / CompData 上，不加报文、不加总线、不加缓存。</li>
 </ol>
 </div>
 
+{bw97_section(bw97 or {})}
 <h2>附录　完整网格</h2>
 {"".join(f"<h4>{label(b, s)}</h4>{sweep_table(b, s)}" for s in ss if s != "s0")}
 </body></html>"""
@@ -882,7 +1254,8 @@ def main() -> None:
     b = json.loads(FOCUS.read_text())
     area = json.loads(AREA.read_text()) if AREA.exists() else {}
     rc = json.loads(RCAUSE.read_text()) if RCAUSE.exists() else {}
-    OUT.write_text(build(b, area, rc))
+    bw97 = json.loads(BW97.read_text()) if BW97.exists() else {}
+    OUT.write_text(build(b, area, rc, bw97))
     print(f"wrote {OUT}  ({OUT.stat().st_size / 1024:.0f} KB)")
 
 

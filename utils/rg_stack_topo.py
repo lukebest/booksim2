@@ -670,14 +670,21 @@ class StackTopology:
 
     def write_bounds(self, txns: Sequence[Txn], *, m_req: int = 1,
                      m_rsp: int = 2, m_wdata: int = 4,
-                     t_ha: int = 0) -> dict[str, Any]:
+                     t_ha: int = 0,
+                     fab_bw: dict[str, int] | None = None,
+                     inject_bw: int = 1) -> dict[str, Any]:
         """Lower bounds on makespan for a closed WriteNoSnp batch.
 
         Independent CHI VCs make the link floor the max over VCs, not the sum.
         Inject / leave ports merge every VC because a station has one port.
+        `fab_bw` is flits per directed edge per VC per sigma window; default 1
+        is the original R1. `inject_bw` scales the boarding-port floor.
         """
         sig = self.sigma
-        mult = {"req": m_req, "rsp": m_rsp, "dat": m_wdata}
+        bw = {"top": 1, "d2d": 1, "h": 1, "v": 1}
+        if fab_bw:
+            bw.update({k: max(1, int(v)) for k, v in fab_bw.items()})
+        inj = max(1, int(inject_bw))
         link: dict[str, dict[int, int]] = {vc: defaultdict(int)
                                            for vc in ("req", "rsp", "dat")}
         port: dict[tuple[str, int], int] = defaultdict(int)
@@ -708,13 +715,20 @@ class StackTopology:
                                sum(self.edge_lat[e] for e in path)
                                + self.hv_turns(path) * self.turn_lat)
 
-        link_by_vc = {vc: (max(d.values()) if d else 0) * sig
-                      for vc, d in link.items()}
+        link_by_vc: dict[str, int] = {}
+        for vc, d in link.items():
+            if not d:
+                link_by_vc[vc] = 0
+                continue
+            link_by_vc[vc] = max(
+                math.ceil(load / bw[self.fabric_of(eid)]) * sig
+                for eid, load in d.items())
         link_lb = max(link_by_vc.values()) if link_by_vc else 0
-        port_lb = (max(port.values()) if port else 0) * sig
-        # Per-fabric floor: total flit-hops on that fabric over its link count.
+        port_lb = math.ceil((max(port.values()) if port else 0) / inj) * sig
+        # Per-fabric floor: total flit-hops on that fabric over its link count
+        # times the fabric's width.
         cap = self.capacity()
-        fab_lb = {k: math.ceil(v / max(1, cap.get(k, 1))) * sig
+        fab_lb = {k: math.ceil(v / max(1, cap.get(k, 1) * bw.get(k, 1))) * sig
                   for k, v in fabric.items()}
         cut_lb = max(fab_lb.values()) if fab_lb else 0
         txn_lb = (legs["req"] + m_req * sig + t_ha
@@ -728,6 +742,7 @@ class StackTopology:
             "txn_lb": txn_lb, "bound": bound, "n_txn": len(txns),
             "capacity": cap, "n_vc": self.n_vc,
             "m_req": m_req, "m_rsp": m_rsp, "m_wdata": m_wdata,
+            "fab_bw": dict(bw), "inject_bw": inj,
         }
 
 
