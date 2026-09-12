@@ -790,8 +790,10 @@ def bw97_section(bw: dict) -> str:
     if pareto:
         extra += f"""<h3>7.4　outstanding 对冲</h3>
 <p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
-outstanding，读要<b>高</b> outstanding。两边的最优点中间没有同时 ≥ 97%
-的交叉。97% 对应写 makespan ≤ 31,703、读 ≤ 34,256。</p>
+outstanding，读要<b>高</b> outstanding。97% 对应写 makespan ≤ 31,703、
+读 ≤ 34,256。读在 outstanding 320 已经跨过 97%；写在 80 附近封顶，
+还差约 200 cycle，再往下开窗口（64）并不更快。没有一个窗口能让
+两边同时 ≥ 97%。</p>
 {pareto}"""
     if shift:
         extra += f"""<h3>7.5　加宽定界织物</h3>

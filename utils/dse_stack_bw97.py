@@ -104,6 +104,11 @@ GRID: dict[str, dict[str, Any]] = {
     "oc96-d2d2-br2-turn2": dict(core_outstanding=96, d2d_bw=2,
                                 bridge_bw=2, turn_bw=2),
     "oc320-d2d2-br2": dict(core_outstanding=320, d2d_bw=2, bridge_bw=2),
+    # Write knee is oc80 = 96.4% (209 cycles short of 97%). turn4 is the
+    # only leftover width that still moves write without dropping the
+    # h:dat floor.
+    "oc80-d2d2-br2-turn4": dict(core_outstanding=80, d2d_bw=2,
+                                bridge_bw=2, turn_bw=4),
 }
 
 # Prefer the cheapest combo that clears TARGET on both ops.
@@ -140,6 +145,7 @@ COST = {
     "oc80-d2d2-br2-turn2": 4,
     "oc96-d2d2-br2-turn2": 4,
     "oc320-d2d2-br2": 4,
+    "oc80-d2d2-br2-turn4": 5,
 }
 
 
@@ -325,6 +331,7 @@ def confirm_specs(store: dict[str, Any]) -> list[tuple]:
         "oc80-d2d2-br2-turn2",
         "oc96-d2d2-br2-turn2",
         "oc320-d2d2-br2",
+        "oc80-d2d2-br2-turn4",
     ]
     return [(c, op, CONFIRM_TILES, True) for c in order for op in OPS
             if job_key(c, op, CONFIRM_TILES) not in store["runs"]]
