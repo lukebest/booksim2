@@ -646,7 +646,12 @@ def build(b: dict, area: dict, rc: dict) -> str:
 
     eff_r0 = _eff("read")
     r0, r16g = makespan(b, "read", "s0"), makespan(b, "read", "s16g")
-    d_r16g = f"{100 * (1 - r16g / max(1, r0)):.1f}%"
+    if r0 and abs(r16g / r0 - 1) < NOISE:
+        d_r16g = "与 S0 持平（差在 1% 以内）"
+    elif r16g < r0:
+        d_r16g = f"把读 makespan 降了 {100 * (1 - r16g / r0):.1f}%"
+    else:
+        d_r16g = f"读 makespan 比 S0 慢 {100 * (r16g / r0 - 1):.1f}%"
     cost = {r["scheme"]: r["cost_ff"] for r in (area.get("rows") or [])}
     c16g = max(1, cost.get("s16g", 0))
     cost_16g = f"{cost.get('s16g', 0):,}"
@@ -743,6 +748,11 @@ D2D×2、bridge×2、转向 1、读 outstanding
 <p>路由不是自由最短路：目的 HA 决定了出 die 的那一跳走哪个 bridge，
 所以“走哪条路”是硬件规定的，不是拥塞控制能改的。</p>
 <img src="cc_binding.png" alt="HA 与 bridge 绑定">
+<div class="def"><b>读批次的 flit 账。</b>
+上表里“每笔写”那一行是共享硬件描述留下的 WriteNoSnp 口径。
+本报告只跑 ReadNoSnp：每笔 <b>REQ 1 + CompData 4</b>，
+没有 WriteData，也没有 DBIDResp。outstanding 320 是读计分板
+（REQ 上环到 CompData 退休），不是写窗口。</div>
 
 <h2>1　方法：两阶段参数 sweep</h2>
 <p>一个 {ct} tile 批次是 {n_txn:,} 笔事务，跑一次要几十分钟，
@@ -793,6 +803,12 @@ D2D×2、bridge×2、转向 1、读 outstanding
 组间在环上根本不相遇，让行恒不触发；有意义的执行点在 HA 侧，
 六个 group 的响应在那里共用端口，绕行按目的地排序。
 网格里这两条路线是分开扫的，参数配对也是按这个结构定的。</div>
+<div class="warn"><b>读批次上，只盯 DAT 的执行机构会退化成 S0。</b>
+core 在均匀读里只注入 REQ，CompData 由 HA 发出。
+1 tile 网格里 13 个 DAT-only 配置的 makespan 完全相同；
+4 tile 上选中的 <code>core-w64-t2</code> 与 S0 的完成时刻逐组重合。
+真正还能动读的是让执行机构伸到 REQ 的配置（<code>core-req-*</code>），
+它们略慢，所以没有被选中。</div>
 {sec.get("s22", "")}
 
 <h2>5　S16：目的端授权（改进为 per-group 粒度）</h2>
@@ -870,13 +886,15 @@ S1 与 S22 都只动源端：S1 少发一点，S22 让行加绕行，
 （96 个 HA 摊 122,880 笔），没有东西可重排。
 S22 “绝不扣住空槽”的原则，正是它在这里帮不上忙的原因——
 要缓解一条过境热链路，必须有人真的少发。</li>
-<li><b>目的端授权是唯一真的动了读的方案，而 per-group 是它该有的粒度。</b>
-S16G 把读 makespan 降了 {d_r16g}，同时把组间倍差从 {sp_r0} 压到 {sp_r16g}；
-在同等公平度下它比 per-core 快 {matched_gain}。
-面积上它也是全场最便宜的：{cost_16g} FF 等效，
+<li><b>目的端授权是唯一能主动拉齐六个 group 的方案，而 per-group 是它该有的粒度。</b>
+按 makespan 选中的 S16G <code>{chosen(b, 's16g')}</code>
+{d_r16g}，组间倍差 {sp_r16g}（S0 是 {sp_r0}）——
+overcommit 大到几乎不扣授权时，它退回 S0 的完成曲线。
+要公平就得付吞吐：同等公平下 per-group 比 per-core 快 {matched_gain}。
+面积上它仍是全场最便宜的：{cost_16g} FF 等效，
 只有 per-core 的 1/{cost_ratio}、S1 的 1/{cost_ratio_s1}，
 因为仲裁轴从 60 项缩到 6 项，而授权本身仍然搭在既有的
-DBIDResp / CompData 上，不加报文、不加总线、不加缓存。</li>
+CompData 上，不加报文、不加总线、不加缓存。</li>
 <li><b>要再往下就得改绑定或改路由。</b>
 读的结构下界 {rc_hi} 是四个 group 共用一条横环重段的结果，
 而这条重段是“HA 按列绑定到 D2D bridge”这条硬件规则的直接后果。
