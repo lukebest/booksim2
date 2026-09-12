@@ -763,7 +763,7 @@ def bw97_section(bw: dict) -> str:
     confirm = bw.get("confirm") or {}
     wr_best = rd_best = (0.0, "")
     for cfg, ops in confirm.items():
-        if cfg == "base":
+        if cfg == "base" or not _bw97_published_bound(_bw97_knobs(bw, cfg)):
             continue
         w, r = (ops or {}).get("write") or {}, (ops or {}).get("read") or {}
         if w.get("makespan") and float(w.get("eff") or 0) > wr_best[0]:
@@ -782,8 +782,11 @@ def bw97_section(bw: dict) -> str:
     elif not has_wide:
         verdict = "1 tile 扫描没有组合同时过 97%（写被握手相对下界卡住）；4 tile 确认在跑"
     else:
-        verdict = ("还没两边都到 97%，★ 是目前最差一侧达成率最高的加宽组合"
-                   + (f"。{side}" if side else ""))
+        verdict = ("允许的带宽旋钮里，没有一套 setup 能让读写同时 ≥ 97%。"
+                   "★ 是最差一侧达成率最高的加宽组合"
+                   + (f"。{side}" if side else "")
+                   + "。写差的约 200 cycle 不在 outstanding / 链路宽 /"
+                   " 转向宽里")
     pareto = bw97_oc_pareto_table(bw)
     shift = bw97_bound_shift_note(bw)
     extra = ""
@@ -791,9 +794,12 @@ def bw97_section(bw: dict) -> str:
         extra += f"""<h3>7.4　outstanding 对冲</h3>
 <p>下界不动时（横/纵/top 仍是 1，D2D 和 bridge 已×2），写要<b>低</b>
 outstanding，读要<b>高</b> outstanding。97% 对应写 makespan ≤ 31,703、
-读 ≤ 34,256。读在 outstanding 320 已经跨过 97%；写在 80 附近封顶，
-还差约 200 cycle，再往下开窗口（64）并不更快。没有一个窗口能让
-两边同时 ≥ 97%。</p>
+读 ≤ 34,256。读在 outstanding 320 已经跨过 97%（34,106 / 33,228 =
+97.4%，组间倍差 1.035）。写在 80 封顶：31,912 / 30,752 = 96.4%，
+还差 209 cycle；再降到 64 是 31,917，并不更快。oc80 上再把转向开到
+4，写反而到 32,001（96.1%）。没有一个窗口能让两边同时 ≥ 97%。
+即便读写各用自己的 outstanding（写 80、读 320），写仍差那 209
+cycle，而允许的带宽旋钮已经试完。</p>
 {pareto}"""
     if shift:
         extra += f"""<h3>7.5　加宽定界织物</h3>
