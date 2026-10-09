@@ -92,6 +92,12 @@ from rg_ring_base import RingBaseParams, RingBaseSim
 
 CONFIGS = ("mesh_base", "ring_base", "mesh_islip2d", "mesh_simple2d",
            "ring_islip2d")
+# HA-side DBID arbitration over the baseline data plane (`rg_dbid_dist`). Kept
+# out of CONFIGS so the existing sweeps that iterate CONFIGS are unchanged.
+DBID_CONFIGS = ("mesh_dbid", "ring_dbid")
+# Homa-style receiver-driven scheduling (`rg_homa_dist`): unscheduled prefix,
+# SRPT grants, overcommitment, per-message RTT window.
+HOMA_CONFIGS = ("mesh_homa", "ring_homa")
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +141,23 @@ class SteadyParams:
     board_ports: int = 1
     leave_ports: int = 1
 
+    # distributed request-grant: HA issues DBIDResp (mesh_dbid / ring_dbid)
+    dbid_k: int = 16                  # HA DBID pool size; 0 = unbounded
+    dbid_policy: str = "least_served"  # least_served / round_robin
+    dbid_pace: float = 0.0            # min cycles between grants per HA; 0 = off
+    ctrl_lat_mode: str = "full"       # REQ/DBID latency: full / half wire delay
+
+    # Homa-style receiver-driven scheduling (mesh_homa / ring_homa)
+    homa_window: int = 32             # RTT window: granted-but-unreceived pkts/msg
+    homa_unsched: int = -1            # unscheduled prefix, pkts; -1 = homa_window
+    homa_degree: int = 8              # overcommit: messages granted per HA at once
+    homa_sched: str = "srpt"          # srpt / fcfs
+
+    # Message workload. "" = one packet per arrival (legacy). Otherwise
+    # "L:prob,L:prob,..." in packets; lam stays in PACKETS per node per cycle,
+    # so the message rate is lam / E[L].
+    msg_mix: str = ""
+
 
 # ---------------------------------------------------------------------------
 # 2. Shared injector + collector
@@ -159,6 +182,35 @@ class Injector:
             if self.rng.random() < self.lam:
                 d = self.rng.randrange(self.n - 1)
                 out.append((s, d + (1 if d >= s else 0)))
+        return out
+
+
+class MsgInjector:
+    """Bernoulli message arrivals; each message is L packets to one dest.
+
+    lam is still packets per node per cycle, so a mix with mean E[L] makes
+    messages arrive at lam / E[L]. All packets of a message are generated in
+    the same cycle (a write of L cache lines issued at once).
+    """
+
+    def __init__(self, n: int, lam: float, mix: str, seed: int = 0):
+        pairs = [x.split(":") for x in mix.split(",")]
+        self.sizes = [int(a) for a, _ in pairs]
+        self.probs = [float(b) for _, b in pairs]
+        tot = sum(self.probs)
+        self.probs = [x / tot for x in self.probs]
+        self.mean = sum(a * b for a, b in zip(self.sizes, self.probs))
+        self.n = n
+        self.rate = lam / self.mean
+        self.rng = random.Random(seed)
+
+    def arrivals(self) -> list[tuple[int, int, int]]:
+        out = []
+        for s in range(self.n):
+            if self.rng.random() < self.rate:
+                d = self.rng.randrange(self.n - 1)
+                L = self.rng.choices(self.sizes, self.probs)[0]
+                out.append((s, d + (1 if d >= s else 0), L))
         return out
 
 
@@ -982,27 +1034,67 @@ def build(config: str, p: SteadyParams, seed: int = 0):
                                      conflict_domain="interval"), seed=seed)
     if config == "ring_islip2d":
         return RGSim("ring", p, seed=seed)
+    if config in DBID_CONFIGS:
+        from rg_dbid_dist import DbidDistSim
+        fabric = config.split("_")[0]
+        base = build(f"{fabric}_base", p, seed=seed)
+        return DbidDistSim(base, fabric, p)
+    if config in HOMA_CONFIGS:
+        from rg_homa_dist import HomaSim
+        fabric = config.split("_")[0]
+        base = build(f"{fabric}_base", p, seed=seed)
+        return HomaSim(base, fabric, p)
     raise ValueError(f"unknown config: {config}")
 
 
 def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
     """Simulate `config` at rate p.lam and return the steady-state metrics."""
     sim = build(config, p, seed=p.seed)
-    inj = Injector(48, p.lam, seed=p.seed + 1)
+    inj = (MsgInjector(48, p.lam, p.msg_mix, seed=p.seed + 1) if p.msg_mix
+           else Injector(48, p.lam, seed=p.seed + 1))
     col = Collector(48)
     total = p.warmup + p.measure
     trace_every = max(1, p.measure // 200)
     n_offered = 0
+    n_win = 0                     # packets DELIVERED inside the window
+    n_off_win = 0                 # packets GENERATED inside the window
     bail = 0
+    # Message completion time (FCT), for every scheme alike. A message is keyed
+    # by (src, dst, t_gen): every simulator reports the message's creation cycle
+    # as t_gen and a node creates at most one message per cycle.
+    msg_left: dict[tuple[int, int, int], int] = {}
+    msg_size: dict[tuple[int, int, int], int] = {}
+    fct: dict[int, list[int]] = defaultdict(list)
 
     for t in range(total):
-        for s, d in inj.arrivals():
-            sim.offer(s, d)
-            n_offered += 1
+        for arr in inj.arrivals():
+            s, d = arr[0], arr[1]
+            L = arr[2] if len(arr) > 2 else 1
+            if hasattr(sim, "offer_msg"):
+                sim.offer_msg(s, d, L)
+            else:
+                for _ in range(L):
+                    sim.offer(s, d)
+            n_offered += L
+            if p.warmup <= t < p.warmup + p.measure:
+                n_off_win += L
+            if p.msg_mix:
+                msg_left[(s, d, t)] = L
+                msg_size[(s, d, t)] = L
         sim.step()
 
         while sim.pkt_done:
             pid, s, d, t_gen, t_done = sim.pkt_done.pop()
+            if p.warmup <= t < p.warmup + p.measure:
+                n_win += 1
+            if p.msg_mix:
+                key = (s, d, t_gen)
+                msg_left[key] -= 1
+                if msg_left[key] == 0:
+                    del msg_left[key]
+                    if t_gen >= p.warmup:
+                        fct[msg_size[key]].append(t_done - t_gen)
+                    del msg_size[key]
             if t_gen >= p.warmup:
                 col.sample(s, t_done - t_gen)
 
@@ -1043,12 +1135,37 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
         "fifo_depth": p.fifo_depth, "swap_rule": p.swap_rule,
         "resolution_mode": p.resolution_mode, "dim_order": p.dim_order,
         "t_inj": p.t_inj, "t_xfer": p.t_xfer,
+        "dbid_k": p.dbid_k, "dbid_policy": p.dbid_policy,
+        "dbid_pace": p.dbid_pace, "ctrl_lat_mode": p.ctrl_lat_mode,
+        "homa_window": p.homa_window, "homa_unsched": p.homa_unsched,
+        "homa_degree": p.homa_degree, "homa_sched": p.homa_sched,
+        "msg_mix": p.msg_mix,
         "warmup": p.warmup, "measure": p.measure, "seed": p.seed,
         "accepted": round(acc, 5),
         "accepted_flits": round(acc * p.m, 5),
         "p50": col.pct(0.50), "p99": col.pct(0.99),
         "mean_lat": round(sum(col.lat) / len(col.lat), 2) if col.lat else None,
         "accept_ratio": round(ratio, 4),
+        # Goodput: flits delivered inside the window / (N * window), counted at
+        # the DELIVERY cycle regardless of generation time. `accepted` counts
+        # only packets generated after warmup, so a configuration with a longer
+        # round trip loses ~lam*latency/measure of it to packets still in
+        # flight at the end -- a bias against REQ/DBID handshakes that is a
+        # measurement artifact, not lost throughput.
+        "goodput": round(n_win * p.m / (48 * p.measure), 5),
+        "goodput_ratio": round(n_win / (48 * p.measure) / p.lam, 4)
+                         if p.lam > 0 else 0.0,
+        # Message workloads are bursty (a 64-packet message is 20% of the
+        # arrivals and 80% of the load); the gate is 0.97 against REALIZED load.
+        # With messages the REALIZED offered load in the window differs from
+        # lam by a few percent (same arrivals for every scheme, since the seed
+        # is shared), so the gate compares delivered to realized offered.
+        "offered_win": n_off_win,
+        "goodput_vs_offered": round(n_win / max(1, n_off_win), 4),
+        "stable_gp": bool(slope < 0.002 and not bail and p.lam > 0
+                          and (n_win / max(1, n_off_win) >= 0.97 if p.msg_mix
+                               else n_win / (48 * p.measure) / p.lam
+                               >= 0.98)),
         "backlog_slope": round(slope, 5),
         "stable": bool(slope < 0.002 and ratio >= 0.98 and not bail),
         "backlog_end": sim.backlog(),
@@ -1081,6 +1198,27 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
         out["bisect_util"] = round(sim.bisect_busy / (nb * p.measure), 4)
         out["bisect_flits_per_cy"] = round(
             sim.bisect_busy / (p.sigma * p.measure), 3)
+    for L, v in sorted(fct.items()):
+        v.sort()
+        out[f"fct_mean_L{L}"] = round(sum(v) / len(v), 1)
+        out[f"fct_p99_L{L}"] = float(v[min(len(v) - 1, int(0.99 * (len(v) - 1)))])
+        out[f"fct_n_L{L}"] = len(v)
+    dist = None
+    if hasattr(sim, "dbid_wait"):                 # DbidDistSim
+        dist = sim
+        sim = dist.base
+        dw = dist.dbid_wait
+        out["dbid_wait_mean"] = round(sum(dw) / len(dw), 2) if dw else None
+        out["ha_out_max"] = dist.ha_out_max
+        out["ha_queue_max"] = dist.ha_queue_max
+        out["n_grants"] = dist.st["n_grants"]
+        out["ctrl_msgs_per_cy"] = round(
+            2 * dist.st["n_grants"] / max(1, dist.t), 2)
+        out["in_network_max"] = col.max_residency
+    if hasattr(sim, "homa_stats"):                # HomaSim
+        out.update(sim.homa_stats(p.warmup))
+        out["in_network_max"] = col.max_residency
+        sim = sim.base
     if isinstance(sim, RingBaseAdapter):
         s = sim.sim.st
         out["n_deflections"] = s["n_deflections"]

@@ -1,0 +1,87 @@
+[
+ {
+  "name": "HA 在途 DBID ≤ K",
+  "ok": true,
+  "detail": "180 行检查，违规 []"
+ },
+ {
+  "name": "mesh_base λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.4 上限=0.490"
+ },
+ {
+  "name": "mesh_islip2d λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.48 上限=0.490"
+ },
+ {
+  "name": "mesh_dbid λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.4 上限=0.490"
+ },
+ {
+  "name": "ring_base λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.55 上限=0.783"
+ },
+ {
+  "name": "ring_islip2d λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.75 上限=0.783"
+ },
+ {
+  "name": "ring_dbid λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.55 上限=0.783"
+ },
+ {
+  "name": "goodput 不超过注入率(+3% 统计容差)",
+  "ok": true,
+  "detail": "违规 []"
+ },
+ {
+  "name": "mesh K=∞ 与基线 goodput 一致",
+  "ok": true,
+  "detail": "最大差 0.0014 @λ=0.48"
+ },
+ {
+  "name": "mesh K=∞ 在低载只多一个往返",
+  "ok": true,
+  "detail": "λ=0.01: p50 38 → 112 (+74)"
+ },
+ {
+  "name": "ring K=∞ 与基线 goodput 一致",
+  "ok": true,
+  "detail": "最大差 0.0018 @λ=0.9"
+ },
+ {
+  "name": "ring K=∞ 在低载只多一个往返",
+  "ok": true,
+  "detail": "λ=0.01: p50 27 → 85 (+58)"
+ },
+ {
+  "name": "mesh_base 与既有 load_sweep 对齐",
+  "ok": true,
+  "detail": "18 点，最大 |Δaccepted|=0.0"
+ },
+ {
+  "name": "mesh_islip2d 与既有 load_sweep 对齐",
+  "ok": true,
+  "detail": "18 点，最大 |Δaccepted|=0.0"
+ },
+ {
+  "name": "ring_base 与既有 load_sweep 对齐",
+  "ok": true,
+  "detail": "18 点，最大 |Δaccepted|=0.0"
+ },
+ {
+  "name": "ring_islip2d 与既有 load_sweep 对齐",
+  "ok": true,
+  "detail": "18 点，最大 |Δaccepted|=0.0"
+ },
+ {
+  "name": "控制消息 = 2×grant",
+  "ok": true,
+  "detail": "ctrl_msgs_per_cy=28.53 goodput*48*2=28.75"
+ }
+]

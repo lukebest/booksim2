@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 440" width="640" height="440" font-family="sans-serif" font-size="12">
+<rect width="640" height="440" fill="#ffffff"/>
+<text x="320.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D ring：goodput 与 HA DBID 池大小 K</text>
+<line x1="66.0" y1="40" x2="66.0" y2="382" stroke="#e5e7eb"/>
+<text x="66.0" y="398" text-anchor="middle">8</text>
+<line x1="135.5" y1="40" x2="135.5" y2="382" stroke="#e5e7eb"/>
+<text x="135.5" y="398" text-anchor="middle">16</text>
+<line x1="205.0" y1="40" x2="205.0" y2="382" stroke="#e5e7eb"/>
+<text x="205.0" y="398" text-anchor="middle">32</text>
+<line x1="274.5" y1="40" x2="274.5" y2="382" stroke="#e5e7eb"/>
+<text x="274.5" y="398" text-anchor="middle">48</text>
+<line x1="344.0" y1="40" x2="344.0" y2="382" stroke="#e5e7eb"/>
+<text x="344.0" y="398" text-anchor="middle">64</text>
+<line x1="413.5" y1="40" x2="413.5" y2="382" stroke="#e5e7eb"/>
+<text x="413.5" y="398" text-anchor="middle">96</text>
+<line x1="483.0" y1="40" x2="483.0" y2="382" stroke="#e5e7eb"/>
+<text x="483.0" y="398" text-anchor="middle">128</text>
+<line x1="552.5" y1="40" x2="552.5" y2="382" stroke="#e5e7eb"/>
+<text x="552.5" y="398" text-anchor="middle">256</text>
+<line x1="622.0" y1="40" x2="622.0" y2="382" stroke="#e5e7eb"/>
+<text x="622.0" y="398" text-anchor="middle">∞</text>
+<line x1="66" y1="382.0" x2="622" y2="382.0" stroke="#e5e7eb"/>
+<text x="60" y="386.0" text-anchor="end">0</text>
+<line x1="66" y1="313.6" x2="622" y2="313.6" stroke="#e5e7eb"/>
+<text x="60" y="317.6" text-anchor="end">0.16</text>
+<line x1="66" y1="245.20000000000002" x2="622" y2="245.20000000000002" stroke="#e5e7eb"/>
+<text x="60" y="249.20000000000002" text-anchor="end">0.32</text>
+<line x1="66" y1="176.79999999999998" x2="622" y2="176.79999999999998" stroke="#e5e7eb"/>
+<text x="60" y="180.79999999999998" text-anchor="end">0.48</text>
+<line x1="66" y1="108.40000000000002" x2="622" y2="108.40000000000002" stroke="#e5e7eb"/>
+<text x="60" y="112.40000000000002" text-anchor="end">0.64</text>
+<line x1="66" y1="40.0" x2="622" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">0.8</text>
+<rect x="66" y="40" width="556" height="342" fill="none" stroke="#374151"/>
+<text x="344.0" y="428" text-anchor="middle">K（每个 HA 的在途写数；最右 = 不限）</text>
+<text transform="translate(16,211.0) rotate(-90)" text-anchor="middle">goodput（flit/节点/周期）</text>
+<polyline points="66.0,324.4 135.5,267.8 205.0,254.0 274.5,254.0 344.0,254.0 413.5,254.0 483.0,254.0 552.5,254.0 622.0,254.0" fill="none" stroke="#2563eb" stroke-width="2"/>
+<circle cx="66.0" cy="324.4" r="3.6" fill="#ffffff" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="135.5" cy="267.8" r="3.6" fill="#ffffff" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="205.0" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="274.5" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="344.0" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="413.5" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="483.0" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="552.5" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<circle cx="622.0" cy="254.0" r="3.6" fill="#2563eb" stroke="#2563eb" stroke-width="1.6"/>
+<polyline points="66.0,324.5 135.5,267.7 205.0,211.3 274.5,211.3 344.0,211.3 413.5,211.3 483.0,211.3 552.5,211.3 622.0,211.3" fill="none" stroke="#7c3aed" stroke-width="2"/>
+<circle cx="66.0" cy="324.5" r="3.6" fill="#ffffff" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="135.5" cy="267.7" r="3.6" fill="#ffffff" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="205.0" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="274.5" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="344.0" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="413.5" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="483.0" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="552.5" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<circle cx="622.0" cy="211.3" r="3.6" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.6"/>
+<polyline points="66.0,324.4 135.5,267.8 205.0,169.6 274.5,167.6 344.0,167.7 413.5,167.7 483.0,167.7 552.5,167.7 622.0,167.7" fill="none" stroke="#db2777" stroke-width="2"/>
+<circle cx="66.0" cy="324.4" r="3.6" fill="#ffffff" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="135.5" cy="267.8" r="3.6" fill="#ffffff" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="205.0" cy="169.6" r="3.6" fill="#ffffff" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="274.5" cy="167.6" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="344.0" cy="167.7" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="413.5" cy="167.7" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="483.0" cy="167.7" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="552.5" cy="167.7" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<circle cx="622.0" cy="167.7" r="3.6" fill="#db2777" stroke="#db2777" stroke-width="1.6"/>
+<polyline points="66.0,324.5 135.5,268.0 205.0,165.7 274.5,135.9 344.0,133.4 413.5,133.1 483.0,132.6 552.5,133.2 622.0,133.2" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="66.0" cy="324.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="135.5" cy="268.0" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="205.0" cy="165.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="274.5" cy="135.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="344.0" cy="133.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="413.5" cy="133.1" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="483.0" cy="132.6" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="552.5" cy="133.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="622.0" cy="133.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="66.0,324.5 135.5,267.7 205.0,163.1 274.5,132.4 344.0,130.1 413.5,130.0 483.0,130.0 552.5,130.6 622.0,132.9" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="66.0" cy="324.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="135.5" cy="267.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="205.0" cy="163.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="274.5" cy="132.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="344.0" cy="130.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="413.5" cy="130.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="483.0" cy="130.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="552.5" cy="130.6" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="622.0" cy="132.9" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="66.0,324.4 135.5,267.9 205.0,161.0 274.5,131.6 344.0,129.5 413.5,128.2 483.0,129.0 552.5,129.6 622.0,131.7" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="66.0" cy="324.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="135.5" cy="267.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="205.0" cy="161.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="274.5" cy="131.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="344.0" cy="129.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="413.5" cy="128.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="483.0" cy="129.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="552.5" cy="129.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="622.0" cy="131.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#2563eb" stroke-width="2"/>
+<text x="110" y="58">λ=0.3</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#7c3aed" stroke-width="2"/>
+<text x="110" y="76">λ=0.4</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#db2777" stroke-width="2"/>
+<text x="110" y="94">λ=0.5</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="112">λ=0.6</text>
+<line x1="78" y1="126" x2="104" y2="126" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="130">λ=0.8</text>
+<line x1="78" y1="144" x2="104" y2="144" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="148">λ=1</text>
+<text x="472" y="374" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg>

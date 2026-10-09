@@ -1,0 +1,1016 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>Homa 类分布式 request-grant：8×6 mesh / ring</title>
+<style>
+body{font:15px/1.65 -apple-system,'Segoe UI','Noto Sans CJK SC',sans-serif;
+max-width:1040px;margin:0 auto;padding:24px 28px 80px;color:#1f2937}
+h1{font-size:26px;margin:.2em 0}h2{margin-top:2.2em;border-bottom:2px solid #e5e7eb;
+padding-bottom:6px}h3{margin-top:1.6em}
+table{border-collapse:collapse;margin:12px 0;font-size:13.5px}
+th,td{border:1px solid #d1d5db;padding:5px 9px;text-align:left;vertical-align:top}
+th{background:#f3f4f6}table.num td{text-align:right}table.heat td{padding:3px}
+.box{background:#f9fafb;border:1px solid #e5e7eb;border-left:4px solid #1f9d55;
+padding:10px 16px;margin:14px 0}.warn{border-left-color:#e07a1f;background:#fffbeb}
+.fig{margin:14px 0;overflow-x:auto}.fig figcaption{font-size:13px;color:#6b7280}
+code{background:#f3f4f6;padding:1px 5px;border-radius:3px;font-size:13px}
+.meta{color:#6b7280;font-size:13.5px}nav a{margin-right:14px}
+.two{display:flex;flex-wrap:wrap;gap:8px}sup{color:#b91c1c}
+</style></head><body>
+<h1>Homa 类分布式 request-grant：8×6 mesh 与 ring 的 goodput–注入率对比</h1>
+<p class="meta">8×6，48 节点；H=7，V=9；RAMP=2，RAMP_BW=2 · 开环 alltoall 写消息 · 稳态仿真
+（warmup 3000，measure 12000，单种子）· 校验 24/24 通过</p>
+<nav><a href="#abs">摘要</a><a href="#mech">机制</a><a href="#setup">口径</a>
+<a href="#param">参数</a><a href="#mesh">2D mesh</a><a href="#ring">2D ring</a>
+<a href="#cross">总结</a><a href="#v1">v1 对照</a><a href="#ver">验证</a>
+<a href="#lim">局限</a><a href="#files">文件</a></nav>
+
+<h2 id="abs">0. 摘要</h2>
+
+<div class="box">
+<p><b>做了什么。</b>把上一版「HA 回 DBID 时的逐包令牌池」换成与 Homa 类似的接收端驱动调度：
+消息的前 U 个包不等授权直接发（unscheduled），接收端 HA 从首包得知消息长度后，按剩余长度最短优先
+（SRPT）在最多 D 条消息之间发 grant，每条消息「已授权但未收到」的包数不超过窗口 W，grant 由包到达来驱动。
+负载改为<b>消息</b>（1/8/64 包，占比 50/30/20%），目的地均匀 alltoall 写。</p>
+<p><b>结论（单种子，误差未量化）。</b></p>
+<ul>
+<li><b>Homa 类比基线好，但远不如集中式。</b>过载区 goodput 峰值（flit/节点/周期）：
+mesh 基线 0.320 → Homa 均衡点 0.378（+18%），集中式 0.611（+91%）；
+ring 基线 0.369 → Homa 0.486（+32%），集中式 0.830（+125%）。
+把 W 压到 1 的吞吐优先点可到 mesh 0.415、ring 0.580，代价是 64 包消息 FCT 恶化一个数量级。</li>
+<li><b>集中式的峰值被高估。</b>集中式在过载区的 goodput（mesh 0.611、ring 0.830）超过了均匀流量的解析上限
+（mesh 0.490、ring 0.783），说明过载时被调度出去的流量构成偏向了「更容易送」的流，
+不是稳定吞吐。按<b>最大稳定注入率 λ*</b>比：mesh 基线 0.3 / 集中式 0.35 / Homa 0.3；
+ring 基线 0.3 / 集中式 0.5 / Homa 0.4。λ 网格步长 0.05，mesh 上 Homa 与基线的 λ* 差异在分辨率以内。</li>
+<li><b>Homa 的真正优势是短消息延迟。</b>λ=0.3 时 1 包消息平均 FCT：
+mesh 316（基线）/ 88（集中式）/ 51（Homa）；
+ring 141 / 65 / 34。在 λ=0.3（三者均稳定）Homa 的短消息比集中式还快（不用等 REQ→grant 往返；过载后优势消失，如 mesh λ=0.5 时 Homa 的 1 包 FCT 反而高于集中式），
+但 64 包消息 FCT 变差（mesh 470 → 721，ring 278 → 529）。</li>
+<li><b>goodput 的提升来自「窗口限流」，不是 SRPT。</b>均衡点上 SRPT 与 FCFS 的 goodput 与 FCT 几乎一致（SRPT 在 U=W=8 时没有机会起作用），
+去掉 unscheduled 前缀不改变 goodput，只让 1 包消息 FCT 变慢。SRPT 的作用要在 W 很小时才看得见（见消融）。</li>
+</ul>
+</div>
+<div class="box warn"><p><b>需要先知道的两点：</b>(1) 规范 Homa 的窗口是 RTT×带宽（这里约 100 个包以上），超过了最大消息长度（64 包），
+规范参数下所有消息都是 unscheduled，调度形同虚设；本文用 W≤16 的<b>亚 BDP 窗口</b>，是对 Homa 的有意偏离。
+(2) 优先级队列没有建模，Homa 的另一半收益（网内抢占）不在这些数字里。</p></div>
+
+<p>峰值 goodput（flit / 节点 / 周期，括号内为相对基线）：</p>
+<table class=""><thead><tr><th></th><th>基线</th><th>集中式</th><th>Homa 均衡点</th><th>Homa 吞吐优先点</th><th>v1 逐包池</th></tr></thead><tbody><tr><td>2D mesh</td><td>0.320</td><td>0.611（+91%）</td><td>0.378（+18%）</td><td>0.415（+30%）</td><td>0.376（+17%）</td></tr><tr><td>2D ring</td><td>0.369</td><td>0.830（+125%）</td><td>0.486（+32%）</td><td>0.580（+57%）</td><td>0.520（+41%）</td></tr></tbody></table>
+
+<h2 id="mech">1. 机制：HA 在回 DBID 时做 Homa 式调度</h2>
+
+<p>以 Homa 的五个要素为蓝本，映射到「写事务：REQ → DBID → 数据」的 NoC 流程：</p>
+<table><tr><th>Homa 要素</th><th>本仿真的实现</th></tr>
+<tr><td>Unscheduled 前缀</td><td>消息到达即发出前 U=min(U, L) 个包，不等 grant。接收端从任一首包得知总长度 L。U=0 时先发 REQ，REQ 到达 HA 后才开始 grant。</td></tr>
+<tr><td>接收端驱动</td><td>每个目的 HA 自己维护活跃消息表，grant 只由接收端发出，grant 沿控制通道回源，延迟等于 Topology 的 wire_distance（+RAMP）。</td></tr>
+<tr><td>SRPT</td><td>按 (剩余未收包数, 到达时间, id) 排序，取前 D 条；<code>homa_sched=fcfs</code> 时按到达时间。</td></tr>
+<tr><td>Overcommit 度 D</td><td>同一时刻最多对 D 条消息发 grant；D 大于同时活跃消息数则等于不限。</td></tr>
+<tr><td>窗口 / 自时钟</td><td>每条消息「已授权但未收到」包数 ≤ W；每个包送达后释放窗口，立即触发该 HA 重新发 grant。</td></tr>
+<tr><td>优先级</td><td><b>未建模</b>。底层基线网络（mesh：VC+credit+iSLIP，ring：E-tag/I-tag+偏转）原样不动，Homa 只在注入前决定「哪个包何时放进去」。</td></tr>
+</table>
+
+<figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 330" width="680" height="330" font-family="sans-serif" font-size="12">
+<rect width="680" height="330" fill="#fff"/>
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#374151"/></marker></defs>
+<text x="90" y="22" text-anchor="middle" font-weight="bold">RN（源，持有写数据）</text>
+<line x1="90" y1="32" x2="90" y2="318" stroke="#9ca3af" stroke-dasharray="3 4"/>
+<text x="330" y="22" text-anchor="middle" font-weight="bold">HA（目的，接收端调度）</text>
+<line x1="330" y1="32" x2="330" y2="318" stroke="#9ca3af" stroke-dasharray="3 4"/>
+<text x="570" y="22" text-anchor="middle" font-weight="bold">数据面（基线 fabric）</text>
+<line x1="570" y1="32" x2="570" y2="318" stroke="#9ca3af" stroke-dasharray="3 4"/>
+<line x1="90" y1="62" x2="570" y2="62" stroke="#1f9d55" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="330.0" y="56" text-anchor="middle" fill="#1f9d55">① 前 U 个包直接发（unscheduled，无往返）</text>
+<line x1="570" y1="96" x2="330" y2="96" stroke="#1f9d55" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="450.0" y="90" text-anchor="middle" fill="#1f9d55">② 首包到达：HA 获知消息长度 L</text>
+<rect x="250" y="112" width="160" height="40" rx="5" fill="#ecfdf5" stroke="#1f9d55"/><text x="330" y="129" text-anchor="middle">按剩余量 SRPT 排序</text><text x="330" y="145" text-anchor="middle">取前 D 条消息 overcommit</text>
+<line x1="330" y1="182" x2="90" y2="182" stroke="#e07a1f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="210.0" y="176" text-anchor="middle" fill="#e07a1f">③ GRANT：该消息窗口内「已授权未收到」＜ W</text>
+<line x1="90" y1="214" x2="570" y2="214" stroke="#e07a1f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="330.0" y="208" text-anchor="middle" fill="#e07a1f">④ 收到 GRANT 才发这一个包</text>
+<line x1="570" y1="246" x2="330" y2="246" stroke="#e07a1f" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="450.0" y="240" text-anchor="middle" fill="#e07a1f">⑤ 包送达 → 窗口腾出一格 → 立刻再授权（③）</text>
+<text x="340" y="296" text-anchor="middle" fill="#6b7280">L ≤ U 的短消息只走 ①，不产生任何控制消息</text>
+</svg><figcaption>Homa 类写调度的消息流。橙色部分只对长于未调度前缀的消息发生。</figcaption></figure>
+
+<p><b>与 CHI 写事务的对应关系。</b>HA 回 DBID 就是「grant」：每个 DBID 授权源端发送一个包的数据。
+这里有一个与标准 CHI WriteNoSnp 不同的地方：unscheduled 前缀等价于<b>预先发放的 DBID 信用</b>，在标准 CHI 里源端必须先收到 DBID 才能发数据，
+所以 unscheduled 需要协议扩展（例如在 REQ 里携带预授权，或者对 HA 做 credit 预配置）。去掉 unscheduled（U=0）的变体就是标准 CHI 的合法映射，其结果见消融表。</p>
+<p>控制报文（REQ、DBID）被建模成<b>无争用的专用控制通道</b>，时延等于数据通道的几何距离，所以控制面的拥塞效应没有计入——这对 Homa 与集中式同样有利。</p>
+
+
+<h2 id="setup">2. 负载与口径</h2>
+
+<ul>
+<li><b>拓扑</b>：8×6 共 48 节点，H=7，V=9，RAMP=2，RAMP_BW=2；mesh 为 VC+credit+iSLIP（buf_depth=20），ring 为无缓冲二维环（E-tag/I-tag+偏转）。</li>
+<li><b>负载</b>：开环泊松到达的消息写，长度混合 1/8/64 包 = 50/30/20%（平均 {mean_len:.1f} 包/消息），目的地在其余 47 个节点上均匀。
+注入率 λ 的单位是 <b>包/节点/周期</b>，因此消息到达率为 λ / 平均长度。</li>
+<li><b>goodput</b>：measure 窗口内<b>送达</b>的 flit 数 / (48 × measure)，单位 flit/节点/周期。
+旧报告的 <code>accepted</code> 是按注入侧统计的，会低估基线（源端 FIFO 里排队尚未注入的包），因此这里改用送达口径。</li>
+<li><b>稳定</b>：measure 窗口内送达 flit ≥ 同窗口实际到达 flit 的 97%（用实际负载而非名义 λ，以免泊松涨落把低载点误判为发散）。<b>λ*</b> = 扫描中最大的稳定点。</li>
+<li><b>FCT</b>：消息从到达到最后一个包送达的周期数，分 1/8/64 包三类报均值与 p99。过载点只统计「已完成」的消息，存在幸存者偏差。</li>
+<li><b>p50</b>：逐包延迟，口径含消息内排队和等待授权，只作参考；Homa 与基线之间的比较以 FCT 为准。</li>
+<li><b>时长与种子</b>：warmup 3000、measure 12000 周期，一个种子，无置信区间。</li>
+</ul>
+
+
+<h2 id="param">3. 参数：窗口 W 与超额授权度 D</h2>
+
+<p>W 与 D 是 Homa 类调度的两个主要旋钮。在 W∈{1,2,4,8,16}、D∈{2,4,8,16,48} 的 25 格网格上、λ∈{0.3, 0.5, 1.0} 上扫描（图中每点 = 一格）：</p>
+<ul>
+<li><b>只按 goodput 选会选到 W=1（stop-and-wait）</b>：每条消息一次只放行一个包，把网络变成近乎「每源每宿一个包」的极强限流，goodput 最高，
+但 64 包消息要等 64 次 grant 往返（mesh 约 4159 周期，是基线的 9 倍）。这不是可接受的工作点。</li>
+<li><b>均衡点</b>（本文主结果）：在 λ=0.3 时 64 包消息 FCT ≤ 基线的 2 倍的约束下取平均 goodput 最大的格。mesh、ring 都选到 <b>W=8, D=48</b> / <b>W=8, D=48</b>。
+</li>
+<li><b>吞吐优先点</b>：不加约束的最优，mesh W=1, D=48，ring W=1, D=48，作为 Homa 在吞吐上的上界单独画出。</li>
+<li>W 增大时 goodput 单调下降并收敛到基线（W=16 时 mesh 约 0.32，与基线相同）：窗口一旦不小于消息长度，所有包都是 unscheduled，调度退化为无调度。
+D 增大到 8 以上之后基本饱和——同一目的端同时活跃的消息数本来就不多（λ=0.3 时 HA 同时活跃的消息峰值 mesh 9、ring 9）。</li>
+</ul>
+
+<div class="two"><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#fff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D mesh：(W, D) 网格的吞吐—长消息延迟折中</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/><text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="168.66666666666669" y1="40" x2="168.66666666666669" y2="372" stroke="#e5e7eb"/><text x="168.66666666666669" y="388" text-anchor="middle">500</text>
+<line x1="271.33333333333337" y1="40" x2="271.33333333333337" y2="372" stroke="#e5e7eb"/><text x="271.33333333333337" y="388" text-anchor="middle">1000</text>
+<line x1="374.0" y1="40" x2="374.0" y2="372" stroke="#e5e7eb"/><text x="374.0" y="388" text-anchor="middle">1500</text>
+<line x1="476.6666666666667" y1="40" x2="476.6666666666667" y2="372" stroke="#e5e7eb"/><text x="476.6666666666667" y="388" text-anchor="middle">2000</text>
+<line x1="579.3333333333334" y1="40" x2="579.3333333333334" y2="372" stroke="#e5e7eb"/><text x="579.3333333333334" y="388" text-anchor="middle">2500</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/><text x="682.0" y="388" text-anchor="middle">3000</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/><text x="60" y="376.0" text-anchor="end">0.0</text>
+<line x1="66" y1="316.66666666666663" x2="682" y2="316.66666666666663" stroke="#e5e7eb"/><text x="60" y="320.66666666666663" text-anchor="end">0.1</text>
+<line x1="66" y1="261.3333333333333" x2="682" y2="261.3333333333333" stroke="#e5e7eb"/><text x="60" y="265.3333333333333" text-anchor="end">0.2</text>
+<line x1="66" y1="205.99999999999997" x2="682" y2="205.99999999999997" stroke="#e5e7eb"/><text x="60" y="209.99999999999997" text-anchor="end">0.3</text>
+<line x1="66" y1="150.66666666666663" x2="682" y2="150.66666666666663" stroke="#e5e7eb"/><text x="60" y="154.66666666666663" text-anchor="end">0.4</text>
+<line x1="66" y1="95.33333333333331" x2="682" y2="95.33333333333331" stroke="#e5e7eb"/><text x="60" y="99.33333333333331" text-anchor="end">0.5</text>
+<line x1="66" y1="39.99999999999993" x2="682" y2="39.99999999999993" stroke="#e5e7eb"/><text x="60" y="43.99999999999993" text-anchor="end">0.6</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">λ=0.3 时 64 包消息的平均 FCT（周期；右端截断）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">λ=1.0 的 goodput（flit/节点/周期）</text>
+<line x1="259.1365333333333" y1="40" x2="259.1365333333333" y2="372" stroke="#b91c1c" stroke-dasharray="6 4"/><text x="263.1365333333333" y="52" fill="#b91c1c">基线 FCT 的 2×（均衡点的约束）</text>
+<line x1="66" y1="194.7618" x2="682" y2="194.7618" stroke="#6b7280" stroke-dasharray="6 4"/><text x="678" y="190.7618" text-anchor="end" fill="#6b7280">基线峰值 0.320</text>
+<circle cx="682.0" cy="343.7" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="332.6" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="306.3" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="243.6" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="164.0" r="7" fill="#0e7490" fill-opacity="0.95" stroke="#111"/>
+<text x="691.0" y="168.0">W=1,D=48</text>
+<circle cx="682.0" cy="312.8" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="276.6" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="208.9" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="553.3" cy="170.0" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="551.2" cy="170.4" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="220.2" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="510.3" cy="182.8" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="328.0" cy="175.0" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="322.1" cy="174.7" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="322.1" cy="180.0" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="390.0" cy="192.5" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="223.2" cy="188.6" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="213.9" cy="185.9" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="214.1" cy="187.0" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="214.1" cy="186.6" r="7" fill="#1f9d55" fill-opacity="0.95" stroke="#111"/>
+<text x="223.1" y="190.6">W=8,D=48</text>
+<circle cx="181.0" cy="202.2" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="168.0" cy="201.7" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="168.1" cy="201.4" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="168.1" cy="200.3" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="168.1" cy="198.6" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="592" cy="358" r="5" fill="#0e7490"/><text x="602" y="362">W=1</text>
+<circle cx="592" cy="342" r="5" fill="#2563eb"/><text x="602" y="346">W=2</text>
+<circle cx="592" cy="326" r="5" fill="#7c3aed"/><text x="602" y="330">W=4</text>
+<circle cx="592" cy="310" r="5" fill="#1f9d55"/><text x="602" y="314">W=8</text>
+<circle cx="592" cy="294" r="5" fill="#e07a1f"/><text x="602" y="298">W=16</text>
+</svg><figcaption>mesh</figcaption></figure><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#fff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D ring：(W, D) 网格的吞吐—长消息延迟折中</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/><text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="168.66666666666669" y1="40" x2="168.66666666666669" y2="372" stroke="#e5e7eb"/><text x="168.66666666666669" y="388" text-anchor="middle">500</text>
+<line x1="271.33333333333337" y1="40" x2="271.33333333333337" y2="372" stroke="#e5e7eb"/><text x="271.33333333333337" y="388" text-anchor="middle">1000</text>
+<line x1="374.0" y1="40" x2="374.0" y2="372" stroke="#e5e7eb"/><text x="374.0" y="388" text-anchor="middle">1500</text>
+<line x1="476.6666666666667" y1="40" x2="476.6666666666667" y2="372" stroke="#e5e7eb"/><text x="476.6666666666667" y="388" text-anchor="middle">2000</text>
+<line x1="579.3333333333334" y1="40" x2="579.3333333333334" y2="372" stroke="#e5e7eb"/><text x="579.3333333333334" y="388" text-anchor="middle">2500</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/><text x="682.0" y="388" text-anchor="middle">3000</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/><text x="60" y="376.0" text-anchor="end">0.0</text>
+<line x1="66" y1="316.66666666666663" x2="682" y2="316.66666666666663" stroke="#e5e7eb"/><text x="60" y="320.66666666666663" text-anchor="end">0.1</text>
+<line x1="66" y1="261.3333333333333" x2="682" y2="261.3333333333333" stroke="#e5e7eb"/><text x="60" y="265.3333333333333" text-anchor="end">0.2</text>
+<line x1="66" y1="205.99999999999997" x2="682" y2="205.99999999999997" stroke="#e5e7eb"/><text x="60" y="209.99999999999997" text-anchor="end">0.3</text>
+<line x1="66" y1="150.66666666666663" x2="682" y2="150.66666666666663" stroke="#e5e7eb"/><text x="60" y="154.66666666666663" text-anchor="end">0.4</text>
+<line x1="66" y1="95.33333333333331" x2="682" y2="95.33333333333331" stroke="#e5e7eb"/><text x="60" y="99.33333333333331" text-anchor="end">0.5</text>
+<line x1="66" y1="39.99999999999993" x2="682" y2="39.99999999999993" stroke="#e5e7eb"/><text x="60" y="43.99999999999993" text-anchor="end">0.6</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">λ=0.3 时 64 包消息的平均 FCT（周期；右端截断）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">λ=1.0 的 goodput（flit/节点/周期）</text>
+<line x1="180.3296" y1="40" x2="180.3296" y2="372" stroke="#b91c1c" stroke-dasharray="6 4"/><text x="184.3296" y="52" fill="#b91c1c">基线 FCT 的 2×（均衡点的约束）</text>
+<line x1="66" y1="167.82" x2="682" y2="167.82" stroke="#6b7280" stroke-dasharray="6 4"/><text x="678" y="163.82" text-anchor="end" fill="#6b7280">基线峰值 0.369</text>
+<circle cx="682.0" cy="340.6" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="325.8" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="289.0" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="200.4" r="4.5" fill="#0e7490" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="51.0" r="7" fill="#0e7490" fill-opacity="0.95" stroke="#111"/>
+<text x="691.0" y="55.0">W=1,D=48</text>
+<circle cx="682.0" cy="303.0" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="256.7" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="522.1" cy="156.7" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="438.6" cy="74.3" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="438.5" cy="58.6" r="4.5" fill="#2563eb" fill-opacity="0.55" stroke="none"/>
+<circle cx="682.0" cy="197.8" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="324.2" cy="119.6" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="260.6" cy="90.7" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="260.3" cy="82.9" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="260.3" cy="77.2" r="4.5" fill="#7c3aed" fill-opacity="0.55" stroke="none"/>
+<circle cx="244.2" cy="145.1" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="177.0" cy="126.2" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="174.6" cy="120.0" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="174.6" cy="116.5" r="4.5" fill="#1f9d55" fill-opacity="0.55" stroke="none"/>
+<circle cx="174.6" cy="109.5" r="7" fill="#1f9d55" fill-opacity="0.95" stroke="#111"/>
+<text x="183.6" y="113.5">W=8,D=48</text>
+<circle cx="140.3" cy="150.9" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="137.4" cy="152.6" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="138.2" cy="150.9" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="138.2" cy="143.8" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="138.2" cy="134.1" r="4.5" fill="#e07a1f" fill-opacity="0.55" stroke="none"/>
+<circle cx="592" cy="358" r="5" fill="#0e7490"/><text x="602" y="362">W=1</text>
+<circle cx="592" cy="342" r="5" fill="#2563eb"/><text x="602" y="346">W=2</text>
+<circle cx="592" cy="326" r="5" fill="#7c3aed"/><text x="602" y="330">W=4</text>
+<circle cx="592" cy="310" r="5" fill="#1f9d55"/><text x="602" y="314">W=8</text>
+<circle cx="592" cy="294" r="5" fill="#e07a1f"/><text x="602" y="298">W=16</text>
+</svg><figcaption>ring</figcaption></figure></div>
+<p>mesh：每格 = 三个 λ（0.3 / 0.5 / 1.0）的平均 goodput；FCT₆₄ = λ=0.3 时 64 包消息平均完成时间。◆ = 均衡点，● = 吞吐优先点。</p>
+<table class="heat"><thead><tr><th>窗口 W \ 度 D</th><th>D=2</th><th>D=4</th><th>D=8</th><th>D=16</th><th>D=48</th></tr></thead><tbody><tr><td><b>W=1</b></td><td><span style="display:block;background:rgba(31,157,85,0.08);padding:4px;border-radius:3px">0.055<br><small>FCT₆₄=—</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.14);padding:4px;border-radius:3px">0.082<br><small>FCT₆₄=9873</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.24);padding:4px;border-radius:3px">0.136<br><small>FCT₆₄=7671</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.46);padding:4px;border-radius:3px">0.243<br><small>FCT₆₄=4971</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.68);padding:4px;border-radius:3px">0.355 ●<br><small>FCT₆₄=4159</small></span></td></tr><tr><td><b>W=2</b></td><td><span style="display:block;background:rgba(31,157,85,0.19);padding:4px;border-radius:3px">0.110<br><small>FCT₆₄=8652</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.31);padding:4px;border-radius:3px">0.170<br><small>FCT₆₄=6873</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.53);padding:4px;border-radius:3px">0.279<br><small>FCT₆₄=3425</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.67);padding:4px;border-radius:3px">0.350<br><small>FCT₆₄=2373</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.68);padding:4px;border-radius:3px">0.353<br><small>FCT₆₄=2363</small></span></td></tr><tr><td><b>W=4</b></td><td><span style="display:block;background:rgba(31,157,85,0.43);padding:4px;border-radius:3px">0.228<br><small>FCT₆₄=5514</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.59);padding:4px;border-radius:3px">0.312<br><small>FCT₆₄=2164</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.344<br><small>FCT₆₄=1276</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.347<br><small>FCT₆₄=1247</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.344<br><small>FCT₆₄=1247</small></span></td></tr><tr><td><b>W=8</b></td><td><span style="display:block;background:rgba(31,157,85,0.59);padding:4px;border-radius:3px">0.309<br><small>FCT₆₄=1578</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.63);padding:4px;border-radius:3px">0.329<br><small>FCT₆₄=765</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.64);padding:4px;border-radius:3px">0.335<br><small>FCT₆₄=720</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.64);padding:4px;border-radius:3px">0.335<br><small>FCT₆₄=721</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.64);padding:4px;border-radius:3px">0.336 ◆<br><small>FCT₆₄=721</small></span></td></tr><tr><td><b>W=16</b></td><td><span style="display:block;background:rgba(31,157,85,0.60);padding:4px;border-radius:3px">0.316<br><small>FCT₆₄=560</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.61);padding:4px;border-radius:3px">0.320<br><small>FCT₆₄=497</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.61);padding:4px;border-radius:3px">0.319<br><small>FCT₆₄=497</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.61);padding:4px;border-radius:3px">0.322<br><small>FCT₆₄=497</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.61);padding:4px;border-radius:3px">0.322<br><small>FCT₆₄=497</small></span></td></tr></tbody></table>
+<p>ring：</p>
+<table class="heat"><thead><tr><th>窗口 W \ 度 D</th><th>D=2</th><th>D=4</th><th>D=8</th><th>D=16</th><th>D=48</th></tr></thead><tbody><tr><td><b>W=1</b></td><td><span style="display:block;background:rgba(31,157,85,0.08);padding:4px;border-radius:3px">0.063<br><small>FCT₆₄=—</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.13);padding:4px;border-radius:3px">0.097<br><small>FCT₆₄=9391</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.24);padding:4px;border-radius:3px">0.166<br><small>FCT₆₄=6884</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.45);padding:4px;border-radius:3px">0.301<br><small>FCT₆₄=3858</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.68);padding:4px;border-radius:3px">0.451 ●<br><small>FCT₆₄=3480</small></span></td></tr><tr><td><b>W=2</b></td><td><span style="display:block;background:rgba(31,157,85,0.18);padding:4px;border-radius:3px">0.127<br><small>FCT₆₄=9047</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.30);padding:4px;border-radius:3px">0.202<br><small>FCT₆₄=5602</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.51);padding:4px;border-radius:3px">0.340<br><small>FCT₆₄=2221</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.440<br><small>FCT₆₄=1815</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.68);padding:4px;border-radius:3px">0.451<br><small>FCT₆₄=1814</small></span></td></tr><tr><td><b>W=4</b></td><td><span style="display:block;background:rgba(31,157,85,0.39);padding:4px;border-radius:3px">0.260<br><small>FCT₆₄=4157</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.56);padding:4px;border-radius:3px">0.375<br><small>FCT₆₄=1258</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.64);padding:4px;border-radius:3px">0.427<br><small>FCT₆₄=948</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.436<br><small>FCT₆₄=946</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.66);padding:4px;border-radius:3px">0.440<br><small>FCT₆₄=946</small></span></td></tr><tr><td><b>W=8</b></td><td><span style="display:block;background:rgba(31,157,85,0.53);padding:4px;border-radius:3px">0.356<br><small>FCT₆₄=868</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.59);padding:4px;border-radius:3px">0.390<br><small>FCT₆₄=541</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.61);padding:4px;border-radius:3px">0.405<br><small>FCT₆₄=529</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.62);padding:4px;border-radius:3px">0.411<br><small>FCT₆₄=529</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.62);padding:4px;border-radius:3px">0.415 ◆<br><small>FCT₆₄=529</small></span></td></tr><tr><td><b>W=16</b></td><td><span style="display:block;background:rgba(31,157,85,0.54);padding:4px;border-radius:3px">0.362<br><small>FCT₆₄=362</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.55);padding:4px;border-radius:3px">0.366<br><small>FCT₆₄=348</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.56);padding:4px;border-radius:3px">0.373<br><small>FCT₆₄=352</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.57);padding:4px;border-radius:3px">0.380<br><small>FCT₆₄=352</small></span></td><td><span style="display:block;background:rgba(31,157,85,0.58);padding:4px;border-radius:3px">0.386<br><small>FCT₆₄=352</small></span></td></tr></tbody></table>
+
+
+<h2 id="mesh">3. 2D mesh</h2>
+
+<p><b>基线</b>：λ* = 0.3，峰值 0.320，λ=1.0 时下降到 0.249（比峰值低 22%）。
+这是过载下的拥塞回落（本负载下信用反压与源队列队头阻塞叠加）。</p>
+<p><b>集中式</b>：λ* = 0.35，λ=0.35 时 goodput 0.345（受解析上限 0.490 约束）；过载区 0.611 超过解析上限，是流量构成漂移，不能当稳定吞吐。
+在稳定区它没有明显劣势，且 λ=0.5（基线已发散）时 1 包 FCT 仍只有 250 周期，而基线 2960。</p>
+<p><b>Homa 均衡点</b>（W=8, D=48）：λ* = 0.3，过载区平台 0.378（+18%），λ=1.0 为 0.335，坍塌比基线轻。
+λ=0.3 时 1 包消息 FCT 51（基线 316），64 包消息 721（基线 470）。
+</p>
+<p><b>Homa 吞吐优先点</b>（W=1, D=48）：平台 0.415（+30%），但在 λ=0.1 就已不稳定（该点 goodput 比到达率低约 6%），64 包消息 FCT 在 λ=0.3 达 4159。</p>
+<p><b>消融（均衡点）</b>：FCFS 与 SRPT 的 goodput、FCT 完全重合（U=W=8，8 包消息整条 unscheduled，调度只作用于 64 包消息，SRPT 无可排序之物）。
+U=0 时 goodput 不变，λ=0.3 的 1 包 FCT 从 51 升到 128——这就是「等一轮 REQ→grant」的代价。
+控制时延减半只改善 64 包消息 FCT（721 → 608），对 goodput 无影响。
+W=2、D=4 时 SRPT 才显现：8 包消息 FCT（λ=0.5）277 对 FCFS 7758，goodput 0.182 对 0.161。</p>
+<p><b>集中式的控制往返 T_rtt</b>：把 16 改成 64，goodput 逐点完全相同，1 包 FCT 恰好多出约 48 周期（= T_rtt 的增量），说明集中式的吞吐不依赖往返时延，只是延迟加上一个固定量。</p>
+
+<h3>goodput 与注入率</h3>
+<figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" width="820" height="500" font-family="sans-serif" font-size="12">
+<rect width="820" height="500" fill="#ffffff"/>
+<text x="410.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D mesh：goodput 与注入率（消息负载，1/8/64 包）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="442" stroke="#e5e7eb"/>
+<text x="66.0" y="458" text-anchor="middle">0</text>
+<line x1="213.20000000000002" y1="40" x2="213.20000000000002" y2="442" stroke="#e5e7eb"/>
+<text x="213.20000000000002" y="458" text-anchor="middle">0.2</text>
+<line x1="360.40000000000003" y1="40" x2="360.40000000000003" y2="442" stroke="#e5e7eb"/>
+<text x="360.40000000000003" y="458" text-anchor="middle">0.4</text>
+<line x1="507.59999999999997" y1="40" x2="507.59999999999997" y2="442" stroke="#e5e7eb"/>
+<text x="507.59999999999997" y="458" text-anchor="middle">0.6</text>
+<line x1="654.8000000000001" y1="40" x2="654.8000000000001" y2="442" stroke="#e5e7eb"/>
+<text x="654.8000000000001" y="458" text-anchor="middle">0.8</text>
+<line x1="802.0" y1="40" x2="802.0" y2="442" stroke="#e5e7eb"/>
+<text x="802.0" y="458" text-anchor="middle">1</text>
+<line x1="66" y1="442.0" x2="802" y2="442.0" stroke="#e5e7eb"/>
+<text x="60" y="446.0" text-anchor="end">0</text>
+<line x1="66" y1="361.6" x2="802" y2="361.6" stroke="#e5e7eb"/>
+<text x="60" y="365.6" text-anchor="end">0.2</text>
+<line x1="66" y1="281.2" x2="802" y2="281.2" stroke="#e5e7eb"/>
+<text x="60" y="285.2" text-anchor="end">0.4</text>
+<line x1="66" y1="200.8" x2="802" y2="200.8" stroke="#e5e7eb"/>
+<text x="60" y="204.8" text-anchor="end">0.6</text>
+<line x1="66" y1="120.39999999999998" x2="802" y2="120.39999999999998" stroke="#e5e7eb"/>
+<text x="60" y="124.39999999999998" text-anchor="end">0.8</text>
+<line x1="66" y1="40.0" x2="802" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">1</text>
+<rect x="66" y="40" width="736" height="402" fill="none" stroke="#374151"/>
+<text x="434.0" y="488" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,241.0) rotate(-90)" text-anchor="middle">goodput（flit / 节点 / 周期）</text>
+<line x1="66.0" y1="442.0" x2="802.0" y2="40.0" stroke="#9ca3af" stroke-dasharray="2 4"/>
+<line x1="66" y1="245.18750000000003" x2="802" y2="245.18750000000003" stroke="#b91c1c" stroke-dasharray="6 4"/>
+<text x="798" y="241.18750000000003" text-anchor="end" fill="#b91c1c">均匀流量解析上限 0.490</text>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.4 213.2,363.6 250.0,344.1 286.8,324.8 323.6,314.0 360.4,314.7 397.2,314.3 434.0,313.2 507.6,315.8 581.2,313.6 654.8,314.4 802.0,341.8" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.4" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="286.8" cy="324.8" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="323.6" cy="314.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="360.4" cy="314.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="397.2" cy="314.3" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="434.0" cy="313.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="507.6" cy="315.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="581.2" cy="313.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="654.8" cy="314.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="802.0" cy="341.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.4 213.2,363.5 250.0,344.1 286.8,322.7 323.6,303.3 360.4,284.0 397.2,263.7 434.0,249.2 507.6,231.3 581.2,219.9 654.8,211.6 802.0,196.4" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.5" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="286.8" cy="322.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="323.6" cy="303.3" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="360.4" cy="284.0" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="397.2" cy="263.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="434.0" cy="249.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="507.6" cy="231.3" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="581.2" cy="219.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="654.8" cy="211.6" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="802.0" cy="196.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="102.8,423.1 139.6,402.5 176.4,383.4 213.2,363.6 250.0,344.1 286.8,323.3 323.6,304.5 360.4,292.3 397.2,290.7 434.0,290.3 507.6,291.6 581.2,289.9 654.8,291.4 802.0,307.3" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="102.8" cy="423.1" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.4" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="286.8" cy="323.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="323.6" cy="304.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="360.4" cy="292.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="397.2" cy="290.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="434.0" cy="290.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="507.6" cy="291.6" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="581.2" cy="289.9" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="654.8" cy="291.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="802.0" cy="307.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="102.8,423.6 139.6,404.0 176.4,386.0 213.2,367.4 250.0,348.7 286.8,328.9 323.6,309.9 360.4,292.8 397.2,280.9 434.0,277.9 507.6,277.0 581.2,275.1 654.8,276.1 802.0,290.9" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="102.8" cy="423.6" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="139.6" cy="404.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="176.4" cy="386.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="213.2" cy="367.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.0" cy="348.7" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="286.8" cy="328.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="323.6" cy="309.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="360.4" cy="292.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="397.2" cy="280.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="434.0" cy="277.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="507.6" cy="277.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="581.2" cy="275.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="654.8" cy="276.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="802.0" cy="290.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.6 213.2,363.6 250.0,344.1 286.8,323.9 323.6,311.3 360.4,304.1 397.2,303.5 434.0,297.5 507.6,294.2 581.2,292.7 654.8,291.0 802.0,300.7" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.6" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="286.8" cy="323.9" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="323.6" cy="311.3" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="360.4" cy="304.1" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="397.2" cy="303.5" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="434.0" cy="297.5" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="507.6" cy="294.2" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="581.2" cy="292.7" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="654.8" cy="291.0" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="802.0" cy="300.7" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类（均衡点）（W=8, D=48）</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先点）（W=1, D=48）</text>
+<line x1="78" y1="126" x2="104" y2="126" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="130">v1 逐包 DBID 池（K=64）</text>
+<text x="652" y="434" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>实心点 = 稳定，空心点 = 队列发散。点线 y=x 是「全部送达」，红色虚线是均匀流量的解析上限；集中式在过载区超过该上限，是被调度出的流量构成漂移所致，不是稳定吞吐。</figcaption></figure>
+<table class=""><thead><tr><th>方案</th><th>λ*</th><th>峰值 goodput</th><th>相对基线</th><th>λ=1.0 goodput</th><th>p50（λ=0.05）</th><th>FCT₁（λ=0.3）</th><th>FCT₆₄（λ=0.3）</th></tr></thead><tbody><tr><td>基线</td><td>0.3</td><td>0.320</td><td>+0%</td><td>0.249</td><td>67</td><td>316</td><td>470</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>0.35</td><td>0.611</td><td>+91%</td><td>0.611</td><td>83</td><td>88</td><td>234</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>0.3</td><td>0.378</td><td>+18%</td><td>0.335</td><td>180</td><td>51</td><td>721</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>0.05</td><td>0.415</td><td>+30%</td><td>0.376</td><td>1042</td><td>41</td><td>4159</td></tr><tr><td>v1 逐包 DBID 池（K=64）</td><td>0.25</td><td>0.376</td><td>+17%</td><td>0.351</td><td>145</td><td>269</td><td>694</td></tr></tbody></table>
+<p class="meta">λ* = 最大稳定注入率；FCT = 消息完成时间（含 REQ/授权/排队），单位周期。✗ = 队列发散。</p>
+<details><summary>逐点数据（goodput）</summary><table class="num"><thead><tr><th>λ</th><th>基线</th><th>集中式</th><th>Homa 均衡</th><th>Homa 吞吐优先</th><th>v1 池</th></tr></thead><tbody><tr><td>0.05</td><td>0.047</td><td>0.047</td><td>0.047</td><td>0.046</td><td>0.047</td></tr><tr><td>0.1</td><td>0.099</td><td>0.099</td><td>0.098</td><td>0.094<sup>✗</sup></td><td>0.098</td></tr><tr><td>0.15</td><td>0.146</td><td>0.146</td><td>0.146</td><td>0.139<sup>✗</sup></td><td>0.145</td></tr><tr><td>0.2</td><td>0.195</td><td>0.195</td><td>0.195</td><td>0.186<sup>✗</sup></td><td>0.195</td></tr><tr><td>0.25</td><td>0.243</td><td>0.244</td><td>0.243</td><td>0.232<sup>✗</sup></td><td>0.244</td></tr><tr><td>0.3</td><td>0.291</td><td>0.297</td><td>0.295</td><td>0.281<sup>✗</sup></td><td>0.294<sup>✗</sup></td></tr><tr><td>0.35</td><td>0.318<sup>✗</sup></td><td>0.345</td><td>0.342<sup>✗</sup></td><td>0.329<sup>✗</sup></td><td>0.325<sup>✗</sup></td></tr><tr><td>0.4</td><td>0.317<sup>✗</sup></td><td>0.393<sup>✗</sup></td><td>0.372<sup>✗</sup></td><td>0.371<sup>✗</sup></td><td>0.343<sup>✗</sup></td></tr><tr><td>0.45</td><td>0.318<sup>✗</sup></td><td>0.444<sup>✗</sup></td><td>0.376<sup>✗</sup></td><td>0.401<sup>✗</sup></td><td>0.344<sup>✗</sup></td></tr><tr><td>0.5</td><td>0.320<sup>✗</sup></td><td>0.479<sup>✗</sup></td><td>0.377<sup>✗</sup></td><td>0.408<sup>✗</sup></td><td>0.360<sup>✗</sup></td></tr><tr><td>0.6</td><td>0.314<sup>✗</sup></td><td>0.524<sup>✗</sup></td><td>0.374<sup>✗</sup></td><td>0.410<sup>✗</sup></td><td>0.368<sup>✗</sup></td></tr><tr><td>0.7</td><td>0.320<sup>✗</sup></td><td>0.553<sup>✗</sup></td><td>0.378<sup>✗</sup></td><td>0.415<sup>✗</sup></td><td>0.371<sup>✗</sup></td></tr><tr><td>0.8</td><td>0.317<sup>✗</sup></td><td>0.573<sup>✗</sup></td><td>0.375<sup>✗</sup></td><td>0.413<sup>✗</sup></td><td>0.376<sup>✗</sup></td></tr><tr><td>1</td><td>0.249<sup>✗</sup></td><td>0.611<sup>✗</sup></td><td>0.335<sup>✗</sup></td><td>0.376<sup>✗</sup></td><td>0.351<sup>✗</sup></td></tr></tbody></table></details>
+<h3>消息完成时间</h3>
+<div class="two"><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#ffffff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D mesh：1 包消息的平均完成时间（FCT）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/>
+<text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="189.2" y1="40" x2="189.2" y2="372" stroke="#e5e7eb"/>
+<text x="189.2" y="388" text-anchor="middle">0.2</text>
+<line x1="312.4" y1="40" x2="312.4" y2="372" stroke="#e5e7eb"/>
+<text x="312.4" y="388" text-anchor="middle">0.4</text>
+<line x1="435.59999999999997" y1="40" x2="435.59999999999997" y2="372" stroke="#e5e7eb"/>
+<text x="435.59999999999997" y="388" text-anchor="middle">0.6</text>
+<line x1="558.8" y1="40" x2="558.8" y2="372" stroke="#e5e7eb"/>
+<text x="558.8" y="388" text-anchor="middle">0.8</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/>
+<text x="682.0" y="388" text-anchor="middle">1</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/>
+<text x="60" y="376.0" text-anchor="end">10</text>
+<line x1="66" y1="319.1985811443574" x2="682" y2="319.1985811443574" stroke="#e5e7eb"/>
+<text x="60" y="323.1985811443574" text-anchor="end">30</text>
+<line x1="66" y1="261.33333333333337" x2="682" y2="261.33333333333337" stroke="#e5e7eb"/>
+<text x="60" y="265.33333333333337" text-anchor="end">100</text>
+<line x1="66" y1="208.53191447769063" x2="682" y2="208.53191447769063" stroke="#e5e7eb"/>
+<text x="60" y="212.53191447769063" text-anchor="end">300</text>
+<line x1="66" y1="150.66666666666669" x2="682" y2="150.66666666666669" stroke="#e5e7eb"/>
+<text x="60" y="154.66666666666669" text-anchor="end">1000</text>
+<line x1="66" y1="97.865247811024" x2="682" y2="97.865247811024" stroke="#e5e7eb"/>
+<text x="60" y="101.865247811024" text-anchor="end">3000</text>
+<line x1="66" y1="40.0" x2="682" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">10000</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">平均 FCT（周期，对数轴）</text>
+<polyline points="96.8,303.1 127.6,298.4 158.4,292.1 189.2,274.3 220.0,259.8 250.8,206.0 281.6,161.9 312.4,130.8 343.2,106.7 374.0,98.5 435.6,81.2 497.2,72.4 558.8,62.8 682.0,60.1" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="96.8" cy="303.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="127.6" cy="298.4" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="158.4" cy="292.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="189.2" cy="274.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="220.0" cy="259.8" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.8" cy="206.0" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="281.6" cy="161.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="312.4" cy="130.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="343.2" cy="106.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="374.0" cy="98.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="435.6" cy="81.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="497.2" cy="72.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="558.8" cy="62.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="682.0" cy="60.1" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="96.8,288.7 127.6,286.9 158.4,284.2 189.2,281.1 220.0,275.2 250.8,267.2 281.6,258.2 312.4,247.3 343.2,233.8 374.0,217.4 435.6,188.2 497.2,172.9 558.8,159.9 682.0,148.8" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="96.8" cy="288.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="127.6" cy="286.9" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="158.4" cy="284.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="189.2" cy="281.1" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="220.0" cy="275.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.8" cy="267.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="281.6" cy="258.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="312.4" cy="247.3" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="343.2" cy="233.8" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="374.0" cy="217.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="435.6" cy="188.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="497.2" cy="172.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="558.8" cy="159.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="682.0" cy="148.8" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="96.8,305.4 127.6,305.3 158.4,304.5 189.2,303.3 220.0,300.5 250.8,293.6 281.6,274.0 312.4,229.6 343.2,189.2 374.0,168.9 435.6,144.5 497.2,132.8 558.8,121.9 682.0,111.0" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="96.8" cy="305.4" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="127.6" cy="305.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="158.4" cy="304.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="189.2" cy="303.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="220.0" cy="300.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.8" cy="293.6" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="281.6" cy="274.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="312.4" cy="229.6" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="343.2" cy="189.2" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="374.0" cy="168.9" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="435.6" cy="144.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="497.2" cy="132.8" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="558.8" cy="121.9" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="682.0" cy="111.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="96.8,305.5 127.6,305.6 158.4,305.3 189.2,305.0 220.0,304.4 250.8,304.3 281.6,303.1 312.4,300.5 343.2,288.2 374.0,274.1 435.6,262.4 497.2,259.3 558.8,252.1 682.0,246.7" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="96.8" cy="305.5" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="127.6" cy="305.6" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="158.4" cy="305.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="189.2" cy="305.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="220.0" cy="304.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.8" cy="304.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="281.6" cy="303.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="312.4" cy="300.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="343.2" cy="288.2" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="374.0" cy="274.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="435.6" cy="262.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="497.2" cy="259.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="558.8" cy="252.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="682.0" cy="246.7" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先）</text>
+<text x="532" y="364" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>1 包消息</figcaption></figure><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#ffffff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D mesh：64 包消息的平均完成时间（FCT）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/>
+<text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="189.2" y1="40" x2="189.2" y2="372" stroke="#e5e7eb"/>
+<text x="189.2" y="388" text-anchor="middle">0.2</text>
+<line x1="312.4" y1="40" x2="312.4" y2="372" stroke="#e5e7eb"/>
+<text x="312.4" y="388" text-anchor="middle">0.4</text>
+<line x1="435.59999999999997" y1="40" x2="435.59999999999997" y2="372" stroke="#e5e7eb"/>
+<text x="435.59999999999997" y="388" text-anchor="middle">0.6</text>
+<line x1="558.8" y1="40" x2="558.8" y2="372" stroke="#e5e7eb"/>
+<text x="558.8" y="388" text-anchor="middle">0.8</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/>
+<text x="682.0" y="388" text-anchor="middle">1</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/>
+<text x="60" y="376.0" text-anchor="end">10</text>
+<line x1="66" y1="319.1985811443574" x2="682" y2="319.1985811443574" stroke="#e5e7eb"/>
+<text x="60" y="323.1985811443574" text-anchor="end">30</text>
+<line x1="66" y1="261.33333333333337" x2="682" y2="261.33333333333337" stroke="#e5e7eb"/>
+<text x="60" y="265.33333333333337" text-anchor="end">100</text>
+<line x1="66" y1="208.53191447769063" x2="682" y2="208.53191447769063" stroke="#e5e7eb"/>
+<text x="60" y="212.53191447769063" text-anchor="end">300</text>
+<line x1="66" y1="150.66666666666669" x2="682" y2="150.66666666666669" stroke="#e5e7eb"/>
+<text x="60" y="154.66666666666669" text-anchor="end">1000</text>
+<line x1="66" y1="97.865247811024" x2="682" y2="97.865247811024" stroke="#e5e7eb"/>
+<text x="60" y="101.865247811024" text-anchor="end">3000</text>
+<line x1="66" y1="40.0" x2="682" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">10000</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">平均 FCT（周期，对数轴）</text>
+<polyline points="96.8,255.2 127.6,249.2 158.4,242.9 189.2,230.3 220.0,223.2 250.8,186.9 281.6,153.0 312.4,125.3 343.2,104.3 374.0,95.4 435.6,79.9 497.2,70.7 558.8,62.3 682.0,59.5" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="96.8" cy="255.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="127.6" cy="249.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="158.4" cy="242.9" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="189.2" cy="230.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="220.0" cy="223.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.8" cy="186.9" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="281.6" cy="153.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="312.4" cy="125.3" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="343.2" cy="104.3" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="374.0" cy="95.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="435.6" cy="79.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="497.2" cy="70.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="558.8" cy="62.3" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="682.0" cy="59.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="96.8,248.7 127.6,243.7 158.4,239.7 189.2,232.8 220.0,228.5 250.8,220.6 281.6,211.4 312.4,199.3 343.2,181.1 374.0,163.2 435.6,137.6 497.2,128.4 558.8,121.9 682.0,117.9" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="96.8" cy="248.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="127.6" cy="243.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="158.4" cy="239.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="189.2" cy="232.8" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="220.0" cy="228.5" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.8" cy="220.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="281.6" cy="211.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="312.4" cy="199.3" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="343.2" cy="181.1" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="374.0" cy="163.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="435.6" cy="137.6" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="497.2" cy="128.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="558.8" cy="121.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="682.0" cy="117.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="96.8,176.4 127.6,177.1 158.4,175.5 189.2,174.0 220.0,172.7 250.8,166.4 281.6,155.3 312.4,130.7 343.2,109.0 374.0,98.7 435.6,87.2 497.2,72.4 558.8,57.3 682.0,48.1" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="96.8" cy="176.4" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="127.6" cy="177.1" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="158.4" cy="175.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="189.2" cy="174.0" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="220.0" cy="172.7" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.8" cy="166.4" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="281.6" cy="155.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="312.4" cy="130.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="343.2" cy="109.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="374.0" cy="98.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="435.6" cy="87.2" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="497.2" cy="72.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="558.8" cy="57.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="682.0" cy="48.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="96.8,81.6 127.6,83.6 158.4,82.0 189.2,83.3 220.0,82.3 250.8,82.2 281.6,82.4 312.4,80.3 343.2,78.6 374.0,76.8 435.6,70.1 497.2,65.8 558.8,60.1 682.0,55.5" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="96.8" cy="81.6" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="127.6" cy="83.6" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="158.4" cy="82.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="189.2" cy="83.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="220.0" cy="82.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.8" cy="82.2" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="281.6" cy="82.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="312.4" cy="80.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="343.2" cy="78.6" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="374.0" cy="76.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="435.6" cy="70.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="497.2" cy="65.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="558.8" cy="60.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="682.0" cy="55.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先）</text>
+<text x="532" y="364" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>64 包消息</figcaption></figure></div>
+<p class="meta">过载区只统计「已完成」的消息，存在幸存者偏差，不能把过载点的 FCT 当作排队后的真实值；λ* 以下的点可比。</p>
+<p>λ=0.3（三者都稳定）时按消息长度分的 FCT（均值 / p99）：</p>
+<table class=""><thead><tr><th>方案</th><th>1 包 均值/p99</th><th>8 包 均值/p99</th><th>64 包 均值/p99</th></tr></thead><tbody><tr><td>基线</td><td>316 / 1751</td><td>325 / 1740</td><td>470 / 1850</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>88 / 247</td><td>110 / 351</td><td>234 / 642</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>51 / 183</td><td>66 / 197</td><td>721 / 1764</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>41 / 85</td><td>571 / 1235</td><td>4159 / 9106</td></tr></tbody></table>
+<p>λ=0.5（基线已发散）：</p>
+<table class=""><thead><tr><th>方案</th><th>1 包 均值/p99</th><th>8 包 均值/p99</th><th>64 包 均值/p99</th></tr></thead><tbody><tr><td>基线</td><td>2960 / 7410</td><td>2984 / 7587</td><td>3157 / 7584</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>250 / 2403</td><td>348 / 2760</td><td>770 / 4965</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>685 / 2412</td><td>699 / 2416</td><td>2947 / 9920</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>77 / 280</td><td>844 / 2464</td><td>4648 / 10438</td></tr></tbody></table>
+<h3>消融（goodput / FCT₁ / FCT₆₄）</h3>
+<table class=""><thead><tr><th>变体</th><th>λ=0.3</th><th>λ=0.5</th><th>λ=0.8</th></tr></thead><tbody><tr><td>均衡点（SRPT，U=W）</td><td>0.295 / 51 / 721</td><td>0.377 / 685 / 2947</td><td>0.375 / 1818 / 6970</td></tr><tr><td>FCFS 代替 SRPT</td><td>0.295 / 51 / 721</td><td>0.377 / 685 / 2947</td><td>0.376 / 1791 / 6961</td></tr><tr><td>无 unscheduled 前缀（U=0）</td><td>0.295 / 128 / 789</td><td>0.377 / 759 / 3019</td><td>0.375 / 1668 / 6496</td></tr><tr><td>控制时延减半</td><td>0.296 / 53 / 608</td><td>0.375 / 703 / 2879</td><td>0.374 / 1833 / 6910</td></tr></tbody></table>
+<p>SRPT 只有在多于一个长度类同时被调度时才起作用（均衡点 U=W=8 时 8 包消息整条都是 unscheduled，只有 64 包消息被调度）。把窗口缩到 W=2 让 8 包与 64 包同时竞争授权：</p>
+<table class=""><thead><tr><th>策略</th><th>λ=0.5 goodput / FCT₈ / FCT₆₄</th><th>λ=0.8 goodput / FCT₈ / FCT₆₄</th></tr></thead><tbody><tr><td>SRPT（W=2, D=4）</td><td>0.182 / 277 / 8718</td><td>0.218 / 304 / 8945</td></tr><tr><td>FCFS（W=2, D=4）</td><td>0.161 / 7758 / 8480</td><td>0.177 / 8711 / 8783</td></tr></tbody></table>
+<h3>集中式的控制往返</h3>
+<table class="num"><thead><tr><th>λ</th><th>goodput T_rtt=16</th><th>goodput T_rtt=64</th><th>FCT₁ T_rtt=16</th><th>FCT₁ T_rtt=64</th></tr></thead><tbody><tr><td>0.2</td><td>0.195</td><td>0.195</td><td>66</td><td>114</td></tr><tr><td>0.3</td><td>0.297</td><td>0.297</td><td>88</td><td>137</td></tr><tr><td>0.5</td><td>0.479</td><td>0.479</td><td>250</td><td>297</td></tr><tr><td>0.8</td><td>0.573</td><td>0.573</td><td>826</td><td>872</td></tr></tbody></table>
+
+
+<h2 id="ring">4. 2D ring</h2>
+
+<p><b>基线</b>：λ* = 0.3，峰值 0.369，λ=1.0 时为 0.311，比峰值低 16%，与偏转吃掉环带宽的解释一致，但本文没有单独量化偏转。</p>
+<p><b>集中式</b>：λ* = 0.5（稳定区 goodput 0.498，接近解析上限 0.783）；过载区 0.830 同样含流量构成漂移。
+ring 上集中式的收益比 mesh 更大；可能的原因是无缓冲环没有缓冲来吸收冲突，事先避开冲突比事后偏转划算（推测，未做隔离实验）。</p>
+<p><b>Homa 均衡点</b>（W=8, D=48）：λ* = 0.4，平台 0.486（+32%）；λ=0.3 的 1 包消息 FCT 34（基线 141，集中式 65），
+64 包消息 529（基线 278）。</p>
+<p><b>Homa 吞吐优先点</b>（W=1, D=48）：平台 0.580（+57%），λ*=0.3，64 包消息 FCT 3480。</p>
+<p><b>消融</b>：与 mesh 一致——SRPT/FCFS 在均衡点重合，U=0 使 1 包 FCT 从 34 升到 94，控制时延减半让 64 包 FCT 从 529 降到 432。
+W=2、D=4 时 SRPT 的 8 包 FCT（λ=0.5）210 对 FCFS 7103。集中式 T_rtt 16→64 同样只加固定延迟、不改 goodput。</p>
+
+<h3>goodput 与注入率</h3>
+<figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" width="820" height="500" font-family="sans-serif" font-size="12">
+<rect width="820" height="500" fill="#ffffff"/>
+<text x="410.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D ring：goodput 与注入率（消息负载，1/8/64 包）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="442" stroke="#e5e7eb"/>
+<text x="66.0" y="458" text-anchor="middle">0</text>
+<line x1="213.20000000000002" y1="40" x2="213.20000000000002" y2="442" stroke="#e5e7eb"/>
+<text x="213.20000000000002" y="458" text-anchor="middle">0.2</text>
+<line x1="360.40000000000003" y1="40" x2="360.40000000000003" y2="442" stroke="#e5e7eb"/>
+<text x="360.40000000000003" y="458" text-anchor="middle">0.4</text>
+<line x1="507.59999999999997" y1="40" x2="507.59999999999997" y2="442" stroke="#e5e7eb"/>
+<text x="507.59999999999997" y="458" text-anchor="middle">0.6</text>
+<line x1="654.8000000000001" y1="40" x2="654.8000000000001" y2="442" stroke="#e5e7eb"/>
+<text x="654.8000000000001" y="458" text-anchor="middle">0.8</text>
+<line x1="802.0" y1="40" x2="802.0" y2="442" stroke="#e5e7eb"/>
+<text x="802.0" y="458" text-anchor="middle">1</text>
+<line x1="66" y1="442.0" x2="802" y2="442.0" stroke="#e5e7eb"/>
+<text x="60" y="446.0" text-anchor="end">0</text>
+<line x1="66" y1="361.6" x2="802" y2="361.6" stroke="#e5e7eb"/>
+<text x="60" y="365.6" text-anchor="end">0.2</text>
+<line x1="66" y1="281.2" x2="802" y2="281.2" stroke="#e5e7eb"/>
+<text x="60" y="285.2" text-anchor="end">0.4</text>
+<line x1="66" y1="200.8" x2="802" y2="200.8" stroke="#e5e7eb"/>
+<text x="60" y="204.8" text-anchor="end">0.6</text>
+<line x1="66" y1="120.39999999999998" x2="802" y2="120.39999999999998" stroke="#e5e7eb"/>
+<text x="60" y="124.39999999999998" text-anchor="end">0.8</text>
+<line x1="66" y1="40.0" x2="802" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">1</text>
+<rect x="66" y="40" width="736" height="402" fill="none" stroke="#374151"/>
+<text x="434.0" y="488" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,241.0) rotate(-90)" text-anchor="middle">goodput（flit / 节点 / 周期）</text>
+<line x1="66.0" y1="442.0" x2="802.0" y2="40.0" stroke="#9ca3af" stroke-dasharray="2 4"/>
+<line x1="66" y1="127.10000000000001" x2="802" y2="127.10000000000001" stroke="#b91c1c" stroke-dasharray="6 4"/>
+<text x="798" y="123.10000000000001" text-anchor="end" fill="#b91c1c">均匀流量解析上限 0.783</text>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.3 213.2,363.6 250.0,344.3 286.8,323.3 323.6,308.0 360.4,299.9 397.2,298.6 434.0,298.1 507.6,298.8 581.2,298.4 654.8,293.7 802.0,317.0" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="286.8" cy="323.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="323.6" cy="308.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="360.4" cy="299.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="397.2" cy="298.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="434.0" cy="298.1" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="507.6" cy="298.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="581.2" cy="298.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="654.8" cy="293.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="802.0" cy="317.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.3 213.2,363.6 250.0,344.1 286.8,322.5 323.6,303.0 360.4,282.7 397.2,262.2 434.0,241.8 507.6,203.5 581.2,168.5 654.8,139.8 802.0,108.2" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.3" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="286.8" cy="322.5" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="323.6" cy="303.0" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="360.4" cy="282.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="397.2" cy="262.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="434.0" cy="241.8" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="507.6" cy="203.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="581.2" cy="168.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="654.8" cy="139.8" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="802.0" cy="108.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="102.8,423.2 139.6,402.5 176.4,383.3 213.2,363.6 250.0,344.1 286.8,322.8 323.6,303.3 360.4,283.2 397.2,263.9 434.0,252.0 507.6,248.5 581.2,246.7 654.8,247.7 802.0,251.3" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.1" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="286.8" cy="322.8" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="323.6" cy="303.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="360.4" cy="283.2" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="397.2" cy="263.9" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="434.0" cy="252.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="507.6" cy="248.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="581.2" cy="246.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="654.8" cy="247.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="802.0" cy="251.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="102.8,423.1 139.6,403.2 176.4,384.5 213.2,365.6 250.0,346.5 286.8,325.8 323.6,306.1 360.4,286.9 397.2,266.6 434.0,247.8 507.6,221.7 581.2,211.4 654.8,209.2 802.0,208.8" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="102.8" cy="423.1" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="139.6" cy="403.2" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="176.4" cy="384.5" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="213.2" cy="365.6" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.0" cy="346.5" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="286.8" cy="325.8" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="323.6" cy="306.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="360.4" cy="286.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="397.2" cy="266.6" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="434.0" cy="247.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="507.6" cy="221.7" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="581.2" cy="211.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="654.8" cy="209.2" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="802.0" cy="208.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<polyline points="102.8,423.2 139.6,402.4 176.4,383.3 213.2,363.6 250.0,344.4 286.8,323.4 323.6,305.1 360.4,287.8 397.2,273.7 434.0,264.5 507.6,256.7 581.2,251.1 654.8,243.9 802.0,232.8" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="102.8" cy="423.2" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="139.6" cy="402.4" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="176.4" cy="383.3" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="213.2" cy="363.6" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="250.0" cy="344.4" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="286.8" cy="323.4" r="3.6" fill="#9ca3af" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="323.6" cy="305.1" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="360.4" cy="287.8" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="397.2" cy="273.7" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="434.0" cy="264.5" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="507.6" cy="256.7" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="581.2" cy="251.1" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="654.8" cy="243.9" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<circle cx="802.0" cy="232.8" r="3.6" fill="#ffffff" stroke="#9ca3af" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类（均衡点）（W=8, D=48）</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先点）（W=1, D=48）</text>
+<line x1="78" y1="126" x2="104" y2="126" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="130">v1 逐包 DBID 池（K=64）</text>
+<text x="652" y="434" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>实心点 = 稳定，空心点 = 队列发散。点线 y=x 是「全部送达」，红色虚线是均匀流量的解析上限；集中式在过载区超过该上限，是被调度出的流量构成漂移所致，不是稳定吞吐。</figcaption></figure>
+<table class=""><thead><tr><th>方案</th><th>λ*</th><th>峰值 goodput</th><th>相对基线</th><th>λ=1.0 goodput</th><th>p50（λ=0.05）</th><th>FCT₁（λ=0.3）</th><th>FCT₆₄（λ=0.3）</th></tr></thead><tbody><tr><td>基线</td><td>0.3</td><td>0.369</td><td>+0%</td><td>0.311</td><td>54</td><td>141</td><td>278</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>0.5</td><td>0.830</td><td>+125%</td><td>0.830</td><td>74</td><td>65</td><td>196</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>0.4</td><td>0.486</td><td>+32%</td><td>0.474</td><td>142</td><td>34</td><td>529</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>0.3</td><td>0.580</td><td>+57%</td><td>0.580</td><td>920</td><td>29</td><td>3480</td></tr><tr><td>v1 逐包 DBID 池（K=64）</td><td>0.3</td><td>0.520</td><td>+41%</td><td>0.520</td><td>117</td><td>169</td><td>428</td></tr></tbody></table>
+<p class="meta">λ* = 最大稳定注入率；FCT = 消息完成时间（含 REQ/授权/排队），单位周期。✗ = 队列发散。</p>
+<details><summary>逐点数据（goodput）</summary><table class="num"><thead><tr><th>λ</th><th>基线</th><th>集中式</th><th>Homa 均衡</th><th>Homa 吞吐优先</th><th>v1 池</th></tr></thead><tbody><tr><td>0.05</td><td>0.047</td><td>0.047</td><td>0.047</td><td>0.047</td><td>0.047</td></tr><tr><td>0.1</td><td>0.099</td><td>0.099</td><td>0.098</td><td>0.097</td><td>0.099</td></tr><tr><td>0.15</td><td>0.146</td><td>0.146</td><td>0.146</td><td>0.143</td><td>0.146</td></tr><tr><td>0.2</td><td>0.195</td><td>0.195</td><td>0.195</td><td>0.190<sup>✗</sup></td><td>0.195</td></tr><tr><td>0.25</td><td>0.243</td><td>0.244</td><td>0.243</td><td>0.238</td><td>0.243</td></tr><tr><td>0.3</td><td>0.295</td><td>0.297</td><td>0.296</td><td>0.289</td><td>0.295</td></tr><tr><td>0.35</td><td>0.333<sup>✗</sup></td><td>0.346</td><td>0.345</td><td>0.338<sup>✗</sup></td><td>0.341<sup>✗</sup></td></tr><tr><td>0.4</td><td>0.354<sup>✗</sup></td><td>0.396</td><td>0.395</td><td>0.386<sup>✗</sup></td><td>0.384<sup>✗</sup></td></tr><tr><td>0.45</td><td>0.357<sup>✗</sup></td><td>0.447</td><td>0.443<sup>✗</sup></td><td>0.436<sup>✗</sup></td><td>0.419<sup>✗</sup></td></tr><tr><td>0.5</td><td>0.358<sup>✗</sup></td><td>0.498</td><td>0.473<sup>✗</sup></td><td>0.483<sup>✗</sup></td><td>0.441<sup>✗</sup></td></tr><tr><td>0.6</td><td>0.356<sup>✗</sup></td><td>0.593<sup>✗</sup></td><td>0.481<sup>✗</sup></td><td>0.548<sup>✗</sup></td><td>0.461<sup>✗</sup></td></tr><tr><td>0.7</td><td>0.357<sup>✗</sup></td><td>0.680<sup>✗</sup></td><td>0.486<sup>✗</sup></td><td>0.574<sup>✗</sup></td><td>0.475<sup>✗</sup></td></tr><tr><td>0.8</td><td>0.369<sup>✗</sup></td><td>0.752<sup>✗</sup></td><td>0.483<sup>✗</sup></td><td>0.579<sup>✗</sup></td><td>0.493<sup>✗</sup></td></tr><tr><td>1</td><td>0.311<sup>✗</sup></td><td>0.830<sup>✗</sup></td><td>0.474<sup>✗</sup></td><td>0.580<sup>✗</sup></td><td>0.520<sup>✗</sup></td></tr></tbody></table></details>
+<h3>消息完成时间</h3>
+<div class="two"><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#ffffff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D ring：1 包消息的平均完成时间（FCT）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/>
+<text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="189.2" y1="40" x2="189.2" y2="372" stroke="#e5e7eb"/>
+<text x="189.2" y="388" text-anchor="middle">0.2</text>
+<line x1="312.4" y1="40" x2="312.4" y2="372" stroke="#e5e7eb"/>
+<text x="312.4" y="388" text-anchor="middle">0.4</text>
+<line x1="435.59999999999997" y1="40" x2="435.59999999999997" y2="372" stroke="#e5e7eb"/>
+<text x="435.59999999999997" y="388" text-anchor="middle">0.6</text>
+<line x1="558.8" y1="40" x2="558.8" y2="372" stroke="#e5e7eb"/>
+<text x="558.8" y="388" text-anchor="middle">0.8</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/>
+<text x="682.0" y="388" text-anchor="middle">1</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/>
+<text x="60" y="376.0" text-anchor="end">10</text>
+<line x1="66" y1="319.1985811443574" x2="682" y2="319.1985811443574" stroke="#e5e7eb"/>
+<text x="60" y="323.1985811443574" text-anchor="end">30</text>
+<line x1="66" y1="261.33333333333337" x2="682" y2="261.33333333333337" stroke="#e5e7eb"/>
+<text x="60" y="265.33333333333337" text-anchor="end">100</text>
+<line x1="66" y1="208.53191447769063" x2="682" y2="208.53191447769063" stroke="#e5e7eb"/>
+<text x="60" y="212.53191447769063" text-anchor="end">300</text>
+<line x1="66" y1="150.66666666666669" x2="682" y2="150.66666666666669" stroke="#e5e7eb"/>
+<text x="60" y="154.66666666666669" text-anchor="end">1000</text>
+<line x1="66" y1="97.865247811024" x2="682" y2="97.865247811024" stroke="#e5e7eb"/>
+<text x="60" y="101.865247811024" text-anchor="end">3000</text>
+<line x1="66" y1="40.0" x2="682" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">10000</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">平均 FCT（周期，对数轴）</text>
+<polyline points="96.8,316.9 127.6,311.4 158.4,304.2 189.2,292.9 220.0,275.5 250.8,244.9 281.6,189.0 312.4,147.7 343.2,122.1 374.0,104.8 435.6,85.9 497.2,76.9 558.8,67.8 682.0,61.2" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="96.8" cy="316.9" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="127.6" cy="311.4" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="158.4" cy="304.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="189.2" cy="292.9" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="220.0" cy="275.5" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.8" cy="244.9" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="281.6" cy="189.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="312.4" cy="147.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="343.2" cy="122.1" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="374.0" cy="104.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="435.6" cy="85.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="497.2" cy="76.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="558.8" cy="67.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="682.0" cy="61.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="96.8,295.7 127.6,294.6 158.4,292.7 189.2,290.6 220.0,287.5 250.8,282.1 281.6,276.9 312.4,271.8 343.2,265.6 374.0,258.3 435.6,244.5 497.2,224.4 558.8,200.0 682.0,158.6" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="96.8" cy="295.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="127.6" cy="294.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="158.4" cy="292.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="189.2" cy="290.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="220.0" cy="287.5" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.8" cy="282.1" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="281.6" cy="276.9" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="312.4" cy="271.8" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="343.2" cy="265.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="374.0" cy="258.3" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="435.6" cy="244.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="497.2" cy="224.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="558.8" cy="200.0" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="682.0" cy="158.6" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="96.8,321.5 127.6,321.0 158.4,320.3 189.2,318.9 220.0,317.2 250.8,313.6 281.6,307.8 312.4,295.9 343.2,273.3 374.0,231.6 435.6,183.3 497.2,159.7 558.8,144.4 682.0,126.8" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="96.8" cy="321.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="127.6" cy="321.0" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="158.4" cy="320.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="189.2" cy="318.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="220.0" cy="317.2" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.8" cy="313.6" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="281.6" cy="307.8" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="312.4" cy="295.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="343.2" cy="273.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="374.0" cy="231.6" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="435.6" cy="183.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="497.2" cy="159.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="558.8" cy="144.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="682.0" cy="126.8" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="96.8,321.8 127.6,322.0 158.4,322.0 189.2,321.5 220.0,321.3 250.8,321.0 281.6,320.5 312.4,320.0 343.2,319.4 374.0,316.9 435.6,301.7 497.2,289.3 558.8,283.8 682.0,279.2" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="96.8" cy="321.8" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="127.6" cy="322.0" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="158.4" cy="322.0" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="189.2" cy="321.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="220.0" cy="321.3" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.8" cy="321.0" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="281.6" cy="320.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="312.4" cy="320.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="343.2" cy="319.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="374.0" cy="316.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="435.6" cy="301.7" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="497.2" cy="289.3" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="558.8" cy="283.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="682.0" cy="279.2" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先）</text>
+<text x="532" y="364" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>1 包消息</figcaption></figure><figure class="fig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 430" width="700" height="430" font-family="sans-serif" font-size="12">
+<rect width="700" height="430" fill="#ffffff"/>
+<text x="350.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D ring：64 包消息的平均完成时间（FCT）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="372" stroke="#e5e7eb"/>
+<text x="66.0" y="388" text-anchor="middle">0</text>
+<line x1="189.2" y1="40" x2="189.2" y2="372" stroke="#e5e7eb"/>
+<text x="189.2" y="388" text-anchor="middle">0.2</text>
+<line x1="312.4" y1="40" x2="312.4" y2="372" stroke="#e5e7eb"/>
+<text x="312.4" y="388" text-anchor="middle">0.4</text>
+<line x1="435.59999999999997" y1="40" x2="435.59999999999997" y2="372" stroke="#e5e7eb"/>
+<text x="435.59999999999997" y="388" text-anchor="middle">0.6</text>
+<line x1="558.8" y1="40" x2="558.8" y2="372" stroke="#e5e7eb"/>
+<text x="558.8" y="388" text-anchor="middle">0.8</text>
+<line x1="682.0" y1="40" x2="682.0" y2="372" stroke="#e5e7eb"/>
+<text x="682.0" y="388" text-anchor="middle">1</text>
+<line x1="66" y1="372.0" x2="682" y2="372.0" stroke="#e5e7eb"/>
+<text x="60" y="376.0" text-anchor="end">10</text>
+<line x1="66" y1="319.1985811443574" x2="682" y2="319.1985811443574" stroke="#e5e7eb"/>
+<text x="60" y="323.1985811443574" text-anchor="end">30</text>
+<line x1="66" y1="261.33333333333337" x2="682" y2="261.33333333333337" stroke="#e5e7eb"/>
+<text x="60" y="265.33333333333337" text-anchor="end">100</text>
+<line x1="66" y1="208.53191447769063" x2="682" y2="208.53191447769063" stroke="#e5e7eb"/>
+<text x="60" y="212.53191447769063" text-anchor="end">300</text>
+<line x1="66" y1="150.66666666666669" x2="682" y2="150.66666666666669" stroke="#e5e7eb"/>
+<text x="60" y="154.66666666666669" text-anchor="end">1000</text>
+<line x1="66" y1="97.865247811024" x2="682" y2="97.865247811024" stroke="#e5e7eb"/>
+<text x="60" y="101.865247811024" text-anchor="end">3000</text>
+<line x1="66" y1="40.0" x2="682" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">10000</text>
+<rect x="66" y="40" width="616" height="332" fill="none" stroke="#374151"/>
+<text x="374.0" y="418" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,206.0) rotate(-90)" text-anchor="middle">平均 FCT（周期，对数轴）</text>
+<polyline points="96.8,261.2 127.6,255.7 158.4,249.2 189.2,240.2 220.0,230.8 250.8,212.1 281.6,172.8 312.4,140.6 343.2,118.4 374.0,102.5 435.6,84.1 497.2,75.6 558.8,67.2 682.0,60.6" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="96.8" cy="261.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="127.6" cy="255.7" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="158.4" cy="249.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="189.2" cy="240.2" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="220.0" cy="230.8" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="250.8" cy="212.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="281.6" cy="172.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="312.4" cy="140.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="343.2" cy="118.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="374.0" cy="102.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="435.6" cy="84.1" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="497.2" cy="75.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="558.8" cy="67.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="682.0" cy="60.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="96.8,251.6 127.6,247.6 158.4,243.0 189.2,237.4 220.0,235.2 250.8,228.9 281.6,223.4 312.4,217.7 343.2,211.2 374.0,202.1 435.6,181.7 497.2,159.1 558.8,138.0 682.0,111.5" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="96.8" cy="251.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="127.6" cy="247.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="158.4" cy="243.0" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="189.2" cy="237.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="220.0" cy="235.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="250.8" cy="228.9" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="281.6" cy="223.4" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="312.4" cy="217.7" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="343.2" cy="211.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="374.0" cy="202.1" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="435.6" cy="181.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="497.2" cy="159.1" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="558.8" cy="138.0" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="682.0" cy="111.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="96.8,188.9 127.6,188.3 158.4,186.5 189.2,185.2 220.0,184.1 250.8,181.3 281.6,176.3 312.4,169.2 343.2,155.1 374.0,126.1 435.6,88.8 497.2,67.7 558.8,54.0 682.0,42.8" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="96.8" cy="188.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="127.6" cy="188.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="158.4" cy="186.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="189.2" cy="185.2" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="220.0" cy="184.1" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="250.8" cy="181.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="281.6" cy="176.3" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="312.4" cy="169.2" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="343.2" cy="155.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="374.0" cy="126.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="435.6" cy="88.8" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="497.2" cy="67.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="558.8" cy="54.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="682.0" cy="42.8" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<polyline points="96.8,90.7 127.6,91.3 158.4,90.2 189.2,90.9 220.0,91.2 250.8,90.7 281.6,90.5 312.4,90.0 343.2,89.5 374.0,87.8 435.6,80.1 497.2,71.4 558.8,65.4 682.0,55.2" fill="none" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="96.8" cy="90.7" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="127.6" cy="91.3" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="158.4" cy="90.2" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="189.2" cy="90.9" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="220.0" cy="91.2" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="250.8" cy="90.7" r="3.6" fill="#0e7490" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="281.6" cy="90.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="312.4" cy="90.0" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="343.2" cy="89.5" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="374.0" cy="87.8" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="435.6" cy="80.1" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="497.2" cy="71.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="558.8" cy="65.4" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<circle cx="682.0" cy="55.2" r="3.6" fill="#ffffff" stroke="#0e7490" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 Homa 类</text>
+<line x1="78" y1="108" x2="104" y2="108" stroke="#0e7490" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="110" y="112">分布式 Homa 类（吞吐优先）</text>
+<text x="532" y="364" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg><figcaption>64 包消息</figcaption></figure></div>
+<p class="meta">过载区只统计「已完成」的消息，存在幸存者偏差，不能把过载点的 FCT 当作排队后的真实值；λ* 以下的点可比。</p>
+<p>λ=0.3（三者都稳定）时按消息长度分的 FCT（均值 / p99）：</p>
+<table class=""><thead><tr><th>方案</th><th>1 包 均值/p99</th><th>8 包 均值/p99</th><th>64 包 均值/p99</th></tr></thead><tbody><tr><td>基线</td><td>141 / 741</td><td>162 / 781</td><td>278 / 902</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>65 / 179</td><td>84 / 203</td><td>196 / 382</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>34 / 90</td><td>51 / 149</td><td>529 / 958</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>29 / 55</td><td>437 / 844</td><td>3480 / 7152</td></tr></tbody></table>
+<p>λ=0.5（基线已发散）：</p>
+<table class=""><thead><tr><th>方案</th><th>1 包 均值/p99</th><th>8 包 均值/p99</th><th>64 包 均值/p99</th></tr></thead><tbody><tr><td>基线</td><td>2599 / 5615</td><td>2580 / 5655</td><td>2726 / 5628</td></tr><tr><td>类 iSLIP 集中仲裁</td><td>107 / 333</td><td>153 / 449</td><td>343 / 860</td></tr><tr><td>分布式 Homa 类（均衡点）</td><td>186 / 682</td><td>209 / 709</td><td>1666 / 4940</td></tr><tr><td>分布式 Homa 类（吞吐优先点）</td><td>32 / 60</td><td>466 / 863</td><td>3700 / 7283</td></tr></tbody></table>
+<h3>消融（goodput / FCT₁ / FCT₆₄）</h3>
+<table class=""><thead><tr><th>变体</th><th>λ=0.3</th><th>λ=0.5</th><th>λ=0.8</th></tr></thead><tbody><tr><td>均衡点（SRPT，U=W）</td><td>0.296 / 34 / 529</td><td>0.473 / 186 / 1666</td><td>0.483 / 1138 / 7480</td></tr><tr><td>FCFS 代替 SRPT</td><td>0.296 / 34 / 529</td><td>0.473 / 186 / 1666</td><td>0.482 / 1138 / 7498</td></tr><tr><td>无 unscheduled 前缀（U=0）</td><td>0.296 / 94 / 587</td><td>0.473 / 243 / 1698</td><td>0.486 / 1068 / 7339</td></tr><tr><td>控制时延减半</td><td>0.296 / 34 / 432</td><td>0.472 / 192 / 1606</td><td>0.481 / 1159 / 7484</td></tr></tbody></table>
+<p>SRPT 只有在多于一个长度类同时被调度时才起作用（均衡点 U=W=8 时 8 包消息整条都是 unscheduled，只有 64 包消息被调度）。把窗口缩到 W=2 让 8 包与 64 包同时竞争授权：</p>
+<table class=""><thead><tr><th>策略</th><th>λ=0.5 goodput / FCT₈ / FCT₆₄</th><th>λ=0.8 goodput / FCT₈ / FCT₆₄</th></tr></thead><tbody><tr><td>SRPT（W=2, D=4）</td><td>0.212 / 210 / 8825</td><td>0.257 / 216 / 9298</td></tr><tr><td>FCFS（W=2, D=4）</td><td>0.191 / 7103 / 8153</td><td>0.216 / 9133 / 9733</td></tr></tbody></table>
+<h3>集中式的控制往返</h3>
+<table class="num"><thead><tr><th>λ</th><th>goodput T_rtt=16</th><th>goodput T_rtt=64</th><th>FCT₁ T_rtt=16</th><th>FCT₁ T_rtt=64</th></tr></thead><tbody><tr><td>0.2</td><td>0.195</td><td>0.195</td><td>54</td><td>102</td></tr><tr><td>0.3</td><td>0.297</td><td>0.297</td><td>65</td><td>113</td></tr><tr><td>0.5</td><td>0.498</td><td>0.498</td><td>107</td><td>154</td></tr><tr><td>0.8</td><td>0.752</td><td>0.752</td><td>358</td><td>406</td></tr></tbody></table>
+
+
+<h2 id="cross">5. mesh 与 ring 横向总结</h2>
+
+<ul>
+<li><b>排名（按稳定区 λ* 与过载平台一起看）</b>：集中式 &gt; Homa（吞吐优先 ≳ 均衡） &gt; 基线。
+ring 上相对差距更大（集中式 +125%，Homa +32%），mesh 上更小（+91% / +18%）；集中式的数字含漂移，应偏保守地看。</li>
+<li><b>Homa 不能代替集中式的原因（推测，未单独验证）</b>：Homa 的 grant 只看接收端自己的入口，不知道路径上哪条链路已被占用；
+集中式的 interval 冲突域则按链路预约。仿真里 Homa 的 goodput 在 D≥8 后对 D 基本不敏感、主要由 W 决定，且 λ* 只比基线提高 0 到 0.1，与「只能限流、不能避冲突」一致，
+但要证实需要对照一个「接收端限流 + 路径感知」的变体。</li>
+<li><b>延迟上的取舍</b>：Homa 的 unscheduled 前缀让短消息不付 REQ/grant 往返，延迟优于集中式；长消息则因窗口小而变慢。
+如果业务以小写为主，Homa 类更合适；若以大块写和吞吐为主，集中式更好。</li>
+<li><b>代价（粗估，未综合）</b>：集中式需要全局 interval 表，旧报告给出 mesh 99,840 bit、ring 184,320 bit。
+Homa 类的状态在每个 HA 内：每条活跃消息约 (源, 剩余, 已授权, 已收) ≈ 48 bit（假设值）；按 D=48 的最坏配置 48×48×48 ≈ 110 kbit，与集中式同量级，
+但实测同时活跃的消息峰值只有约 9，按实测规模约 21 kbit。状态是分布的，没有全局串行化点；
+控制报文约 9.8 条/周期（λ=0.3，全网）。</li>
+<li><b>统计口径提示</b>：旧报告用 <code>accepted</code>（按注入侧统计）在单包负载下给出基线过载回落 mesh −42%、ring −16%；换成送达口径 goodput 后同一数据是 mesh −5%、ring 0%（v1 报告 §6 的结论，本轮扫描未重复）。本报告的消息负载下基线回落更明显（mesh 22%、ring 16%），不能与单包负载的数字直接比较。</li>
+</ul>
+
+
+<h2 id="v1">6. 与 v1（逐包 DBID 池）的对比</h2>
+
+<p>上一版（v1）的分布式方案是在 HA 的 DBID 发放处放一个 K 个令牌的池，按「服务最少者优先」发放，对每个包都要先 REQ→DBID 再发数据。
+它与 Homa 类的区别是：v1 对每个包都限流且没有 unscheduled，没有按消息剩余长度排序，也没有按消息的窗口。</p>
+<ul>
+<li><b>单包负载</b>（下表）：v1 的峰值与基线几乎相同（mesh 0.416 对 0.412），低载延迟翻了约 3 倍。逐包 REQ/DBID 往返没有带来吞吐，只带来延迟。</li>
+<li><b>消息负载</b>：K=64 的池峰值 mesh 0.376（+17%）、ring 0.520（+41%）；
+与 Homa 均衡点 mesh 0.378、ring 0.486 相近（ring 上池还略高）。
+所以<b>在 goodput 上 Homa 并没有比池明显更强</b>，差别在于 1 包消息 FCT（λ=0.3：池 mesh 269 对 Homa 51；ring 169 对 34）。</li>
+<li><b>退化检查</b>：在单包负载下 Homa 没有任何调度可做（消息长度 1 ≤ U），结果与基线逐点完全相同、grant 数为 0，这也是实现的一条正确性检查。</li>
+</ul>
+
+<p>v1 在<b>单包</b>负载下的结果（上一轮，<code>write_dbid_8x6.json</code>）：</p>
+<table class=""><thead><tr><th>拓扑</th><th>基线峰值</th><th>集中式峰值</th><th>v1 池峰值</th><th>低载 p50（基线 → v1）</th></tr></thead><tbody><tr><td>2D mesh</td><td>0.412</td><td>0.617</td><td>0.416</td><td>38 → 112</td></tr><tr><td>2D ring</td><td>0.585</td><td>0.876</td><td>0.594</td><td>27 → 85</td></tr></tbody></table>
+<p>本轮单包负载下的 Homa 退化检查：</p>
+<table class=""><thead><tr><th>拓扑</th><th>基线峰值</th><th>Homa 峰值</th><th>逐点最大差</th><th>grant 数</th></tr></thead><tbody><tr><td>2D mesh</td><td>0.410</td><td>0.410</td><td>0.0000</td><td>0</td></tr><tr><td>2D ring</td><td>0.584</td><td>0.584</td><td>0.0000</td><td>0</td></tr></tbody></table>
+
+<h2 id="ver">7. 验证</h2>
+<table class=""><thead><tr><th>检查</th><th>结果</th><th>细节</th></tr></thead><tbody><tr><td>每条消息 granted-未收 ≤ 窗口 W</td><td>✓</td><td>266 行检查，违规 []</td></tr><tr><td>unsched=0 时无 unscheduled 包</td><td>✓</td><td>6 行，unsched_frac=[0.0, 0.0, 0.0]</td></tr><tr><td>grant 数 = 非 unscheduled 包数</td><td>✓</td><td>12 个稳定点，最大相对误差 0.021</td></tr><tr><td>mesh 单包负载下 Homa 退化为基线</td><td>✓</td><td>goodput 最大差 0.0000，低载 p50 最大差 0.0</td></tr><tr><td>mesh 单包负载下无 grant</td><td>✓</td><td>n_grants=[0]</td></tr><tr><td>ring 单包负载下 Homa 退化为基线</td><td>✓</td><td>goodput 最大差 0.0000，低载 p50 最大差 0.0</td></tr><tr><td>ring 单包负载下无 grant</td><td>✓</td><td>n_grants=[0]</td></tr><tr><td>mesh_base λ*≤解析上限</td><td>✓</td><td>λ*=0.3 上限=0.490</td></tr><tr><td>mesh_central λ*≤解析上限</td><td>✓</td><td>λ*=0.35 上限=0.490</td></tr><tr><td>mesh_homa λ*≤解析上限</td><td>✓</td><td>λ*=0.3 上限=0.490</td></tr><tr><td>mesh_pool λ*≤解析上限</td><td>✓</td><td>λ*=0.25 上限=0.490</td></tr><tr><td>ring_base λ*≤解析上限</td><td>✓</td><td>λ*=0.3 上限=0.783</td></tr><tr><td>ring_central λ*≤解析上限</td><td>✓</td><td>λ*=0.5 上限=0.783</td></tr><tr><td>ring_homa λ*≤解析上限</td><td>✓</td><td>λ*=0.4 上限=0.783</td></tr><tr><td>ring_pool λ*≤解析上限</td><td>✓</td><td>λ*=0.3 上限=0.783</td></tr><tr><td>goodput 不超过注入率(+5%)</td><td>✓</td><td>违规 []</td></tr><tr><td>mesh_base 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 41.9/48.8/113.7</td></tr><tr><td>mesh_islip2d 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 56.6/63.6/130.1</td></tr><tr><td>mesh_homa 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 40.0/46.9/585.1</td></tr><tr><td>ring_base 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 31.5/38.4/100.3</td></tr><tr><td>ring_islip2d 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 48.9/56.3/122.4</td></tr><tr><td>ring_homa 低载 FCT 随消息长度单调</td><td>✓</td><td>L1/L8/L64 = 28.6/36.0/451.5</td></tr><tr><td>mesh SRPT 中等消息(8 包)FCT ≤ FCFS（W=2, D=4, λ=0.8）</td><td>✓</td><td>SRPT 304.5 vs FCFS 8710.9</td></tr><tr><td>ring SRPT 中等消息(8 包)FCT ≤ FCFS（W=2, D=4, λ=0.8）</td><td>✓</td><td>SRPT 215.5 vs FCFS 9132.8</td></tr></tbody></table>
+
+<h2 id="lim">8. 已知局限</h2>
+
+<ul>
+<li><b>单种子、单次运行</b>，没有置信区间。λ 网格步长 0.05，λ* 的分辨率有限；mesh 上 Homa 与基线的 λ* 相同不代表没有差别。</li>
+<li><b>亚 BDP 窗口</b>：规范 Homa 的窗口约 RTT×带宽，超过最大消息长度（64 包），那样所有消息都是 unscheduled。W≤16 是为了让调度起作用，不是 Homa 的原始设置。</li>
+<li><b>没有建模优先级</b>：网内的优先级队列和抢占是 Homa 低延迟的另一半来源，这里缺失；mesh 的 VC 与 iSLIP 没有按剩余长度排序。</li>
+<li><b>Unscheduled 不是合法的 CHI 写流程</b>：需要 REQ 携带预授权或预配 DBID 信用；U=0 的变体才是标准映射。</li>
+<li><b>控制通道无争用</b>：REQ/grant 的时延按几何距离计算，没有排队。对集中式与 Homa 类都乐观。</li>
+<li><b>集中式过载区 goodput 偏高</b>：流量构成漂移导致超过解析上限，比较时应看稳定区。</li>
+<li><b>FCT 的幸存者偏差</b>：过载点只统计已完成的消息，长消息被排除，数值偏低。</li>
+<li><b>突发负载带来噪声</b>：消息长度 64 包的突发使 p99 与均值波动大，W/D 网格中差 0.01 以内的 goodput 差异不应解读。</li>
+<li><b>均衡点依赖选择准则</b>：「FCT₆₄ ≤ 2×基线」是人为约束，换约束会换点。</li>
+</ul>
+
+
+<h2 id="files">9. 文件</h2>
+
+<ul>
+<li><code>utils/rg_homa_dist.py</code>：Homa 类 HA 调度仿真（<code>HomaSim</code>）</li>
+<li><code>utils/rg_steady_des.py</code>：稳态仿真，新增消息注入器 <code>MsgInjector</code>、送达口径 goodput、FCT 统计、<code>mesh_homa</code>/<code>ring_homa</code> 配置</li>
+<li><code>utils/rg_dbid_dist.py</code>：v1 逐包 DBID 池（作为对照）</li>
+<li><code>utils/dse_write_homa_8x6.py</code>：扫描（网格、主曲线、消融）→ <code>results/write_homa_8x6.json</code>、<code>results/write_homa_grid.json</code></li>
+<li><code>utils/verify_write_homa.py</code>：24 项校验 → <code>results/verify_write_homa_8x6.json</code></li>
+<li><code>utils/gen_write_homa_report.py</code>、<code>utils/gen_write_homa_prose.py</code>：生成本报告</li>
+<li><code>results/report_write_homa_8x6.html</code>：本报告（自包含）</li>
+</ul>
+
+</body></html>

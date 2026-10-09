@@ -1,0 +1,122 @@
+[
+ {
+  "name": "每条消息 granted-未收 ≤ 窗口 W",
+  "ok": true,
+  "detail": "266 行检查，违规 []"
+ },
+ {
+  "name": "unsched=0 时无 unscheduled 包",
+  "ok": true,
+  "detail": "6 行，unsched_frac=[0.0, 0.0, 0.0]"
+ },
+ {
+  "name": "grant 数 = 非 unscheduled 包数",
+  "ok": true,
+  "detail": "12 个稳定点，最大相对误差 0.021"
+ },
+ {
+  "name": "mesh 单包负载下 Homa 退化为基线",
+  "ok": true,
+  "detail": "goodput 最大差 0.0000，低载 p50 最大差 0.0"
+ },
+ {
+  "name": "mesh 单包负载下无 grant",
+  "ok": true,
+  "detail": "n_grants=[0]"
+ },
+ {
+  "name": "ring 单包负载下 Homa 退化为基线",
+  "ok": true,
+  "detail": "goodput 最大差 0.0000，低载 p50 最大差 0.0"
+ },
+ {
+  "name": "ring 单包负载下无 grant",
+  "ok": true,
+  "detail": "n_grants=[0]"
+ },
+ {
+  "name": "mesh_base λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.3 上限=0.490"
+ },
+ {
+  "name": "mesh_central λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.35 上限=0.490"
+ },
+ {
+  "name": "mesh_homa λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.3 上限=0.490"
+ },
+ {
+  "name": "mesh_pool λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.25 上限=0.490"
+ },
+ {
+  "name": "ring_base λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.3 上限=0.783"
+ },
+ {
+  "name": "ring_central λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.5 上限=0.783"
+ },
+ {
+  "name": "ring_homa λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.4 上限=0.783"
+ },
+ {
+  "name": "ring_pool λ*≤解析上限",
+  "ok": true,
+  "detail": "λ*=0.3 上限=0.783"
+ },
+ {
+  "name": "goodput 不超过注入率(+5%)",
+  "ok": true,
+  "detail": "违规 []"
+ },
+ {
+  "name": "mesh_base 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 41.9/48.8/113.7"
+ },
+ {
+  "name": "mesh_islip2d 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 56.6/63.6/130.1"
+ },
+ {
+  "name": "mesh_homa 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 40.0/46.9/585.1"
+ },
+ {
+  "name": "ring_base 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 31.5/38.4/100.3"
+ },
+ {
+  "name": "ring_islip2d 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 48.9/56.3/122.4"
+ },
+ {
+  "name": "ring_homa 低载 FCT 随消息长度单调",
+  "ok": true,
+  "detail": "L1/L8/L64 = 28.6/36.0/451.5"
+ },
+ {
+  "name": "mesh SRPT 中等消息(8 包)FCT ≤ FCFS（W=2, D=4, λ=0.8）",
+  "ok": true,
+  "detail": "SRPT 304.5 vs FCFS 8710.9"
+ },
+ {
+  "name": "ring SRPT 中等消息(8 包)FCT ≤ FCFS（W=2, D=4, λ=0.8）",
+  "ok": true,
+  "detail": "SRPT 215.5 vs FCFS 9132.8"
+ }
+]

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 470" width="760" height="470" font-family="sans-serif" font-size="12">
+<rect width="760" height="470" fill="#ffffff"/>
+<text x="380.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">2D mesh：p50 延迟与注入率（含 REQ→DBID 往返）</text>
+<line x1="66.0" y1="40" x2="66.0" y2="412" stroke="#e5e7eb"/>
+<text x="66.0" y="428" text-anchor="middle">0</text>
+<line x1="201.20000000000002" y1="40" x2="201.20000000000002" y2="412" stroke="#e5e7eb"/>
+<text x="201.20000000000002" y="428" text-anchor="middle">0.2</text>
+<line x1="336.40000000000003" y1="40" x2="336.40000000000003" y2="412" stroke="#e5e7eb"/>
+<text x="336.40000000000003" y="428" text-anchor="middle">0.4</text>
+<line x1="471.59999999999997" y1="40" x2="471.59999999999997" y2="412" stroke="#e5e7eb"/>
+<text x="471.59999999999997" y="428" text-anchor="middle">0.6</text>
+<line x1="606.8000000000001" y1="40" x2="606.8000000000001" y2="412" stroke="#e5e7eb"/>
+<text x="606.8000000000001" y="428" text-anchor="middle">0.8</text>
+<line x1="742.0" y1="40" x2="742.0" y2="412" stroke="#e5e7eb"/>
+<text x="742.0" y="428" text-anchor="middle">1</text>
+<line x1="66" y1="412.0" x2="742" y2="412.0" stroke="#e5e7eb"/>
+<text x="60" y="416.0" text-anchor="end">10</text>
+<line x1="66" y1="352.83696441476184" x2="742" y2="352.83696441476184" stroke="#e5e7eb"/>
+<text x="60" y="356.83696441476184" text-anchor="end">30</text>
+<line x1="66" y1="288.0" x2="742" y2="288.0" stroke="#e5e7eb"/>
+<text x="60" y="292.0" text-anchor="end">100</text>
+<line x1="66" y1="228.8369644147618" x2="742" y2="228.8369644147618" stroke="#e5e7eb"/>
+<text x="60" y="232.8369644147618" text-anchor="end">300</text>
+<line x1="66" y1="164.0" x2="742" y2="164.0" stroke="#e5e7eb"/>
+<text x="60" y="168.0" text-anchor="end">1000</text>
+<line x1="66" y1="104.83696441476184" x2="742" y2="104.83696441476184" stroke="#e5e7eb"/>
+<text x="60" y="108.83696441476184" text-anchor="end">3000</text>
+<line x1="66" y1="40.0" x2="742" y2="40.0" stroke="#e5e7eb"/>
+<text x="60" y="44.0" text-anchor="end">10000</text>
+<rect x="66" y="40" width="676" height="372" fill="none" stroke="#374151"/>
+<text x="404.0" y="458" text-anchor="middle">注入率 λ（包 / 节点 / 周期）</text>
+<text transform="translate(16,226.0) rotate(-90)" text-anchor="middle">p50 延迟（周期，对数轴）</text>
+<polyline points="72.8,340.1 133.6,340.1 201.2,338.7 268.8,337.3 302.6,336.0 336.4,329.8 349.9,309.6 370.2,302.8 390.5,304.9 404.0,299.3 417.5,256.9 437.8,203.4 471.6,179.1 505.4,174.5 539.2,167.2 573.0,154.7 606.8,142.2 674.4,127.5 742.0,118.0" fill="none" stroke="#6b7280" stroke-width="2"/>
+<circle cx="72.8" cy="340.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="133.6" cy="340.1" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="201.2" cy="338.7" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="268.8" cy="337.3" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="302.6" cy="336.0" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="336.4" cy="329.8" r="3.6" fill="#6b7280" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="349.9" cy="309.6" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="370.2" cy="302.8" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="390.5" cy="304.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="404.0" cy="299.3" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="417.5" cy="256.9" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="437.8" cy="203.4" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="471.6" cy="179.1" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="505.4" cy="174.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="539.2" cy="167.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="573.0" cy="154.7" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="606.8" cy="142.2" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="674.4" cy="127.5" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<circle cx="742.0" cy="118.0" r="3.6" fill="#ffffff" stroke="#6b7280" stroke-width="1.6"/>
+<polyline points="72.8,321.2 133.6,321.2 201.2,320.2 268.8,319.2 302.6,319.2 336.4,317.3 349.9,317.3 370.2,314.6 390.5,307.2 404.0,274.7 417.5,261.7 437.8,258.5 471.6,257.9 505.4,255.8 539.2,253.4 573.0,253.7 606.8,253.7 674.4,253.2 742.0,252.6" fill="none" stroke="#e07a1f" stroke-width="2"/>
+<circle cx="72.8" cy="321.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="133.6" cy="321.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="201.2" cy="320.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="268.8" cy="319.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="302.6" cy="319.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="336.4" cy="317.3" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="349.9" cy="317.3" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="370.2" cy="314.6" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="390.5" cy="307.2" r="3.6" fill="#e07a1f" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="404.0" cy="274.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="417.5" cy="261.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="437.8" cy="258.5" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="471.6" cy="257.9" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="505.4" cy="255.8" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="539.2" cy="253.4" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="573.0" cy="253.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="606.8" cy="253.7" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="674.4" cy="253.2" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<circle cx="742.0" cy="252.6" r="3.6" fill="#ffffff" stroke="#e07a1f" stroke-width="1.6"/>
+<polyline points="72.8,281.9 133.6,281.9 201.2,281.9 268.8,280.9 302.6,280.5 336.4,276.9 349.9,262.7 370.2,212.3 390.5,189.5 404.0,180.0 417.5,169.3 437.8,156.2 471.6,142.1 505.4,132.7 539.2,125.4 573.0,119.6 606.8,114.4 674.4,106.5 742.0,100.5" fill="none" stroke="#1f9d55" stroke-width="2"/>
+<circle cx="72.8" cy="281.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="133.6" cy="281.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="201.2" cy="281.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="268.8" cy="280.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="302.6" cy="280.5" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="336.4" cy="276.9" r="3.6" fill="#1f9d55" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="349.9" cy="262.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="370.2" cy="212.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="390.5" cy="189.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="404.0" cy="180.0" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="417.5" cy="169.3" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="437.8" cy="156.2" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="471.6" cy="142.1" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="505.4" cy="132.7" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="539.2" cy="125.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="573.0" cy="119.6" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="606.8" cy="114.4" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="674.4" cy="106.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<circle cx="742.0" cy="100.5" r="3.6" fill="#ffffff" stroke="#1f9d55" stroke-width="1.6"/>
+<line x1="78" y1="54" x2="104" y2="54" stroke="#6b7280" stroke-width="2"/>
+<text x="110" y="58">基线</text>
+<line x1="78" y1="72" x2="104" y2="72" stroke="#e07a1f" stroke-width="2"/>
+<text x="110" y="76">类 iSLIP 集中仲裁</text>
+<line x1="78" y1="90" x2="104" y2="90" stroke="#1f9d55" stroke-width="2"/>
+<text x="110" y="94">分布式 HA-DBID 仲裁</text>
+<text x="592" y="404" font-size="11" fill="#6b7280">实心=稳定  空心=队列发散</text>
+</svg>
