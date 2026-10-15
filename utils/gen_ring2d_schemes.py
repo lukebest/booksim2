@@ -405,6 +405,14 @@ def _cell(v) -> str:
     return "放不出" if v is None else f"{v:,}"
 
 
+def _vs(v, base: int) -> str:
+    if not v:
+        return "—"
+    if v == base:
+        return "1"
+    return f"{v / base:.2f}×"
+
+
 def main() -> None:
     isl = _islip()
     topo = RingTopology()
@@ -662,23 +670,26 @@ credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基�
 全网 {N_FLOWS:,} KiB。</p>
 <p>最热链路在 1 flit 时过 {wide['hot']} 个包，64 flit 时就要串行
 {wide['link_lb']:,} 个 flit。iSLIP 把这一整包订成连续的 64 拍，
-makespan <b class="win">{wide['islip']:,}</b>，是这条下限的
-{wide['islip']/wide['link_lb']:.2f} 倍。
+makespan <b class="win">{wide['islip']:,}</b>，是基线的 {_vs(wide['islip'], wide['base'])}，
+也是这条下限的 {wide['islip']/wide['link_lb']:.2f} 倍。
 基线是 {wide['base']:,}。credit ×1 的链路计数只有 {wide['c1_credit']}，
 一个包就要 64，同一条链路上放不下第二个包，要等 DONE 回来，
 所以是 {wide['c1']:,}，慢于基线。计数加倍到 {wide['c2_credit']} 可以叠两个包，
-makespan {wide['c2']:,}，短于基线。rate 是 {wide['rate']:,}，三个周期相同。</p>
+makespan {wide['c2']:,}，是基线的 {_vs(wide['c2'], wide['base'])}。
+rate 是 {wide['rate']:,}，{_vs(wide['rate'], wide['base'])}，三个周期相同。
+credit ×1 是 {_vs(wide['c1'], wide['base'])}。</p>
 <table>
 <thead><tr><th>方案</th><th>1 flit<br><span class="muted">{flit_b} B</span></th>
 <th>16 flit<br><span class="muted">{16 * flit_b} B</span></th>
-<th>64 flit<br><span class="muted">{kib} KiB</span></th></tr></thead>
+<th>64 flit<br><span class="muted">{kib} KiB</span></th>
+<th>64 flit / 基线</th></tr></thead>
 <tbody>
-<tr><td>链路下限</td><td>{long[1]['link_lb']:,}</td><td>{long[16]['link_lb']:,}</td><td>{long[64]['link_lb']:,}</td></tr>
-<tr class="hl"><td>iSLIP-2D</td><td>{long[1]['islip']:,}</td><td>{long[16]['islip']:,}</td><td><b>{long[64]['islip']:,}</b></td></tr>
-<tr class="hl"><td>基线</td><td>{long[1]['base']:,}</td><td>{long[16]['base']:,}</td><td><b>{long[64]['base']:,}</b></td></tr>
-<tr><td>credit ×2</td><td>{_cell(long[1]['c2'])}</td><td>{_cell(long[16]['c2'])}</td><td>{_cell(long[64]['c2'])}</td></tr>
-<tr class="hl"><td>credit ×1</td><td>{_cell(long[1]['c1'])}</td><td>{_cell(long[16]['c1'])}</td><td><b>{_cell(long[64]['c1'])}</b></td></tr>
-<tr class="hl"><td>rate</td><td>{long[1]['rate']:,}</td><td>{long[16]['rate']:,}</td><td><b>{long[64]['rate']:,}</b></td></tr>
+<tr><td>链路下限</td><td>{long[1]['link_lb']:,}</td><td>{long[16]['link_lb']:,}</td><td>{long[64]['link_lb']:,}</td><td>{_vs(long[64]['link_lb'], wide['base'])}</td></tr>
+<tr class="hl"><td>iSLIP-2D</td><td>{long[1]['islip']:,}</td><td>{long[16]['islip']:,}</td><td><b>{long[64]['islip']:,}</b></td><td><b>{_vs(long[64]['islip'], wide['base'])}</b></td></tr>
+<tr class="hl"><td>基线</td><td>{long[1]['base']:,}</td><td>{long[16]['base']:,}</td><td><b>{long[64]['base']:,}</b></td><td>1</td></tr>
+<tr><td>credit ×2</td><td>{_cell(long[1]['c2'])}</td><td>{_cell(long[16]['c2'])}</td><td>{_cell(long[64]['c2'])}</td><td>{_vs(long[64]['c2'], wide['base'])}</td></tr>
+<tr class="hl"><td>credit ×1</td><td>{_cell(long[1]['c1'])}</td><td>{_cell(long[16]['c1'])}</td><td><b>{_cell(long[64]['c1'])}</b></td><td>{_vs(long[64]['c1'], wide['base'])}</td></tr>
+<tr class="hl"><td>rate</td><td>{long[1]['rate']:,}</td><td>{long[16]['rate']:,}</td><td><b>{long[64]['rate']:,}</b></td><td>{_vs(long[64]['rate'], wide['base'])}</td></tr>
 </tbody></table>
 <div class="fig">{_svg_len([long[1], long[16], long[64]])}
 <div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。

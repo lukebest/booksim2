@@ -137,23 +137,26 @@ credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基�
 全网 2,256 KiB。</p>
 <p>最热链路在 1 flit 时过 60 个包，64 flit 时就要串行
 3,840 个 flit。iSLIP 把这一整包订成连续的 64 拍，
-makespan <b class="win">5,141</b>，是这条下限的
-1.34 倍。
+makespan <b class="win">5,141</b>，是基线的 0.43×，
+也是这条下限的 1.34 倍。
 基线是 11,869。credit ×1 的链路计数只有 90，
 一个包就要 64，同一条链路上放不下第二个包，要等 DONE 回来，
 所以是 13,505，慢于基线。计数加倍到 180 可以叠两个包，
-makespan 10,020，短于基线。rate 是 12,782，三个周期相同。</p>
+makespan 10,020，是基线的 0.84×。
+rate 是 12,782，1.08×，三个周期相同。
+credit ×1 是 1.14×。</p>
 <table>
 <thead><tr><th>方案</th><th>1 flit<br><span class="muted">16 B</span></th>
 <th>16 flit<br><span class="muted">256 B</span></th>
-<th>64 flit<br><span class="muted">1 KiB</span></th></tr></thead>
+<th>64 flit<br><span class="muted">1 KiB</span></th>
+<th>64 flit / 基线</th></tr></thead>
 <tbody>
-<tr><td>链路下限</td><td>60</td><td>960</td><td>3,840</td></tr>
-<tr class="hl"><td>iSLIP-2D</td><td>120</td><td>1,460</td><td><b>5,141</b></td></tr>
-<tr class="hl"><td>基线</td><td>149</td><td>2,527</td><td><b>11,869</b></td></tr>
-<tr><td>credit ×2</td><td>165</td><td>2,440</td><td>10,020</td></tr>
-<tr class="hl"><td>credit ×1</td><td>165</td><td>2,541</td><td><b>13,505</b></td></tr>
-<tr class="hl"><td>rate</td><td>240</td><td>3,017</td><td><b>12,782</b></td></tr>
+<tr><td>链路下限</td><td>60</td><td>960</td><td>3,840</td><td>0.32×</td></tr>
+<tr class="hl"><td>iSLIP-2D</td><td>120</td><td>1,460</td><td><b>5,141</b></td><td><b>0.43×</b></td></tr>
+<tr class="hl"><td>基线</td><td>149</td><td>2,527</td><td><b>11,869</b></td><td>1</td></tr>
+<tr><td>credit ×2</td><td>165</td><td>2,440</td><td>10,020</td><td>0.84×</td></tr>
+<tr class="hl"><td>credit ×1</td><td>165</td><td>2,541</td><td><b>13,505</b></td><td>1.14×</td></tr>
+<tr class="hl"><td>rate</td><td>240</td><td>3,017</td><td><b>12,782</b></td><td>1.08×</td></tr>
 </tbody></table>
 <div class="fig"><svg viewBox="0 0 880 400" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="36" width="640" height="300"/><line class="gl" x1="72" y1="294.0" x2="712" y2="294.0"/><text class="tick" x="64" y="298.0" text-anchor="end">100</text><line class="gl" x1="72" y1="179.9" x2="712" y2="179.9"/><text class="tick" x="64" y="183.9" text-anchor="end">1k</text><line class="gl" x1="72" y1="65.8" x2="712" y2="65.8"/><text class="tick" x="64" y="69.8" text-anchor="end">10k</text><text class="tick" x="132.2" y="354" text-anchor="middle">1</text><text class="tick" x="487.0" y="354" text-anchor="middle">16</text><text class="tick" x="664.4" y="354" text-anchor="middle">64</text><polyline points="132.2,319.3 487.0,181.9 664.4,113.2" fill="none" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="132.2" cy="319.3" r="3.5" fill="#8b95ab"/><circle cx="487.0" cy="181.9" r="3.5" fill="#8b95ab"/><circle cx="664.4" cy="113.2" r="3.5" fill="#8b95ab"/><polyline points="132.2,285.0 487.0,161.1 664.4,98.7" fill="none" stroke="#6ee7a8" stroke-width="2.2"/><circle cx="132.2" cy="285.0" r="3.5" fill="#6ee7a8"/><circle cx="487.0" cy="161.1" r="3.5" fill="#6ee7a8"/><circle cx="664.4" cy="98.7" r="3.5" fill="#6ee7a8"/><polyline points="132.2,274.2 487.0,133.9 664.4,57.3" fill="none" stroke="#7eb6ff" stroke-width="2.2"/><circle cx="132.2" cy="274.2" r="3.5" fill="#7eb6ff"/><circle cx="487.0" cy="133.9" r="3.5" fill="#7eb6ff"/><circle cx="664.4" cy="57.3" r="3.5" fill="#7eb6ff"/><polyline points="132.2,269.2 487.0,133.7 664.4,50.9" fill="none" stroke="#e06c6c" stroke-width="2.2"/><circle cx="132.2" cy="269.2" r="3.5" fill="#e06c6c"/><circle cx="487.0" cy="133.7" r="3.5" fill="#e06c6c"/><circle cx="664.4" cy="50.9" r="3.5" fill="#e06c6c"/><polyline points="132.2,250.6 487.0,125.2 664.4,53.6" fill="none" stroke="#e6a23c" stroke-width="2.2"/><circle cx="132.2" cy="250.6" r="3.5" fill="#e6a23c"/><circle cx="487.0" cy="125.2" r="3.5" fill="#e6a23c"/><circle cx="664.4" cy="53.6" r="3.5" fill="#e6a23c"/><line x1="728" y1="54" x2="750" y2="54" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="4 3"/><text class="tick" x="756" y="58" fill="#e8ecf4">链路下限</text><line x1="728" y1="76" x2="750" y2="76" stroke="#6ee7a8" stroke-width="2.2"/><text class="tick" x="756" y="80" fill="#e8ecf4">iSLIP-2D</text><line x1="728" y1="98" x2="750" y2="98" stroke="#7eb6ff" stroke-width="2.2"/><text class="tick" x="756" y="102" fill="#e8ecf4">基线</text><line x1="728" y1="120" x2="750" y2="120" stroke="#e06c6c" stroke-width="2.2"/><text class="tick" x="756" y="124" fill="#e8ecf4">credit ×1</text><line x1="728" y1="142" x2="750" y2="142" stroke="#e6a23c" stroke-width="2.2"/><text class="tick" x="756" y="146" fill="#e8ecf4">rate</text><text class="axl" x="392.0" y="376" text-anchor="middle">每个 src-dst 的 flit 数（对数）</text><text class="axl" x="16" y="186.0" text-anchor="middle" transform="rotate(-90 16 186.0)">makespan（拍，对数）</text></svg>
 <div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
