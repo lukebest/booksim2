@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>2D 环 · all-to-all makespan 与面积</title>
+<style>
+body { font-family: "Segoe UI", "Noto Sans SC", system-ui, sans-serif;
+       margin: 0; background: #0b1020; color: #e8ecf4; line-height: 1.62; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 28px 34px 72px; }
+h1 { font-size: 1.5rem; color: #f0f4ff; border-bottom: 1px solid #2a3555;
+     padding-bottom: .45rem; }
+h2 { margin-top: 1.8rem; font-size: 1.15rem; color: #f0f4ff;
+     border-left: 4px solid #7eb6ff; padding-left: .55rem; }
+p { margin: .55rem 0; }
+.muted { color: #9aa3b5; font-size: .85rem; }
+.pill { display: inline-block; background: #1a2340; border: 1px solid #2a3555;
+        border-radius: 999px; padding: 2px 11px; font-size: .78rem;
+        margin: 0 6px 6px 0; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem;
+        margin: .7rem 0 1.1rem; }
+th, td { border: 1px solid #2a3555; padding: 6px 9px; text-align: left; }
+th { background: #1a2340; }
+tr:nth-child(even) { background: #12192c; }
+tr.hl td { background: #17243d; }
+.win { color: #6ee7a8; font-weight: 600; }
+.fig { background: #0e1425; border: 1px solid #2a3555; border-radius: 10px;
+       padding: 14px 12px 8px; margin: 1rem 0; }
+.fig .cap { color: #9aa3b5; font-size: .82rem; margin-top: .45rem; }
+.note { background: #141b2f; border-left: 3px solid #d9a03c;
+        border-radius: 0 8px 8px 0; padding: 10px 15px; margin: .8rem 0;
+        font-size: .9rem; }
+svg text { font-family: "Segoe UI","Noto Sans SC",system-ui,sans-serif; }
+.plot { fill: #0b142a; stroke: #2a3555; }
+.gl { stroke: #1f2a47; }
+.tick { fill: #8b95ab; font-size: 11px; }
+.axl { fill: #9aa3b5; font-size: 12px; }
+.cv { fill: none; stroke-width: 2.4; }
+.cB { stroke: #6ee7a8; }
+code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>2D 环：同一 all-to-all 的 makespan 与面积</h1>
+<p class="muted">只保留维度切片 2D 环。mesh 不在这页。
+数字来自 <code>results/islip2d_8x6.json</code> 的 ring · alltoall · m=1 · σ=1，
+面积来自 <code>utils/rg_sched_cost.py</code> 的仲裁器状态。</p>
+<p>
+<span class="pill">48 节点 · 6 行环 × 8 + 8 列环 × 6</span>
+<span class="pill">192 条有向链路</span>
+<span class="pill">2,256 条 all-to-all 流</span>
+<span class="pill">H=7 / V=9</span>
+</p>
+
+<h2>1 · makespan</h2>
+<p>每个方案把同一批 2,256 条流排完。makespan 是最后一条流结束的拍，
+比 data_span 多 16 拍，那是一趟请求-授权时延。
+轮数下界是最热链路负载；<code>whole_ring</code> 把下界从 60 抬到 192，
+因为整环互斥、不能空分复用。</p>
+<p>最短的是 <b class="win">fixed · g=2 · interval</b>，120 拍。
+同面积里最短的 free_at 方案是 fixed · g=2 · fill=arc_asc，1,586 拍。
+<code>whole_ring</code> 是 5,280 拍，最慢。</p>
+<table>
+<thead><tr><th>方案</th><th>轮数</th><th>下界</th><th>轮数/下界</th>
+<th>data_span</th><th>makespan</th><th>最热链路</th><th>仲裁器 bit</th></tr></thead>
+<tbody>
+<tr class="hl"><td>fixed · g=2 · interval</td><td>69</td><td>60</td><td>1.150</td><td>104</td><td><b class='win'>120</b></td><td>60</td><td>189,528</td></tr><tr class="hl"><td>fixed · g=2 · fill=arc_asc</td><td>79</td><td>60</td><td>1.317</td><td>1,570</td><td><b class='win'>1,586</b></td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2 · board=2/leave=2</td><td>65</td><td>60</td><td>1.083</td><td>1,811</td><td>1,827</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2 · board=1/leave=2</td><td>67</td><td>60</td><td>1.117</td><td>1,849</td><td>1,865</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2 · board=2/leave=1</td><td>67</td><td>60</td><td>1.117</td><td>1,876</td><td>1,892</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2 · fill=pressure</td><td>65</td><td>60</td><td>1.083</td><td>1,890</td><td>1,906</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2</td><td>69</td><td>60</td><td>1.150</td><td>1,941</td><td>1,957</td><td>60</td><td>10,968</td></tr><tr><td>balanced · g=2</td><td>63</td><td>49</td><td>1.286</td><td>1,952</td><td>1,968</td><td>49</td><td>10,968</td></tr><tr><td>balanced · g=1</td><td>64</td><td>49</td><td>1.306</td><td>1,976</td><td>1,992</td><td>49</td><td>10,968</td></tr><tr><td>fixed · g=2 · fill=flowid</td><td>81</td><td>60</td><td>1.350</td><td>1,992</td><td>2,008</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=1</td><td>67</td><td>60</td><td>1.117</td><td>2,009</td><td>2,025</td><td>60</td><td>10,968</td></tr><tr><td>dyn · g=2</td><td>65</td><td>56</td><td>1.161</td><td>2,047</td><td>2,063</td><td>56</td><td>10,968</td></tr><tr><td>dyn · g=1</td><td>69</td><td>56</td><td>1.232</td><td>2,063</td><td>2,079</td><td>56</td><td>10,968</td></tr><tr><td>fixed · g=2 · fill=random</td><td>79</td><td>60</td><td>1.317</td><td>2,124</td><td>2,140</td><td>60</td><td>10,968</td></tr><tr><td>fixed · g=2 · whole_ring</td><td>195</td><td>192</td><td>1.016</td><td>5,264</td><td>5,280</td><td>60</td><td>10,968</td></tr>
+</tbody></table>
+<p class="muted">高亮行是面积–makespan 前沿。路径模式、补齐序、上/下环口数不改仲裁器状态，
+所以 free_at 各行的 bit 都是 10,968。
+interval 多一张区间表，189,528 bit，其中区间表
+184,320 bit。
+环基线的分布式存储是 198,528 bit，那一套没有这批 all-to-all 的 makespan，不进表。</p>
+
+<h2>2 · 面积 / makespan Pareto</h2>
+<p>两轴都是越小越好：面积向左，makespan 向下。绿线连非支配点。
+蓝点共用一块 free_at 仲裁器，所以叠在同一条竖线上；绿点是 interval，红点是 whole_ring。</p>
+<div class="fig"><svg viewBox="0 0 880 460" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="78" y="36" width="760" height="340"/><line class="gl" x1="78" y1="312.0" x2="838" y2="312.0"/><text class="tick" x="70" y="316.0" text-anchor="end">200</text><line class="gl" x1="78" y1="239.7" x2="838" y2="239.7"/><text class="tick" x="70" y="243.7" text-anchor="end">500</text><line class="gl" x1="78" y1="185.0" x2="838" y2="185.0"/><text class="tick" x="70" y="189.0" text-anchor="end">1000</text><line class="gl" x1="78" y1="130.2" x2="838" y2="130.2"/><text class="tick" x="70" y="134.2" text-anchor="end">2000</text><line class="gl" x1="78" y1="57.9" x2="838" y2="57.9"/><text class="tick" x="70" y="61.9" text-anchor="end">5000</text><text class="tick" x="131.2" y="394" text-anchor="middle">10k</text><text class="tick" x="633.2" y="394" text-anchor="middle">100k</text><polyline class="cv cB" points="151.4,148.5 772.6,352.3" fill="none"/><circle cx="772.6" cy="352.3" r="6" fill="#6ee7a8"/><circle cx="151.4" cy="148.5" r="6" fill="#7eb6ff"/><line x1="142.4" y1="137.4" x2="160.4" y2="137.4" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="137.4" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="135.8" x2="160.4" y2="135.8" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="135.8" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="134.6" x2="160.4" y2="134.6" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="134.6" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="134.0" x2="160.4" y2="134.0" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="134.0" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="132.0" x2="160.4" y2="132.0" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="132.0" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="131.5" x2="160.4" y2="131.5" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="131.5" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="130.6" x2="160.4" y2="130.6" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="130.6" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="129.9" x2="160.4" y2="129.9" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="129.9" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="129.3" x2="160.4" y2="129.3" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="129.3" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="127.8" x2="160.4" y2="127.8" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="127.8" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="127.2" x2="160.4" y2="127.2" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="127.2" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="124.9" x2="160.4" y2="124.9" stroke="#7eb6ff" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="124.9" r="3.2" fill="#7eb6ff"/><line x1="142.4" y1="53.6" x2="160.4" y2="53.6" stroke="#f0a0a0" stroke-width="2" opacity="0.85"/><circle cx="151.4" cy="53.6" r="3.2" fill="#f0a0a0"/><text class="tick" x="165.4" y="166.5" fill="#e8ecf4">fixed · g=2 · fill=arc_asc  1,586</text><text class="tick" x="165.4" y="114.9" fill="#9aa3b5">其余 free_at  1,827–2,140，同一列</text><text class="tick" x="165.4" y="47.6" fill="#f0a0a0">fixed · g=2 · whole_ring  5,280</text><text class="tick" x="760.6" y="344.3" text-anchor="end" fill="#6ee7a8">fixed · g=2 · interval  120</text><text class="axl" x="458.0" y="416" text-anchor="middle">仲裁器状态（bit，对数）</text><text class="axl" x="18" y="206.0" text-anchor="middle" transform="rotate(-90 18 206.0)">makespan（拍，对数）</text></svg>
+<div class="cap">前沿：fixed · g=2 · fill=arc_asc（1,586 拍 / 10,968 bit）、fixed · g=2 · interval（120 拍 / 189,528 bit）。
+interval 用 17.3× 的仲裁器状态，
+把 makespan 从 1,586 收到 120
+（13.2×）。
+其余 free_at 方案和 whole_ring 都在这条前沿内侧。</div></div>
+<div class="note">
+批量调度按完全流水计，表里的 makespan 没有再加 T_sched。
+free_at 的 T_sched 是 69 拍，
+interval 是 138 拍。
+即便把 interval 的 138 拍一次加上，
+合计 258 拍仍然短于 free_at 的 1,586。
+</div>
+<p class="muted">重新生成：<code>python3 utils/gen_ring2d_a2a_report.py</code></p>
+</div></body></html>
