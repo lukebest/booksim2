@@ -152,7 +152,6 @@ def _svg(pts: list[dict]) -> str:
     # inside ~30 px. (dx, dy, anchor) is relative to the marker center.
     label_at = {
         "iSLIP-2D": (-14, -14, "end", "iSLIP-2D"),
-        "credit ×0.5": (18, -18, "start", "credit ×0.5"),
         "credit ×1": (22, 4, "start", "credit ×1"),
         "credit ×2": (22, 18, "start", "credit ×2"),
         "credit HA=16": (18, -12, "start", "credit HA=16"),
@@ -238,7 +237,6 @@ def _svg_system(pts: list[dict]) -> str:
     label_at = {
         "基线": (14, 18, "start", "基线"),
         "iSLIP-2D": (-12, -16, "end", "iSLIP-2D"),
-        "credit ×0.5": (28, -18, "start", "credit ×0.5"),
         "credit ×1": (28, -4, "start", "credit ×1"),
         "credit ×2": (28, 16, "start", "credit ×2"),
         "credit HA=16": (14, -12, "start", "HA=16"),
@@ -324,7 +322,7 @@ def _measure_m(m: int) -> dict:
     out["base"] = base["makespan"]
     out["defl"] = base.get("defl")
     out["reasm_ovf"] = base.get("reasm_ovf")
-    for scale in (0.5, 1.0, 2.0):
+    for scale in (1.0, 2.0):
         p = SteadyParams(m=m, buf_depth=20, t_rtt=16, ca_credit_scale=scale)
         credit = FabricMap("ring", p).link_credit
         key = f"c{scale:g}"
@@ -434,7 +432,7 @@ def main() -> None:
         "shape": "d",
         "note": "interval · fixed · g=2",
     }]
-    for scale in (0.5, 1.0, 2.0):
+    for scale in (1.0, 2.0):
         r = _drain("credit", ca_credit_scale=scale, ca_period=1, ha_trackers=0)
         pts.append({
             "name": f"credit ×{scale:g}",
@@ -495,7 +493,7 @@ def main() -> None:
                 f"<td><b>{p['makespan']:,}</b></td><td>{rel}</td>"
                 f"<td>{p['bits']:,}</td><td>{p['system']:,}</td></tr>")
 
-    order = ["基线", "iSLIP-2D", "credit ×0.5", "credit ×1", "credit ×2",
+    order = ["基线", "iSLIP-2D", "credit ×1", "credit ×2",
              "credit HA=16", "rate T=16", "rate T=64", "rate T=256"]
     by = {p["name"]: p for p in pts}
     body = "".join(row(by[n], n in ("基线", "iSLIP-2D", "credit ×1", "rate T=64"))
@@ -505,15 +503,12 @@ def main() -> None:
     snames = "、".join(p["name"] for p in sorted(
         (p for p in pts if p["sfront"]), key=lambda p: p["system"]))
     c2 = next(p for p in pts if p["name"] == "credit ×2")
-    c05 = next(p for p in pts if p["name"] == "credit ×0.5")
     long = {1: {
         "m": 1,
         "islip": base_mk,
         "base": raw["makespan"],
-        "c0.5": c05["makespan"],
         "c1": cred["makespan"],
         "c2": c2["makespan"],
-        "c0.5_credit": c05["link_credit"],
         "c1_credit": cred["link_credit"],
         "c2_credit": c2["link_credit"],
         "rate": rate["makespan"],
@@ -648,6 +643,7 @@ credit 的 makespan 从 {cred['makespan']} 变成 {ha['makespan']}。</p>
 基线的仲裁器是 0，不在对数轴上。第二张图把环站存储算进去。</p>
 <div class="fig">{_svg(arb)}
 <div class="cap">仲裁器前沿：{names}。
+HA=16 比 ×1 少约 100 bit，makespan 却是 {ha['makespan']}，所以也落在前沿上。
 credit ×1 的仲裁器状态约为 iSLIP 的 {100*cred['bits']/ic['bits']:.0f}%，
 makespan 多 {cred['makespan']-base_mk} 拍，并且长于基线的 {raw['makespan']} 拍。
 rate 比 credit 更大也更慢。credit ×2 与 ×1 的 makespan 相同、状态更多。</div></div>
@@ -671,8 +667,7 @@ makespan <b class="win">{wide['islip']:,}</b>，是这条下限的
 基线是 {wide['base']:,}。credit ×1 的链路计数只有 {wide['c1_credit']}，
 一个包就要 64，同一条链路上放不下第二个包，要等 DONE 回来，
 所以是 {wide['c1']:,}，慢于基线。计数加倍到 {wide['c2_credit']} 可以叠两个包，
-makespan {wide['c2']:,}，短于基线。×0.5 的计数是 {wide['c0.5_credit']}，
-小于 64，一个包都放不出去。rate 是 {wide['rate']:,}，三个周期相同。</p>
+makespan {wide['c2']:,}，短于基线。rate 是 {wide['rate']:,}，三个周期相同。</p>
 <table>
 <thead><tr><th>方案</th><th>1 flit<br><span class="muted">{flit_b} B</span></th>
 <th>16 flit<br><span class="muted">{16 * flit_b} B</span></th>
@@ -683,13 +678,11 @@ makespan {wide['c2']:,}，短于基线。×0.5 的计数是 {wide['c0.5_credit']
 <tr class="hl"><td>基线</td><td>{long[1]['base']:,}</td><td>{long[16]['base']:,}</td><td><b>{long[64]['base']:,}</b></td></tr>
 <tr><td>credit ×2</td><td>{_cell(long[1]['c2'])}</td><td>{_cell(long[16]['c2'])}</td><td>{_cell(long[64]['c2'])}</td></tr>
 <tr class="hl"><td>credit ×1</td><td>{_cell(long[1]['c1'])}</td><td>{_cell(long[16]['c1'])}</td><td><b>{_cell(long[64]['c1'])}</b></td></tr>
-<tr><td>credit ×0.5</td><td>{_cell(long[1]['c0.5'])}</td><td>{_cell(long[16]['c0.5'])}</td><td>{_cell(long[64]['c0.5'])}</td></tr>
 <tr class="hl"><td>rate</td><td>{long[1]['rate']:,}</td><td>{long[16]['rate']:,}</td><td><b>{long[64]['rate']:,}</b></td></tr>
 </tbody></table>
 <div class="fig">{_svg_len([long[1], long[16], long[64]])}
 <div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
-虚线是最热链路要串行的 flit 数，makespan 不能低于它。
-credit ×0.5 在 64 flit 放不出包，没有点。</div></div>
+虚线是最热链路要串行的 flit 数，makespan 不能低于它。</div></div>
 <p class="muted">64 flit 时基线偏转 {wide['defl']:,} 次。
 目的端重组缓冲是 64 flit，刚好一个包，多出来的 flit 把这个计数打满了
 {wide['reasm_ovf']:,} 次；包没有被丢掉，只是在环上多转。
