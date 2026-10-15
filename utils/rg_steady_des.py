@@ -153,6 +153,13 @@ class SteadyParams:
     homa_degree: int = 8              # overcommit: messages granted per HA at once
     homa_sched: str = "srpt"          # srpt / fcfs
 
+    # CA-credit / CA-rate (docs/rg.md). scale multiplies link BDP only.
+    # ha_trackers <= 0 sizes the pool to the fabric's analytic anchor × no-load RTT
+    # so the tracker is not an accidental bottleneck; a positive value is the
+    # literal tracker count.
+    ca_credit_scale: float = 1.0
+    ha_trackers: int = 0
+
     # Message workload. "" = one packet per arrival (legacy). Otherwise
     # "L:prob,L:prob,..." in packets; lam stays in PACKETS per node per cycle,
     # so the message rate is lam / E[L].
@@ -1044,6 +1051,10 @@ def build(config: str, p: SteadyParams, seed: int = 0):
         fabric = config.split("_")[0]
         base = build(f"{fabric}_base", p, seed=seed)
         return HomaSim(base, fabric, p)
+    if config in ("mesh_ca_credit", "ring_ca_credit",
+                  "mesh_ca_rate", "ring_ca_rate"):
+        from rg_ca_admit import build_ca
+        return build_ca(config, p, seed=seed)
     raise ValueError(f"unknown config: {config}")
 
 
@@ -1129,6 +1140,8 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
                  else p.match,
         "horizon": p.horizon,
         "ca_period": p.ca_period, "ca_probe": p.ca_probe,
+        "ca_credit_scale": p.ca_credit_scale,
+        "ha_trackers": p.ha_trackers,
         "pipeline_depth": p.pipeline_depth,
         "path_mode": p.path_mode, "ring_path_mode": p.ring_path_mode,
         "board_ports": p.board_ports, "leave_ports": p.leave_ports,
@@ -1204,6 +1217,9 @@ def run_steady(config: str, p: SteadyParams) -> dict[str, Any]:
         out[f"fct_p99_L{L}"] = float(v[min(len(v) - 1, int(0.99 * (len(v) - 1)))])
         out[f"fct_n_L{L}"] = len(v)
     dist = None
+    if hasattr(sim, "ca_export"):                 # CA-credit / CA-rate
+        out.update(sim.ca_export())
+        sim = sim.base
     if hasattr(sim, "dbid_wait"):                 # DbidDistSim
         dist = sim
         sim = dist.base

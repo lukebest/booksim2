@@ -2414,7 +2414,28 @@ def main() -> None:
 
     b, s, v, x, sm = load()
     led = rg_sched_cost.centralization_ledger()
-    OUT.write_text(build(b, s, v, x, led, sm), encoding="utf-8")
+    html = build(b, s, v, x, led, sm)
+    from gen_ca_section import render as render_ca
+    extra = render_ca(ROOT)
+    if extra:
+        html = html.replace(
+            '<a href="#s12">12 · 验证清单与已知局限</a>',
+            '<a href="#s11b">11b · CA-credit 与 CA-rate</a><br/>\n'
+            '<a href="#s12">12 · 验证清单与已知局限</a>',
+            1)
+        html = html.replace(
+            '<h2 id="s12">', extra + '\n<h2 id="s12">', 1)
+        html = html.replace(
+            '<tr><td><code>utils/gen_islip2d_report.py</code></td>',
+            '<tr><td><code>utils/rg_ca_admit.py</code></td>\n'
+            '<td>CA-credit / CA-rate 准入，接在 mesh_base / ring_base 上</td></tr>\n'
+            '<tr><td><code>utils/dse_ca_credit_rate.py</code></td>\n'
+            '<td>稳态扫描 → <code>results/ca_credit_rate_8x6.json</code>（§11b）</td></tr>\n'
+            '<tr><td><code>utils/gen_ca_section.py</code></td>\n'
+            '<td>§11b 的表、吞吐曲线和 Pareto</td></tr>\n'
+            '<tr><td><code>utils/gen_islip2d_report.py</code></td>',
+            1)
+    OUT.write_text(html, encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)} "
           f"({OUT.stat().st_size / 1024:.0f} KB)")
 
