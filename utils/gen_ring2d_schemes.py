@@ -19,9 +19,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils"))
 
-from rg_ca_admit import CreditSim, RateSim
+from rg_ca_admit import CreditSim, FabricMap, RateSim
+from rg_ring_sched import schedule_ring
 from rg_ring_topo import RingTopology
-from rg_sched_cost import distributed_cost, pareto_front, sched_cost
+from rg_sched_cost import W_FLIT, distributed_cost, pareto_front, sched_cost
 from rg_steady_des import RingBaseAdapter, SteadyParams
 
 BATCH = ROOT / "results" / "islip2d_8x6.json"
@@ -274,6 +275,138 @@ def _svg_system(pts: list[dict]) -> str:
     return "".join(parts)
 
 
+def _clk(sim) -> int:
+    return sim.t if hasattr(sim, "t") else sim.sim.t
+
+
+def _finish(sim, *, limit: int = 300_000, stall: int = 25_000) -> dict:
+    for s in range(48):
+        for d in range(48):
+            if s != d:
+                sim.offer(s, d)
+    got = last = 0
+    seen = -1
+    seen_at = 0
+    while got < N_FLOWS and _clk(sim) < limit:
+        sim.step()
+        while sim.pkt_done:
+            td = sim.pkt_done.pop()[-1]
+            got += 1
+            last = max(last, td)
+        c = _clk(sim)
+        if got != seen:
+            seen, seen_at = got, c
+        elif c - seen_at > stall:
+            return {"makespan": None, "got": got, "stall": True}
+    if got != N_FLOWS:
+        return {"makespan": None, "got": got, "stall": True}
+    out = {"makespan": last, "got": got, "stall": False}
+    if hasattr(sim, "sim"):
+        out["defl"] = sim.sim.st["n_deflections"]
+        out["reasm_ovf"] = sim.sim.st["n_reasm_overflow"]
+    return out
+
+
+def _measure_m(m: int) -> dict:
+    """Same 2,256-pair all-to-all, m flits per pair."""
+    a2a = [(s, d) for s in range(48) for d in range(48) if s != d]
+    isl = schedule_ring(RingTopology(), a2a, m=m, ring_path_mode="fixed",
+                        grants_per_src=2, conflict_domain="interval",
+                        pipeline_depth=1 << 20, t_rtt=16)
+    hot = isl["plan"]["max_link_load"]
+    out: dict = {
+        "m": m,
+        "islip": isl["makespan_sched"],
+        "hot": hot,
+        "link_lb": hot * m,
+    }
+    base = _finish(RingBaseAdapter(SteadyParams(m=m, buf_depth=20, t_rtt=16)))
+    out["base"] = base["makespan"]
+    out["defl"] = base.get("defl")
+    out["reasm_ovf"] = base.get("reasm_ovf")
+    for scale in (0.5, 1.0, 2.0):
+        p = SteadyParams(m=m, buf_depth=20, t_rtt=16, ca_credit_scale=scale)
+        credit = FabricMap("ring", p).link_credit
+        key = f"c{scale:g}"
+        out[f"{key}_credit"] = credit
+        if credit < m:
+            out[key] = None
+            continue
+        out[key] = _finish(CreditSim("ring", p))["makespan"]
+    out["rate"] = _finish(RateSim(
+        "ring", SteadyParams(m=m, buf_depth=20, t_rtt=16, ca_period=64)
+    ))["makespan"]
+    return out
+
+
+def _svg_len(rows: list[dict]) -> str:
+    """makespan against flits per src-dst. Log-log. Smaller makespan is down."""
+    W, H = 880, 400
+    x0, y0, pw, ph = 72, 36, 640, 300
+    series = [
+        ("链路下限", "#8b95ab", "link_lb", True),
+        ("iSLIP-2D", "#6ee7a8", "islip", False),
+        ("基线", "#7eb6ff", "base", False),
+        ("credit ×1", "#e06c6c", "c1", False),
+        ("rate", "#e6a23c", "rate", False),
+    ]
+    xs = [r["m"] for r in rows]
+    ys = [r[k] for r in rows for _, _, k, _ in series if r.get(k)]
+    xmin, xmax = min(xs) / 1.6, max(xs) * 1.45
+    ymin, ymax = min(ys) / 1.4, max(ys) * 1.35
+
+    def X(v: float) -> float:
+        return x0 + (math.log10(v) - math.log10(xmin)) / (
+            math.log10(xmax) - math.log10(xmin)) * pw
+
+    def Y(v: float) -> float:
+        return y0 + (math.log10(ymax) - math.log10(v)) / (
+            math.log10(ymax) - math.log10(ymin)) * ph
+
+    parts = [f'<svg viewBox="0 0 {W} {H}" width="100%" '
+             f'preserveAspectRatio="xMidYMid meet" role="img">',
+             f'<rect class="plot" x="{x0}" y="{y0}" width="{pw}" height="{ph}"/>']
+    for g in (100, 1_000, 10_000):
+        if ymin <= g <= ymax:
+            yy = Y(g)
+            parts.append(f'<line class="gl" x1="{x0}" y1="{yy:.1f}" '
+                         f'x2="{x0+pw}" y2="{yy:.1f}"/>')
+            lab = f"{g/1000:.0f}k" if g >= 1000 else str(g)
+            parts.append(f'<text class="tick" x="{x0-8}" y="{yy+4:.1f}" '
+                         f'text-anchor="end">{lab}</text>')
+    for m in xs:
+        xx = X(m)
+        parts.append(f'<text class="tick" x="{xx:.1f}" y="{y0+ph+18}" '
+                     f'text-anchor="middle">{m}</text>')
+    for _name, col, key, dash in series:
+        pts = [(r["m"], r[key]) for r in rows if r.get(key)]
+        d = " ".join(f"{X(m):.1f},{Y(v):.1f}" for m, v in pts)
+        extra = ' stroke-dasharray="5 4"' if dash else ""
+        parts.append(f'<polyline points="{d}" fill="none" stroke="{col}" '
+                     f'stroke-width="2.2"{extra}/>')
+        for m, v in pts:
+            parts.append(f'<circle cx="{X(m):.1f}" cy="{Y(v):.1f}" r="3.5" '
+                         f'fill="{col}"/>')
+    lx = x0 + pw + 16
+    for i, (name, col, _key, dash) in enumerate(series):
+        ly = y0 + 18 + i * 22
+        parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx+22}" y2="{ly}" '
+                     f'stroke="{col}" stroke-width="2.2"'
+                     f'{" stroke-dasharray=\"4 3\"" if dash else ""}/>')
+        parts.append(f'<text class="tick" x="{lx+28}" y="{ly+4}" '
+                     f'fill="#e8ecf4">{name}</text>')
+    parts.append(f'<text class="axl" x="{x0+pw/2}" y="{y0+ph+40}" '
+                 f'text-anchor="middle">每个 src-dst 的 flit 数（对数）</text>')
+    parts.append(f'<text class="axl" x="16" y="{y0+ph/2}" text-anchor="middle" '
+                 f'transform="rotate(-90 16 {y0+ph/2})">makespan（拍，对数）</text>')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _cell(v) -> str:
+    return "放不出" if v is None else f"{v:,}"
+
+
 def main() -> None:
     isl = _islip()
     topo = RingTopology()
@@ -371,6 +504,29 @@ def main() -> None:
         (p for p in arb if p["front"]), key=lambda p: p["bits"]))
     snames = "、".join(p["name"] for p in sorted(
         (p for p in pts if p["sfront"]), key=lambda p: p["system"]))
+    c2 = next(p for p in pts if p["name"] == "credit ×2")
+    c05 = next(p for p in pts if p["name"] == "credit ×0.5")
+    long = {1: {
+        "m": 1,
+        "islip": base_mk,
+        "base": raw["makespan"],
+        "c0.5": c05["makespan"],
+        "c1": cred["makespan"],
+        "c2": c2["makespan"],
+        "c0.5_credit": c05["link_credit"],
+        "c1_credit": cred["link_credit"],
+        "c2_credit": c2["link_credit"],
+        "rate": rate["makespan"],
+        "hot": 60,
+        "link_lb": 60,
+        "defl": raw["defl"],
+        "reasm_ovf": None,
+    }}
+    for m in (16, 64):
+        long[m] = _measure_m(m)
+    wide = long[64]
+    flit_b = W_FLIT // 8
+    kib = 64 * flit_b // 1024
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -418,9 +574,10 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 </head>
 <body><div class="wrap">
 <h1>2D 环：基线与三种准入的 makespan</h1>
-<p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一个 flit，共 {N_FLOWS:,} 条。
+<p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一条流，共 {N_FLOWS:,} 条。
+第 1–3 节每条流是 1 个 flit（{flit_b} byte）。第 4 节把包长加到 64 flit。
 基线、CA-credit、CA-rate 都在环数据面上排完；
-iSLIP-2D 的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
+iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
 <p>
 <span class="pill">6 行环 × 8 + 8 列环 × 6</span>
 <span class="pill">192 条有向链路</span>
@@ -499,6 +656,44 @@ rate 比 credit 更大也更慢。credit ×2 与 ×1 的 makespan 相同、状�
 基线 {station:,} bit、{raw['makespan']} 拍。iSLIP 把环站换成区间表之后，
 面积少 {station-ic['bits']:,} bit，makespan 也更短，所以基线落在前沿内侧。
 credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基线。</div></div>
+
+<h2>4 · 64 flit 的包</h2>
+<p>64 flit 是<b>每个 src-dst 的包长</b>，节点数和流数不变，还是 2,256 条。
+面积模型里一个 flit 是 {W_FLIT} bit，也就是 {flit_b} byte。
+所以 1 flit = {flit_b} byte，16 flit = {16 * flit_b} byte，
+64 flit = {64 * flit_b:,} byte = {kib} KiB。
+每个节点向另外 47 个节点各发 {kib} KiB，自己发出 47 KiB，也收到 47 KiB。
+全网 {N_FLOWS:,} KiB。</p>
+<p>最热链路在 1 flit 时过 {wide['hot']} 个包，64 flit 时就要串行
+{wide['link_lb']:,} 个 flit。iSLIP 把这一整包订成连续的 64 拍，
+makespan <b class="win">{wide['islip']:,}</b>，是这条下限的
+{wide['islip']/wide['link_lb']:.2f} 倍。
+基线是 {wide['base']:,}。credit ×1 的链路计数只有 {wide['c1_credit']}，
+一个包就要 64，同一条链路上放不下第二个包，要等 DONE 回来，
+所以是 {wide['c1']:,}，慢于基线。计数加倍到 {wide['c2_credit']} 可以叠两个包，
+makespan {wide['c2']:,}，短于基线。×0.5 的计数是 {wide['c0.5_credit']}，
+小于 64，一个包都放不出去。rate 是 {wide['rate']:,}，三个周期相同。</p>
+<table>
+<thead><tr><th>方案</th><th>1 flit<br><span class="muted">{flit_b} B</span></th>
+<th>16 flit<br><span class="muted">{16 * flit_b} B</span></th>
+<th>64 flit<br><span class="muted">{kib} KiB</span></th></tr></thead>
+<tbody>
+<tr><td>链路下限</td><td>{long[1]['link_lb']:,}</td><td>{long[16]['link_lb']:,}</td><td>{long[64]['link_lb']:,}</td></tr>
+<tr class="hl"><td>iSLIP-2D</td><td>{long[1]['islip']:,}</td><td>{long[16]['islip']:,}</td><td><b>{long[64]['islip']:,}</b></td></tr>
+<tr class="hl"><td>基线</td><td>{long[1]['base']:,}</td><td>{long[16]['base']:,}</td><td><b>{long[64]['base']:,}</b></td></tr>
+<tr><td>credit ×2</td><td>{_cell(long[1]['c2'])}</td><td>{_cell(long[16]['c2'])}</td><td>{_cell(long[64]['c2'])}</td></tr>
+<tr class="hl"><td>credit ×1</td><td>{_cell(long[1]['c1'])}</td><td>{_cell(long[16]['c1'])}</td><td><b>{_cell(long[64]['c1'])}</b></td></tr>
+<tr><td>credit ×0.5</td><td>{_cell(long[1]['c0.5'])}</td><td>{_cell(long[16]['c0.5'])}</td><td>{_cell(long[64]['c0.5'])}</td></tr>
+<tr class="hl"><td>rate</td><td>{long[1]['rate']:,}</td><td>{long[16]['rate']:,}</td><td><b>{long[64]['rate']:,}</b></td></tr>
+</tbody></table>
+<div class="fig">{_svg_len([long[1], long[16], long[64]])}
+<div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
+虚线是最热链路要串行的 flit 数，makespan 不能低于它。
+credit ×0.5 在 64 flit 放不出包，没有点。</div></div>
+<p class="muted">64 flit 时基线偏转 {wide['defl']:,} 次。
+目的端重组缓冲是 64 flit，刚好一个包，多出来的 flit 把这个计数打满了
+{wide['reasm_ovf']:,} 次；包没有被丢掉，只是在环上多转。
+rate 的 T=16、64、256 在 16 flit 和 64 flit 都是同一个 makespan。</p>
 <p class="muted">重新生成：<code>python3 utils/gen_ring2d_schemes.py</code></p>
 </div></body></html>
 """

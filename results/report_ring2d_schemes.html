@@ -44,9 +44,10 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 </head>
 <body><div class="wrap">
 <h1>2D 环：基线与三种准入的 makespan</h1>
-<p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一个 flit，共 2,256 条。
+<p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一条流，共 2,256 条。
+第 1–3 节每条流是 1 个 flit（16 byte）。第 4 节把包长加到 64 flit。
 基线、CA-credit、CA-rate 都在环数据面上排完；
-iSLIP-2D 的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
+iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
 <p>
 <span class="pill">6 行环 × 8 + 8 列环 × 6</span>
 <span class="pill">192 条有向链路</span>
@@ -125,5 +126,43 @@ rate 比 credit 更大也更慢。credit ×2 与 ×1 的 makespan 相同、状�
 基线 198,528 bit、149 拍。iSLIP 把环站换成区间表之后，
 面积少 9,000 bit，makespan 也更短，所以基线落在前沿内侧。
 credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基线。</div></div>
+
+<h2>4 · 64 flit 的包</h2>
+<p>64 flit 是<b>每个 src-dst 的包长</b>，节点数和流数不变，还是 2,256 条。
+面积模型里一个 flit 是 128 bit，也就是 16 byte。
+所以 1 flit = 16 byte，16 flit = 256 byte，
+64 flit = 1,024 byte = 1 KiB。
+每个节点向另外 47 个节点各发 1 KiB，自己发出 47 KiB，也收到 47 KiB。
+全网 2,256 KiB。</p>
+<p>最热链路在 1 flit 时过 60 个包，64 flit 时就要串行
+3,840 个 flit。iSLIP 把这一整包订成连续的 64 拍，
+makespan <b class="win">5,141</b>，是这条下限的
+1.34 倍。
+基线是 11,869。credit ×1 的链路计数只有 90，
+一个包就要 64，同一条链路上放不下第二个包，要等 DONE 回来，
+所以是 13,505，慢于基线。计数加倍到 180 可以叠两个包，
+makespan 10,020，短于基线。×0.5 的计数是 45，
+小于 64，一个包都放不出去。rate 是 12,782，三个周期相同。</p>
+<table>
+<thead><tr><th>方案</th><th>1 flit<br><span class="muted">16 B</span></th>
+<th>16 flit<br><span class="muted">256 B</span></th>
+<th>64 flit<br><span class="muted">1 KiB</span></th></tr></thead>
+<tbody>
+<tr><td>链路下限</td><td>60</td><td>960</td><td>3,840</td></tr>
+<tr class="hl"><td>iSLIP-2D</td><td>120</td><td>1,460</td><td><b>5,141</b></td></tr>
+<tr class="hl"><td>基线</td><td>149</td><td>2,527</td><td><b>11,869</b></td></tr>
+<tr><td>credit ×2</td><td>165</td><td>2,440</td><td>10,020</td></tr>
+<tr class="hl"><td>credit ×1</td><td>165</td><td>2,541</td><td><b>13,505</b></td></tr>
+<tr><td>credit ×0.5</td><td>173</td><td>4,421</td><td>放不出</td></tr>
+<tr class="hl"><td>rate</td><td>240</td><td>3,017</td><td><b>12,782</b></td></tr>
+</tbody></table>
+<div class="fig"><svg viewBox="0 0 880 400" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="36" width="640" height="300"/><line class="gl" x1="72" y1="294.0" x2="712" y2="294.0"/><text class="tick" x="64" y="298.0" text-anchor="end">100</text><line class="gl" x1="72" y1="179.9" x2="712" y2="179.9"/><text class="tick" x="64" y="183.9" text-anchor="end">1k</text><line class="gl" x1="72" y1="65.8" x2="712" y2="65.8"/><text class="tick" x="64" y="69.8" text-anchor="end">10k</text><text class="tick" x="132.2" y="354" text-anchor="middle">1</text><text class="tick" x="487.0" y="354" text-anchor="middle">16</text><text class="tick" x="664.4" y="354" text-anchor="middle">64</text><polyline points="132.2,319.3 487.0,181.9 664.4,113.2" fill="none" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="132.2" cy="319.3" r="3.5" fill="#8b95ab"/><circle cx="487.0" cy="181.9" r="3.5" fill="#8b95ab"/><circle cx="664.4" cy="113.2" r="3.5" fill="#8b95ab"/><polyline points="132.2,285.0 487.0,161.1 664.4,98.7" fill="none" stroke="#6ee7a8" stroke-width="2.2"/><circle cx="132.2" cy="285.0" r="3.5" fill="#6ee7a8"/><circle cx="487.0" cy="161.1" r="3.5" fill="#6ee7a8"/><circle cx="664.4" cy="98.7" r="3.5" fill="#6ee7a8"/><polyline points="132.2,274.2 487.0,133.9 664.4,57.3" fill="none" stroke="#7eb6ff" stroke-width="2.2"/><circle cx="132.2" cy="274.2" r="3.5" fill="#7eb6ff"/><circle cx="487.0" cy="133.9" r="3.5" fill="#7eb6ff"/><circle cx="664.4" cy="57.3" r="3.5" fill="#7eb6ff"/><polyline points="132.2,269.2 487.0,133.7 664.4,50.9" fill="none" stroke="#e06c6c" stroke-width="2.2"/><circle cx="132.2" cy="269.2" r="3.5" fill="#e06c6c"/><circle cx="487.0" cy="133.7" r="3.5" fill="#e06c6c"/><circle cx="664.4" cy="50.9" r="3.5" fill="#e06c6c"/><polyline points="132.2,250.6 487.0,125.2 664.4,53.6" fill="none" stroke="#e6a23c" stroke-width="2.2"/><circle cx="132.2" cy="250.6" r="3.5" fill="#e6a23c"/><circle cx="487.0" cy="125.2" r="3.5" fill="#e6a23c"/><circle cx="664.4" cy="53.6" r="3.5" fill="#e6a23c"/><line x1="728" y1="54" x2="750" y2="54" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="4 3"/><text class="tick" x="756" y="58" fill="#e8ecf4">链路下限</text><line x1="728" y1="76" x2="750" y2="76" stroke="#6ee7a8" stroke-width="2.2"/><text class="tick" x="756" y="80" fill="#e8ecf4">iSLIP-2D</text><line x1="728" y1="98" x2="750" y2="98" stroke="#7eb6ff" stroke-width="2.2"/><text class="tick" x="756" y="102" fill="#e8ecf4">基线</text><line x1="728" y1="120" x2="750" y2="120" stroke="#e06c6c" stroke-width="2.2"/><text class="tick" x="756" y="124" fill="#e8ecf4">credit ×1</text><line x1="728" y1="142" x2="750" y2="142" stroke="#e6a23c" stroke-width="2.2"/><text class="tick" x="756" y="146" fill="#e8ecf4">rate</text><text class="axl" x="392.0" y="376" text-anchor="middle">每个 src-dst 的 flit 数（对数）</text><text class="axl" x="16" y="186.0" text-anchor="middle" transform="rotate(-90 16 186.0)">makespan（拍，对数）</text></svg>
+<div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
+虚线是最热链路要串行的 flit 数，makespan 不能低于它。
+credit ×0.5 在 64 flit 放不出包，没有点。</div></div>
+<p class="muted">64 flit 时基线偏转 34,869 次。
+目的端重组缓冲是 64 flit，刚好一个包，多出来的 flit 把这个计数打满了
+106,173 次；包没有被丢掉，只是在环上多转。
+rate 的 T=16、64、256 在 16 flit 和 64 flit 都是同一个 makespan。</p>
 <p class="muted">重新生成：<code>python3 utils/gen_ring2d_schemes.py</code></p>
 </div></body></html>
