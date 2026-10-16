@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Concise 2D-ring report: baseline, iSLIP-2D, CA-credit, CA-rate.
+"""Concise 2D-ring report: baseline, iSLIP-2D, CA-credit, CA-rate, CA-ring.
 
 One all-to-all of 2,256 single-flit flows on the dimension-sliced ring.
 The baseline is the reactive ring (I-tag / E-tag), with no central arbiter.
@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils"))
 
 from rg_ca_admit import CreditSim, FabricMap, RateSim
+from rg_ca_ring import RingGrainSim
+from rg_islip_ring import RingSlipSim
 from rg_ring_sched import schedule_ring
 from rg_ring_topo import RingTopology
 from rg_sched_cost import W_FLIT, distributed_cost, pareto_front, sched_cost
@@ -74,8 +76,39 @@ def _drain_base() -> dict:
 
 
 def _drain(kind: str, **kw) -> dict:
-    p = SteadyParams(buf_depth=20, t_rtt=16, **kw)
-    sim = CreditSim("ring", p) if kind == "credit" else RateSim("ring", p)
+    if kind == "slip":
+        p = SteadyParams(buf_depth=20, t_rtt=16, **kw)
+        sim = RingSlipSim(p)
+        for s in range(48):
+            for d in range(48):
+                if s != d:
+                    sim.offer(s, d)
+        got = last = 0
+        while got < N_FLOWS and sim.t < 100_000:
+            sim.step()
+            while sim.pkt_done:
+                got += 1
+                last = max(last, sim.pkt_done.pop()[-1])
+        if got != N_FLOWS:
+            raise RuntimeError(f"slip delivered {got}/{N_FLOWS}")
+        e = sim.export()
+        return {
+            "makespan": last,
+            "bits": e["arbiter_bits"],
+            "system": e["system_bits"],
+            "breakdown": e["arbiter_breakdown"],
+            "rounds": e["rounds"],
+            "defl": e["n_deflections"],
+            "ctrl_per_cy": e["ctrl_msgs"] / max(1, sim.t),
+        }
+    if kind == "ring":
+        scale = kw.pop("scale")
+        p = SteadyParams(buf_depth=20, t_rtt=16, **kw)
+        sim = RingGrainSim(p, ring_credit_scale=scale,
+                           bridge_credit_scale=scale)
+    else:
+        p = SteadyParams(buf_depth=20, t_rtt=16, **kw)
+        sim = CreditSim("ring", p) if kind == "credit" else RateSim("ring", p)
     for s in range(48):
         for d in range(48):
             if s != d:
@@ -90,6 +123,19 @@ def _drain(kind: str, **kw) -> dict:
             last = max(last, td)
     if got != N_FLOWS:
         raise RuntimeError(f"{kind} delivered {got}/{N_FLOWS}")
+    if kind == "ring":
+        e = sim.export()
+        return {
+            "makespan": last,
+            "bits": e["arbiter_bits"],
+            "system": e["system_bits"],
+            "ring_credit": e["ring_credit"],
+            "ring_credit_min": e["ring_credit_min"],
+            "bridge_credit": e["bridge_credit"],
+            "grants": e["n_grants"],
+            "defl": e["n_deflections"],
+            "ctrl_per_cy": e["ctrl_msgs"] / max(1, sim.t),
+        }
     return {
         "makespan": last,
         "bits": sim.fm.arbiter_bits,
@@ -153,6 +199,9 @@ def _svg(pts: list[dict]) -> str:
     label_at = {
         "iSLIP-2D": (-14, -14, "end", "iSLIP-2D"),
         "credit ×1": (22, 4, "start", "credit ×1"),
+        "CA-ring ×1": (16, -12, "start", "CA-ring ×1"),
+        "CA-ring ×2": (16, 16, "start", "CA-ring ×2"),
+        "iSLIP-ring": (-14, -12, "end", "iSLIP-ring"),
         "credit ×2": (22, 18, "start", "credit ×2"),
         "credit HA=16": (18, -12, "start", "credit HA=16"),
         "rate T=16": (16, -8, "start", "rate"),
@@ -167,6 +216,18 @@ def _svg(pts: list[dict]) -> str:
         elif p["shape"] == "s":
             parts.append(f'<rect x="{cx-5:.1f}" y="{cy-5:.1f}" width="10" '
                          f'height="10" fill="{col}" opacity="{op}"/>')
+        elif p["shape"] == "h":
+            hx = " ".join(f"{cx + 7*math.cos(math.pi/3*i):.1f},"
+                          f"{cy + 7*math.sin(math.pi/3*i):.1f}"
+                          for i in range(6))
+            parts.append(f'<polygon points="{hx}" fill="{col}" '
+                         f'opacity="{op}"/>')
+        elif p["shape"] == "p":
+            pg = " ".join(f"{cx + 7.5*math.cos(-math.pi/2 + 2*math.pi/5*i):.1f},"
+                          f"{cy + 7.5*math.sin(-math.pi/2 + 2*math.pi/5*i):.1f}"
+                          for i in range(5))
+            parts.append(f'<polygon points="{pg}" fill="{col}" '
+                         f'opacity="{op}"/>')
         elif p["shape"] == "t":
             parts.append(
                 f'<polygon points="{cx:.1f},{cy-7:.1f} {cx+6.5:.1f},{cy+5:.1f} '
@@ -214,7 +275,7 @@ def _svg_system(pts: list[dict]) -> str:
                          f'x2="{x0+pw}" y2="{yy:.1f}"/>')
             parts.append(f'<text class="tick" x="{x0-8}" y="{yy+4:.1f}" '
                          f'text-anchor="end">{g}</text>')
-    for g in (190_000, 200_000, 210_000, 220_000):
+    for g in (190_000, 200_000, 210_000, 220_000, 230_000, 240_000):
         if xmin <= g <= xmax:
             xx = X(g)
             parts.append(f'<text class="tick" x="{xx:.1f}" y="{y0+ph+18}" '
@@ -228,7 +289,8 @@ def _svg_system(pts: list[dict]) -> str:
     groups: list[dict] = []
     for p in pts:
         for g in groups:
-            if g["system"] == p["system"] and g["makespan"] == p["makespan"]:
+            if (abs(g["system"] - p["system"]) < 100
+                    and g["makespan"] == p["makespan"]):
                 g["names"].append(p["name"])
                 g["sfront"] = g["sfront"] or p["sfront"]
                 break
@@ -238,6 +300,8 @@ def _svg_system(pts: list[dict]) -> str:
         "基线": (14, 18, "start", "基线"),
         "iSLIP-2D": (-12, -16, "end", "iSLIP-2D"),
         "credit ×1": (28, -4, "start", "credit ×1"),
+        "CA-ring ×1": (-10, -14, "end", "CA-ring ×1 / ×2"),
+        "iSLIP-ring": (-12, -12, "end", "iSLIP-ring"),
         "credit ×2": (28, 16, "start", "credit ×2"),
         "credit HA=16": (14, -12, "start", "HA=16"),
         "rate T=16": (12, -10, "start", "rate"),
@@ -252,6 +316,18 @@ def _svg_system(pts: list[dict]) -> str:
         elif p["shape"] == "s":
             parts.append(f'<rect x="{cx-5:.1f}" y="{cy-5:.1f}" width="10" '
                          f'height="10" fill="{col}" opacity="{op}"/>')
+        elif p["shape"] == "h":
+            hx = " ".join(f"{cx + 7*math.cos(math.pi/3*i):.1f},"
+                          f"{cy + 7*math.sin(math.pi/3*i):.1f}"
+                          for i in range(6))
+            parts.append(f'<polygon points="{hx}" fill="{col}" '
+                         f'opacity="{op}"/>')
+        elif p["shape"] == "p":
+            pg = " ".join(f"{cx + 7.5*math.cos(-math.pi/2 + 2*math.pi/5*i):.1f},"
+                          f"{cy + 7.5*math.sin(-math.pi/2 + 2*math.pi/5*i):.1f}"
+                          for i in range(5))
+            parts.append(f'<polygon points="{pg}" fill="{col}" '
+                         f'opacity="{op}"/>')
         elif p["shape"] == "t":
             parts.append(
                 f'<polygon points="{cx:.1f},{cy-7:.1f} {cx+6.5:.1f},{cy+5:.1f} '
@@ -277,10 +353,16 @@ def _clk(sim) -> int:
     return sim.t if hasattr(sim, "t") else sim.sim.t
 
 
-def _finish(sim, *, limit: int = 300_000, stall: int = 25_000) -> dict:
+def _finish(sim, *, limit: int = 300_000, stall: int = 25_000,
+            stagger: bool = False) -> dict:
+    """Offer the whole all-to-all at t=0. Default order is destination index
+    0..47 for every source, so all sources aim at the same destination at the
+    same time. stagger=True sends source s to s+1, s+2, ... instead."""
     for s in range(48):
-        for d in range(48):
-            if s != d:
+        dsts = ([(s + k) % 48 for k in range(1, 48)] if stagger
+                else range(48))
+        for d in dsts:
+            if d != s:
                 sim.offer(s, d)
     got = last = 0
     seen = -1
@@ -299,6 +381,8 @@ def _finish(sim, *, limit: int = 300_000, stall: int = 25_000) -> dict:
     if got != N_FLOWS:
         return {"makespan": None, "got": got, "stall": True}
     out = {"makespan": last, "got": got, "stall": False}
+    if hasattr(sim, "export"):
+        out["ctrl_per_cy"] = sim.export()["ctrl_msgs"] / max(1, sim.t)
     if hasattr(sim, "sim"):
         out["defl"] = sim.sim.st["n_deflections"]
         out["reasm_ovf"] = sim.sim.st["n_reasm_overflow"]
@@ -334,7 +418,58 @@ def _measure_m(m: int) -> dict:
     out["rate"] = _finish(RateSim(
         "ring", SteadyParams(m=m, buf_depth=20, t_rtt=16, ca_period=64)
     ))["makespan"]
+    for scale in (1.0, 2.0):
+        r = _finish(RingGrainSim(SteadyParams(m=m, buf_depth=20, t_rtt=16),
+                                 ring_credit_scale=scale,
+                                 bridge_credit_scale=scale))
+        out[f"ca{scale:g}"] = r["makespan"]
+        if scale == 1.0:
+            out["ca_defl"] = r.get("defl")
+            out["ca_ctrl"] = r.get("ctrl_per_cy")
+    out["ca_inflight"] = _finish(RingGrainSim(
+        SteadyParams(m=m, buf_depth=20, t_rtt=16),
+        ring_basis="inflight"))["makespan"]
+    out.update(_slip_extra(m))
     return out
+
+
+def _slip_extra(m: int) -> dict:
+    """iSLIP-ring at m flits per pair, plus the two checks the text cites."""
+    p = lambda: SteadyParams(m=m, buf_depth=20, t_rtt=16)  # noqa: E731
+    sim = RingSlipSim(p())
+    r = _finish(sim)
+    e = sim.export()
+    a2a = [(s, d) for s in range(48) for d in range(48) if s != d]
+    excl = schedule_ring(RingTopology(spatial_reuse="whole_ring"), a2a, m=m,
+                         ring_path_mode="fixed", grants_per_src=2,
+                         conflict_domain="interval", pipeline_depth=1 << 20,
+                         t_rtt=16)
+    return {
+        "sr": r["makespan"],
+        "sr_defl": e["n_deflections"],
+        "sr_fifo": e["n_fifo_full_deflect"],
+        "sr_ctrl": e["ctrl_msgs"],
+        "sr_ctrl_cy": e["ctrl_msgs"] / max(1, sim.t),
+        "sr_start": e["t_last_start"],
+        "sr_rounds": e["rounds"],
+        "sr_rl1": _finish(RingSlipSim(p(), round_lat=1))["makespan"],
+        "sr_excl": excl["makespan_sched"],
+        "sr_full": _finish(RingSlipSim(p(), book_ej=True,
+                                       book_dst=True))["makespan"],
+    }
+
+
+def _measure_stagger(m: int) -> dict:
+    p = lambda **k: SteadyParams(m=m, buf_depth=20, t_rtt=16, **k)  # noqa: E731
+    return {
+        "base": _finish(RingBaseAdapter(p()), stagger=True)["makespan"],
+        "c1": _finish(CreditSim("ring", p(ca_credit_scale=1.0)),
+                      stagger=True)["makespan"],
+        "rate": _finish(RateSim("ring", p(ca_period=64)),
+                        stagger=True)["makespan"],
+        "ca1": _finish(RingGrainSim(p()), stagger=True)["makespan"],
+        "sr": _finish(RingSlipSim(p()), stagger=True)["makespan"],
+    }
 
 
 def _svg_len(rows: list[dict]) -> str:
@@ -347,6 +482,8 @@ def _svg_len(rows: list[dict]) -> str:
         ("基线", "#7eb6ff", "base", False),
         ("credit ×1", "#e06c6c", "c1", False),
         ("rate", "#e6a23c", "rate", False),
+        ("CA-ring ×1", "#4dd0e1", "ca1", False),
+        ("iSLIP-ring", "#ff8fd0", "sr", False),
     ]
     xs = [r["m"] for r in rows]
     ys = [r[k] for r in rows for _, _, k, _ in series if r.get(k)]
@@ -479,6 +616,38 @@ def main() -> None:
             "note": f"周期 {period}",
             "headline": period == 64,
         })
+    for scale in (1.0, 2.0):
+        r = _drain("ring", scale=scale, ca_period=1)
+        pts.append({
+            "name": f"CA-ring ×{scale:g}",
+            "scheme": "ring",
+            "makespan": r["makespan"],
+            "bits": r["bits"],
+            "system": r["system"],
+            "color": "#4dd0e1" if scale == 1 else "#95e6f0",
+            "shape": "h",
+            "note": f"环计数 {r['ring_credit_min']}–{r['ring_credit']} · "
+                    f"桥计数 {r['bridge_credit']}",
+            "ring_credit": r["ring_credit"],
+            "ring_credit_min": r["ring_credit_min"],
+            "bridge_credit": r["bridge_credit"],
+            "defl": r["defl"],
+            "ctrl_per_cy": r["ctrl_per_cy"],
+        })
+    r = _drain("slip", ca_period=1)
+    pts.append({
+        "name": "iSLIP-ring",
+        "scheme": "slip",
+        "makespan": r["makespan"],
+        "bits": r["bits"],
+        "system": r["system"],
+        "color": "#ff8fd0",
+        "shape": "p",
+        "note": "环 + 桥 + 注入口 · g=2",
+        "defl": r["defl"],
+        "rounds": r["rounds"],
+        "breakdown": r["breakdown"],
+    })
     arb = [p for p in pts if p["bits"] > 0]
     front = pareto_front([(p["bits"], p["makespan"], p["name"]) for p in arb])
     front_names = {name for _, _, name in front}
@@ -492,6 +661,11 @@ def main() -> None:
     raw = next(p for p in pts if p["name"] == "基线")
     cred = next(p for p in pts if p["name"] == "credit ×1")
     rate = next(p for p in pts if p["name"] == "rate T=64")
+    ca1 = next(p for p in pts if p["name"] == "CA-ring ×1")
+    ca2 = next(p for p in pts if p["name"] == "CA-ring ×2")
+    sr = next(p for p in pts if p["name"] == "iSLIP-ring")
+    sr_tbl = sum(v for k, v in sr["breakdown"].items()
+                 if k.startswith("interval"))
 
     def row(p: dict, hl: bool = False) -> str:
         cls = ' class="hl"' if hl else ""
@@ -502,9 +676,12 @@ def main() -> None:
                 f"<td>{p['bits']:,}</td><td>{p['system']:,}</td></tr>")
 
     order = ["基线", "iSLIP-2D", "credit ×1", "credit ×2",
-             "credit HA=16", "rate T=16", "rate T=64", "rate T=256"]
+             "credit HA=16", "rate T=16", "rate T=64", "rate T=256",
+             "CA-ring ×1", "CA-ring ×2", "iSLIP-ring"]
     by = {p["name"]: p for p in pts}
-    body = "".join(row(by[n], n in ("基线", "iSLIP-2D", "credit ×1", "rate T=64"))
+    body = "".join(row(by[n], n in ("基线", "iSLIP-2D", "credit ×1",
+                                    "rate T=64", "CA-ring ×1",
+                                    "iSLIP-ring"))
                    for n in order)
     names = "、".join(p["name"] for p in sorted(
         (p for p in arb if p["front"]), key=lambda p: p["bits"]))
@@ -520,13 +697,20 @@ def main() -> None:
         "c1_credit": cred["link_credit"],
         "c2_credit": c2["link_credit"],
         "rate": rate["makespan"],
+        "ca1": ca1["makespan"],
+        "ca2": ca2["makespan"],
         "hot": 60,
         "link_lb": 60,
         "defl": raw["defl"],
         "reasm_ovf": None,
     }}
+    long[1].update(_slip_extra(1))
+    long[1]["ca_inflight"] = _finish(RingGrainSim(
+        SteadyParams(m=1, buf_depth=20, t_rtt=16),
+        ring_basis="inflight"))["makespan"]
     for m in (16, 64):
         long[m] = _measure_m(m)
+    stag = {m: _measure_stagger(m) for m in (1, 16, 64)}
     wide = long[64]
     flit_b = W_FLIT // 8
     kib = 64 * flit_b // 1024
@@ -536,7 +720,7 @@ def main() -> None:
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>2D 环 · 基线 / iSLIP-2D / CA-credit / CA-rate</title>
+<title>2D 环 · 基线 / iSLIP-2D / CA-credit / CA-rate / CA-ring / iSLIP-ring</title>
 <style>
 body {{ font-family: "Segoe UI", "Noto Sans SC", system-ui, sans-serif;
        margin: 0; background: #0b1020; color: #e8ecf4; line-height: 1.62; }}
@@ -576,10 +760,10 @@ code {{ background: #1a2340; padding: 1px 5px; border-radius: 4px; }}
 </style>
 </head>
 <body><div class="wrap">
-<h1>2D 环：基线与三种准入的 makespan</h1>
+<h1>2D 环：基线与五种集中仲裁的 makespan</h1>
 <p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一条流，共 {N_FLOWS:,} 条。
 第 1–3 节每条流是 1 个 flit（{flit_b} byte）。第 4 节把包长加到 64 flit。
-基线、CA-credit、CA-rate 都在环数据面上排完；
+基线、CA-credit、CA-rate、CA-ring、iSLIP-ring 都在环数据面上排完；
 iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
 <p>
 <span class="pill">6 行环 × 8 + 8 列环 × 6</span>
@@ -588,7 +772,7 @@ iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</cod
 <span class="pill">t<sub>rtt</sub>=16</span>
 </p>
 
-<h2>1 · 基线与三种方案</h2>
+<h2>1 · 基线与五种方案</h2>
 <p><b>基线</b>。没有集中仲裁。每个环站自己决定注入、转弯和弹出，
 I-tag 保住饿着的注入，E-tag 保住转不了弯的 flit。
 面积全在环站：转发 FIFO、弹出队列、重组缓冲，共 {station:,} bit。仲裁器状态是 0。</p>
@@ -619,6 +803,41 @@ HA 的初值是 tracker 个数，默认 {cred['ha']}，也就是同时最多挂 
 <li>控制消息只有这一来一回。每 T 拍每个核上报一次、仲裁器回一次，共 96 条，和包的多少无关。
 这页的代表点是 T=64。T=16 和 T=256 的仲裁器都是同一张速率表，{rate['bits']:,} bit。</li>
 </ol>
+<p><b>CA-ring</b>（环级信用）。把每条环当成一个整体，仲裁器不看链路，只看环和桥。
+一个包从源环出发，经环桥转上目的环，只要转上了目的环就交给环站：
+剩下的路由 I-tag / E-tag 带到目的节点，不再经过仲裁器。
+源和目的在同一行或同一列的包，一开始就在目的环上，直接走数据面。</p>
+<ol>
+<li>两种计数。源环每个方向一个：初值是这个方向的带宽时延积，即环段数除以平均第一段跳数，再乘空载往返 {ca1['bridge_credit']} 拍，
+两个方向分别是 {ca1['ring_credit_min']} 和 {ca1['ring_credit']} 个 flit。
+每座环桥一个：初值就是空载往返 {ca1['bridge_credit']} 拍，桥每拍最多转 1 个 flit。</li>
+<li>每拍一轮 iSLIP。每个源对每座桥有 1 位请求，共 336 位。
+每座桥在向它请求的 7 个源里轮询选 1 个，条件是桥和这个源的环方向都还有计数。
+每个源再在收到的授予里轮询选 1 个。</li>
+<li>一次只授予 1 个 flit，16 拍后注入。flit 在桥上转进目的环那一拍，桥发 DONE，再过 16 拍把两个计数加回来。
+按 flit 授予，所以 64 flit 的包也不会被小于包长的计数卡住。</li>
+</ol>
+<p><b>iSLIP-ring</b>（环级 iSLIP）。视角和 CA-ring 一样：只看环和桥，转上目的环就算到。
+区别在仲裁方式。CA-ring 是信用计数，只说「现在可以注入」；
+iSLIP-ring 沿用 iSLIP-2D，给整个包订一个起始拍，只是订的资源从「每一段」换成「每条环」。</p>
+<ol>
+<li>一个包订三样，都从起始拍 t0 算：
+源注入口，t0 起连续 m 拍，容量 1；
+源环的这个方向，同样这 m 拍，容量是这条环的段数 k（行环 8、列环 6），这个包占 h 个，h 是它在这条环上走的跳数；
+环桥，从第一个 flit 飞到桥的那拍起连续 m 拍，容量 1。
+环是一个整体，不分哪一段，只按「占了几段」记账：同一拍占用的段数加起来不超过 k，就认为放得下。
+这只是不冲突的必要条件，不是充分条件。</li>
+<li>每轮一次 iSLIP。每个源对每座桥 1 位请求，共 336 位；每座桥轮询选 1 个源授予；
+每个源最多接受 2 个授予；再按最长弧优先补满。同一轮每座桥最多 1 个包，每个环方向占用不超过 k。
+共 {sr['rounds']} 轮。和 iSLIP-2D 一样，makespan 不计这些轮本身的耗时，只计 16 拍的请求授权往返。</li>
+<li>通过的包按最长弧优先，各自订到最早的可行起拍，不早于第 16 拍。
+一个包的 m 个 flit 连续注入，之后不再回仲裁器，没有 DONE。
+目的环那一段和目的端的弹出口没有人订，仍由 I-tag / E-tag 兜底。</li>
+</ol>
+<p class="muted">另一种做法是整环独占：一条流把它走过的两条环整条占住。不会冲突，但环段延迟是 {topo.H}–{topo.V} 拍，
+一条环被占住很久。同样的 iSLIP，1、16、64 flit 的 makespan 是
+{long[1]['sr_excl']:,}、{long[16]['sr_excl']:,}、{long[64]['sr_excl']:,}，比基线慢得多。
+所以这里改按段数记账，把冲突交给数据面。</p>
 
 <h2>2 · 同一 all-to-all 的 makespan</h2>
 <p>makespan 是最后一条流到达目的端的拍。基线是 <b>{raw['makespan']}</b> 拍。
@@ -626,14 +845,21 @@ iSLIP-2D 是 <b class="win">{base_mk}</b> 拍
 （其中数据跨度 {isl['data_span']} 拍，前面 16 拍是第一次请求授权），
 比基线短 {raw['makespan']-base_mk} 拍。
 CA-credit ×1 是 {cred['makespan']} 拍，CA-rate 是 {rate['makespan']} 拍，
-都长于基线（{cred['makespan']-raw['makespan']} 拍、{rate['makespan']-raw['makespan']} 拍）。
+CA-ring ×1 是 {ca1['makespan']} 拍，都长于基线
+（{cred['makespan']-raw['makespan']} 拍、{rate['makespan']-raw['makespan']} 拍、{ca1['makespan']-raw['makespan']} 拍）。
 这批流在第 0 拍就全部在场，基线当场注入。
 credit 要先减到计数，并且每个源每拍只放 1 个包。
 rate 要等第一份速率走完 32 拍才开始注入；三个周期的完成时间相同，
-因为这批流一次就摆齐，第一次分配已经把最热的链路分满。</p>
+因为这批流一次就摆齐，第一次分配已经把最热的链路分满。
+CA-ring 要等 16 拍的授予才注入，并且每座桥每拍只授予 1 个 flit；
+×2 的计数更大，但这批流只有 1 flit，计数不是瓶颈，还是 {ca2['makespan']} 拍。</p>
+<p>iSLIP-ring 是 {sr['makespan']} 拍，比基线短 {raw['makespan']-sr['makespan']} 拍，比 CA-ring ×1 短 {ca1['makespan']-sr['makespan']} 拍，
+比 iSLIP-2D 长 {sr['makespan']-base_mk} 拍。表里最后一个包订在第 {long[1]['sr_start']} 拍开始注入，
+环上另有 {long[1]['sr_defl']} 次偏转，是桥上转弯冲突。
+若按一轮占 1 拍计这 {sr['rounds']} 轮，makespan 是 {long[1]['sr_rl1']}，比不计时长 {long[1]['sr_rl1']-sr['makespan']} 拍，已经慢于基线。</p>
 <p class="muted">基线这 {N_FLOWS:,} 个包里偏转 {raw['defl']} 次。
 时钟差 2 拍：iSLIP 的 makespan 含弹出斜坡 RAMP=2；
-基线、credit、rate 记的是 flit 进入目的弹出队列的拍。这 2 拍不改变排序。</p>
+基线、credit、rate、CA-ring 记的是 flit 进入目的弹出队列的拍。这 2 拍不改变排序。</p>
 <table>
 <thead><tr><th>方案</th><th>makespan</th><th>相对 iSLIP</th>
 <th>仲裁器 bit</th><th>系统 bit</th></tr></thead>
@@ -642,7 +868,12 @@ rate 要等第一份速率走完 32 拍才开始注入；三个周期的完成�
 </tbody></table>
 <p class="muted">高亮行是正文比较的点。系统 bit = 仲裁器 + 环站存储。
 基线和 iSLIP 的两列含义不同：基线没有仲裁器，iSLIP 删掉了环站队列。
-credit / rate 在基线的 {station:,} bit 上再加自己的仲裁器。
+credit / rate / CA-ring 在基线的 {station:,} bit 上再加自己的仲裁器。
+CA-ring ×1 的仲裁器只有 {ca1['bits']:,} bit，是 credit ×1 的 {100*ca1['bits']/cred['bits']:.0f}%，是 iSLIP 的 {100*ca1['bits']/ic['bits']:.1f}%。
+iSLIP-ring 是 {sr['bits']:,} bit，其中区间表 {sr_tbl:,} bit
+（{sr['breakdown']['interval_ring_dir']:,} 环方向、{sr['breakdown']['interval_bridge']:,} 桥、{sr['breakdown']['interval_inject']:,} 注入口，每张表 16 段区间），
+是 iSLIP-2D 的 {100*sr['bits']/ic['bits']:.0f}%，是 CA-ring ×1 的 {sr['bits']/ca1['bits']:.0f} 倍。
+区间表用 12 位时间戳，和 iSLIP-2D 同一口径，长包下没有重新加宽。
 把 HA tracker 从 {cred['ha']} 收到 16，同时能挂起的事务变少，
 credit 的 makespan 从 {cred['makespan']} 变成 {ha['makespan']}。</p>
 
@@ -651,15 +882,20 @@ credit 的 makespan 从 {cred['makespan']} 变成 {ha['makespan']}。</p>
 基线的仲裁器是 0，不在对数轴上。第二张图把环站存储算进去。</p>
 <div class="fig">{_svg(arb)}
 <div class="cap">仲裁器前沿：{names}。
-HA=16 比 ×1 少约 100 bit，makespan 却是 {ha['makespan']}，所以也落在前沿上。
-credit ×1 的仲裁器状态约为 iSLIP 的 {100*cred['bits']/ic['bits']:.0f}%，
-makespan 多 {cred['makespan']-base_mk} 拍，并且长于基线的 {raw['makespan']} 拍。
-rate 比 credit 更大也更慢。credit ×2 与 ×1 的 makespan 相同、状态更多。</div></div>
+CA-ring ×1 的仲裁器只有 {ca1['bits']:,} bit，是 credit ×1（{cred['bits']:,}）的 {100*ca1['bits']/cred['bits']:.0f}%，
+makespan 多 {ca1['makespan']-cred['makespan']} 拍。
+iSLIP-ring 比 credit ×1 快 {cred['makespan']-sr['makespan']} 拍，状态多 {sr['bits']/cred['bits']:.1f} 倍；
+比 iSLIP-2D 慢 {sr['makespan']-base_mk} 拍，状态只有它的 {100*sr['bits']/ic['bits']:.0f}%。
+iSLIP 比 credit ×1 再快 {cred['makespan']-base_mk} 拍，状态是 {ic['bits']:,} bit。
+CA-ring ×2 与 ×1 的 makespan 相同、状态更多；rate 比 credit 更大也更慢。</div></div>
 <div class="fig">{_svg_system(pts)}
 <div class="cap">系统前沿：{snames}。
 基线 {station:,} bit、{raw['makespan']} 拍。iSLIP 把环站换成区间表之后，
 面积少 {station-ic['bits']:,} bit，makespan 也更短，所以基线落在前沿内侧。
-credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基线。</div></div>
+credit、rate、CA-ring 和 iSLIP-ring 既背着环站、又多一段准入延迟。
+iSLIP-ring 还多一张 {sr_tbl:,} bit 的区间表，系统 bit {sr['system']:,}，makespan 只比基线短 {raw['makespan']-sr['makespan']} 拍；
+其余几个 1 flit 时两轴都差于基线。
+包长到 64 flit 时 CA-ring 比基线快，见第 4 节。</div></div>
 
 <h2>4 · 64 flit 的包</h2>
 <p>64 flit 是<b>每个 src-dst 的包长</b>，节点数和流数不变，还是 2,256 条。
@@ -678,6 +914,22 @@ makespan <b class="win">{wide['islip']:,}</b>，是基线的 {_vs(wide['islip'],
 makespan {wide['c2']:,}，是基线的 {_vs(wide['c2'], wide['base'])}。
 rate 是 {wide['rate']:,}，{_vs(wide['rate'], wide['base'])}，三个周期相同。
 credit ×1 是 {_vs(wide['c1'], wide['base'])}。</p>
+<p>CA-ring ×1 是 <b class="win">{wide['ca1']:,}</b>，{_vs(wide['ca1'], wide['base'])}，
+×2 是 {wide['ca2']:,}，{_vs(wide['ca2'], wide['base'])}。
+它比基线快，环上偏转只有 {wide['ca_defl']:,} 次，基线是 {wide['defl']:,} 次。
+原因有两个：每座桥每拍只授予 1 个 flit，源环的流量被限在带宽时延积以内；
+CA-ring 的源队列按桥分开，一个源同时往 7 个方向发，而基线的源队列按目的号排队，
+48 个源在同一时刻打向同一个目的。第 5 节把这一项去掉。
+但它没有预订时隙，所以仍是 iSLIP 的 {wide['ca1']/wide['islip']:.2f} 倍。
+16 flit 时 CA-ring ×1 是 {long[16]['ca1']:,}，是基线的 {_vs(long[16]['ca1'], long[16]['base'])}。</p>
+<p>iSLIP-ring 是 <b class="win">{wide['sr']:,}</b>，{_vs(wide['sr'], wide['base'])}，是 iSLIP-2D 的 {wide['sr']/wide['islip']:.2f} 倍，
+也比 CA-ring ×1 慢 {wide['sr']-wide['ca1']:,} 拍。16 flit 时是 {long[16]['sr']:,}，比 CA-ring ×1 慢 {long[16]['sr']-long[16]['ca1']:,} 拍。
+所以包一长，它在两个指标上都被 CA-ring 压住：状态多 {sr['bits']/ca1['bits']:.0f} 倍，makespan 还更长。
+表里最后一个包在第 {wide['sr_start']:,} 拍开始注入，数据面却花了 {wide['sr']:,} 拍才送完，
+中间的差距是 {wide['sr_defl']:,} 次偏转，其中 {wide['sr_fifo']:,} 次是 flit 到了桥，而桥的转发 FIFO 已满。
+环级记账不能保证两个包在桥上同一拍转弯，冲突就落在这一点上。
+再把弹出口和目的环也订上，1、16、64 flit 是 {long[1]['sr_full']:,}、{long[16]['sr_full']:,}、{long[64]['sr_full']:,}，
+1 flit 反而变慢，64 flit 只好 {100*(1-long[64]['sr_full']/wide['sr']):.0f}%，表也更大，所以正文用不订这两项的版本。</p>
 <table>
 <thead><tr><th>方案</th><th>1 flit<br><span class="muted">{flit_b} B</span></th>
 <th>16 flit<br><span class="muted">{16 * flit_b} B</span></th>
@@ -690,6 +942,9 @@ credit ×1 是 {_vs(wide['c1'], wide['base'])}。</p>
 <tr><td>credit ×2</td><td>{_cell(long[1]['c2'])}</td><td>{_cell(long[16]['c2'])}</td><td>{_cell(long[64]['c2'])}</td><td>{_vs(long[64]['c2'], wide['base'])}</td></tr>
 <tr class="hl"><td>credit ×1</td><td>{_cell(long[1]['c1'])}</td><td>{_cell(long[16]['c1'])}</td><td><b>{_cell(long[64]['c1'])}</b></td><td>{_vs(long[64]['c1'], wide['base'])}</td></tr>
 <tr class="hl"><td>rate</td><td>{long[1]['rate']:,}</td><td>{long[16]['rate']:,}</td><td><b>{long[64]['rate']:,}</b></td><td>{_vs(long[64]['rate'], wide['base'])}</td></tr>
+<tr><td>CA-ring ×2</td><td>{long[1]['ca2']:,}</td><td>{long[16]['ca2']:,}</td><td>{long[64]['ca2']:,}</td><td>{_vs(long[64]['ca2'], wide['base'])}</td></tr>
+<tr class="hl"><td>CA-ring ×1</td><td>{long[1]['ca1']:,}</td><td>{long[16]['ca1']:,}</td><td><b>{long[64]['ca1']:,}</b></td><td><b>{_vs(long[64]['ca1'], wide['base'])}</b></td></tr>
+<tr class="hl"><td>iSLIP-ring</td><td>{long[1]['sr']:,}</td><td>{long[16]['sr']:,}</td><td><b>{long[64]['sr']:,}</b></td><td><b>{_vs(long[64]['sr'], wide['base'])}</b></td></tr>
 </tbody></table>
 <div class="fig">{_svg_len([long[1], long[16], long[64]])}
 <div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
@@ -698,6 +953,36 @@ credit ×1 是 {_vs(wide['c1'], wide['base'])}。</p>
 目的端重组缓冲是 64 flit，刚好一个包，多出来的 flit 把这个计数打满了
 {wide['reasm_ovf']:,} 次；包没有被丢掉，只是在环上多转。
 rate 的 T=16、64、256 在 16 flit 和 64 flit 都是同一个 makespan。</p>
+<p class="muted">CA-ring 的环计数取带宽时延积。若只取环上同时在飞的 flit 数（行环 8 段 × 7 拍 = 56），
+计数太小，会把环限死：1、16、64 flit 分别是 {long[1]['ca_inflight']:,}、{long[16]['ca_inflight']:,}、{long[64]['ca_inflight']:,}，
+64 flit 比基线慢 {_vs(long[64]['ca_inflight'], wide['base'])}。
+CA-ring 把每个 flit 当独立子包送入数据面，目的端重组缓冲在这里不限流，和基线一样只做统计。
+64 flit 时 CA-ring ×1 每拍约 {wide['ca_ctrl']:.0f} 条控制消息（请求、授予、DONE），仲裁器状态小，控制流量大。
+iSLIP-ring 的控制消息只有请求、授予、接受，共 {wide['sr_ctrl']:,} 条，和包长无关，64 flit 时平均每拍 {wide['sr_ctrl_cy']:.2f} 条。</p>
+<h2>5 · 激励顺序的影响</h2>
+<p>前面所有行用同一个顺序：每个源按目的号 0 到 47 依次排队，所以第一批包全部冲向节点 0，再冲向节点 1。
+这对基线和 credit、rate、CA-ring、iSLIP-ring 的数据面都是同步的 incast。
+改成错开：源 s 按 s+1、s+2、… 的顺序发，各源同一时刻打向不同的目的。
+iSLIP 的调度只看整批流，不看到达顺序，数字不变。</p>
+<table>
+<thead><tr><th>方案</th><th>1 flit</th><th>16 flit</th><th>64 flit</th><th>64 flit / 基线</th></tr></thead>
+<tbody>
+<tr class="hl"><td>iSLIP-2D</td><td>{long[1]['islip']:,}</td><td>{long[16]['islip']:,}</td><td><b>{long[64]['islip']:,}</b></td><td><b>{_vs(long[64]['islip'], stag[64]['base'])}</b></td></tr>
+<tr class="hl"><td>基线（错开）</td><td>{stag[1]['base']:,}</td><td>{stag[16]['base']:,}</td><td><b>{stag[64]['base']:,}</b></td><td>1</td></tr>
+<tr><td>credit ×1（错开）</td><td>{stag[1]['c1']:,}</td><td>{stag[16]['c1']:,}</td><td>{stag[64]['c1']:,}</td><td>{_vs(stag[64]['c1'], stag[64]['base'])}</td></tr>
+<tr><td>rate（错开）</td><td>{stag[1]['rate']:,}</td><td>{stag[16]['rate']:,}</td><td>{stag[64]['rate']:,}</td><td>{_vs(stag[64]['rate'], stag[64]['base'])}</td></tr>
+<tr class="hl"><td>CA-ring ×1（错开）</td><td>{stag[1]['ca1']:,}</td><td>{stag[16]['ca1']:,}</td><td><b>{stag[64]['ca1']:,}</b></td><td><b>{_vs(stag[64]['ca1'], stag[64]['base'])}</b></td></tr>
+<tr class="hl"><td>iSLIP-ring（错开）</td><td>{stag[1]['sr']:,}</td><td>{stag[16]['sr']:,}</td><td><b>{stag[64]['sr']:,}</b></td><td><b>{_vs(stag[64]['sr'], stag[64]['base'])}</b></td></tr>
+</tbody></table>
+<p>错开之后，基线 1 flit 是 {stag[1]['base']}，已经短于 iSLIP 的 {long[1]['islip']}。
+64 flit 时基线从 {wide['base']:,} 降到 {stag[64]['base']:,}，CA-ring ×1 从 {wide['ca1']:,} 降到 {stag[64]['ca1']:,}，
+相对基线是 {_vs(stag[64]['ca1'], stag[64]['base'])}，比第 4 节的 {_vs(wide['ca1'], wide['base'])} 窄。
+iSLIP 在 64 flit 仍是基线的 {_vs(long[64]['islip'], stag[64]['base'])}。
+iSLIP-ring 错开后是 {stag[1]['sr']}、{stag[16]['sr']:,}、{stag[64]['sr']:,}，
+三档都比错开的基线慢（{stag[1]['base']}、{stag[16]['base']:,}、{stag[64]['base']:,}），64 flit 时是基线的 {_vs(stag[64]['sr'], stag[64]['base'])}。
+第 4 节里 iSLIP-ring 比基线快，主要是基线那个同步 incast 的顺序太差；换成错开的顺序，它就没有优势了。
+所以 CA-ring 比基线快的幅度，有一部分来自排队方式，另一部分才是仲裁本身；
+iSLIP 在长包上的优势不受这一项影响。</p>
 <p class="muted">重新生成：<code>python3 utils/gen_ring2d_schemes.py</code></p>
 </div></body></html>
 """

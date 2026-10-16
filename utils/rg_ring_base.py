@@ -196,6 +196,11 @@ class RingBaseSim:
         self.cut_win = (0, 0)
         self.cut_busy = 0
 
+        # Optional observer: called as on_transfer(flit, t) when a flit leaves
+        # a bridge FIFO onto its second ring. Used by ring-grain arbitration
+        # to learn that a flit has left the source ring. Off by default.
+        self.on_transfer: Any = None
+
     def count_cut(self, links: Any, t0: int, t1: int) -> None:
         """Count link-busy cycles on `links` for ring hops taken in [t0, t1).
 
@@ -413,6 +418,8 @@ class RingBaseSim:
                 self.resv_used[key] -= 1
             self.fifo_blocked[key] = 0
             self._launch(f, inring=False)
+            if self.on_transfer is not None:
+                self.on_transfer(f, t)
 
         # --- local injection (lowest priority)
         for node in list(self.srcq.keys()):

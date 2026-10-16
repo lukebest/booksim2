@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>2D 环 · 基线 / iSLIP-2D / CA-credit / CA-rate</title>
+<title>2D 环 · 基线 / iSLIP-2D / CA-credit / CA-rate / CA-ring / iSLIP-ring</title>
 <style>
 body { font-family: "Segoe UI", "Noto Sans SC", system-ui, sans-serif;
        margin: 0; background: #0b1020; color: #e8ecf4; line-height: 1.62; }
@@ -43,10 +43,10 @@ code { background: #1a2340; padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
 <body><div class="wrap">
-<h1>2D 环：基线与三种准入的 makespan</h1>
+<h1>2D 环：基线与五种集中仲裁的 makespan</h1>
 <p class="muted">只看维度切片 2D 环。同一批 all-to-all：48 节点、每对节点一条流，共 2,256 条。
 第 1–3 节每条流是 1 个 flit（16 byte）。第 4 节把包长加到 64 flit。
-基线、CA-credit、CA-rate 都在环数据面上排完；
+基线、CA-credit、CA-rate、CA-ring、iSLIP-ring 都在环数据面上排完；
 iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</code>。</p>
 <p>
 <span class="pill">6 行环 × 8 + 8 列环 × 6</span>
@@ -55,7 +55,7 @@ iSLIP-2D 在 1 flit 时的完成时间来自 <code>results/islip2d_8x6.json</cod
 <span class="pill">t<sub>rtt</sub>=16</span>
 </p>
 
-<h2>1 · 基线与三种方案</h2>
+<h2>1 · 基线与五种方案</h2>
 <p><b>基线</b>。没有集中仲裁。每个环站自己决定注入、转弯和弹出，
 I-tag 保住饿着的注入，E-tag 保住转不了弯的 flit。
 面积全在环站：转发 FIFO、弹出队列、重组缓冲，共 198,528 bit。仲裁器状态是 0。</p>
@@ -86,6 +86,41 @@ HA 的初值是 tracker 个数，默认 71，也就是同时最多挂 71 个未�
 <li>控制消息只有这一来一回。每 T 拍每个核上报一次、仲裁器回一次，共 96 条，和包的多少无关。
 这页的代表点是 T=64。T=16 和 T=256 的仲裁器都是同一张速率表，18,336 bit。</li>
 </ol>
+<p><b>CA-ring</b>（环级信用）。把每条环当成一个整体，仲裁器不看链路，只看环和桥。
+一个包从源环出发，经环桥转上目的环，只要转上了目的环就交给环站：
+剩下的路由 I-tag / E-tag 带到目的节点，不再经过仲裁器。
+源和目的在同一行或同一列的包，一开始就在目的环上，直接走数据面。</p>
+<ol>
+<li>两种计数。源环每个方向一个：初值是这个方向的带宽时延积，即环段数除以平均第一段跳数，再乘空载往返 61 拍，
+两个方向分别是 195 和 244 个 flit。
+每座环桥一个：初值就是空载往返 61 拍，桥每拍最多转 1 个 flit。</li>
+<li>每拍一轮 iSLIP。每个源对每座桥有 1 位请求，共 336 位。
+每座桥在向它请求的 7 个源里轮询选 1 个，条件是桥和这个源的环方向都还有计数。
+每个源再在收到的授予里轮询选 1 个。</li>
+<li>一次只授予 1 个 flit，16 拍后注入。flit 在桥上转进目的环那一拍，桥发 DONE，再过 16 拍把两个计数加回来。
+按 flit 授予，所以 64 flit 的包也不会被小于包长的计数卡住。</li>
+</ol>
+<p><b>iSLIP-ring</b>（环级 iSLIP）。视角和 CA-ring 一样：只看环和桥，转上目的环就算到。
+区别在仲裁方式。CA-ring 是信用计数，只说「现在可以注入」；
+iSLIP-ring 沿用 iSLIP-2D，给整个包订一个起始拍，只是订的资源从「每一段」换成「每条环」。</p>
+<ol>
+<li>一个包订三样，都从起始拍 t0 算：
+源注入口，t0 起连续 m 拍，容量 1；
+源环的这个方向，同样这 m 拍，容量是这条环的段数 k（行环 8、列环 6），这个包占 h 个，h 是它在这条环上走的跳数；
+环桥，从第一个 flit 飞到桥的那拍起连续 m 拍，容量 1。
+环是一个整体，不分哪一段，只按「占了几段」记账：同一拍占用的段数加起来不超过 k，就认为放得下。
+这只是不冲突的必要条件，不是充分条件。</li>
+<li>每轮一次 iSLIP。每个源对每座桥 1 位请求，共 336 位；每座桥轮询选 1 个源授予；
+每个源最多接受 2 个授予；再按最长弧优先补满。同一轮每座桥最多 1 个包，每个环方向占用不超过 k。
+共 53 轮。和 iSLIP-2D 一样，makespan 不计这些轮本身的耗时，只计 16 拍的请求授权往返。</li>
+<li>通过的包按最长弧优先，各自订到最早的可行起拍，不早于第 16 拍。
+一个包的 m 个 flit 连续注入，之后不再回仲裁器，没有 DONE。
+目的环那一段和目的端的弹出口没有人订，仍由 I-tag / E-tag 兜底。</li>
+</ol>
+<p class="muted">另一种做法是整环独占：一条流把它走过的两条环整条占住。不会冲突，但环段延迟是 7–9 拍，
+一条环被占住很久。同样的 iSLIP，1、16、64 flit 的 makespan 是
+3,726、6,905、16,434，比基线慢得多。
+所以这里改按段数记账，把冲突交给数据面。</p>
 
 <h2>2 · 同一 all-to-all 的 makespan</h2>
 <p>makespan 是最后一条流到达目的端的拍。基线是 <b>149</b> 拍。
@@ -93,40 +128,57 @@ iSLIP-2D 是 <b class="win">120</b> 拍
 （其中数据跨度 104 拍，前面 16 拍是第一次请求授权），
 比基线短 29 拍。
 CA-credit ×1 是 165 拍，CA-rate 是 240 拍，
-都长于基线（16 拍、91 拍）。
+CA-ring ×1 是 171 拍，都长于基线
+（16 拍、91 拍、22 拍）。
 这批流在第 0 拍就全部在场，基线当场注入。
 credit 要先减到计数，并且每个源每拍只放 1 个包。
 rate 要等第一份速率走完 32 拍才开始注入；三个周期的完成时间相同，
-因为这批流一次就摆齐，第一次分配已经把最热的链路分满。</p>
+因为这批流一次就摆齐，第一次分配已经把最热的链路分满。
+CA-ring 要等 16 拍的授予才注入，并且每座桥每拍只授予 1 个 flit；
+×2 的计数更大，但这批流只有 1 flit，计数不是瓶颈，还是 171 拍。</p>
+<p>iSLIP-ring 是 148 拍，比基线短 1 拍，比 CA-ring ×1 短 23 拍，
+比 iSLIP-2D 长 28 拍。表里最后一个包订在第 67 拍开始注入，
+环上另有 43 次偏转，是桥上转弯冲突。
+若按一轮占 1 拍计这 53 轮，makespan 是 169，比不计时长 21 拍，已经慢于基线。</p>
 <p class="muted">基线这 2,256 个包里偏转 27 次。
 时钟差 2 拍：iSLIP 的 makespan 含弹出斜坡 RAMP=2；
-基线、credit、rate 记的是 flit 进入目的弹出队列的拍。这 2 拍不改变排序。</p>
+基线、credit、rate、CA-ring 记的是 flit 进入目的弹出队列的拍。这 2 拍不改变排序。</p>
 <table>
 <thead><tr><th>方案</th><th>makespan</th><th>相对 iSLIP</th>
 <th>仲裁器 bit</th><th>系统 bit</th></tr></thead>
 <tbody>
-<tr class="hl"><td>基线<br><span class='muted'>I-tag / E-tag · 无集中仲裁</span></td><td><b>149</b></td><td>1.24×</td><td>0</td><td>198,528</td></tr><tr class="hl"><td>iSLIP-2D<br><span class='muted'>interval · fixed · g=2</span></td><td><b>120</b></td><td>—</td><td>189,528</td><td>189,528</td></tr><tr class="hl"><td>credit ×1<br><span class='muted'>HA=71 · 链路信用 90</span></td><td><b>165</b></td><td>1.38×</td><td>5,910</td><td>204,438</td></tr><tr><td>credit ×2<br><span class='muted'>HA=71 · 链路信用 180</span></td><td><b>165</b></td><td>1.38×</td><td>6,390</td><td>204,918</td></tr><tr><td>credit HA=16<br><span class='muted'>tracker=16</span></td><td><b>256</b></td><td>2.13×</td><td>5,814</td><td>204,342</td></tr><tr><td>rate T=16<br><span class='muted'>周期 16</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr><tr class="hl"><td>rate T=64<br><span class='muted'>周期 64</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr><tr><td>rate T=256<br><span class='muted'>周期 256</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr>
+<tr class="hl"><td>基线<br><span class='muted'>I-tag / E-tag · 无集中仲裁</span></td><td><b>149</b></td><td>1.24×</td><td>0</td><td>198,528</td></tr><tr class="hl"><td>iSLIP-2D<br><span class='muted'>interval · fixed · g=2</span></td><td><b>120</b></td><td>—</td><td>189,528</td><td>189,528</td></tr><tr class="hl"><td>credit ×1<br><span class='muted'>HA=71 · 链路信用 90</span></td><td><b>165</b></td><td>1.38×</td><td>5,910</td><td>204,438</td></tr><tr><td>credit ×2<br><span class='muted'>HA=71 · 链路信用 180</span></td><td><b>165</b></td><td>1.38×</td><td>6,390</td><td>204,918</td></tr><tr><td>credit HA=16<br><span class='muted'>tracker=16</span></td><td><b>256</b></td><td>2.13×</td><td>5,814</td><td>204,342</td></tr><tr><td>rate T=16<br><span class='muted'>周期 16</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr><tr class="hl"><td>rate T=64<br><span class='muted'>周期 64</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr><tr><td>rate T=256<br><span class='muted'>周期 256</span></td><td><b>240</b></td><td>2.00×</td><td>18,336</td><td>216,864</td></tr><tr class="hl"><td>CA-ring ×1<br><span class='muted'>环计数 195–244 · 桥计数 61</span></td><td><b>171</b></td><td>1.43×</td><td>1,008</td><td>199,536</td></tr><tr><td>CA-ring ×2<br><span class='muted'>环计数 390–488 · 桥计数 122</span></td><td><b>171</b></td><td>1.43×</td><td>1,068</td><td>199,596</td></tr><tr class="hl"><td>iSLIP-ring<br><span class='muted'>环 + 桥 + 注入口 · g=2</span></td><td><b>148</b></td><td>1.23×</td><td>50,144</td><td>248,672</td></tr>
 </tbody></table>
 <p class="muted">高亮行是正文比较的点。系统 bit = 仲裁器 + 环站存储。
 基线和 iSLIP 的两列含义不同：基线没有仲裁器，iSLIP 删掉了环站队列。
-credit / rate 在基线的 198,528 bit 上再加自己的仲裁器。
+credit / rate / CA-ring 在基线的 198,528 bit 上再加自己的仲裁器。
+CA-ring ×1 的仲裁器只有 1,008 bit，是 credit ×1 的 17%，是 iSLIP 的 0.5%。
+iSLIP-ring 是 50,144 bit，其中区间表 49,408 bit
+（12,544 环方向、18,432 桥、18,432 注入口，每张表 16 段区间），
+是 iSLIP-2D 的 26%，是 CA-ring ×1 的 50 倍。
+区间表用 12 位时间戳，和 iSLIP-2D 同一口径，长包下没有重新加宽。
 把 HA tracker 从 71 收到 16，同时能挂起的事务变少，
 credit 的 makespan 从 165 变成 256。</p>
 
 <h2>3 · 面积 / makespan Pareto</h2>
 <p>两轴都是越小越好，好的角在左下。第一张图只比较有集中状态的方案，横轴是仲裁器 bit。
 基线的仲裁器是 0，不在对数轴上。第二张图把环站存储算进去。</p>
-<div class="fig"><svg viewBox="0 0 880 420" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="28" width="760" height="310"/><line class="gl" x1="72" y1="328.1" x2="832" y2="328.1"/><text class="tick" x="64" y="332.1" text-anchor="end">100</text><line class="gl" x1="72" y1="230.0" x2="832" y2="230.0"/><text class="tick" x="64" y="234.0" text-anchor="end">150</text><line class="gl" x1="72" y1="160.4" x2="832" y2="160.4"/><text class="tick" x="64" y="164.4" text-anchor="end">200</text><line class="gl" x1="72" y1="62.2" x2="832" y2="62.2"/><text class="tick" x="64" y="66.2" text-anchor="end">300</text><text class="tick" x="242.4" y="356" text-anchor="middle">10k</text><text class="tick" x="656.5" y="356" text-anchor="middle">100k</text><polyline class="cv cB" points="144.9,100.6 147.9,206.9 771.5,284.0" fill="none"/><polygon points="771.5,277.0 778.5,284.0 771.5,291.0 764.5,284.0" fill="#6ee7a8" opacity="1"/><text class="tick" x="757.5" y="270.0" text-anchor="end" fill="#e8ecf4">iSLIP-2D  120</text><circle cx="147.9" cy="206.9" r="6" fill="#e06c6c" opacity="1"/><text class="tick" x="169.9" y="210.9" text-anchor="start" fill="#e8ecf4">credit ×1  165</text><circle cx="161.9" cy="206.9" r="6" fill="#f0a0a0" opacity="0.45"/><text class="tick" x="183.9" y="224.9" text-anchor="start" fill="#e8ecf4">credit ×2  165</text><circle cx="144.9" cy="100.6" r="6" fill="#c9a6ff" opacity="1"/><text class="tick" x="162.9" y="88.6" text-anchor="start" fill="#e8ecf4">credit HA=16  256</text><rect x="346.5" y="111.2" width="10" height="10" fill="#f5c16c" opacity="0.45"/><text class="tick" x="367.5" y="108.2" text-anchor="start" fill="#e8ecf4">rate  240</text><text class="axl" x="452.0" y="378" text-anchor="middle">仲裁器状态（bit，对数）</text><text class="axl" x="16" y="183.0" text-anchor="middle" transform="rotate(-90 16 183.0)">makespan（拍，对数）</text></svg>
-<div class="cap">仲裁器前沿：credit HA=16、credit ×1、iSLIP-2D。
-HA=16 比 ×1 少约 100 bit，makespan 却是 256，所以也落在前沿上。
-credit ×1 的仲裁器状态约为 iSLIP 的 3%，
-makespan 多 45 拍，并且长于基线的 149 拍。
-rate 比 credit 更大也更慢。credit ×2 与 ×1 的 makespan 相同、状态更多。</div></div>
-<div class="fig"><svg viewBox="0 0 880 420" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="78" y="28" width="750" height="310"/><line class="gl" x1="78" y1="303.6" x2="828" y2="303.6"/><text class="tick" x="70" y="307.6" text-anchor="end">120</text><line class="gl" x1="78" y1="234.7" x2="828" y2="234.7"/><text class="tick" x="70" y="238.7" text-anchor="end">160</text><line class="gl" x1="78" y1="165.8" x2="828" y2="165.8"/><text class="tick" x="70" y="169.8" text-anchor="end">200</text><line class="gl" x1="78" y1="96.9" x2="828" y2="96.9"/><text class="tick" x="70" y="100.9" text-anchor="end">240</text><text class="tick" x="201.4" y="356" text-anchor="middle">190k</text><text class="tick" x="392.1" y="356" text-anchor="middle">200k</text><text class="tick" x="582.7" y="356" text-anchor="middle">210k</text><text class="tick" x="773.4" y="356" text-anchor="middle">220k</text><polygon points="364.0,246.6 370.5,258.6 357.5,258.6" fill="#7eb6ff" opacity="1"/><text class="tick" x="378.0" y="271.6" text-anchor="start" fill="#e8ecf4">基线  149</text><polygon points="192.4,296.6 199.4,303.6 192.4,310.6 185.4,303.6" fill="#6ee7a8" opacity="1"/><text class="tick" x="180.4" y="287.6" text-anchor="end" fill="#e8ecf4">iSLIP-2D  120</text><circle cx="476.7" cy="226.1" r="6" fill="#e06c6c" opacity="0.55"/><text class="tick" x="504.7" y="222.1" text-anchor="start" fill="#e8ecf4">credit ×1  165</text><circle cx="485.8" cy="226.1" r="6" fill="#f0a0a0" opacity="0.55"/><text class="tick" x="513.8" y="242.1" text-anchor="start" fill="#e8ecf4">credit ×2  165</text><circle cx="474.9" cy="69.3" r="6" fill="#c9a6ff" opacity="0.55"/><text class="tick" x="488.9" y="57.3" text-anchor="start" fill="#e8ecf4">HA=16  256</text><rect x="708.6" y="91.9" width="10" height="10" fill="#f5c16c" opacity="0.55"/><text class="tick" x="725.6" y="86.9" text-anchor="start" fill="#e8ecf4">rate  240</text><text class="axl" x="453.0" y="378" text-anchor="middle">系统状态（bit）</text><text class="axl" x="16" y="183.0" text-anchor="middle" transform="rotate(-90 16 183.0)">makespan（拍）</text></svg>
+<div class="fig"><svg viewBox="0 0 880 420" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="28" width="760" height="310"/><line class="gl" x1="72" y1="328.1" x2="832" y2="328.1"/><text class="tick" x="64" y="332.1" text-anchor="end">100</text><line class="gl" x1="72" y1="230.0" x2="832" y2="230.0"/><text class="tick" x="64" y="234.0" text-anchor="end">150</text><line class="gl" x1="72" y1="160.4" x2="832" y2="160.4"/><text class="tick" x="64" y="164.4" text-anchor="end">200</text><line class="gl" x1="72" y1="62.2" x2="832" y2="62.2"/><text class="tick" x="64" y="66.2" text-anchor="end">300</text><text class="tick" x="122.5" y="356" text-anchor="middle">1k</text><text class="tick" x="415.2" y="356" text-anchor="middle">10k</text><text class="tick" x="707.9" y="356" text-anchor="middle">100k</text><polyline class="cv cB" points="123.5,198.3 348.4,206.9 620.2,233.2 789.2,284.0" fill="none"/><polygon points="789.2,277.0 796.2,284.0 789.2,291.0 782.2,284.0" fill="#6ee7a8" opacity="1"/><text class="tick" x="775.2" y="270.0" text-anchor="end" fill="#e8ecf4">iSLIP-2D  120</text><circle cx="348.4" cy="206.9" r="6" fill="#e06c6c" opacity="1"/><text class="tick" x="370.4" y="210.9" text-anchor="start" fill="#e8ecf4">credit ×1  165</text><circle cx="358.3" cy="206.9" r="6" fill="#f0a0a0" opacity="0.45"/><text class="tick" x="380.3" y="224.9" text-anchor="start" fill="#e8ecf4">credit ×2  165</text><circle cx="346.3" cy="100.6" r="6" fill="#c9a6ff" opacity="0.45"/><text class="tick" x="364.3" y="88.6" text-anchor="start" fill="#e8ecf4">credit HA=16  256</text><rect x="487.3" y="111.2" width="10" height="10" fill="#f5c16c" opacity="0.45"/><text class="tick" x="508.3" y="108.2" text-anchor="start" fill="#e8ecf4">rate  240</text><polygon points="130.5,198.3 127.0,204.3 120.0,204.3 116.5,198.3 120.0,192.2 127.0,192.2" fill="#4dd0e1" opacity="1"/><text class="tick" x="139.5" y="186.3" text-anchor="start" fill="#e8ecf4">CA-ring ×1  171</text><polygon points="137.9,198.3 134.4,204.3 127.4,204.3 123.9,198.3 127.4,192.2 134.4,192.2" fill="#95e6f0" opacity="0.45"/><text class="tick" x="146.9" y="214.3" text-anchor="start" fill="#e8ecf4">CA-ring ×2  171</text><polygon points="620.2,225.7 627.3,230.9 624.6,239.3 615.8,239.3 613.1,230.9" fill="#ff8fd0" opacity="1"/><text class="tick" x="606.2" y="221.2" text-anchor="end" fill="#e8ecf4">iSLIP-ring  148</text><text class="axl" x="452.0" y="378" text-anchor="middle">仲裁器状态（bit，对数）</text><text class="axl" x="16" y="183.0" text-anchor="middle" transform="rotate(-90 16 183.0)">makespan（拍，对数）</text></svg>
+<div class="cap">仲裁器前沿：CA-ring ×1、credit ×1、iSLIP-ring、iSLIP-2D。
+CA-ring ×1 的仲裁器只有 1,008 bit，是 credit ×1（5,910）的 17%，
+makespan 多 6 拍。
+iSLIP-ring 比 credit ×1 快 17 拍，状态多 8.5 倍；
+比 iSLIP-2D 慢 28 拍，状态只有它的 26%。
+iSLIP 比 credit ×1 再快 45 拍，状态是 189,528 bit。
+CA-ring ×2 与 ×1 的 makespan 相同、状态更多；rate 比 credit 更大也更慢。</div></div>
+<div class="fig"><svg viewBox="0 0 880 420" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="78" y="28" width="750" height="310"/><line class="gl" x1="78" y1="303.6" x2="828" y2="303.6"/><text class="tick" x="70" y="307.6" text-anchor="end">120</text><line class="gl" x1="78" y1="234.7" x2="828" y2="234.7"/><text class="tick" x="70" y="238.7" text-anchor="end">160</text><line class="gl" x1="78" y1="165.8" x2="828" y2="165.8"/><text class="tick" x="70" y="169.8" text-anchor="end">200</text><line class="gl" x1="78" y1="96.9" x2="828" y2="96.9"/><text class="tick" x="70" y="100.9" text-anchor="end">240</text><text class="tick" x="146.2" y="356" text-anchor="middle">190k</text><text class="tick" x="251.6" y="356" text-anchor="middle">200k</text><text class="tick" x="357.1" y="356" text-anchor="middle">210k</text><text class="tick" x="462.5" y="356" text-anchor="middle">220k</text><text class="tick" x="567.9" y="356" text-anchor="middle">230k</text><text class="tick" x="673.3" y="356" text-anchor="middle">240k</text><polygon points="236.1,246.6 242.6,258.6 229.6,258.6" fill="#7eb6ff" opacity="1"/><text class="tick" x="250.1" y="271.6" text-anchor="start" fill="#e8ecf4">基线  149</text><polygon points="141.3,296.6 148.3,303.6 141.3,310.6 134.3,303.6" fill="#6ee7a8" opacity="1"/><text class="tick" x="129.3" y="287.6" text-anchor="end" fill="#e8ecf4">iSLIP-2D  120</text><circle cx="298.4" cy="226.1" r="6" fill="#e06c6c" opacity="0.55"/><text class="tick" x="326.4" y="222.1" text-anchor="start" fill="#e8ecf4">credit ×1  165</text><circle cx="303.5" cy="226.1" r="6" fill="#f0a0a0" opacity="0.55"/><text class="tick" x="331.5" y="242.1" text-anchor="start" fill="#e8ecf4">credit ×2  165</text><circle cx="297.4" cy="69.3" r="6" fill="#c9a6ff" opacity="0.55"/><text class="tick" x="311.4" y="57.3" text-anchor="start" fill="#e8ecf4">HA=16  256</text><rect x="424.4" y="91.9" width="10" height="10" fill="#f5c16c" opacity="0.55"/><text class="tick" x="441.4" y="86.9" text-anchor="start" fill="#e8ecf4">rate  240</text><polygon points="253.8,215.7 250.3,221.8 243.3,221.8 239.8,215.7 243.3,209.7 250.3,209.7" fill="#4dd0e1" opacity="0.55"/><text class="tick" x="236.8" y="201.7" text-anchor="end" fill="#e8ecf4">CA-ring ×1 / ×2  171</text><polygon points="764.7,247.8 771.9,253.0 769.2,261.4 760.3,261.4 757.6,253.0" fill="#ff8fd0" opacity="0.55"/><text class="tick" x="752.7" y="243.3" text-anchor="end" fill="#e8ecf4">iSLIP-ring  148</text><text class="axl" x="453.0" y="378" text-anchor="middle">系统状态（bit）</text><text class="axl" x="16" y="183.0" text-anchor="middle" transform="rotate(-90 16 183.0)">makespan（拍）</text></svg>
 <div class="cap">系统前沿：iSLIP-2D。
 基线 198,528 bit、149 拍。iSLIP 把环站换成区间表之后，
 面积少 9,000 bit，makespan 也更短，所以基线落在前沿内侧。
-credit 和 rate 既背着环站、又多一段准入延迟，两轴都差于基线。</div></div>
+credit、rate、CA-ring 和 iSLIP-ring 既背着环站、又多一段准入延迟。
+iSLIP-ring 还多一张 49,408 bit 的区间表，系统 bit 248,672，makespan 只比基线短 1 拍；
+其余几个 1 flit 时两轴都差于基线。
+包长到 64 flit 时 CA-ring 比基线快，见第 4 节。</div></div>
 
 <h2>4 · 64 flit 的包</h2>
 <p>64 flit 是<b>每个 src-dst 的包长</b>，节点数和流数不变，还是 2,256 条。
@@ -145,6 +197,22 @@ makespan <b class="win">5,141</b>，是基线的 0.43×，
 makespan 10,020，是基线的 0.84×。
 rate 是 12,782，1.08×，三个周期相同。
 credit ×1 是 1.14×。</p>
+<p>CA-ring ×1 是 <b class="win">9,131</b>，0.77×，
+×2 是 9,059，0.76×。
+它比基线快，环上偏转只有 10,634 次，基线是 34,869 次。
+原因有两个：每座桥每拍只授予 1 个 flit，源环的流量被限在带宽时延积以内；
+CA-ring 的源队列按桥分开，一个源同时往 7 个方向发，而基线的源队列按目的号排队，
+48 个源在同一时刻打向同一个目的。第 5 节把这一项去掉。
+但它没有预订时隙，所以仍是 iSLIP 的 1.78 倍。
+16 flit 时 CA-ring ×1 是 2,094，是基线的 0.83×。</p>
+<p>iSLIP-ring 是 <b class="win">9,760</b>，0.82×，是 iSLIP-2D 的 1.90 倍，
+也比 CA-ring ×1 慢 629 拍。16 flit 时是 2,279，比 CA-ring ×1 慢 185 拍。
+所以包一长，它在两个指标上都被 CA-ring 压住：状态多 50 倍，makespan 还更长。
+表里最后一个包在第 4,069 拍开始注入，数据面却花了 9,760 拍才送完，
+中间的差距是 25,749 次偏转，其中 24,963 次是 flit 到了桥，而桥的转发 FIFO 已满。
+环级记账不能保证两个包在桥上同一拍转弯，冲突就落在这一点上。
+再把弹出口和目的环也订上，1、16、64 flit 是 165、2,137、9,483，
+1 flit 反而变慢，64 flit 只好 3%，表也更大，所以正文用不订这两项的版本。</p>
 <table>
 <thead><tr><th>方案</th><th>1 flit<br><span class="muted">16 B</span></th>
 <th>16 flit<br><span class="muted">256 B</span></th>
@@ -157,13 +225,46 @@ credit ×1 是 1.14×。</p>
 <tr><td>credit ×2</td><td>165</td><td>2,440</td><td>10,020</td><td>0.84×</td></tr>
 <tr class="hl"><td>credit ×1</td><td>165</td><td>2,541</td><td><b>13,505</b></td><td>1.14×</td></tr>
 <tr class="hl"><td>rate</td><td>240</td><td>3,017</td><td><b>12,782</b></td><td>1.08×</td></tr>
+<tr><td>CA-ring ×2</td><td>171</td><td>1,915</td><td>9,059</td><td>0.76×</td></tr>
+<tr class="hl"><td>CA-ring ×1</td><td>171</td><td>2,094</td><td><b>9,131</b></td><td><b>0.77×</b></td></tr>
+<tr class="hl"><td>iSLIP-ring</td><td>148</td><td>2,279</td><td><b>9,760</b></td><td><b>0.82×</b></td></tr>
 </tbody></table>
-<div class="fig"><svg viewBox="0 0 880 400" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="36" width="640" height="300"/><line class="gl" x1="72" y1="294.0" x2="712" y2="294.0"/><text class="tick" x="64" y="298.0" text-anchor="end">100</text><line class="gl" x1="72" y1="179.9" x2="712" y2="179.9"/><text class="tick" x="64" y="183.9" text-anchor="end">1k</text><line class="gl" x1="72" y1="65.8" x2="712" y2="65.8"/><text class="tick" x="64" y="69.8" text-anchor="end">10k</text><text class="tick" x="132.2" y="354" text-anchor="middle">1</text><text class="tick" x="487.0" y="354" text-anchor="middle">16</text><text class="tick" x="664.4" y="354" text-anchor="middle">64</text><polyline points="132.2,319.3 487.0,181.9 664.4,113.2" fill="none" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="132.2" cy="319.3" r="3.5" fill="#8b95ab"/><circle cx="487.0" cy="181.9" r="3.5" fill="#8b95ab"/><circle cx="664.4" cy="113.2" r="3.5" fill="#8b95ab"/><polyline points="132.2,285.0 487.0,161.1 664.4,98.7" fill="none" stroke="#6ee7a8" stroke-width="2.2"/><circle cx="132.2" cy="285.0" r="3.5" fill="#6ee7a8"/><circle cx="487.0" cy="161.1" r="3.5" fill="#6ee7a8"/><circle cx="664.4" cy="98.7" r="3.5" fill="#6ee7a8"/><polyline points="132.2,274.2 487.0,133.9 664.4,57.3" fill="none" stroke="#7eb6ff" stroke-width="2.2"/><circle cx="132.2" cy="274.2" r="3.5" fill="#7eb6ff"/><circle cx="487.0" cy="133.9" r="3.5" fill="#7eb6ff"/><circle cx="664.4" cy="57.3" r="3.5" fill="#7eb6ff"/><polyline points="132.2,269.2 487.0,133.7 664.4,50.9" fill="none" stroke="#e06c6c" stroke-width="2.2"/><circle cx="132.2" cy="269.2" r="3.5" fill="#e06c6c"/><circle cx="487.0" cy="133.7" r="3.5" fill="#e06c6c"/><circle cx="664.4" cy="50.9" r="3.5" fill="#e06c6c"/><polyline points="132.2,250.6 487.0,125.2 664.4,53.6" fill="none" stroke="#e6a23c" stroke-width="2.2"/><circle cx="132.2" cy="250.6" r="3.5" fill="#e6a23c"/><circle cx="487.0" cy="125.2" r="3.5" fill="#e6a23c"/><circle cx="664.4" cy="53.6" r="3.5" fill="#e6a23c"/><line x1="728" y1="54" x2="750" y2="54" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="4 3"/><text class="tick" x="756" y="58" fill="#e8ecf4">链路下限</text><line x1="728" y1="76" x2="750" y2="76" stroke="#6ee7a8" stroke-width="2.2"/><text class="tick" x="756" y="80" fill="#e8ecf4">iSLIP-2D</text><line x1="728" y1="98" x2="750" y2="98" stroke="#7eb6ff" stroke-width="2.2"/><text class="tick" x="756" y="102" fill="#e8ecf4">基线</text><line x1="728" y1="120" x2="750" y2="120" stroke="#e06c6c" stroke-width="2.2"/><text class="tick" x="756" y="124" fill="#e8ecf4">credit ×1</text><line x1="728" y1="142" x2="750" y2="142" stroke="#e6a23c" stroke-width="2.2"/><text class="tick" x="756" y="146" fill="#e8ecf4">rate</text><text class="axl" x="392.0" y="376" text-anchor="middle">每个 src-dst 的 flit 数（对数）</text><text class="axl" x="16" y="186.0" text-anchor="middle" transform="rotate(-90 16 186.0)">makespan（拍，对数）</text></svg>
+<div class="fig"><svg viewBox="0 0 880 400" width="100%" preserveAspectRatio="xMidYMid meet" role="img"><rect class="plot" x="72" y="36" width="640" height="300"/><line class="gl" x1="72" y1="294.0" x2="712" y2="294.0"/><text class="tick" x="64" y="298.0" text-anchor="end">100</text><line class="gl" x1="72" y1="179.9" x2="712" y2="179.9"/><text class="tick" x="64" y="183.9" text-anchor="end">1k</text><line class="gl" x1="72" y1="65.8" x2="712" y2="65.8"/><text class="tick" x="64" y="69.8" text-anchor="end">10k</text><text class="tick" x="132.2" y="354" text-anchor="middle">1</text><text class="tick" x="487.0" y="354" text-anchor="middle">16</text><text class="tick" x="664.4" y="354" text-anchor="middle">64</text><polyline points="132.2,319.3 487.0,181.9 664.4,113.2" fill="none" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="132.2" cy="319.3" r="3.5" fill="#8b95ab"/><circle cx="487.0" cy="181.9" r="3.5" fill="#8b95ab"/><circle cx="664.4" cy="113.2" r="3.5" fill="#8b95ab"/><polyline points="132.2,285.0 487.0,161.1 664.4,98.7" fill="none" stroke="#6ee7a8" stroke-width="2.2"/><circle cx="132.2" cy="285.0" r="3.5" fill="#6ee7a8"/><circle cx="487.0" cy="161.1" r="3.5" fill="#6ee7a8"/><circle cx="664.4" cy="98.7" r="3.5" fill="#6ee7a8"/><polyline points="132.2,274.2 487.0,133.9 664.4,57.3" fill="none" stroke="#7eb6ff" stroke-width="2.2"/><circle cx="132.2" cy="274.2" r="3.5" fill="#7eb6ff"/><circle cx="487.0" cy="133.9" r="3.5" fill="#7eb6ff"/><circle cx="664.4" cy="57.3" r="3.5" fill="#7eb6ff"/><polyline points="132.2,269.2 487.0,133.7 664.4,50.9" fill="none" stroke="#e06c6c" stroke-width="2.2"/><circle cx="132.2" cy="269.2" r="3.5" fill="#e06c6c"/><circle cx="487.0" cy="133.7" r="3.5" fill="#e06c6c"/><circle cx="664.4" cy="50.9" r="3.5" fill="#e06c6c"/><polyline points="132.2,250.6 487.0,125.2 664.4,53.6" fill="none" stroke="#e6a23c" stroke-width="2.2"/><circle cx="132.2" cy="250.6" r="3.5" fill="#e6a23c"/><circle cx="487.0" cy="125.2" r="3.5" fill="#e6a23c"/><circle cx="664.4" cy="53.6" r="3.5" fill="#e6a23c"/><polyline points="132.2,267.4 487.0,143.3 664.4,70.3" fill="none" stroke="#4dd0e1" stroke-width="2.2"/><circle cx="132.2" cy="267.4" r="3.5" fill="#4dd0e1"/><circle cx="487.0" cy="143.3" r="3.5" fill="#4dd0e1"/><circle cx="664.4" cy="70.3" r="3.5" fill="#4dd0e1"/><polyline points="132.2,274.6 487.0,139.1 664.4,67.0" fill="none" stroke="#ff8fd0" stroke-width="2.2"/><circle cx="132.2" cy="274.6" r="3.5" fill="#ff8fd0"/><circle cx="487.0" cy="139.1" r="3.5" fill="#ff8fd0"/><circle cx="664.4" cy="67.0" r="3.5" fill="#ff8fd0"/><line x1="728" y1="54" x2="750" y2="54" stroke="#8b95ab" stroke-width="2.2" stroke-dasharray="4 3"/><text class="tick" x="756" y="58" fill="#e8ecf4">链路下限</text><line x1="728" y1="76" x2="750" y2="76" stroke="#6ee7a8" stroke-width="2.2"/><text class="tick" x="756" y="80" fill="#e8ecf4">iSLIP-2D</text><line x1="728" y1="98" x2="750" y2="98" stroke="#7eb6ff" stroke-width="2.2"/><text class="tick" x="756" y="102" fill="#e8ecf4">基线</text><line x1="728" y1="120" x2="750" y2="120" stroke="#e06c6c" stroke-width="2.2"/><text class="tick" x="756" y="124" fill="#e8ecf4">credit ×1</text><line x1="728" y1="142" x2="750" y2="142" stroke="#e6a23c" stroke-width="2.2"/><text class="tick" x="756" y="146" fill="#e8ecf4">rate</text><line x1="728" y1="164" x2="750" y2="164" stroke="#4dd0e1" stroke-width="2.2"/><text class="tick" x="756" y="168" fill="#e8ecf4">CA-ring ×1</text><line x1="728" y1="186" x2="750" y2="186" stroke="#ff8fd0" stroke-width="2.2"/><text class="tick" x="756" y="190" fill="#e8ecf4">iSLIP-ring</text><text class="axl" x="392.0" y="376" text-anchor="middle">每个 src-dst 的 flit 数（对数）</text><text class="axl" x="16" y="186.0" text-anchor="middle" transform="rotate(-90 16 186.0)">makespan（拍，对数）</text></svg>
 <div class="cap">纵轴是 makespan，横轴是每个 src-dst 的 flit 数，都是对数。
 虚线是最热链路要串行的 flit 数，makespan 不能低于它。</div></div>
 <p class="muted">64 flit 时基线偏转 34,869 次。
 目的端重组缓冲是 64 flit，刚好一个包，多出来的 flit 把这个计数打满了
 106,173 次；包没有被丢掉，只是在环上多转。
 rate 的 T=16、64、256 在 16 flit 和 64 flit 都是同一个 makespan。</p>
+<p class="muted">CA-ring 的环计数取带宽时延积。若只取环上同时在飞的 flit 数（行环 8 段 × 7 拍 = 56），
+计数太小，会把环限死：1、16、64 flit 分别是 238、3,607、14,767，
+64 flit 比基线慢 1.24×。
+CA-ring 把每个 flit 当独立子包送入数据面，目的端重组缓冲在这里不限流，和基线一样只做统计。
+64 flit 时 CA-ring ×1 每拍约 63 条控制消息（请求、授予、DONE），仲裁器状态小，控制流量大。
+iSLIP-ring 的控制消息只有请求、授予、接受，共 5,640 条，和包长无关，64 flit 时平均每拍 0.58 条。</p>
+<h2>5 · 激励顺序的影响</h2>
+<p>前面所有行用同一个顺序：每个源按目的号 0 到 47 依次排队，所以第一批包全部冲向节点 0，再冲向节点 1。
+这对基线和 credit、rate、CA-ring、iSLIP-ring 的数据面都是同步的 incast。
+改成错开：源 s 按 s+1、s+2、… 的顺序发，各源同一时刻打向不同的目的。
+iSLIP 的调度只看整批流，不看到达顺序，数字不变。</p>
+<table>
+<thead><tr><th>方案</th><th>1 flit</th><th>16 flit</th><th>64 flit</th><th>64 flit / 基线</th></tr></thead>
+<tbody>
+<tr class="hl"><td>iSLIP-2D</td><td>120</td><td>1,460</td><td><b>5,141</b></td><td><b>0.55×</b></td></tr>
+<tr class="hl"><td>基线（错开）</td><td>117</td><td>1,968</td><td><b>9,429</b></td><td>1</td></tr>
+<tr><td>credit ×1（错开）</td><td>133</td><td>2,359</td><td>12,238</td><td>1.30×</td></tr>
+<tr><td>rate（错开）</td><td>240</td><td>3,017</td><td>12,782</td><td>1.36×</td></tr>
+<tr class="hl"><td>CA-ring ×1（错开）</td><td>153</td><td>1,884</td><td><b>8,247</b></td><td><b>0.87×</b></td></tr>
+<tr class="hl"><td>iSLIP-ring（错开）</td><td>156</td><td>2,046</td><td><b>9,887</b></td><td><b>1.05×</b></td></tr>
+</tbody></table>
+<p>错开之后，基线 1 flit 是 117，已经短于 iSLIP 的 120。
+64 flit 时基线从 11,869 降到 9,429，CA-ring ×1 从 9,131 降到 8,247，
+相对基线是 0.87×，比第 4 节的 0.77× 窄。
+iSLIP 在 64 flit 仍是基线的 0.55×。
+iSLIP-ring 错开后是 156、2,046、9,887，
+三档都比错开的基线慢（117、1,968、9,429），64 flit 时是基线的 1.05×。
+第 4 节里 iSLIP-ring 比基线快，主要是基线那个同步 incast 的顺序太差；换成错开的顺序，它就没有优势了。
+所以 CA-ring 比基线快的幅度，有一部分来自排队方式，另一部分才是仲裁本身；
+iSLIP 在长包上的优势不受这一项影响。</p>
 <p class="muted">重新生成：<code>python3 utils/gen_ring2d_schemes.py</code></p>
 </div></body></html>
